@@ -1,0 +1,66 @@
+
+[dependency-groups]
+dev = [
+    "pytest<9.0.0,>=8.2.2",
+]
+
+lint = [
+    "ruff",
+]
+
+[project]
+authors = [
+    {name = "constatza", email = "29166969+constatza@users.noreply.github.com"},
+]
+
+requires-python = ">=3.12, <3.13"
+dependencies = [
+    "numpy<2,>=1",
+    "pathlib<2.0.0,>=1.0.1",
+    "tomlkit<1.0.0,>=0.12.5",
+    "pydantic<3.0.0,>=2.7.4",
+    "plotly<6.0.0,>=5.22.0",
+    "lightning<3.0.0,>=2.3.2",
+    "rich<14.0.0,>=13.7.1",
+    "matplotlib<4.0.0,>=3.9.1",
+    "polars>=1.4.1,<2.0.0",
+    "mlflow<3.0.0,>=2.17.0",
+    "optuna<4,>=3",
+    "psutil<7.0.0,>=6.1.0",
+    "torch<2.5.1,>=2.1.0",
+]
+name = "dlkit"
+version = "0.1.0"
+description = "custom modules and networks for pytorch integration with optuna and mlflow"
+readme = "README.md"
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+]
+torchvision = [
+  { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+]
+
+[build-system]
+requires = ["hatchling>=1.0.0"]
+build-backend = "hatchling.build"
+
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+pythonpath = [
+    "src",
+]
+
+[project.scripts]
+start-server = "dlkit.scripts.start_mlflow_server:main"
+hopt = "dlkit.scripts.hparams_optimization:main"
+

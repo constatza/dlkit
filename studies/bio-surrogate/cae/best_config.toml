@@ -1,0 +1,71 @@
+[mlflow]
+experiment_name = "test artifacts 1"
+run_name = "basic cae"
+log_models = false
+
+[mlflow.server]
+host = "localhost"
+port = 5000
+backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
+default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
+tracking_uri = "http://{mlflow.server.host}:{mlflow.server.port}"
+terminate_apps_on_port = true
+
+[optuna]
+
+[trainer]
+max_epochs = 1
+enable_checkpointing = false
+logger = false
+fast_dev_run = true
+accelerator = "cpu"
+
+
+[model]
+name = "caes.cae1d.BasicCAE"
+latent_size = 3
+num_layers = 7
+kernel_size = 7
+reduced_channels = 200
+reduced_timesteps = 200
+
+[optimizer]
+name = "RAdam"
+lr = 0.001  # Range
+
+[scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.6
+patience = 10
+min_lr = 1e-7
+
+[pruner]
+
+[[transforms.features]]
+name = "NumpyToTensor"
+[[transforms.features]]
+name = "StandardScaler"
+dim = [0, -1]
+
+[sampler]
+
+[datamodule]
+name = "FileDataModule"
+test_size = 0.3
+batch_size = 64
+
+[dataloader]
+num_workers = 1
+persistent_workers = true
+
+[paths]
+dataroot = "M:\\constantinos\\data\\bio\\5-equations"
+features = "M:\\constantinos\\data\\bio\\5-equations\\input\\solutions.npy"
+input = "M:\\constantinos\\data\\bio\\5-equations\\input"
+output = "M:\\constantinos\\data\\bio\\5-equations\\output"
+figures = "M:\\constantinos\\data\\bio\\5-equations\\output\\figures"
+latent = "M:\\constantinos\\data\\bio\\5-equations\\output\\latent.npy"
+predictions = "M:\\constantinos\\data\\bio\\5-equations\\output\\predictions.npy"
+parameters = "M:\\constantinos\\data\\bio\\5-equations\\input\\parameters.npy"
+
+

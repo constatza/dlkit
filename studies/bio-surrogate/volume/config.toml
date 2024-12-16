@@ -1,0 +1,34 @@
+[study]
+name = "volume"
+
+
+[paths]
+raw = "M:/constantinos/data/bio/12-equations-with-immuno/raw"
+processed = "M:/constantinos/data/bio/12-equations-with-immuno/processed"
+workdir = "C:/Users/cluster/constantinos/mytorch/studies/bio-surrogate/volume/"
+output = "M:/constantinos/data/bio/12-equations-with-immuno/output/volume"
+input = "M:/constantinos/data/bio/12-equations-with-immuno/input/volume"
+
+
+
+parameters_raw = "{paths.raw}/parameters_No_*.txt"
+volumes_raw = "{paths.raw}/volume_*.txt"
+times_raw = "{paths.raw}/timeStepTotalTimes_AnalysisNo_*.txt"
+volumes_collected = "{paths.processed}/volumes_collected.csv"
+times_collected = "{paths.processed}/times_collected.csv"
+parameters_collected = "{paths.processed}/parameters_collected.csv"
+
+volumes_per_time = "{paths.processed}/volumes_per_time.csv"
+features = "{paths.input}/parameters.csv"
+targets = "{paths.input}/volumes.csv"
+checkpoints = "{paths.output}/checkpoints"
+
+
+
+
+
+
+
+
+
+
