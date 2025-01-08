@@ -14,7 +14,7 @@ def check_paths(paths_dict: dict) -> dict:
             path = str(path_name)
         else:
             path = Path(path_name)
-        new_dict[key] = path
+        new_dict[key] = str(path)
     return new_dict
 
 
@@ -96,7 +96,6 @@ def parse_self_referencing_toml(toml_string: str) -> Dict:
 def load_config(config_path: FilePath) -> dict:
     config = read_toml(config_path)
     config = dict(config)
-    config["paths"] = check_paths(config["paths"])
     return config
 
 

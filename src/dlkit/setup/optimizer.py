@@ -7,6 +7,5 @@ def initialize_optimizer(config, parameters):
 
     optimizer_name = config.get("name", "Adam")
     optimizer_class = import_dynamically(optimizer_name, prepend="torch.optim")
-    config["params"] = parameters
-    optimizer = optimizer_class(**filter_kwargs(config))
+    optimizer = optimizer_class(parameters, **filter_kwargs(config))
     return optimizer
