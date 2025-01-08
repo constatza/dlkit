@@ -18,10 +18,12 @@ def initialize_model(config: dict, shapes: dict) -> nn.Module:
     """
     model_config = config["model"]
     model_class = import_dynamically(model_config.get("name"), prepend="dlkit.networks")
+    input_shape = tuple(shapes["features"])
+    output_shape = tuple(shapes.get("targets", (1,)))
     model_config.update(
         {
-            "input_shape": shapes["features"],
-            "output_shape": shapes.get("targets", None),
+            "input_shape": input_shape,
+            "output_shape": output_shape,
             "optimizer_config": config["optimizer"],
             "scheduler_config": config["scheduler"],
         }

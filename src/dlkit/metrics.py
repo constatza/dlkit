@@ -4,20 +4,15 @@ import torch
 def root_mean_square(tensor):
     return torch.sqrt(torch.mean(tensor**2))
 
-
-def rmse(predictions, targets):
+def rmse_loss(predictions, targets):
     """Root Mean Square Error"""
-    return root_mean_square(predictions - targets)
+    return torch.sqrt(torch.nn.functional.mse_loss(predictions, targets))
 
-
-def normalized_rmse(predictions, targets):
+def nrmse_loss(predictions, targets):
     """Normalized Root Mean Square Error"""
-    return rmse(predictions, targets) / root_mean_square(targets)
-
+    return rmse_loss(predictions, targets) / root_mean_square(targets)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
-
-
 def mse_plus_kl_divergence(recon_x, x, mu, logvar, kld_weight=1e-1):
     mse = torch.nn.MSELoss()(recon_x, x)
     # see Appendix B from VAE paper:

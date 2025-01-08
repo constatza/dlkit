@@ -1,13 +1,14 @@
 import torch
 
-from dlkit.metrics import normalized_rmse
-from dlkit.networks.blocks import OptimizerSchedulerNetwork
+from dlkit.metrics import nrmse_loss
+from dlkit.networks.blocks.network_types import OptimizerSchedulerNetwork
 
 
 class CAE(OptimizerSchedulerNetwork):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.save_hyperparameters(ignore=["activation"])
 
     def encode(self, x):
         raise NotImplementedError
@@ -48,8 +49,8 @@ class CAE(OptimizerSchedulerNetwork):
 
     @staticmethod
     def training_loss_func(x_hat, x):
-        return torch.nn.functional.huber_loss(x_hat, x)
+        return torch.nn.functional.mse_loss(x_hat, x)
 
     @staticmethod
     def test_loss_func(x_hat, x):
-        return CAE.training_loss_func(x_hat, x)
+        return nrmse_loss(x_hat, x)

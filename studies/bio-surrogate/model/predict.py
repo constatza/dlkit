@@ -3,9 +3,9 @@ import numpy as np
 import torch
 from lightning import Trainer
 
-from dlkit.datamodules import FileDataModule
+from dlkit.data.file_datamodule import FileDataModule
 from dlkit.io.readers import read_study
-from dlkit.metrics import normalized_rmse
+from dlkit.metrics import nrmse
 from dlkit.networks.caes import BasicCAE
 from dlkit.networks.ffnns import FeedForwardNN
 from dlkit.pipeline import Pipeline
@@ -38,7 +38,7 @@ class ChainedModel(lightning.LightningModule):
         return y_hat
 
     def loss(self, y_hat, y):
-        return normalized_rmse(y_hat, y)
+        return nrmse(y_hat, y)
 
 
 def predict(paths):
