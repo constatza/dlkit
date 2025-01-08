@@ -33,6 +33,7 @@ class MLFlowConfig(BaseModel):
     server: MLFlowServerConfig = Field(
         ..., description="MLflow server configuration block."
     )
+    register_model: bool = Field(default=False, description="Whether to register the model.")
 
 
 @validate_call
@@ -65,7 +66,6 @@ def get_or_create_experiment(
     else:
         experiment_id = mlflow.create_experiment(
             name=experiment_name,
-            # artifact_location=f"{artifact_root_uri}/{experiment_name}",
         )
         logger.info(
             f"Created new experiment '{experiment_name}' with ID {experiment_id}"

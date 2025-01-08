@@ -6,7 +6,7 @@ from lightning.pytorch.callbacks import TQDMProgressBar, ModelCheckpoint, ModelS
 from lightning.pytorch.loggers import CSVLogger
 from lightning.pytorch.trainer import Trainer
 
-from dlkit.datamodules import FileDataModule
+from dlkit.data.file_datamodule import FileDataModule
 from dlkit.io.readers import read_study
 from dlkit.networks.ffnns import FeedForwardNN
 from dlkit.pipeline import Pipeline

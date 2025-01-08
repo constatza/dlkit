@@ -1,7 +1,6 @@
 from pathlib import Path
 from dlkit.utils.system_utils import import_dynamically, filter_kwargs
 from dlkit.setup.transforms import initialize_transforms
-from dlkit.pipeline import Pipeline
 
 
 def initialize_datamodule(config):

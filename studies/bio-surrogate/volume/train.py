@@ -4,7 +4,7 @@ from lightning.pytorch.callbacks import RichProgressBar, ModelCheckpoint, ModelS
 from lightning.pytorch.trainer import Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
 
-from dlkit.datamodules import FileDataModule
+from dlkit.data.file_datamodule import FileDataModule
 from dlkit.io.readers import read_study
 from dlkit.networks.ffnns import FeedForwardNN
 from dlkit.transforms import NumpyToTensor, MinMaxScaler

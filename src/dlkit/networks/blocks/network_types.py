@@ -6,15 +6,16 @@ from dlkit.setup.scheduler import initialize_scheduler
 class OptimizerSchedulerNetwork(LightningModule):
 
     def __init__(
-        self,
-        input_shape: tuple | list = None,
-        output_shape: tuple | list = None,
-        optimizer_config: dict = None,
-        scheduler_config: dict = None,
-        *args,
-        **kwargs,
+            self,
+            input_shape: tuple | list = None,
+            output_shape: tuple | list = None,
+            optimizer_config: dict = None,
+            scheduler_config: dict = None,
+            *args,
+            **kwargs,
     ):
         super().__init__()
+        self.save_hyperparameters(ignore=["activation"])
         self.input_shape = input_shape
         self.output_shape = output_shape or input_shape
         self.optimizer_config = optimizer_config
@@ -26,6 +27,8 @@ class OptimizerSchedulerNetwork(LightningModule):
     def configure_optimizers(self):
         optimizer = initialize_optimizer(self.optimizer_config, self.parameters())
         scheduler = initialize_scheduler(self.scheduler_config, optimizer)
+        self.optimizer_config = None
+        self.scheduler_config = None
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -47,5 +50,5 @@ class OptimizerSchedulerNetwork(LightningModule):
 
     def on_test_epoch_end(self) -> None:
         self.log(
-            "test_loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True
+            "test_loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=False
         )

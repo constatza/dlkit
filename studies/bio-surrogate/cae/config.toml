@@ -5,7 +5,7 @@ log_models = false
 
 [mlflow.server]
 host = "localhost"
-port = 5000
+port = 6060
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
 tracking_uri = "https://{mlflow.server.host}:{mlflow.server.port}"

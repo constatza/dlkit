@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from lightning import LightningModule
 
-from dlkit.networks.caes.cae1d import BasicCAE
+from dlkit.networks.caes.simple1d import BasicCAE
 
 
 class VAE(nn.Module):
@@ -40,10 +40,10 @@ class VAE(nn.Module):
 
 class VAE2(LightningModule):
     def __init__(
-        self,
-        cae,
-        beta: float,
-        activation=nn.functional.gelu,
+            self,
+            cae,
+            beta: float,
+            activation=nn.functional.gelu,
     ):
         super(VAE2, self).__init__()
         hparams = cae.hparams
@@ -143,5 +143,4 @@ class LinearChannelDescentVAE(VAE2):
 
 
 if __name__ == "__main__":
-
     pass

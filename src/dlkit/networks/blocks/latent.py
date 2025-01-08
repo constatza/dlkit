@@ -1,7 +1,7 @@
 from torch import nn
 
 
-class LatentToFeature(nn.Module):
+class VectorToTensorBlock(nn.Module):
     def __init__(self, latent_dim: int, target_shape: tuple):
         """
         Converts latent vector into a feature map for the decoder.
@@ -22,7 +22,7 @@ class LatentToFeature(nn.Module):
         )  # Reshape to (batch_size, channels, timesteps)
 
 
-class FeatureToLatent(nn.Module):
+class TensorToVectorBlock(nn.Module):
     def __init__(self, input_shape: tuple, latent_dim: int):
         """
         Converts the feature map into a latent vector.

@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 from dlkit.io.logging import get_logger
+from dlkit.utils.mlflow_utils import is_mlflow_server_running
 
 logger = get_logger(__name__)
 
@@ -35,24 +36,15 @@ def import_dynamically(module_path: str, prepend: str = ""):
 
     # Split the path into components
     path_parts = module_path.split(".")
-
-    module = None
-    # Try to progressively import the module components
-    for i in range(1, len(path_parts)):
-        try:
-            # Try importing progressively larger parts of the path
-            module = importlib.import_module(".".join(path_parts[:i]))
-        except ModuleNotFoundError:
-            # If any part of the module cannot be imported, return the error
-            print(f"Cannot find module: {'.'.join(path_parts[:i])}")
+    module = importlib.import_module(".".join(path_parts[:-1]))
 
     # If the last part is not found, try importing as an attribute (class, function, etc.)
     try:
         attr = getattr(module, path_parts[-1])
         return attr
-    except AttributeError:
+    except AttributeError as e:
         # If it's not an attribute, return the full module instead
-        return module
+        raise e
 
 
 def filter_kwargs(kwargs: dict):
@@ -75,6 +67,11 @@ def check_port_available(host, port, terminate_apps_on_port=False):
             sock.bind((host, port))
         except socket.error:
             logger.warn(f"Port {port} is already in use.")
+
+            if is_mlflow_server_running(host, port):
+                logger.warn("MLflow server is already running on the port.")
+                return
+
             if terminate_apps_on_port:
                 logger.warn("Terminating applications using the port.")
                 terminate_apps(port)
@@ -90,7 +87,7 @@ def terminate_apps(port):
     if os.name == "nt":
         # kill windows apps using port
         subprocess.run(
-            f'for /f "tokens=5" %a in (\'netstat -aon ^| find "{port}"\') do taskkill /f /pid %a',
+            f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr "{port}"\') do taskkill /f /pid %a',
             shell=True,
             stdout=subprocess.DEVNULL,
         )
