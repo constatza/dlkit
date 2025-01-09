@@ -1,11 +1,11 @@
-# MyTorch
+# DLkit
 
-**MyTorch** is a supplementary module for vanilla [PyTorch](https://github.com/pytorch/pytorch) and [Lightning](https://github.com/Lightning-AI/pytorch-lightning) providing custom classes for common architectures and utility functions to streamline deep learning development.
+**DLkit** is a supplementary module for vanilla [PyTorch](https://github.com/pytorch/pytorch) and [Lightning](https://github.com/Lightning-AI/pytorch-lightning) providing custom classes for common architectures and utility functions to streamline deep learning development.
 It also includes a hyperparameter optimization module using [optuna](https://github.com/optuna/optuna) that integrates with [MLFlow](https://github.com/mlflow/mlflow) to track experiments, metrics, and models.
 
 ## Installation
 
-**MyTorch** requires Python 3.12. 
+**DLkit** requires Python 3.12. 
 You can install the package using either `uv` or `pip`.
 
 ### Using `uv`
@@ -17,7 +17,7 @@ You can install the package using either `uv` or `pip`.
 2. **Clone the Repository**:
 
    ```bash
-   git clone https://github.com/constatza/mytorch.git
+   git clone https://github.com/constatza/dlkit.git
    ```
 
 3. **Navigate to the Project Directory**:
@@ -39,7 +39,7 @@ You can install the package using either `uv` or `pip`.
 1. **Clone the Repository**:
 
    ```bash
-   git clone https://github.com/constatza/mytorch.git
+   git clone https://github.com/constatza/dlkit.git
    ```
 
 2. **Navigate to the Project Directory**:
