@@ -1,1 +1,1 @@
-from .file_datamodule import FileDataModule
+from .mmap_module import MMapModule
