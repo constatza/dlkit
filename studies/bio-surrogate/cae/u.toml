@@ -1,6 +1,5 @@
 [mlflow]
 experiment_name = "U-CAE"
-run_name = "test"
 log_models = false
 
 [mlflow.server]
@@ -14,25 +13,22 @@ terminate_apps_on_port = true
 [optuna]
 
 [trainer]
-max_epochs = 300
-enable_checkpointing = false
-logger = false
-fast_dev_run = false
-gradient_clip_val = 0.5
+max_epochs = 150
+#gradient_clip_val = 0.5
 
 
 [model]
 name = "caes.SkipCAE"
-latent_size = 4
-num_layers = 3
-kernel_size = 9
-final_channels = 100
+latent_size = 5
+num_layers = 2
+kernel_size = 5
+final_channels = 10
 final_timesteps = 10
 
 [optimizer]
 name = "RAdam"
-lr = 0.001  # Range
-betas = [0.9, 0.999]
+lr = 1e-3# Range
+#weight_decay = 1e-5
 
 [scheduler]
 #name = "CosineAnnealingWarmRestarts"
@@ -40,37 +36,34 @@ betas = [0.9, 0.999]
 #T_mult = 2
 #eta_min = 1e-5
 name = "ReduceLROnPlateau"
-factor = 0.7
-patience = 8
-min_lr = 1e-8
+factor = 0.5
+patience = 10
+min_lr = 1e-6
 
 [pruner]
 
-[[transforms.features]]
-name = "NumpyToTensor"
-[[transforms.features]]
-name = "StandardScaler"
-dim = [0, -1]
+#[[transforms]]
+#name = "Log1pSigned"
+[[transforms]]
+name = "MinMaxScaler"
+dim = -1
 
 [sampler]
 
 [datamodule]
-name = "FileDataModule"
+name = "MMapModule"
 test_size = 0.3
 batch_size = 64
 
 [dataloader]
-num_workers = 12
-persistent_workers = true
+num_workers = 0
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
-features = "M:\\constantinos\\data\\bio\\5-equations\\input\\Usolutions.npy"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-output = "./output"
-figures = "./figures"
+features = "{paths.input}\\USolutions.npy"
+output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
-predictions = "./{output\\predictions.npy"
-parameters = "M:\\constantinos\\data\\bio\\5-equations\\input\\parameters.npy"
+predictions = "{paths.output}\\predictions.npy"
 
 

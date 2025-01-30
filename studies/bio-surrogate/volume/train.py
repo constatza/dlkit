@@ -8,7 +8,7 @@ from dlkit.data.file_datamodule import FileDataModule
 from dlkit.io.readers import read_study
 from dlkit.networks.ffnns import FeedForwardNN
 from dlkit.transforms import NumpyToTensor, MinMaxScaler
-from dlkit.pipeline import Pipeline
+from dlkit.transforms.chaining import Pipeline
 
 torch.set_float32_matmul_precision("medium")
 lr = 1e-2

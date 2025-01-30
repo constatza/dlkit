@@ -8,7 +8,7 @@ paths = config["paths"]
 
 
 def log(x):
-    return np.log1p(np.abs(x)) * np.sign(x)
+    return np.log1p(np.abs(x) + 1) * np.sign(x)
 
 
 features = np.load(paths["features"])
