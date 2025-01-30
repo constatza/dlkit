@@ -11,7 +11,7 @@ def rmse_loss(predictions, targets):
 def nmse_loss(predictions, targets, eps=1e-8):
     """Normalized Mean Square Error"""
     return torch.mean((predictions - targets) ** 2, dim=-1) / (
-        torch.var(targets, dim=-1) + eps
+        torch.std(targets, dim=-1) + eps
     )
 
 
