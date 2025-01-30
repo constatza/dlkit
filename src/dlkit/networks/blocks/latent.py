@@ -23,7 +23,7 @@ class VectorToTensorBlock(nn.Module):
 
 
 class TensorToVectorBlock(nn.Module):
-    def __init__(self, input_shape: tuple, latent_dim: int):
+    def __init__(self, channels_in: int, timesteps_in: int, latent_dim: int):
         """
         Converts the feature map into a latent vector.
 
@@ -32,10 +32,82 @@ class TensorToVectorBlock(nn.Module):
         - latent_dim (int): Dimension of the latent vector.
         """
         super().__init__()
-        channels, timesteps = input_shape
+        self.activation = nn.GELU()
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(channels * timesteps, latent_dim)
+        self.dense = nn.Linear(channels_in * timesteps_in, latent_dim)
 
     def forward(self, x):
         x = self.flatten(x)
-        return self.fc(x)
+        x = self.dense(x)
+        return x
+
+
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1):
+        """
+        Self-attention block for temporal data.
+
+        Parameters:
+        - channels (int): Number of channels in the input.
+        - timesteps (int): Number of timesteps in the input.
+        """
+        super().__init__()
+        self.multihead_attn = nn.MultiheadAttention(
+            embed_dim=embed_dim, num_heads=num_heads, dropout=0.1
+        )
+
+    def forward(self, x):
+        x = x.permute(2, 0, 1)
+        x, _ = self.multihead_attn(x, x, x)
+        x = x.permute(1, 2, 0)
+        return x
+
+
+class TransformerEncoderBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1):
+        """
+        Transformer block for temporal data.
+
+        Parameters:
+        - embed_dim (int): Embedding dimension.
+        - num_heads (int): Number of attention heads.
+        """
+        super().__init__()
+        self.transformer_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim, nhead=num_heads
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            self.transformer_layer, num_layers=num_layers
+        )
+
+    def forward(self, x):
+        x = x.permute(2, 0, 1)
+        x = self.transformer_encoder(x)
+        x = x.permute(1, 2, 0)
+        return x
+
+
+class TransformerDecoderBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1):
+        """
+        Transformer block for temporal data.
+
+        Parameters:
+        - embed_dim (int): Embedding dimension.
+        - num_heads (int): Number of attention heads.
+        """
+        super().__init__()
+        self.transformer_layer = nn.TransformerDecoderLayer(
+            d_model=embed_dim, nhead=num_heads
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            self.transformer_layer, num_layers=num_layers
+        )
+
+    def forward(self, x, memory=None):
+        if memory is None:
+            memory = x
+        x = x.permute(2, 0, 1)
+        x = self.transformer_decoder(x, memory.permute(2, 0, 1))
+        x = x.permute(1, 2, 0)
+        return x

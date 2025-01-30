@@ -53,7 +53,7 @@ class OptimizerSchedulerNetwork(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-
+        
         y_hat = self.forward(x)
         loss = self.training_loss_func(y_hat, y)
         self.val_loss = loss

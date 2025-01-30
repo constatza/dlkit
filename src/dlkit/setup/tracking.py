@@ -27,13 +27,15 @@ class MLFlowServerConfig(BaseModel):
 class MLFlowConfig(BaseModel):
     """Configuration model for MLflow experiment settings."""
 
-    experiment_name: str = Field(..., description="Name of the MLflow experiment.")
-    run_name: str = Field(..., description="Name of the MLflow run.")
+    experiment_name: str = Field(None, description="Name of the MLflow experiment.")
+    run_name: str = Field(None, description="Name of the MLflow run.")
     log_models: bool = Field(False, description="Whether to log models.")
     server: MLFlowServerConfig = Field(
         ..., description="MLflow server configuration block."
     )
-    register_model: bool = Field(default=False, description="Whether to register the model.")
+    register_model: bool = Field(
+        default=False, description="Whether to register the model."
+    )
 
 
 @validate_call
@@ -93,7 +95,6 @@ def initialize_mlflow_client(config: MLFlowConfig) -> str:
 
     # Set the MLflow tracking URI for the server
     mlflow.set_tracking_uri(tracking_uri)
-    logger.info(f"Set MLflow tracking URI: {tracking_uri}")
 
     # Create or retrieve the default experiment
     experiment_id = get_or_create_experiment(config.experiment_name)
