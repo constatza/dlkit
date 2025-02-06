@@ -18,6 +18,5 @@ def initialize_trainer(config):
         ),
     ]
     total_params = {**config.get("trainer", {}), "default_root_dir": None}
-    total_params["logger"] = False
     trainer = Trainer(**filter_kwargs(total_params), callbacks=callbacks)
     return trainer

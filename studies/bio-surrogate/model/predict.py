@@ -8,7 +8,7 @@ from dlkit.io.readers import read_study
 from dlkit.metrics import nrmse
 from dlkit.networks.caes import BasicCAE
 from dlkit.networks.ffnns import FeedForwardNN
-from dlkit.pipeline import Pipeline
+from dlkit.transforms.chaining import Pipeline
 from dlkit.transforms import MinMaxScaler, NumpyToTensor, StandardScaler
 
 batch_size = 64
@@ -42,7 +42,6 @@ class ChainedModel(lightning.LightningModule):
 
 
 def predict(paths):
-
     feature_transform = Pipeline(
         NumpyToTensor(),
         MinMaxScaler(),
@@ -86,7 +85,7 @@ def predict(paths):
     trainer.save_checkpoint(paths.checkpoints / "model.ckpt")
 
     stacked_predictions = torch.stack(predictions).squeeze()
-    predictions = data_module.target_transforms.inverse_transform(stacked_predictions)
+    predictions = data_module.target_transforms.inverse(stacked_predictions)
     return predictions.cpu().numpy(), data_module.targets.cpu().numpy()
 
 

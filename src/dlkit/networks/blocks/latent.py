@@ -1,8 +1,18 @@
 from torch import nn
+import torch.nn.functional as F
+
+from dlkit.networks.blocks.dense import DenseBlock
+from dlkit.networks.blocks.residual import ResidualBlock
 
 
 class VectorToTensorBlock(nn.Module):
-    def __init__(self, latent_dim: int, target_shape: tuple):
+    def __init__(
+        self,
+        latent_dim: int,
+        target_shape: tuple,
+        activation=F.gelu,
+        batch_norm: bool = False,
+    ):
         """
         Converts latent vector into a feature map for the decoder.
 
@@ -13,17 +23,25 @@ class VectorToTensorBlock(nn.Module):
         super().__init__()
         self.latent_dim = latent_dim
         self.target_shape = target_shape
-        self.fc = nn.Linear(latent_dim, target_shape[0] * target_shape[1])
+        self.dense_block = DenseBlock(
+            latent_dim, target_shape[0] * target_shape[1], batch_norm=batch_norm
+        )
 
     def forward(self, x):
-        x = self.fc(x)
+        x = self.dense_block(x)
         return x.view(
             x.size(0), *self.target_shape
         )  # Reshape to (batch_size, channels, timesteps)
 
 
 class TensorToVectorBlock(nn.Module):
-    def __init__(self, input_shape: tuple, latent_dim: int):
+    def __init__(
+        self,
+        channels_in: int,
+        timesteps_in: int,
+        latent_dim: int,
+        batch_norm: bool = False,
+    ):
         """
         Converts the feature map into a latent vector.
 
@@ -32,10 +50,84 @@ class TensorToVectorBlock(nn.Module):
         - latent_dim (int): Dimension of the latent vector.
         """
         super().__init__()
-        channels, timesteps = input_shape
+        self.activation = F.gelu
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(channels * timesteps, latent_dim)
+        self.dense_block = DenseBlock(
+            channels_in * timesteps_in, latent_dim, batch_norm=False
+        )
 
     def forward(self, x):
         x = self.flatten(x)
-        return self.fc(x)
+        x = self.dense_block(x)
+        return x
+
+
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1):
+        """
+        Self-attention block for temporal data.
+
+        Parameters:
+        - channels (int): Number of channels in the input.
+        - timesteps (int): Number of timesteps in the input.
+        """
+        super().__init__()
+        self.multihead_attn = nn.MultiheadAttention(
+            embed_dim=embed_dim, num_heads=num_heads, dropout=0.1
+        )
+
+    def forward(self, x):
+        x = x.permute(2, 0, 1)
+        x, _ = self.multihead_attn(x, x, x)
+        x = x.permute(1, 2, 0)
+        return x
+
+
+class TransformerEncoderBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1):
+        """
+        Transformer block for temporal data.
+
+        Parameters:
+        - embed_dim (int): Embedding dimension.
+        - num_heads (int): Number of attention heads.
+        """
+        super().__init__()
+        self.transformer_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim, nhead=num_heads
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            self.transformer_layer, num_layers=num_layers
+        )
+
+    def forward(self, x):
+        x = x.permute(2, 0, 1)
+        x = self.transformer_encoder(x)
+        x = x.permute(1, 2, 0)
+        return x
+
+
+class TransformerDecoderBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1):
+        """
+        Transformer block for temporal data.
+
+        Parameters:
+        - embed_dim (int): Embedding dimension.
+        - num_heads (int): Number of attention heads.
+        """
+        super().__init__()
+        self.transformer_layer = nn.TransformerDecoderLayer(
+            d_model=embed_dim, nhead=num_heads
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            self.transformer_layer, num_layers=num_layers
+        )
+
+    def forward(self, x, memory=None):
+        if memory is None:
+            memory = x
+        x = x.permute(2, 0, 1)
+        x = self.transformer_decoder(x, memory.permute(2, 0, 1))
+        x = x.permute(1, 2, 0)
+        return x

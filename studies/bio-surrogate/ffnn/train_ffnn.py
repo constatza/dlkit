@@ -9,7 +9,7 @@ from lightning.pytorch.trainer import Trainer
 from dlkit.data.file_datamodule import FileDataModule
 from dlkit.io.readers import read_study
 from dlkit.networks.ffnns import FeedForwardNN
-from dlkit.pipeline import Pipeline
+from dlkit.transforms.chaining import Pipeline
 from dlkit.transforms import NumpyToTensor, MinMaxScaler
 from dlkit.utils.system_utils import tune_lr
 

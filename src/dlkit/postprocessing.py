@@ -2,6 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+import json
+import mlflow
+
 
 def plot_losses(train_losses, val_losses):
     """Plot the training and validation losses."""
@@ -73,4 +76,18 @@ def plot_parametric_predictions(
         ax.legend()
     if show:
         plt.show()
+    return fig
+
+
+def plot_residuals(y_pred, y_true):
+    """Plot the residuals of the model with error bars."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(y_true, y_pred)
+    ax.set_xlabel("True")
+    ax.set_ylabel("Predicted")
+    ax.set_title("Residuals")
+    # plot x=y line
+    ax.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], "b--")
+    # plot error bars
+    # ax.errorbar(y_true, y_pred, yerr=y_pred - y_true, fmt="none", color="black")
     return fig

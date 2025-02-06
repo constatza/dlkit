@@ -1,7 +1,9 @@
-import torch
+import abc
 
-from dlkit.metrics import nrmse_loss
 from dlkit.networks.blocks.network_types import OptimizerSchedulerNetwork
+from dlkit.metrics import nmse_time_series_loss
+import torch.nn.functional as F
+import torch
 
 
 class CAE(OptimizerSchedulerNetwork):
@@ -10,47 +12,22 @@ class CAE(OptimizerSchedulerNetwork):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters(ignore=["activation"])
 
+    @abc.abstractmethod
     def encode(self, x):
-        raise NotImplementedError
+        pass
 
+    @abc.abstractmethod
     def decode(self, x):
-        raise NotImplementedError
+        pass
 
     def forward(self, x):
         encoding = self.encode(x)
         return self.decode(encoding)
 
-    def training_step(self, batch, batch_idx):
-        x = batch[0]
-        x_hat = self.forward(x)
-        loss = self.training_loss_func(x_hat, x)
-        self.train_loss = loss
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x = batch[0]
-        x_hat = self.forward(x)
-        loss = self.training_loss_func(x_hat, x)
-        self.val_loss = loss
-        return loss
-
-    def test_step(self, batch, batch_idx):
-        x = batch[0]
-        x_hat = self.forward(x)
-        loss = self.test_loss_func(x_hat, x)
-        self.test_loss = loss
-        return loss
-
-    def predict_step(self, batch, batch_idx):
-        x = batch[0]
-        encoding = self.encode(x)
-        predictions = self.decode(encoding)
-        return predictions, encoding
-
     @staticmethod
     def training_loss_func(x_hat, x):
-        return torch.nn.functional.mse_loss(x_hat, x)
+        return nmse_time_series_loss(x_hat, x)
 
     @staticmethod
     def test_loss_func(x_hat, x):
-        return nrmse_loss(x_hat, x)
+        return nmse_time_series_loss(x_hat, x)

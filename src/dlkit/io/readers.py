@@ -1,3 +1,5 @@
+import argparse
+import functools
 from typing import Dict, Any
 import numpy as np
 import torch
@@ -97,6 +99,21 @@ def load_config(config_path: FilePath) -> dict:
     config = read_toml(config_path)
     config = dict(config)
     return config
+
+
+def parse_config_decorator(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        argparser = argparse.ArgumentParser()
+        argparser.add_argument(
+            "config", type=str, help="Path to the configuration file used for training."
+        )
+        config_path = argparser.parse_args().config
+        config = load_config(config_path)
+
+        return func(config, *args, **kwargs)
+
+    return wrapper
 
 
 @validate_call

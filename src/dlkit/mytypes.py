@@ -4,9 +4,12 @@ from typing import TypeVar, List, Tuple, Annotated, Callable, Dict, Iterable
 from numpy import ndarray
 from pydantic import FilePath, DirectoryPath, BeforeValidator, validate_call
 from torch import Tensor
+from torch import Tensor
+from numpy import ndarray
 
 T = TypeVar("T")
 type MaybeListLike[T] = List[T] | Tuple[T] | T
+type ArrayOrTensor = Tensor | ndarray
 
 
 @validate_call
@@ -27,9 +30,4 @@ def ensure_dir_exists(p: Path):
 
 
 type TupleLike[T] = Annotated[Tuple[T] | List[T], BeforeValidator(ensure_tuple)]
-type NoInit[T] = Callable[..., T]
 type CreateIfNotExistsDir = Annotated[DirectoryPath, BeforeValidator(ensure_dir_exists)]
-type PathLike = FilePath | DirectoryPath | Path
-type PathDict = Dict[str, PathLike | PathDict]
-type Maybe[T] = T | None
-type ArrayLike = List | Tensor | ndarray | Tuple

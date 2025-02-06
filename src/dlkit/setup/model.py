@@ -1,6 +1,7 @@
 import torch.nn as nn
 from dlkit.utils.system_utils import import_dynamically
 from dlkit.utils.system_utils import filter_kwargs
+from dlkit.setup.transforms import initialize_transforms
 
 
 def initialize_model(config: dict, shapes: dict) -> nn.Module:
@@ -18,8 +19,8 @@ def initialize_model(config: dict, shapes: dict) -> nn.Module:
     """
     model_config = config["model"]
     model_class = import_dynamically(model_config.get("name"), prepend="dlkit.networks")
-    input_shape = tuple(shapes["features"])
-    output_shape = tuple(shapes.get("targets", (1,)))
+    input_shape = tuple(shapes[0])
+    output_shape = tuple(shapes[1])
     model_config.update(
         {
             "input_shape": input_shape,

@@ -1,21 +1,18 @@
+from torch import nn
 from dlkit.utils.system_utils import import_dynamically, filter_kwargs
-from dlkit.pipeline import Pipeline
+from dlkit.transforms.chaining import TransformationChain
 
 
-def initialize_transforms(transforms_config):
-    if not transforms_config:
-        transforms_config = {
-            "features": [{"name": "NumpyToTensor"}],
-            "targets": [{"name": "NumpyToTensor"}],
-        }
+def initialize_transforms(config):
 
-    features_pipeline = Pipeline(
-        *[initialize(d) for d in transforms_config["features"]]
-    )
-    targets_pipeline = Pipeline(
-        *[initialize(d) for d in transforms_config.get("targets", [])]
-    )
-    return features_pipeline, targets_pipeline
+    config = config.get("transforms", [])
+    if config:
+        transform_chain = TransformationChain(
+            nn.ModuleList([initialize(d) for d in config])
+        )
+    else:
+        transform_chain = TransformationChain(nn.ModuleList([]))
+    return transform_chain
 
 
 def initialize(d: dict):
