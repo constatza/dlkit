@@ -17,7 +17,6 @@ from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.utils.system_utils import import_dynamically
 from dlkit.io.writers import write_toml
 
-
 logger = get_logger(__name__)
 
 # set all seeds with pytorch lightning
@@ -44,7 +43,7 @@ def optimize(config_path: FilePath):
     logger.info(f"Using pruner: {pruner.__class__.__name__}")
 
     with mlflow.start_run(
-        run_name=str(config["mlflow"].get("run_name") + f"-{datetime.now()}")
+            run_name=str(config["mlflow"].get("run_name") + f"-{datetime.now()}")
     ) as parent_run:
         mlflow.pytorch.autolog(log_models=config["mlflow"].get("log_models", False))
         study = optuna.create_study(

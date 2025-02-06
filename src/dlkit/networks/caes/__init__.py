@@ -1,3 +1,2 @@
-from .simple1d import *
-from .skip1d import *
-from .vae import *
+from .skip1d import SkipCAE1d
+from .diff1d import DiffCAE1d

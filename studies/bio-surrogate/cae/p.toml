@@ -1,0 +1,70 @@
+[mlflow]
+experiment_name = "P-CAE"
+log_models = false
+
+[mlflow.server]
+host = "localhost"
+port = 6061
+backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
+default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
+tracking_uri = "http://{mlflow.server.host}:{mlflow.server.port}"
+terminate_apps_on_port = true
+
+[optuna]
+
+[trainer]
+max_epochs = 250
+gradient_clip_val = 5
+#fast_dev_run = true
+
+
+[model]
+name = "caes.DiffCAE1d"
+latent_size = 5
+num_layers = 4
+kernel_size = 7
+final_channels = 10
+final_timesteps = 10
+
+[optimizer]
+name = "RAdam"
+lr = 5e-4 # Range
+#weight_decay = 1e-5
+
+[scheduler]
+#name = "CosineAnnealingWarmRestarts"
+#T_0 = 50
+#T_mult = 2
+#eta_min = 1e-5
+name = "ReduceLROnPlateau"
+factor = 0.5
+patience = 5
+min_lr = 1e-6
+
+[pruner]
+
+#[[transforms]]
+#name = "Log1pSigned"
+[[transforms]]
+name = "MinMaxScaler"
+dim = [0, -1]
+
+[sampler]
+
+[datamodule]
+name = "NumpyModule"
+test_size = 0.3
+
+[dataloader]
+num_workers = 3
+batch_size = 64
+
+[paths]
+dataroot = "M:\\constantinos\\data\\bio\\5-equations"
+input = "M:\\constantinos\\data\\bio\\5-equations\\input"
+features = "{paths.input}\\p.npy"
+output = "{paths.dataroot}\\output"
+latent = "{paths.output}\\latent.npy"
+predictions = "{paths.output}\\p-predictions.npy"
+
+

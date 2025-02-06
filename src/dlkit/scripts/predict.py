@@ -7,7 +7,7 @@ import mlflow.pytorch
 from lightning.pytorch import seed_everything
 from typing import Any, Dict
 
-from dlkit.io.readers import load_config
+from dlkit.io.readers import parse_config_decorator
 from dlkit.io.logging import get_logger
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.tracking import MLFlowConfig
@@ -39,11 +39,11 @@ def load_model_from_mlflow(run_id: str, model_artifact_path: str = "model") -> A
 
 
 def predict_and_log(
-    trainer: Any,
-    model: Any,
-    data_module: Any,
-    run_id: str,
-    artifact_subdir: str = "prediction_results",
+        trainer: Any,
+        model: Any,
+        data_module: Any,
+        run_id: str,
+        artifact_subdir: str = "prediction_results",
 ) -> None:
     """
     Run predictions using the trainer and model, then log results as MLflow artifacts.
@@ -78,15 +78,6 @@ def predict_and_log(
         np.save(pred_file_path, predictions_np)
 
         # Optionally, log some metadata about predictions
-        metadata = {
-            "num_samples": predictions_np.shape[0],
-            "prediction_shape": predictions_np.shape[1:],
-            "description": "Model predictions",
-        }
-        meta_file_path = os.path.join(temp_dir, "prediction_metadata.json")
-        with open(meta_file_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2)
-
         # Log artifacts
         mlflow.log_artifacts(temp_dir, artifact_subdir)
 
@@ -95,6 +86,7 @@ def predict_and_log(
         # shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+@parse_config_decorator
 def main(config: Dict[str, Any]) -> None:
     """
     Main function for loading a model from MLflow artifacts and performing predictions.
@@ -132,10 +124,4 @@ def main(config: Dict[str, Any]) -> None:
 
 
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument(
-        "config", type=str, help="Path to the configuration file used for training."
-    )
-    args = argparser.parse_args()
-    config = load_config(args.config)
-    main(config)
+    main()

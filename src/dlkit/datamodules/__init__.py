@@ -1,1 +1,1 @@
-from .file_datamodule import FileDataModule
+from .numpy_module import NumpyModule
