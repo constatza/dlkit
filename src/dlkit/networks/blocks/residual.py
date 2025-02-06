@@ -2,6 +2,7 @@ from typing import Literal
 
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 
 
 class Aggregator1d(nn.Module):
@@ -10,7 +11,7 @@ class Aggregator1d(nn.Module):
         self,
         in_channels,
         out_channels,
-        kernel_size=1,
+        kernel_size: int = 1,
         aggregator: Literal["sum", "concat"] = "sum",
     ):
         super(Aggregator1d, self).__init__()
@@ -37,7 +38,7 @@ def agg_concat(x_in, x_out):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, module: nn.Module, aggregator: str = "sum"):
+    def __init__(self, module: nn.Module, aggregator: str = "sum", activation=F.gelu):
         """
         Initializes the ResidualBlock.
 
@@ -45,15 +46,21 @@ class ResidualBlock(nn.Module):
             module (nn.Module): The module to apply to the input.
             aggregator (str): Aggregation method to combine input and module output.
                              Options: 'sum', 'concat', 'mean', 'max', 'min', 'weighted_sum'. Defaults to 'sum'.
+            activation (nn.Module): The activation function to apply to the output.
         """
         super(ResidualBlock, self).__init__()
-        in_channels = module.in_channels
-        out_channels = module.out_channels
+        self.in_channels = module.in_channels
+        self.out_channels = module.out_channels
+        self.activation = activation
 
         aggregators = nn.ModuleDict(
             {
-                "sum": Aggregator1d(in_channels, out_channels, aggregator="sum"),
-                "concat": Aggregator1d(in_channels, out_channels, aggregator="concat"),
+                "sum": Aggregator1d(
+                    self.in_channels, self.out_channels, aggregator="sum"
+                ),
+                "concat": Aggregator1d(
+                    self.in_channels, self.out_channels, aggregator="concat"
+                ),
             }
         )
 

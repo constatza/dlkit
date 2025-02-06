@@ -1,5 +1,5 @@
 [mlflow]
-experiment_name = "U-CAE"
+experiment_name = "P-CAE"
 log_models = false
 
 [mlflow.server]
@@ -14,7 +14,7 @@ terminate_apps_on_port = true
 
 [trainer]
 max_epochs = 250
-#gradient_clip_val = 5
+gradient_clip_val = 5
 #fast_dev_run = true
 
 
@@ -22,13 +22,13 @@ max_epochs = 250
 name = "caes.DiffCAE1d"
 latent_size = 5
 num_layers = 4
-kernel_size = 5
-final_channels = 500
-final_timesteps = 738
+kernel_size = 7
+final_channels = 10
+final_timesteps = 10
 
 [optimizer]
 name = "RAdam"
-lr = 1e-3 # Range
+lr = 5e-4 # Range
 #weight_decay = 1e-5
 
 [scheduler]
@@ -38,7 +38,7 @@ lr = 1e-3 # Range
 #eta_min = 1e-5
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 10
+patience = 5
 min_lr = 1e-6
 
 [pruner]
@@ -58,14 +58,13 @@ test_size = 0.3
 [dataloader]
 num_workers = 3
 batch_size = 64
-persistent_workers = true
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-features = "{paths.input}\\u.npy"
+features = "{paths.input}\\p.npy"
 output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
-predictions = "{paths.output}\\u-predictions.npy"
+predictions = "{paths.output}\\p-predictions.npy"
 
 

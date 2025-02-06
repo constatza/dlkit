@@ -44,8 +44,6 @@ class ConvSameTimesteps(nn.Module):
         # )
 
         self.bn1 = nn.BatchNorm1d(in_channels) if batch_norm else nn.Identity()
-        # self.bn2 = nn.BatchNorm1d(out_channels) if batch_norm else nn.Identity()
-
         self.out_channels = out_channels
         self.in_channels = in_channels
 
@@ -53,9 +51,6 @@ class ConvSameTimesteps(nn.Module):
         x = self.bn1(x)
         x = self.activation(x)
         x = self.conv1(x)
-        # x = self.bn2(x)
-        # x = self.activation(x)
-        # x = self.conv2(x)
         return x
 
 

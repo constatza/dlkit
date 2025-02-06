@@ -3,12 +3,8 @@ import numpy as np
 
 from dlkit.io.readers import load_config
 
-config: dict = load_config("./u.toml")
+config: dict = load_config("./p.toml")
 paths = config["paths"]
-
-
-def log(x):
-    return np.log1p(np.abs(x)) * np.sign(x)
 
 
 features = np.load(paths["features"])
@@ -16,8 +12,6 @@ features = np.load(paths["features"])
 predictions = np.load(paths["predictions"])
 # stack first two axes
 predictions = predictions.reshape(-1, predictions.shape[-2], predictions.shape[-1])
-predictions = log(predictions)
-features = log(features)
 timesteps = np.arange(0, features.shape[-1])
 
 

@@ -1,5 +1,5 @@
 [mlflow]
-experiment_name = "U-CAE"
+experiment_name = "Tcell-CAE"
 log_models = false
 
 [mlflow.server]
@@ -21,14 +21,14 @@ max_epochs = 250
 [model]
 name = "caes.DiffCAE1d"
 latent_size = 5
-num_layers = 4
+num_layers = 5
 kernel_size = 5
-final_channels = 500
+final_channels = 100
 final_timesteps = 738
 
 [optimizer]
 name = "RAdam"
-lr = 1e-3 # Range
+lr = 1e-4 # Range
 #weight_decay = 1e-5
 
 [scheduler]
@@ -58,14 +58,13 @@ test_size = 0.3
 [dataloader]
 num_workers = 3
 batch_size = 64
-persistent_workers = true
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-features = "{paths.input}\\u.npy"
+features = "{paths.input}\\tcell.npy"
 output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
-predictions = "{paths.output}\\u-predictions.npy"
+predictions = "{paths.output}\\tcell-predictions.npy"
 
 

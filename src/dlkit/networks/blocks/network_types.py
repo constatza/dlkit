@@ -53,7 +53,6 @@ class OptimizerSchedulerNetwork(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-
         y_hat = self.forward(x)
         loss = self.training_loss_func(y_hat, y)
         self.val_loss = loss
@@ -69,8 +68,9 @@ class OptimizerSchedulerNetwork(LightningModule):
     def predict_step(self, batch, batch_idx):
         x = batch[0]
         y_hat = self.forward(x)
-        predictions = self.trainer.datamodule.dataset.transforms.inverse(y_hat)
-        return predictions
+        transform_chain = self.trainer.datamodule.transform_chain.to(self.device)
+        predictions = transform_chain.inverse_transform(y_hat)
+        return predictions.cpu()
 
     # def on_train_start(self) -> None:
     #     # transfer transforms to trainer device
