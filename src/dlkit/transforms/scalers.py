@@ -35,15 +35,13 @@ class MinMaxScaler(Scaler):
         """
         self.min = data.amin(dim=self.dim, keepdim=True)
         self.max = data.amax(dim=self.dim, keepdim=True)
-        self.max = self.max.squeeze(0)
-        self.min = self.min.squeeze(0)
         self.fitted = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Scale to interval [-1, 1]"""
         return (2 * (x - self.min) / (self.max - self.min)) - 1
 
-    def inverse(self) -> nn.Module:
+    def inverse_module(self) -> nn.Module:
         """
         Return a module that lazily computes the inverse transformation
         using the current min and max values at runtime.
@@ -80,15 +78,12 @@ class StdScaler(Scaler):
     def fit(self, data: torch.Tensor) -> None:
         self.mean = torch.mean(data, dim=self.dim, keepdim=True)
         self.std = torch.std(data, dim=self.dim, keepdim=True)
-        self.mean = self.mean.squeeze(0)
-        self.std = self.std.squeeze(0)
-
         self.fitted = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return (x - self.mean) / self.std
 
-    def inverse(self) -> nn.Module:
+    def inverse_module(self) -> nn.Module:
         """
         Return a module that lazily computes the inverse transformation
         using the current min and max values at runtime.

@@ -1,1 +1,1 @@
-from .mmap_module import MMapModule
+from .numpy_module import NumpyModule

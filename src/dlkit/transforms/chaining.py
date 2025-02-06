@@ -21,9 +21,11 @@ class TransformationChain(nn.Module):
         """
         super().__init__()
         # Use ModuleList so PyTorch tracks submodules
-        self.direct_transforms = nn.ModuleList(step for step in transforms)
+        self.direct_transforms = nn.ModuleList(
+            step.direct_module() for step in transforms
+        )
         self.inverse_transforms = nn.ModuleList(
-            step.inverse() for step in transforms[::-1]
+            step.inverse_module() for step in transforms[::-1]
         )
         self.fitted = False
 
@@ -42,6 +44,15 @@ class TransformationChain(nn.Module):
             # After optional fitting, run forward so that the data is transformed
             self.fitted = True
 
+    def fit_transform(self, data: torch.Tensor) -> torch.Tensor:
+        """One-shot fit for all scalers in the pipeline, in order.
+
+        Args:
+            data (torch.Tensor): Data to fit scalers on.
+        """
+        self.fit(data)
+        return self(data)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Sequentially pass x through each step in the pipeline.
 
@@ -55,7 +66,7 @@ class TransformationChain(nn.Module):
             x = transform(x)
         return x
 
-    def inverse(self, x: torch.Tensor) -> torch.Tensor:
+    def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
         """Sequentially pass x through each step in the pipeline.
 
         Args:
@@ -64,14 +75,14 @@ class TransformationChain(nn.Module):
         Returns:
             torch.Tensor: Final output after all modules.
         """
-        for transform in self.inverse_transforms:
-            x = transform(x)
+        for inverse_transform in self.inverse_transforms:
+            x = inverse_transform(x)
         return x
 
-    def to(self, device: torch.device) -> None:
-        self.direct_transforms = nn.ModuleList(
-            step.to(device) for step in self.direct_transforms
-        )
-        self.inverse_transforms = nn.ModuleList(
-            step.to(device) for step in self.inverse_transforms
-        )
+    # def to(self, device: torch.device) -> None:
+    #     self.direct_transforms = nn.ModuleList(
+    #         step.to(device) for step in self.direct_transforms
+    #     )
+    #     self.inverse_transforms = nn.ModuleList(
+    #         step.to(device) for step in self.inverse_transforms
+    #     )

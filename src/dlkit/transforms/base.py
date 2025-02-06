@@ -25,10 +25,10 @@ class Invertible(nn.Module):
         pass
 
     @abc.abstractmethod
-    def inverse(self) -> nn.Module:
+    def inverse_module(self) -> nn.Module:
         pass
 
-    def direct(self, x: torch.Tensor) -> nn.Module:
+    def direct_module(self) -> nn.Module:
         return self
 
 
