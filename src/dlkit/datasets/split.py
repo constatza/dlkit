@@ -3,7 +3,12 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
-def split_indices(indices: np.ndarray, test_size: float = 0.3, val_size: float = 0.5, random_state: int = 1):
+def split_indices(
+    indices: np.ndarray | list,
+    test_size: float = 0.3,
+    val_size: float = 0.5,
+    random_state: int = 1,
+):
     """
     Splits the dataset into train, validation, and test indices.
     """
