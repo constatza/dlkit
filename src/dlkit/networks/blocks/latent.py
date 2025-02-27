@@ -1,8 +1,9 @@
 from torch import nn
+import torch
 import torch.nn.functional as F
 
 from dlkit.networks.blocks.dense import DenseBlock
-from dlkit.networks.blocks.residual import ResidualBlock
+from typing import Callable
 
 
 class VectorToTensorBlock(nn.Module):
@@ -10,7 +11,7 @@ class VectorToTensorBlock(nn.Module):
         self,
         latent_dim: int,
         target_shape: tuple,
-        activation=F.gelu,
+        activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
         batch_norm: bool = False,
     ):
         """
@@ -24,14 +25,13 @@ class VectorToTensorBlock(nn.Module):
         self.latent_dim = latent_dim
         self.target_shape = target_shape
         self.dense_block = DenseBlock(
-            latent_dim, target_shape[0] * target_shape[1], batch_norm=batch_norm
+            latent_dim,
+            target_shape[0] * target_shape[1],
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.dense_block(x)
-        return x.view(
-            x.size(0), *self.target_shape
-        )  # Reshape to (batch_size, channels, timesteps)
+        return x.view(x.size(0), *self.target_shape)
 
 
 class TensorToVectorBlock(nn.Module):
@@ -40,7 +40,6 @@ class TensorToVectorBlock(nn.Module):
         channels_in: int,
         timesteps_in: int,
         latent_dim: int,
-        batch_norm: bool = False,
     ):
         """
         Converts the feature map into a latent vector.
@@ -52,9 +51,7 @@ class TensorToVectorBlock(nn.Module):
         super().__init__()
         self.activation = F.gelu
         self.flatten = nn.Flatten()
-        self.dense_block = DenseBlock(
-            channels_in * timesteps_in, latent_dim, batch_norm=False
-        )
+        self.dense_block = DenseBlock(channels_in * timesteps_in, latent_dim)
 
     def forward(self, x):
         x = self.flatten(x)

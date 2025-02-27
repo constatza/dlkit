@@ -1,7 +1,9 @@
 import abc
 
+import torch.nn as nn
+
 from dlkit.networks.blocks.network_types import OptimizerSchedulerNetwork
-from dlkit.metrics import nmse_time_series_loss
+from dlkit.metrics.temporal import mase, nmse, mase_with_derivative
 import torch.nn.functional as F
 import torch
 
@@ -26,8 +28,8 @@ class CAE(OptimizerSchedulerNetwork):
 
     @staticmethod
     def training_loss_func(x_hat, x):
-        return nmse_time_series_loss(x_hat, x)
+        return mase_with_derivative(x_hat, x, weight=0.01)
 
     @staticmethod
     def test_loss_func(x_hat, x):
-        return nmse_time_series_loss(x_hat, x)
+        return nmse(x_hat, x)

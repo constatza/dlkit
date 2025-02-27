@@ -1,6 +1,5 @@
-import numpy as np
 import torch
-from pyarrow.conftest import groups
+import numpy as np
 from pydantic import validate_call, ConfigDict
 from torch import nn
 from torch.nn import Sequential
@@ -14,9 +13,10 @@ from dlkit.networks.caes.base import CAE
 from dlkit.networks.blocks.residual import ResidualBlock
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.utils.math_utils import linear_interpolation_int
+import torch.nn.functional as F
 
 
-class SkipCAE1d(CAE):
+class TemporalCAE1d(CAE):
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
@@ -31,6 +31,30 @@ class SkipCAE1d(CAE):
         *args,
         **kwargs,
     ):
+        """
+        Initialize a `DiffCAE1d` instance.
+
+        Parameters
+        ----------
+        input_shape : tuple
+            Input shape of the data (batch_size, channels, timesteps).
+        final_channels : int, optional
+            Number of channels in the final latent encoding, by default 10.
+        final_timesteps : int, optional
+            Number of timesteps in the final latent encoding, by default 5.
+        latent_size : int, optional
+            Size of the latent vector, by default 10.
+        num_layers : int, optional
+            Number of layers in the encoder and decoder, by default 4.
+        kernel_size : int, optional
+            Kernel size for convolutions, by default 5.
+        activation : nn.Module, optional
+            Activation function for each block, by default nn.GELU().
+
+        Returns
+        -------
+        None
+        """
         super().__init__(*args, **kwargs)
         self.save_hyperparameters(
             ignore=["activation"],
@@ -38,8 +62,14 @@ class SkipCAE1d(CAE):
 
         self.activation = activation
         self.input_shape = input_shape
+        self.timesteps = torch.from_numpy(
+            np.load(r"M:\constantinos\data\bio\5-equations\input\timesteps.npy").astype(
+                np.float32
+            )
+        ).reshape(1, 1, -1)
+        self.timesteps = self.timesteps / self.timesteps.max()
 
-        self.example_input_array = torch.randn(input_shape)
+        self.example_input_array = torch.randn(1, *input_shape[1:])
 
         initial_channels = input_shape[-2]
         initial_time_steps = input_shape[-1]
@@ -55,9 +85,13 @@ class SkipCAE1d(CAE):
         ).tolist()
 
         # Instantiate feature extractor and latent encoder
+        encoder_channels = channels.copy()
+        encoder_channels[0] += 3
+        decoder_timesteps = timesteps.copy()
+        decoder_timesteps[0] += 40
 
         self.encoder = SkipEncoder(
-            channels=channels.copy(),
+            channels=encoder_channels,
             timesteps=timesteps,
             latent_dim=latent_size,
             kernel_size=kernel_size,
@@ -65,17 +99,52 @@ class SkipCAE1d(CAE):
 
         # Instantiate latent decoder and feature decoder
         self.decoder = SkipDecoder(
-            channels=channels.copy(),
-            timesteps=timesteps,
+            channels=channels,
+            timesteps=decoder_timesteps,
             latent_dim=latent_size,
             kernel_size=kernel_size,
         )
+        self.smoothing_layer = nn.Sequential(
+            nn.AdaptiveAvgPool1d(initial_time_steps),
+            # nn.GELU(),
+            # nn.Conv1d(
+            #     in_channels=initial_channels,
+            #     out_channels=initial_channels,
+            #     kernel_size=kernel_size,
+            #     padding="same",
+            # ),
+        )
 
     def encode(self, x):
+        # add timestamps and deltas
         return self.encoder(x)
 
     def decode(self, x):
-        return self.decoder(x)
+        x = self.decoder(x)
+        x = self.smoothing_layer(x)
+        return x
+
+    def forward(self, x):
+        # dx = self.delta(x)
+
+        with torch.no_grad():
+            # repeat timesteps for each sample in the batch
+            timesteps = self.timesteps.clone().repeat(x.shape[0], 1, 1).to(x.device)
+            # pad timesteps to match x in last dimension
+            dt = self.delta(timesteps)
+            dt_inv = 1 / dt
+            dt_inv = dt_inv / dt_inv.max()
+            x = torch.cat((timesteps, dt, dt_inv, x), dim=1)
+        x = self.encode(x)
+        x = self.decode(x)
+        return x
+
+    @staticmethod
+    def delta(x):
+        dx = torch.diff(x, dim=-1, n=1)
+        dx = dx / dx.max()
+        # repeat last value as padding
+        return F.pad(dx, (0, 1), mode="replicate")
 
 
 class SkipEncoder(nn.Module):
@@ -90,10 +159,12 @@ class SkipEncoder(nn.Module):
         Complete encoder that compresses the input into a latent vector.
 
         Parameters:
+        - input_shape (tuple): Shape of the input (batch_size, channels, timesteps).
         - latent_dim (int): Dimension of the latent vector.
         - channels (List[int]): List of channels for each layer.
         - kernel_size (int): Kernel size for convolutions.
         - timesteps (List[int]): List of timesteps for adaptive pooling at each layer.
+        - activation (nn.Module): Activation function for each block.
         """
         super().__init__()
 
@@ -106,9 +177,9 @@ class SkipEncoder(nn.Module):
                         out_channels=channels[i + 1],
                         in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
-                        padding="same",
-                        groups=2,
+                        dilation=2**i,
                     ),
+                    # activation=F.gelu,
                 )
             )
             layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
@@ -121,7 +192,7 @@ class SkipEncoder(nn.Module):
 
     def forward(self, x):
         x = self.feature_extractor(x)
-        x = self.feature_to_latent(x)
+        # x = self.feature_to_latent(x)
         return x
 
 
@@ -141,17 +212,19 @@ class SkipDecoder(nn.Module):
         - channels (List[int]): List of channels for each layer, in reverse order from the encoder.
         - kernel_size (int): Kernel size for transposed convolutions.
         - timesteps (List[int]): List of timesteps for adaptive upsampling.
+        - activation (nn.Module): Activation function for each block.
+        - output_shape (tuple): Target output shape (batch_size, channels, timesteps) to guarantee correct reconstruction.
         """
         super().__init__()
-        num_layers = len(timesteps) - 1
         timesteps = timesteps[::-1]
-        timesteps_decoder = [timesteps[0]] + [timesteps[-1] + 100] * num_layers
         channels = channels[::-1]
 
         self.latent_to_feature = VectorToTensorBlock(
-            latent_dim, (channels[0], timesteps_decoder[0])
+            latent_dim,
+            (channels[0], timesteps[0]),
         )
 
+        num_layers = len(timesteps) - 1
         layers = []
         for i in range(num_layers):
             layers.append(
@@ -159,25 +232,18 @@ class SkipDecoder(nn.Module):
                     ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
-                        in_timesteps=timesteps_decoder[i],
+                        in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
-                        padding="same",
+                        # dilation=2**i,
                     ),
+                    # activation=F.gelu,
                 )
             )
-            layers.append(nn.AvgPool1d(kernel_size=5, stride=2, padding=2))
-            layers.append(nn.Upsample(timesteps_decoder[i + 1]))
+            layers.append(nn.Upsample(size=timesteps[i + 1], mode="linear"))
 
-        layers.append(nn.AdaptiveAvgPool1d(timesteps[-1]))
         self.feature_decoder = Sequential(*layers)
 
-        self.smoothing_layer = nn.Sequential(
-            nn.GELU(),
-            nn.Conv1d(channels[-1], channels[-1], kernel_size=9, padding="same"),
-        )
-
     def forward(self, x):
-        x = self.latent_to_feature(x)
+        # x = self.latent_to_feature(x)
         x = self.feature_decoder(x)
-        x = self.smoothing_layer(x)
         return x
