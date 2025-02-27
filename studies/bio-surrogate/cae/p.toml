@@ -4,7 +4,7 @@ log_models = false
 
 [mlflow.server]
 host = "localhost"
-port = 6061
+port = 35382
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
 tracking_uri = "http://{mlflow.server.host}:{mlflow.server.port}"
@@ -13,23 +13,23 @@ terminate_apps_on_port = true
 [optuna]
 
 [trainer]
-max_epochs = 250
+max_epochs = 400
 gradient_clip_val = 5
 #fast_dev_run = true
 
 
 [model]
-name = "caes.DiffCAE1d"
+name = "caes.TemporalCAE1d"
 latent_size = 5
-num_layers = 4
+num_layers = 3
 kernel_size = 7
-final_channels = 10
-final_timesteps = 10
+final_channels = 500
+final_timesteps = 600
 
 [optimizer]
 name = "RAdam"
-lr = 5e-4 # Range
-#weight_decay = 1e-5
+lr = 1e-3
+#weight_decay = 8e-6
 
 [scheduler]
 #name = "CosineAnnealingWarmRestarts"
@@ -37,9 +37,12 @@ lr = 5e-4 # Range
 #T_mult = 2
 #eta_min = 1e-5
 name = "ReduceLROnPlateau"
-factor = 0.5
-patience = 5
-min_lr = 1e-6
+factor = 0.8
+patience = 8
+min_lr = 1e-5
+#name = "OneCycleLR"
+#max_lr = 1e-3
+#total_steps = 250
 
 [pruner]
 
@@ -56,8 +59,10 @@ name = "NumpyModule"
 test_size = 0.3
 
 [dataloader]
-num_workers = 3
-batch_size = 64
+num_workers = 5
+batch_size = 128
+persistent_workers = true
+pin_memory = true
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
@@ -65,6 +70,8 @@ input = "M:\\constantinos\\data\\bio\\5-equations\\input"
 features = "{paths.input}\\p.npy"
 output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
+figures = "{paths.output}\\figures\\"
 predictions = "{paths.output}\\p-predictions.npy"
+idx_split = "{paths.input}\\idx_split.json"
 
 
