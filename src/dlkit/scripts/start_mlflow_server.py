@@ -4,7 +4,7 @@ import subprocess
 import sys
 import atexit
 from dlkit.io.logging import get_logger
-from dlkit.io.readers import read_toml
+from dlkit.io.readers import read_toml, parse_config
 from dlkit.setup.tracking import MLFlowServerConfig
 from dlkit.utils.system_utils import (
     ensure_local_directory,
@@ -109,24 +109,17 @@ def popen_mlflow_server(config: MLFlowServerConfig):
     return mlflow_process
 
 
-def start_mlflow_server(config: MLFlowServerConfig) -> None:
-    checks_before_start(config)
-    popen_mlflow_server(config)
-
-
 def main():
-
-    parser = argparse.ArgumentParser(description="Start MLflow server.")
-    parser.add_argument(
-        "config",
-        type=str,
-        default="config.toml",
-        help="Path to the configuration file.",
-    )
-    args = parser.parse_args()
-    config = read_toml(args.config)
-
-    start_mlflow_server(MLFlowServerConfig(**config["mlflow"]["server"]))
+    config = parse_config()
+    config = MLFlowServerConfig(**config["mlflow"]["server"])
+    checks_before_start(config)
+    try:
+        mlflow_server = popen_mlflow_server(config)
+        mlflow_server.wait()
+    except Exception as e:
+        logger.error(e)
+    finally:
+        sys.exit(0)
 
 
 if __name__ == "__main__":

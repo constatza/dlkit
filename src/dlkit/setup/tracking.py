@@ -1,3 +1,5 @@
+import sys
+import requests
 import mlflow
 from pydantic import BaseModel, Field, validate_call
 from dlkit.io.logging import get_logger
@@ -80,17 +82,25 @@ def get_or_create_experiment(
 
 @validate_call
 def initialize_mlflow_client(config: MLFlowConfig) -> str:
+    # Ensure directories exist if local
     """
-    Initializes the MLflow tracking server environment by setting up directories and creating experiments.
+    Initialize the MLflow client with the specified configuration.
+
+    Ensures that the MLflow tracking URI points to a valid directory, and
+    creates or retrieves the default experiment.
 
     Args:
-        config (MLFlowServerConfig): Configuration for the MLflow server.
+        config: The MLflow configuration.
 
     Returns:
-        str: The experiment ID of the configured experiment.
+        The experiment ID of the default experiment.
     """
-    # Ensure directories exist if local
     tracking_uri = config.server.tracking_uri
+
+    if not is_server_running(config.server.host, config.server.port):
+        logger.error("MLflow server is not running.")
+        sys.exit(1)
+
     ensure_local_directory(tracking_uri)
 
     # Set the MLflow tracking URI for the server
@@ -99,3 +109,25 @@ def initialize_mlflow_client(config: MLFlowConfig) -> str:
     # Create or retrieve the default experiment
     experiment_id = get_or_create_experiment(config.experiment_name)
     return experiment_id
+
+
+def is_server_running(host: str, port: int, scheme: str = "http") -> bool:
+    """
+    Check if the server is running by querying its health endpoint.
+
+    Args:
+        host (str): Hostname or IP address where the MLflow server is running.
+        port (int): Port number of the MLflow server.
+        scheme (str): URL scheme ('http' or 'https'). Defaults to "http".
+
+    Returns:
+        bool: True if the server responds with status 200, False otherwise.
+    """
+    url = f"{scheme}://{host}:{port}/health"
+    try:
+        response = requests.get(url, timeout=5)
+        return response.status_code == 200
+    except Exception as err:
+        logger.error(f"Failed to connect to server at {url}")
+        logger.error(err)
+        return False
