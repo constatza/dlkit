@@ -20,7 +20,7 @@ torch.set_float32_matmul_precision("medium")
 seed_everything(1)
 
 
-def main(config: dict):
+def train(config: dict):
     mlflow_config = MLFlowConfig(**config["mlflow"])
 
     # Initialize MLflow client and get experiment_id
@@ -76,13 +76,17 @@ def main(config: dict):
     logger.info(f"Training completed. Run ID: {run_id}")
 
 
-if __name__ == "__main__":
+def main():
     try:
-        config = parse_config()
-        main(config)
+        config = parse_config(description="Training script.")
+        train(config)
     except Exception as e:
 
         logger.error(e)
         logger.error(traceback.format_exc())
     finally:
         sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
