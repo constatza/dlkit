@@ -11,7 +11,7 @@ from dlkit.networks.blocks.latent import (
 )
 from dlkit.networks.caes.base import CAE
 
-from dlkit.networks.blocks.residual import ResidualBlock
+from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.utils.math_utils import linear_interpolation_int
 
@@ -39,7 +39,7 @@ class SkipCAE1d(CAE):
         self.activation = activation
         self.input_shape = input_shape
 
-        self.example_input_array = torch.randn(input_shape)
+        self.example_input_array = torch.randn(1, *input_shape[1:])
 
         initial_channels = input_shape[-2]
         initial_time_steps = input_shape[-1]
@@ -70,12 +70,23 @@ class SkipCAE1d(CAE):
             latent_dim=latent_size,
             kernel_size=kernel_size,
         )
+        self.smoothing_layer = SkipConnection(
+            nn.Sequential(
+                nn.GELU(),
+                nn.Conv1d(
+                    channels[0], channels[0], kernel_size=kernel_size, padding="same"
+                ),
+            ),
+            in_channels=channels[0],
+            out_channels=channels[0],
+        )
 
     def encode(self, x):
         return self.encoder(x)
 
     def decode(self, x):
-        return self.decoder(x)
+        x = self.decoder(x)
+        return self.smoothing_layer(x)
 
 
 class SkipEncoder(nn.Module):
@@ -100,14 +111,14 @@ class SkipEncoder(nn.Module):
         layers = []
         for i in range(len(timesteps) - 1):
             layers.append(
-                ResidualBlock(
+                SkipConnection(
                     ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
                         in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
                         padding="same",
-                        groups=2,
+                        dilation=2**i,
                     ),
                 )
             )
@@ -145,39 +156,31 @@ class SkipDecoder(nn.Module):
         super().__init__()
         num_layers = len(timesteps) - 1
         timesteps = timesteps[::-1]
-        timesteps_decoder = [timesteps[0]] + [timesteps[-1] + 100] * num_layers
         channels = channels[::-1]
 
         self.latent_to_feature = VectorToTensorBlock(
-            latent_dim, (channels[0], timesteps_decoder[0])
+            latent_dim, (channels[0], timesteps[0])
         )
 
         layers = []
         for i in range(num_layers):
             layers.append(
-                ResidualBlock(
+                SkipConnection(
                     ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
-                        in_timesteps=timesteps_decoder[i],
+                        in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
                         padding="same",
+                        dilation=2**i,
                     ),
                 )
             )
-            layers.append(nn.AvgPool1d(kernel_size=5, stride=2, padding=2))
-            layers.append(nn.Upsample(timesteps_decoder[i + 1]))
+            layers.append(nn.Upsample(timesteps[i + 1]))
 
-        layers.append(nn.AdaptiveAvgPool1d(timesteps[-1]))
         self.feature_decoder = Sequential(*layers)
-
-        self.smoothing_layer = nn.Sequential(
-            nn.GELU(),
-            nn.Conv1d(channels[-1], channels[-1], kernel_size=9, padding="same"),
-        )
 
     def forward(self, x):
         x = self.latent_to_feature(x)
         x = self.feature_decoder(x)
-        x = self.smoothing_layer(x)
         return x

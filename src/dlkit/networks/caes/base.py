@@ -28,7 +28,7 @@ class CAE(OptimizerSchedulerNetwork):
 
     @staticmethod
     def training_loss_func(x_hat, x):
-        return mase_with_derivative(x_hat, x, weight=0.01)
+        return nmse(x_hat, x)
 
     @staticmethod
     def test_loss_func(x_hat, x):

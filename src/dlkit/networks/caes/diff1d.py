@@ -9,7 +9,7 @@ from dlkit.networks.blocks.latent import (
 )
 from dlkit.networks.caes.base import CAE
 
-from dlkit.networks.blocks.residual import ResidualBlock
+from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.utils.math_utils import linear_interpolation_int
 import torch.nn.functional as F
@@ -139,7 +139,7 @@ class SkipEncoder(nn.Module):
         layers = []
         for i in range(len(timesteps) - 1):
             layers.append(
-                ResidualBlock(
+                SkipConnection(
                     ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
@@ -195,7 +195,7 @@ class SkipDecoder(nn.Module):
         layers = []
         for i in range(num_layers):
             layers.append(
-                ResidualBlock(
+                SkipConnection(
                     ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],

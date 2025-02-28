@@ -19,16 +19,18 @@ aggregation_functions = {
 }
 
 
-class ResidualBlock(nn.Module):
+class SkipConnection(nn.Module):
     def __init__(
         self,
         module: nn.Module,
         how: Literal["sum", "concat"] = "sum",
         layer_type: Literal["conv1d", "conv2d", "linear"] = "conv1d",
         activation: Callable[[torch.Tensor], torch.Tensor] = lambda x: x,
-        kernel_size: int = 1,
         in_channels: int = None,
         out_channels: int = None,
+        kernel_size: int = 1,
+        stride: int = 1,
+        bias: bool = True,
     ):
         """
         Initializes the ResidualBlock.
@@ -40,7 +42,7 @@ class ResidualBlock(nn.Module):
             layer_type (str): Type of layer to use for aggregation. Options: 'conv1d', 'conv2d', 'linear'.
             activation
         """
-        super(ResidualBlock, self).__init__()
+        super(SkipConnection, self).__init__()
         if hasattr(module, "in_channels") and hasattr(module, "out_channels"):
             self.in_channels = module.in_channels
             self.out_channels = module.out_channels
@@ -51,9 +53,22 @@ class ResidualBlock(nn.Module):
             self.in_channels = in_channels
             self.out_channels = out_channels
 
+        if hasattr(module, "dilation"):
+            self.dilation = module.dilation
+        if hasattr(module, "stride"):
+            self.stride = module.stride
+
         if self.in_channels is None or self.out_channels is None:
             raise ValueError("in_channels and out_channels must be specified")
 
+        self.reduce_layer = select_skip_layers(
+            layer_type,
+            self.in_channels,
+            self.out_channels,
+            kernel_size,
+            stride,
+            bias=bias,
+        )
         self.kernel_size = kernel_size
         self.activation = activation
         self.layer_type = layer_type
@@ -61,20 +76,23 @@ class ResidualBlock(nn.Module):
 
         self.aggregation_function = aggregation_functions[how]
 
-        if self.in_channels == self.out_channels:
-            self.reduce_layer = nn.Identity()
-        elif layer_type == "conv1d":
-            self.reduce_layer = nn.Conv1d(
-                self.in_channels, self.out_channels, self.kernel_size
-            )
-        elif layer_type == "conv2d":
-            self.reduce_layer = nn.Conv2d(
-                self.in_channels, self.out_channels, self.kernel_size
-            )
-        elif layer_type == "linear":
-            self.reduce_layer = nn.Linear(self.in_channels, self.out_channels)
-
     def forward(self, x_in: torch.Tensor) -> torch.Tensor:
         x_out = self.module(x_in)
-        agg_out = self.aggregation_function(self.reduce_layer(x_in), x_out)
+        skip = self.reduce_layer(x_in)
+        # if skip.shape[2:] != x_out.shape[2:]:
+        #     skip = torch.nn.functional.interpolate(skip, size=x_out.shape[2:])
+        agg_out = self.aggregation_function(skip, x_out)
         return self.activation(agg_out)
+
+
+def select_skip_layers(
+    layer_type, in_channels, out_channels, kernel_size, stride, bias=True
+):
+    if in_channels == out_channels:
+        return nn.Identity()
+    if layer_type == "conv1d":
+        return nn.Conv1d(in_channels, out_channels, 1, stride=stride, bias=bias)
+    if layer_type == "conv2d":
+        return nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
+    if layer_type == "linear":
+        return nn.Linear(in_channels, out_channels, bias=False)

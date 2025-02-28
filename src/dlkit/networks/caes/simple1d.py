@@ -8,7 +8,7 @@ from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBloc
 from dlkit.networks.caes.base import CAE
 from lightning import LightningModule
 
-from dlkit.networks.blocks.residual import ResidualBlock
+from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import (
     ConvolutionBlock1d,
     UpsampleTimesteps,
