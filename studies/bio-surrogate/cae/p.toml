@@ -13,18 +13,18 @@ terminate_apps_on_port = true
 [optuna]
 
 [trainer]
-max_epochs = 400
+max_epochs = 600
 gradient_clip_val = 5
 #fast_dev_run = true
 
 
 [model]
-name = "caes.TemporalCAE1d"
+name = "caes.SkipCAE1d"
 latent_size = 5
-num_layers = 3
-kernel_size = 7
-final_channels = 500
-final_timesteps = 600
+num_layers = 5
+kernel_size = 9
+final_channels = 80
+final_timesteps = 800
 
 [optimizer]
 name = "RAdam"
@@ -67,7 +67,7 @@ pin_memory = true
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-features = "{paths.input}\\p.npy"
+features = "{paths.input}\\acceleration\\Psolutions_acceleration.npy"
 output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
 figures = "{paths.output}\\figures\\"

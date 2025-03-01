@@ -70,15 +70,11 @@ class SkipCAE1d(CAE):
             latent_dim=latent_size,
             kernel_size=kernel_size,
         )
-        self.smoothing_layer = SkipConnection(
-            nn.Sequential(
-                nn.GELU(),
-                nn.Conv1d(
-                    channels[0], channels[0], kernel_size=kernel_size, padding="same"
-                ),
+        self.smoothing_layer = nn.Sequential(
+            nn.GELU(),
+            nn.Conv1d(
+                channels[0], channels[0], kernel_size=kernel_size, padding="same"
             ),
-            in_channels=channels[0],
-            out_channels=channels[0],
         )
 
     def encode(self, x):
