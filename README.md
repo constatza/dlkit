@@ -71,9 +71,14 @@ You can install the package using either `uv` or `pip`.
 To execute the provided scripts, use:
 
 ### MLFlow Server
-Start the MLFlow server using the configuration specified in the configuration
+Start the MLFlow server using the configuration specified in the configuration (required for training and optimization)
 ```bash
 uv run start-server path/to/config.toml
+```
+### Training
+Run the training process using the configuration specified in the configuration
+```bash
+uv run train path/to/config.toml
 ```
 
 ### Hyperparameter Optimization
