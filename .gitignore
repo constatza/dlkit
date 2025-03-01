@@ -189,4 +189,7 @@ mlflow/
 *logs
 
 *.npy
-/studies/bio-surrogate/model/lightning_logs
+
+lightning_logs
+*~
+

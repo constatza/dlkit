@@ -1,18 +1,28 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 from dlkit.io.readers import load_config
+from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
+from dlkit.metrics.temporal import nmse
+from dlkit.utils.math_utils import interp_extrap
 
-config: dict = load_config("./p.toml")
+
+variable = "P"
+config: dict = load_config(f"{variable.lower()}.toml")
 paths = config["paths"]
+output_dir = Path(paths["figures"])
+output_dir.mkdir(exist_ok=True, parents=True)
 
 
-features = np.load(paths["features"])
+features = np.load(paths["features"], mmap_mode="r")
 
-predictions = np.load(paths["predictions"])
+predictions = np.load(paths["predictions"], mmap_mode="r")
 # stack first two axes
 predictions = predictions.reshape(-1, predictions.shape[-2], predictions.shape[-1])
-timesteps = np.arange(0, features.shape[-1])
+timesteps = np.arange(0, predictions.shape[-1])
 
 
 num_plots = 3
@@ -22,23 +32,37 @@ sample_idx = np.random.randint(0, features.shape[0], num_plots)
 # random num_plots indices from axis 1
 dof_idx = np.random.randint(0, features.shape[1], num_plots)
 
+selected_features = features[sample_idx, dof_idx, :].T
+selected_predictions = predictions[sample_idx, dof_idx, :].T
 
-timesteps = np.arange(0, features.shape[-1])
+error = nmse(
+    torch.from_numpy(selected_predictions.T).float(),
+    torch.from_numpy(selected_features.T).float(),
+)
+title = f"Variable: {variable}, NRMSE: {error:.4f}"
 # common x-axis
 fig, ax = plt.subplots(num_plots, 1, figsize=(10, 10), sharex=True)
+fig.suptitle(title)
 for i, idx in enumerate(sample_idx):
-    ax[i].plot(timesteps, features[idx, dof_idx[i], :].T, label="Original")
-    ax[i].plot(timesteps, predictions[idx, dof_idx[i], :].T, label="Predicted")
+    ax[i].plot(timesteps, selected_features[:, i], label="Original")
+    ax[i].plot(timesteps, selected_predictions[:, i], label="Predicted")
     ax[i].set_title(f"Sample {idx}")
     ax[i].legend()
     ax[i].set_xlabel("Timestep")
-    ax[i].set_ylabel("P")
+    ax[i].set_ylabel(f"{variable}")
 # common x-axis
+fig.savefig(output_dir / f"{variable}_predictions.png", dpi=600)
 
-from dlkit.postprocessing import plot_residuals
 
-# plot_residuals(predictions.ravel(), features.ravel())
+# error = 1e-3
 
+
+fig = plot_pred_vs_true(selected_predictions.ravel(), selected_features.ravel(), title)
+fig.savefig(output_dir / f"{variable}_pred_vs_true.png", dpi=600)
+
+
+fig = plot_residuals(selected_predictions.ravel(), selected_features.ravel(), title)
+fig.savefig(output_dir / f"{variable}_residuals.png", dpi=600)
 plt.show()
 
 # visualize latent space

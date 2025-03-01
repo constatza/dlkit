@@ -20,7 +20,7 @@ class NumpyModule(LightningDataModule):
     Args:
         features_path (FilePath): Path to features file (e.g. .npy).
         targets_path (Optional[FilePath]): Path to targets file (e.g. .npy). Defaults to None.
-        idx_path (Optional[FilePath]): Path to saved index splits for train/val/test. Defaults to None.
+        idx_split_path (Optional[FilePath]): Path to saved index splits for train/val/test. Defaults to None.
         dataloader_config (dict, optional): Configuration for DataLoader. Defaults to None.
         save_dir (Path, optional): Directory to save indices. Defaults to Path(".").
         transform_chain (Optional[TransformationChain]): Transformation chain for dataset. Defaults to None.
@@ -33,7 +33,7 @@ class NumpyModule(LightningDataModule):
         self,
         features_path: FilePath,
         targets_path: Optional[FilePath] = None,
-        idx_path: Optional[FilePath | DirectoryPath] = None,
+        idx_split_path: FilePath | None = None,
         dataloader_config: dict | None = None,
         transform_chain: Optional[TransformationChain] = None,
         test_size: float = 0.3,
@@ -42,15 +42,12 @@ class NumpyModule(LightningDataModule):
         super().__init__()
         self.features_path = features_path
         self.targets_path = targets_path
-        self.idx_path: Path = idx_path
+        self.idx_split_path: Path = idx_split_path
         self.dataloader_config = dataloader_config or {}
         self.transform_chain = transform_chain
 
-        if self.idx_path is None:
-            self.idx_path = Path(".")
+        if self.idx_split_path is None:
             logger.warning("No index path provided, saving to current directory.")
-        if self.idx_path.is_dir():
-            self.idx_path = self.idx_path / "idx_split.json"
 
         self.dataset: Optional[TensorDataset] = None
         self.idx_split = {}
@@ -89,14 +86,21 @@ class NumpyModule(LightningDataModule):
 
             # Generate or load train/val/test indices
             self.idx_split = split_or_load_indices(
-                self.idx_path,
+                self.idx_split_path,
                 len(self.features),
                 test_size=self.test_size,
                 val_size=self.val_size,
             )
-            with open(self.idx_path, "w") as f:
-                self.idx_split["idx_path"] = str(self.idx_path)
-                json.dump(self.idx_split, f)
+            if self.idx_split_path is None:
+                self.idx_split_path = self.features_path.parent / "idx_split.json"
+                logger.warning(
+                    f"No index split path provided, generating and saving to {self.idx_split_path}"
+                )
+                with open(self.idx_split_path, "w") as f:
+                    self.idx_split["idx_path"] = str(self.idx_split_path)
+                    json.dump(self.idx_split, f)
+            else:
+                logger.info(f"Loaded indices from {self.idx_split_path}")
 
             # If transform_chain is provided, move data to GPU, apply transforms
             # Then delete the old (untransformed) copy

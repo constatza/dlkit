@@ -22,13 +22,13 @@ gradient_clip_val = 5
 name = "caes.DiffCAE1d"
 latent_size = 5
 num_layers = 4
-kernel_size = 5
-final_channels = 100
+kernel_size = 9
+final_channels = 1
 final_timesteps = 738
 
 [optimizer]
 name = "RAdam"
-lr = 4e-4 # Range
+lr = 1e-4 # Range
 #weight_decay = 1e-5
 
 [scheduler]
@@ -58,13 +58,17 @@ test_size = 0.3
 [dataloader]
 num_workers = 3
 batch_size = 64
+pin_memory = true
+persistent_workers = true
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
 features = "{paths.input}\\cox.npy"
 output = "{paths.dataroot}\\output"
+figures = "{paths.output}\\figures\\"
 latent = "{paths.output}\\latent.npy"
 predictions = "{paths.output}\\cox-predictions.npy"
+idx_split = "{paths.input}\\splits.json"
 
 

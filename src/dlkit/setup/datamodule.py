@@ -19,15 +19,10 @@ def initialize_datamodule(config):
     #     datamodel_config.get("name"), prepend="dlkit.datamodules"
     # )
 
-    save_dir = (
-        paths_config.get("datamodule", None)
-        or Path(paths_config.get("output")) / "datamodule"
-    )
+    idx_split = paths_config.get("idx_split", None)
 
     features_path = paths_config.get("features")
     targets_path = paths_config.get("targets", None)
-
-    save_dir.mkdir(parents=True, exist_ok=True)
 
     transforms: TransformationChain = initialize_transforms(config)
 
@@ -35,7 +30,7 @@ def initialize_datamodule(config):
         features_path=features_path,
         targets_path=targets_path,
         transform_chain=transforms,
-        idx_path=save_dir,
+        idx_split_path=idx_split,
         dataloader_config=config.get("dataloader"),
     )
 

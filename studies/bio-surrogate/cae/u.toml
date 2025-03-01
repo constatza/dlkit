@@ -4,7 +4,7 @@ log_models = false
 
 [mlflow.server]
 host = "localhost"
-port = 6061
+port = 65381
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
 tracking_uri = "http://{mlflow.server.host}:{mlflow.server.port}"
@@ -13,7 +13,7 @@ terminate_apps_on_port = true
 [optuna]
 
 [trainer]
-max_epochs = 250
+max_epochs = 150
 #gradient_clip_val = 5
 #fast_dev_run = true
 
@@ -23,7 +23,7 @@ name = "caes.DiffCAE1d"
 latent_size = 5
 num_layers = 4
 kernel_size = 5
-final_channels = 500
+final_channels = 200
 final_timesteps = 738
 
 [optimizer]
@@ -59,6 +59,7 @@ test_size = 0.3
 num_workers = 3
 batch_size = 64
 persistent_workers = true
+pin_memory = true
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
@@ -67,5 +68,7 @@ features = "{paths.input}\\u.npy"
 output = "{paths.dataroot}\\output"
 latent = "{paths.output}\\latent.npy"
 predictions = "{paths.output}\\u-predictions.npy"
+idx_split = "{paths.input}\\idx_split.json"
+figures = "{paths.output}\\figures\\"
 
 

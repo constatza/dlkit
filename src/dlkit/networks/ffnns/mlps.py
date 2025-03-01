@@ -90,7 +90,7 @@ class FeedForwardNN(LightningModule):
 
     @staticmethod
     def test_loss(y_hat, y):
-        return dlkit.metrics.nrmse(y_hat, y)
+        return dlkit.metrics.metrics.nrmse(y_hat, y)
 
     def on_validation_epoch_end(self) -> None:
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]

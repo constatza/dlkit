@@ -79,15 +79,30 @@ def plot_parametric_predictions(
     return fig
 
 
-def plot_residuals(y_pred, y_true):
-    """Plot the residuals of the model with error bars."""
+def plot_pred_vs_true(y_pred, y_true, title=None, **kwargs):
+    """Plot predicted vs true values."""
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.scatter(y_true, y_pred)
+    # change marker to x shape
+    ax.scatter(y_true, y_pred, marker="o", **kwargs)
     ax.set_xlabel("True")
     ax.set_ylabel("Predicted")
-    ax.set_title("Residuals")
+    ax.set_title(title)
     # plot x=y line
     ax.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], "b--")
     # plot error bars
     # ax.errorbar(y_true, y_pred, yerr=y_pred - y_true, fmt="none", color="black")
+    return fig
+
+
+def plot_residuals(y_pred, y_true, title=None, **kwargs):
+    """Plot residuals."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(y_true, y_pred - y_true, marker="o", **kwargs)
+    ax.set_xlabel("True")
+    ax.set_ylabel("Residuals")
+    ax.set_title(title)
+    # plot x=0 line
+    ax.plot([y_true.min(), y_true.max()], [0, 0], "b--")
+    # plot error bars
+    # ax.errorbar(y_true, y_pred - y_true, yerr=y_pred - y_true, fmt="none", color="black")
     return fig

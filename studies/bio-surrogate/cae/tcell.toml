@@ -64,7 +64,9 @@ dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
 features = "{paths.input}\\tcell.npy"
 output = "{paths.dataroot}\\output"
+figures = "{paths.output}\\figures\\"
 latent = "{paths.output}\\latent.npy"
 predictions = "{paths.output}\\tcell-predictions.npy"
+idx_split = "{paths.input}\\idx_split.json"
 
 
