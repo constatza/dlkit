@@ -1,4 +1,4 @@
-from dlkit.transforms.base import Scaler, Lambda
+from dlkit.transforms.base import Scaler, Map
 
 from torch import nn
 import torch

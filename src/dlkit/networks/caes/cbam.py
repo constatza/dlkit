@@ -5,21 +5,16 @@ import torch.nn as nn
 class ChannelAttention1D(nn.Module):
     """Channel Attention Module for 1D data."""
 
-    def __init__(self, in_channels: int, reduction: int):
-        """
-        Args:
-            in_channels (int): Number of input channels.
-            reduction (int): Reduction ratio for the channel attention module.
-        """
+    def __init__(self, in_channels: int, out_channels: int):
         super(ChannelAttention1D, self).__init__()
         self.global_avg_pool = nn.AdaptiveAvgPool1d(output_size=1)
         self.global_max_pool = nn.AdaptiveMaxPool1d(output_size=1)
         self.reduce_conv = nn.Conv1d(
-            in_channels, in_channels // reduction, kernel_size=1, bias=False
+            in_channels, out_channels, kernel_size=1, bias=False
         )
         self.relu = nn.ReLU(inplace=True)
         self.expand_conv = nn.Conv1d(
-            in_channels // reduction, in_channels, kernel_size=1, bias=False
+            in_channels, out_channels, kernel_size=1, bias=False
         )
         self.sigmoid = nn.Sigmoid()
 

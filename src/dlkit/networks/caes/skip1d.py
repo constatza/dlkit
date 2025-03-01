@@ -2,9 +2,7 @@ import numpy as np
 import torch
 from pyarrow.conftest import groups
 from pydantic import validate_call, ConfigDict
-from scipy.misc import derivative
 from torch import nn
-from torch.fx.experimental.unification.unification_tools import first
 from torch.nn import Sequential
 
 from dlkit.networks.blocks.latent import (
@@ -13,12 +11,8 @@ from dlkit.networks.blocks.latent import (
 )
 from dlkit.networks.caes.base import CAE
 
-from dlkit.networks.blocks.residual import ResidualBlock
-from dlkit.networks.blocks.convolutional import (
-    ConvSameTimesteps,
-    UpsampleTimesteps,
-    DownsampleTimesteps,
-)
+from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.utils.math_utils import linear_interpolation_int
 
 
@@ -45,7 +39,7 @@ class SkipCAE1d(CAE):
         self.activation = activation
         self.input_shape = input_shape
 
-        self.example_input_array = torch.randn(input_shape)
+        self.example_input_array = torch.randn(1, *input_shape[1:])
 
         initial_channels = input_shape[-2]
         initial_time_steps = input_shape[-1]
@@ -76,12 +70,19 @@ class SkipCAE1d(CAE):
             latent_dim=latent_size,
             kernel_size=kernel_size,
         )
+        self.smoothing_layer = nn.Sequential(
+            nn.GELU(),
+            nn.Conv1d(
+                channels[0], channels[0], kernel_size=kernel_size, padding="same"
+            ),
+        )
 
     def encode(self, x):
         return self.encoder(x)
 
     def decode(self, x):
-        return self.decoder(x)
+        x = self.decoder(x)
+        return self.smoothing_layer(x)
 
 
 class SkipEncoder(nn.Module):
@@ -106,17 +107,18 @@ class SkipEncoder(nn.Module):
         layers = []
         for i in range(len(timesteps) - 1):
             layers.append(
-                ResidualBlock(
-                    ConvSameTimesteps(
+                SkipConnection(
+                    ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
+                        in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
+                        padding="same",
                         dilation=2**i,
-                        # batch_norm=True,
                     ),
                 )
             )
-            layers.append(DownsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
 
         self.feature_extractor = Sequential(*layers)
 
@@ -148,6 +150,7 @@ class SkipDecoder(nn.Module):
         - timesteps (List[int]): List of timesteps for adaptive upsampling.
         """
         super().__init__()
+        num_layers = len(timesteps) - 1
         timesteps = timesteps[::-1]
         channels = channels[::-1]
 
@@ -155,30 +158,25 @@ class SkipDecoder(nn.Module):
             latent_dim, (channels[0], timesteps[0])
         )
 
-        num_layers = len(timesteps) - 1
         layers = []
         for i in range(num_layers):
             layers.append(
-                ConvSameTimesteps(
-                    in_channels=channels[i],
-                    out_channels=channels[i + 1],
-                    kernel_size=kernel_size,
-                    dilation=2**i,
-                    # batch_norm=True,
-                ),
+                SkipConnection(
+                    ConvolutionBlock1d(
+                        in_channels=channels[i],
+                        out_channels=channels[i + 1],
+                        in_timesteps=timesteps[i],
+                        kernel_size=kernel_size,
+                        padding="same",
+                        dilation=2**i,
+                    ),
+                )
             )
-            layers.append(UpsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.Upsample(timesteps[i + 1]))
 
         self.feature_decoder = Sequential(*layers)
-
-        self.smoothing_layer = nn.Sequential(
-            nn.BatchNorm1d(channels[-1]),
-            nn.LeakyReLU(),
-            nn.Conv1d(channels[-1], channels[-1], kernel_size=5, padding="same"),
-        )
 
     def forward(self, x):
         x = self.latent_to_feature(x)
         x = self.feature_decoder(x)
-        x = self.smoothing_layer(x)
         return x

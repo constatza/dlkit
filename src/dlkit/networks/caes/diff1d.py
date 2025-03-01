@@ -9,12 +9,8 @@ from dlkit.networks.blocks.latent import (
 )
 from dlkit.networks.caes.base import CAE
 
-from dlkit.networks.blocks.residual import ResidualBlock
-from dlkit.networks.blocks.convolutional import (
-    ConvSameTimesteps,
-    UpsampleTimesteps,
-    DownsampleTimesteps,
-)
+from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.utils.math_utils import linear_interpolation_int
 import torch.nn.functional as F
 
@@ -66,7 +62,7 @@ class DiffCAE1d(CAE):
         self.activation = activation
         self.input_shape = input_shape
 
-        self.example_input_array = torch.randn(input_shape)
+        self.example_input_array = torch.randn(2, *input_shape[1:])
 
         initial_channels = input_shape[-2]
         initial_time_steps = input_shape[-1]
@@ -82,9 +78,11 @@ class DiffCAE1d(CAE):
         ).tolist()
 
         # Instantiate feature extractor and latent encoder
+        encoder_channels = channels.copy()
+        encoder_channels[0] *= 2
 
         self.encoder = SkipEncoder(
-            channels=channels.copy(),
+            channels=encoder_channels,
             timesteps=timesteps,
             latent_dim=latent_size,
             kernel_size=kernel_size,
@@ -92,7 +90,7 @@ class DiffCAE1d(CAE):
 
         # Instantiate latent decoder and feature decoder
         self.decoder = SkipDecoder(
-            channels=channels.copy(),
+            channels=channels,
             timesteps=timesteps,
             latent_dim=latent_size,
             kernel_size=kernel_size,
@@ -103,6 +101,18 @@ class DiffCAE1d(CAE):
 
     def decode(self, x):
         return self.decoder(x)
+
+    def forward(self, x):
+        dx = self.delta(x)
+        x = torch.cat((x, dx), dim=1)
+        x = self.encode(x)
+        x = self.decode(x)
+        return x
+
+    @staticmethod
+    def delta(x):
+        dx = torch.diff(x, dim=-1, n=1)
+        return F.pad(dx, (0, 1))
 
 
 class SkipEncoder(nn.Module):
@@ -126,60 +136,31 @@ class SkipEncoder(nn.Module):
         """
         super().__init__()
 
-        self.reduce_dx = ResidualBlock(
-            ConvSameTimesteps(
-                in_channels=channels[0],
-                out_channels=(channels[0] + 1) // 2,
-                kernel_size=kernel_size,
-                # batch_norm=True,
-            ),
-            aggregator="sum",
-        )
-
-        self.reduce_x = ResidualBlock(
-            ConvSameTimesteps(
-                in_channels=channels[0],
-                out_channels=(channels[0] + 1) // 2,
-                kernel_size=kernel_size,
-                # batch_norm=True,
-            ),
-            aggregator="sum",
-        )
-        channels[0] += channels[0] % 2
         layers = []
         for i in range(len(timesteps) - 1):
             layers.append(
-                ResidualBlock(
-                    ConvSameTimesteps(
+                SkipConnection(
+                    ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
+                        in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
-                        dilation=i + 1,
-                        groups=2,
-                        # batch_norm=True,
                     ),
+                    activation=F.gelu,
                 )
             )
-            layers.append(DownsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
 
         self.feature_extractor = Sequential(*layers)
 
         self.feature_to_latent = TensorToVectorBlock(
-            channels[-1], timesteps[-1], latent_dim, batch_norm=True
+            channels[-1], timesteps[-1], latent_dim
         )
 
     def forward(self, x):
-        x = torch.cat((self.reduce_x(x), self.reduce_dx(self.delta(x))), dim=1)
         x = self.feature_extractor(x)
-        x = self.feature_to_latent(x)
+        # x = self.feature_to_latent(x)
         return x
-
-    @staticmethod
-    def delta(x: torch.Tensor) -> torch.Tensor:
-        # central differences
-        dx = 0.5 * (x[..., 2:] - x[..., :-2])
-        dx = torch.nn.functional.pad(dx, (1, 1), mode="constant", value=0)
-        return dx
 
 
 class SkipDecoder(nn.Module):
@@ -206,34 +187,37 @@ class SkipDecoder(nn.Module):
         channels = channels[::-1]
 
         self.latent_to_feature = VectorToTensorBlock(
-            latent_dim, (channels[0], timesteps[0]), batch_norm=True
+            latent_dim,
+            (channels[0], timesteps[0]),
         )
 
         num_layers = len(timesteps) - 1
         layers = []
         for i in range(num_layers):
             layers.append(
-                ResidualBlock(
-                    ConvSameTimesteps(
+                SkipConnection(
+                    ConvolutionBlock1d(
                         in_channels=channels[i],
                         out_channels=channels[i + 1],
+                        in_timesteps=timesteps[i],
                         kernel_size=kernel_size,
-                        dilation=i + 1,
-                        # batch_norm=True,
                     ),
+                    activation=F.gelu,
                 )
             )
-            layers.append(UpsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.Upsample(size=timesteps[i + 1], mode="linear"))
 
         self.feature_decoder = Sequential(*layers)
 
         self.smoothing_layer = nn.Sequential(
             nn.GELU(),
-            nn.Conv1d(channels[-1], channels[-1], kernel_size=7, padding="same"),
+            nn.Conv1d(
+                channels[-1], channels[-1], kernel_size=kernel_size, padding="same"
+            ),
         )
 
     def forward(self, x):
-        x = self.latent_to_feature(x)
+        # x = self.latent_to_feature(x)
         x = self.feature_decoder(x)
         x = self.smoothing_layer(x)
         return x

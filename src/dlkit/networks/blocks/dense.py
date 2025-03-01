@@ -1,19 +1,25 @@
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Callable
+import torch
 
 
 class DenseBlock(nn.Module):
     def __init__(
-        self, input_size: int, output_size: int, batch_norm=True, activation=F.gelu
+        self,
+        in_features: int,
+        out_features: int,
+        activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
     ):
         super(DenseBlock, self).__init__()
-        self.fc1 = nn.Linear(input_size, output_size)
-        # self.fc2 = nn.Linear(output_size, output_size)
+        self.in_features = in_features
+        self.out_features = out_features
+        self.layer_norm = nn.LayerNorm(in_features)
+        self.fc1 = nn.Linear(in_features, out_features)
         self.activation = activation
-        self.bn = nn.BatchNorm1d(input_size) if batch_norm else nn.Identity()
 
     def forward(self, x):
-        x = self.bn(x)
-        # x = self.activation(x)
+        x = self.layer_norm(x)
+        x = self.activation(x)
         x = self.fc1(x)
         return x

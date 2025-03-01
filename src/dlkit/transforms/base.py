@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 
-class Lambda(nn.Module):
+class Map(nn.Module):
     def __init__(self, func: Callable):
         super().__init__()
         self.func = func

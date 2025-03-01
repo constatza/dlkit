@@ -8,7 +8,7 @@ paths = study.paths
 
 data = np.load(paths.input / "dataset.npz")
 targets = data["targets"]
-predictions = np.load(paths.predictions)
+predictions = np.load(paths.names)
 
 
 num_plots = 3

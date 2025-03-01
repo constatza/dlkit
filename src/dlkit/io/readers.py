@@ -101,19 +101,14 @@ def load_config(config_path: FilePath) -> dict:
     return config
 
 
-def parse_config_decorator(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        argparser = argparse.ArgumentParser()
-        argparser.add_argument(
-            "config", type=str, help="Path to the configuration file used for training."
-        )
-        config_path = argparser.parse_args().config
-        config = load_config(config_path)
-
-        return func(config, *args, **kwargs)
-
-    return wrapper
+def parse_config(description: str = "") -> Dict[str, Any]:
+    argparser = argparse.ArgumentParser(description=description)
+    argparser.add_argument(
+        "config", type=str, help="Path to the configuration file used for training."
+    )
+    config_path = argparser.parse_args().config
+    config = load_config(config_path)
+    return config
 
 
 @validate_call

@@ -1,18 +1,18 @@
 import sys
+import traceback
 
 import numpy as np
 from lightning.pytorch import seed_everything
 import mlflow
 import mlflow.pytorch
 
-from dlkit.io.readers import load_config, parse_config_decorator
+from dlkit.io.readers import load_config, parse_config
 from dlkit.io.logging import get_logger
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.tracking import MLFlowConfig
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
-from dlkit.scripts.start_mlflow_server import popen_mlflow_server
 import torch
 
 logger = get_logger(__name__)
@@ -20,11 +20,10 @@ torch.set_float32_matmul_precision("medium")
 seed_everything(1)
 
 
-@parse_config_decorator
-def main(config: dict):
+def train(config: dict):
     mlflow_config = MLFlowConfig(**config["mlflow"])
 
-    mlflow_server = popen_mlflow_server(mlflow_config.server)
+    # Initialize MLflow client and get experiment_id
     experiment_id = initialize_mlflow_client(mlflow_config)
 
     datamodule = initialize_datamodule(config)
@@ -43,7 +42,7 @@ def main(config: dict):
         mlflow.log_dict(config, "paths.yml")
 
         datamodule.setup(stage="fit")
-        mlflow.log_dict(datamodule.idx_split, "splits.json")
+        mlflow.log_dict(datamodule.idx_split_path, "splits.json")
         mlflow_dataset = mlflow.data.from_numpy(
             datamodule.features,
             targets=datamodule.targets,
@@ -63,7 +62,7 @@ def main(config: dict):
         # Convert predictions (list of Tensors) to a single NumPy array if possible
         # Assuming predictions is a list of tensors or arrays
         if isinstance(predictions, list) and len(predictions) > 0:
-            predictions_np = torch.stack(predictions).numpy()
+            predictions_np = torch.cat(predictions, dim=0).numpy()
             np.save(config["paths"]["predictions"], predictions_np)
             mlflow.log_artifact(config["paths"]["predictions"])
 
@@ -76,8 +75,17 @@ def main(config: dict):
 
     logger.info(f"Training completed. Run ID: {run_id}")
 
-    # Terminate the MLflow server
-    mlflow_server.terminate()
+
+def main():
+    try:
+        config = parse_config(description="Training script.")
+        train(config)
+    except Exception as e:
+
+        logger.error(e)
+        logger.error(traceback.format_exc())
+    finally:
+        sys.exit(0)
 
 
 if __name__ == "__main__":

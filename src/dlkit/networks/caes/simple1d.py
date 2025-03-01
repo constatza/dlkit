@@ -8,8 +8,12 @@ from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBloc
 from dlkit.networks.caes.base import CAE
 from lightning import LightningModule
 
-from dlkit.networks.blocks.residual import ResidualBlock
-from dlkit.networks.blocks.convolutional import ConvSameTimesteps, UpsampleTimesteps, DownsampleTimesteps
+from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.blocks.convolutional import (
+    ConvolutionBlock1d,
+    UpsampleTimesteps,
+    DownsampleTimesteps,
+)
 
 
 class BasicCAE(CAE):
@@ -77,13 +81,9 @@ class BasicCAE(CAE):
         )
 
         self.smoothing_layer = nn.Sequential(
-            nn.Conv1d(
-                input_shape[1], input_shape[1], kernel_size=9, padding="same"
-            ),
+            nn.Conv1d(input_shape[1], input_shape[1], kernel_size=9, padding="same"),
             nn.GELU(),
-            nn.Conv1d(
-                input_shape[1], input_shape[1], kernel_size=9, padding="same"
-            ),
+            nn.Conv1d(input_shape[1], input_shape[1], kernel_size=9, padding="same"),
         )
 
     def encode(self, x):
@@ -123,15 +123,24 @@ class Encoder(LightningModule):
         layers = []
         for i in range(num_layers):
             layers.append(
-                ConvSameTimesteps(in_channels=channels[i], out_channels=channels[i], kernel_size=kernel_size, batch_norm=True)
+                ConvolutionBlock1d(
+                    in_channels=channels[i],
+                    out_channels=channels[i],
+                    kernel_size=kernel_size,
+                    batch_norm=True,
+                )
             )
             layers.append(
-                ConvSameTimesteps(in_channels=channels[i], out_channels=channels[i + 1], kernel_size=kernel_size, batch_norm=True)
+                ConvolutionBlock1d(
+                    in_channels=channels[i],
+                    out_channels=channels[i + 1],
+                    kernel_size=kernel_size,
+                    batch_norm=True,
+                )
             )
             layers.append(DownsampleTimesteps(out_timesteps=timesteps[i + 1]))
 
         self.feature_extractor = Sequential(*layers)
-
 
         self.feature_to_latent = TensorToVectorBlock(
             (channels[-1], timesteps[-1]), latent_dim
@@ -175,16 +184,25 @@ class Decoder(LightningModule):
         # channels =
         layers = []
         for i in range(num_layers):
-            layers.append(ConvSameTimesteps(in_channels=channels[i], out_channels=channels[i], kernel_size=kernel_size, batch_norm=True))
             layers.append(
-               ConvSameTimesteps(in_channels=channels[i], out_channels=channels[i+1], kernel_size=kernel_size, batch_norm=True),
+                ConvolutionBlock1d(
+                    in_channels=channels[i],
+                    out_channels=channels[i],
+                    kernel_size=kernel_size,
+                    batch_norm=True,
+                )
+            )
+            layers.append(
+                ConvolutionBlock1d(
+                    in_channels=channels[i],
+                    out_channels=channels[i + 1],
+                    kernel_size=kernel_size,
+                    batch_norm=True,
+                ),
             )
             layers.append(UpsampleTimesteps(out_timesteps=timesteps[i + 1]))
 
-
-
         self.feature_decoder = Sequential(*layers)
-
 
     def forward(self, x):
         x = self.latent_to_feature(x)
