@@ -31,7 +31,7 @@ class MLFlowConfig(BaseModel):
 
     experiment_name: str = Field(None, description="Name of the MLflow experiment.")
     run_name: str = Field(None, description="Name of the MLflow run.")
-    log_models: bool = Field(False, description="Whether to log models.")
+    ckpt_path: str = Field(None, description="Path to the checkpoint file.")
     server: MLFlowServerConfig = Field(
         ..., description="MLflow server configuration block."
     )
