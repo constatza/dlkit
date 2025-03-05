@@ -5,6 +5,7 @@ import numpy as np
 from lightning.pytorch import seed_everything
 import mlflow
 import mlflow.pytorch
+from mlflow.tracking import MlflowClient
 
 from dlkit.io.readers import load_config, parse_config
 from dlkit.io.logging import get_logger
@@ -18,6 +19,8 @@ import torch
 logger = get_logger(__name__)
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)
+import mlflow
+from typing import Optional
 
 
 def train(config: dict):
@@ -26,20 +29,22 @@ def train(config: dict):
     # Initialize MLflow client and get experiment_id
     experiment_id = initialize_mlflow_client(mlflow_config)
 
-    datamodule = initialize_datamodule(config)
-    trainer = initialize_trainer(config)
-    dataset_source = mlflow.data.dataset_source.DatasetSource.from_dict(
-        {
-            "features": datamodule.features_path,
-            "targets": datamodule.targets_path,
-        }
-    )
-
     # Start MLFlow run
     with mlflow.start_run(run_name=mlflow_config.run_name) as run:
+        logger.info("Training started.")
+
+        datamodule = initialize_datamodule(config)
+        trainer = initialize_trainer(config)
+        dataset_source = mlflow.data.dataset_source.DatasetSource.from_dict(
+            {
+                "features": datamodule.features_path,
+                "targets": datamodule.targets_path,
+            }
+        )
+
         run_id = run.info.run_id
-        mlflow.pytorch.autolog(log_models=True)
-        mlflow.log_dict(config, "paths.yml")
+        mlflow.pytorch.autolog(log_models=False)
+        mlflow.log_dict(config, "config.yml")
 
         datamodule.setup(stage="fit")
         mlflow.log_dict(datamodule.idx_split_path, "splits.json")
@@ -55,7 +60,7 @@ def train(config: dict):
 
         model = initialize_model(config, datamodule.shapes)
         mlflow.log_params(model.hparams)
-        trainer.fit(model, datamodule=datamodule)
+        trainer.fit(model, datamodule=datamodule, ckpt_path=mlflow_config.ckpt_path)
         trainer.test(model, datamodule=datamodule)
         predictions = trainer.predict(model, datamodule=datamodule)
 
