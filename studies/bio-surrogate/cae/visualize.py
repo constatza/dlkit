@@ -6,7 +6,7 @@ import torch
 
 from dlkit.io.readers import load_config
 from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
-from dlkit.metrics.temporal import nmse
+from dlkit.metrics.temporal import mase
 from dlkit.utils.math_utils import interp_extrap
 
 
@@ -30,22 +30,23 @@ num_plots = 3
 # random num_plots indices from axis 0
 sample_idx = np.random.randint(0, features.shape[0], num_plots)
 # random num_plots indices from axis 1
-dof_idx = np.random.randint(0, features.shape[1], num_plots)
+dof_idx = 100
 
-selected_features = features[sample_idx, dof_idx, :].T
-selected_predictions = predictions[sample_idx, dof_idx, :].T
 
-error = nmse(
-    torch.from_numpy(selected_predictions.T).float(),
-    torch.from_numpy(selected_features.T).float(),
+selected_features = features[sample_idx, dof_idx : dof_idx + 1, :]
+selected_predictions = predictions[sample_idx, dof_idx : dof_idx + 1, :]
+
+error = mase(
+    torch.from_numpy(selected_predictions).float(),
+    torch.from_numpy(selected_features).float(),
 )
 title = f"Variable: {variable}, NRMSE: {error:.4f}"
 # common x-axis
 fig, ax = plt.subplots(num_plots, 1, figsize=(10, 10), sharex=True)
 fig.suptitle(title)
 for i, idx in enumerate(sample_idx):
-    ax[i].plot(timesteps, selected_features[:, i], label="Original")
-    ax[i].plot(timesteps, selected_predictions[:, i], label="Predicted")
+    ax[i].plot(timesteps, selected_features[:, 0, :].T, label="Original")
+    ax[i].plot(timesteps, selected_predictions[:, 0, :].T, label="Predicted")
     ax[i].set_title(f"Sample {idx}")
     ax[i].legend()
     ax[i].set_xlabel("Timestep")
