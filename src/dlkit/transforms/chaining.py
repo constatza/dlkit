@@ -78,11 +78,3 @@ class TransformationChain(nn.Module):
         for inverse_transform in self.inverse_transforms:
             x = inverse_transform(x)
         return x
-
-    # def to(self, device: torch.device) -> None:
-    #     self.direct_transforms = nn.ModuleList(
-    #         step.to(device) for step in self.direct_transforms
-    #     )
-    #     self.inverse_transforms = nn.ModuleList(
-    #         step.to(device) for step in self.inverse_transforms
-    #     )
