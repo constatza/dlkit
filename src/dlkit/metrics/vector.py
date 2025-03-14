@@ -1,6 +1,7 @@
 import torch.nn.functional as F
 import torch.linalg as LA
 import torch
+from typing import Literal
 
 
 def cosine_loss(predictions, targets):
@@ -15,8 +16,8 @@ def sum_squares(x, dim=-1):
     return torch.sum(x**2, dim=dim)
 
 
-def mean_squares(x):
-    return torch.mean(x**2)
+def mean_squares(x, dim=-1):
+    return torch.mean(torch.pow(x, 2), dim=dim)
 
 
 def sum_abs(x, dim=-1):
