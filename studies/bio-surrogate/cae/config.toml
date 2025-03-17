@@ -1,80 +1,69 @@
 [mlflow]
-experiment_name = "test artifacts 1"
-run_name = "basic cae"
-log_models = false
+experiment_name = "P-CAE"
+enable_checkpointing = true
+ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
 
 [mlflow.server]
 host = "localhost"
-port = 6060
+port = 35382
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
-tracking_uri = "https://{mlflow.server.host}:{mlflow.server.port}"
-
+tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
+terminate_apps_on_port = true
 
 [optuna]
-n_trials = 200
-direction = "minimize"
+# (empty)
 
 [trainer]
-max_epochs = 400
-enable_checkpointing = false
-logger = false
+max_epochs = 300
+gradient_clip_val = 5
 fast_dev_run = true
 
 [model]
-name = "caes.cae1d.BasicCAE"
-latent_size = {low = 3, high = 15, type = "int"}
-kernel_size = {low = 3, high = 11, type = "int", step = 2}
-num_layers = {low = 1, high = 6, type = "int"}
-reduced_channels = { low = 200, high = 600, type = "int" }
-reduced_timesteps =  {low = 200, high = 600, type = "int" }
+name = "caes.SkipCAE1d"
+latent_size = 5
+num_layers = 5
+kernel_size = 5
+final_channels = 80
+final_timesteps = 80
 
 [optimizer]
 name = "RAdam"
-lr = 0.001  # Range
-min_lr = 1e-7
+lr = 0.001
+# weight_decay = 8e-6
 
 [scheduler]
 name = "ReduceLROnPlateau"
-factor = 0.6
+factor = 0.8
 patience = 10
-min_lr = 1e-7
+min_lr = 1e-5
 
 [pruner]
-name = "MedianPruner"
-n_startup_trials = 10
-interval_steps = 10
+# (empty)
 
-[transforms]
-features = [
-    {name = "NumpyToTensor"},
-    {name = "MinMaxScaler", dim = [0, -1]}
-]
+[[transforms]]
+name = "MinMaxScaler"
+dim = [0, -1]
 
-# Sampler configuration for hyperparameter search
 [sampler]
-name = "TPESampler"  # Example of using a sampler
+# (empty)
 
 [datamodule]
-name = "FileDataModule"
+name = "NumpyModule"
 test_size = 0.3
-batch_size = 64
 
 [dataloader]
-num_workers = 1
+num_workers = 5
+batch_size = 128
 persistent_workers = true
+pin_memory = true
 
 [paths]
-dataroot = "M:/constantinos/data/bio/5-equations/"
-features = "{paths.input}/solutions.npy"
-input = "{paths.dataroot}/input/"
-output = "{paths.dataroot}/output/"
-figures = "{paths.output}/figures/"
-latent = "{paths.output}/latent.npy"
-predictions = "{paths.output}/predictions.npy"
-parameters = "{paths.input}/parameters.npy"
-
-
-
-
-
+dataroot = "M:\\constantinos\\data\\bio\\5-equations"
+input = "M:\\constantinos\\data\\bio\\5-equations\\input"
+features = "@format {this.paths.input}\\p.npy"
+output = "@format {this.paths.dataroot}\\output"
+latent = "@format {this.paths.output}\\latent.npy"
+figures = "@format {this.paths.output}\\figures\\"
+predictions = "@format {this.paths.output}\\p-predictions.npy"
+idx_split = "@format {this.paths.input}\\idx_split.json"
