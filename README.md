@@ -54,7 +54,7 @@ You can install the package using either `uv` or `pip`.
 
    ```bash
    python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scriptsctivate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
 4. **Install Dependencies**:
@@ -79,6 +79,14 @@ uv run start-server path/to/config.toml
 Run the training process using the configuration specified in the configuration
 ```bash
 uv run train path/to/config.toml
+```
+or with mlflow logging
+```bash
+uv run train path/to/config.toml
+```
+Note: MLflow training requires mlflow server to be running
+```bash
+uv run server path/to/config.toml
 ```
 
 ### Hyperparameter Optimization
