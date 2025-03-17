@@ -4,47 +4,60 @@ dev = [
     "pytest<9.0.0,>=8.2.2",
 ]
 
-lint = [
-    "ruff",
-]
 
 [project]
-authors = [
-    {name = "constatza", email = "29166969+constatza@users.noreply.github.com"},
-]
-
-requires-python = ">=3.12, <3.13"
-dependencies = [
-    "numpy<3.0,>=2.1",
-    "pathlib<2.0.0,>=1.0.1",
-    "tomlkit<1.0.0,>=0.12.5",
-    "pydantic<3.0.0,>=2.7.4",
-    #    "plotly<6.0.0,>=5.22.0",
-    "lightning<3.0.0,>=2.3.2",
-    #    "rich<14.0.0,>=13.7.1",
-    "matplotlib<4.0.0,>=3.9.1",
-    "polars>=1.4.1,<2.0.0",
-    "mlflow>=2.17.0,<3.0.0",
-    "optuna<4,>=3",
-    "torch<2.5.1,>=2.1.0",
-]
 name = "dlkit"
 version = "0.1.0"
 description = "custom modules and networks for pytorch integration with optuna and mlflow"
 readme = "README.md"
 
-[[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
-explicit = true
+authors = [
+    {name = "constatza", email = "29166969+constatza@users.noreply.github.com"},
+]
+
+requires-python = ">=3.11, <3.13"
+dependencies = [
+    "numpy<3.0,>=2.1",
+    "pathlib<2.0.0,>=1.0.1",
+    "tomlkit<1.0.0,>=0.12.5",
+    "pydantic<3.0.0,>=2.7.4",
+    "lightning<3.0.0,>=2.3.2",
+    "mlflow>=2.17.0,<3.0.0",
+    "optuna<4,>=3",
+    "torch>=2.4.0, <2.7.0",
+    "dynaconf>=3.2.10",
+]
+
+[project.optional-dependencies]
+plot = [
+    "matplotlib<4.0.0,>=3.9.1",
+]
+data = [
+    "polars>=1.4.1,<2.0.0",
+    ]
+
+
+
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+    {index = "pytorch-cpu", marker = "sys_platform == 'darwin'"},
+    { index = "pytorch-gpu", marker = "sys_platform != 'darwin'" },
 ]
-torchvision = [
-  { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
-]
+
+
+
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-gpu"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
 
 [build-system]
 requires = ["hatchling>=1.0.0"]
@@ -60,7 +73,9 @@ pythonpath = [
 ]
 
 [project.scripts]
-start-server = "dlkit.scripts.start_mlflow_server:main"
+server = "dlkit.scripts.start_mlflow_server:main"
 hopt = "dlkit.scripts.hparams_optimization:main"
+train-mlflow = "dlkit.scripts.mlflow_training:main"
 train = "dlkit.scripts.training:main"
+
 
