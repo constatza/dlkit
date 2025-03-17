@@ -1,22 +1,22 @@
 [mlflow]
 experiment_name = "P-CAE"
 enable_checkpointing = true
-#ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
+ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
 
 [mlflow.server]
 host = "localhost"
 port = 35382
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
-tracking_uri = "http://{mlflow.server.host}:{mlflow.server.port}"
+tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 terminate_apps_on_port = true
 
 [optuna]
 
 [trainer]
 max_epochs = 300
-#gradient_clip_val = 5
-#fast_dev_run = true
+gradient_clip_val = 5
+fast_dev_run = true
 
 [model]
 name = "caes.SkipCAE1d"
@@ -67,12 +67,11 @@ pin_memory = true
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
 input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-features = "{paths.input}\\p.npy"
-output = "{paths.dataroot}\\output"
-latent = "{paths.output}\\latent.npy"
-figures = "{paths.output}\\figures\\"
-predictions = "{paths.output}\\p-predictions.npy"
-idx_split = "{paths.input}\\idx_split.json"
+output = "@format {this.paths.dataroot}\\output"
+features = "@format {this.paths.input}\\p.npy"
+latent = "@format {this.paths.output}\\latent.npy"
+predictions = "@format {this.paths.output}\\p-predictions.npy"
+idx_split = "@format {this.paths.input}\\idx_split.json"
 
 
 
