@@ -1,8 +1,5 @@
-from dlkit.io.logging import get_logger
 from torch import nn
 import torch
-
-logger = get_logger(__name__)
 
 
 class TransformationChain(nn.Module):
