@@ -182,14 +182,14 @@ mlflow/
 *.db
 *.dbf
 /.idea
-*.xml
 
 *.ckpt
 *.png
 *logs
-
 *.npy
-
 lightning_logs
 *~
 
+
+.qodo
+.codiumai.toml

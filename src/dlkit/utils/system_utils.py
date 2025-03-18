@@ -5,16 +5,12 @@ import signal
 import subprocess
 import sys
 import socket
-import argparse
 
-from docker.auth import load_config
 from urllib3.util.url import parse_url
 from pathlib import Path
 
-from dlkit.io.logging import get_logger
+from loguru import logger
 from dlkit.utils.mlflow_utils import is_mlflow_server_running
-
-logger = get_logger(__name__)
 
 
 def import_dynamically(module_path: str, prepend: str = ""):
