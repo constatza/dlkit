@@ -1,18 +1,16 @@
-[mlflow]
+[mlflow.client]
 experiment_name = "P-CAE"
 enable_checkpointing = true
 ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
+tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 
 [mlflow.server]
 host = "localhost"
 port = 35382
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
 default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
-tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 terminate_apps_on_port = true
 
-[optuna]
-# (empty)
 
 [trainer]
 max_epochs = 300
@@ -21,8 +19,8 @@ fast_dev_run = true
 
 [model]
 name = "caes.SkipCAE1d"
-latent_size = 5
-num_layers = 5
+latent_size = {"low"= 5, "high"=10}
+num_layers = [1, 2, 3]
 kernel_size = 5
 final_channels = 80
 final_timesteps = 80
@@ -30,7 +28,7 @@ final_timesteps = 80
 [optimizer]
 name = "RAdam"
 lr = 0.001
-# weight_decay = 8e-6
+weight_decay = 8e-6
 
 [scheduler]
 name = "ReduceLROnPlateau"
@@ -38,25 +36,31 @@ factor = 0.8
 patience = 10
 min_lr = 1e-5
 
-[pruner]
-# (empty)
 
-[[transforms]]
-name = "MinMaxScaler"
-dim = [0, -1]
 
-[sampler]
-# (empty)
 
 [datamodule]
 name = "NumpyModule"
 test_size = 0.3
 
-[dataloader]
+[[datamodule.transforms]]
+name = "MinMaxScaler"
+dim = [0, -1]
+
+[datamodule.dataloader]
 num_workers = 5
 batch_size = 128
 persistent_workers = true
 pin_memory = true
+
+[optuna]
+# (empty)
+
+[optuna.pruner]
+# (empty)
+
+[optuna.sampler]
+# (empty)
 
 [paths]
 dataroot = "M:\\constantinos\\data\\bio\\5-equations"
