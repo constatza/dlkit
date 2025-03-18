@@ -1,22 +1,28 @@
 import sys
 import traceback
 import numpy as np
+import torch
+import click
 
-# from lightning.pytorch import seed_everything
-from dlkit.io.readers import load_config, parse_config
-from dlkit.io.logging import get_logger
+from lightning.pytorch import seed_everything
+from pydantic import validate_call, FilePath
+from loguru import logger
+
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
-import torch
-from typing import Dict
+from dlkit.io.readers import load_settings_from
 
-logger = get_logger(__name__)
 torch.set_float32_matmul_precision("medium")
-# seed_everything(1)
+seed_everything(1)
 
 
-def train(config: Dict) -> None:
+@click.command(
+    "train", help="Trains, tests, and predicts using the provided configuration."
+)
+@click.argument("config-path")
+@validate_call
+def train(config_path: FilePath) -> None:
     """Trains, tests, and predicts using the provided configuration.
 
     This function initializes the datamodule, trainer, and model using the
@@ -24,13 +30,13 @@ def train(config: Dict) -> None:
     prediction steps. Finally, it saves the predictions to disk.
 
     Args:
-        config (Dict): Configuration dictionary containing training parameters,
-            paths, and model settings.
+        config_path (FilePath): The path to the configuration file.
     """
     logger.info("Training started.")
+    settings = load_settings_from(config_path)
 
-    datamodule = initialize_datamodule(config)
-    trainer = initialize_trainer(config)
+    datamodule = initialize_datamodule(settings.DATAMODULE)
+    trainer = initialize_trainer(settings.TRAINER)
 
     # Setup datamodule for training
     datamodule.setup(stage="fit")
@@ -54,10 +60,8 @@ def train(config: Dict) -> None:
 def main() -> None:
     """Main function to parse configuration and trigger training."""
     try:
-        config = parse_config(description="Training script.")
-        train(config)
-    except Exception as e:
-        logger.error(e)
+        train()
+    except Exception:
         logger.error(traceback.format_exc())
     finally:
         sys.exit(0)

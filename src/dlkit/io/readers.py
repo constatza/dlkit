@@ -1,11 +1,11 @@
-import argparse
-from dynaconf import Dynaconf
-from typing import Any
+from dynaconf import Dynaconf, LazySettings
 from pydantic import validate_call, FilePath
+from dlkit.settings.classes import Settings
+from dlkit.settings.utils import dynaconf_to_settings
 
 
 @validate_call
-def load_config(config_path: FilePath) -> dict:
+def load_config(config_path: FilePath) -> LazySettings:
 
     # Load the TOML config that uses interpolation (without forcing everything under a default namespace)
     """
@@ -17,23 +17,12 @@ def load_config(config_path: FilePath) -> dict:
     Returns:
         dict: A dictionary representation of the configuration with keys in lowercase.
     """
-    config = Dynaconf(settings_files=[config_path], load_dotenv=True)
-    return config.to_dict(lower=True)
+    config = Dynaconf(settings_files=[config_path], envvar_prefix="DLKIT")
+    return config
 
 
-def parse_config(description: str = "") -> dict[str, Any]:
-    """
-    Parse the command line arguments and load a configuration from a TOML file.
-
-    Args:
-        description (str): The description of the command line interface.
-
-    Returns:
-        dict[str, Any]: A dictionary representation of the configuration with keys in lowercase.
-    """
-    argparser = argparse.ArgumentParser(description=description)
-    argparser.add_argument(
-        "config", type=str, help="Path to the TOML configuration file."
-    )
-    config_path = argparser.parse_args().config
-    return load_config(config_path)
+# @validate_call
+def load_settings_from(file_path: FilePath) -> Settings:
+    config = Dynaconf(settings_files=[file_path], envvar_prefix="DLKIT")
+    dlkit_settings = dynaconf_to_settings(config)
+    return dlkit_settings
