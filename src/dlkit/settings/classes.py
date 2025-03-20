@@ -6,7 +6,7 @@ from pydantic import (
     RootModel,
     model_validator,
 )
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -20,7 +20,7 @@ class FloatRange(BaseModel):
     low: float = Field(..., description="Minimum value")
     high: float = Field(..., description="Maximum value")
     step: float = Field(default=1, description="Step size (optional)")
-    log: Optional[bool] = Field(
+    log: bool | None = Field(
         default=False, description="If true, sample on a log scale"
     )
 
@@ -67,7 +67,7 @@ class MLflowClient(BaseSettings):
     enable_checkpointing: bool = Field(
         default=False, description="Whether to enable checkpointing."
     )
-    ckpt_path: Optional[str] = Field(
+    ckpt_path: str | None = Field(
         default=None, description="Path to the checkpoint file."
     )
 
@@ -82,14 +82,14 @@ class Trainer(BaseSettings):
         default=100,
         description="Maximum number of epochs to train for.",
     )
-    gradient_clip_val: Optional[float] = Field(
+    gradient_clip_val: float | None = Field(
         default=None, description="Value for gradient clipping (if any)."
     )
     fast_dev_run: bool | int = Field(
         default=False,
         description="Flag for fast development run or number of batches to run in fast dev mode.",
     )
-    default_root_dir: Optional[DirectoryPath] = Field(
+    default_root_dir: DirectoryPath | None = Field(
         default=None, description="Default root directory for the model."
     )
     logger: bool = Field(default=False, description="Whether to log the model.")
@@ -97,36 +97,34 @@ class Trainer(BaseSettings):
 
 class ModelSettings(BaseSettings):
     name: str = Field(..., description="Model namespace path.")
-    input_shape: Optional[IntSequence] = Field(
+    input_shape: IntSequence | None = Field(
         None, description="Input shape of the model."
     )
-    output_shape: Optional[IntSequence] = Field(
+    output_shape: IntSequence | None = Field(
         None, description="Output shape of the model."
     )
-    num_layers: Optional[IntHyper] = Field(
-        default=None, description="Number of layers."
-    )
-    latent_size: Optional[IntHyper] = Field(
+    num_layers: IntHyper | None = Field(default=None, description="Number of layers.")
+    latent_size: IntHyper | None = Field(
         default=None, description="Latent dimension size."
     )
-    kernel_size: Optional[IntHyper] = Field(
+    kernel_size: IntHyper | None = Field(
         default=None, description="Convolution kernel size."
     )
-    latent_channels: Optional[IntHyper] = Field(
+    latent_channels: IntHyper | None = Field(
         default=None, description="Number of latent channels before reduce to vector."
     )
-    latent_width: Optional[IntHyper] = Field(
+    latent_width: IntHyper | None = Field(
         default=None, description="Latent width before reduce to vector."
     )
-    latent_height: Optional[IntHyper] = Field(
+    latent_height: IntHyper | None = Field(
         default=None, description="Latent height before reduce to vector."
     )
 
 
 class Optimizer(BaseSettings):
     name: str = Field(default="Adam", description="Optimizer name.")
-    lr: Optional[FloatHyper] = Field(default=None, description="Learning rate.")
-    weight_decay: Optional[float] = Field(
+    lr: FloatHyper | None = Field(default=None, description="Learning rate.")
+    weight_decay: float | None = Field(
         default=None, description="Optional weight decay."
     )
 
@@ -166,7 +164,7 @@ class Sampler(BaseSettings):
         default="TPESampler",
         description="Sampler algorithm name for hyperparameter optimization.",
     )
-    seed: Optional[int] = Field(
+    seed: int | None = Field(
         default=None, description="Optional random seed for reproducibility."
     )
 
@@ -191,19 +189,19 @@ class Datamodule(BaseSettings):
 
 class Paths(BaseSettings):
     features: FilePath = Field(..., description="Path to the features file.")
-    targets: Optional[FilePath] = Field(
+    targets: FilePath | None = Field(
         default=None, description="Path to the targets file (if any)."
     )
-    input: Optional[DirectoryPath] = Field(default=None, description="Input directory.")
-    output: Optional[DirectoryPath] = Field(
+    input: DirectoryPath | None = Field(default=None, description="Input directory.")
+    output: DirectoryPath | None = Field(
         default=None, description="Output directory for generated files."
     )
-    predictions: Optional[Path] = Field(
+    predictions: Path | None = Field(
         default=None, description="Path to the (future) predictions file."
     )
 
     # !! idx split default value must be None !!
-    idx_split: Optional[FilePath] = Field(
+    idx_split: FilePath | None = Field(
         default=None, description="Path to the index split file."
     )
 
@@ -215,8 +213,8 @@ class Paths(BaseSettings):
 
 
 class Optuna(BaseSettings):
-    sampler: Optional[Sampler] = Field(default=None, description="Optuna sampler.")
-    pruner: Optional[Pruner] = Field(default=None, description="Optuna pruner.")
+    sampler: Sampler | None = Field(default=None, description="Optuna sampler.")
+    pruner: Pruner | None = Field(default=None, description="Optuna pruner.")
 
 
 # Top-level configuration model.
@@ -231,5 +229,5 @@ class Settings(BaseModel):
     SCHEDULER: Scheduler
     DATAMODULE: Datamodule
     PATHS: Paths
-    PRUNER: Optional[Pruner] = None
-    SAMPLER: Optional[Sampler] = None
+    PRUNER: Pruner | None = None
+    SAMPLER: Sampler | None = None

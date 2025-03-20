@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from dlkit.networks.blocks.dense import DenseBlock
-from typing import Callable
+from collections.abc import Callable
 
 
 class VectorToTensorBlock(nn.Module):
