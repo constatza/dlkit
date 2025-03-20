@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Callable
+from collections.abc import Callable
 import torch
 
 
@@ -11,6 +11,14 @@ class DenseBlock(nn.Module):
         out_features: int,
         activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
     ):
+        """
+        Initializes a DenseBlock.
+
+        Parameters:
+            in_features (int): Number of input features to the layer.
+            out_features (int): Number of output features from the layer.
+            activation (Callable[[torch.Tensor], torch.Tensor], optional): Activation function to be used in the layer. Defaults to F.gelu.
+        """
         super(DenseBlock, self).__init__()
         self.in_features = in_features
         self.out_features = out_features

@@ -2,7 +2,6 @@ import json
 import torch
 
 from pathlib import Path
-from typing import Optional
 from lightning import LightningDataModule
 from loguru import logger
 from pydantic import FilePath, validate_call, DirectoryPath
@@ -18,11 +17,10 @@ class NumpyModule(LightningDataModule):
 
     Args:
         features_path (FilePath): Path to features file (e.g. .npy).
-        targets_path (Optional[FilePath]): Path to targets file (e.g. .npy). Defaults to None.
-        idx_split_path (Optional[FilePath]): Path to saved index splits for train/val/test. Defaults to None.
+        targets_path (FilePath | None): Path to targets file (e.g. .npy). Defaults to None.
+        idx_split_path (FilePath | None): Path to saved index splits for train/val/test. Defaults to None.
         dataloader_config (dict, optional): Configuration for DataLoader. Defaults to None.
-        save_dir (Path, optional): Directory to save indices. Defaults to Path(".").
-        transform_chain (Optional[TransformationChain]): Transformation chain for dataset. Defaults to None.
+        transform_chain (TransformationChain | None): Transformation chain for dataset. Defaults to None.
         test_size (float, optional): Fraction for test split (0 to 1). Defaults to 0.3.
         val_size (float, optional): Fraction for val split (0 to 1). Defaults to 0.5.
     """
@@ -31,10 +29,10 @@ class NumpyModule(LightningDataModule):
     def __init__(
         self,
         features_path: FilePath,
-        targets_path: Optional[FilePath] = None,
+        targets_path: FilePath = None,
         idx_split_path: FilePath | None = None,
         dataloader_config: dict | None = None,
-        transform_chain: Optional[TransformationChain] = None,
+        transform_chain: TransformationChain | None = None,
         test_size: float = 0.3,
         val_size: float = 0.5,
     ):
@@ -48,30 +46,30 @@ class NumpyModule(LightningDataModule):
         if self.idx_split_path is None:
             logger.warning("No index path provided, saving to current directory.")
 
-        self.dataset: Optional[TensorDataset] = None
+        self.dataset: TensorDataset | None = None
         self.idx_split = {}
         self.test_size = test_size
         self.val_size = val_size
-        self.train_set: Optional[Subset] = None
-        self.val_set: Optional[Subset] = None
-        self.test_set: Optional[Subset] = None
-        self.predict_set: Optional[Subset] = None
+        self.train_set: Subset | None = None
+        self.val_set: Subset | None = None
+        self.test_set: Subset | None = None
+        self.predict_set: Subset | None = None
 
         # Tensors
-        self.features: Optional[torch.Tensor] = None
-        self.transformed_features: Optional[torch.Tensor] = None
-        self.targets: Optional[torch.Tensor] = None
-        self.transformed_targets: Optional[torch.Tensor] = None
-        self.shapes: Optional[tuple] = None
+        self.features: torch.Tensor | None = None
+        self.transformed_features: torch.Tensor | None = None
+        self.targets: torch.Tensor | None = None
+        self.transformed_targets: torch.Tensor | None = None
+        self.shapes: tuple | None = None
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
         """
         Set up datasets for different stages.
 
         Args:
-            stage (Optional[str], optional): Stage ('fit', 'test', or 'predict'). Defaults to None.
+            stage (str | None, optional): Stage ('fit', 'test', or 'predict'). Defaults to None.
         """
         # -------------------------
         # FIT STAGE

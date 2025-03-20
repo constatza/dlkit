@@ -1,16 +1,16 @@
+from collections.abc import Sequence
 import torch.nn as nn
 import torch.optim
 from lightning import LightningModule
 
 import dlkit.metrics
-from dlkit.mytypes import TupleLike
 
 
 class FeedForwardNN(LightningModule):
 
     def __init__(
         self,
-        layers: TupleLike = None,
+        layers: Sequence = None,
         activation: nn.Module = nn.GELU(),
         lr: float = 1e-3,
         layer_norm: bool = False,

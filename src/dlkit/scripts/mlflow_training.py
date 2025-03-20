@@ -6,9 +6,8 @@ from lightning.pytorch import seed_everything
 import mlflow
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
+from loguru import logger
 
-from dlkit.io.readers import load_config, parse_config
-from dlkit.io.logging import get_logger
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.tracking import MLFlowConfig
 from dlkit.setup.datamodule import initialize_datamodule
@@ -16,11 +15,9 @@ from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
 import torch
 
-logger = get_logger(__name__)
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)
 import mlflow
-from typing import Optional
 
 
 def train(config: dict):

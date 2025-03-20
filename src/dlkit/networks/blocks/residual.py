@@ -1,8 +1,8 @@
-from typing import Literal, Callable
+from typing import Literal
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 
 
 def agg_sum(x_in: torch.Tensor, x_out: torch.Tensor) -> torch.Tensor:

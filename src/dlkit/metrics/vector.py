@@ -1,7 +1,6 @@
 import torch.nn.functional as F
 import torch.linalg as LA
 import torch
-from typing import Literal
 
 
 def cosine_loss(predictions, targets):
