@@ -170,7 +170,8 @@ processed/
 interim/
 external/
 temp/
-mlflow/
+**/mlflow/
+**/mlruns/
 *.zip
 *.tar
 *.gz
