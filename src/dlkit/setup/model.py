@@ -1,12 +1,12 @@
 import torch.nn as nn
+from pydantic_core._pydantic_core import ValidationError
+
 from dlkit.utils.system_utils import import_dynamically
-from dlkit.utils.system_utils import filter_kwargs
-from dlkit.setup.transforms import initialize_transforms
 
-from dlkit.settings.classes import ModelSettings
+from dlkit.settings.classes import ModelSettings, Shape
 
 
-def initialize_model(config: ModelSettings, shapes: dict) -> nn.Module:
+def initialize_model(config: ModelSettings, shape: Shape) -> nn.Module:
     """
     Dynamically imports and sets up the model based on the provided configuration.
     The configuration should include the name of the model as well as any parameters
@@ -14,21 +14,18 @@ def initialize_model(config: ModelSettings, shapes: dict) -> nn.Module:
 
     Args:
         config (Settings): The configuration object for the model.
-        shapes (dict): A dictionary containing the shapes of the features and targets.
+        shape (dict): A dictionary containing the shapes of the features and targets.
 
     Returns:
         nn.Module: The instantiated model object.
     """
     model_class = import_dynamically(config.name, prepend="dlkit.networks")
-    input_shape = tuple(shapes[0])
-    output_shape = tuple(shapes[1])
-    config.update(
-        {
-            "input_shape": input_shape,
-            "output_shape": output_shape,
-            "optimizer_config": config["optimizer"],
-            "scheduler_config": config["scheduler"],
-        }
-    )
-    model = model_class(**filter_kwargs(model_config))
+    config.shape = shape
+
+    try:
+        model = model_class(settings=config)
+    except ValidationError as e:
+        raise ValueError(
+            f"{e} \nIf you are trying hyperparameter optimization, please use the `hparams_optimization` script."
+        )
     return model

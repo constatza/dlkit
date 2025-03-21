@@ -1,11 +1,11 @@
-import torch.optim as optim
-
+from collections.abc import Iterator
+from torch.optim import Optimizer
 from dlkit.utils.system_utils import import_dynamically, filter_kwargs
+from dlkit.settings.classes import OptimizerSettings
 
 
-def initialize_optimizer(config, parameters):
+def initialize_optimizer(config: OptimizerSettings, parameters: Iterator) -> Optimizer:
 
-    optimizer_name = config.get("name", "Adam")
-    optimizer_class = import_dynamically(optimizer_name, prepend="torch.optim")
-    optimizer = optimizer_class(parameters, **filter_kwargs(config))
+    optimizer_class = import_dynamically(config.name, prepend="torch.optim")
+    optimizer = optimizer_class(parameters, **filter_kwargs(config.model_dump()))
     return optimizer

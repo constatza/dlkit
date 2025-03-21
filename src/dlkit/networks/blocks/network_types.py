@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 import abc
 
 from lightning import LightningModule
@@ -5,25 +6,16 @@ from lightning import LightningModule
 from dlkit.setup.optimizer import initialize_optimizer
 from dlkit.setup.scheduler import initialize_scheduler
 import torch
+from dlkit.settings.classes import OptimizerSettings, SchedulerSettings, ModelSettings
 
 
 class OptimizerSchedulerNetwork(LightningModule):
 
-    def __init__(
-        self,
-        input_shape: tuple | list = None,
-        output_shape: tuple | list = None,
-        optimizer_config: dict = None,
-        scheduler_config: dict = None,
-        *args,
-        **kwargs,
-    ):
+    def __init__(self, settings: ModelSettings):
         super().__init__()
-        self.save_hyperparameters(ignore=["activation"])
-        self.input_shape = input_shape
-        self.output_shape = output_shape or input_shape
-        self.optimizer_config = optimizer_config
-        self.scheduler_config = scheduler_config
+        self.settings = settings
+        self.optimizer_config = settings.optimizer
+        self.scheduler_config = settings.scheduler
         self.val_loss = None
         self.train_loss = None
         self.test_loss = None
@@ -31,8 +23,8 @@ class OptimizerSchedulerNetwork(LightningModule):
     def configure_optimizers(self):
         optimizer = initialize_optimizer(self.optimizer_config, self.parameters())
         scheduler = initialize_scheduler(self.scheduler_config, optimizer)
-        self.optimizer_config = None
-        self.scheduler_config = None
+        # self.optimizer_config = None
+        # self.scheduler_config = None
         if not scheduler:
             return {"optimizer": optimizer}
         return {

@@ -1,19 +1,18 @@
-from cgitb import enable
+from dlkit.settings.classes import TrainerSettings, Settings
 
 from lightning import Trainer
 from dlkit.utils.system_utils import filter_kwargs
 from lightning.pytorch.callbacks import ModelSummary, ModelCheckpoint
-from lightning.pytorch.loggers import MLFlowLogger
 import mlflow
 from pathlib import Path
 
 
-def initialize_trainer(config):
+def initialize_trainer(config: TrainerSettings) -> Trainer:
 
     callbacks = [
         ModelSummary(max_depth=3),
     ]
-    if config.get("mlflow").get("enable_checkpointing", False):
+    if config.enable_checkpointing:
         callbacks.append(
             ModelCheckpoint(
                 dirpath=Path(mlflow.get_artifact_uri()) / "checkpoints",
@@ -26,13 +25,8 @@ def initialize_trainer(config):
             ),
         )
 
-    total_params = {
-        **config.get("trainer", {}),
-        "default_root_dir": None,
-        "logger": False,
-    }
     trainer = Trainer(
-        **filter_kwargs(total_params),
+        **filter_kwargs(config.model_dump()),
         callbacks=callbacks,
     )
     return trainer

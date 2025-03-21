@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 import functools
 import importlib
 import os
@@ -44,7 +45,7 @@ def import_dynamically(module_path: str, prepend: str = ""):
         raise e
 
 
-def filter_kwargs(kwargs: dict):
+def filter_kwargs(kwargs: dict, blacklist: Sequence[str] = ("name",)):
     """
     Filter keyword arguments to only include valid parameters for a class constructor
     and return a new instance of the class with the filtered keyword arguments.
@@ -54,7 +55,7 @@ def filter_kwargs(kwargs: dict):
     # valid_params = set(sig.parameters) - {"self"}
 
     # Filter kwargs to only include valid parameters
-    return {k: v for k, v in kwargs.items() if k != "name"}
+    return {k: v for k, v in kwargs.items() if k not in blacklist}
 
 
 def check_port_available(host, port, terminate_apps_on_port=False):

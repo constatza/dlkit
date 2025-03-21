@@ -35,14 +35,14 @@ def train(config_path: FilePath) -> None:
     logger.info("Training started.")
     settings = load_settings_from(config_path)
 
-    datamodule = initialize_datamodule(settings.DATAMODULE)
+    datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
 
     # Setup datamodule for training
     datamodule.setup(stage="fit")
 
     # Initialize model with shapes derived from datamodule
-    model = initialize_model(config, datamodule.shapes)
+    model = initialize_model(settings.MODEL, datamodule.shapes)
 
     # Train and evaluate the model
     trainer.fit(model, datamodule=datamodule)
@@ -52,7 +52,7 @@ def train(config_path: FilePath) -> None:
     # Convert predictions (list of Tensors) to a single NumPy array if possible
     if isinstance(predictions, list) and len(predictions) > 0:
         predictions_np = torch.cat(predictions, dim=0).numpy()
-        np.save(config["paths"]["predictions"], predictions_np)
+        np.save(str(settings.PATHS.predictions), predictions_np)
 
     logger.info("Training completed.")
 
