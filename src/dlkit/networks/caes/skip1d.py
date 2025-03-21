@@ -1,6 +1,5 @@
-import numpy as np
+from collections.abc import Sequence
 import torch
-from pyarrow.conftest import groups
 from pydantic import validate_call, ConfigDict
 from torch import nn
 from torch.nn import Sequential
@@ -13,6 +12,7 @@ from dlkit.networks.caes.base import CAE
 
 from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
+from dlkit.settings.classes import ModelSettings
 from dlkit.utils.math_utils import linear_interpolation_int
 
 
@@ -21,14 +21,8 @@ class SkipCAE1d(CAE):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        input_shape: tuple,
-        final_channels: int = 10,
-        final_timesteps: int = 5,
-        latent_size: int = 10,
-        num_layers: int = 4,
-        kernel_size: int = 5,
-        activation: nn.Module = nn.GELU(),
         *args,
+        activation: nn.Module = nn.GELU(),
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -37,21 +31,26 @@ class SkipCAE1d(CAE):
         )
 
         self.activation = activation
-        self.input_shape = input_shape
+        latent_channels = self.settings.latent_channels
+        latent_width = self.settings.latent_width
+        latent_size = self.settings.latent_size
+        num_layers = self.settings.num_layers
+        kernel_size = self.settings.kernel_size
+        shape = self.settings.shape
 
-        self.example_input_array = torch.randn(1, *input_shape[1:])
+        self.example_input_array = torch.randn(1, *shape.features)
 
-        initial_channels = input_shape[-2]
-        initial_time_steps = input_shape[-1]
+        initial_channels = shape.features[-2]
+        initial_width = shape.features[-1]
 
         channels = linear_interpolation_int(
-            [initial_channels, final_channels], num_layers + 1
+            [initial_channels, latent_channels], num_layers + 1
         )
         channels[1:] = channels[1:] + (channels[1:] % 2)
         channels = channels.tolist()
 
         timesteps = linear_interpolation_int(
-            [initial_time_steps, final_timesteps], num_layers + 1
+            [initial_width, latent_width], num_layers + 1
         ).tolist()
 
         # Instantiate feature extractor and latent encoder
@@ -84,14 +83,22 @@ class SkipCAE1d(CAE):
         x = self.decoder(x)
         return self.smoothing_layer(x)
 
+    @staticmethod
+    def training_loss_func(x_hat, x):
+        return nn.functional.mse_loss(x_hat, x)
+
+    @staticmethod
+    def test_loss_func(x_hat, x):
+        return nn.functional.mse_loss(x_hat, x)
+
 
 class SkipEncoder(nn.Module):
     def __init__(
         self,
         latent_dim: int,
-        channels: list[int],
+        channels: Sequence[int],
         kernel_size: int = 3,
-        timesteps: list[int] = None,
+        timesteps: Sequence[int] = None,
     ):
         """
         Complete encoder that compresses the input into a latent vector.
@@ -136,8 +143,8 @@ class SkipDecoder(nn.Module):
     def __init__(
         self,
         latent_dim: int,
-        channels: list[int],
-        timesteps: list[int],
+        channels: Sequence[int],
+        timesteps: Sequence[int],
         kernel_size: int = 3,
     ):
         """

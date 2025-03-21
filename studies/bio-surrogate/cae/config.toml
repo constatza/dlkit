@@ -1,7 +1,5 @@
 [mlflow.client]
 experiment_name = "P-CAE"
-enable_checkpointing = true
-ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
 tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 
 [mlflow.server]
@@ -16,21 +14,23 @@ terminate_apps_on_port = true
 max_epochs = 300
 gradient_clip_val = 5
 fast_dev_run = true
+accelerator = "cpu"
+enable_checkpointing = true
 
 [model]
 name = "caes.SkipCAE1d"
-latent_size = {"low"= 5, "high"=10}
-num_layers = [1, 2, 3]
+latent_size = 5
+num_layers = 2
 kernel_size = 5
-final_channels = 80
-final_timesteps = 80
+latent_channels = 80
+latent_width = 80
 
-[optimizer]
+[model.optimizer]
 name = "RAdam"
 lr = 0.001
 weight_decay = 8e-6
 
-[scheduler]
+[model.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.8
 patience = 10
@@ -71,3 +71,4 @@ latent = "@format {this.paths.output}\\latent.npy"
 figures = "@format {this.paths.output}\\figures\\"
 predictions = "@format {this.paths.output}\\p-predictions.npy"
 idx_split = "@format {this.paths.input}\\idx_split.json"
+ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"

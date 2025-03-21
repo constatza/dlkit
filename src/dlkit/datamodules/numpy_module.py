@@ -1,14 +1,14 @@
 import json
 import torch
 
-from pathlib import Path
 from lightning import LightningDataModule
 from loguru import logger
-from pydantic import FilePath, validate_call, DirectoryPath
 from torch.utils.data import TensorDataset, DataLoader, Subset
 
 from dlkit.datasets.numpy_dataset import load_dataset, split_or_load_indices
+from dlkit.settings.classes import DatamoduleSettings, Paths, Shape
 from dlkit.transforms.chaining import TransformationChain
+from dlkit.utils.system_utils import filter_kwargs
 
 
 class NumpyModule(LightningDataModule):
@@ -16,51 +16,37 @@ class NumpyModule(LightningDataModule):
     LightningDataModule for handling datasets with train/val/test splits and lazy loading.
 
     Args:
-        features_path (FilePath): Path to features file (e.g. .npy).
-        targets_path (FilePath | None): Path to targets file (e.g. .npy). Defaults to None.
-        idx_split_path (FilePath | None): Path to saved index splits for train/val/test. Defaults to None.
-        dataloader_config (dict, optional): Configuration for DataLoader. Defaults to None.
-        transform_chain (TransformationChain | None): Transformation chain for dataset. Defaults to None.
-        test_size (float, optional): Fraction for test split (0 to 1). Defaults to 0.3.
-        val_size (float, optional): Fraction for val split (0 to 1). Defaults to 0.5.
+
     """
 
-    @validate_call(config={"arbitrary_types_allowed": True})
+    dataset: TensorDataset | None
+    train_set: Subset | None
+    val_set: Subset | None
+    test_set: Subset | None
+    predict_set: Subset | None
+
+    idx_split: dict[str, tuple[int]]
+
+    features: torch.Tensor | None
+    targets: torch.Tensor | None
+    transformed_features: torch.Tensor | None
+    transformed_targets: torch.Tensor | None
+
+    shapes: Shape
+
     def __init__(
         self,
-        features_path: FilePath,
-        targets_path: FilePath = None,
-        idx_split_path: FilePath | None = None,
-        dataloader_config: dict | None = None,
+        settings: DatamoduleSettings,
+        paths: Paths,
         transform_chain: TransformationChain | None = None,
-        test_size: float = 0.3,
-        val_size: float = 0.5,
     ):
         super().__init__()
-        self.features_path = features_path
-        self.targets_path = targets_path
-        self.idx_split_path: Path = idx_split_path
-        self.dataloader_config = dataloader_config or {}
+        self.settings = settings
+        self.paths = paths
         self.transform_chain = transform_chain
 
-        if self.idx_split_path is None:
+        if self.paths.idx_split is None:
             logger.warning("No index path provided, saving to current directory.")
-
-        self.dataset: TensorDataset | None = None
-        self.idx_split = {}
-        self.test_size = test_size
-        self.val_size = val_size
-        self.train_set: Subset | None = None
-        self.val_set: Subset | None = None
-        self.test_set: Subset | None = None
-        self.predict_set: Subset | None = None
-
-        # Tensors
-        self.features: torch.Tensor | None = None
-        self.transformed_features: torch.Tensor | None = None
-        self.targets: torch.Tensor | None = None
-        self.transformed_targets: torch.Tensor | None = None
-        self.shapes: tuple | None = None
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -77,27 +63,29 @@ class NumpyModule(LightningDataModule):
         if stage in ["fit", None]:
             # Load features/targets into memory (CPU by default)
             self.features, self.targets = load_dataset(
-                self.features_path, self.targets_path
+                self.paths.features, self.paths.targets
             )
-            self.shapes = (self.features.shape, self.targets.shape)
+            self.shapes = Shape(
+                features=self.features.shape[1:], targets=self.targets.shape[1:]
+            )
 
             # Generate or load train/val/test indices
             self.idx_split = split_or_load_indices(
-                self.idx_split_path,
+                self.paths.idx_split,
                 len(self.features),
-                test_size=self.test_size,
-                val_size=self.val_size,
+                test_size=self.settings.test_size,
+                val_size=self.settings.val_size,
             )
-            if self.idx_split_path is None:
-                self.idx_split_path = self.features_path.parent / "idx_split.json"
-                logger.warning(
-                    f"No index split path provided, generating and saving to {self.idx_split_path}"
-                )
-                with open(self.idx_split_path, "w") as f:
-                    self.idx_split["idx_path"] = str(self.idx_split_path)
+            if self.paths.idx_split is None:
+                self.paths.idx_split = self.paths.input / "idx_split.json"
+                with open(self.paths.idx_split, "w") as f:
+                    self.idx_split["idx_path"] = str(self.paths.idx_split)
                     json.dump(self.idx_split, f)
+                logger.warning(
+                    f"No index split path provided, generating and saving to {self.paths.idx_split}"
+                )
             else:
-                logger.info(f"Loaded indices from {self.idx_split_path}")
+                logger.info(f"Loaded indices from {self.paths.idx_split}")
 
             # If transform_chain is provided, move data to GPU, apply transforms
             # Then delete the old (untransformed) copy
@@ -110,11 +98,11 @@ class NumpyModule(LightningDataModule):
 
                 # Free GPU memory from the original features, since they're no longer needed
                 # If no target file was provided, the transformed features act as targets
-                if not self.targets_path:
+                if self.settings.autoencoder_dataset:
                     self.transformed_targets = self.transformed_features
                 else:
-                    # Future targets transformation
-                    pass
+                    # TODO: Future targets transformation
+                    logger.warning("No transformation applied to targets. ")
 
             else:
                 # If no transform, just store them as-is (may still want to put them on GPU depending on your pipeline)
@@ -132,7 +120,7 @@ class NumpyModule(LightningDataModule):
 
             # Create subsets for train/val
             self.train_set = Subset(self.dataset, self.idx_split["train"])
-            if self.val_size > 0:
+            if self.settings.val_size > 0:
                 self.val_set = Subset(self.dataset, self.idx_split["val"])
 
         # -------------------------
@@ -160,16 +148,26 @@ class NumpyModule(LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         """Create DataLoader for training set."""
-        return DataLoader(self.train_set, shuffle=False, **self.dataloader_config)
+        return DataLoader(
+            self.train_set,
+            **self.settings.dataloader.model_dump(),
+        )
 
     def val_dataloader(self) -> DataLoader:
         """Create DataLoader for validation set."""
-        return DataLoader(self.val_set, shuffle=False, **self.dataloader_config)
+        return DataLoader(self.val_set, **self.settings.dataloader.model_dump())
 
     def test_dataloader(self) -> DataLoader:
         """Create DataLoader for test set."""
-        return DataLoader(self.test_set, shuffle=False, **self.dataloader_config)
+        return DataLoader(self.test_set, **self.settings.dataloader.model_dump())
 
     def predict_dataloader(self) -> DataLoader:
         """Create DataLoader for predict set."""
-        return DataLoader(self.predict_set, shuffle=False, **self.dataloader_config)
+        # don't shuffle predict set
+        return DataLoader(
+            self.predict_set,
+            shuffle=False,
+            **filter_kwargs(
+                self.settings.dataloader.model_dump(), blacklist=("shuffle",)
+            ),
+        )
