@@ -1,12 +1,15 @@
-import torch.nn as nn
+from lightning.pytorch import LightningModule
 from pydantic_core._pydantic_core import ValidationError
+from pydantic import validate_call
 
 from dlkit.utils.system_utils import import_dynamically
 
-from dlkit.settings.classes import ModelSettings, Shape
+from dlkit.settings import ModelSettings
+from dlkit.settings.types import Shape
 
 
-def initialize_model(config: ModelSettings, shape: Shape) -> nn.Module:
+@validate_call
+def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
     """
     Dynamically imports and sets up the model based on the provided configuration.
     The configuration should include the name of the model as well as any parameters
@@ -20,7 +23,7 @@ def initialize_model(config: ModelSettings, shape: Shape) -> nn.Module:
         nn.Module: The instantiated model object.
     """
     model_class = import_dynamically(config.name, prepend="dlkit.networks")
-    config.shape = shape
+    config = config.model_copy(update={"shape": shape})
 
     try:
         model = model_class(settings=config)

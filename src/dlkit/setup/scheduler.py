@@ -1,6 +1,5 @@
 from torch import optim
-from dlkit.settings.classes import SchedulerSettings, OptimizerSettings
-from dlkit.utils.system_utils import filter_kwargs
+from dlkit.settings import SchedulerSettings
 
 
 def initialize_scheduler(
@@ -12,7 +11,7 @@ def initialize_scheduler(
     )
 
     return (
-        scheduler_class(optimizer, **filter_kwargs(scheduler.model_dump()))
+        scheduler_class(optimizer, **scheduler.to_dict_compatible_with(scheduler_class))
         if scheduler_class
         else None
     )

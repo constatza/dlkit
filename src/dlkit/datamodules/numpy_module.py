@@ -6,9 +6,9 @@ from loguru import logger
 from torch.utils.data import TensorDataset, DataLoader, Subset
 
 from dlkit.datasets.numpy_dataset import load_dataset, split_or_load_indices
-from dlkit.settings.classes import DatamoduleSettings, Paths, Shape
+from dlkit.settings import DatamoduleSettings, Paths
+from dlkit.settings.types import Shape
 from dlkit.transforms.chaining import TransformationChain
-from dlkit.utils.system_utils import filter_kwargs
 
 
 class NumpyModule(LightningDataModule):
@@ -18,6 +18,10 @@ class NumpyModule(LightningDataModule):
     Args:
 
     """
+
+    settings: DatamoduleSettings
+    paths: Paths
+    transform_chain: TransformationChain
 
     dataset: TensorDataset | None
     train_set: Subset | None
@@ -60,7 +64,7 @@ class NumpyModule(LightningDataModule):
         # -------------------------
         # FIT STAGE
         # -------------------------
-        if stage in ["fit", None]:
+        if stage in ["fit"]:
             # Load features/targets into memory (CPU by default)
             self.features, self.targets = load_dataset(
                 self.paths.features, self.paths.targets
@@ -77,7 +81,9 @@ class NumpyModule(LightningDataModule):
                 val_size=self.settings.val_size,
             )
             if self.paths.idx_split is None:
-                self.paths.idx_split = self.paths.input / "idx_split.json"
+                self.paths = self.paths.model_copy(
+                    update={"idx_split": self.paths.input / "idx_split.json"}
+                )
                 with open(self.paths.idx_split, "w") as f:
                     self.idx_split["idx_path"] = str(self.paths.idx_split)
                     json.dump(self.idx_split, f)
@@ -167,7 +173,7 @@ class NumpyModule(LightningDataModule):
         return DataLoader(
             self.predict_set,
             shuffle=False,
-            **filter_kwargs(
-                self.settings.dataloader.model_dump(), blacklist=("shuffle",)
+            **self.settings.dataloader.to_dict_compatible_with(
+                DataLoader, exclude=("shuffle",)
             ),
         )

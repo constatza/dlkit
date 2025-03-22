@@ -4,83 +4,65 @@ import optuna
 import mlflow
 import torch
 from lightning.pytorch import seed_everything
+from loguru import logger
+from pydantic import validate_call, FilePath
+import click
 
+from dlkit.io.readers import load_settings_from
 from dlkit.setup.pruner import initialize_pruner
-from dlkit.io.logging import get_logger
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.datamodule import initialize_datamodule
-from dlkit.utils.system_utils import import_dynamically
+from dlkit.setup.trainer import initialize_trainer
 from dlkit.utils.optuna_utils import objective
-from dlkit.io.readers import parse_config
-from dlkit.setup.tracking import MLFlowConfig
 
-
-logger = get_logger(__name__)
 
 # set all seeds with pytorch lightning
 seed_everything(1)
 torch.set_float32_matmul_precision("medium")
 
 
-def main(config_dict: dict):
-    mlflow_config = MLFlowConfig(**config_dict["mlflow"])
+@click.command(
+    "Hyperparameter Optimization", help="Hyperparameter Optimization with Optuna."
+)
+@click.argument("config-path")
+@validate_call
+def main(config_path: FilePath) -> None:
+    settings = load_settings_from(config_path)
 
-    dataset_module = initialize_datamodule(config_dict)
-    dataset_module.prepare_data()
-
-    # Read n_trials from config
-    optuna_config = config_dict.get("optuna", {})
-    n_trials = optuna_config["n_trials"]
+    datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
+    datamodule.setup(stage="fit")
 
     # setup mlflow experiment and tracking uri
-    experiment_id = initialize_mlflow_client(mlflow_config)
+    experiment_id = initialize_mlflow_client(settings.MLFLOW.client)
 
     # Setup pruner
-    pruner = initialize_pruner(config_dict.get("pruner"))
-    logger.info(f"Using pruner: {pruner.__class__.__name__}")
-    experiment_name = config_dict["mlflow"].get("experiment_name", "experiment")
+    pruner = initialize_pruner(settings.OPTUNA.pruner)
 
-    with mlflow.start_run() as parent_run:
-        mlflow.pytorch.autolog(
-            log_models=config_dict["mlflow"].get("log_models", False)
-        )
+    with mlflow.start_run(
+        experiment_id=experiment_id, run_name=settings.MLFLOW.client.run_name
+    ) as parent_run:
+        mlflow.pytorch.autolog(log_models=False)
         study = optuna.create_study(
-            direction=config_dict["optuna"].get("direction", "minimize"),
+            direction=settings.OPTUNA.direction,
             pruner=pruner,
             study_name=f"study_{experiment_id}",
         )
         study.optimize(
-            lambda trial: objective(trial, config_dict, dataset_module),
-            n_trials=n_trials,
+            lambda trial: objective(
+                trial, settings.MODEL, datamodule, settings.TRAINER
+            ),
+            n_trials=settings.OPTUNA.n_trials,
         )
 
         logger.info(f"Best trial: {study.best_trial.number}")
         logger.info(f"Best parameters: {study.best_trial.params}")
         logger.info(f"Best value: {study.best_trial.value}")
 
-        # log best parameters to mlflow
-        config_dict["model"].update(study.best_trial.params)
-
-        model_class = import_dynamically(
-            config_dict["model"].get("name"), prepend="dlkit.networks"
-        )
-        best_run_id = study.best_trial.user_attrs.get("mlflow_run_id")
-        config_dict["mlflow"].update(
-            {"best_run_id": best_run_id, "run_name": f"best-{best_run_id}"}
-        )
-
-        mlflow.log_dict(config_dict, "best_config.toml")
-
 
 if __name__ == "__main__":
     try:
-        config = parse_config(
-            description="Hyperparameter Optimization with Optuna script."
-        )
-        main(config)
+        main()
     except Exception as e:
-
-        logger.error(e)
         logger.error(traceback.format_exc())
     finally:
         sys.exit(0)

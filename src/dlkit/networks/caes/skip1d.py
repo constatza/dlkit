@@ -12,7 +12,7 @@ from dlkit.networks.caes.base import CAE
 
 from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
-from dlkit.settings.classes import ModelSettings
+from dlkit.settings.general_settings import ModelSettings
 from dlkit.utils.math_utils import linear_interpolation_int
 
 

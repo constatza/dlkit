@@ -45,33 +45,20 @@ def import_dynamically(module_path: str, prepend: str = ""):
         raise e
 
 
-def filter_kwargs(kwargs: dict, blacklist: Sequence[str] = ("name",)):
-    """
-    Filter keyword arguments to only include valid parameters for a class constructor
-    and return a new instance of the class with the filtered keyword arguments.
-    """
-    # sig = inspect.signature(cls.__init__)
-    # # Get valid argument names (excluding 'self')
-    # valid_params = set(sig.parameters) - {"self"}
-
-    # Filter kwargs to only include valid parameters
-    return {k: v for k, v in kwargs.items() if k not in blacklist}
-
-
 def check_port_available(host, port, terminate_apps_on_port=False):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(1)
         try:
             sock.bind((host, port))
         except socket.error:
-            logger.warn(f"Port {port} is already in use.")
+            logger.warning(f"Port {port} is already in use.")
 
             if is_mlflow_server_running(host, port):
-                logger.warn("MLflow server is already running on the port.")
+                logger.warning("MLflow server is already running on the port.")
                 return
 
             if terminate_apps_on_port:
-                logger.warn("Terminating applications using the port.")
+                logger.warning("Terminating applications using the port.")
                 terminate_apps(port)
                 check_port_available(host, port, terminate_apps_on_port=False)
             else:

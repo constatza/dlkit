@@ -6,7 +6,7 @@ tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.por
 host = "localhost"
 port = 35382
 backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
-default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns"
+default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns/artifacts"
 terminate_apps_on_port = true
 
 
@@ -71,4 +71,4 @@ latent = "@format {this.paths.output}\\latent.npy"
 figures = "@format {this.paths.output}\\figures\\"
 predictions = "@format {this.paths.output}\\p-predictions.npy"
 idx_split = "@format {this.paths.input}\\idx_split.json"
-ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
+#ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"

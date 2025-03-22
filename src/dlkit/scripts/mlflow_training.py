@@ -2,14 +2,15 @@ import sys
 import traceback
 
 import numpy as np
-from lightning.pytorch import seed_everything
 import mlflow
-import mlflow.pytorch
-from mlflow.tracking import MlflowClient
+from pydantic import validate_call, FilePath
 from loguru import logger
+from lightning.pytorch import seed_everything
 
+import click
+from dlkit.settings import Settings
+from dlkit.io.readers import load_settings_from
 from dlkit.setup.tracking import initialize_mlflow_client
-from dlkit.setup.tracking import MLFlowConfig
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
@@ -17,34 +18,41 @@ import torch
 
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)
-import mlflow
 
 
-def train(config: dict):
-    mlflow_config = MLFlowConfig(**config["mlflow"])
+@click.command(
+    "MLFlow Training",
+    help="Trains, tests, and predicts using the provided configuration.",
+)
+@click.argument("config-path")
+@validate_call
+def train(config_path: FilePath) -> None:
 
+    settings = load_settings_from(config_path)
+
+    datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
+    trainer = initialize_trainer(settings.TRAINER)
     # Initialize MLflow client and get experiment_id
-    experiment_id = initialize_mlflow_client(mlflow_config)
-
+    experiment_id = initialize_mlflow_client(settings.MLFLOW.client)
     # Start MLFlow run
-    with mlflow.start_run(run_name=mlflow_config.run_name) as run:
+    with mlflow.start_run(
+        experiment_id=experiment_id, run_name=settings.MLFLOW.client.run_name
+    ) as run:
         logger.info("Training started.")
 
-        datamodule = initialize_datamodule(config)
-        trainer = initialize_trainer(config)
         dataset_source = mlflow.data.dataset_source.DatasetSource.from_dict(
             {
-                "features": datamodule.features_path,
-                "targets": datamodule.targets_path,
+                "features": settings.PATHS.features,
+                "targets": settings.PATHS.targets,
             }
         )
 
         run_id = run.info.run_id
         mlflow.pytorch.autolog(log_models=False)
-        mlflow.log_dict(config, "config.yml")
+        mlflow.log_dict(settings.model_dump(), "config.toml")
 
         datamodule.setup(stage="fit")
-        mlflow.log_dict(datamodule.idx_split_path, "splits.json")
+        mlflow.log_dict(datamodule.idx_split, "splits.json")
         mlflow_dataset = mlflow.data.from_numpy(
             datamodule.features,
             targets=datamodule.targets,
@@ -55,24 +63,17 @@ def train(config: dict):
         )
         mlflow.log_input(mlflow_dataset, "dataset")
 
-        model = initialize_model(config, datamodule.shapes)
+        model = initialize_model(settings.MODEL, datamodule.shapes)
         mlflow.log_params(model.hparams)
-        trainer.fit(model, datamodule=datamodule, ckpt_path=mlflow_config.ckpt_path)
+        trainer.fit(model, datamodule=datamodule, ckpt_path=settings.PATHS.ckpt_path)
         trainer.test(model, datamodule=datamodule)
         predictions = trainer.predict(model, datamodule=datamodule)
 
-        # Convert predictions (list of Tensors) to a single NumPy array if possible
-        # Assuming predictions is a list of tensors or arrays
-        if isinstance(predictions, list) and len(predictions) > 0:
-            predictions_np = torch.cat(predictions, dim=0).numpy()
-            np.save(config["paths"]["predictions"], predictions_np)
-            mlflow.log_artifact(config["paths"]["predictions"])
-
         # Log the model
         mlflow.pytorch.log_model(model, "model", signature=signature)
-        if mlflow_config.register_model:
+        if settings.MLFLOW.client.register_model:
             mlflow.register_model(
-                model_uri=f"runs:/{run_id}/model", name=config["model"]["name"]
+                model_uri=f"runs:/{run_id}/model", name=settings.MODEL.name
             )
 
     logger.info(f"Training completed. Run ID: {run_id}")
@@ -80,11 +81,8 @@ def train(config: dict):
 
 def main():
     try:
-        config = parse_config(description="Training script.")
-        train(config)
+        train()
     except Exception as e:
-
-        logger.error(e)
         logger.error(traceback.format_exc())
     finally:
         sys.exit(0)

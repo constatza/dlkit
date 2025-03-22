@@ -38,10 +38,8 @@ def train(config_path: FilePath) -> None:
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
 
-    # Setup datamodule for training
-    datamodule.setup(stage="fit")
-
     # Initialize model with shapes derived from datamodule
+    datamodule.setup(stage="fit")
     model = initialize_model(settings.MODEL, datamodule.shapes)
 
     # Train and evaluate the model
