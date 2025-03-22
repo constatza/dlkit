@@ -6,7 +6,7 @@ from lightning import LightningModule
 from dlkit.setup.optimizer import initialize_optimizer
 from dlkit.setup.scheduler import initialize_scheduler
 import torch
-from dlkit.settings.classes import OptimizerSettings, SchedulerSettings, ModelSettings
+from dlkit.settings import ModelSettings
 
 
 class OptimizerSchedulerNetwork(LightningModule):

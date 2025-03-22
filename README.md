@@ -73,7 +73,7 @@ To execute the provided scripts, use:
 ### MLFlow Server
 Start the MLFlow server using the configuration specified in the configuration (required for training and optimization)
 ```bash
-uv run start-server path/to/config.toml
+uv run server path/to/config.toml
 ```
 ### Training
 Run the training process using the configuration specified in the configuration
@@ -82,7 +82,7 @@ uv run train path/to/config.toml
 ```
 or with mlflow logging
 ```bash
-uv run train path/to/config.toml
+uv run train-mlflow path/to/config.toml
 ```
 Note: MLflow training requires mlflow server to be running
 ```bash

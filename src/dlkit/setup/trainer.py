@@ -1,7 +1,6 @@
-from dlkit.settings.classes import TrainerSettings, Settings
+from dlkit.settings.general_settings import TrainerSettings, Settings
 
 from lightning import Trainer
-from dlkit.utils.system_utils import filter_kwargs
 from lightning.pytorch.callbacks import ModelSummary, ModelCheckpoint
 import mlflow
 from pathlib import Path
@@ -26,7 +25,7 @@ def initialize_trainer(config: TrainerSettings) -> Trainer:
         )
 
     trainer = Trainer(
-        **filter_kwargs(config.model_dump()),
+        **config.to_dict_compatible_with(Trainer),
         callbacks=callbacks,
     )
     return trainer

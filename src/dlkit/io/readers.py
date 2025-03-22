@@ -1,6 +1,6 @@
 from dynaconf import Dynaconf, LazySettings
 from pydantic import validate_call, FilePath
-from dlkit.settings.classes import Settings
+from dlkit.settings.general_settings import Settings
 from dlkit.settings.utils import dynaconf_to_settings
 
 

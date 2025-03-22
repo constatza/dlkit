@@ -1,16 +1,13 @@
-from pathlib import Path
 from dlkit.transforms.chaining import TransformationChain
-from dlkit.utils.system_utils import import_dynamically, filter_kwargs
 from dlkit.setup.transforms import initialize_transforms
 from dlkit.datamodules.numpy_module import NumpyModule
-from dlkit.settings.classes import DatamoduleSettings, Paths
-from lightning import LightningDataModule
+from dlkit.settings.general_settings import DatamoduleSettings, Paths
 
 
 def initialize_datamodule(
     datamodule_config: DatamoduleSettings,
     paths_config: Paths,
-) -> LightningDataModule:
+) -> NumpyModule:
     """
     Dynamically imports and sets up the datamodule based on the provided configuration.
     :return: LightningDataModule: The instantiated datamodule object.
