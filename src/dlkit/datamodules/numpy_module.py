@@ -36,7 +36,7 @@ class NumpyModule(LightningDataModule):
     transformed_features: torch.Tensor | None
     transformed_targets: torch.Tensor | None
 
-    shapes: Shape
+    shape: Shape
 
     def __init__(
         self,
@@ -68,9 +68,6 @@ class NumpyModule(LightningDataModule):
             # Load features/targets into memory (CPU by default)
             self.features, self.targets = load_dataset(
                 self.paths.features, self.paths.targets
-            )
-            self.shapes = Shape(
-                features=self.features.shape[1:], targets=self.targets.shape[1:]
             )
 
             # Generate or load train/val/test indices
@@ -104,7 +101,7 @@ class NumpyModule(LightningDataModule):
 
                 # Free GPU memory from the original features, since they're no longer needed
                 # If no target file was provided, the transformed features act as targets
-                if self.settings.autoencoder_dataset:
+                if self.settings.is_autoencoder:
                     self.transformed_targets = self.transformed_features
                 else:
                     # TODO: Future targets transformation
@@ -119,6 +116,10 @@ class NumpyModule(LightningDataModule):
             self.transform_chain = self.transform_chain.cpu()
             self.transformed_targets = self.transformed_targets.cpu()
             self.transformed_features = self.transformed_features.cpu()
+            self.shape = Shape(
+                features=self.transformed_features.shape[1:],
+                targets=self.transformed_targets.shape[1:],
+            )
             # Build the main dataset
             self.dataset = TensorDataset(
                 self.transformed_features, self.transformed_targets

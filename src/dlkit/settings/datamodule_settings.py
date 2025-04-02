@@ -5,7 +5,7 @@ from .base_settings import BaseSettings
 class TransformSettings(BaseSettings):
     name: str = Field(..., description="Name of the transform.")
     dim: tuple[int, ...] = Field(
-        ..., description="List of dimensions to apply the transform on."
+        None, description="List of dimensions to apply the transform on."
     )
 
 
@@ -33,7 +33,7 @@ class DatamoduleSettings(BaseSettings):
     transforms: tuple[TransformSettings, ...] = Field(
         ..., description="List of transforms to apply."
     )
-    autoencoder_dataset: bool = Field(
+    is_autoencoder: bool = Field(
         default=False,
         description="Whether targets and features are the same.",
         frozen=False,

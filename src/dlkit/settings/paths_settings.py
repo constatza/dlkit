@@ -1,6 +1,7 @@
 from pathlib import Path
 from pydantic import Field, DirectoryPath, FilePath, model_validator
 from .base_settings import BaseSettings
+from pydantic import field_validator, ValidationInfo
 
 
 class Paths(BaseSettings):
@@ -25,16 +26,17 @@ class Paths(BaseSettings):
         default=None, description="Path to the checkpoint file."
     )
 
-    @model_validator(mode="before")
-    def populate_predictions(cls, data):
-        if "output" not in data:
-            return data
-        if "predictions" not in data:
-            data["predictions"] = f"{data['output']}/predictions.npy"
-        return data
+    @field_validator("predictions", mode="after")
+    @classmethod
+    def populate_predictions(cls, value, info: ValidationInfo):
+        print("Validate predictions")
+        if value is None:
+            return info.data["output"] / "predictions.csv"
+        return value
 
-    @model_validator(mode="before")
-    def populate_targets(cls, data):
-        if "targets" not in data:
-            data["targets"] = data["features"]
-        return data
+    @field_validator("targets", mode="after")
+    @classmethod
+    def populate_targets(cls, value: FilePath | None, info: ValidationInfo):
+        if value is None:
+            return info.data["features"]
+        return value

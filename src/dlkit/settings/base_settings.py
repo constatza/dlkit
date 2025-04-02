@@ -17,7 +17,7 @@ class BaseSettings(BaseModel):
         frozen = True
 
     def to_dict_compatible_with(
-        self, cls: Type, exclude: tuple[str] = ()
+        self, cls: Type, exclude: tuple[str, ...] = ()
     ) -> dict[str, Any]:
         signature = inspect.signature(cls)
 

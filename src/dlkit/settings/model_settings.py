@@ -34,9 +34,6 @@ class ModelSettings(HyperParameterSettings):
     scheduler: SchedulerSettings = Field(
         default=SchedulerSettings(), description="Scheduler settings."
     )
-    is_autoencoder: bool = Field(
-        default=False, description="Whether the model is an autoencoder.", frozen=False
-    )
     num_layers: IntHyper | None = Field(default=None, description="Number of layers.")
     latent_size: IntHyper | None = Field(
         default=None, description="Latent dimension size."
