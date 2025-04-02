@@ -8,25 +8,22 @@ from dlkit.settings import (
     TrainerSettings,
     DatamoduleSettings,
 )
+from pydantic import field_validator, ValidationInfo
 
 
 class Settings(BaseSettings):
     """Settings for DLkit."""
 
-    MODEL: ModelSettings
     PATHS: Paths
+    MODEL: ModelSettings
     MLFLOW: MLflowSettings
     OPTUNA: OptunaSettings
     TRAINER: TrainerSettings
     DATAMODULE: DatamoduleSettings
 
-    @model_validator(mode="before")
-    def is_autoencoder(cls, data: dict) -> dict:
-        if not "PATHS" in data and not "MODEL" in data and not "DATAMODULE" in data:
-            raise ValueError("PATHS, MODEL, and DATAMODULE must be defined.")
-
-        if "targets" not in data["PATHS"] and "features" in data["PATHS"]:
-            data["MODEL"].update({"is_autoencoder": True})
-            data["DATAMODULE"].update({"autoencoder_dataset": True})
-
-        return data
+    @field_validator("DATAMODULE", mode="after", check_fields=True)
+    @classmethod
+    def populate_is_autoencoder(cls, value: DatamoduleSettings, info: ValidationInfo):
+        if info.data["PATHS"].targets is None:
+            return value.model_copy(update={"is_autoencoder": True})
+        return value

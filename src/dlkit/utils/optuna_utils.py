@@ -14,7 +14,7 @@ def objective(
     trainer_settings: TrainerSettings,
 ) -> float:
 
-    model = initialize_model(model_settings.resolve(trial), datamodule.shapes)
+    model = initialize_model(model_settings.resolve(trial), datamodule.shape)
     trainer_settings = initialize_trainer(trainer_settings)
 
     with mlflow.start_run(

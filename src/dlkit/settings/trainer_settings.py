@@ -1,6 +1,13 @@
 from pydantic import Field, DirectoryPath
-from .types import IntHyper
 from .base_settings import BaseSettings
+
+
+class CallbackSettings(BaseSettings):
+
+    name: str = Field(
+        default="",
+        description="Name of the callback.",
+    )
 
 
 class TrainerSettings(BaseSettings):
@@ -21,4 +28,7 @@ class TrainerSettings(BaseSettings):
     logger: bool = Field(default=False, description="Whether to log the model.")
     enable_checkpointing: bool = Field(
         default=False, description="Whether to enable checkpointing."
+    )
+    callbacks: tuple[CallbackSettings, ...] = Field(
+        tuple(), description="List of callbacks."
     )
