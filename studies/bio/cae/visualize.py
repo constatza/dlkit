@@ -4,15 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from dlkit.io.readers import load_config
 from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
 from dlkit.metrics.temporal import mase
-from dlkit.utils.math_utils import interp_extrap
+from dynaconf import Dynaconf
 
 
 variable = "P"
-config: dict = load_config(f"{variable.lower()}.toml")
-paths = config["paths"]
+config = Dynaconf(settings_paths=[f"{variable.lower()}.toml"])
+paths = config.paths
 output_dir = Path(paths["figures"])
 output_dir.mkdir(exist_ok=True, parents=True)
 

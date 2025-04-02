@@ -25,7 +25,7 @@ def write_data(data, path):
 
 def main():
 
-    from dlkit.io.readers import read_study
+    from dlkit.io.settings import read_study
 
     study = read_study("./config.toml")
     volumes = study.paths.volumes

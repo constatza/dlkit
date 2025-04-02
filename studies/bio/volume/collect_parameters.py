@@ -1,6 +1,6 @@
 import polars as pl
 
-from dlkit.io.readers import read_study
+from dlkit.io.settings import read_study
 
 
 # Read the study

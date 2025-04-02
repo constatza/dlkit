@@ -17,6 +17,14 @@ fast_dev_run = true
 accelerator = "cpu"
 enable_checkpointing = true
 
+[[trainer.callbacks]]
+name = "ModelCheckpoint"
+monitor = "val_loss"
+mode = "min"
+save_top_k = 1
+save_last = true
+dirpath = "./"
+
 [model]
 name = "caes.SkipCAE1d"
 latent_size = 5
@@ -47,6 +55,10 @@ test_size = 0.3
 name = "MinMaxScaler"
 dim = [0, -1]
 
+[[datamodule.transforms]]
+name = "PCA"
+n_components = 5
+
 [datamodule.dataloader]
 num_workers = 5
 batch_size = 128
@@ -71,4 +83,4 @@ latent = "@format {this.paths.output}\\latent.npy"
 figures = "@format {this.paths.output}\\figures\\"
 predictions = "@format {this.paths.output}\\p-predictions.npy"
 idx_split = "@format {this.paths.input}\\idx_split.json"
-#ckpt_path = "file:///M:/constantinos/data/bio/5-equations/mlruns/1/58a3c85901214e8da5864cce6e0d30d0/artifacts/checkpoints/latest_checkpoint.pth"
+checkpoints = "@format {this.paths.output}\\checkpoints\\"
