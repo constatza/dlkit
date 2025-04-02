@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import validate_call, FilePath
 import click
 
-from dlkit.io.readers import load_settings_from
+from dlkit.io.settings import load_validated_settings
 from dlkit.setup.pruner import initialize_pruner
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.datamodule import initialize_datamodule
@@ -27,7 +27,7 @@ torch.set_float32_matmul_precision("medium")
 @click.argument("config-path")
 @validate_call
 def main(config_path: FilePath) -> None:
-    settings = load_settings_from(config_path)
+    settings = load_validated_settings(config_path)
 
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     datamodule.setup(stage="fit")

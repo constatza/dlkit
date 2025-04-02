@@ -11,7 +11,7 @@ from loguru import logger
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
-from dlkit.io.readers import load_settings_from
+from dlkit.io.settings import load_validated_settings
 
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)
@@ -33,14 +33,14 @@ def train(config_path: FilePath) -> None:
         config_path (FilePath): The path to the configuration file.
     """
     logger.info("Training started.")
-    settings = load_settings_from(config_path)
+    settings = load_validated_settings(config_path)
 
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
 
     # Initialize model with shapes derived from datamodule
     datamodule.setup(stage="fit")
-    model = initialize_model(settings.MODEL, datamodule.shapes)
+    model = initialize_model(settings.MODEL, datamodule.shape)
 
     # Train and evaluate the model
     trainer.fit(model, datamodule=datamodule)

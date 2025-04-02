@@ -9,7 +9,7 @@ from lightning.pytorch import seed_everything
 
 import click
 from dlkit.settings import Settings
-from dlkit.io.readers import load_settings_from
+from dlkit.io.settings import load_validated_settings
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
@@ -28,7 +28,7 @@ seed_everything(1)
 @validate_call
 def train(config_path: FilePath) -> None:
 
-    settings = load_settings_from(config_path)
+    settings = load_validated_settings(config_path)
 
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
@@ -63,7 +63,7 @@ def train(config_path: FilePath) -> None:
         )
         mlflow.log_input(mlflow_dataset, "dataset")
 
-        model = initialize_model(settings.MODEL, datamodule.shapes)
+        model = initialize_model(settings.MODEL, datamodule.shape)
         mlflow.log_params(model.hparams)
         trainer.fit(model, datamodule=datamodule, ckpt_path=settings.PATHS.ckpt_path)
         trainer.test(model, datamodule=datamodule)
