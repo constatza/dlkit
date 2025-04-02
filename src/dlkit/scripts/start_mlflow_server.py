@@ -8,10 +8,9 @@ from pydantic import validate_call, FilePath
 from loguru import logger
 from dlkit.utils.system_utils import (
     ensure_local_directory,
-    check_port_available,
 )
 from dlkit.settings import MLflowServerSettings
-from dlkit.io.readers import load_settings_from
+from dlkit.io.settings import load_validated_settings
 
 
 def kill_process_group(popen: subprocess.Popen, sig: int = signal.SIGTERM) -> None:
@@ -64,8 +63,6 @@ def checks_before_start(config: MLflowServerSettings):
         config (dict): Configuration dictionary parsed from a TOML file.
     """
 
-    # Initialize MLflow server settings (e.g., creating or retrieving the experiment)
-    check_port_available(config.host, config.port, config.terminate_apps_on_port)
     # Ensure directories exist if local
     ensure_local_directory(config.default_artifact_root)
     ensure_local_directory(config.backend_store_uri)
@@ -113,7 +110,7 @@ def popen_mlflow_server(config: MLflowServerSettings) -> subprocess.Popen:
 @validate_call
 def main(config_path: FilePath):
     try:
-        settings = load_settings_from(config_path)
+        settings = load_validated_settings(config_path)
         checks_before_start(settings.MLFLOW.server)
         mlflow_server = popen_mlflow_server(settings.MLFLOW.server)
         mlflow_server.wait()
