@@ -1,8 +1,9 @@
+import returns.primitives.exceptions
 from lightning.pytorch import LightningModule
 from pydantic_core._pydantic_core import ValidationError
 from pydantic import validate_call
 
-from dlkit.utils.system_utils import import_dynamically
+from dlkit.utils.system_utils import import_dynamic
 
 from dlkit.settings import ModelSettings
 from dlkit.settings.types import Shape
@@ -22,13 +23,16 @@ def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
     Returns:
         nn.Module: The instantiated model object.
     """
-    model_class = import_dynamically(config.name, prepend="dlkit.networks")
     config = config.model_copy(update={"shape": shape})
 
+    prepend = "dlkit.networks"
     try:
+        model_class = import_dynamic(config.name, prepend=prepend).unwrap()
         model = model_class(settings=config)
     except ValidationError as e:
         raise ValueError(
             f"{e} \nIf you are trying hyperparameter optimization, please use the `hparams_optimization` script."
         )
+    except returns.primitives.exceptions.UnwrapFailedError as e:
+        raise ValueError(f"Model {prepend}.{config.name} not found.")
     return model

@@ -1,4 +1,5 @@
 from dlkit.settings.general_settings import TrainerSettings, Settings
+from dlkit.utils.system_utils import import_dynamic
 
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelSummary, ModelCheckpoint
@@ -11,21 +12,15 @@ def initialize_trainer(config: TrainerSettings) -> Trainer:
     callbacks = [
         ModelSummary(max_depth=3),
     ]
-    if config.enable_checkpointing:
+    for callback in config.callbacks:
+
+        cb_class = import_dynamic(callback.name, prepend="lightning.pytorch.callbacks")
         callbacks.append(
-            ModelCheckpoint(
-                dirpath=Path(mlflow.get_artifact_uri()) / "checkpoints",
-                monitor="val_loss",  # Metric to monitor
-                mode="min",  # "min" for loss, "max" for accuracy or other metrics
-                save_top_k=1,  # Save only the best model
-                filename="best-{epoch:02d}",  # Naming pattern
-                verbose=True,  # Logs when a checkpoint is saved
-                every_n_epochs=10,  # Save checkpoint every n epochs
-            ),
+            cb_class.bind(lambda c: c(**callback.to_dict_compatible_with(c)))
         )
 
     trainer = Trainer(
-        **config.to_dict_compatible_with(Trainer),
+        **config.to_dict_compatible_with(Trainer, exclude=("callbacks", "name")),
         callbacks=callbacks,
     )
     return trainer
