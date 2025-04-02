@@ -1,0 +1,73 @@
+[mlflow.client]
+experiment_name       = "P-CAE"
+tracking_uri          = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
+
+[mlflow.server]
+host                  = "localhost"
+port                  = 7777
+backend_store_uri     = "sqlite:///path/to/mlruns/db"
+default_artifact_root = "file:///path/to/mlruns/artifacts"
+terminate_apps_on_port= true
+
+[trainer]
+max_epochs            = 1
+gradient_clip_val     = 5
+fast_dev_run          = true
+accelerator           = "cpu"
+enable_checkpointing  = true
+
+[model]
+name                  = "caes.SkipCAE1d"
+latent_size           = [5, 10]
+num_layers            = {low=1, high=3}
+kernel_size           = 5
+latent_channels       = 80
+latent_width          = 80
+
+[model.optimizer]
+name                  = "RAdam"
+lr                    = 0.001
+weight_decay          = 8e-6
+
+[model.scheduler]
+name                  = "ReduceLROnPlateau"
+factor                = 0.8
+patience              = 10
+min_lr                = 1e-5
+
+[datamodule]
+name                  = "NumpyModule"
+test_size             = 0.3
+
+[[datamodule.transforms]]
+name                  = "MinMaxScaler"
+dim                   = [0, -1]
+
+[datamodule.dataloader]
+num_workers           = 5
+batch_size            = 128
+persistent_workers    = true
+pin_memory            = true
+
+[optuna]
+n_trials              = 100
+timeout               = 600
+direction             = "minimize"
+
+[optuna.pruner]
+name                  = "nop_pruner"
+n_warmup_steps        = 10
+
+[optuna.sampler]
+name                  = "tpe_sampler"
+
+[paths]
+dataroot              = "path/to/data_root"
+input                 = "path/to/input"
+features              = "@format {this.paths.input}/p.npy"
+output                = "@format {this.paths.dataroot}/output"
+latent                = "@format {this.paths.output}/latent.npy"
+figures               = "@format {this.paths.output}/figures"
+predictions           = "@format {this.paths.output}/predictions.npy"
+idx_split             = "@format {this.paths.input}/idx_split.json"
+ckpt_path             = "file:///path/to/latest_checkpoint.pth"

@@ -86,7 +86,7 @@ def interpolate(df_time, df_vol):
 
 
 def main():
-    from dlkit.io.readers import read_study
+    from dlkit.io.settings import read_study
 
     write = True
 
