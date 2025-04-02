@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from pydantic import validate_call
 from torch.optim import Optimizer
-from dlkit.utils.system_utils import import_dynamically
+from dlkit.utils.system_utils import import_dynamic
 from dlkit.settings import OptimizerSettings
 
 
@@ -19,7 +19,7 @@ def initialize_optimizer(config: OptimizerSettings, parameters: Iterator) -> Opt
         Optimizer: An instance of a PyTorch optimizer initialized with the specified parameters
         and configuration settings.
     """
-    optimizer_class = import_dynamically(config.name, prepend="torch.optim")
+    optimizer_class = import_dynamic(config.name, prepend="torch.optim").unwrap()
     optimizer = optimizer_class(
         parameters, **config.to_dict_compatible_with(optimizer_class)
     )

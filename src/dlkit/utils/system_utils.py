@@ -1,12 +1,8 @@
-from collections.abc import Sequence
-import functools
-import importlib
+from types import ModuleType
+from importlib import import_module
 import os
-import signal
-import subprocess
-import sys
-import socket
 
+from returns.result import ResultE, Success, Failure
 from urllib3.util.url import parse_url
 from pathlib import Path
 
@@ -14,7 +10,7 @@ from loguru import logger
 from dlkit.utils.mlflow_utils import is_mlflow_server_running
 
 
-def import_dynamically(module_path: str, prepend: str = ""):
+def import_dynamic(module_path: str, prepend: str = "") -> ResultE[ModuleType]:
     """
     Dynamically import a module, class, function, or attribute from a string path.
 
@@ -32,66 +28,13 @@ def import_dynamically(module_path: str, prepend: str = ""):
     if prepend:
         module_path = f"{prepend}.{module_path}"
 
-    # Split the path into components
-    path_parts = module_path.split(".")
-    module = importlib.import_module(".".join(path_parts[:-1]))
-
-    # If the last part is not found, try importing as an attribute (class, function, etc.)
     try:
-        attr = getattr(module, path_parts[-1])
-        return attr
-    except AttributeError as e:
-        # If it's not an attribute, return the full module instead
-        raise e
-
-
-def check_port_available(host, port, terminate_apps_on_port=False):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(1)
-        try:
-            sock.bind((host, port))
-        except socket.error:
-            logger.warning(f"Port {port} is already in use.")
-
-            if is_mlflow_server_running(host, port):
-                logger.warning("MLflow server is already running on the port.")
-                return
-
-            if terminate_apps_on_port:
-                logger.warning("Terminating applications using the port.")
-                terminate_apps(port)
-                check_port_available(host, port, terminate_apps_on_port=False)
-            else:
-                logger.warn(
-                    "Please specify a different port or terminate the applications using the port."
-                )
-                sys.exit(1)
-
-
-def terminate_apps(port):
-    if os.name == "nt":
-        # kill windows apps using port
-        subprocess.run(
-            f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr "{port}"\') do taskkill /f /pid %a',
-            shell=True,
-            stdout=subprocess.DEVNULL,
-        )
-
-    else:
-        subprocess.run(
-            f"kill -9 $(lsof -t -i:{port})", shell=True, stdout=subprocess.DEVNULL
-        )
-
-
-def cleanup(server_process):
-    """Terminate the MLflow server process group."""
-    if server_process.poll() is None:  # Server still running
-        if os.name != "nt":
-            # On Unix, kill the entire process group
-            os.killpg(server_process.pid, signal.SIGTERM)
-        else:
-            # On Windows, just terminate the process (created in new group)
-            server_process.terminate()
+        module, attr = module_path.rsplit(".", 1)
+        module = import_module(module)
+        return Success(getattr(module, attr))
+    except (ImportError, AttributeError, ModuleNotFoundError) as e:
+        logger.error(f"{e}")
+        return Failure(e)
 
 
 def ensure_local_directory(uri: str) -> None:
