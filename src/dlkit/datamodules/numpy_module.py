@@ -22,6 +22,7 @@ class NumpyModule(LightningDataModule):
     settings: DatamoduleSettings
     paths: Paths
     transform_chain: TransformationChain
+    fitted: bool
 
     dataset: TensorDataset | None
     train_set: Subset | None
@@ -54,6 +55,8 @@ class NumpyModule(LightningDataModule):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        self.fitted = False
+
     def setup(self, stage: str | None = None) -> None:
         """
         Set up datasets for different stages.
@@ -64,7 +67,8 @@ class NumpyModule(LightningDataModule):
         # -------------------------
         # FIT STAGE
         # -------------------------
-        if stage in ["fit"]:
+        if stage in ["fit"] and self.fitted is False:
+            self.fitted = True
             # Load features/targets into memory (CPU by default)
             self.features, self.targets = load_dataset(
                 self.paths.features, self.paths.targets
