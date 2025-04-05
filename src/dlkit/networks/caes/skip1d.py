@@ -14,6 +14,7 @@ from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.settings.general_settings import ModelSettings
 from dlkit.utils.math_utils import linear_interpolation_int
+from dlkit.metrics.temporal import mase
 
 
 class SkipCAE1d(CAE):
@@ -37,6 +38,8 @@ class SkipCAE1d(CAE):
         num_layers = self.settings.num_layers
         kernel_size = self.settings.kernel_size
         shape = self.settings.shape
+        if len(shape.features) != 2:
+            raise ValueError("Shape must be 2D")
 
         self.example_input_array = torch.randn(1, *shape.features)
 
@@ -70,7 +73,7 @@ class SkipCAE1d(CAE):
             kernel_size=kernel_size,
         )
         self.smoothing_layer = nn.Sequential(
-            nn.GELU(),
+            nn.SELU(),
             nn.Conv1d(
                 channels[0], channels[0], kernel_size=kernel_size, padding="same"
             ),
@@ -85,11 +88,11 @@ class SkipCAE1d(CAE):
 
     @staticmethod
     def training_loss_func(x_hat, x):
-        return nn.functional.mse_loss(x_hat, x)
+        return mase(x_hat, x)
 
     @staticmethod
     def test_loss_func(x_hat, x):
-        return nn.functional.mse_loss(x_hat, x)
+        return mase(x_hat, x)
 
 
 class SkipEncoder(nn.Module):
