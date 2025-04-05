@@ -15,9 +15,7 @@ def initialize_trainer(config: TrainerSettings) -> Trainer:
     for callback in config.callbacks:
 
         cb_class = import_dynamic(callback.name, prepend="lightning.pytorch.callbacks")
-        callbacks.append(
-            cb_class.bind(lambda c: c(**callback.to_dict_compatible_with(c)))
-        )
+        callbacks.append(cb_class(**callback.to_dict_compatible_with(cb_class)))
 
     trainer = Trainer(
         **config.to_dict_compatible_with(Trainer, exclude=("callbacks", "name")),

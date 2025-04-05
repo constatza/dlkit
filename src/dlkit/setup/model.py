@@ -27,7 +27,7 @@ def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
 
     prepend = "dlkit.networks"
     try:
-        model_class = import_dynamic(config.name, prepend=prepend).unwrap()
+        model_class = import_dynamic(config.name, prepend=prepend)
         model = model_class(settings=config)
     except ValidationError as e:
         raise ValueError(

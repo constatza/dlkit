@@ -17,7 +17,5 @@ def initialize_transforms(config: Sequence[TransformSettings]):
 
 
 def initialize(transform: TransformSettings):
-    transform_class = import_dynamic(
-        transform.name, prepend="dlkit.transforms"
-    ).unwrap()
+    transform_class = import_dynamic(transform.name, prepend="dlkit.transforms")
     return transform_class(**transform.to_dict_compatible_with(transform_class))
