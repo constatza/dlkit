@@ -1,30 +1,22 @@
-from torch import nn
 import torch
+from torch.nn import ModuleList
 
 
-class TransformationChain(nn.Module):
-    """A pipeline that chains together a list of nn.Modules (transforms, scalers, or trainable modules).
+from .base import Scaler, Map
 
-    - Scalers have a 'fit' method that will be called once on the given data.
-    - NoFitTransform does not require fit.
-    - Regular nn.Modules (trainable layers) will simply pass data through.
-    """
 
-    def __init__(self, transforms: nn.ModuleList) -> None:
-        """
-        Args:
-            transforms (List[Tuple[str, nn.Module]]):
-                Ordered list of (name, module) to be executed in sequence.
-        """
+class TransformationChain(Scaler):
+
+    direct_transforms: ModuleList
+    inverse_transforms: ModuleList
+    fitted: bool
+
+    def __init__(self, transforms: ModuleList):
         super().__init__()
         # Use ModuleList so PyTorch tracks submodules
-        self.direct_transforms = nn.ModuleList(
-            step.direct_module() for step in transforms
-        )
-        self.inverse_transforms = nn.ModuleList(
-            step.inverse_module() for step in transforms[::-1]
-        )
+        self.direct_transforms = transforms
         self.fitted = False
+        self.inverse_transforms: ModuleList = ModuleList(reversed(transforms))
 
     def fit(self, data: torch.Tensor) -> None:
         """One-shot fit for all scalers in the pipeline, in order.
@@ -35,11 +27,10 @@ class TransformationChain(nn.Module):
         current_data = data
         for mod in self.direct_transforms:
             # If it's a scaler, call fit
-            if hasattr(mod, "fit") and callable(getattr(mod, "fit", None)):
-                # Run fit
+            if hasattr(mod, "fit") and callable(mod.fit):
                 mod.fit(current_data)
-            # After optional fitting, run forward so that the data is transformed
-            self.fitted = True
+            current_data = mod(current_data)
+        self.fitted = True
 
     def fit_transform(self, data: torch.Tensor) -> torch.Tensor:
         """One-shot fit for all scalers in the pipeline, in order.
@@ -72,6 +63,11 @@ class TransformationChain(nn.Module):
         Returns:
             torch.Tensor: Final output after all modules.
         """
-        for inverse_transform in self.inverse_transforms:
-            x = inverse_transform(x)
+        for transform in self.inverse_transforms:
+            if not hasattr(transform, "inverse_transform"):
+                raise ValueError(
+                    f"Transform {transform} does not have an inverse_transform method."
+                )
+            if transform.apply_inverse:
+                x = transform.inverse_transform(x)
         return x

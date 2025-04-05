@@ -41,28 +41,18 @@ class MinMaxScaler(Scaler):
         """Scale to interval [-1, 1]"""
         return (2 * (x - self.min) / (self.max - self.min)) - 1
 
-    def inverse_module(self) -> nn.Module:
+    def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
         """
         Return a module that lazily computes the inverse transformation
         using the current min and max values at runtime.
         """
 
-        class LazyInverse(nn.Module):
-            def __init__(self, scaler: MinMaxScaler):
-                super().__init__()
-                self.scaler = scaler
+        if not self.fitted:
+            raise RuntimeError(
+                "Scaler has not been fitted yet. Call `fit` before using the inverse transformation."
+            )
+        device = x.device  # Get the device of the input tensor
+        max_scaled = self.max.to(device)  # Move self.scaler.max to the same device
+        min_scaled = self.min.to(device)
 
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                if not self.scaler.fitted:
-                    raise RuntimeError(
-                        "Scaler has not been fitted yet. Call `fit` before using the inverse transformation."
-                    )
-                device = x.device  # Get the device of the input tensor
-                max_scaled = self.scaler.max.to(
-                    device
-                )  # Move self.scaler.max to the same device
-                min_scaled = self.scaler.min.to(device)
-
-                return (x + 1) / 2 * (max_scaled - min_scaled) + min_scaled
-
-        return LazyInverse(self)
+        return (x + 1) / 2 * (max_scaled - min_scaled) + min_scaled
