@@ -29,7 +29,6 @@ dependencies = [
     "pytest-mock>=3.14.0",
     "click>=8.1.8",
     "loguru>=0.7.3",
-    "returns>=0.25.0",
     "polars>=1.4.1,<2.0.0",
     "tables>=3.10.2",
 ]

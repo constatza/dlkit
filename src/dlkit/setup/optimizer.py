@@ -19,7 +19,7 @@ def initialize_optimizer(config: OptimizerSettings, parameters: Iterator) -> Opt
         Optimizer: An instance of a PyTorch optimizer initialized with the specified parameters
         and configuration settings.
     """
-    optimizer_class = import_dynamic(config.name, prepend="torch.optim").unwrap()
+    optimizer_class = import_dynamic(config.name, prepend="torch.optim")
     optimizer = optimizer_class(
         parameters, **config.to_dict_compatible_with(optimizer_class)
     )

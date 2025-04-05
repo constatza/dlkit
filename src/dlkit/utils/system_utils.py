@@ -8,9 +8,18 @@ from pathlib import Path
 
 from loguru import logger
 from dlkit.utils.mlflow_utils import is_mlflow_server_running
+import traceback
+
+import traceback
+from typing import NoReturn
 
 
-def import_dynamic(module_path: str, prepend: str = "") -> ResultE[ModuleType]:
+def get_last_error_message(exc: Exception) -> str:
+    tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    return tb_lines[-1].strip()
+
+
+def import_dynamic(module_path: str, prepend: str = "") -> type:
     """
     Dynamically import a module, class, function, or attribute from a string path.
 
@@ -30,11 +39,12 @@ def import_dynamic(module_path: str, prepend: str = "") -> ResultE[ModuleType]:
 
     try:
         module, attr = module_path.rsplit(".", 1)
-        module = import_module(module)
-        return Success(getattr(module, attr))
+        module: ModuleType = import_module(module)
+        return getattr(module, attr)
     except (ImportError, AttributeError, ModuleNotFoundError) as e:
-        logger.error(f"{e}")
-        return Failure(e)
+        last = get_last_error_message(e)
+        logger.error(f"{last}")
+        raise e
 
 
 def ensure_local_directory(uri: str) -> None:
