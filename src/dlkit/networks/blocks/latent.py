@@ -11,8 +11,6 @@ class VectorToTensorBlock(nn.Module):
         self,
         latent_dim: int,
         target_shape: tuple,
-        activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
-        batch_norm: bool = False,
     ):
         """
         Converts latent vector into a feature map for the decoder.
@@ -50,11 +48,12 @@ class TensorToVectorBlock(nn.Module):
         """
         super().__init__()
         self.activation = F.gelu
-        self.flatten = nn.Flatten()
-        self.dense_block = DenseBlock(channels_in * timesteps_in, latent_dim)
+        self.pooling = nn.AdaptiveAvgPool1d(1)
+        self.dense_block = DenseBlock(channels_in, latent_dim)
 
     def forward(self, x):
-        x = self.flatten(x)
+        x = self.pooling(x)
+        x = x.flatten(1)
         x = self.dense_block(x)
         return x
 

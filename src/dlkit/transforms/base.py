@@ -1,52 +1,44 @@
 import abc
-from collections.abc import Callable
 import torch
 import torch.nn as nn
 
 
 class Map(nn.Module):
-    def __init__(self, func: Callable):
-        super().__init__()
-        self.func = func
+    """
+    Base class for tensor transformations.
 
-    def forward(self, x):
-        with torch.no_grad():
-            return self.func(x)
+    Subclasses must implement a forward method.
+    The inverse method is optional; if provided, it must return a Maybe[torch.Tensor]:
+    Some if the inverse is successful, or Nothing otherwise.
+    The fit method is also optional; if present, it will be applied before forward.
+    """
 
+    apply_inverse: bool
 
-class Invertible(nn.Module):
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    @abc.abstractmethod
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_inverse = True
 
     @abc.abstractmethod
-    def inverse_module(self) -> nn.Module:
-        pass
+    def forward(self, x: torch.Tensor) -> torch.Tensor: ...
 
-    def direct_module(self) -> nn.Module:
-        return self
+    def inverse_transform(self, y: torch.Tensor) -> torch.Tensor:
+        """
+        Optional inverse operation.
+
+        """
+        return y  # Default: returns identity
 
 
-class Scaler(Invertible):
-    """A module (scaler) that REQUIRES a one-time fit, e.g. for computing statistics."""
+class Scaler(Map):
 
-    def __init__(self) -> None:
-        """Initialize BaseScaler."""
+    def __init__(self):
         super().__init__()
         self.fitted = False
 
     @abc.abstractmethod
-    def fit(self, data: torch.Tensor) -> None:
-        """Fit the scaler on data.
+    def fit(self, data: torch.Tensor) -> None: ...
 
-        Args:
-            data (torch.Tensor): Data to fit on.
-        """
-        pass
-
-    def flag_fit(self) -> None:
-        self.fitted = True
+    def fit_transform(self, data: torch.Tensor) -> torch.Tensor:
+        self.fit(data)
+        return self(data)

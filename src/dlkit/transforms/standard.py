@@ -19,28 +19,18 @@ class StdScaler(Scaler):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return (x - self.mean) / self.std
 
-    def inverse_module(self) -> nn.Module:
+    def inverse_transform(self, x) -> torch.Tensor:
         """
         Return a module that lazily computes the inverse transformation
         using the current min and max values at runtime.
         """
 
-        class LazyInverse(nn.Module):
-            def __init__(self, scaler: StdScaler):
-                super().__init__()
-                self.scaler = scaler
+        if not self.fitted:
+            raise RuntimeError(
+                "Scaler has not been fitted yet. Call `fit` before using the inverse transformation."
+            )
+        device = x.device  # Get the device of the input tensor
+        std_scaled = self.std.to(device)  # Move self.scaler.max to the same device
+        mean_scaled = self.mean.to(device)
 
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                if not self.scaler.fitted:
-                    raise RuntimeError(
-                        "Scaler has not been fitted yet. Call `fit` before using the inverse transformation."
-                    )
-                device = x.device  # Get the device of the input tensor
-                std_scaled = self.scaler.std.to(
-                    device
-                )  # Move self.scaler.max to the same device
-                mean_scaled = self.scaler.mean.to(device)
-
-                return (x * std_scaled) + mean_scaled
-
-        return LazyInverse(self)
+        return (x * std_scaled) + mean_scaled

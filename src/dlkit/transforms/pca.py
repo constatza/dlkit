@@ -3,6 +3,23 @@ import torch.nn as nn
 
 from loguru import logger
 from dlkit.transforms.base import Scaler
+from functools import wraps
+
+
+def reshaper2d(func):
+    @wraps(func)
+    def wrapper(*args):
+        data_position = len(args) - 1
+        data = args[data_position]
+        shape = data.shape
+        if len(shape) < 2:
+            return func(*args)
+        else:
+            data = data.reshape(-1, data.shape[-1])
+            processed = func(*args[:-1], data)
+            return processed.reshape((-1,) + shape[1:-1] + processed.shape[1:])
+
+    return wrapper
 
 
 class PCA(Scaler):
@@ -40,7 +57,7 @@ class PCA(Scaler):
         self.fitted: bool = False
         self._orig_shape: tuple[int, ...] | None = None
 
-    def fit(self, data: torch.Tensor) -> None:
+    def fit(self, data: torch.Tensor, dim: int = -1) -> None:
         """
         Fit the PCA transformer on the input data.
 
@@ -52,13 +69,13 @@ class PCA(Scaler):
         Args:
             data (torch.Tensor): Input data of shape (..., n_features). For example,
                 (N, T, D) where D is the feature dimension.
+            dim (int, optional): Dimension to be used as the feature dimension (to be reduced). Defaults to -1.
         """
-        # Store original shape if data is more than 2D.
-        if data.dim() > 2:
-            self._orig_shape = data.shape
+        # swqp dim to the last dimension for easier handling.
+        data = data.transpose(dim, -1)
+
+        if len(data.shape) > 2:
             data = data.reshape(-1, data.shape[-1])
-        else:
-            self._orig_shape = None
 
         n_samples, _ = data.shape
 
@@ -92,6 +109,7 @@ class PCA(Scaler):
             f"PCA total explained variance ratio: {self.total_explained_variance:.4f}"
         )
 
+    @reshaper2d
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         """
         Project the input data onto the principal components.
@@ -110,16 +128,16 @@ class PCA(Scaler):
             )
 
         # If data is more than 2D, flatten all dimensions except the last.
-        if data.dim() > 2:
-            data = data.reshape(-1, data.shape[-1])
 
         # Center the data using the stored mean.
         data_centered = data - self.mean
         # Project the data onto the principal components.
         projected = torch.matmul(data_centered, self.components.T)
+
         return projected
 
-    def inverse_module(self) -> nn.Module:
+    @reshaper2d
+    def inverse_transform(self, projected: torch.Tensor) -> torch.Tensor:
         """
         Return a module that performs the inverse transformation (approximate reconstruction).
 
@@ -130,29 +148,14 @@ class PCA(Scaler):
             nn.Module: A module that performs the inverse transformation.
         """
 
-        class LazyInverse(nn.Module):
-            def __init__(self, pca: PCA) -> None:
-                super().__init__()
-                self.pca = pca
+        if not self.fitted or self.mean is None or self.components is None:
+            raise RuntimeError(
+                "PCA has not been fitted yet. Call `fit` before using the inverse transformation."
+            )
+        device = projected.device
+        mean = self.mean.to(device)
+        components = self.components.to(device)
+        # Reconstruct the data: approximate inverse of the PCA projection.
+        reconstructed = torch.matmul(projected, components) + mean
 
-            def forward(self, projected: torch.Tensor) -> torch.Tensor:
-                if (
-                    not self.pca.fitted
-                    or self.pca.mean is None
-                    or self.pca.components is None
-                ):
-                    raise RuntimeError(
-                        "PCA has not been fitted yet. Call `fit` before using the inverse transformation."
-                    )
-                device = projected.device
-                mean = self.pca.mean.to(device)
-                components = self.pca.components.to(device)
-                # Reconstruct the data: approximate inverse of the PCA projection.
-                reconstructed = torch.matmul(projected, components) + mean
-
-                # If original data was multi-dimensional, reshape back to original shape.
-                if self.pca._orig_shape is not None:
-                    reconstructed = reconstructed.reshape(self.pca._orig_shape)
-                return reconstructed
-
-        return LazyInverse(self)
+        return reconstructed
