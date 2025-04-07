@@ -9,6 +9,7 @@ from dlkit.settings import (
     DatamoduleSettings,
 )
 from pydantic import field_validator, ValidationInfo
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -16,12 +17,12 @@ class Settings(BaseSettings):
 
     PATHS: Paths
     MODEL: ModelSettings
-    MLFLOW: MLflowSettings
-    OPTUNA: OptunaSettings
-    TRAINER: TrainerSettings
-    DATAMODULE: DatamoduleSettings
+    MLFLOW: MLflowSettings = Field(default=MLflowSettings(), description="Model settings.")
+    OPTUNA: OptunaSettings = Field(default=OptunaSettings(), description="Optuna settings.")
+    TRAINER: TrainerSettings = Field(default=TrainerSettings(), description="Trainer settings.")
+    DATAMODULE: DatamoduleSettings = Field(default=DatamoduleSettings(), description="Data module settings.")
 
-    @field_validator("DATAMODULE", mode="after", check_fields=True)
+    @field_validator("DATAMODULE", mode="after")
     @classmethod
     def populate_is_autoencoder(cls, value: DatamoduleSettings, info: ValidationInfo):
         if info.data["PATHS"].targets is None:

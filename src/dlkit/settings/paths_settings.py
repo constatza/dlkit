@@ -40,3 +40,4 @@ class Paths(BaseSettings):
         if value is None:
             return info.data["features"]
         return value
+

@@ -18,5 +18,8 @@ from dlkit.settings import (
 
 
 @validate_call(config={"arbitrary_types_allowed": True})
-def dynaconf_to_settings(dynaconf_config: LazySettings) -> Settings:
-    return Settings(**dynaconf_config.to_dict())
+def dynaconf_to_settings(config: LazySettings) -> Settings:
+
+    return Settings(
+        **config.to_dict(),
+    )
