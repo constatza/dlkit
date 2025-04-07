@@ -2,7 +2,6 @@ from types import ModuleType
 from importlib import import_module
 import os
 
-from returns.result import ResultE, Success, Failure
 from urllib3.util.url import parse_url
 from pathlib import Path
 

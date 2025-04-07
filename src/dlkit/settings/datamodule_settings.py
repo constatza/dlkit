@@ -22,16 +22,16 @@ class DataloaderSettings(BaseSettings):
 
 
 class DatamoduleSettings(BaseSettings):
-    name: str = Field(..., description="Datamodule name.")
+    name: str = Field("NumpyModule", description="Datamodule name.")
     test_size: float = Field(
         default=0.2, description="Fraction of data used for testing."
     )
     val_size: float = Field(
         default=0.5, description="Fraction of test data used for validation."
     )
-    dataloader: DataloaderSettings = Field(..., description="Dataloader settings.")
+    dataloader: DataloaderSettings = Field(DataloaderSettings(), description="Dataloader settings.")
     transforms: tuple[TransformSettings, ...] = Field(
-        ..., description="List of transforms to apply."
+        (), description="List of transforms to apply."
     )
     is_autoencoder: bool = Field(
         default=False,

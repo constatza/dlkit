@@ -7,8 +7,8 @@ from .base_settings import BaseSettings, HyperParameterSettings
 class OptimizerSettings(HyperParameterSettings):
     name: str = Field(default="Adam", description="Optimizer name.")
     lr: FloatHyper | None = Field(default=None, description="Learning rate.")
-    weight_decay: float | None = Field(
-        default=None, description="Optional weight decay."
+    weight_decay: float  = Field(
+        default=0.0, description="Optional weight decay."
     )
 
 
