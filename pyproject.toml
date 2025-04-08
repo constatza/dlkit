@@ -73,7 +73,7 @@ pythonpath = [
 ]
 
 [project.scripts]
-server = "dlkit.scripts.start_mlflow_server:main"
+server = "dlkit.scripts.mlflow_server:main"
 hopt = "dlkit.scripts.hparams_optimization:main"
 train-mlflow = "dlkit.scripts.mlflow_training:main"
 train = "dlkit.scripts.training:main"

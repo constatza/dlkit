@@ -1,12 +1,12 @@
 from dlkit.transforms.chaining import TransformationChain
 from dlkit.setup.transforms import initialize_transforms
 from dlkit.datamodules.numpy_module import NumpyModule
-from dlkit.settings.general_settings import DatamoduleSettings, Paths
+from dlkit.settings.general_settings import DatamoduleSettings, PathSettings
 
 
 def initialize_datamodule(
     datamodule_config: DatamoduleSettings,
-    paths_config: Paths,
+    paths_config: PathSettings,
 ) -> NumpyModule:
     """
     Dynamically imports and sets up the datamodule based on the provided configuration.

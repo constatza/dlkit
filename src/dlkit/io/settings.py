@@ -1,9 +1,8 @@
-from dynaconf import Dynaconf, LazySettings
+from dynaconf import Dynaconf
 from pydantic import validate_call, FilePath
 from dlkit.settings.general_settings import Settings
 from dlkit.settings.utils import dynaconf_to_settings
 
-from dlkit.settings import Paths, MLflowSettings, OptunaSettings, TrainerSettings, DatamoduleSettings, ModelSettings
 
 @validate_call
 def load_validated_settings(file_path: FilePath) -> Settings:
