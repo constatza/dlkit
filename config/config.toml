@@ -1,13 +1,11 @@
 [mlflow.client]
 experiment_name       = "Experiment Name"
-tracking_uri          = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 
 [mlflow.server]
 host                  = "localhost"
-port                  = 7777
+port                  = 9090
 backend_store_uri     = "sqlite:///path/to/mlflow.db"
-default_artifact_root = "file:///path/to/mlflow/artifacts"
-terminate_apps_on_port= true
+artifacts_destination = "file:///path/to/mlruns/artifacts"
 
 [trainer]
 max_epochs            = 300
@@ -58,4 +56,4 @@ latent                = "@format {this.paths.output}/latent.npy"
 figures               = "@format {this.paths.output}/figures"
 predictions           = "@format {this.paths.output}/predictions.npy"
 idx_split             = "@format {this.paths.input}/idx_split.json"
-# ckpt_path           = "file:///path/to/checkpoint"
+ckpt_path           = "file:///path/to/checkpoint"
