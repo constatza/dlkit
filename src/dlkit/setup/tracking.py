@@ -1,10 +1,10 @@
-import sys
+from time import sleep
 import requests
 import mlflow
 from loguru import logger
-from pydantic import BaseModel, Field, validate_call
-from dlkit.utils.system_utils import ensure_local_directory
-from dlkit.settings import MLflowClientSettings
+from pydantic import validate_call
+from dlkit.scripts.mlflow_server import start_server
+from dlkit.settings import MLflowSettings
 
 
 def get_or_create_experiment(experiment_name):
@@ -28,8 +28,21 @@ def get_or_create_experiment(experiment_name):
     return mlflow.create_experiment(experiment_name)
 
 
+def try_start_server(settings: MLflowSettings) -> None:
+    counter: int = 0
+    while (
+        not is_server_running(settings.client.tracking_uri)
+        and counter < settings.client.max_trials
+    ):
+        counter += 1
+        logger.error(f"MLflow server is not running at {settings.client.tracking_uri}")
+        logger.info(f"Trying to start the MLflow server trial {counter}")
+        process = start_server(settings.server)
+        sleep(1)  # Wait for the server to start
+
+
 @validate_call
-def initialize_mlflow_client(settings: MLflowClientSettings) -> str:
+def initialize_mlflow_client(settings: MLflowSettings) -> str:
     # Ensure directories exist if local
     """
     Initialize the MLflow client with the specified configuration.
@@ -46,16 +59,17 @@ def initialize_mlflow_client(settings: MLflowClientSettings) -> str:
 
     # ensure_local_directory(settings.tracking_uri)
 
-    if is_server_running(settings.tracking_uri):
-        logger.info("MLflow server is already running.")
-    else:
-        sys.exit(1)
+    try_start_server(settings)
 
-    # Set the MLflow tracking URI for the server
-    mlflow.set_tracking_uri(settings.tracking_uri)
+    if not is_server_running(settings.client.tracking_uri):
+        logger.error(
+            f"Failed to start the MLflow server after {settings.client.max_trials} trials."
+        )
+        raise ConnectionError("Failed to start the MLflow server.")
 
-    # Create or retrieve the default experiment
-    experiment_id = get_or_create_experiment(settings.experiment_name)
+    logger.info("MLflow server is up.")
+    mlflow.set_tracking_uri(settings.client.tracking_uri)
+    experiment_id = get_or_create_experiment(settings.client.experiment_name)
     return experiment_id
 
 
@@ -73,5 +87,4 @@ def is_server_running(tracking_uri: str) -> bool:
         response = requests.get(url, timeout=5)
         return response.status_code == 200
     except requests.ConnectionError as e:
-        logger.error(f"MLflow Connection Error: {e}")
         return False

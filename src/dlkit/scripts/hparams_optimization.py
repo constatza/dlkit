@@ -21,19 +21,15 @@ seed_everything(1)
 torch.set_float32_matmul_precision("medium")
 
 
-@click.command(
-    "Hyperparameter Optimization", help="Hyperparameter Optimization with Optuna."
-)
-@click.argument("config-path")
 @validate_call
-def main(config_path: FilePath) -> None:
+def hopt(config_path: FilePath) -> None:
     settings = load_validated_settings(config_path)
 
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     datamodule.setup(stage="fit")
 
     # setup mlflow experiment and tracking uri
-    experiment_id = initialize_mlflow_client(settings.MLFLOW.client)
+    experiment_id = initialize_mlflow_client(settings.MLFLOW)
 
     # Setup pruner
     pruner = initialize_pruner(settings.OPTUNA.pruner)
@@ -59,10 +55,23 @@ def main(config_path: FilePath) -> None:
         logger.info(f"Best value: {study.best_trial.value}")
 
 
-if __name__ == "__main__":
+@click.command(
+    "Hyperparameter Optimization", help="Hyperparameter Optimization with Optuna."
+)
+@click.argument("config-path")
+def hopt_cli(config_path: str):
+    hopt(config_path)
+
+
+def main() -> None:
+    """Main function to parse configuration and trigger training."""
     try:
-        main()
-    except Exception as e:
+        hopt_cli()
+    except Exception:
         logger.error(traceback.format_exc())
     finally:
         sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
