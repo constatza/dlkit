@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from optuna.trial import Trial
 from optuna.distributions import CategoricalChoiceType
 
-from .types import IntRange, FloatRange, IntHyper, FloatHyper, StrHyper
+from dlkit.dataypes.basic import IntRange, FloatRange, IntHyper, FloatHyper, StrHyper
 
 
 class BaseSettings(BaseModel):

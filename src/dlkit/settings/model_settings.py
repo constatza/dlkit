@@ -1,15 +1,13 @@
 from pydantic import Field
 
-from .types import IntHyper, FloatHyper, Shape
+from dlkit.dataypes.basic import IntHyper, FloatHyper, Shape
 from .base_settings import BaseSettings, HyperParameterSettings
 
 
 class OptimizerSettings(HyperParameterSettings):
     name: str = Field(default="Adam", description="Optimizer name.")
     lr: FloatHyper | None = Field(default=None, description="Learning rate.")
-    weight_decay: float  = Field(
-        default=0.0, description="Optional weight decay."
-    )
+    weight_decay: float = Field(default=0.0, description="Optional weight decay.")
 
 
 class SchedulerSettings(BaseSettings):

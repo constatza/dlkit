@@ -5,10 +5,10 @@ from pydantic import validate_call
 from dlkit.utils.system_utils import import_dynamic
 
 from dlkit.settings import ModelSettings
-from dlkit.settings.types import Shape
+from dlkit.dataypes.basic import Shape
 
 
-@validate_call
+@validate_call(config={"arbitrary_types_allowed": True})
 def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
     """
     Dynamically imports and sets up the model based on the provided configuration.
@@ -32,6 +32,4 @@ def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
         raise ValueError(
             f"{e} \nIf you are trying hyperparameter optimization, please use the `hparams_optimization` script."
         )
-    except returns.primitives.exceptions.UnwrapFailedError as e:
-        raise ValueError(f"Model {prepend}.{config.name} not found.")
     return model

@@ -2,7 +2,7 @@ from pydantic import model_validator
 from .base_settings import BaseSettings
 from dlkit.settings import (
     ModelSettings,
-    Paths,
+    PathSettings,
     MLflowSettings,
     OptunaSettings,
     TrainerSettings,
@@ -15,7 +15,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Settings for DLkit."""
 
-    PATHS: Paths
+    PATHS: PathSettings
     MODEL: ModelSettings
     MLFLOW: MLflowSettings = Field(default=MLflowSettings(), description="Model settings.")
     OPTUNA: OptunaSettings = Field(default=OptunaSettings(), description="Optuna settings.")
