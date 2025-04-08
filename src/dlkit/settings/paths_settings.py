@@ -4,7 +4,7 @@ from .base_settings import BaseSettings
 from pydantic import field_validator, ValidationInfo
 
 
-class Paths(BaseSettings):
+class PathSettings(BaseSettings):
 
     features: FilePath = Field(..., description="Path to the features file.")
     targets: FilePath | None = Field(
@@ -25,6 +25,17 @@ class Paths(BaseSettings):
     ckpt_path: str | None = Field(
         default=None, description="Path to the checkpoint file."
     )
+    figures: DirectoryPath | None = Field(
+        default=None, description="Directory path for figures.")
+
+    @field_validator("output", mode="after")
+    @classmethod
+    def populate_output(cls, value, info: ValidationInfo):
+        if value is None:
+            directory = info.data["features"].parent.parent / "output"
+            directory.mkdir(exist_ok=True, parents=True)
+            return directory
+        return value
 
     @field_validator("predictions", mode="after")
     @classmethod
@@ -40,4 +51,12 @@ class Paths(BaseSettings):
         if value is None:
             return info.data["features"]
         return value
+
+    @field_validator("figures", mode="after")
+    @classmethod
+    def populate_figures(cls, value: DirectoryPath | None, info: ValidationInfo):
+        if value is None:
+            return info.data["output"] / "figures"
+        return value
+
 
