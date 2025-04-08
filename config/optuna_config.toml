@@ -1,13 +1,11 @@
 [mlflow.client]
 experiment_name       = "P-CAE"
-tracking_uri          = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 
 [mlflow.server]
 host                  = "localhost"
 port                  = 7777
 backend_store_uri     = "sqlite:///path/to/mlruns/db"
-default_artifact_root = "file:///path/to/mlruns/artifacts"
-terminate_apps_on_port= true
+artifacts_destination = "file:///path/to/mlruns/artifacts"
 
 [trainer]
 max_epochs            = 1

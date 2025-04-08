@@ -84,7 +84,7 @@ or with mlflow logging
 ```bash
 uv run train-mlflow path/to/config.toml
 ```
-Note: MLflow training requires mlflow server to be running
+This will automatically start the MLFlow server and log the training process.
 
 ### Hyperparameter Optimization
 Run the hyperparameter optimization process using the configuration specified in the configuration
