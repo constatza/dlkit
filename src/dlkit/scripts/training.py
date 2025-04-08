@@ -3,6 +3,7 @@ import traceback
 import numpy as np
 import torch
 import click
+import attr
 
 from lightning.pytorch import seed_everything
 from pydantic import validate_call, FilePath
@@ -11,18 +12,16 @@ from loguru import logger
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
-from dlkit.io.settings import load_validated_settings
+from dlkit.io.settings import load_validated_settings, Settings
+from dlkit.dataypes import TrainingState
+
 
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)
 
 
-@click.command(
-    "train", help="Trains, tests, and predicts using the provided configuration."
-)
-@click.argument("config-path")
 @validate_call
-def train(config_path: FilePath) -> None:
+def train(settings: Settings) -> TrainingState:
     """Trains, tests, and predicts using the provided configuration.
 
     This function initializes the datamodule, trainer, and model using the
@@ -33,7 +32,6 @@ def train(config_path: FilePath) -> None:
         config_path (FilePath): The path to the configuration file.
     """
     logger.info("Training started.")
-    settings = load_validated_settings(config_path)
 
     datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
@@ -47,18 +45,39 @@ def train(config_path: FilePath) -> None:
     trainer.test(model, datamodule=datamodule)
     predictions = trainer.predict(model, datamodule=datamodule)
 
-    # Convert predictions (list of Tensors) to a single NumPy array if possible
     if isinstance(predictions, list) and len(predictions) > 0:
-        predictions_np = torch.cat(predictions, dim=0).numpy()
-        np.save(str(settings.PATHS.predictions), predictions_np)
+        # Convert predictions (list of Tensors) to a single NumPy array if needed
+        predictions = torch.cat(predictions, dim=0).numpy()
 
     logger.info("Training completed.")
+    return TrainingState(
+        trainer=trainer, model=model, datamodule=datamodule, predictions=predictions
+    )
+
+
+@click.command(
+    "train", help="Trains, tests, and predicts using the provided configuration."
+)
+@click.argument("config-path")
+@click.option(
+    "--save-predictions",
+    "-s",
+    is_flag=True,
+    default=False,
+    help="Whether to save the predictions to disk.",
+)
+def train_cli(config_path: str, save_predictions: bool = False):
+    settings = load_validated_settings(config_path)
+    training_state = train(settings)
+    if save_predictions:
+        np.save(str(settings.PATHS.predictions), predictions)
+        logger.info(f"Predictions saved to {settings.PATHS.predictions}")
 
 
 def main() -> None:
     """Main function to parse configuration and trigger training."""
     try:
-        train()
+        train_cli()
     except Exception:
         logger.error(traceback.format_exc())
     finally:
