@@ -7,7 +7,7 @@ from torch.utils.data import TensorDataset, DataLoader, Subset
 
 from dlkit.datasets.numpy_dataset import load_dataset, split_or_load_indices
 from dlkit.settings import DatamoduleSettings, PathSettings
-from dlkit.dataypes.basic import Shape
+from dlkit.datatypes.basic import Shape
 from dlkit.transforms.chaining import TransformationChain
 
 
