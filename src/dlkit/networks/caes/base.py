@@ -20,6 +20,15 @@ class CAE(BasicNetwork):
         encoding = self.encode(x)
         return self.decode(encoding)
 
+    def predict_step(self, batch, batch_idx):
+        x = batch[0]
+        latent = self.encode(x)
+        y = self.decode(latent)
+        transform_chain = self.datamodule.transform_chain.to(self.device)
+        predictions = transform_chain.inverse_transform(y)
+        predictions = predictions.detach().cpu()
+        return {"predictions": predictions, "latent": latent}
+
     @staticmethod
     @abc.abstractmethod
     def training_loss_func(x_hat, x): ...

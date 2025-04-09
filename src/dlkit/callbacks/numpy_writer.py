@@ -1,10 +1,11 @@
-import os
 import torch
 import numpy as np
 
 from collections.abc import Mapping
 from lightning.pytorch import Callback, Trainer, LightningModule
 from loguru import logger
+
+from pydantic import validate_call, DirectoryPath
 
 
 class NumpyWriter(Callback):
@@ -16,10 +17,11 @@ class NumpyWriter(Callback):
     more key-value pairs, where each value is a torch.Tensor.
 
     Attributes:
-        output_dir (str): The directory where the predictions will be saved.
+        output_path (str): The directory where the predictions will be saved.
     """
 
-    def __init__(self, output_dir: str) -> None:
+    @validate_call
+    def __init__(self, output_dir: DirectoryPath) -> None:
         """
         Initialize the NumpyWriter callback.
 
@@ -28,6 +30,7 @@ class NumpyWriter(Callback):
         """
         super().__init__()
         self.output_dir = output_dir
+        self.output_dir.parent.mkdir(parents=True, exist_ok=True)
         # This dictionary will accumulate predictions across batches.
         # The keys are strings and values are lists of torch.Tensor.
         self._predictions: dict[str, list[torch.Tensor]] = {}
@@ -82,23 +85,16 @@ class NumpyWriter(Callback):
             logger.warning("No predictions accumulated in NumpyWriter.")
             return
 
-        try:
-            aggregated_data = {}
-            # Process each key independently.
-            for key, tensor_list in self._predictions.items():
-                # Concatenate along the batch dimension.
-                concatenated = torch.cat(tensor_list, dim=0)
-                aggregated_data[key] = concatenated.cpu().numpy()
-
-            # Ensure the output directory exists.
-            os.makedirs(self.output_dir, exist_ok=True)
+        # Process each key independently.
+        for key, tensor_list in self._predictions.items():
+            # Concatenate along the batch dimension.
+            concatenated = torch.cat(tensor_list, dim=0).cpu().numpy()
             # Save all arrays into one compressed file (e.g. predictions.npz)
-            output_file = os.path.join(self.output_dir, "predictions.npz")
-            np.savez_compressed(output_file, **aggregated_data)
-            logger.info(f"Aggregated predictions successfully saved to: {output_file}")
-        except Exception as e:
-            logger.error(f"Failed to save aggregated predictions: {e}")
-            raise e
-        finally:
-            # Clear the accumulated predictions for subsequent runs.
-            self._predictions.clear()
+            output_path = self.output_dir / f"{key}.npy"
+            try:
+                np.save(output_path, concatenated)
+                logger.info(f"Successfully saved: {output_path}")
+            except IOError as e:
+                logger.error(f"Failed to save: {output_path}")
+                logger.error(f"Error: {e}")
+                continue
