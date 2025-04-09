@@ -26,7 +26,8 @@ class PathSettings(BaseSettings):
         default=None, description="Path to the checkpoint file."
     )
     figures: DirectoryPath | None = Field(
-        default=None, description="Directory path for figures.")
+        default=None, description="Directory path for figures."
+    )
 
     @field_validator("output", mode="after")
     @classmethod
@@ -42,7 +43,7 @@ class PathSettings(BaseSettings):
     def populate_predictions(cls, value, info: ValidationInfo):
         print("Validate predictions")
         if value is None:
-            return info.data["output"] / "predictions.csv"
+            return info.data["output"] / "predictions"
         return value
 
     @field_validator("targets", mode="after")
@@ -58,5 +59,3 @@ class PathSettings(BaseSettings):
         if value is None:
             return info.data["output"] / "figures"
         return value
-
-

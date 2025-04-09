@@ -8,10 +8,10 @@ class PrunerSettings(BaseSettings):
         default="NopPruner",
         description="Pruner algorithm name for hyperparameter optimization.",
     )
-    n_warmup_steps: int = Field(
+    n_warmup_steps: int | None = Field(
         default=None, description="Number of warmup steps before pruning starts."
     )
-    interval_steps: int = Field(
+    interval_steps: int | None = Field(
         default=None, description="Interval between pruning steps."
     )
 
