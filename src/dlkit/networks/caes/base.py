@@ -1,8 +1,8 @@
 import abc
-from dlkit.networks.blocks.network_types import OptimizerSchedulerNetwork
+from dlkit.networks.blocks.basic_network import BasicNetwork
 
 
-class CAE(OptimizerSchedulerNetwork):
+class CAE(BasicNetwork):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

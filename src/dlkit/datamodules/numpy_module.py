@@ -6,7 +6,7 @@ from loguru import logger
 from torch.utils.data import TensorDataset, DataLoader, Subset
 
 from dlkit.datasets.numpy_dataset import load_dataset, split_or_load_indices
-from dlkit.settings import DatamoduleSettings, PathSettings
+from dlkit.settings import DataSettings, PathSettings
 from dlkit.datatypes.basic import Shape
 from dlkit.transforms.chaining import TransformationChain
 
@@ -19,7 +19,7 @@ class NumpyModule(LightningDataModule):
 
     """
 
-    settings: DatamoduleSettings
+    settings: DataSettings
     paths: PathSettings
     transform_chain: TransformationChain
     fitted: bool
@@ -41,7 +41,7 @@ class NumpyModule(LightningDataModule):
 
     def __init__(
         self,
-        settings: DatamoduleSettings,
+        settings: DataSettings,
         paths: PathSettings,
         transform_chain: TransformationChain | None = None,
     ):

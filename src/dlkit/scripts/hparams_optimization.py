@@ -25,7 +25,7 @@ torch.set_float32_matmul_precision("medium")
 def hopt(config_path: FilePath) -> None:
     settings = load_validated_settings(config_path)
 
-    datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
+    datamodule = initialize_datamodule(settings.DATA, settings.PATHS)
     datamodule.setup(stage="fit")
 
     # setup mlflow experiment and tracking uri
