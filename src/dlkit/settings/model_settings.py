@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from dlkit.dataypes.basic import IntHyper, FloatHyper, Shape
+from dlkit.datatypes.basic import IntHyper, FloatHyper, Shape
 from .base_settings import BaseSettings, HyperParameterSettings
 
 

@@ -5,7 +5,7 @@ from pydantic import validate_call
 from dlkit.utils.system_utils import import_dynamic
 
 from dlkit.settings import ModelSettings
-from dlkit.dataypes.basic import Shape
+from dlkit.datatypes.basic import Shape
 
 
 @validate_call(config={"arbitrary_types_allowed": True})

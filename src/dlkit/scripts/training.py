@@ -13,7 +13,7 @@ from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
 from dlkit.io.settings import load_validated_settings, Settings
-from dlkit.dataypes import TrainingState
+from dlkit.datatypes import TrainingState
 
 
 torch.set_float32_matmul_precision("medium")
