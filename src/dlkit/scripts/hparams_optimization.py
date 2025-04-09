@@ -5,14 +5,14 @@ import mlflow
 import torch
 from lightning.pytorch import seed_everything
 from loguru import logger
-from pydantic import validate_call, FilePath
+from pydantic import validate_call
 import click
 
 from dlkit.io.settings import load_validated_settings
+from dlkit.settings import Settings
 from dlkit.setup.pruner import initialize_pruner
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.setup.datamodule import initialize_datamodule
-from dlkit.setup.trainer import initialize_trainer
 from dlkit.utils.optuna_utils import objective
 
 
@@ -22,21 +22,16 @@ torch.set_float32_matmul_precision("medium")
 
 
 @validate_call
-def hopt(config_path: FilePath) -> None:
-    settings = load_validated_settings(config_path)
+def hopt(settings: Settings) -> None:
 
     datamodule = initialize_datamodule(settings.DATA, settings.PATHS)
     datamodule.setup(stage="fit")
-
-    # setup mlflow experiment and tracking uri
     experiment_id = initialize_mlflow_client(settings.MLFLOW)
-
-    # Setup pruner
     pruner = initialize_pruner(settings.OPTUNA.pruner)
 
     with mlflow.start_run(
         experiment_id=experiment_id, run_name=settings.MLFLOW.client.run_name
-    ) as parent_run:
+    ):
         mlflow.pytorch.autolog(log_models=False)
         study = optuna.create_study(
             direction=settings.OPTUNA.direction,
@@ -60,7 +55,8 @@ def hopt(config_path: FilePath) -> None:
 )
 @click.argument("config-path")
 def hopt_cli(config_path: str):
-    hopt(config_path)
+    settings = load_validated_settings(config_path)
+    hopt(settings)
 
 
 def main() -> None:

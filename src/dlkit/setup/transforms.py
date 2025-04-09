@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from torch import nn
 from dlkit.utils.system_utils import import_dynamic
 from dlkit.transforms.chaining import TransformationChain
-from dlkit.settings import TransformSettings
+from dlkit.settings.datamodule_settings import TransformSettings
 
 
 def initialize_transforms(config: Sequence[TransformSettings]):

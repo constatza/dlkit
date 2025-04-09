@@ -13,7 +13,7 @@ from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.trainer import initialize_trainer
 from dlkit.setup.model import initialize_model
 from dlkit.io.settings import load_validated_settings, Settings
-from dlkit.datatypes import TrainingState
+from dlkit.datatypes.training import TrainingState
 
 
 torch.set_float32_matmul_precision("medium")
@@ -53,16 +53,10 @@ def train(settings: Settings) -> TrainingState:
     "train", help="Trains, tests, and predicts using the provided configuration."
 )
 @click.argument("config-path")
-@click.option(
-    "--save-predictions",
-    "-s",
-    is_flag=True,
-    default=False,
-    help="Whether to save the predictions to disk.",
-)
-def train_cli(config_path: str, save_predictions: bool = False):
+def train_cli(config_path: str = "./config.toml"):
     settings = load_validated_settings(config_path)
     training_state = train(settings)
+    return training_state
 
 
 def main() -> None:

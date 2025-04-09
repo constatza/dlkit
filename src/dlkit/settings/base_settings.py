@@ -15,6 +15,7 @@ class BaseSettings(BaseModel):
         extra = "allow"
         validate_assignment = True
         frozen = True
+        validate_default = True
 
     def to_dict_compatible_with(
         self, cls: Type, exclude: tuple[str, ...] = ()

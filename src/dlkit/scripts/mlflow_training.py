@@ -20,8 +20,14 @@ seed_everything(1)
 
 @validate_call
 def train_mlflow(settings: Settings) -> None:
+    """Trains, tests, and predicts using the provided configuration.
+    This functions utilizes MLflow in order to monitor and track the
+    training process, model performance, and other relevant metrics.
 
-    # Initialize MLflow client and get experiment_id
+    Args:
+        Settings: The DLkit settings object.
+    """
+    logger.info("Training started.")
     experiment_id = initialize_mlflow_client(settings.MLFLOW)
     # Start MLFlow run
     with mlflow.start_run(
@@ -54,7 +60,6 @@ def train_mlflow(settings: Settings) -> None:
             datamodule.features, datamodule.targets
         )
         mlflow.log_input(mlflow_dataset, "dataset")
-        # Log the model
         mlflow.pytorch.log_model(model, "model", signature=signature)
         if settings.MLFLOW.client.register_model:
             mlflow.register_model(

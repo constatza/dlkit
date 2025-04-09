@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     @field_validator("DATA", mode="after")
     @classmethod
     def populate_is_autoencoder(cls, value: DataSettings, info: ValidationInfo):
-        if info.data["PATHS"].targets is None:
+        targets = info.data["PATHS"].targets
+        if targets is None or targets == info.data["PATHS"].features:
             return value.model_copy(update={"is_autoencoder": True})
         return value
