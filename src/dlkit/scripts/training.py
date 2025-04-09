@@ -33,7 +33,7 @@ def train(settings: Settings) -> TrainingState:
     """
     logger.info("Training started.")
 
-    datamodule = initialize_datamodule(settings.DATAMODULE, settings.PATHS)
+    datamodule = initialize_datamodule(settings.DATA, settings.PATHS)
     trainer = initialize_trainer(settings.TRAINER)
 
     # Initialize model with shapes derived from datamodule
@@ -43,16 +43,10 @@ def train(settings: Settings) -> TrainingState:
     # Train and evaluate the model
     trainer.fit(model, datamodule=datamodule)
     trainer.test(model, datamodule=datamodule)
-    predictions = trainer.predict(model, datamodule=datamodule)
-
-    if isinstance(predictions, list) and len(predictions) > 0:
-        # Convert predictions (list of Tensors) to a single NumPy array if needed
-        predictions = torch.cat(predictions, dim=0).numpy()
+    trainer.predict(model, datamodule=datamodule)
 
     logger.info("Training completed.")
-    return TrainingState(
-        trainer=trainer, model=model, datamodule=datamodule, predictions=predictions
-    )
+    return TrainingState(trainer=trainer, model=model, datamodule=datamodule)
 
 
 @click.command(
@@ -69,9 +63,6 @@ def train(settings: Settings) -> TrainingState:
 def train_cli(config_path: str, save_predictions: bool = False):
     settings = load_validated_settings(config_path)
     training_state = train(settings)
-    if save_predictions:
-        np.save(str(settings.PATHS.predictions), predictions)
-        logger.info(f"Predictions saved to {settings.PATHS.predictions}")
 
 
 def main() -> None:

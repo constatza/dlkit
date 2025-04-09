@@ -21,7 +21,7 @@ class DataloaderSettings(BaseSettings):
     pin_memory: bool = Field(default=True, description="Whether to pin memory.")
 
 
-class DatamoduleSettings(BaseSettings):
+class DataSettings(BaseSettings):
     name: str = Field("NumpyModule", description="Datamodule name.")
     test_size: float = Field(
         default=0.2, description="Fraction of data used for testing."
@@ -29,7 +29,9 @@ class DatamoduleSettings(BaseSettings):
     val_size: float = Field(
         default=0.5, description="Fraction of test data used for validation."
     )
-    dataloader: DataloaderSettings = Field(DataloaderSettings(), description="Dataloader settings.")
+    dataloader: DataloaderSettings = Field(
+        DataloaderSettings(), description="Dataloader settings."
+    )
     transforms: tuple[TransformSettings, ...] = Field(
         (), description="List of transforms to apply."
     )

@@ -1,15 +1,20 @@
-from collections.abc import Sequence
 import abc
 
 from lightning import LightningModule
-
 from dlkit.setup.optimizer import initialize_optimizer
 from dlkit.setup.scheduler import initialize_scheduler
-import torch
-from dlkit.settings import ModelSettings
+from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
+from dlkit.datamodules.numpy_module import NumpyModule
 
 
-class OptimizerSchedulerNetwork(LightningModule):
+class BasicNetwork(LightningModule):
+    settings: ModelSettings
+    optimizer_settings: OptimizerSettings
+    scheduler_settings: SchedulerSettings
+    datamodule: NumpyModule | None
+    train_loss: float | None
+    val_loss: float | None
+    test_loss: float | None
 
     def __init__(self, settings: ModelSettings):
         super().__init__()
@@ -19,12 +24,11 @@ class OptimizerSchedulerNetwork(LightningModule):
         self.val_loss = None
         self.train_loss = None
         self.test_loss = None
+        self.datamodule = None
 
     def configure_optimizers(self):
         optimizer = initialize_optimizer(self.optimizer_config, self.parameters())
         scheduler = initialize_scheduler(self.scheduler_config, optimizer)
-        # self.optimizer_config = None
-        # self.scheduler_config = None
         if not scheduler:
             return {"optimizer": optimizer}
         return {
@@ -35,6 +39,9 @@ class OptimizerSchedulerNetwork(LightningModule):
                 "monitor": "val_loss",
             },
         }
+
+    def on_train_start(self) -> None:
+        self.datamodule: NumpyModule = self.trainer.datamodule
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -60,13 +67,10 @@ class OptimizerSchedulerNetwork(LightningModule):
     def predict_step(self, batch, batch_idx):
         x = batch[0]
         y_hat = self.forward(x)
-        transform_chain = self.trainer.datamodule.transform_chain.to(self.device)
+        transform_chain = self.datamodule.transform_chain.to(self.device)
         predictions = transform_chain.inverse_transform(y_hat)
-        return predictions.cpu()
-
-    # def on_train_start(self) -> None:
-    #     # transfer transforms to trainer device
-    #     self.trainer.datamodule.dataset.transforms.to(self.device)
+        predictions = predictions.detach().cpu()
+        return {"predictions": predictions}
 
     def on_train_epoch_end(self) -> None:
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]

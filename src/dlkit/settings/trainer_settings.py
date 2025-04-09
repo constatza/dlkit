@@ -8,6 +8,10 @@ class CallbackSettings(BaseSettings):
         default="",
         description="Name of the callback.",
     )
+    module_path: str = Field(
+        default="pytorch.lightning.callbacks",
+        description="Module path where the callback class is located.",
+    )
 
 
 class TrainerSettings(BaseSettings):
