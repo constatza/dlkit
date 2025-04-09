@@ -13,8 +13,7 @@ def initialize_trainer(config: TrainerSettings) -> Trainer:
         ModelSummary(max_depth=3),
     ]
     for callback in config.callbacks:
-
-        cb_class = import_dynamic(callback.name, prepend="lightning.pytorch.callbacks")
+        cb_class = import_dynamic(callback.name, prepend=callback.module_path)
         callbacks.append(cb_class(**callback.to_dict_compatible_with(cb_class)))
 
     trainer = Trainer(
