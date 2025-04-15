@@ -1,20 +1,19 @@
 import sys
 import traceback
+
+import attr
+import click
 import numpy as np
 import torch
-import click
-import attr
-
 from lightning.pytorch import seed_everything
-from pydantic import validate_call, FilePath
 from loguru import logger
+from pydantic import FilePath, validate_call
 
-from dlkit.setup.datamodule import initialize_datamodule
-from dlkit.setup.trainer import initialize_trainer
-from dlkit.setup.model import initialize_model
-from dlkit.io.settings import load_validated_settings, Settings
 from dlkit.datatypes.training import TrainingState
-
+from dlkit.io.settings import Settings, load_validated_settings
+from dlkit.setup.datamodule import initialize_datamodule
+from dlkit.setup.model import initialize_model
+from dlkit.setup.trainer import initialize_trainer
 
 torch.set_float32_matmul_precision("medium")
 seed_everything(1)

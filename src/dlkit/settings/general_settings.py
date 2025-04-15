@@ -1,37 +1,50 @@
-from pydantic import model_validator
-from .base_settings import BaseSettings
+from pydantic import Field, ValidationInfo, field_validator
+
 from dlkit.settings import (
-    ModelSettings,
-    PathSettings,
-    MLflowSettings,
-    OptunaSettings,
-    TrainerSettings,
     DataSettings,
+    MLflowSettings,
+    ModelSettings,
+    OptunaSettings,
+    PathSettings,
+    TrainerSettings,
 )
-from pydantic import field_validator, ValidationInfo
-from pydantic import Field
+
+from .base_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Settings for DLkit."""
+    """
+    Configuration settings for DLkit, encapsulating various components such as
+    model, paths, MLflow, Optuna, trainer, and data settings.
 
-    PATHS: PathSettings = Field(..., description="Paths settings.")
-    MODEL: ModelSettings = Field(..., description="Model settings.")
-    MLFLOW: MLflowSettings = Field(
-        default=MLflowSettings(), description="Model settings."
-    )
+    Attributes:
+        MODEL (ModelSettings): Configuration for model settings.
+        PATHS (PathSettings): Configuration for paths settings.
+        MLFLOW (MLflowSettings): Configuration for MLflow settings.
+        OPTUNA (OptunaSettings): Configuration for Optuna settings.
+        TRAINER (TrainerSettings): Configuration for trainer settings.
+        DATA (DataSettings): Configuration for data module settings.
+
+    Methods:
+        populate_is_autoencoder(cls, value, info): Automatically sets the
+        'is_autoencoder' flag in DATA settings if the targets path is the same
+        as the features path.
+    """
+
+    MODEL: ModelSettings
+    PATHS: PathSettings
+    MLFLOW: MLflowSettings
     OPTUNA: OptunaSettings = Field(
         default=OptunaSettings(), description="Optuna settings."
     )
     TRAINER: TrainerSettings = Field(
         default=TrainerSettings(), description="Trainer settings."
     )
-    DATA: DataSettings = Field(..., description="Data module settings.")
+    DATA: DataSettings = Field(..., description="Datamodule settings.")
 
-    @field_validator("DATA", mode="after")
+    @field_validator("DATA")
     @classmethod
     def populate_is_autoencoder(cls, value: DataSettings, info: ValidationInfo):
-        targets = info.data["PATHS"].targets
-        if targets is None or targets == info.data["PATHS"].features:
+        if info.data["PATHS"].targets == info.data["PATHS"].features:
             return value.model_copy(update={"is_autoencoder": True})
         return value

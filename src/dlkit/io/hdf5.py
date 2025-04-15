@@ -1,7 +1,8 @@
 from pathlib import Path
-from pydantic import validate_call
+
 import numpy as np
 import tables
+from pydantic import validate_call
 
 
 @validate_call

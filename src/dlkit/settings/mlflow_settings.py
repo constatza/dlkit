@@ -1,6 +1,6 @@
-from pydantic import Field
+from pydantic import Field, ValidationInfo, field_validator
+
 from .base_settings import BaseSettings
-from pydantic import field_validator, ValidationInfo
 
 
 class MLflowServerSettings(BaseSettings):

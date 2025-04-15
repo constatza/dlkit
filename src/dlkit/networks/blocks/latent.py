@@ -1,9 +1,8 @@
-from torch import nn
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from dlkit.networks.blocks.dense import DenseBlock
-from collections.abc import Callable
 
 
 class VectorToTensorBlock(nn.Module):
@@ -36,7 +35,6 @@ class TensorToVectorBlock(nn.Module):
     def __init__(
         self,
         channels_in: int,
-        timesteps_in: int,
         latent_dim: int,
     ):
         """

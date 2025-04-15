@@ -1,13 +1,15 @@
-from typing import Literal
 from functools import partial
-import torch.nn.functional as F
+from typing import Literal
+
 import torch
+import torch.nn.functional as F
+
 from dlkit.metrics.vector import (
-    rms_over_rms_loss,
     mean_abs,
     mean_squares,
-    vector_norm,
+    rms_over_rms_loss,
     sum_squares,
+    vector_norm,
 )
 
 

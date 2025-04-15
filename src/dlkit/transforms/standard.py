@@ -1,11 +1,12 @@
+from typing import Optional
+
 import torch
-from torch import nn
 
 from dlkit.transforms.base import Scaler
 
 
 class StdScaler(Scaler):
-    def __init__(self, dim: int | list[int] = None) -> None:
+    def __init__(self, dim: Optional[int | list[int]] = None) -> None:
         super().__init__()
         self.mean: torch.Tensor | None = None
         self.std: torch.Tensor | None = None

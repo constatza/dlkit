@@ -1,15 +1,15 @@
 import json
-import torch
-
 from typing import Literal
+
+import torch
 from lightning import LightningDataModule
 from loguru import logger
-from torch.utils.data import TensorDataset, DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, TensorDataset
 
 from dlkit.datasets.numpy_dataset import load_dataset, split_or_load_indices
+from dlkit.datatypes.basic import Shape
 from dlkit.settings.datamodule_settings import DataSettings
 from dlkit.settings.paths_settings import PathSettings
-from dlkit.datatypes.basic import Shape
 from dlkit.transforms.chaining import TransformationChain
 
 

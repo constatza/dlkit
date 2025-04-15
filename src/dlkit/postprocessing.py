@@ -2,9 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-import json
-import mlflow
-
 
 def plot_losses(train_losses, val_losses):
     """Plot the training and validation losses."""

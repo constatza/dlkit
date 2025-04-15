@@ -1,19 +1,15 @@
+from typing import Optional
+
 import numpy as np
 import torch
-from pydantic import validate_call, ConfigDict
+from lightning import LightningModule
+from pydantic import ConfigDict, validate_call
 from torch import nn
 from torch.nn import Sequential
 
+from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.networks.caes.base import CAE
-from lightning import LightningModule
-
-from dlkit.networks.blocks.residual import SkipConnection
-from dlkit.networks.blocks.convolutional import (
-    ConvolutionBlock1d,
-    UpsampleTimesteps,
-    DownsampleTimesteps,
-)
 
 
 class BasicCAE(CAE):
@@ -103,7 +99,7 @@ class Encoder(LightningModule):
         latent_dim: int,
         channels: list[int],
         kernel_size: int = 3,
-        timesteps: list[int] = None,
+        timesteps: Optional[list[int]] = None,
     ):
         """
         Complete encoder that compresses the input into a latent vector.
@@ -126,25 +122,23 @@ class Encoder(LightningModule):
                 ConvolutionBlock1d(
                     in_channels=channels[i],
                     out_channels=channels[i],
+                    in_timesteps=timesteps[i],
                     kernel_size=kernel_size,
-                    batch_norm=True,
                 )
             )
             layers.append(
                 ConvolutionBlock1d(
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
+                    in_timesteps=timesteps[i],
                     kernel_size=kernel_size,
-                    batch_norm=True,
                 )
             )
-            layers.append(DownsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
 
         self.feature_extractor = Sequential(*layers)
 
-        self.feature_to_latent = TensorToVectorBlock(
-            (channels[-1], timesteps[-1]), latent_dim
-        )
+        self.feature_to_latent = TensorToVectorBlock(channels[-1], latent_dim)
 
     def forward(self, x):
         x = self.feature_extractor(x)
@@ -159,7 +153,7 @@ class Decoder(LightningModule):
         channels: list[int],
         timesteps: list[int],
         kernel_size: int = 3,
-        output_shape: tuple = None,
+        output_shape: Optional[tuple] = None,
     ):
         """
         Complete decoder that reconstructs the input from a latent vector.
@@ -188,30 +182,23 @@ class Decoder(LightningModule):
                 ConvolutionBlock1d(
                     in_channels=channels[i],
                     out_channels=channels[i],
+                    in_timesteps=timesteps[i],
                     kernel_size=kernel_size,
-                    batch_norm=True,
                 )
             )
             layers.append(
                 ConvolutionBlock1d(
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
+                    in_timesteps=timesteps[i],
                     kernel_size=kernel_size,
-                    batch_norm=True,
                 ),
             )
-            layers.append(UpsampleTimesteps(out_timesteps=timesteps[i + 1]))
+            layers.append(nn.Upsample(timesteps[i + 1]))
 
         self.feature_decoder = Sequential(*layers)
 
     def forward(self, x):
         x = self.latent_to_feature(x)
         x = self.feature_decoder(x)
-
-        # Ensure the output shape matches the input shape
-        target_channels, target_timesteps = self.output_shape[-2:]
-        x = nn.functional.interpolate(
-            x, size=(target_timesteps,), mode="linear", align_corners=False
-        )
-
         return x

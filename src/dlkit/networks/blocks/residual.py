@@ -1,5 +1,5 @@
-from typing import Literal
 from collections.abc import Callable
+from typing import Literal, Optional
 
 import torch
 import torch.nn as nn
@@ -26,8 +26,8 @@ class SkipConnection(nn.Module):
         how: Literal["sum", "concat"] = "sum",
         layer_type: Literal["conv1d", "conv2d", "linear"] = "conv1d",
         activation: Callable[[torch.Tensor], torch.Tensor] = lambda x: x,
-        in_channels: int = None,
-        out_channels: int = None,
+        in_channels: Optional[int] = None,
+        out_channels: Optional[int] = None,
         kernel_size: int = 1,
         stride: int = 1,
         bias: bool = True,

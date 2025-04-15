@@ -1,8 +1,7 @@
 import torch
 from torch.nn import ModuleList
 
-
-from .base import Scaler, Map
+from .base import Map, Scaler
 
 
 class TransformationChain(Scaler):

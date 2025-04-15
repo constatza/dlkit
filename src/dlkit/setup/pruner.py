@@ -1,7 +1,8 @@
-from pydantic import validate_call
 from loguru import logger
-from dlkit.utils.system_utils import import_dynamic
+from pydantic import validate_call
+
 from dlkit.settings import PrunerSettings
+from dlkit.utils.system_utils import import_dynamic
 
 
 @validate_call

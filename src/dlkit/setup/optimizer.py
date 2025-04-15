@@ -1,8 +1,10 @@
 from collections.abc import Iterator
+
 from pydantic import validate_call
 from torch.optim import Optimizer
-from dlkit.utils.system_utils import import_dynamic
+
 from dlkit.settings import OptimizerSettings
+from dlkit.utils.system_utils import import_dynamic
 
 
 @validate_call(config={"arbitrary_types_allowed": True})

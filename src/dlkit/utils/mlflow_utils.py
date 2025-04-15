@@ -1,5 +1,6 @@
 import requests
 
+
 def is_mlflow_server_running(host: str = "localhost", port: int = 5000) -> bool:
     url = f"http://{host}:{port}/api/2.0/mlflow/experiments/list"
     try:
