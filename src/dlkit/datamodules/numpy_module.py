@@ -1,6 +1,7 @@
 import json
 import torch
 
+from typing import Literal
 from lightning import LightningDataModule
 from loguru import logger
 from torch.utils.data import TensorDataset, DataLoader, Subset
@@ -31,7 +32,7 @@ class NumpyModule(LightningDataModule):
     test_set: Subset | None
     predict_set: Subset | None
 
-    idx_split: dict[str, tuple[int]]
+    idx_split: dict[str, tuple[int, ...]]
 
     features: torch.Tensor | None
     targets: torch.Tensor | None
@@ -44,18 +45,14 @@ class NumpyModule(LightningDataModule):
         self,
         settings: DataSettings,
         paths: PathSettings,
+        device: Literal["cpu", "cuda"] = "cuda" if torch.cuda.is_available() else "cpu",
         transform_chain: TransformationChain | None = None,
     ):
         super().__init__()
         self.settings = settings
         self.paths = paths
         self.transform_chain = transform_chain
-
-        if self.paths.idx_split is None:
-            logger.warning("No index path provided, saving to current directory.")
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        self.device = torch.device(device)
         self.fitted = False
 
     def setup(self, stage: str | None = None) -> None:
@@ -84,7 +81,7 @@ class NumpyModule(LightningDataModule):
             )
             if self.paths.idx_split is None:
                 self.paths = self.paths.model_copy(
-                    update={"idx_split": self.paths.input / "idx_split.json"}
+                    update={"idx_split": self.paths.input_dir / "idx_split.json"}
                 )
                 with open(self.paths.idx_split, "w") as f:
                     self.idx_split["idx_path"] = str(self.paths.idx_split)

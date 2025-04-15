@@ -33,7 +33,9 @@ def train(settings: Settings) -> TrainingState:
     """
     logger.info("Training started.")
 
-    datamodule = initialize_datamodule(settings.DATA, settings.PATHS)
+    datamodule = initialize_datamodule(
+        settings.DATA, settings.PATHS, datamodule_device=settings.TRAINER.accelerator
+    )
     trainer = initialize_trainer(settings.TRAINER)
 
     # Initialize model with shapes derived from datamodule
