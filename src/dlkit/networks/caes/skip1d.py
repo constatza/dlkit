@@ -1,20 +1,18 @@
 from collections.abc import Sequence
+from typing import Optional
+
 import torch
-from pydantic import validate_call, ConfigDict
+from pydantic import ConfigDict, validate_call
 from torch import nn
 from torch.nn import Sequential
 
-from dlkit.networks.blocks.latent import (
-    TensorToVectorBlock,
-    VectorToTensorBlock,
-)
-from dlkit.networks.caes.base import CAE
-
-from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.metrics.temporal import mase
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
+from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
+from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.caes.base import CAE
 from dlkit.settings.general_settings import ModelSettings
 from dlkit.utils.math_utils import linear_interpolation_int
-from dlkit.metrics.temporal import mase
 
 
 class SkipCAE1d(CAE):
@@ -34,7 +32,7 @@ class SkipCAE1d(CAE):
         self.activation = activation
         latent_channels = self.settings.latent_channels
         latent_width = self.settings.latent_width
-        latent_size = self.settings.latent_size
+        latent_size: int = self.settings.latent_size
         num_layers = self.settings.num_layers
         kernel_size = self.settings.kernel_size
         shape = self.settings.shape
@@ -101,7 +99,7 @@ class SkipEncoder(nn.Module):
         latent_dim: int,
         channels: Sequence[int],
         kernel_size: int = 3,
-        timesteps: Sequence[int] = None,
+        timesteps: Optional[Sequence[int]] = None,
     ):
         """
         Complete encoder that compresses the input into a latent vector.
@@ -132,9 +130,7 @@ class SkipEncoder(nn.Module):
 
         self.feature_extractor = Sequential(*layers)
 
-        self.feature_to_latent = TensorToVectorBlock(
-            channels[-1], timesteps[-1], latent_dim
-        )
+        self.feature_to_latent = TensorToVectorBlock(channels[-1], latent_dim)
 
     def forward(self, x):
         x = self.feature_extractor(x)

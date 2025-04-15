@@ -1,9 +1,10 @@
+from functools import wraps
+
 import torch
 import torch.nn as nn
-
 from loguru import logger
+
 from dlkit.transforms.base import Scaler
-from functools import wraps
 
 
 def reshaper2d(func):

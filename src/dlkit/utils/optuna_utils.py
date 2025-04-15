@@ -1,9 +1,9 @@
-import optuna
 import mlflow
+import optuna
 
 from dlkit.datamodules import NumpyModule
-from dlkit.setup.model import initialize_model
 from dlkit.settings import ModelSettings, TrainerSettings
+from dlkit.setup.model import initialize_model
 from dlkit.setup.trainer import initialize_trainer
 
 

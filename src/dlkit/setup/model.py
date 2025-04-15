@@ -1,11 +1,9 @@
 from lightning.pytorch import LightningModule
-from pydantic_core._pydantic_core import ValidationError
-from pydantic import validate_call
+from pydantic import ValidationError, validate_call
 
-from dlkit.utils.system_utils import import_dynamic
-
-from dlkit.settings import ModelSettings
 from dlkit.datatypes.basic import Shape
+from dlkit.settings import ModelSettings
+from dlkit.utils.system_utils import import_dynamic
 
 
 @validate_call(config={"arbitrary_types_allowed": True})

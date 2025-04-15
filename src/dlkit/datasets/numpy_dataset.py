@@ -1,7 +1,9 @@
 import json
-from pydantic import FilePath
+
 import numpy as np
 import torch
+from pydantic import FilePath
+
 from dlkit.datasets.split import split_indices
 
 
@@ -24,7 +26,7 @@ def split_or_load_indices(
     size: int | None = None,
     test_size: float = 0.3,
     val_size: float = 0.5,
-):
+) -> dict[str, tuple[int, ...]]:
     if indices_path:
         return get_idx_split_from_file(indices_path)
     if size:
@@ -33,15 +35,15 @@ def split_or_load_indices(
     raise ValueError("indices_path or size must be provided")
 
 
-def get_idx_split_from_file(indices_path: FilePath) -> dict[str, list[int]]:
+def get_idx_split_from_file(indices_path: FilePath) -> dict[str, tuple[int, ...]]:
     with open(indices_path, "r", encoding="utf-8") as f:
-        saved_indices: dict[str, list[int]] = json.load(f)
+        saved_indices: dict[str, tuple[int, ...]] = json.load(f)
     return saved_indices
 
 
 def generate_idx_split_dict(
     size: int, test_size: float, val_size: float
-) -> dict[str, list[int]]:
+) -> dict[str, tuple[int, ...]]:
     all_ids = list(range(size))
     train_idx, val_idx, test_idx = split_indices(
         all_ids, test_size=test_size, val_size=val_size

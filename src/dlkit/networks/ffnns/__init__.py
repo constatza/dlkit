@@ -1,1 +1,1 @@
-from .mlps import *
+from .mlp import *

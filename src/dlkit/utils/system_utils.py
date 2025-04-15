@@ -1,13 +1,11 @@
-from types import ModuleType
-from importlib import import_module
 import os
-
-from urllib3.util.url import parse_url
+import traceback
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 
 from loguru import logger
-
-import traceback
+from urllib3.util.url import parse_url
 
 
 def get_last_error_message(exc: Exception) -> str:

@@ -1,4 +1,5 @@
 import abc
+
 from dlkit.networks.blocks.basic_network import BasicNetwork
 
 

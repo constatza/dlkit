@@ -1,7 +1,8 @@
 # Description: Convolutional blocks for use in neural networks.
+import math
+
 import torch
 import torch.nn as nn
-import math
 
 
 class ConvolutionBlock1d(nn.Module):

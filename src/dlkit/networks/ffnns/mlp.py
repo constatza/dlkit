@@ -1,23 +1,25 @@
 from collections.abc import Sequence
+from typing import Optional
+
 import torch.nn as nn
 import torch.optim
 from lightning import LightningModule
 
-import dlkit.metrics
+from dlkit.metrics.vector import mse_over_std_error
 
 
 class FeedForwardNN(LightningModule):
 
     def __init__(
         self,
-        layers: Sequence = None,
+        layers: Optional[Sequence] = None,
         activation: nn.Module = nn.GELU(),
         lr: float = 1e-3,
         layer_norm: bool = False,
         dropout: float = 0,
         batch_norm: bool = False,
     ):
-        super(FeedForwardNN, self).__init__()
+        super().__init__()
         self.save_hyperparameters()
         self.num_layers = len(layers) - 1
 
@@ -90,7 +92,7 @@ class FeedForwardNN(LightningModule):
 
     @staticmethod
     def test_loss(y_hat, y):
-        return dlkit.metrics.metrics.nrmse(y_hat, y)
+        return mse_over_std_error(y_hat, y)
 
     def on_validation_epoch_end(self) -> None:
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
@@ -100,10 +102,10 @@ class FeedForwardNN(LightningModule):
 class ConstantHiddenSizeFFNN(FeedForwardNN):
     def __init__(
         self,
-        input_size: int = None,
-        output_size: int = None,
-        hidden_size: int = None,
-        num_layers: int = None,
+        input_size: Optional[int] = None,
+        output_size: Optional[int] = None,
+        hidden_size: Optional[int] = None,
+        num_layers: Optional[int] = None,
         **kwargs,
     ):
         layers = [input_size] + [hidden_size] * num_layers + [output_size]

@@ -1,5 +1,4 @@
 import numpy as np
-
 from sklearn.model_selection import train_test_split
 
 
@@ -8,7 +7,7 @@ def split_indices(
     test_size: float = 0.3,
     val_size: float = 0.5,
     random_state: int = 1,
-):
+) -> tuple[tuple, tuple, tuple]:
     """
     Splits the dataset into train, validation, and test indices.
     """

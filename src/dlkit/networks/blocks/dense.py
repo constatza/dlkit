@@ -1,7 +1,8 @@
+from collections.abc import Callable
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections.abc import Callable
-import torch
 
 
 class DenseBlock(nn.Module):

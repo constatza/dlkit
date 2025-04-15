@@ -1,10 +1,11 @@
 import abc
 
 from lightning import LightningModule
+
+from dlkit.datamodules.numpy_module import NumpyModule
+from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
 from dlkit.setup.optimizer import initialize_optimizer
 from dlkit.setup.scheduler import initialize_scheduler
-from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
-from dlkit.datamodules.numpy_module import NumpyModule
 
 
 class BasicNetwork(LightningModule):

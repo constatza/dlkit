@@ -1,20 +1,20 @@
 import sys
 import traceback
-import optuna
+
+import click
 import mlflow
+import optuna
 import torch
 from lightning.pytorch import seed_everything
 from loguru import logger
 from pydantic import validate_call
-import click
 
 from dlkit.io.settings import load_validated_settings
 from dlkit.settings import Settings
+from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.pruner import initialize_pruner
 from dlkit.setup.tracking import initialize_mlflow_client
-from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.utils.optuna_utils import objective
-
 
 # set all seeds with pytorch lightning
 seed_everything(1)
@@ -56,7 +56,7 @@ def hopt(settings: Settings) -> None:
     "Hyperparameter Optimization", help="Hyperparameter Optimization with Optuna."
 )
 @click.argument("config-path")
-def hopt_cli(config_path: str):
+def hopt_cli(config_path: str = "./config.toml"):
     settings = load_validated_settings(config_path)
     hopt(settings)
 

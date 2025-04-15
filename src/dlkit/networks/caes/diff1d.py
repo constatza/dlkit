@@ -1,18 +1,16 @@
+from typing import Optional
+
 import torch
-from pydantic import validate_call, ConfigDict
+import torch.nn.functional as F
+from pydantic import ConfigDict, validate_call
 from torch import nn
 from torch.nn import Sequential
 
-from dlkit.networks.blocks.latent import (
-    TensorToVectorBlock,
-    VectorToTensorBlock,
-)
-from dlkit.networks.caes.base import CAE
-
-from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
+from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
+from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.caes.base import CAE
 from dlkit.utils.math_utils import linear_interpolation_int
-import torch.nn.functional as F
 
 
 class DiffCAE1d(CAE):
@@ -121,7 +119,7 @@ class SkipEncoder(nn.Module):
         latent_dim: int,
         channels: list[int],
         kernel_size: int = 3,
-        timesteps: list[int] = None,
+        timesteps: Optional[list[int]] = None,
     ):
         """
         Complete encoder that compresses the input into a latent vector.
@@ -153,9 +151,7 @@ class SkipEncoder(nn.Module):
 
         self.feature_extractor = Sequential(*layers)
 
-        self.feature_to_latent = TensorToVectorBlock(
-            channels[-1], timesteps[-1], latent_dim
-        )
+        self.feature_to_latent = TensorToVectorBlock(channels[-1], latent_dim)
 
     def forward(self, x):
         x = self.feature_extractor(x)
