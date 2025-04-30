@@ -1,15 +1,13 @@
 from pydantic import Field, ValidationInfo, field_validator
 
-from dlkit.settings import (
-    DataSettings,
-    MLflowSettings,
-    ModelSettings,
-    OptunaSettings,
-    PathSettings,
-    TrainerSettings,
-)
 
 from .base_settings import BaseSettings
+from .paths_settings import PathSettings
+from .trainer_settings import TrainerSettings
+from .mlflow_settings import MLflowSettings
+from .model_settings import ModelSettings
+from .optuna_settings import OptunaSettings
+from .datamodule_settings import DataSettings
 
 
 class Settings(BaseSettings):

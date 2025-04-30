@@ -6,7 +6,6 @@ from .base_settings import BaseSettings
 
 
 class CallbackSettings(BaseSettings):
-
     name: str | None = Field(
         default=None,
         description="Name of the callback.",
@@ -18,7 +17,6 @@ class CallbackSettings(BaseSettings):
 
 
 class LoggerSettings(BaseSettings):
-
     name: str | None = Field(
         default=None,
         description="Name of the logger.",
