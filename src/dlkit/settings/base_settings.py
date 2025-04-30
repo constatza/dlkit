@@ -24,12 +24,11 @@ class BaseSettings(BaseModel):
         return {
             field: value
             for field, value in self.model_dump().items()
-            if field in signature.parameters.keys() and not field in exclude
+            if field in signature.parameters.keys() and field not in exclude
         }
 
 
 class HyperParameterSettings(BaseSettings):
-
     def resolve(
         self,
         trial: Trial | None = None,
@@ -48,7 +47,6 @@ class HyperParameterSettings(BaseSettings):
     def get_optuna_suggestion(
         trial: Trial, field: str, value: IntHyper | FloatHyper | StrHyper
     ) -> CategoricalChoiceType:
-
         if isinstance(value, IntRange):
             return trial.suggest_int(
                 name=field, low=value.low, high=value.high, step=value.step
