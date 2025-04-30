@@ -11,12 +11,10 @@ from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.caes.base import CAE
-from dlkit.settings.general_settings import ModelSettings
 from dlkit.utils.math_utils import linear_interpolation_int
 
 
 class SkipCAE1d(CAE):
-
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,

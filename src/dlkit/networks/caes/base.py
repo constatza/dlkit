@@ -4,7 +4,6 @@ from dlkit.networks.blocks.basic_network import BasicNetwork
 
 
 class CAE(BasicNetwork):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters(ignore=["activation"])

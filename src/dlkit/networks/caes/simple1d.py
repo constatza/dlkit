@@ -13,7 +13,6 @@ from dlkit.networks.caes.base import CAE
 
 
 class BasicCAE(CAE):
-
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,

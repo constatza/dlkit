@@ -8,7 +8,6 @@ from dlkit.utils.system_utils import import_dynamic
 
 
 def initialize_transforms(config: Sequence[TransformSettings]):
-
     if config:
         transform_chain = TransformationChain(
             nn.ModuleList([initialize(d) for d in config])

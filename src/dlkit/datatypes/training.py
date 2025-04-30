@@ -1,5 +1,5 @@
 import attr
-from lightning.pytorch import LightningDataModule, LightningModule, Trainer
+from lightning.pytorch import LightningModule, Trainer
 
 from dlkit.datamodules import NumpyModule
 

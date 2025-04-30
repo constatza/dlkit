@@ -14,7 +14,6 @@ from dlkit.utils.math_utils import linear_interpolation_int
 
 
 class DiffCAE1d(CAE):
-
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,

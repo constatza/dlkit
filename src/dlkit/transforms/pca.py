@@ -1,7 +1,6 @@
 from functools import wraps
 
 import torch
-import torch.nn as nn
 from loguru import logger
 
 from dlkit.transforms.base import Scaler
@@ -107,7 +106,7 @@ class PCA(Scaler):
 
         self.fitted = True
         logger.info(
-            f"PCA total explained variance ratio: {self.total_explained_variance:.4f}"
+            f"PCA total explained variance ratio: {self.total_explained_variance:.4e}"
         )
 
     @reshaper2d

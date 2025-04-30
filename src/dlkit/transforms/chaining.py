@@ -1,19 +1,20 @@
+from collections.abc import Sequence
+
 import torch
 from torch.nn import ModuleList
 
-from .base import Map, Scaler
+from .base import Scaler
 
 
 class TransformationChain(Scaler):
-
     direct_transforms: ModuleList
     inverse_transforms: ModuleList
     fitted: bool
 
-    def __init__(self, transforms: ModuleList):
+    def __init__(self, transforms: Sequence[torch.nn.Module]):
         super().__init__()
         # Use ModuleList so PyTorch tracks submodules
-        self.direct_transforms = transforms
+        self.direct_transforms = ModuleList(transforms)
         self.fitted = False
         self.inverse_transforms: ModuleList = ModuleList(reversed(transforms))
 

@@ -6,7 +6,7 @@ import mlflow
 import torch
 from lightning.pytorch import seed_everything
 from loguru import logger
-from pydantic import FilePath, validate_call
+from pydantic import validate_call
 
 from dlkit.io.settings import load_validated_settings
 from dlkit.scripts.training import train
@@ -32,7 +32,6 @@ def train_mlflow(settings: Settings) -> None:
     with mlflow.start_run(
         experiment_id=experiment_id, run_name=settings.MLFLOW.client.run_name
     ) as run:
-
         dataset_source = mlflow.data.dataset_source.DatasetSource.from_dict(
             {
                 "features": settings.PATHS.features,
