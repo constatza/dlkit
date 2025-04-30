@@ -30,9 +30,14 @@ class Map(nn.Module):
         """
         return y  # Default: returns identity
 
+    def transform(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the transformation to the input tensor.
+        """
+        return self.forward(x)
+
 
 class Scaler(Map):
-
     def __init__(self):
         super().__init__()
         self.fitted = False

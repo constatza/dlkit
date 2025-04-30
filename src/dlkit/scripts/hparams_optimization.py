@@ -23,7 +23,6 @@ torch.set_float32_matmul_precision("medium")
 
 @validate_call
 def hopt(settings: Settings) -> None:
-
     datamodule = initialize_datamodule(
         settings.DATA, settings.PATHS, datamodule_device=settings.TRAINER.accelerator
     )

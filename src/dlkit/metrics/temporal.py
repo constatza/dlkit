@@ -1,13 +1,8 @@
-from functools import partial
-from typing import Literal
-
 import torch
-import torch.nn.functional as F
 
 from dlkit.metrics.vector import (
     mean_abs,
     mean_squares,
-    rms_over_rms_loss,
     sum_squares,
     vector_norm,
 )
@@ -57,7 +52,6 @@ def vectorized_sum_sqr_loss(predictions, targets, dim=1):
 
 
 def mean_error(loss_func, dim: int | list[int] = 1):
-
     def wrapper(predictions, targets, *args, **kwargs):
         return torch.mean(loss_func(predictions, targets, *args, **kwargs), dim=dim)
 
@@ -65,7 +59,6 @@ def mean_error(loss_func, dim: int | list[int] = 1):
 
 
 def naive_forecast_scaler(loss_func, dim: int | list[int] = 1):
-
     def wrapper(predictions, targets, *args, **kwargs):
         return mean_error(loss_func, dim=dim)(
             targets[:, :, :-1], targets[:, :, 1:], *args, **kwargs
@@ -75,7 +68,6 @@ def naive_forecast_scaler(loss_func, dim: int | list[int] = 1):
 
 
 def std_scaler(loss_func, dim: int | list[int] = 1):
-
     def wrapper(predictions, targets, *args, **kwargs):
         return torch.std(loss_func(predictions, targets, *args, **kwargs), dim=dim)
 
@@ -87,7 +79,6 @@ def mean_scaled_error(
     scaler: callable = naive_forecast_scaler,
     dim: int | list[int] = 1,
 ):
-
     def wrapper(predictions, targets, *args, **kwargs):
         error = mean_error(loss_func, dim=dim)(predictions, targets, *args, **kwargs)
         return error / scaler(loss_func, dim=dim)(predictions, targets)

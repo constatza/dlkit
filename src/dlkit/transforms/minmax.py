@@ -1,13 +1,11 @@
 from typing import Optional
 
 import torch
-from torch import nn
 
-from dlkit.transforms.base import Map, Scaler
+from dlkit.transforms.base import Scaler
 
 
 class MinMaxScaler(Scaler):
-
     def __init__(self, dim: Optional[int | list[int]] = None) -> None:
         """Minimum-Maximum Scaler.
         Important: This scaler transforms data in the range [-1, 1] by default!!!

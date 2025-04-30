@@ -39,7 +39,7 @@ def try_start_server(settings: MLflowSettings) -> None:
         counter += 1
         logger.error(f"MLflow server is not running at {settings.client.tracking_uri}")
         logger.info(f"Trying to start the MLflow server trial {counter}")
-        process = start_server(settings.server)
+        _ = start_server(settings.server)
         sleep(1)  # Wait for the server to start
 
 
@@ -88,5 +88,5 @@ def is_server_running(tracking_uri: str) -> bool:
     try:
         response = requests.get(url, timeout=5)
         return response.status_code == 200
-    except requests.ConnectionError as e:
+    except requests.ConnectionError:
         return False

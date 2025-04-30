@@ -9,7 +9,6 @@ from dlkit.metrics.vector import mse_over_std_error
 
 
 class FeedForwardNN(LightningModule):
-
     def __init__(
         self,
         layers: Optional[Sequence] = None,

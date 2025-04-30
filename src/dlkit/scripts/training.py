@@ -1,13 +1,11 @@
 import sys
 import traceback
 
-import attr
 import click
-import numpy as np
 import torch
 from lightning.pytorch import seed_everything
 from loguru import logger
-from pydantic import FilePath, validate_call
+from pydantic import validate_call
 
 from dlkit.datatypes.training import TrainingState
 from dlkit.io.settings import Settings, load_validated_settings

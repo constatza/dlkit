@@ -1,5 +1,5 @@
 import numpy as np
-from pydantic import ConfigDict, validate_call
+from pydantic import validate_call
 
 
 @validate_call
