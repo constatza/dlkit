@@ -24,7 +24,7 @@ class CAE(BasicNetwork):
         x = batch[0]
         latent = self.encode(x)
         y = self.decode(latent)
-        transform_chain = self.datamodule.transform_chain.to(self.device)
+        transform_chain = self.datamodule.features_pipeline.to(self.device)
         predictions = transform_chain.inverse_transform(y)
         predictions = predictions.detach().cpu()
         return {"predictions": predictions, "latent": latent}

@@ -1,1 +1,3 @@
-from .numpy_module import NumpyModule
+from .in_memory import InMemoryModule
+
+__all__ = ["InMemoryModule"]

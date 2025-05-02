@@ -2,7 +2,7 @@ import abc
 
 from lightning import LightningModule
 
-from dlkit.datamodules.numpy_module import NumpyModule
+from dlkit.datamodules.in_memory import InMemoryModule
 from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
 from dlkit.setup.optimizer import initialize_optimizer
 from dlkit.setup.scheduler import initialize_scheduler
@@ -12,7 +12,7 @@ class BasicNetwork(LightningModule):
     settings: ModelSettings
     optimizer_settings: OptimizerSettings
     scheduler_settings: SchedulerSettings
-    datamodule: NumpyModule | None
+    datamodule: InMemoryModule | None
     train_loss: float | None
     val_loss: float | None
     test_loss: float | None
@@ -42,7 +42,7 @@ class BasicNetwork(LightningModule):
         }
 
     def on_train_start(self) -> None:
-        self.datamodule: NumpyModule = self.trainer.datamodule
+        self.datamodule: InMemoryModule = self.trainer.datamodule
 
     def training_step(self, batch, batch_idx):
         x, y = batch

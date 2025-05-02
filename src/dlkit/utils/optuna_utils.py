@@ -1,7 +1,7 @@
 import mlflow
 import optuna
 
-from dlkit.datamodules import NumpyModule
+from dlkit.datamodules import InMemoryModule
 from dlkit.settings import ModelSettings, TrainerSettings
 from dlkit.setup.model import initialize_model
 from dlkit.setup.trainer import initialize_trainer
@@ -11,7 +11,7 @@ from dlkit.setup.trainer import initialize_trainer
 def objective(
     trial,
     model_settings: ModelSettings,
-    datamodule: NumpyModule,
+    datamodule: InMemoryModule,
     trainer_settings: TrainerSettings,
 ) -> float:
     model = initialize_model(model_settings.resolve(trial), datamodule.shape)

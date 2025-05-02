@@ -3,6 +3,12 @@ from pydantic import Field
 from .base_settings import BaseSettings
 
 
+class SplitIndices(BaseSettings):
+    train: tuple[int, ...]
+    validation: tuple[int, ...]
+    test: tuple[int, ...]
+
+
 class TransformSettings(BaseSettings):
     name: str = Field(..., description="Name of the transform.")
     dim: tuple[int, ...] = Field(
@@ -11,7 +17,7 @@ class TransformSettings(BaseSettings):
 
 
 class DataloaderSettings(BaseSettings):
-    num_workers: int = Field(default=5, description="Number of worker processes.")
+    num_workers: int = Field(default=1, description="Number of worker processes.")
     batch_size: int = Field(default=64, description="Batch size.")
     shuffle: bool = Field(
         default=False, description="Whether to shuffle the training data set."
@@ -22,20 +28,35 @@ class DataloaderSettings(BaseSettings):
     pin_memory: bool = Field(default=True, description="Whether to pin memory.")
 
 
-class DataSettings(BaseSettings):
-    name: str = Field("NumpyModule", description="Datamodule name.")
+class DatasetSettings(BaseSettings):
+    name: str = Field("NumpyDataset", description="Dataset name.")
+    module_path: str = Field(
+        default="dlkit.datasets",
+        description="Module path where the dataset class is located.",
+    )
+
+
+class DatamoduleSettings(BaseSettings):
+    name: str = Field("InMemoryModule", description="Datamodule name.")
+    dataset: DatasetSettings = Field(
+        default=DatasetSettings(), description="Dataset settings."
+    )
     test_size: float = Field(
-        default=0.2, description="Fraction of data used for testing."
+        default=0.15, description="Fraction of data used for testing."
     )
     val_size: float = Field(
-        default=0.5, description="Fraction of test data used for validation."
+        default=0.15, description="Fraction of data used for validation."
     )
     dataloader: DataloaderSettings = Field(
         DataloaderSettings(), description="Dataloader settings."
     )
-    transforms: tuple[TransformSettings, ...] = Field(
-        (), description="List of transforms to apply."
+    feature_transforms: tuple[TransformSettings, ...] = Field(
+        default=(), description="List of transforms to apply to features."
     )
+    target_transforms: tuple[TransformSettings, ...] = Field(
+        default=(), description="List of transforms to apply to targets."
+    )
+
     is_autoencoder: bool = Field(
         default=False,
         description="Whether targets and features are the same.",

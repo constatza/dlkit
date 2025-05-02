@@ -7,7 +7,7 @@ from lightning.pytorch import seed_everything
 from loguru import logger
 from pydantic import validate_call
 
-from dlkit.datatypes.training import TrainingState
+from dlkit.datatypes.learning import TrainingState
 from dlkit.io.settings import Settings, load_validated_settings
 from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.model import initialize_model
