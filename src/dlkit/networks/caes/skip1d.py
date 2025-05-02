@@ -34,10 +34,8 @@ class SkipCAE1d(CAE):
         num_layers = self.settings.num_layers
         kernel_size = self.settings.kernel_size
         shape = self.settings.shape
-        if len(shape.features) != 2:
-            raise ValueError("Shape must be 2D")
 
-        self.example_input_array = torch.randn(1, *shape.features)
+        self.example_input_array = torch.randn(1, *shape.features[1:])
 
         initial_channels = shape.features[-2]
         initial_width = shape.features[-1]

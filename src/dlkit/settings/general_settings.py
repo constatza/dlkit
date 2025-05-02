@@ -7,7 +7,7 @@ from .trainer_settings import TrainerSettings
 from .mlflow_settings import MLflowSettings
 from .model_settings import ModelSettings
 from .optuna_settings import OptunaSettings
-from .datamodule_settings import DataSettings
+from .datamodule_settings import DatamoduleSettings
 
 
 class Settings(BaseSettings):
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         MLFLOW (MLflowSettings): Configuration for MLflow settings.
         OPTUNA (OptunaSettings): Configuration for Optuna settings.
         TRAINER (TrainerSettings): Configuration for trainer settings.
-        DATA (DataSettings): Configuration for data module settings.
+        DATA (DatamoduleSettings): Configuration for data module settings.
 
     Methods:
         populate_is_autoencoder(cls, value, info): Automatically sets the
@@ -38,11 +38,11 @@ class Settings(BaseSettings):
     TRAINER: TrainerSettings = Field(
         default=TrainerSettings(), description="Trainer settings."
     )
-    DATA: DataSettings = Field(..., description="Datamodule settings.")
+    DATA: DatamoduleSettings = Field(..., description="Datamodule settings.")
 
     @field_validator("DATA")
     @classmethod
-    def populate_is_autoencoder(cls, value: DataSettings, info: ValidationInfo):
+    def populate_is_autoencoder(cls, value: DatamoduleSettings, info: ValidationInfo):
         if info.data["PATHS"].targets == info.data["PATHS"].features:
             return value.model_copy(update={"is_autoencoder": True})
         return value
