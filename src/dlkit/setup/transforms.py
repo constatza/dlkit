@@ -1,20 +1,13 @@
 from collections.abc import Sequence
 
-from torch import nn
 
 from dlkit.settings.datamodule_settings import TransformSettings
-from dlkit.transforms.chaining import TransformationChain
+from dlkit.transforms.chaining import Pipeline
 from dlkit.utils.system_utils import import_dynamic
 
 
-def initialize_transforms(config: Sequence[TransformSettings]):
-    if config:
-        transform_chain = TransformationChain(
-            nn.ModuleList([initialize(d) for d in config])
-        )
-    else:
-        transform_chain = TransformationChain(nn.ModuleList([]))
-    return transform_chain
+def initialize_transforms(transformations: Sequence[TransformSettings]):
+    return Pipeline([initialize(d) for d in transformations])
 
 
 def initialize(transform: TransformSettings):
