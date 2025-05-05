@@ -28,14 +28,3 @@ class FloatRange(BasicTypeSettings):
 IntHyper = int | IntRange | tuple[int, ...]
 FloatHyper = float | FloatRange | tuple[float, ...]
 StrHyper = str | tuple[str, ...]
-
-
-class Shape(BasicTypeSettings):
-    """Shape of a tensor or array.""" ""
-
-    features: tuple[int, ...] | None = Field(
-        default=None, description="Shape of the features."
-    )
-    targets: tuple[int, ...] | None = Field(
-        default=None, description="Shape of the target values."
-    )

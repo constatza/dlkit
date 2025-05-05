@@ -3,12 +3,6 @@ from pydantic import Field
 from .base_settings import BaseSettings
 
 
-class SplitIndices(BaseSettings):
-    train: tuple[int, ...]
-    validation: tuple[int, ...]
-    test: tuple[int, ...]
-
-
 class TransformSettings(BaseSettings):
     name: str = Field(..., description="Name of the transform.")
     dim: tuple[int, ...] = Field(
@@ -36,19 +30,26 @@ class DatasetSettings(BaseSettings):
     )
 
 
-class DatamoduleSettings(BaseSettings):
-    name: str = Field("InMemoryModule", description="Datamodule name.")
-    dataset: DatasetSettings = Field(
-        default=DatasetSettings(), description="Dataset settings."
+class DataModuleSettings(BaseSettings):
+    name: str = Field(default="InMemoryModule", description="Datamodule name.")
+    module_path: str = Field(
+        default="dlkit.datamodules",
+        description="Module path where the datamodule class is located.",
+    )
+
+
+class DataSettings(BaseSettings):
+    module: DataModuleSettings = Field(
+        DataModuleSettings(), description="Dataset settings."
+    )
+    dataloader: DataloaderSettings = Field(
+        DataloaderSettings(), description="Dataloader settings."
     )
     test_size: float = Field(
         default=0.15, description="Fraction of data used for testing."
     )
     val_size: float = Field(
         default=0.15, description="Fraction of data used for validation."
-    )
-    dataloader: DataloaderSettings = Field(
-        DataloaderSettings(), description="Dataloader settings."
     )
     feature_transforms: tuple[TransformSettings, ...] = Field(
         default=(), description="List of transforms to apply to features."
@@ -57,8 +58,11 @@ class DatamoduleSettings(BaseSettings):
         default=(), description="List of transforms to apply to targets."
     )
 
-    is_autoencoder: bool = Field(
-        default=False,
-        description="Whether targets and features are the same.",
+    dataset: DatasetSettings = Field(
+        default=DatasetSettings(), description="Dataset settings."
+    )
+    targets_exist: bool = Field(
+        default=True,
+        description="Whether dataset has both features and targets.",
         frozen=False,
     )

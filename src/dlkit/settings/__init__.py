@@ -1,6 +1,6 @@
-from .datamodule_settings import (
+from .data_settings import (
     DataloaderSettings,
-    DatamoduleSettings,
+    DataSettings,
     TransformSettings,
 )
 from .general_settings import Settings
@@ -13,7 +13,7 @@ from .trainer_settings import TrainerSettings
 
 __all__ = [
     "DataloaderSettings",
-    "DatamoduleSettings",
+    "DataSettings",
     "TransformSettings",
     "Settings",
     "MLflowClientSettings",

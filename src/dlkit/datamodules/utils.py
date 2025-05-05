@@ -5,7 +5,7 @@ from pydantic import validate_call, FilePath, DirectoryPath
 from pathlib import Path
 from loguru import logger
 
-from dlkit.settings.datamodule_settings import SplitIndices
+from dlkit.datatypes.dataset import SplitIndices
 
 
 def generate_split(
@@ -57,11 +57,10 @@ def save_split_indices(
         json.dump(data, f)
 
 
-# --- Combined helper for idx_split lifecycle with pydantic validation ---
 @validate_call
-def index_split(
+def get_or_create_idx_split(
     n: int,
-    idx_split_path: FilePath | None = None,
+    filepath: FilePath | None = None,
     save_dir: DirectoryPath | None = None,
     test_size: float = 0.15,
     val_size: float = 0.15,
@@ -71,7 +70,7 @@ def index_split(
     Load existing split if available (validated by pydantic), otherwise generate and save a new one.
 
     Args:
-        idx_split_path: Optional FilePath to an existing split JSON. If provided, must exist.
+        filepath: Optional FilePath to an existing split JSON. If provided, must exist.
         save_dir: DirectoryPath to save the split JSON file. If idx_split is provided, it is ignored.
         n: Total number of samples.
         test_size: Fraction for test set.
@@ -81,15 +80,15 @@ def index_split(
     Returns:
         A tuple of (split mapping, path to the split JSON file).
     """
-    if idx_split_path is not None:
-        idx_split = load_split_indices(idx_split_path)
-        logger.info(f"Loaded indices from {idx_split_path}")
-        return idx_split, idx_split_path
+    if filepath is not None:
+        idx_split = load_split_indices(filepath)
+        logger.info(f"Loaded indices from {filepath}")
+        return idx_split
 
     if save_dir is None:
         raise ValueError("Either save_dir or idx_split must be provided.")
     idx_split = generate_split(n=n, test_size=test_size, val_size=val_size, seed=seed)
-    idx_split_path = Path(save_dir) / "idx_split.json"
-    save_split_indices(idx_split, idx_split_path)
-    logger.info(f"No split file provided. Created new split at {idx_split_path}")
-    return idx_split, idx_split_path
+    filepath = Path(save_dir) / "idx_split.json"
+    save_split_indices(idx_split, filepath)
+    logger.info(f"No split file provided. Created new split at {filepath}")
+    return idx_split
