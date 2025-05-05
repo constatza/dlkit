@@ -1,68 +1,52 @@
 from typing import Literal
 
 import torch
-
-from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Subset, TensorDataset, Dataset, ConcatDataset
 
-from dlkit.settings.datamodule_settings import DatamoduleSettings
+from dlkit.settings.data_settings import DataSettings
 from dlkit.settings.paths_settings import PathSettings
 from dlkit.transforms.chaining import Pipeline
-from dlkit.datatypes.dataset import SplitDataset
-from dlkit.settings.datamodule_settings import SplitIndices
-from dlkit.datatypes import Shape
-from .utils import index_split
+from dlkit.datatypes.dataset import SplitDataset, SplitIndices
+from dlkit.datatypes.dataset import Shape
+from .base import BaseDataModule
 
 
-# --- Pure function for generating splits ---
-
-
-class InMemoryModule(LightningDataModule):
+class InMemoryModule(BaseDataModule):
     """
-    DataModule using NumpyDataset to load raw data,
-    create splits in 'fit', apply transforms via helper methods,
-    and provide DataLoaders.
+    This datamodule is designed to handle in-memory datasets efficiently.
     """
 
-    idx_split: SplitIndices | None
     paths: PathSettings
     device: torch.device
     features_pipeline: Pipeline
     targets_pipeline: Pipeline
     dataset: SplitDataset
     shape: Shape
+    idx_split: SplitIndices
 
     def __init__(
         self,
         dataset: Dataset,
-        settings: DatamoduleSettings,
-        paths: PathSettings,
+        settings: DataSettings,
+        idx_split: SplitIndices,
         features_pipeline: Pipeline = Pipeline(()),
         targets_pipeline: Pipeline = Pipeline(()),
         device: Literal["cpu", "cuda"] = "cuda" if torch.cuda.is_available() else "cpu",
-    ):
-        super().__init__()
-        # Raw dataset bridge
-        self.settings = settings
-        self.paths = paths
-        self.dataset = SplitDataset(raw=dataset)
-        self.device = torch.device(device)
-        self.features_pipeline = features_pipeline.to(self.device)
-        self.targets_pipeline = targets_pipeline.to(self.device)
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            dataset,
+            settings=settings,
+            idx_split=idx_split,
+            device=device,
+        )
         self.fitted = False
-        self.idx_split = None
+        self.features_pipeline = features_pipeline.to(device)
+        self.targets_pipeline = targets_pipeline.to(device)
 
     def setup(self, stage: str | None = None) -> None:
         # FIT: generate splits, build processed_dataset
         if stage in ("fit", None) and not self.fitted:
-            self.idx_split, split_path = index_split(
-                idx_split_path=self.paths.idx_split,
-                save_dir=self.paths.input_dir,
-                n=len(self.dataset.raw),
-                test_size=self.settings.test_size,
-                val_size=self.settings.val_size,
-            )
-            self.paths = self.paths.model_copy(update={"idx_split": split_path})
             raw_train = Subset(self.dataset.raw, self.idx_split.train)
             raw_validation = Subset(self.dataset.raw, self.idx_split.validation)
             self.dataset.train = self.fit_transform_dataset(raw_train)
@@ -88,26 +72,6 @@ class InMemoryModule(LightningDataModule):
                 [self.dataset.train, self.dataset.validation, self.dataset.test]
             )
 
-    def train_dataloader(self):
-        return DataLoader(self.dataset.train, **self.settings.dataloader.model_dump())
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.dataset.validation, **self.settings.dataloader.model_dump()
-        )
-
-    def test_dataloader(self):
-        return DataLoader(self.dataset.test, **self.settings.dataloader.model_dump())
-
-    def predict_dataloader(self):
-        return DataLoader(
-            self.dataset.predict,
-            shuffle=False,
-            **self.settings.dataloader.to_dict_compatible_with(
-                DataLoader, exclude=("shuffle",)
-            ),
-        )
-
     def fit_dataset(self, dataset: Dataset):
         """
         Apply fit & transformation to raw features and targets and return a TensorDataset.
@@ -131,7 +95,7 @@ class InMemoryModule(LightningDataModule):
         features, targets = next(iter(raw_loader))
         # Apply input transform
         features = self.features_pipeline.transform(features.to(self.device))
-        if self.settings.is_autoencoder or targets is None:
+        if self.settings.targets_exist or targets is None:
             return TensorDataset(features, features)
 
         targets = self.targets_pipeline.transform(features.to(self.device))
