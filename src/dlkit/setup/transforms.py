@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 
-from dlkit.settings.datamodule_settings import TransformSettings
+from dlkit.settings.data_settings import TransformSettings
 from dlkit.transforms.chaining import Pipeline
 from dlkit.utils.system_utils import import_dynamic
 

@@ -1,12 +1,11 @@
 from lightning.pytorch import LightningModule
-from pydantic import ValidationError, validate_call
+from pydantic import ValidationError
 
-from dlkit.datatypes.basic import Shape
+from dlkit.datatypes.dataset import Shape
 from dlkit.settings import ModelSettings
 from dlkit.utils.system_utils import import_dynamic
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
 def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
     """
     Dynamically imports and sets up the model based on the provided configuration.
