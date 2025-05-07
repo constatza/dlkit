@@ -9,26 +9,25 @@ from dlkit.settings.utils import dynaconf_to_settings
 
 @validate_call
 def load_validated_settings(file_path: FilePath) -> Settings:
-    """
-    Load and validate settings from a configuration file.
+	"""Load and validate settings from a configuration file.
 
-    This function reads a configuration file specified by `file_path` using
-    Dynaconf, validates it, and converts it into a `Settings` object. If the
-    configuration file is not valid, a `DynaconfFormatError` is raised.
+	This function reads a configuration file specified by `file_path` using
+	Dynaconf, validates it, and converts it into a `Settings` object. If the
+	configuration file is not valid, a `DynaconfFormatError` is raised.
 
-    Args:
-        file_path (FilePath): The path to the configuration file.
+	Args:
+	    file_path (FilePath): The path to the configuration file.
 
-    Returns:
-        Settings: A validated `Settings` object.
+	Returns:
+	    Settings: A validated `Settings` object.
 
-    Raises:
-        DynaconfFormatError: If the configuration file format is invalid.
-    """
-    try:
-        config = Dynaconf(settings_files=[file_path], envvar_prefix="DLKIT")
-    except DynaconfFormatError as e:
-        logger.error(f"Configuration file is not valid - {str(file_path)}")
-        raise e
-    dlkit_settings = dynaconf_to_settings(config)
-    return dlkit_settings
+	Raises:
+	    DynaconfFormatError: If the configuration file format is invalid.
+	"""
+	try:
+		config = Dynaconf(settings_files=[file_path], envvar_prefix='DLKIT')
+	except DynaconfFormatError as e:
+		logger.error(f'Configuration file is not valid - {str(file_path)}')
+		raise e
+	dlkit_settings = dynaconf_to_settings(config)
+	return dlkit_settings
