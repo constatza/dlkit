@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 
-class Map(nn.Module):
+class Transform(nn.Module):
 	"""Base class for tensor transformations.
 
 	Subclasses must implement a forward method.
@@ -15,30 +15,20 @@ class Map(nn.Module):
 
 	apply_inverse: bool
 
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+	def __init__(self):
+		super().__init__()
 		self.apply_inverse = True
+		self.fitted = False
 
 	@abc.abstractmethod
 	def forward(self, x: torch.Tensor) -> torch.Tensor: ...
 
-	def inverse_transform(self, y: torch.Tensor) -> torch.Tensor:
-		"""Optional inverse operation."""
-		return y  # Default: returns identity
+	@abc.abstractmethod
+	def inverse_transform(self, y: torch.Tensor) -> torch.Tensor: ...
 
 	def transform(self, x: torch.Tensor) -> torch.Tensor:
 		"""Apply the transformation to the input tensor."""
 		return self.forward(x)
 
-
-class Scaler(Map):
-	def __init__(self):
-		super().__init__()
-		self.fitted = False
-
-	@abc.abstractmethod
-	def fit(self, data: torch.Tensor) -> None: ...
-
-	def fit_transform(self, data: torch.Tensor) -> torch.Tensor:
-		self.fit(data)
-		return self(data)
+	def fit(self, data: torch.Tensor) -> None:
+		self.fitted = True

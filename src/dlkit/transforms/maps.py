@@ -1,11 +1,11 @@
 import torch
 
-from dlkit.transforms.base import Map
+from dlkit.transforms.base import Transform
 
 epsilon = 1e-8
 
 
-class Permutation(Map):
+class Permutation(Transform):
 	def __init__(self, dims: tuple[int]):
 		"""Must be a permutation and must be used before any other transforms."""
 		super().__init__()

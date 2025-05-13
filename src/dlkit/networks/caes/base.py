@@ -1,11 +1,11 @@
 import abc
 
-from dlkit.networks.blocks.basic_network import BasicNetwork
+from lightning.pytorch import LightningModule
 
 
-class CAE(BasicNetwork):
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+class CAE(LightningModule):
+	def __init__(self):
+		super().__init__()
 		self.save_hyperparameters(ignore=['activation'])
 
 	@abc.abstractmethod
@@ -24,15 +24,4 @@ class CAE(BasicNetwork):
 		x = batch[0]
 		latent = self.encode(x)
 		y = self.decode(latent)
-		transform_chain = self.datamodule.features_pipeline.to(self.device)
-		predictions = transform_chain.inverse_transform(y)
-		predictions = predictions.detach().cpu()
-		return {'predictions': predictions, 'latent': latent}
-
-	@staticmethod
-	@abc.abstractmethod
-	def training_loss_func(x_hat, x): ...
-
-	@staticmethod
-	@abc.abstractmethod
-	def test_loss_func(x_hat, x): ...
+		return {'predictions': y.detach().cpu(), 'latent': latent.detach().cpu()}

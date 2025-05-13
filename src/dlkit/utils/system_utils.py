@@ -1,8 +1,6 @@
 import os
 import traceback
-from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 
 from loguru import logger
 from urllib3.util.url import parse_url
@@ -11,33 +9,6 @@ from urllib3.util.url import parse_url
 def get_last_error_message(exc: Exception) -> str:
 	tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
 	return tb_lines[-1].strip()
-
-
-def import_dynamic(module_path: str, prepend: str = '') -> type:
-	"""Dynamically import a module, class, function, or attribute from a string path.
-
-	Args:
-	    module_path (str): The string path of the module, class, function, or attribute to import.
-	    prepend (str, optional): Optional string to prepend to the module path. Defaults to "".
-
-	Returns:
-	    The imported module, class, function, or attribute.
-	"""
-	# Replace potential path separators with dots
-	module_path = module_path.replace('/', '.').replace('\\', '.')
-
-	# Prepend optional path, if provided
-	if prepend:
-		module_path = f'{prepend}.{module_path}'
-
-	try:
-		module_name, class_name = module_path.rsplit('.', 1)
-		module: ModuleType = import_module(module_name)
-		return getattr(module, class_name)
-	except (ImportError, AttributeError, ModuleNotFoundError) as e:
-		last = get_last_error_message(e)
-		logger.error(f'{last}')
-		raise e
 
 
 def is_local_host(hostname: str | None) -> bool:

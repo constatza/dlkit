@@ -8,7 +8,7 @@ authors = [
     { name = "constatza", email = "29166969+constatza@users.noreply.github.com" },
 ]
 
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.12, <3.14"
 dependencies = [
     "numpy<3.0,>=2.1",
     "pathlib<2.0.0,>=1.0.1",
@@ -29,10 +29,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
-    "isort>=6.0.1",
     "pre-commit>=4.2.0",
-    "pylint>=3.3.6",
     "pytest<9.0.0,>=8.2.2",
 ]
 
@@ -45,9 +42,6 @@ server = "dlkit.scripts.mlflow_server:main"
 hopt = "dlkit.scripts.hparams_optimization:main"
 train-mlflow = "dlkit.scripts.mlflow_training:main"
 train = "dlkit.scripts.training:main"
-
-[tool.setuptools]
-package-dir = { "" = "src" }
 
 [tool.uv.sources]
 torch = [

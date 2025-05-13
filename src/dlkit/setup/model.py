@@ -1,31 +1,41 @@
 from lightning.pytorch import LightningModule
 from pydantic import ValidationError
 
-from dlkit.datatypes.dataset import Shape
+from dlkit.networks.blocks.basic_network import PipelineNetwork
 from dlkit.settings import ModelSettings
-from dlkit.utils.system_utils import import_dynamic
+from dlkit.transforms.pipeline import Pipeline
+from dlkit.utils.import_utils import load_class
 
 
-def initialize_model(config: ModelSettings, shape: Shape) -> LightningModule:
+def initialize_model(
+	settings: ModelSettings,
+	settings_path: str,
+) -> LightningModule:
 	"""Dynamically imports and sets up the model based on the provided configuration.
 	The configuration should include the name of the model as well as any parameters
 	that need to be passed to the model's constructor.
 
 	Args:
-	    config (Settings): The configuration object for the model.
-	    shape (dict): A dictionary containing the shapes of the features and targets.
+	    settings (Settings): The configuration object for the model.
+	    settings_path (FilePath): The path to the settings file.
 
 	Returns:
 	    nn.Module: The instantiated model object.
 	"""
-	config = config.model_copy(update={'shape': shape})
+	pipeline = Pipeline(
+		feature_transforms=settings.feature_transforms,
+		target_transforms=settings.target_transforms,
+		is_autoencoder=settings.is_autoencoder,
+	)
 
-	prepend = 'dlkit.networks'
 	try:
-		model_class = import_dynamic(config.name, prepend=prepend)
-		model = model_class(settings=config)
+		model_class = load_class(
+			class_name=settings.name, module_path=settings.module_path, settings_path=settings_path
+		)
+		model = model_class(**settings.to_dict_compatible_with(model_class))
 	except ValidationError as e:
 		raise ValueError(
 			f'{e} \nIf you are trying hyperparameter optimization, please use the `hparams_optimization` script.'
-		)
-	return model
+		) from e
+
+	return PipelineNetwork(settings=settings, model=model, pipeline=pipeline)

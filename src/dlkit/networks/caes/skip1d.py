@@ -5,50 +5,51 @@ from pydantic import ConfigDict, validate_call
 from torch import nn
 from torch.nn import Sequential
 
+from dlkit.datatypes.dataset import Shape
 from dlkit.metrics.temporal import mase
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.caes.base import CAE
-from dlkit.utils.math_utils import linear_interpolation_int
 
 
 class SkipCAE1d(CAE):
+	latent_channels: int
+	latent_width: int
+	latent_size: int
+	num_layers: int
+	kernel_size: int
+	shape: Shape
+
 	@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 	def __init__(
 		self,
-		*args,
+		input_shape: tuple[int, ...],
+		latent_channels: int = 5,
+		latent_width: int = 10,
+		latent_size: int = 10,
+		num_layers: int = 3,
+		kernel_size: int = 3,
 		activation: nn.Module = nn.GELU(),
-		**kwargs,
 	):
-		super().__init__(*args, **kwargs)
+		super().__init__()
 		self.save_hyperparameters(
 			ignore=['activation'],
 		)
 
 		self.activation = activation
-		latent_channels = self.settings.latent_channels
-		latent_width = self.settings.latent_width
-		latent_size: int = self.settings.latent_size
-		num_layers = self.settings.num_layers
-		kernel_size = self.settings.kernel_size
-		shape = self.settings.shape
+		initial_channels = input_shape[0]
+		initial_width = input_shape[1]
 
-		self.example_input_array = torch.randn(1, *shape.features[1:])
+		self.example_input_array = torch.randn(1, initial_channels, initial_width)
 
-		initial_channels = shape.features[-2]
-		initial_width = shape.features[-1]
-
-		channels = linear_interpolation_int([initial_channels, latent_channels], num_layers + 1)
-		channels[1:] = channels[1:] + (channels[1:] % 2)
-		channels = channels.tolist()
-
-		timesteps = linear_interpolation_int([initial_width, latent_width], num_layers + 1).tolist()
+		channels = torch.linspace(initial_channels, latent_channels, num_layers + 1).int().tolist()
+		timesteps = torch.linspace(initial_width, latent_width, num_layers + 1).int().tolist()
 
 		# Instantiate feature extractor and latent encoder
 
 		self.encoder = SkipEncoder(
-			channels=channels.copy(),
+			channels=channels,
 			timesteps=timesteps,
 			latent_dim=latent_size,
 			kernel_size=kernel_size,
@@ -56,7 +57,7 @@ class SkipCAE1d(CAE):
 
 		# Instantiate latent decoder and feature decoder
 		self.decoder = SkipDecoder(
-			channels=channels.copy(),
+			channels=channels,
 			timesteps=timesteps,
 			latent_dim=latent_size,
 			kernel_size=kernel_size,
@@ -171,3 +172,11 @@ class SkipDecoder(nn.Module):
 		x = self.latent_to_feature(x)
 		x = self.feature_decoder(x)
 		return x
+
+	@staticmethod
+	def training_loss_func(x_hat, x):
+		return mase(x_hat, x)
+
+	@staticmethod
+	def test_loss_func(x_hat, x):
+		return mase(x_hat, x)

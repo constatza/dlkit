@@ -1,8 +1,9 @@
+from pathlib import Path
+
 import torch
 from numpy import load
-from torch.utils.data import Dataset
-from pathlib import Path
 from pydantic import validate_call, FilePath
+from torch.utils.data import Dataset
 
 
 class NumpyDataset(Dataset):

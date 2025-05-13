@@ -1,5 +1,4 @@
 import sys
-import traceback
 
 import click
 import torch
@@ -13,9 +12,6 @@ from dlkit.setup.datamodule import initialize_datamodule
 from dlkit.setup.model import initialize_model
 from dlkit.setup.trainer import initialize_trainer
 
-torch.set_float32_matmul_precision('medium')
-seed_everything(1)
-
 
 @validate_call
 def train(settings: Settings) -> TrainingState:
@@ -26,8 +22,10 @@ def train(settings: Settings) -> TrainingState:
 	prediction steps. Finally, it saves the predictions to disk.
 
 	Args:
-	    config_path (FilePath): The path to the configuration file.
+	    settings: The configuration object for the training process.
 	"""
+	torch.set_float32_matmul_precision('medium')
+	seed_everything(settings.seed)
 	logger.info('Training started.')
 
 	datamodule = initialize_datamodule(
@@ -36,8 +34,10 @@ def train(settings: Settings) -> TrainingState:
 	trainer = initialize_trainer(settings.TRAINER)
 
 	# Initialize model with shapes derived from datamodule
-	datamodule.setup(stage='fit')
-	model = initialize_model(settings.MODEL, datamodule.shape)
+	model = initialize_model(
+		settings=settings.MODEL,
+		settings_path=settings.PATHS.settings,
+	)
 
 	# Train and evaluate the model
 	trainer.fit(model, datamodule=datamodule)
@@ -49,7 +49,7 @@ def train(settings: Settings) -> TrainingState:
 
 
 @click.command('train', help='Trains, tests, and predicts using the provided configuration.')
-@click.argument('config-path')
+@click.argument('config-path', type=str, default='./config.toml')
 def train_cli(config_path: str = './config.toml'):
 	settings = load_validated_settings(config_path)
 	training_state = train(settings)
@@ -60,8 +60,8 @@ def main() -> None:
 	"""Main function to parse configuration and trigger training."""
 	try:
 		train_cli()
-	except Exception:
-		logger.error(traceback.format_exc())
+	except KeyboardInterrupt:
+		logger.warning('Training interrupted.')
 	finally:
 		sys.exit(0)
 
