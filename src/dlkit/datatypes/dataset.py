@@ -1,8 +1,12 @@
+from typing import TypeVar
+
+from attrs import define, field
 from pydantic import Field
 from torch.utils.data import Dataset
-from attrs import define, field
 
 from .basic import BasicTypeSettings
+
+Dataset_T = TypeVar('Dataset_T', bound=Dataset, covariant=True)
 
 
 class Shape(BasicTypeSettings):
@@ -19,6 +23,15 @@ class SplitDataset:
 	validation: Dataset | None = field(default=None)
 	test: Dataset | None = field(default=None)
 	predict: Dataset | None = field(default=None, alias='transformed')
+
+
+@define
+class SplitDatasetOfType[Dataset_T]:
+	raw: Dataset_T = field()
+	train: Dataset_T | None = field(default=None)
+	validation: Dataset_T | None = field(default=None)
+	test: Dataset_T | None = field(default=None)
+	predict: Dataset_T | None = field(default=None, alias='transformed')
 
 
 class SplitIndices(BasicTypeSettings):

@@ -1,9 +1,9 @@
 import torch
 
-from dlkit.transforms.base import Scaler
+from dlkit.transforms.base import Transform
 
 
-class StdScaler(Scaler):
+class StdScaler(Transform):
 	def __init__(self, dim: int | list[int] | None = None) -> None:
 		super().__init__()
 		self.mean: torch.Tensor | None = None

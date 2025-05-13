@@ -29,5 +29,6 @@ def load_validated_settings(file_path: FilePath) -> Settings:
 	except DynaconfFormatError as e:
 		logger.error(f'Configuration file is not valid - {str(file_path)}')
 		raise e
+	config.paths['settings'] = file_path
 	dlkit_settings = dynaconf_to_settings(config)
 	return dlkit_settings

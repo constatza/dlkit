@@ -42,6 +42,7 @@ class PathSettings(BaseSettings):
 	"""
 
 	root: DirectoryPath = Field(..., description='Root directory.')
+	settings: FilePath = Field(..., description='Path to the settings file.')
 
 	input_dir: DirectoryPath | None = Field(None, description='Input directory.')
 	output_dir: DirectoryPath | None = Field(

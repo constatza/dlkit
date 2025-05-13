@@ -1,10 +1,10 @@
 from dynaconf import LazySettings
-from pydantic import validate_call
+from pydantic import validate_call, ConfigDict
 
 from .general_settings import Settings
 
 
-@validate_call(config={'arbitrary_types_allowed': True})
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def dynaconf_to_settings(config: LazySettings) -> Settings:
 	"""Convert a LazySettings object to a Settings object."""
 	try:

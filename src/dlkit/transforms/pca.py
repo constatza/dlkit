@@ -3,7 +3,7 @@ from functools import wraps
 import torch
 from loguru import logger
 
-from dlkit.transforms.base import Scaler
+from .base import Transform
 
 
 def reshaper2d(func):
@@ -22,7 +22,7 @@ def reshaper2d(func):
 	return wrapper
 
 
-class PCA(Scaler):
+class PCA(Transform):
 	"""Principal Component Analysis (PCA) transformer using torch.pca_lowrank.
 
 	This transformer computes the principal components efficiently by leveraging

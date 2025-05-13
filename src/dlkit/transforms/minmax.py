@@ -1,19 +1,27 @@
+from collections.abc import Sequence
+
 import torch
 
-from dlkit.transforms.base import Scaler
+from dlkit.transforms.base import Transform
 
 
-class MinMaxScaler(Scaler):
-	def __init__(self, dim: int | list[int] | None = None) -> None:
-		"""Minimum-Maximum Scaler.
+class MinMaxScaler(Transform):
+	"""Minimum-Maximum Scaler."""
+
+	min: torch.Tensor
+	max: torch.Tensor
+	dim: int | Sequence[int]
+
+	def __init__(self, dim: int | Sequence[int] = 0) -> None:
+		"""
 		Important: This scaler transforms data in the range [-1, 1] by default!!!
 
 		Args:
 		    dim (int | list[int], optional): _description_. Defaults to None.
 		"""
 		super().__init__()
-		self.min: torch.Tensor | None = None
-		self.max: torch.Tensor | None = None
+		self.min = torch.empty(1)
+		self.max = torch.empty(1)
 		self.dim = dim or 0
 
 	def fit(self, data: torch.Tensor) -> None:

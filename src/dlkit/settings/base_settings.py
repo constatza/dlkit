@@ -4,17 +4,18 @@ from typing import Any, Self
 
 from optuna.distributions import CategoricalChoiceType
 from optuna.trial import Trial
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, FilePath
 
 from dlkit.datatypes.basic import FloatHyper, FloatRange, IntHyper, IntRange, StrHyper
+from dlkit.utils.import_utils import load_class
 
 
 class BaseSettings(BaseModel):
-	class Config:
-		extra = 'allow'
-		validate_assignment = True
-		frozen = True
-		validate_default = True
+	model_config = ConfigDict(
+		frozen=True,
+		validate_default=True,
+		extra='allow',
+	)
 
 	def to_dict_compatible_with(self, cls: type, exclude: tuple[str, ...] = ()) -> dict[str, Any]:
 		signature = inspect.signature(cls)
@@ -59,3 +60,12 @@ class HyperParameterSettings(BaseSettings):
 			return trial.suggest_categorical(name=field, choices=value)
 
 		return value
+
+
+class ClassSettings(BaseSettings):
+	name: str
+	module_path: str
+
+	def construct_class_dynamic(self, settings_path: FilePath | None = None) -> type:
+		class_name = load_class(self.name, self.module_path, settings_path)
+		return class_name(**self.to_dict_compatible_with(class_name))
