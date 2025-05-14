@@ -34,15 +34,16 @@ def train(settings: Settings) -> TrainingState:
 	trainer = initialize_trainer(settings.TRAINER)
 
 	# Initialize model with shapes derived from datamodule
+	datamodule.setup('fit')
 	model = initialize_model(
 		settings=settings.MODEL,
 		settings_path=settings.PATHS.settings,
+		dataset=datamodule.dataset.train,
 	)
 
 	# Train and evaluate the model
 	trainer.fit(model, datamodule=datamodule)
 	trainer.test(model, datamodule=datamodule)
-	trainer.predict(model, datamodule=datamodule)
 
 	logger.info('Training completed.')
 	return TrainingState(trainer=trainer, model=model, datamodule=datamodule)

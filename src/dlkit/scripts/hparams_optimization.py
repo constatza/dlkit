@@ -16,13 +16,12 @@ from dlkit.setup.pruner import initialize_pruner
 from dlkit.setup.tracking import initialize_mlflow_client
 from dlkit.utils.optuna_utils import objective
 
-# set all seeds with pytorch lightning
-seed_everything(1)
-torch.set_float32_matmul_precision('medium')
-
 
 @validate_call
 def hopt(settings: Settings) -> None:
+	# set all seeds with pytorch lightning
+	seed_everything(1)
+	torch.set_float32_matmul_precision('medium')
 	datamodule = initialize_datamodule(
 		settings.DATA, settings.PATHS, datamodule_device=settings.TRAINER.accelerator
 	)

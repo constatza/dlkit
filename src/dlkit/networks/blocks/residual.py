@@ -25,7 +25,7 @@ class SkipConnection(nn.Module):
 		module: nn.Module,
 		how: Literal['sum', 'concat'] = 'sum',
 		layer_type: Literal['conv1d', 'conv2d', 'linear'] = 'conv1d',
-		activation: Callable[[torch.Tensor], torch.Tensor] = lambda x: x,
+		activation: Callable[[torch.Tensor], torch.Tensor] = nn.Identity(),
 		in_channels: int | None = None,
 		out_channels: int | None = None,
 		kernel_size: int = 1,
@@ -64,7 +64,6 @@ class SkipConnection(nn.Module):
 			layer_type,
 			self.in_channels,
 			self.out_channels,
-			kernel_size,
 			stride,
 			bias=bias,
 		)
@@ -78,13 +77,11 @@ class SkipConnection(nn.Module):
 	def forward(self, x_in: torch.Tensor) -> torch.Tensor:
 		x_out = self.module(x_in)
 		skip = self.reduce_layer(x_in)
-		# if skip.shape[2:] != x_out.shape[2:]:
-		#     skip = torch.nn.functional.interpolate(skip, size=x_out.shape[2:])
 		agg_out = self.aggregation_function(skip, x_out)
 		return self.activation(agg_out)
 
 
-def select_skip_layers(layer_type, in_channels, out_channels, kernel_size, stride, bias=True):
+def select_skip_layers(layer_type, in_channels, out_channels, stride, bias=True):
 	if in_channels == out_channels:
 		return nn.Identity()
 	if layer_type == 'conv1d':
@@ -93,3 +90,5 @@ def select_skip_layers(layer_type, in_channels, out_channels, kernel_size, strid
 		return nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
 	if layer_type == 'linear':
 		return nn.Linear(in_channels, out_channels, bias=False)
+
+	raise ValueError(f'Unsupported layer type: {layer_type}')

@@ -78,7 +78,7 @@ def import_from_path(class_name: str, path: Path, base: Path) -> type:
 
 
 @validate_call()
-def load_class(class_name: str, module_path: str, settings_path: FilePath | None = None) -> type:
+def load_class(class_name: str, module_path: str, settings_path: FilePath | None = None):
 	"""
 	High-level loader: parse config, import module or file, and return the model class.
 
