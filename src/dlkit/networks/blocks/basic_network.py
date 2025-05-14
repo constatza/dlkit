@@ -58,10 +58,13 @@ class PipelineNetwork(LightningModule):
 		# Fetch the ready train loader
 		dl = self.trainer.datamodule.train_dataloader()
 		x, y = next(iter(dl))
-		x = x.to(self.device)
-		y = y.to(self.device)
-		self.pipeline.fit(x, y)  # fit-only-once on the training set
-		logger.info('Pipeline fitted and moved to device.')
+		if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
+			x = x.to(self.device)
+			y = y.to(self.device)
+			self.pipeline.fit(x, y)  # fit-only-once on the training set
+			logger.info('Pipeline fitted and moved to device.')
+			return
+		logger.warning('Unknown data type in train loader.')
 
 	def training_step(self, batch, batch_idx):
 		x, y = batch

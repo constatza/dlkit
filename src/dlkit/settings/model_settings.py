@@ -32,7 +32,7 @@ class TransformSettings(ClassSettings):
 	)
 
 
-class ModelSettings(HyperParameterSettings):
+class ModelSettings(HyperParameterSettings, ClassSettings):
 	name: str = Field(..., description='Model namespace path.')
 	module_path: str = Field(
 		default='dlkit.networks',
