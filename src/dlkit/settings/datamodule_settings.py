@@ -1,6 +1,8 @@
+from lightning import LightningDataModule
 from pydantic import Field, NonNegativeFloat
+from torch.utils.data import Dataset
 
-from .base_settings import BaseSettings
+from .base_settings import BaseSettings, ClassSettings
 
 
 class DataloaderSettings(BaseSettings):
@@ -11,7 +13,7 @@ class DataloaderSettings(BaseSettings):
 	pin_memory: bool = Field(default=True, description='Whether to pin memory.')
 
 
-class DatasetSettings(BaseSettings):
+class DatasetSettings(ClassSettings[Dataset]):
 	name: str = Field('NumpyDataset', description='Dataset name.')
 	module_path: str = Field(
 		default='dlkit.datasets',
@@ -22,22 +24,14 @@ class DatasetSettings(BaseSettings):
 	)
 
 
-class DataModuleSettings(BaseSettings):
-	name: str = Field(default='BaseDataModule', description='Datamodule name.')
+class DataModuleSettings(ClassSettings[LightningDataModule]):
+	name: str = Field(default='InMemoryModule', description='Datamodule name.')
 	module_path: str = Field(
 		default='dlkit.datamodules',
 		description='Module path where the datamodule class is located.',
 	)
-
-
-class DataSettings(BaseSettings):
-	module: DataModuleSettings = Field(DataModuleSettings(), description='Dataset settings.')
-	dataloader: DataloaderSettings = Field(DataloaderSettings(), description='Dataloader settings.')
-	dataset: DatasetSettings = Field(default=DatasetSettings(), description='Dataset settings.')
-	targets_exist: bool = Field(
-		default=True,
-		description='Whether dataset has both features and targets.',
-		frozen=False,
+	dataloader: DataloaderSettings = Field(
+		default=DataloaderSettings(), description='Dataloader settings.'
 	)
 	test_size: NonNegativeFloat = Field(
 		default=0.15, description='Fraction of data used for testing.'

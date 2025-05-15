@@ -23,7 +23,7 @@ def hopt(settings: Settings) -> None:
 	seed_everything(1)
 	torch.set_float32_matmul_precision('medium')
 	datamodule = initialize_datamodule(
-		settings.DATA, settings.PATHS, datamodule_device=settings.TRAINER.accelerator
+		settings.DATAMODULE, settings.DATASET, settings.DATALOADER, settings.PATHS
 	)
 	datamodule.setup(stage='fit')
 	experiment_id = initialize_mlflow_client(settings.MLFLOW)

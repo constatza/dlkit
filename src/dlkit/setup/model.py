@@ -5,7 +5,7 @@ from pytorch_forecasting.data import TimeSeriesDataSet
 from dlkit.networks.blocks.basic_network import PipelineNetwork
 from dlkit.settings import ModelSettings
 from dlkit.transforms.pipeline import Pipeline
-from dlkit.utils.import_utils import load_class
+from dlkit.utils.loading import load_class, init_class
 
 
 def initialize_model(
@@ -26,8 +26,8 @@ def initialize_model(
 			target_transforms=settings.target_transforms,
 			is_autoencoder=settings.is_autoencoder,
 		)
-		model = settings.construct_class_dynamic(settings_path)  # noqa: D100
-		return PipelineNetwork(settings, model, pipeline)
+		model: LightningModule = init_class(settings, settings_path)  # noqa: D100
+		return PipelineNetwork(settings=settings, model=model, pipeline=pipeline)  # noqa: D100
 
 	if settings.module_path == 'pytorch_forecasting':
 		class_name: type(TemporalFusionTransformer) = load_class(

@@ -7,6 +7,9 @@ from types import ModuleType
 
 from pydantic import FilePath, validate_call
 
+from dlkit.settings.base_settings import ClassSettings
+from dlkit.settings.base_settings import T_co
+
 logger = logging.getLogger(__name__)
 
 
@@ -94,3 +97,12 @@ def load_class(class_name: str, module_path: str, settings_path: FilePath | None
 		return import_from_path(class_name, Path(module_path), settings_path.parent)
 
 	return import_from_module(class_name=class_name, module_prefix=module_path)
+
+
+def init_class(
+	cls_settings: ClassSettings[T_co], settings_path: FilePath | None = None, **kwargs
+) -> T_co:
+	class_name = load_class(cls_settings.name, cls_settings.module_path, settings_path)
+	if isinstance(class_name, type):
+		return class_name(**cls_settings.to_dict_compatible_with(class_name, **kwargs))
+	return class_name

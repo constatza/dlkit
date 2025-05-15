@@ -1,35 +1,29 @@
-from typing import Literal
-
-import torch
 from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 
 from dlkit.datatypes.dataset import Shape, SplitDatasetOfType, SplitIndices, Dataset_T
-from dlkit.settings import DataSettings
+from dlkit.settings import DataloaderSettings
 
 
-class BaseDataModule(LightningDataModule):
-	device: torch.device
-	settings: DataSettings
+class InMemoryModule(LightningDataModule):
 	idx_split: SplitIndices
 	dataset: SplitDatasetOfType
+	dataloader_settings: DataloaderSettings
 	shape: Shape
 	fitted: bool
 
 	def __init__(
 		self,
 		dataset: Dataset_T,
-		settings: DataSettings,
 		idx_split: SplitIndices,
-		device: Literal['cpu', 'cuda'] = 'cpu',
+		dataloader_settings: DataloaderSettings,
 	) -> None:
 		super().__init__()
 
 		self.dataset = SplitDatasetOfType[Dataset_T]()
-		self.settings = settings
-		self.device = torch.device(device)
 		self.idx_split = idx_split
 		self.fitted = False
+		self.dataloader_settings = dataloader_settings
 
 		self.dataset.raw = dataset
 		self.dataset.train = Subset(self.dataset.raw, self.idx_split.train)
@@ -46,17 +40,17 @@ class BaseDataModule(LightningDataModule):
 	def train_dataloader(self):
 		if self.dataset.train is None:
 			raise RuntimeError("Call setup('fit') before setup('train')")
-		return DataLoader(self.dataset.train, **self.settings.dataloader.model_dump())
+		return DataLoader(self.dataset.train, **self.dataloader_settings.model_dump())
 
 	def val_dataloader(self):
 		if self.dataset.validation is None:
 			raise RuntimeError("Call setup('fit') before setup('validation')")
-		return DataLoader(self.dataset.validation, **self.settings.dataloader.model_dump())
+		return DataLoader(self.dataset.validation, **self.dataloader_settings.model_dump())
 
 	def test_dataloader(self):
 		if self.dataset.test is None:
 			raise RuntimeError("Call setup('fit') before setup('test')")
-		return DataLoader(self.dataset.test, **self.settings.dataloader.model_dump())
+		return DataLoader(self.dataset.test, **self.dataloader_settings.model_dump())
 
 	def predict_dataloader(self):
 		if self.dataset.predict is None:
@@ -64,5 +58,5 @@ class BaseDataModule(LightningDataModule):
 		return DataLoader(
 			self.dataset.predict,
 			shuffle=False,
-			**self.settings.dataloader.to_dict_compatible_with(DataLoader, exclude=('shuffle',)),
+			**self.dataloader_settings.to_dict_compatible_with(DataLoader, exclude=('shuffle',)),
 		)

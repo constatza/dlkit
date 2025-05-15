@@ -1,47 +1,44 @@
-from typing import Literal
+from lightning import LightningDataModule
 
-from dlkit.datamodules.base import BaseDataModule
 from dlkit.datamodules.utils import get_or_create_idx_split
-from dlkit.settings.general_settings import DataSettings, PathSettings
-from dlkit.utils.import_utils import import_from_module
+from dlkit.settings import PathSettings, DataModuleSettings, DataloaderSettings
+from dlkit.settings.datamodule_settings import DatasetSettings
+from dlkit.utils.loading import init_class
 
 
 def initialize_datamodule(
-	data_settings: DataSettings,
+	settings: DataModuleSettings,
+	dataset_settings: DatasetSettings,
+	dataloader_settings: DataloaderSettings,
 	paths: PathSettings,
-	datamodule_device: Literal['cpu', 'cuda'] = 'cpu',
-) -> BaseDataModule:
-	"""Dynamically imports and sets up the datamodule based on the provided configuration.
-	:return: LightningDataModule: The instantiated datamodule object.
+) -> LightningDataModule:
+	"""
+	Builds a datamodule based on the provided settings and dataset.
+	Args:
+	    settings (DataModuleSettings): The settings for the datamodule.
+	    dataset_settings (DatasetSettings): The settings for the dataset.
+	    dataloader_settings (DataloaderSettings): The settings for the dataloader.
+	    paths (PathSettings): The paths for saving and loading data.
+
+	Returns:
+	    LightningDataModule: The LightningDataModule for the dataset.
 	"""
 
-	dataset = import_from_module(
-		data_settings.dataset.name,
-		module_prefix=data_settings.dataset.module_path,
-	)
-
-	dataset = dataset(
-		**data_settings.dataset.to_dict_compatible_with(dataset),
-		**paths.to_dict_compatible_with(dataset),
-	)
-
-	module = import_from_module(
-		data_settings.module.name,
-		module_prefix=data_settings.module.module_path,
-	)
+	dataset = init_class(dataset_settings, **paths.model_dump())
 
 	idx_split = get_or_create_idx_split(
 		n=len(dataset),
 		filepath=paths.idx_split,
 		save_dir=paths.input_dir,
-		test_size=data_settings.test_size,
-		val_size=data_settings.val_size,
+		test_size=settings.test_size,
+		val_size=settings.val_size,
 	)
 
-	datamodule_instance = module(
+	datamodule_instance = init_class(
+		settings,
 		dataset=dataset,
-		settings=data_settings,
 		idx_split=idx_split,
+		dataloader_settings=dataloader_settings,
 	)
 
 	return datamodule_instance

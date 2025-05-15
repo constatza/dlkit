@@ -1,7 +1,7 @@
 from pydantic import Field
 
 from .base_settings import BaseSettings
-from .data_settings import DataSettings
+from .datamodule_settings import DataModuleSettings, DatasetSettings, DataloaderSettings
 from .mlflow_settings import MLflowSettings
 from .model_settings import ModelSettings
 from .optuna_settings import OptunaSettings
@@ -28,5 +28,7 @@ class Settings(BaseSettings):
 	MLFLOW: MLflowSettings
 	OPTUNA: OptunaSettings = Field(default=OptunaSettings(), description='Optuna settings.')
 	TRAINER: TrainerSettings = Field(default=TrainerSettings(), description='Trainer settings.')
-	DATA: DataSettings = Field(..., description='Datamodule settings.')
-	seed: int = Field(default=42, description='Random seed for reproducibility.')
+	DATAMODULE: DataModuleSettings = Field(..., description='Datamodule settings.')
+	DATASET: DatasetSettings = Field(..., description='Dataset settings.')
+	DATALOADER: DataloaderSettings = Field(DataloaderSettings(), description='Dataloader settings.')
+	seed: int = Field(default=1, description='Random seed for reproducibility.')
