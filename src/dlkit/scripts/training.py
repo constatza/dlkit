@@ -29,7 +29,10 @@ def train(settings: Settings) -> TrainingState:
 	logger.info('Training started.')
 
 	datamodule = initialize_datamodule(
-		settings.DATA, settings.PATHS, datamodule_device=settings.TRAINER.accelerator
+		settings.DATAMODULE,
+		settings.DATASET,
+		settings.DATALOADER,
+		settings.PATHS,
 	)
 	trainer = initialize_trainer(settings.TRAINER)
 
@@ -44,7 +47,7 @@ def train(settings: Settings) -> TrainingState:
 	# Train and evaluate the model
 	trainer.fit(model, datamodule=datamodule)
 	trainer.test(model, datamodule=datamodule)
-
+	trainer.predict(model, datamodule=datamodule)
 	logger.info('Training completed.')
 	return TrainingState(trainer=trainer, model=model, datamodule=datamodule)
 

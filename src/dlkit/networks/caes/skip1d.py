@@ -74,14 +74,6 @@ class SkipCAE1d(CAE):
 		x = self.decoder(x)
 		return self.smoothing_layer(x)
 
-	@staticmethod
-	def training_loss_func(x_hat, x):
-		return mase(x_hat, x)
-
-	@staticmethod
-	def test_loss_func(x_hat, x):
-		return mase(x_hat, x)
-
 
 class SkipEncoder(nn.Module):
 	def __init__(

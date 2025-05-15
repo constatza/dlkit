@@ -9,6 +9,7 @@ from torch.nn import ModuleList
 from dlkit.datatypes.dataset import Shape
 from dlkit.settings.model_settings import TransformSettings
 from .base import Transform
+from ..utils.loading import init_class
 
 
 class Pipeline(Transform):
@@ -28,8 +29,8 @@ class Pipeline(Transform):
 		is_autoencoder: bool = False,
 	) -> None:
 		super().__init__()
-		feature_transforms = [d.construct_class_dynamic() for d in feature_transforms]
-		target_transforms = [d.construct_class_dynamic() for d in target_transforms]
+		feature_transforms = [init_class(d) for d in feature_transforms]
+		target_transforms = [init_class(d) for d in target_transforms]
 		self.feature_transforms = ModuleList(feature_transforms)
 		self.target_transforms = (
 			ModuleList(target_transforms) if not is_autoencoder else self.feature_transforms

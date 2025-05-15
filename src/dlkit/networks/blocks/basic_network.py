@@ -5,9 +5,8 @@ from lightning import LightningModule, LightningDataModule
 from loguru import logger
 
 from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
-from dlkit.setup.optimizer import initialize_optimizer
-from dlkit.setup.scheduler import initialize_scheduler
 from dlkit.transforms.pipeline import Pipeline
+from dlkit.utils.loading import init_class
 
 
 class PipelineNetwork(LightningModule):
@@ -19,19 +18,17 @@ class PipelineNetwork(LightningModule):
 	model: LightningModule
 	train_loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
-	def __init__(
-		self,
-		settings: ModelSettings,
-		model: LightningModule,
-		pipeline: Pipeline,
-	) -> None:
+	def __init__(self, settings: ModelSettings, model: LightningModule, pipeline: Pipeline) -> None:
 		super().__init__()
 		self.settings = settings
-		self.optimizer_config = settings.optimizer
-		self.scheduler_config = settings.scheduler
-		self.pipeline = pipeline
 		self.model = model
+		self.pipeline = pipeline
 		self.datamodule = None
+		self.training_loss_func = getattr(
+			model, 'training_loss_func', init_class(self.settings.train_loss)
+		)
+		self.validation_loss_func = self.training_loss_func
+		self.test_loss_func = getattr(model, 'test_loss_func', init_class(self.settings.test_loss))
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
 		x = self.pipeline(x, which='features')
@@ -39,8 +36,8 @@ class PipelineNetwork(LightningModule):
 		return x
 
 	def configure_optimizers(self):
-		optimizer = initialize_optimizer(self.optimizer_config, self.parameters())
-		scheduler = initialize_scheduler(self.scheduler_config, optimizer)
+		optimizer = init_class(self.settings.optimizer, params=self.model.parameters())
+		scheduler = init_class(self.settings.scheduler, optimizer=optimizer)
 		if not scheduler:
 			return {'optimizer': optimizer}
 		return {
@@ -70,7 +67,7 @@ class PipelineNetwork(LightningModule):
 		x, y = batch
 		y_hat = self.forward(x)
 		y_true = self.pipeline(y, which='targets')
-		loss = self.model.training_loss_func(y_hat, y_true)
+		loss = self.training_loss_func(y_hat, y_true)
 		self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
 		return loss
 
@@ -78,7 +75,7 @@ class PipelineNetwork(LightningModule):
 		x, y = batch
 		y_hat = self.forward(x)
 		y_true = self.pipeline(y, which='targets')
-		loss = self.model.training_loss_func(y_hat, y_true)
+		loss = self.training_loss_func(y_hat, y_true)
 		self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
 		return loss
 
@@ -86,7 +83,7 @@ class PipelineNetwork(LightningModule):
 		x, y = batch
 		y_hat = self.forward(x)
 		y_true = self.pipeline(y, which='targets')
-		loss = self.model.test_loss_func(y_hat, y_true)
+		loss = self.test_loss_func(y_hat, y_true)
 		self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=False)
 		return loss
 

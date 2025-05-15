@@ -1,13 +1,14 @@
-import inspect
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Self, TypeVar
 
 from optuna.distributions import CategoricalChoiceType
 from optuna.trial import Trial
-from pydantic import BaseModel, ConfigDict, FilePath
+from pydantic import BaseModel, ConfigDict
 
 from dlkit.datatypes.basic import FloatHyper, FloatRange, IntHyper, IntRange, StrHyper
-from dlkit.utils.import_utils import load_class
+from dlkit.utils.general import kwargs_compatible_with
+
+T_co = TypeVar('T_co', covariant=True)
 
 
 class BaseSettings(BaseModel):
@@ -17,14 +18,10 @@ class BaseSettings(BaseModel):
 		extra='allow',
 	)
 
-	def to_dict_compatible_with(self, cls: type, exclude: tuple[str, ...] = ()) -> dict[str, Any]:
-		signature = inspect.signature(cls)
-
-		return {
-			field: value
-			for field, value in self.model_dump().items()
-			if field in signature.parameters.keys() and field not in exclude
-		}
+	def to_dict_compatible_with(
+		self, cls: type, exclude: tuple[str, ...] = (), **kwargs
+	) -> dict[str, Any]:
+		return kwargs_compatible_with(cls, exclude=exclude, **kwargs, **self.model_dump())
 
 
 class HyperParameterSettings(BaseSettings):
@@ -62,10 +59,9 @@ class HyperParameterSettings(BaseSettings):
 		return value
 
 
-class ClassSettings(BaseSettings):
+class ClassSettings[T_co](BaseSettings):
 	name: str
 	module_path: str
-
-	def construct_class_dynamic(self, settings_path: FilePath | None = None) -> type:
-		class_name = load_class(self.name, self.module_path, settings_path)
-		return class_name(**self.to_dict_compatible_with(class_name))
+	model_config = ConfigDict(
+		arbitrary_types_allowed=True,
+	)

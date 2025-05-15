@@ -1,11 +1,13 @@
 from typing import Literal
 
+from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.loggers import Logger
 from pydantic import DirectoryPath, Field
 
-from .base_settings import BaseSettings
+from .base_settings import BaseSettings, ClassSettings
 
 
-class CallbackSettings(BaseSettings):
+class CallbackSettings(ClassSettings[Callback]):
 	name: str | None = Field(
 		default=None,
 		description='Name of the callback.',
@@ -16,7 +18,7 @@ class CallbackSettings(BaseSettings):
 	)
 
 
-class LoggerSettings(BaseSettings):
+class LoggerSettings(ClassSettings[Logger]):
 	name: str | None = Field(
 		default=None,
 		description='Name of the logger.',
@@ -26,9 +28,10 @@ class LoggerSettings(BaseSettings):
 		description='Module path where the logger class is located.',
 	)
 
-	# save_dir: DirectoryPath | None = Field(
-	#     None, description="Directory path where the logger should save the model."
-	# )
+
+# save_dir: DirectoryPath | None = Field(
+#     None, description="Directory path where the logger should save the model."
+# )
 
 
 class TrainerSettings(BaseSettings):
