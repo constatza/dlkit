@@ -25,10 +25,10 @@ def load_validated_settings(file_path: FilePath) -> Settings:
 	    DynaconfFormatError: If the configuration file format is invalid.
 	"""
 	try:
-		config = Dynaconf(settings_files=[file_path], envvar_prefix='DLKIT')
+		config: Dynaconf = Dynaconf(settings_files=[file_path], envvar_prefix='DLKIT')
 	except DynaconfFormatError as e:
 		logger.error(f'Configuration file is not valid - {str(file_path)}')
-		raise e
+		raise ValueError(f'Configuration file is not valid - {str(file_path)}') from e
 	config.paths['settings'] = file_path
 	dlkit_settings = dynaconf_to_settings(config)
 	return dlkit_settings

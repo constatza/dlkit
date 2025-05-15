@@ -17,17 +17,8 @@ class Shape(BasicTypeSettings):
 
 
 @define
-class SplitDataset:
-	raw: Dataset = field()
-	train: Dataset | None = field(default=None)
-	validation: Dataset | None = field(default=None)
-	test: Dataset | None = field(default=None)
-	predict: Dataset | None = field(default=None, alias='transformed')
-
-
-@define
 class SplitDatasetOfType[Dataset_T]:
-	raw: Dataset_T = field()
+	raw: Dataset_T = field(default=None)
 	train: Dataset_T | None = field(default=None)
 	validation: Dataset_T | None = field(default=None)
 	test: Dataset_T | None = field(default=None)
