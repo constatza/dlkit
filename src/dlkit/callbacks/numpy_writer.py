@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import mlflow
@@ -22,7 +22,9 @@ class NumpyWriter(Callback):
 	"""
 
 	@validate_call
-	def __init__(self, output_dir: DirectoryPath | None = None) -> None:
+	def __init__(
+		self, output_dir: DirectoryPath | None = None, filenames: Sequence[str] = ('predictions',)
+	) -> None:
 		"""Initialize the NumpyWriter callback.
 
 		Args:
@@ -38,6 +40,7 @@ class NumpyWriter(Callback):
 		# This dictionary will accumulate predictions across batches.
 		# The keys are strings and values are lists of torch.Tensor.
 		self._predictions: dict[str, list[torch.Tensor]] = {}
+		self._filenames: Sequence[str] = filenames
 
 	def on_predict_batch_end(
 		self,
@@ -60,13 +63,14 @@ class NumpyWriter(Callback):
 		"""
 		# Ensure the outputs are a mapping.
 		if isinstance(outputs, Mapping):
-			for key, value in outputs.items():
-				self.store_predictions(key, value)
+			for i, (key, value) in enumerate(outputs.items()):
+				write_key = self._filenames[i] if len(self._filenames) > i else key
+				self._store_predictions(write_key, value)
 		elif isinstance(outputs, list | tuple):
 			for i, value in enumerate(outputs):
-				self.store_predictions(f'predictions_{i}', value)
+				self._store_predictions(self._filenames[i], value)
 		elif isinstance(outputs, torch.Tensor):
-			self.store_predictions('predictions', outputs)
+			self._store_predictions(self._filenames[0], outputs)
 		else:
 			logger.error(f'Unexpected output type in NumpyWriter: {type(outputs)}')
 
@@ -101,7 +105,7 @@ class NumpyWriter(Callback):
 				logger.error(f'Error: {e}')
 				continue
 
-	def store_predictions(self, key: str, value: torch.Tensor) -> None:
+	def _store_predictions(self, key: str, value: torch.Tensor) -> None:
 		"""Store a prediction tensor for a given key.
 
 		Args:

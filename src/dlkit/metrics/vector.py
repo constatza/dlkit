@@ -38,6 +38,6 @@ def rms_over_rms_loss(predictions, targets, eps=1e-8):
 	return rms_loss(predictions, targets) / (vector_norm(targets) + eps)
 
 
-def mse_over_std_error(predictions: Tensor, targets: Tensor, eps: float = 1e-8) -> Tensor:
+def mse_over_var_error(predictions: Tensor, targets: Tensor, eps: float = 1e-8) -> Tensor:
 	"""Mean Squared Error over Standard Deviation."""
-	return mean_squares(predictions - targets) / (torch.std(targets) + eps)
+	return torch.mean(mean_squares(predictions - targets)) / (torch.var(targets) + eps)

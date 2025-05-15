@@ -24,4 +24,4 @@ class CAE(LightningModule):
 		x = batch[0]
 		latent = self.encode(x)
 		y = self.decode(latent)
-		return {'predictions': y.detach().cpu(), 'latent': latent.detach().cpu()}
+		return {'predictions': y.detach(), 'latent': latent.detach()}
