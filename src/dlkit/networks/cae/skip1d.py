@@ -10,7 +10,7 @@ from dlkit.metrics.temporal import mase
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.networks.blocks.residual import SkipConnection
-from dlkit.networks.caes.base import CAE
+from dlkit.networks.cae.base import CAE
 
 
 class SkipCAE1d(CAE):

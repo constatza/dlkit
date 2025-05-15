@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 import torch
+from pydantic import validate_call
 
 from dlkit.transforms.base import Transform
 
@@ -12,17 +13,30 @@ class MinMaxScaler(Transform):
 	max: torch.Tensor
 	dim: int | Sequence[int]
 
-	def __init__(self, dim: int | Sequence[int] = 0) -> None:
+	@validate_call()
+	def __init__(
+		self, dim: int | Sequence[int] = 0, input_shape: tuple[int, ...] | None = None
+	) -> None:
 		"""
 		Important: This scaler transforms data in the range [-1, 1] by default!!!
 
 		Args:
-		    dim (int | list[int], optional): _description_. Defaults to None.
+		    dim (int | Sequence[int], optional): The dimension(s) along which to compute
+		        the minimum and maximum values. Defaults to 0.
+		    input_shape (tuple[int, ...] | None, optional): The shape of the input data.
 		"""
 		super().__init__()
-		self.min = torch.empty(1)
-		self.max = torch.empty(1)
-		self.dim = dim or 0
+		moments_shape = [1, *input_shape]
+		dim = dim if isinstance(dim, Sequence) else (dim,)
+		size = len(moments_shape)
+		# assure that dim has nonegative values
+		self.dim = tuple([idx % size for idx in dim if idx < 0])
+
+		# create zero tensors with the same number of dimensions as the input data
+		# but with reduced size along the specified dimensions dim
+		moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(moments_shape)])
+		self.register_buffer('min', torch.zeros(moments_shape))
+		self.register_buffer('max', torch.zeros(moments_shape))
 
 	def fit(self, data: torch.Tensor) -> None:
 		"""Compute the minimum and maximum values along the specified dimensions of the data.
@@ -37,13 +51,13 @@ class MinMaxScaler(Transform):
 		        initialization.
 
 		"""
-		self.min = data.amin(dim=self.dim, keepdim=True)
-		self.max = data.amax(dim=self.dim, keepdim=True)
+		self.min = torch.amin(input=data, dim=self.dim, keepdim=True)
+		self.max = torch.amax(input=data, dim=self.dim, keepdim=True)
 		self.fitted = True
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
 		"""Scale to interval [-1, 1]."""
-		return (2 * (x - self.min) / (self.max - self.min)) - 1
+		return 2 * (x - self.min) / (self.max - self.min) - 1
 
 	def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
 		"""Return a module that lazily computes the inverse transformation
@@ -53,8 +67,5 @@ class MinMaxScaler(Transform):
 			raise RuntimeError(
 				'Scaler has not been fitted yet. Call `fit` before using the inverse transformation.'
 			)
-		device = x.device  # Get the device of the input tensor
-		max_scaled = self.max.to(device)  # Move self.scaler.max to the same device
-		min_scaled = self.min.to(device)
 
-		return (x + 1) / 2 * (max_scaled - min_scaled) + min_scaled
+		return (x + 1) / 2 * (self.max - self.min) + self.min

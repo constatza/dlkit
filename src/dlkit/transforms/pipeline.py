@@ -19,23 +19,23 @@ class Pipeline(Transform):
 	target_transforms: ModuleList
 	original_shape: Shape | None
 	transformed_shape: Shape | None
-	fitted: bool
 	is_autoencoder: bool
 
 	def __init__(
 		self,
+		input_shape: tuple[int, ...],
 		feature_transforms: Sequence[TransformSettings],
 		target_transforms: Sequence[TransformSettings] = (),
 		is_autoencoder: bool = False,
 	) -> None:
 		super().__init__()
-		feature_transforms = [init_class(d) for d in feature_transforms]
-		target_transforms = [init_class(d) for d in target_transforms]
-		self.feature_transforms = ModuleList(feature_transforms)
+
+		self.feature_transforms = initialize_transforms(feature_transforms, input_shape=input_shape)
 		self.target_transforms = (
-			ModuleList(target_transforms) if not is_autoencoder else self.feature_transforms
+			initialize_transforms(target_transforms, input_shape=input_shape)
+			if not is_autoencoder
+			else self.feature_transforms
 		)
-		self.fitted = False
 		self.original_shape = None
 		self.transformed_shape = None
 		self.is_autoencoder = is_autoencoder
@@ -116,3 +116,24 @@ class Pipeline(Transform):
 def warn_unfit_pipeline() -> None:
 	error = 'Pipeline must be fitted before calling inverse_transform.'
 	logger.error(error)
+
+
+def initialize_transforms(
+	transform_seq: Sequence[TransformSettings], input_shape: tuple[int, ...] | None = None
+) -> ModuleList:
+	"""Initialize the transforms in the pipeline and provide shape information to each transform.
+	Args:
+	    transform_seq (Sequence[TransformSettings]): List of transform settings.
+	    input_shape (tuple[int, ...], optional): Shape of the input data. Defaults to None.
+	Returns:
+	            nn.ModuleList: List of initialized transform modules.
+	"""
+	dummy_input = torch.zeros((1, *input_shape))
+	module_list = ModuleList()
+	for transform in transform_seq:
+		module = init_class(transform, input_shape=input_shape)
+		dummy_input = module(dummy_input)
+		module_list.append(module)
+		input_shape = dummy_input.shape[1:]
+
+	return module_list

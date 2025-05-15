@@ -39,8 +39,8 @@ class TransformSettings(ClassSettings):
 	module_path: str = Field(
 		default='dlkit.transforms', description='Module path to the transform.'
 	)
-	dim: tuple[int, ...] | None = Field(
-		default=None,
+	dim: tuple[int, ...] | int = Field(
+		default=0,
 		description='List of dimensions to apply the transform on.',
 	)
 
