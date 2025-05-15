@@ -2,7 +2,7 @@ from typing import Literal
 
 import torch
 from lightning.pytorch import LightningDataModule
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 
 from dlkit.datatypes.dataset import Shape, SplitDatasetOfType, SplitIndices, Dataset_T
 from dlkit.settings import DataSettings
@@ -14,6 +14,7 @@ class BaseDataModule(LightningDataModule):
 	idx_split: SplitIndices
 	dataset: SplitDatasetOfType
 	shape: Shape
+	fitted: bool
 
 	def __init__(
 		self,
@@ -24,10 +25,23 @@ class BaseDataModule(LightningDataModule):
 	) -> None:
 		super().__init__()
 
-		self.dataset = SplitDatasetOfType[Dataset_T](raw=dataset)
+		self.dataset = SplitDatasetOfType[Dataset_T]()
 		self.settings = settings
 		self.device = torch.device(device)
 		self.idx_split = idx_split
+		self.fitted = False
+
+		self.dataset.raw = dataset
+		self.dataset.train = Subset(self.dataset.raw, self.idx_split.train)
+		self.dataset.validation = Subset(self.dataset.raw, self.idx_split.validation)
+		self.dataset.test = Subset(self.dataset.raw, self.idx_split.test)
+		self.dataset.predict = ConcatDataset(
+			[self.dataset.train, self.dataset.validation, self.dataset.test]
+		)
+
+		self.shape = Shape(
+			features=self.dataset.train[0][0].shape, targets=self.dataset.train[0][1].shape
+		)
 
 	def train_dataloader(self):
 		if self.dataset.train is None:

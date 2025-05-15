@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, NonNegativeFloat
 
 from .base_settings import BaseSettings
 
@@ -17,10 +17,13 @@ class DatasetSettings(BaseSettings):
 		default='dlkit.datasets',
 		description='Module path where the dataset class is located.',
 	)
+	group_ids: list[str] | None = Field(
+		default=None, description='Group IDs for pytorch forecasting TimeSeriesDataSet.'
+	)
 
 
 class DataModuleSettings(BaseSettings):
-	name: str = Field(default='InMemoryModule', description='Datamodule name.')
+	name: str = Field(default='BaseDataModule', description='Datamodule name.')
 	module_path: str = Field(
 		default='dlkit.datamodules',
 		description='Module path where the datamodule class is located.',
@@ -30,11 +33,15 @@ class DataModuleSettings(BaseSettings):
 class DataSettings(BaseSettings):
 	module: DataModuleSettings = Field(DataModuleSettings(), description='Dataset settings.')
 	dataloader: DataloaderSettings = Field(DataloaderSettings(), description='Dataloader settings.')
-	test_size: float = Field(default=0.15, description='Fraction of data used for testing.')
-	val_size: float = Field(default=0.15, description='Fraction of data used for validation.')
 	dataset: DatasetSettings = Field(default=DatasetSettings(), description='Dataset settings.')
 	targets_exist: bool = Field(
 		default=True,
 		description='Whether dataset has both features and targets.',
 		frozen=False,
+	)
+	test_size: NonNegativeFloat = Field(
+		default=0.15, description='Fraction of data used for testing.'
+	)
+	val_size: NonNegativeFloat = Field(
+		default=0.15, description='Fraction of data used for validation.'
 	)
