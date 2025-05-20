@@ -30,7 +30,7 @@ class MinMaxScaler(Transform):
 		dim = dim if isinstance(dim, Sequence) else (dim,)
 		size = len(moments_shape)
 		# assure that dim has nonegative values
-		self.dim = tuple([idx % size for idx in dim if idx < 0])
+		self.dim = tuple([idx % size for idx in dim])
 
 		# create zero tensors with the same number of dimensions as the input data
 		# but with reduced size along the specified dimensions dim
