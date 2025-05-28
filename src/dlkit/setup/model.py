@@ -2,32 +2,36 @@ from lightning.pytorch import LightningModule
 from pytorch_forecasting import TemporalFusionTransformer
 from pytorch_forecasting.data import TimeSeriesDataSet
 
-from dlkit.networks.blocks.basic_network import PipelineNetwork
+from dlkit.networks.blocks.base import PipelineNetwork
+from dlkit.datasets.base import BaseDataset
 from dlkit.settings import ModelSettings
 from dlkit.utils.loading import load_class
 
 
-def initialize_model(
-	settings: ModelSettings, settings_path: str | None = None, dataset=TimeSeriesDataSet | None
+def build_model(
+    settings: ModelSettings,
+    settings_path: str | None = None,
+    dataset: TimeSeriesDataSet | BaseDataset | None = None,
 ) -> LightningModule:
-	"""Builds a LightningModule based on the provided settings and pipeline.
-	Args:
-	    settings (ModelSettings): The settings object for the model.
-	    settings_path (str, optional): The path to the settings file. Defaults to None.
-	    dataset (Dataset, optional): The dataset to use for the model. Defaults to None.
+    """Builds a LightningModule based on the provided settings and pipeline.
 
-	Returns:
-	    LightningModule: The LightningModule for the model.
-	"""
-	if settings.module_path != 'pytorch_forecasting':
-		return PipelineNetwork(settings=settings)  # noqa: D100
+    Args:
+        settings (ModelSettings): The settings object for the model.
+        settings_path (str, optional): The path to the settings file. Defaults to None.
+        dataset (Dataset, optional): The dataset to use for the model. Defaults to None.
 
-	if settings.module_path == 'pytorch_forecasting':
-		class_name: type(TemporalFusionTransformer) = load_class(
-			settings.name, settings.module_path, settings_path
-		)  # noqa: D100
-		return class_name(**settings.to_dict_compatible_with(class_name)).from_dataset(
-			dataset,
-		)  # noqa: D100
+    Returns:
+        LightningModule: The LightningModule for the model.
+    """
+    if settings.module_path != "pytorch_forecasting":
+        return PipelineNetwork(settings=settings.model_copy(update={"shape": dataset.shape}))
 
-	raise ValueError(f'Unknown module path: {settings.module_path}')
+    if settings.module_path == "pytorch_forecasting":
+        class_name: type(TemporalFusionTransformer) = load_class(
+            settings.name, settings.module_path, settings_path
+        )  # noqa: D100
+        return class_name(**settings.to_dict_compatible_with(class_name)).from_dataset(
+            dataset,
+        )  # noqa: D100
+
+    raise ValueError(f"Unknown module path: {settings.module_path}")

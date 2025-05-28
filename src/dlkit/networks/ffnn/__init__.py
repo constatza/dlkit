@@ -1,3 +1,3 @@
-from .simple import FeedForwardNN, ConstantHiddenSizeFFNN
+from .simple import FeedForwardNN, ConstantWidthFFNN
 
-__all__ = ['FeedForwardNN', 'ConstantHiddenSizeFFNN']
+__all__ = ["FeedForwardNN", "ConstantWidthFFNN"]
