@@ -30,6 +30,9 @@ class SamplerSettings(ClassSettings[BaseSampler]):
 
 
 class OptunaSettings(BaseSettings):
+    enable: bool = Field(
+        default=False, description="Whether to use Optuna for hyperparameter optimization."
+    )
     n_trials: int = Field(
         default=10, description="Number of trials for hyperparameter optimization."
     )
