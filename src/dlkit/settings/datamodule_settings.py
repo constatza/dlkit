@@ -1,7 +1,7 @@
 from lightning import LightningDataModule  # noqa: D100
 from pydantic import Field, NonNegativeFloat
-from torch.utils.data import Dataset
 
+from dlkit.datasets.base import BaseDataset
 from .base_settings import BaseSettings, ClassSettings
 
 
@@ -15,7 +15,7 @@ class DataloaderSettings(BaseSettings):
     pin_memory: bool = Field(default=True, description="Whether to pin memory.")
 
 
-class DatasetSettings(ClassSettings[Dataset]):
+class DatasetSettings(ClassSettings[BaseDataset]):
     """Settings for the pytorch dataset."""
 
     name: str = Field("NumpyDataset", description="Dataset name.")

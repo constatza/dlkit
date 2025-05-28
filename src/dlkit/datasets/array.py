@@ -29,6 +29,7 @@ class NumpyDataset(BaseDataset):
         targets: Path | None = None,
         dtype: torch.dtype = torch.float32,
     ) -> None:
+        super().__init__(features, targets)
         features_np = load(str(features))
         self.features = torch.from_numpy(features_np).type(dtype)
         if targets is not None:
