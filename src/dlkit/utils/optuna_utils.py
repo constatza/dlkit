@@ -2,39 +2,28 @@ import mlflow
 import optuna
 from lightning.pytorch import LightningDataModule
 
-from dlkit.settings import ModelSettings, TrainerSettings
-from dlkit.setup.model import initialize_model
-from dlkit.setup.trainer import initialize_trainer
+from dlkit.run.mlflow_training import train_mlflow
+from dlkit.settings import Settings
 
 
-# TODO: use train
-def objective(
-	trial,
-	model_settings: ModelSettings,
-	datamodule: LightningDataModule,
-	trainer_settings: TrainerSettings,
-) -> float:
-	model = initialize_model(model_settings.resolve(trial))
-	trainer = initialize_trainer(trainer_settings)
+def objective_mlflow(trial, settings: Settings, datamodule: LightningDataModule) -> float:
+    trial.set_user_attr("mlflow_run_id", mlflow.active_run().info.run_id)
 
-	with mlflow.start_run(
-		run_name=f'{trial.number}',
-		nested=True,
-		experiment_id=mlflow.active_run().info.experiment_id,
-	):
-		trial.set_user_attr('mlflow_run_id', mlflow.active_run().info.run_id)
-		mlflow.log_params(trial.params)
+    # Train the model and log metrics
+    model_settings = settings.MODEL.resolve(trial)
+    training_state = train_mlflow(
+        settings.model_copy(update={"MODEL": model_settings}), datamodule=datamodule, predict=False
+    )
+    trainer = training_state.trainer
+    # trainer.test(training_state.model, datamodule=datamodule)
+    test_loss = trainer.logged_metrics.get("test_loss")
 
-		trainer.fit(model, datamodule=datamodule)
-		val_loss = trainer.callback_metrics.get('val_loss')
-		trainer.test(model, datamodule=datamodule)
+    if test_loss is not None:
+        trial.report(test_loss.item(), step=trainer.current_epoch)
+        # Handle pruning based on the intermediate value
+        if trial.should_prune():
+            raise optuna.exceptions.TrialPruned()
 
-		if val_loss is not None:
-			trial.report(val_loss.item(), step=trainer.current_epoch)
-			# Handle pruning based on the intermediate value
-			if trial.should_prune():
-				raise optuna.exceptions.TrialPruned()
-
-			return val_loss.item()
-		else:
-			raise ValueError('Validation loss not found in callback metrics.')
+        return test_loss.item()
+    else:
+        raise ValueError("Validation loss not found in callback metrics.")
