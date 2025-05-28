@@ -1,11 +1,12 @@
 import os
 from signal import CTRL_BREAK_EVENT, SIGTERM
-from subprocess import CREATE_NEW_PROCESS_GROUP, PIPE, Popen
+from subprocess import CREATE_NEW_PROCESS_GROUP, Popen
 from time import sleep
 
 import requests
 from loguru import logger
-from pydantic import FileUrl, validate_call
+from pydantic import validate_call
+
 
 from dlkit.settings import MLflowServerSettings
 from dlkit.utils.system_utils import mkdir_for_local
@@ -45,10 +46,7 @@ class ServerProcess:
         """Spawn the subprocess as a new process group."""
         if self._proc is not None:
             raise RuntimeError("Server already started.")
-        kwargs = {
-            "stdout": PIPE,
-            "stderr": PIPE,
-        }
+        kwargs = {}
         # UNIX: new session → new process group; Windows: CREATE_NEW_PROCESS_GROUP
         if os.name == "posix":
             kwargs["preexec_fn"] = os.setsid
@@ -107,20 +105,6 @@ def _is_server_running(host: str, port: int, timeout: float = 2.0, schema: str =
 
 
 @validate_call
-def checks_before_start(artifacts_destination: FileUrl, backend_store_uri: FileUrl) -> None:
-    """Start the MLflow server with validated configuration.
-
-    Args:
-            artifacts_destination (FileUrl): The destination for MLflow artifacts.
-        backend_store_uri (FileUrl): The URI for the backend store.
-    """
-    mkdir_for_local(artifacts_destination)
-    mkdir_for_local(backend_store_uri)
-    logger.info(f"Backend store URI: {backend_store_uri}")
-    logger.info(f"Artifacts destination: {artifacts_destination}")
-
-
-@validate_call
 def start_server(config: MLflowServerSettings, **kwargs) -> Popen:
     """Starts the MLflow server as a subprocess.
 
@@ -132,11 +116,15 @@ def start_server(config: MLflowServerSettings, **kwargs) -> Popen:
             artifact_root (str): Default artifact root directory or URI.
     """
     # Check if the backend store URI and artifacts destination are local
-    if isinstance(config.backend_store_uri, FileUrl):
-        if config.backend_store_uri.scheme == "file":
-            checks_before_start(config.artifacts_destination, config.backend_store_uri)
-        else:
-            logger.info("Backend store URI is not local, no need to create directories.")
+    local_hosts = ["localhost", "127.0.0.1", "::1", None]
+
+    if config.backend_store_uri.host in local_hosts:
+        mkdir_for_local(config.backend_store_uri)
+    if config.artifacts_destination.host in local_hosts:
+        mkdir_for_local(config.artifacts_destination)
+
     # Start in a new session on Unix
     mlflow_process = Popen(config.command, shell=False, **kwargs)
+    logger.info(f"Backend store URI: {config.backend_store_uri}")
+    logger.info(f"Artifacts destination: {config.artifacts_destination}")
     return mlflow_process
