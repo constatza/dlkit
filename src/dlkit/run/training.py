@@ -46,9 +46,11 @@ def build_training_state(
         settings_path=settings.PATHS.settings,
         dataset=datamodule.dataset.raw,
     )
-    return TrainingState[type(model), type(datamodule)](
-        trainer=trainer, model=model, datamodule=datamodule, seed=settings.seed
-    )
+    if ckpt := settings.MODEL.checkpoint:
+        logger.info(f"Loading model from checkpoint: {ckpt}")
+        model = model.load_from_checkpoint(checkpoint_path=ckpt, strict=False)
+
+    return TrainingState(trainer=trainer, model=model, datamodule=datamodule, seed=settings.seed)
 
 
 def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingState[M_T, D_T]:
@@ -84,8 +86,6 @@ def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingSt
 def train(
     settings: Settings,
     datamodule: LightningDataModule | None = None,
-    test: bool = True,
-    predict: bool = False,
 ) -> TrainingState:
     """Trains, tests, and predicts using the provided configuration.
 
@@ -99,14 +99,19 @@ def train(
         predict: Whether to perform prediction after training and testing.
     """
     training_state = build_training_state(settings, datamodule=datamodule)
-    logger.info("Training started.")
-    training_state = train_state(training_state)
-    logger.info("Training completed.")
+
+    if settings.MODEL.train:
+        logger.info("Starting training.")
+        training_state = train_state(training_state)
+        logger.info("Training completed.")
+    else:
+        logger.info("Training skipped as per configuration.")
+
     trainer = training_state.trainer
-    if test:
-        trainer.test(training_state.model, datamodule=training_state.datamodule)
-        logger.info("Testing completed.")
-    if predict:
+    if settings.MODEL.predict:
         trainer.predict(training_state.model, datamodule=training_state.datamodule)
         logger.info("Prediction completed.")
+    if settings.MODEL.test:
+        trainer.test(training_state.model, datamodule=training_state.datamodule)
+        logger.info("Testing completed.")
     return training_state

@@ -1,7 +1,11 @@
 """A module defining the TrainingState class for managing training sessions in PyTorch Lightning."""
 
+from typing import TypeVar
 from attr import define, field
-from lightning.pytorch import Trainer
+from lightning.pytorch import Trainer, LightningModule, LightningDataModule
+
+Model_T = TypeVar("Model_T", bound=LightningModule)
+DataModule_T = TypeVar("DataModule_T", bound=LightningDataModule)
 
 
 @define(frozen=True)
