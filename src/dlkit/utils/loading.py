@@ -1,6 +1,5 @@
 import importlib
 import importlib.util
-import logging
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -8,14 +7,10 @@ from types import ModuleType
 from pydantic import FilePath, validate_call
 
 from dlkit.settings.base_settings import ClassSettings
-from dlkit.settings.base_settings import T_co
-
-logger = logging.getLogger(__name__)
 
 
 def import_from_module(class_name: str, module_prefix: str = '') -> type:
-	"""
-	Dynamically import a module, class, function, or attribute from a string path.
+	"""Dynamically import a module, class, function, or attribute from a string path.
 
 	Args:
 	    class_name: The name of the class to import.
@@ -35,8 +30,7 @@ def import_from_module(class_name: str, module_prefix: str = '') -> type:
 
 
 def import_from_path(class_name: str, path: Path, base: Path) -> type:
-	"""
-	Import a module from a filesystem path.
+	"""Import a module from a filesystem path.
 
 	If from_path resolves to a .py file, load it directly.
 	If it resolves to a directory with __init__.py, import it as a package.
@@ -82,8 +76,7 @@ def import_from_path(class_name: str, path: Path, base: Path) -> type:
 
 @validate_call()
 def load_class(class_name: str, module_path: str, settings_path: FilePath | None = None):
-	"""
-	High-level loader: parse config, import module or file, and return the model class.
+	"""High-level loader: parse config, import module or file, and return the model class.
 
 	Args:
 
@@ -99,9 +92,17 @@ def load_class(class_name: str, module_path: str, settings_path: FilePath | None
 	return import_from_module(class_name=class_name, module_prefix=module_path)
 
 
-def init_class(
-	cls_settings: ClassSettings[T_co], settings_path: FilePath | None = None, **kwargs
-) -> T_co:
+def init_class[T](cls_settings: ClassSettings[T], settings_path: FilePath | None = None, **kwargs ) -> T:
+	"""Initialize a class instance from ClassSettings.
+	
+	Args:
+		cls_settings:
+		settings_path:
+		**kwargs:
+
+	Returns:
+		An instance of the class specified in cls_settings.
+	"""
 	class_name = load_class(cls_settings.name, cls_settings.module_path, settings_path)
 	if isinstance(class_name, type):
 		return class_name(**cls_settings.to_dict_compatible_with(class_name, **kwargs))

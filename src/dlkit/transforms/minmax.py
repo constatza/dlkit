@@ -17,8 +17,7 @@ class MinMaxScaler(Transform):
 	def __init__(
 		self, dim: int | Sequence[int] = 0, input_shape: tuple[int, ...] | None = None
 	) -> None:
-		"""
-		Important: This scaler transforms data in the range [-1, 1] by default!!!
+		"""Important: This scaler transforms data in the range [-1, 1] by default!!!
 
 		Args:
 		    dim (int | Sequence[int], optional): The dimension(s) along which to compute

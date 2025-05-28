@@ -1,44 +1,42 @@
-from lightning import LightningDataModule
-
+from dlkit.datamodules import InMemoryModule
 from dlkit.datamodules.utils import get_or_create_idx_split
-from dlkit.settings import PathSettings, DataModuleSettings, DataloaderSettings
+from dlkit.settings import DataloaderSettings, DataModuleSettings, PathSettings
 from dlkit.settings.datamodule_settings import DatasetSettings
 from dlkit.utils.loading import init_class
 
 
-def initialize_datamodule(
-	settings: DataModuleSettings,
-	dataset_settings: DatasetSettings,
-	dataloader_settings: DataloaderSettings,
-	paths: PathSettings,
-) -> LightningDataModule:
-	"""
-	Builds a datamodule based on the provided settings and dataset.
-	Args:
-	    settings (DataModuleSettings): The settings for the datamodule.
-	    dataset_settings (DatasetSettings): The settings for the dataset.
-	    dataloader_settings (DataloaderSettings): The settings for the dataloader.
-	    paths (PathSettings): The paths for saving and loading data.
+def build_datamodule(
+    settings: DataModuleSettings,
+    dataset_settings: DatasetSettings,
+    dataloader_settings: DataloaderSettings,
+    paths: PathSettings,
+) -> InMemoryModule:
+    """Builds a datamodule based on the provided settings and dataset.
 
-	Returns:
-	    LightningDataModule: The LightningDataModule for the dataset.
-	"""
+    Args:
+        settings (DataModuleSettings): The settings for the datamodule.
+        dataset_settings (DatasetSettings): The settings for the dataset.
+        dataloader_settings (DataloaderSettings): The settings for the dataloader.
+        paths (PathSettings): The paths for saving and loading data.
 
-	dataset = init_class(dataset_settings, **paths.model_dump())
+    Returns:
+        LightningDataModule: The LightningDataModule for the dataset.
+    """
+    dataset = init_class(dataset_settings, **paths.model_dump())
 
-	idx_split = get_or_create_idx_split(
-		n=len(dataset),
-		filepath=paths.idx_split,
-		save_dir=paths.input_dir,
-		test_size=settings.test_size,
-		val_size=settings.val_size,
-	)
+    idx_split = get_or_create_idx_split(
+        n=len(dataset),
+        filepath=paths.idx_split,
+        save_dir=paths.input_dir,
+        test_size=settings.test_size,
+        val_size=settings.val_size,
+    )
 
-	datamodule_instance = init_class(
-		settings,
-		dataset=dataset,
-		idx_split=idx_split,
-		dataloader_settings=dataloader_settings,
-	)
+    datamodule_instance = init_class(
+        settings,
+        dataset=dataset,
+        idx_split=idx_split,
+        dataloader_settings=dataloader_settings,
+    )
 
-	return datamodule_instance
+    return datamodule_instance  # noqa
