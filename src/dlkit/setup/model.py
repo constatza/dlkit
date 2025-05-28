@@ -1,9 +1,8 @@
 from lightning.pytorch import LightningModule
 from pytorch_forecasting import TemporalFusionTransformer
-from pytorch_forecasting.data import TimeSeriesDataSet
 
+from dlkit.datasets import ForecastingDataset
 from dlkit.networks.blocks.base import PipelineNetwork
-from dlkit.datasets.base import BaseDataset
 from dlkit.settings import ModelSettings
 from dlkit.utils.loading import load_class
 
@@ -11,7 +10,7 @@ from dlkit.utils.loading import load_class
 def build_model(
     settings: ModelSettings,
     settings_path: str | None = None,
-    dataset: TimeSeriesDataSet | BaseDataset | None = None,
+    dataset: ForecastingDataset | None = None,
 ) -> LightningModule:
     """Builds a LightningModule based on the provided settings and pipeline.
 
@@ -31,7 +30,7 @@ def build_model(
             settings.name, settings.module_path, settings_path
         )  # noqa: D100
         return class_name(**settings.to_dict_compatible_with(class_name)).from_dataset(
-            dataset,
+            dataset.timeseries,
         )  # noqa: D100
 
     raise ValueError(f"Unknown module path: {settings.module_path}")
