@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
-from optuna.distributions import CategoricalChoiceType
 
 
 class BasicTypeSettings(BaseModel):
@@ -28,14 +27,14 @@ class FloatDistribution(BasicTypeSettings):
     log: bool = Field(default=False, description="Whether to use log scale.")
 
 
-class CategoricalDistribution(BasicTypeSettings):
+class CategoricalDistribution[T](BasicTypeSettings):
     """Categorical distribution for hyperparameters."""
 
-    choices: Sequence[CategoricalChoiceType] = Field(
+    choices: Sequence[T] = Field(
         ..., description="List of choices for the categorical distribution."
     )
 
 
-IntHyper = int | IntDistribution | tuple[int, ...]
-FloatHyper = float | FloatDistribution | tuple[float, ...]
-StrHyper = str | CategoricalDistribution | tuple[str, ...]
+IntHyper = int | IntDistribution | CategoricalDistribution[int] | tuple[int, ...]
+FloatHyper = float | FloatDistribution | CategoricalDistribution[float] | tuple[float, ...]
+StrHyper = str | CategoricalDistribution | CategoricalDistribution[str] | tuple[str, ...]

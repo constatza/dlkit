@@ -5,95 +5,98 @@ It also includes a hyperparameter optimization module using [optuna](https://git
 
 ## Installation
 
-**DLkit** requires Python 3.12. 
+**DLkit** requires Python 3.12+. 
 You can install the package using either `uv` or `pip`.
 
 ### Using `uv`
 
-1. **Install `uv`**:
+Ensure that `uv` is installed on your system. For official installation instructions tailored to your platform, please refer to the [uv documentation](https://docs.astral.sh/uv).
 
-   Ensure that `uv` is installed on your system. For official installation instructions tailored to your platform, please refer to the [uv documentation](https://docs.astral.sh/uv).
+~~~bash
+uv add git+https://github.com/constatza/dlkit
+~~~
 
-2. **Clone the Repository**:
+## Using the API
 
-   ```bash
-   git clone https://github.com/constatza/dlkit.git
-   ```
+To use the api, import the package and use the provided functions:
+~~~python
+from dlkit.io.settings import load_validated_settings
+from dlkit.run.training import train
 
-3. **Navigate to the Project Directory**:
+settings_path = "./config.toml"
+settings = load_validated_settings(settings_path)
+training_state = train(settings, mlflow=True)
+~~~
+The configuration file should include the following sections:
+~~~toml
+[model]
+kernel_size = 5
+hidden_size = 32
+num_layers = 1
+scalar = 0.01
 
-   ```bash
-   cd dlkit
-   ```
 
-4. **Install Dependencies**:
-
-   ```bash
-   uv sync
-   ```
-
-   This command will install all the dependencies specified in the `pyproject.toml` and `uv.lock` files.
-
-### Using `pip`
-
-1. **Clone the Repository**:
-
-   ```bash
-   git clone https://github.com/constatza/dlkit.git
-   ```
-
-2. **Navigate to the Project Directory**:
-
-   ```bash
-   cd dlkit
-   ```
-
-3. **Create a Virtual Environment**:
-
-   It is recommended to create a virtual environment to manage your dependencies:
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-4. **Install Dependencies**:
-
-   ```bash
-   pip install .
-   ```
-
-   This command will install all the dependencies listed in the `pyproject.toml` file.
-   Use the `-e` flag to install the package in editable mode.
+[paths]
+input_dir = "./data"
+output_dir = "./results"
+features = "./data/features.npy"
+targets = "./data/targets.npy"
+~~~
 
 ## Running Scripts
 
 To execute the provided scripts, use:
 
-### MLFlow Server
-Start the MLFlow server using the configuration specified in the configuration (required for training and optimization)
-```bash
-uv run server path/to/config.toml
-```
 ### Training
 Run the training process using the configuration specified in the configuration
-```bash
+~~~bash
 uv run train path/to/config.toml
-```
+~~~
 or with mlflow logging
 ```bash
-uv run train-mlflow path/to/config.toml
+uv run train --mlflow path/to/config.toml
 ```
 This will automatically start the MLFlow server and log the training process.
 
 ### Hyperparameter Optimization
-Run the hyperparameter optimization process using the configuration specified in the configuration
-```bash
-uv run hopt path/to/config.toml
-```
+For fine-tuning the model using hyperparameter optimization, run
+~~~bash
+uv run train --optuna path/to/config.toml
+~~~
+the configuration should include a section for optuna e.g.:
+~~~toml
+[optuna]
+n_trials = 100
+
+[optuna.pruner]
+name = "MedianPruner"
+n_startup_trials=5
+n_warmup_steps=30
+interval_steps=10
+~~~
+and hyperparameter ranges for the model configuration e.g.:
+~~~toml
+[model]
+kernel_size = {low=3, high=7, step=2}
+hidden_size = {low=32, high=64}
+num_layers = {choices=[1, 2, 3]}
+scalar = {low=0.01, high=0.1}
+~~~
+
+### MLFlow Server
+If you want to see the MLflow GUI, when server is not auto-started from training, run
+~~~bash
+uv run server path/to/config.toml
+~~~
+and open `http://{host}:{port}` where `host` and `port` are specified in the configuration:
+~~~toml
+[mlflow.server]
+host = "localhost"
+port = 5000
+~~~
 
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
+Contributions are welcome! Any suggestions or bug reports can be raised [here](https://github.com/constatza/dlkit/issues).
 
