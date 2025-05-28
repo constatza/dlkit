@@ -5,6 +5,7 @@ from typing import Any
 
 def kwargs_compatible_with(cls: type, exclude: Sequence[str] = (), **kwargs) -> dict[str, Any]:
 	"""Convert a dictionary to a format compatible with the constructor of a given class or function signature.
+
 	Args:
 	    cls: The class or function to check against.
 	    exclude (Sequence[str]): A sequence of keys to exclude from the final dictionary.

@@ -20,9 +20,9 @@ class ForecastingDataset(Dataset):
 		time_varying_known_reals: Sequence[str] = ('time',),
 		static_reals: Sequence[str] = ('param',),
 	):
-		"""
-		A dataset for time series forecasting with Pytorch Forecasting
+		"""A dataset for time series forecasting with Pytorch Forecasting
 		that wraps a polars dataframe.
+
 		Args:
 		    filepath (FilePath): Path to the dataset file.
 		    time_idx (str): Column name for time index.
@@ -69,9 +69,12 @@ class ForecastingDataset(Dataset):
 		if isinstance(idx, Sequence):
 			return self.__getitems__(idx)
 		if isinstance(idx, slice):
-			start = idx.start or 0
-			stop = idx.stop or len(self)
+			n = len(self)
+			start = (idx.start or 0) % n
+			stop = (idx.stop or n) % n
 			step = idx.step or 1
+			if start == stop == 0 and step < 0:
+				start, stop = n - 1, 0
 			idx = list(range(start, stop, step))
 			return self.__getitems__(idx)
 		return self.df.filter(pl.col(self.group_ids) == idx)
