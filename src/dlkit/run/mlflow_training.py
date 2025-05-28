@@ -21,7 +21,7 @@ IDX_SPLIT_FILENAME = "idx_split.json"
 
 
 def train_mlflow(
-    settings: Settings, datamodule: LightningDataModule | None = None, predict: bool = False
+    settings: Settings, datamodule: LightningDataModule | None = None
 ) -> TrainingState:
     """Trains, tests, and predicts using the provided configuration.
     This functions utilizes MLflow in order to monitor and track the
@@ -45,7 +45,7 @@ def train_mlflow(
             mlflow.pytorch.autolog()
             mlflow.log_dict(settings.model_dump(), SETTINGS_FILENAME)
 
-            training_state = train(settings, datamodule=datamodule, predict=predict)
+            training_state = train(settings, datamodule=datamodule)
             model = training_state.model
             datamodule: InMemoryModule = training_state.datamodule
             mlflow.models.set_model(model)

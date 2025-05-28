@@ -18,7 +18,7 @@ def build_trainer(settings: TrainerSettings) -> Trainer:
     trainer = Trainer(
         **settings.to_dict_compatible_with(Trainer, exclude=("callbacks", "name", "logger")),
         callbacks=callbacks,
-        logger=True,
+        logger=logger,
         num_sanity_val_steps=1,
     )
     return trainer

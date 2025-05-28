@@ -87,8 +87,9 @@ class Pipeline(Transform):
         if which == "targets":
             pipeline = self.target_transforms
 
-        for transform in pipeline:
-            x = transform(x)
+        with torch.no_grad():
+            for transform in pipeline:
+                x = transform(x)
         return x
 
     def inverse_transform(
@@ -110,14 +111,15 @@ class Pipeline(Transform):
         if which == "features":
             pipeline = self.feature_transforms
 
-        for transform in pipeline[::-1]:
-            y = transform.inverse_transform(y)
+        with torch.no_grad():
+            for transform in pipeline[::-1]:
+                y = transform.inverse_transform(y)
         return y
 
 
 def warn_unfit_pipeline() -> None:
     error = "Pipeline must be fitted before calling inverse_transform."
-    logger.error(error)
+    logger.warning(error)
 
 
 def initialize_transforms(
