@@ -1,5 +1,5 @@
 from pydantic import Field, ValidationInfo, field_validator
-from pydantic.networks import AnyUrl
+from pydantic.networks import AnyUrl, FileUrl
 
 from .base_settings import BaseSettings
 
@@ -9,7 +9,7 @@ class MLflowServerSettings(BaseSettings):
     host: str = Field(default="127.0.0.1", description="MLflow server host address.")
     port: int = Field(default=5000, description="MLflow server port number.", gt=0, lt=65536)
     backend_store_uri: AnyUrl | None = Field(default=None, description="URI for the backend store.")
-    artifacts_destination: AnyUrl | None = Field(
+    artifacts_destination: FileUrl | None = Field(
         default=None, description="Default artifact root path."
     )
     num_workers: int = Field(default=4, description="Number of workers.")
@@ -36,7 +36,7 @@ class MLflowServerSettings(BaseSettings):
 
 class MLflowClientSettings(BaseSettings):
     experiment_name: str = Field(default="Experiment", description="MLflow experiment name.")
-    run_name: str = Field(default="Run", description="Name of the MLflow run.")
+    run_name: str | None = Field(default=None, description="Name of the MLflow run.")
     tracking_uri: AnyUrl | None = Field(default=None, description="Tracking URI for MLflow.")
     register_model: bool = Field(default=False, description="Whether to register the model.")
     max_trials: int = Field(
@@ -59,5 +59,5 @@ class MLflowSettings(BaseSettings):
             scheme = info.data["server"].scheme
             host = info.data["server"].host
             port = info.data["server"].port
-            return value.model_copy(update={"tracking_uri": f"{scheme}://{host}:{port}"})
+            return value.model_copy(update={"tracking_uri": AnyUrl(f"{scheme}://{host}:{port}")})
         return value
