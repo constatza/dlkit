@@ -2,7 +2,7 @@ from collections.abc import Callable, Iterator
 
 import torch.nn as nn
 from lightning import LightningModule
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, FilePath
 from pydantic_core.core_schema import ValidationInfo
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
@@ -66,6 +66,14 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     scheduler: SchedulerSettings = Field(
         default=SchedulerSettings(), description="Scheduler settings."
     )
+
+    checkpoint: FilePath | None = Field(default=None, description="Path to the model checkpoint.")
+
+    train: bool = Field(default=True, description="Whether to train the model.")
+
+    test: bool = Field(default=True, description="Whether to test the model.")
+
+    predict: bool = Field(default=True, description="Whether to predict with the model.")
 
     train_loss: LossFunctionSettings = Field(
         default=LossFunctionSettings(),

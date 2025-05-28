@@ -12,7 +12,8 @@ def objective_mlflow(trial, settings: Settings, datamodule: LightningDataModule)
     # Train the model and log metrics
     model_settings = settings.MODEL.resolve(trial)
     training_state = train_mlflow(
-        settings.model_copy(update={"MODEL": model_settings}), datamodule=datamodule, predict=False
+        settings.model_copy(update={"MODEL": model_settings}),
+        datamodule=datamodule,
     )
     trainer = training_state.trainer
     # trainer.test(training_state.model, datamodule=datamodule)
