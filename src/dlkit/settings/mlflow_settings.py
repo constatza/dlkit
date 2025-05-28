@@ -45,6 +45,7 @@ class MLflowClientSettings(BaseSettings):
 
 
 class MLflowSettings(BaseSettings):
+    enable: bool = Field(default=False, description="Whether to enable MLflow.")
     server: MLflowServerSettings = Field(
         default=MLflowServerSettings(), description="MLflow server settings."
     )

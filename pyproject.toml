@@ -41,8 +41,6 @@ plot = ["matplotlib<4.0.0,>=3.9.1", ]
 
 [project.scripts]
 server = "dlkit.scripts.start_mlflow_server:main"
-hopt = "dlkit.scripts.hparams_optimization:main"
-train-mlflow = "dlkit.scripts.mlflow_training:main"
 train = "dlkit.scripts.training:main"
 
 [tool.uv.sources]
