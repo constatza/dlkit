@@ -6,6 +6,7 @@ from pytorch_forecasting import TimeSeriesDataSet
 from dlkit.io.tables import read_table
 from dlkit.datasets.base import BaseDataset
 from dlkit.datatypes.dataset import Shape
+from dlkit.utils.general import slice_to_list
 
 
 class ForecastingDataset(BaseDataset):
@@ -34,10 +35,12 @@ class ForecastingDataset(BaseDataset):
         """
         super().__init__(features, None)
         df_pl = read_table(str(features))
+        self.kwargs = kwargs
 
         self.timeseries = TimeSeriesDataSet(
             df_pl.to_pandas(), time_idx=time_idx, target=target, group_ids=group_ids, **kwargs
         )
+        self.target = target
         self.time_idx = time_idx
         self.group_ids = (
             [
@@ -61,19 +64,23 @@ class ForecastingDataset(BaseDataset):
         if isinstance(idx, Sequence):
             return self.__getitems__(idx)
         if isinstance(idx, slice):
-            n = len(self)
-            start = (idx.start or 0) % n
-            stop = (idx.stop or n) % n
-            step = idx.step or 1
-            if start == stop == 0 and step < 0:
-                start, stop = n - 1, 0
-            idx = list(range(start, stop, step))
+            idx = slice_to_list(idx, self.__len__())
             return self.__getitems__(idx)
         return self.df.filter(pl.col(self.group_ids) == idx)
 
     def __getitems__(self, indices: Sequence[int]):
         """Get items by group_ids column"""
         return self.df.filter(pl.col(self.group_ids).is_in(indices))
+
+    def to_timeseries_dataset(self, idx: slice | Sequence[int] | int, **kwargs):
+        return TimeSeriesDataSet(
+            self[idx].to_pandas(),
+            self.time_idx,
+            self.target,
+            self.group_ids,
+            **self.kwargs,
+            **kwargs,
+        )
 
     #
     @property
@@ -86,3 +93,9 @@ class ForecastingDataset(BaseDataset):
             .select(pl.col(self.target))
             .shape,
         )
+
+
+def polars_to_timeseries(
+    df: pl.DataFrame, time_idx: str, target: str | list[str], group_ids: list[str], **kwargs
+):
+    return TimeSeriesDataSet(df.to_pandas(), time_idx, target, group_ids, **kwargs)

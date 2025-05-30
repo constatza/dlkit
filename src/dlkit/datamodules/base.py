@@ -1,5 +1,5 @@
 from lightning.pytorch import LightningDataModule
-from torch.utils.data import DataLoader, Subset, ConcatDataset
+from torch.utils.data import DataLoader, Subset
 
 from dlkit.datatypes.dataset import Shape, SplitDatasetOfType, SplitIndices
 from dlkit.settings import DataloaderSettings
@@ -20,24 +20,19 @@ class InMemoryModule[Dataset_T](LightningDataModule):
     ) -> None:
         super().__init__()
 
-        self.dataset = SplitDatasetOfType[Dataset_T]()
+        self.dataset = SplitDatasetOfType(raw=dataset)
         self.idx_split = idx_split
         self.fitted = False
         self.dataloader_settings = dataloader_settings
 
-        self.dataset.raw = dataset
         self.dataset.train = Subset(self.dataset.raw, self.idx_split.train)
         self.dataset.validation = Subset(self.dataset.raw, self.idx_split.validation)
         self.dataset.test = Subset(self.dataset.raw, self.idx_split.test)
-        self.dataset.predict = ConcatDataset([
-            self.dataset.train,
-            self.dataset.validation,
-            self.dataset.test,
-        ])
+        self.dataset.predict = self.dataset.raw
 
-        self.shape = Shape(
-            features=self.dataset.train[0][0].shape, targets=self.dataset.train[0][1].shape
-        )
+        # self.shape = Shape(
+        #     features=self.dataset.train[0][0].shape, targets=self.dataset.train[0][1].shape
+        # )
 
     def train_dataloader(self):
         if self.dataset.train is None:
