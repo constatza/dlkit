@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 
 from dlkit.datamodules.base import InMemoryModule
 from dlkit.datasets import ForecastingDataset
+from dlkit.datasets.timeseries import polars_to_timeseries
 from dlkit.datatypes.dataset import SplitIndices
 from dlkit.settings import DataloaderSettings
 
@@ -24,31 +25,45 @@ class TimeSeriesDataModule(InMemoryModule):
 
     def setup(self, stage: str | None = None) -> None:
         """Called on each GPU/process. Load via read_data(), then build datasets for fit/val/test/predict."""
-        if stage == "fit" and not self.fitted:
+        if not self.fitted:
             # split samples w.r.t. group_ids and self.idx_split
 
+            dataset = polars_to_timeseries(
+                self.dataset.raw[:],
+                self.dataset.raw.time_idx,
+                self.dataset.raw.target,
+                self.dataset.raw.group_ids,
+                **self.dataset.raw.kwargs,
+            )
+
             train_ds = TimeSeriesDataSet.from_dataset(
-                dataset=self.dataset.raw.timeseries,
+                dataset,
                 data=self.dataset.train[:].to_pandas(),
-                stop_randomization=True,
             )
             val_ds = TimeSeriesDataSet.from_dataset(
-                dataset=self.dataset.raw.timeseries,
+                dataset,
                 data=self.dataset.validation[:].to_pandas(),
-                stop_randomization=True,
                 predict=True,
+                stop_randomization=True,
             )
             test_ds = TimeSeriesDataSet.from_dataset(
-                dataset=self.dataset.raw.timeseries,
-                data=self.dataset.validation[:].to_pandas(),
-                stop_randomization=True,
+                dataset,
+                data=self.dataset.test[:].to_pandas(),
                 predict=True,
+                stop_randomization=True,
+            )
+
+            predict_ds = TimeSeriesDataSet.from_dataset(
+                dataset,
+                data=self.dataset.predict[:].to_pandas(),
+                predict=True,
+                stop_randomization=True,
             )
 
             self.dataset.train = train_ds
             self.dataset.validation = val_ds
             self.dataset.test = test_ds
-            self.dataset.predict = self.dataset.raw.timeseries
+            self.dataset.predict = predict_ds
             self.fitted = True
 
     def train_dataloader(self) -> DataLoader:
