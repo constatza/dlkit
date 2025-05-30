@@ -29,7 +29,8 @@ def build_model(
         class_name: type(TemporalFusionTransformer) = load_class(
             settings.name, settings.module_path, settings_path
         )  # noqa: D100
-        return class_name(**settings.to_dict_compatible_with(class_name)).from_dataset(
+        applied_settings = settings.to_dict_compatible_with(class_name)
+        return class_name(**applied_settings).from_dataset(
             dataset.timeseries,
         )  # noqa: D100
 
