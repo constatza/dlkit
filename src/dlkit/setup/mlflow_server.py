@@ -28,7 +28,7 @@ class ServerProcess:
 
     def __init__(self, config: MLflowServerSettings) -> None:
         self._config = config
-        self._proc: Popen | None = None
+        self.process: Popen | None = None
         self.is_active = (
             True  # Flag to indicate if the server is actively running in case of an existing server
         )
@@ -38,13 +38,13 @@ class ServerProcess:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        if self._proc:
+        if self.process:
             sleep(self._config.keep_alive_interval)
         self.stop()
 
     def start(self) -> None:
         """Spawn the subprocess as a new process group."""
-        if self._proc is not None:
+        if self.process is not None:
             raise RuntimeError("Server already started.")
         kwargs = {}
         # UNIX: new session → new process group; Windows: CREATE_NEW_PROCESS_GROUP
@@ -58,14 +58,14 @@ class ServerProcess:
             logger.info(f"Server already running at {self._config.host}:{self._config.port}")
             self.is_active = False
             return
-        self._proc = start_server(self._config, **kwargs)
-        logger.info(f"Started server PID={self._proc.pid}")
+        self.process = start_server(self._config, **kwargs)
+        logger.info(f"Started server PID={self.process.pid}")
 
     def stop(self) -> None:
         """Attempt graceful terminate, then force‐kill after timeout."""
-        if not self._proc:
+        if not self.process:
             return
-        proc = self._proc
+        proc = self.process
         print(f"Stopping server PID={proc.pid}...")
         try:
             # Graceful
@@ -81,7 +81,7 @@ class ServerProcess:
             logger.error("Unexpected error .Server process killed.")
             raise e
         finally:
-            self._proc = None
+            self.process = None
             logger.info("Server stopped.")
 
 

@@ -20,7 +20,7 @@ def get_or_create_experiment(experiment_name: str) -> str:
     - str: ID of the existing or newly created MLflow experiment.
     """
     experiment = mlflow.get_experiment_by_name(experiment_name)
-    if experiment is not None:
+    if experiment:
         return experiment.experiment_id
     return mlflow.create_experiment(experiment_name)
 
