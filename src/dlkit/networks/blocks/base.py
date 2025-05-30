@@ -77,7 +77,7 @@ class PipelineNetwork(LightningModule):
         y_hat = self.forward(x)
         y_true = self.pipeline(y, which="targets")
         loss = self.training_loss_func(y_hat, y_true)
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -85,7 +85,7 @@ class PipelineNetwork(LightningModule):
         y_hat = self.forward(x)
         y_true = self.pipeline(y, which="targets")
         loss = self.training_loss_func(y_hat, y_true)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
@@ -93,7 +93,7 @@ class PipelineNetwork(LightningModule):
         y_hat = self.forward(x)
         y_true = self.pipeline(y, which="targets")
         loss = self.test_loss_func(y_hat, y_true)
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         return {"test_loss": loss}
 
     def predict_step(

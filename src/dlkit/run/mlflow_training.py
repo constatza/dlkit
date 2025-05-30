@@ -42,30 +42,32 @@ def train_mlflow(
             nested=not server.is_active,  # Use nested runs if a server is already running
         ) as run:
             run_id = run.info.run_id
-            mlflow.pytorch.autolog()
+            mlflow.pytorch.autolog(log_models=False)
             mlflow.log_dict(settings.model_dump(), SETTINGS_FILENAME)
 
             training_state = train_vanilla(settings, datamodule=datamodule)
             model = training_state.model
             datamodule: InMemoryModule = training_state.datamodule
+
+            mlflow.log_dict(datamodule.idx_split.model_dump(), IDX_SPLIT_FILENAME)
+            mlflow.log_params(model.hparams)
             mlflow.models.set_model(model)
 
             # Log the model
             features, targets = get_sample(datamodule.dataset.train)
             log_mlflow_dataset(features, settings.PATHS.features.as_uri())
             log_mlflow_dataset(targets, settings.PATHS.targets.as_uri())
-            mlflow.log_dict(datamodule.idx_split.model_dump(), IDX_SPLIT_FILENAME)
 
-            # signature = mlflow.models.infer_signature(
-            #     datamodule.dataset.train[0][0].cpu().numpy(),
-            #     datamodule.dataset.train[0][1].cpu().numpy(),
-            # )
-            # mlflow.pytorch.log_model(
-            #     model,
-            #     name=settings.MODEL.name,
-            #     signature=signature,
-            #     params=settings.MODEL.model_dump(exclude_none=True),
-            # )
+            signature = mlflow.models.infer_signature(
+                datamodule.dataset.train[0][0].cpu().numpy(),
+                datamodule.dataset.train[0][1].cpu().numpy(),
+            )
+            mlflow.pytorch.log_model(
+                model,
+                name=settings.MODEL.name.split(".")[-1],
+                signature=signature,
+                params=settings.MODEL.model_dump(exclude_none=True),
+            )
             if settings.MLFLOW.client.register_model:
                 mlflow.register_model(
                     model_uri=f"runs:/{run_id}/model",
