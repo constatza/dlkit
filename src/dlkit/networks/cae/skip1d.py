@@ -6,9 +6,11 @@ from torch import nn
 from torch.nn import Sequential
 
 from dlkit.datatypes.dataset import Shape
-from dlkit.metrics.temporal import mase
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
-from dlkit.networks.blocks.latent import TensorToVectorBlock, VectorToTensorBlock
+from dlkit.networks.blocks.latent import (
+    TensorToVectorBlock,
+    VectorToTensorBlock,
+)
 from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.cae.base import CAE
 
@@ -95,14 +97,18 @@ class SkipEncoder(nn.Module):
         for i in range(len(timesteps) - 1):
             layers.append(
                 SkipConnection(
-                    ConvolutionBlock1d(
-                        in_channels=channels[i],
-                        out_channels=channels[i + 1],
-                        in_timesteps=timesteps[i],
-                        kernel_size=kernel_size,
-                        padding="same",
-                        dilation=2**i,
+                    Sequential(
+                        ConvolutionBlock1d(
+                            in_channels=channels[i],
+                            out_channels=channels[i + 1],
+                            in_timesteps=timesteps[i],
+                            kernel_size=kernel_size,
+                            padding="same",
+                            dilation=i + 1,
+                        ),
                     ),
+                    in_channels=channels[i],
+                    out_channels=channels[i + 1],
                 )
             )
             layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
@@ -144,14 +150,18 @@ class SkipDecoder(nn.Module):
         for i in range(num_layers):
             layers.append(
                 SkipConnection(
-                    ConvolutionBlock1d(
-                        in_channels=channels[i],
-                        out_channels=channels[i + 1],
-                        in_timesteps=timesteps[i],
-                        kernel_size=kernel_size,
-                        padding="same",
-                        dilation=2**i,
+                    Sequential(
+                        ConvolutionBlock1d(
+                            in_channels=channels[i],
+                            out_channels=channels[i + 1],
+                            in_timesteps=timesteps[i],
+                            kernel_size=kernel_size,
+                            padding="same",
+                            dilation=i + 1,
+                        ),
                     ),
+                    in_channels=channels[i],
+                    out_channels=channels[i + 1],
                 )
             )
             layers.append(nn.Upsample(timesteps[i + 1]))
@@ -163,10 +173,10 @@ class SkipDecoder(nn.Module):
         x = self.feature_decoder(x)
         return x
 
-    @staticmethod
-    def training_loss_func(x_hat, x):
-        return mase(x_hat, x)
-
-    @staticmethod
-    def test_loss_func(x_hat, x):
-        return mase(x_hat, x)
+    # @staticmethod
+    # def training_loss_func(x_hat, x):
+    #     return mase(x_hat, x)
+    #
+    # @staticmethod
+    # def test_loss_func(x_hat, x):
+    #     return mase(x_hat, x)
