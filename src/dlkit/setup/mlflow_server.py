@@ -1,6 +1,6 @@
 import os
-from signal import CTRL_BREAK_EVENT, SIGTERM
-from subprocess import CREATE_NEW_PROCESS_GROUP, Popen
+from signal import  SIGTERM
+from subprocess import  Popen
 from time import sleep
 
 import requests
@@ -51,6 +51,7 @@ class ServerProcess:
         if os.name == "posix":
             kwargs["preexec_fn"] = os.setsid
         else:
+            from signal import CREATE_NEW_PROCESS_GROUP
             kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
         # Start the server
@@ -65,13 +66,14 @@ class ServerProcess:
         """Attempt graceful terminate, then force‐kill after timeout."""
         if not self.process:
             return
-        proc = self.process
+        proc: Popen = self.process
         print(f"Stopping server PID={proc.pid}...")
         try:
             # Graceful
             if os.name == "posix":
                 os.killpg(os.getpgid(proc.pid), SIGTERM)
             else:
+                from signal import CTRL_BREAK_EVENT
                 proc.send_signal(CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
             proc.wait(timeout=self._config.shutdown_timeout)
         except Exception as e:
