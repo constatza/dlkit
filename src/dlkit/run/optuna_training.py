@@ -11,6 +11,8 @@ from dlkit.setup.mlflow_client import initialize_mlflow_client
 from dlkit.utils.loading import init_class
 from dlkit.utils.optuna_utils import objective_mlflow
 
+BEST_PARAMS_FILENAME = "best_params.json"
+
 
 @validate_call
 def train_optuna(settings: Settings) -> None:
@@ -50,6 +52,10 @@ def train_optuna(settings: Settings) -> None:
                 n_trials=settings.OPTUNA.n_trials,
             )
 
+            mlflow.log_params(study.best_trial.params)
+            mlflow.log_metric("best_value", study.best_trial.value)
+            mlflow.log_dict(study.best_trial.params, BEST_PARAMS_FILENAME)
+            logger.info("Optimization completed.")
             logger.info(f"Best trial: {study.best_trial.number}")
             logger.info(f"Best parameters: {study.best_trial.params}")
             logger.info(f"Best value: {study.best_trial.value}")
