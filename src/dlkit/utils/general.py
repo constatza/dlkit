@@ -23,8 +23,21 @@ def kwargs_compatible_with(cls: type, exclude: Sequence[str] = (), **kwargs) -> 
 
 
 def slice_to_list(idx: slice, length: int):
-    start = (idx.start or 0) % length
-    stop = (idx.stop or length - 1) % length
+    """
+    Convert a slice to a list of indices of length `length`.
+
+    When the slice is a reverse slice (i.e. `start` and `stop` are both zero and `step` is negative),
+    the resulting list will be a reversed list of indices of length `length`.
+
+    Args:
+        idx: The slice to convert.
+        length: The length of the resulting list.
+
+    Returns:
+        list[int]: A list of indices as defined by the slice.
+    """
+    start = (idx.start or 0) % (length + 1)
+    stop = (idx.stop or length) % (length + 1)
     step = idx.step or 1
     if start == stop == 0 and step < 0:
         start, stop = length - 1, 0
