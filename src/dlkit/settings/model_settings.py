@@ -27,12 +27,12 @@ class SchedulerSettings(ClassSettings[LRScheduler]):
     module_path: str = Field(
         default="torch.optim.lr_scheduler", description="Module path to the scheduler."
     )
-    factor: float = Field(default=0.8, description="Reduction factor.")
+    factor: float = Field(default=0.5, description="Reduction factor.")
     patience: int = Field(
-        default=20,
+        default=50,
         description="Number of epochs with no improvement before reducing the LR.",
     )
-    min_lr: float = Field(default=1e-5, description="Minimum learning rate.")
+    min_lr: float = Field(default=1e-8, description="Minimum learning rate.")
 
 
 class TransformSettings(ClassSettings):

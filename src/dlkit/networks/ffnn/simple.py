@@ -69,6 +69,6 @@ class ConstantWidthFFNN(FeedForwardNN):
         x = self.layers[0](x)  # Initial layer
         for layer in self.layers[1:-1]:  # Skip the last layer
             residual = self.activation(layer(x))
-            x += residual
+            x = x + residual
         x = self.layers[-1](x)
         return x
