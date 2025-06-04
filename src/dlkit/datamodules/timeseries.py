@@ -71,7 +71,7 @@ class TimeSeriesDataModule(InMemoryModule):
             raise RuntimeError("`setup('fit')` must be called before `train_dataloader()`")
         dataloader_func = self.dataset.train.to_dataloader
         return dataloader_func(
-            train=True, **self.dataloader_settings.to_dict_compatible_with(dataloader_func)
+            train=True, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def val_dataloader(self) -> DataLoader:
