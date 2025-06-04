@@ -48,7 +48,7 @@ def build_training_state(
     )
     if ckpt := settings.MODEL.checkpoint:
         logger.info(f"Loading model from checkpoint: {ckpt}")
-        model = model.__class__.load_from_checkpoint(checkpoint_path=ckpt, strict=False)
+        model = model.__class__.load_from_checkpoint(ckpt_path=ckpt, strict=False)
 
     return TrainingState(trainer=trainer, model=model, datamodule=datamodule, seed=settings.seed)
 
@@ -77,9 +77,7 @@ def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingSt
 
     # Train and evaluate the model
     trainer.fit(model, datamodule=datamodule)
-    return TrainingState[type(model), type(datamodule)](
-        trainer=trainer, model=model, datamodule=datamodule
-    )
+    return TrainingState(trainer=trainer, model=model, datamodule=datamodule)
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
@@ -96,7 +94,6 @@ def train_vanilla(
         settings: The configuration object for the training process.
         datamodule: An optional datamodule to use. If not provided, it will be
             built from the settings.
-        predict: Whether to perform prediction after training and testing.
     """
     training_state = build_training_state(settings, datamodule=datamodule)
 

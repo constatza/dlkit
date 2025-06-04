@@ -7,6 +7,8 @@ from loguru import logger
 from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
 from dlkit.transforms.chain import TransformChain
 from dlkit.utils.loading import init_class
+from dlkit.utils.torch_utils import dataloader_to_tensor
+from dlkit.utils.general import get_name
 
 
 class PipelineNetwork(LightningModule):
@@ -34,13 +36,11 @@ class PipelineNetwork(LightningModule):
 
         self.model = init_class(settings)
         self.datamodule = None
-        self.training_loss_func = getattr(
-            self.model, "training_loss_func", init_class(self.settings.train_loss)
+        self.loss_function = getattr(
+            self.model, "loss_function", init_class(self.settings.loss_function)
         )
-        self.validation_loss_func = self.training_loss_func
-        self.test_loss_func = getattr(
-            self.model, "test_loss_func", init_class(self.settings.test_loss)
-        )
+        self.metrics = tuple(init_class(m) for m in self.settings.metrics)
+
         self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
 
     def forward(self, x: torch.Tensor, apply_target_inverse_chain=False) -> torch.Tensor:
@@ -71,7 +71,7 @@ class PipelineNetwork(LightningModule):
         self.targets_chain = self.targets_chain.to(self.device)
         # Fetch the ready train loader
         dl = self.trainer.datamodule.train_dataloader()
-        x, y = next(iter(dl))
+        x, y = dataloader_to_tensor(dl)
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
             x = x.to(self.device)
             self.features_chain.fit(x)
@@ -86,7 +86,7 @@ class PipelineNetwork(LightningModule):
         x, y = batch
         y_hat = self.forward(x)
         y_true = self.targets_chain(y)
-        loss = self.training_loss_func(y_hat, y_true)
+        loss = self.loss_function(y_hat, y_true)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
 
@@ -94,17 +94,16 @@ class PipelineNetwork(LightningModule):
         x, y = batch
         y_hat = self.forward(x)
         y_true = self.targets_chain(y)
-        loss = self.training_loss_func(y_hat, y_true)
+        loss = self.loss_function(y_hat, y_true)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        return {"val_loss": loss}
+        metrics = {"val_loss": loss}
+        return metrics.update(self._compute_metrics(y_hat, y_true))
 
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
         y_true = self.targets_chain(y)
-        loss = self.test_loss_func(y_hat, y_true)
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
-        return {"test_loss": loss}
+        return self._compute_metrics(y_hat, y_true)
 
     def predict_step(
         self, batch, batch_idx
@@ -151,6 +150,15 @@ class PipelineNetwork(LightningModule):
     def on_train_epoch_end(self) -> None:
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
+
+    def _compute_metrics(self, y_hat: torch.Tensor, y_true: torch.Tensor):
+        metrics = {}
+        for metric in self.metrics:
+            value = metric(y_hat, y_true)
+            name = get_name(metric)
+            self.log(name, value, on_step=False, on_epoch=True)
+            metrics[name] = value
+        return metrics
 
     @classmethod
     def load_from_checkpoint(cls, ckpt_path: str, **kwargs):
