@@ -48,7 +48,7 @@ def build_training_state(
     )
     if ckpt := settings.MODEL.checkpoint:
         logger.info(f"Loading model from checkpoint: {ckpt}")
-        model = model.load_from_checkpoint(checkpoint_path=ckpt, strict=False)
+        model = model.__class__.load_from_checkpoint(checkpoint_path=ckpt, strict=False)
 
     return TrainingState(trainer=trainer, model=model, datamodule=datamodule, seed=settings.seed)
 
