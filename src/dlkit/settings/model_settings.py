@@ -46,22 +46,18 @@ class TransformSettings(ClassSettings):
     )
 
 
-class LossFunctionSettings(ClassSettings[Callable]):
-    name: str = Field(default="MSELoss", description="Name of the loss function.")
-    module_path: str = Field(default="torch.nn", description="Module path to the loss function.")
-
-
-class MetricFunctionalSettings(ClassSettings[Callable]):
-    name: str = Field(default="mean_squared_error", description="Name of the metric.")
+class MetricSettings(ClassSettings[Metric]):
+    name: str = Field(default="MeanSquaredError", description="Name of the metric.")
     module_path: str = Field(
-        default="torchmetrics.functional.regression", description="Module path to the metric."
+        default="torchmetrics.regression", description="Module path to the metric."
     )
 
 
-class MetricSettings(ClassSettings[Metric]):
-    name: str = Field(default="MSE", description="Name of the metric.")
+class LossSettings(ClassSettings[Callable]):
+    name: str = Field(default="mean_squared_error", description="Name of the loss.")
     module_path: str = Field(
-        default="torchmetrics.regression", description="Module path to the metric."
+        default="torchmetrics.functional.regression",
+        description="Module path to the loss.",
     )
 
 
@@ -89,8 +85,8 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
 
     predict: bool = Field(default=True, description="Whether to predict with the model.")
 
-    loss_function: LossFunctionSettings = Field(
-        default=LossFunctionSettings(),
+    loss_function: LossSettings = Field(
+        default=LossSettings(),
         description="Loss function settings for training and validation.",
     )
 
@@ -103,7 +99,7 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
 
     is_autoencoder: bool = Field(default=False, description="Whether the model is an autoencoder.")
 
-    metrics: tuple[MetricSettings | MetricFunctionalSettings, ...] = Field(
+    metrics: tuple[MetricSettings, ...] = Field(
         default=(MetricSettings(),),
         description="List of metrics to compute on the model at test time.",
     )

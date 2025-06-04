@@ -9,6 +9,7 @@ from dlkit.transforms.chain import TransformChain
 from dlkit.utils.loading import init_class
 from dlkit.utils.torch_utils import dataloader_to_tensor
 from dlkit.utils.general import get_name
+from torchmetrics import MetricCollection
 
 
 class PipelineNetwork(LightningModule):
@@ -36,11 +37,11 @@ class PipelineNetwork(LightningModule):
 
         self.model = init_class(settings)
         self.datamodule = None
-        self.loss_function = getattr(
-            self.model, "loss_function", init_class(self.settings.loss_function)
+        self.loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = init_class(
+            self.settings.loss_function
         )
-        self.metrics = tuple(init_class(m) for m in self.settings.metrics)
-
+        self.val_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
+        self.test_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
         self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
 
     def forward(self, x: torch.Tensor, apply_target_inverse_chain=False) -> torch.Tensor:
@@ -94,16 +95,27 @@ class PipelineNetwork(LightningModule):
         x, y = batch
         y_hat = self.forward(x)
         y_true = self.targets_chain(y)
-        loss = self.loss_function(y_hat, y_true)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        metrics = {"val_loss": loss}
-        return metrics.update(self._compute_metrics(y_hat, y_true))
+        val_loss = self.loss_function(y_hat, y_true)
+        batch_values = self.val_metrics(y_hat, y_true)
+        self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(batch_values, on_step=False, on_epoch=True)
+        return {"loss": val_loss}
+
+    def on_validation_epoch_end(self):
+        self.val_metrics.reset()  # Required when using multiple metrics and assigning self.val_metrics to a variable
 
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
         y_true = self.targets_chain(y)
-        return self._compute_metrics(y_hat, y_true)
+        loss = self.loss_function(y_hat, y_true)
+        batch_values = self.test_metrics(y_hat, y_true)
+        self.log_dict(batch_values, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        return {"test_loss": loss}
+
+    def on_test_epoch_end(self):
+        self.test_metrics.reset()
 
     def predict_step(
         self, batch, batch_idx
@@ -154,10 +166,10 @@ class PipelineNetwork(LightningModule):
     def _compute_metrics(self, y_hat: torch.Tensor, y_true: torch.Tensor):
         metrics = {}
         for metric in self.metrics:
-            value = metric(y_hat, y_true)
+            metric(y_hat, y_true)
             name = get_name(metric)
-            self.log(name, value, on_step=False, on_epoch=True)
-            metrics[name] = value
+            self.log(name, metric, on_step=False, on_epoch=True)
+            metrics[name] = metric
         return metrics
 
     @classmethod
