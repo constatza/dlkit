@@ -17,10 +17,14 @@ class SplitDatasetOfType[Dataset_T]:
     train: Dataset_T | None = field(default=None)
     validation: Dataset_T | None = field(default=None)
     test: Dataset_T | None = field(default=None)
-    predict: Dataset_T | None = field(default=None, alias="transformed")
+    predict: Dataset_T | None = field(default=None)
 
 
 class SplitIndices(BasicTypeSettings):
     train: tuple[int, ...]
     validation: tuple[int, ...]
     test: tuple[int, ...]
+    predict: tuple[int, ...] | None = Field(default=None)
+
+    def __len__(self):
+        return len(self.train) + len(self.validation) + len(self.test)
