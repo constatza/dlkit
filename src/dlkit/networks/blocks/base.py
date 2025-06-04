@@ -5,7 +5,7 @@ from lightning import LightningModule, LightningDataModule
 from loguru import logger
 
 from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
-from dlkit.transforms.pipeline import Pipeline
+from dlkit.transforms.chain import TransformChain
 from dlkit.utils.loading import init_class
 
 
@@ -14,20 +14,24 @@ class PipelineNetwork(LightningModule):
     optimizer_settings: OptimizerSettings
     scheduler_settings: SchedulerSettings
     datamodule: LightningDataModule | None
-    pipeline: Pipeline
+    features_chain: TransformChain
+    targets_chain: TransformChain
     model: LightningModule
     train_loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
     def __init__(self, settings: ModelSettings) -> None:
         super().__init__()
-        super().save_hyperparameters(settings.model_dump())
+        super().save_hyperparameters(settings.model_dump(exclude_none=True, exclude_unset=True))
         self.settings = settings
-        self.pipeline = Pipeline(
-            shape=settings.shape,
-            feature_transforms=settings.feature_transforms,
-            target_transforms=settings.target_transforms,
-            is_autoencoder=settings.is_autoencoder,
+        self.features_chain = TransformChain(
+            settings.feature_transforms, input_shape=settings.shape.features
         )
+        self.targets_chain = (
+            TransformChain(settings.target_transforms, input_shape=settings.shape.targets)
+            if not settings.is_autoencoder
+            else self.features_chain
+        )
+
         self.model = init_class(settings)
         self.datamodule = None
         self.training_loss_func = getattr(
@@ -39,9 +43,11 @@ class PipelineNetwork(LightningModule):
         )
         self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pipeline(x, which="features")
+    def forward(self, x: torch.Tensor, apply_target_inverse_chain=False) -> torch.Tensor:
+        x = self.features_chain(x)
         x = self.model(x)
+        if apply_target_inverse_chain:
+            x = self.target_chain.inverse_transform(x)
         return x
 
     def configure_optimizers(self):
@@ -59,15 +65,19 @@ class PipelineNetwork(LightningModule):
         }
 
     def on_train_start(self):
+        # Move model to device
         # Move pipeline (with buffers) to device
-        self.pipeline = self.pipeline.to(self.device)
+        self.features_chain = self.features_chain.to(self.device)
+        self.targets_chain = self.targets_chain.to(self.device)
         # Fetch the ready train loader
         dl = self.trainer.datamodule.train_dataloader()
         x, y = next(iter(dl))
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
             x = x.to(self.device)
-            y = y.to(self.device)
-            self.pipeline.fit(x, y)  # fit-only-once on the training set
+            self.features_chain.fit(x)
+            if not self.settings.is_autoencoder:
+                y = y.to(self.device)
+                self.targets_chain.fit(y)
             logger.info("Pipeline fitted and moved to device.")
             return
         logger.warning("Unknown data type in train loader.")
@@ -75,7 +85,7 @@ class PipelineNetwork(LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
-        y_true = self.pipeline(y, which="targets")
+        y_true = self.targets_chain(y)
         loss = self.training_loss_func(y_hat, y_true)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
@@ -83,7 +93,7 @@ class PipelineNetwork(LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
-        y_true = self.pipeline(y, which="targets")
+        y_true = self.targets_chain(y)
         loss = self.training_loss_func(y_hat, y_true)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"val_loss": loss}
@@ -91,7 +101,7 @@ class PipelineNetwork(LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
-        y_true = self.pipeline(y, which="targets")
+        y_true = self.targets_chain(y)
         loss = self.test_loss_func(y_hat, y_true)
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         return {"test_loss": loss}
@@ -111,7 +121,7 @@ class PipelineNetwork(LightningModule):
             The predictions from the model.
         """
         x = batch[0]
-        x = self.pipeline(x)
+        x = self.features_chain(x)
 
         predictions = self.model.predict_step((x,), batch_idx)
         if isinstance(predictions, torch.Tensor):
@@ -124,19 +134,19 @@ class PipelineNetwork(LightningModule):
         raise ValueError(f"Unexpected output type in predict_step {type(predictions)}")
 
     def _return_from_dict(self, predictions: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        predictions["predictions"] = self.pipeline.inverse_transform(
-            predictions["predictions"], which="targets"
+        predictions["predictions"] = self.targets_chain.inverse_transform(
+            predictions["predictions"],
         )
         return predictions
 
     def _return_from_sequence(
         self, predictions: Sequence[torch.Tensor]
     ) -> tuple[torch.Tensor, ...]:
-        predictions_0 = self.pipeline.inverse_transform(predictions[0], which="targets")
+        predictions_0 = self.targets_chain.inverse_transform(predictions[0])
         return (predictions_0,) + tuple(pred for pred in predictions[1:])  # new tuple
 
     def _return_from_tensor(self, predictions: torch.Tensor) -> torch.Tensor:
-        return self.pipeline.inverse_transform(predictions, which="targets")
+        return self.targets_chain.inverse_transform(predictions)
 
     def on_train_epoch_end(self) -> None:
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
@@ -144,10 +154,8 @@ class PipelineNetwork(LightningModule):
 
     @classmethod
     def load_from_checkpoint(cls, ckpt_path: str, **kwargs):
-        # 1. pull out the saved hparams dict
+        """Load the model from a checkpoint."""
         data = torch.load(ckpt_path)
         hparams = data.get("hyper_parameters") or data["hparams"]
-        # 2. rebuild ModelSettings
         settings = ModelSettings.model_validate(hparams)
-        # 3. delegate to Lightning, injecting the Settings object
         return super().load_from_checkpoint(ckpt_path, settings=settings, **kwargs)
