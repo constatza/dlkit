@@ -1,4 +1,5 @@
 import inspect
+from types import FunctionType
 from collections.abc import Sequence
 from typing import Any
 
@@ -42,3 +43,20 @@ def slice_to_list(idx: slice, length: int):
     if start == stop == 0 and step < 0:
         start, stop = length - 1, 0
     return list(range(start, stop, step))
+
+
+def get_name(obj: object) -> str:
+    """
+    Return the name of a function or class. If `obj` is an instance,
+    return the class name of that instance. If it’s a function or class,
+    return its __name__. Otherwise, return the type’s name.
+    """
+    if isinstance(obj, FunctionType):
+        # It’s a function object
+        return obj.__name__
+    elif inspect.isclass(obj):
+        # It’s a class object
+        return obj.__name__
+    else:
+        # Assume it’s an instance; return its class’s name
+        return obj.__class__.__name__
