@@ -1,5 +1,5 @@
 from dlkit.datamodules import InMemoryModule
-from dlkit.datamodules.utils import get_or_create_idx_split
+from dlkit.utils.split import get_or_create_idx_split
 from dlkit.settings import DataloaderSettings, DataModuleSettings, PathSettings
 from dlkit.settings.datamodule_settings import DatasetSettings
 from dlkit.utils.loading import init_class

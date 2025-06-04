@@ -19,7 +19,9 @@ class Settings(BaseSettings):
         MLFLOW (MLflowSettings): Configuration for MLflow settings.
         OPTUNA (OptunaSettings): Configuration for Optuna settings.
         TRAINER (TrainerSettings): Configuration for trainer settings.
-        DATA (DataSettings): Configuration for data module settings.
+        DATAMODULE (DataModuleSettings): Configuration for datamodule settings.
+        DATASET (DatasetSettings): Configuration for dataset settings.
+        DATALOADER (DataloaderSettings): Configuration for dataloader settings.
         seed (int): Random seed for reproducibility.
     """
 
