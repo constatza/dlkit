@@ -5,16 +5,14 @@ from torch.nn import Sequential
 from collections.abc import Sequence
 
 from dlkit.datatypes.dataset import Shape
-from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
 from dlkit.networks.blocks.latent import (
     TensorToVectorBlock,
     VectorToTensorBlock,
 )
-from dlkit.networks.blocks.residual import SkipConnection
 from dlkit.networks.cae.base import CAE
 
 
-class SkipCAE1d(CAE):
+class LinearCAE1d(CAE):
     latent_channels: int
     latent_width: int
     latent_size: int
@@ -95,19 +93,12 @@ class SkipEncoder(nn.Module):
         layers = []
         for i in range(len(timesteps) - 1):
             layers.append(
-                SkipConnection(
-                    Sequential(
-                        ConvolutionBlock1d(
-                            in_channels=channels[i],
-                            out_channels=channels[i + 1],
-                            in_timesteps=timesteps[i],
-                            kernel_size=kernel_size,
-                            padding="same",
-                            dilation=i + 1,
-                        ),
-                    ),
+                nn.Conv1d(
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
+                    kernel_size=kernel_size,
+                    padding="same",
+                    dilation=i + 1,
                 )
             )
             layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
@@ -148,19 +139,12 @@ class SkipDecoder(nn.Module):
         layers = []
         for i in range(num_layers):
             layers.append(
-                SkipConnection(
-                    Sequential(
-                        ConvolutionBlock1d(
-                            in_channels=channels[i],
-                            out_channels=channels[i + 1],
-                            in_timesteps=timesteps[i],
-                            kernel_size=kernel_size,
-                            padding="same",
-                            dilation=i + 1,
-                        ),
-                    ),
+                nn.Conv1d(
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
+                    kernel_size=kernel_size,
+                    padding="same",
+                    dilation=i + 1,
                 )
             )
             layers.append(nn.Upsample(timesteps[i + 1]))

@@ -2,14 +2,14 @@ from collections.abc import Callable, Iterator
 
 import torch.nn as nn
 from lightning import LightningModule
-from pydantic import Field, field_validator, FilePath
-from pydantic_core.core_schema import ValidationInfo
+from pydantic import Field, FilePath
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
 from dlkit.datatypes.basic import FloatHyper, IntHyper
 from .base_settings import HyperParameterSettings, ClassSettings
 from dlkit.datatypes.dataset import Shape
+from torchmetrics import Metric
 
 
 class OptimizerSettings(HyperParameterSettings, ClassSettings[Optimizer]):
@@ -27,12 +27,12 @@ class SchedulerSettings(ClassSettings[LRScheduler]):
     module_path: str = Field(
         default="torch.optim.lr_scheduler", description="Module path to the scheduler."
     )
-    factor: float = Field(default=0.8, description="Reduction factor.")
+    factor: float = Field(default=0.5, description="Reduction factor.")
     patience: int = Field(
-        default=20,
+        default=50,
         description="Number of epochs with no improvement before reducing the LR.",
     )
-    min_lr: float = Field(default=1e-5, description="Minimum learning rate.")
+    min_lr: float = Field(default=1e-8, description="Minimum learning rate.")
 
 
 class TransformSettings(ClassSettings):
@@ -46,9 +46,19 @@ class TransformSettings(ClassSettings):
     )
 
 
-class LossFunctionSettings(ClassSettings[Callable]):
-    name: str = Field(default="MSELoss", description="Name of the loss function.")
-    module_path: str = Field(default="torch.nn", description="Module path to the loss function.")
+class MetricSettings(ClassSettings[Metric]):
+    name: str = Field(default="MeanSquaredError", description="Name of the metric.")
+    module_path: str = Field(
+        default="torchmetrics.regression", description="Module path to the metric."
+    )
+
+
+class LossSettings(ClassSettings[Callable]):
+    name: str = Field(default="mean_squared_error", description="Name of the loss.")
+    module_path: str = Field(
+        default="torchmetrics.functional.regression",
+        description="Module path to the loss.",
+    )
 
 
 class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
@@ -75,12 +85,9 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
 
     predict: bool = Field(default=True, description="Whether to predict with the model.")
 
-    train_loss: LossFunctionSettings = Field(
-        default=LossFunctionSettings(),
+    loss_function: LossSettings = Field(
+        default=LossSettings(),
         description="Loss function settings for training and validation.",
-    )
-    test_loss: LossFunctionSettings | None = Field(
-        default=None, description="Loss function settings for testing."
     )
 
     feature_transforms: tuple[TransformSettings, ...] = Field(
@@ -91,6 +98,11 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     )
 
     is_autoencoder: bool = Field(default=False, description="Whether the model is an autoencoder.")
+
+    metrics: tuple[MetricSettings, ...] = Field(
+        default=(MetricSettings(),),
+        description="List of metrics to compute on the model at test time.",
+    )
 
     num_layers: IntHyper | None = Field(default=None, description="Number of layers.")
     latent_size: IntHyper | None = Field(default=None, description="Latent dimension size.")
@@ -104,10 +116,3 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     latent_height: IntHyper | None = Field(
         default=None, description="Latent height before reduce to vector."
     )
-
-    @field_validator("test_loss")
-    @classmethod
-    def populate_test_loss(cls, value, info: ValidationInfo):
-        if not value:
-            return info.data["train_loss"]
-        return value
