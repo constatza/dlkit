@@ -7,12 +7,13 @@ from torch.nn import ModuleList
 
 from dlkit.settings.model_settings import TransformSettings
 from dlkit.utils.loading import init_class
+from .base import Transform
 
 
 # -------------------------------------------------------------------
 # Core decoupled pipeline
 # -------------------------------------------------------------------
-class TransformChain(torch.nn.Module):
+class TransformChain(Transform):
     """
         Pipeline for chaining multiple transformations together for ONE tensor stream.
     :w
@@ -26,7 +27,6 @@ class TransformChain(torch.nn.Module):
     transforms: ModuleList
     input_shape: tuple[int, ...] | Size
     transformed_shape: tuple[int, ...] | Size | None
-    fitted: torch.Tensor
 
     def __init__(
         self,
@@ -60,7 +60,6 @@ class TransformChain(torch.nn.Module):
 
         self.input_shape = input_shape
         self.transformed_shape = None
-        self.register_buffer("fitted", torch.zeros(1, requires_grad=False))
 
     def fit(self, x: Tensor) -> None:
         """
@@ -87,7 +86,7 @@ class TransformChain(torch.nn.Module):
                 x = transform(x)
 
         # Mark as fitted and store the shape after all transforms
-        self.fitted = torch.ones(1, requires_grad=False)
+        self.fitted = True
         self.transformed_shape = tuple(x.shape[1:])
 
     def forward(self, x: Tensor) -> Tensor:
