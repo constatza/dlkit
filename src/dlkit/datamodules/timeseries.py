@@ -67,29 +67,29 @@ class TimeSeriesDataModule(InMemoryModule):
             self.fitted = True
 
     def train_dataloader(self) -> DataLoader:
-        if self.dataset.train is None:
+        if not isinstance(self.dataset.train, TimeSeriesDataSet):
             raise RuntimeError("`setup('fit')` must be called before `train_dataloader()`")
         dataloader_func = self.dataset.train.to_dataloader
         return dataloader_func(
-            train=True, **self.dataloader_settings.to_dict_compatible_with(dataloader_func)
+            train=True, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def val_dataloader(self) -> DataLoader:
-        if self.dataset.validation is None:
+        if not isinstance(self.dataset.validation, TimeSeriesDataSet):
             raise RuntimeError("`setup('fit')` must be called before `val_dataloader()`")
         return self.dataset.validation.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def test_dataloader(self) -> DataLoader:
-        if self.dataset.test is None:
+        if not isinstance(self.dataset.test, TimeSeriesDataSet):
             raise RuntimeError("`setup('test')` must be called before `test_dataloader()`")
         return self.dataset.test.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def predict_dataloader(self) -> DataLoader:
-        if self.dataset.predict is None:
+        if not isinstance(self.dataset.predict, TimeSeriesDataSet):
             raise RuntimeError("`setup('predict')` must be called before `predict_dataloader()`")
         return self.dataset.predict.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)

@@ -98,4 +98,10 @@ class ForecastingDataset(BaseDataset):
 def polars_to_timeseries(
     df: pl.DataFrame, time_idx: str, target: str | list[str], group_ids: list[str], **kwargs
 ):
-    return TimeSeriesDataSet(df.to_pandas(), time_idx, target, group_ids, **kwargs)
+    return TimeSeriesDataSet(
+        df.to_pandas(),
+        time_idx,
+        target,
+        group_ids,
+        **kwargs,
+    )

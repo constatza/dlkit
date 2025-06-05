@@ -58,15 +58,16 @@ def train_mlflow(
             log_mlflow_dataset(features, settings.PATHS.features.as_uri())
             log_mlflow_dataset(targets, settings.PATHS.targets.as_uri())
 
-            signature = mlflow.models.infer_signature(
-                datamodule.dataset.train[0][0].cpu().numpy(),
-                datamodule.dataset.train[0][1].cpu().numpy(),
-            )
+            # TODO: Add signature in a generic way
+            # signature = mlflow.models.infer_signature(
+            #     datamodule.dataset.train[0][0].cpu().numpy(),
+            #     datamodule.dataset.train[0][1].cpu().numpy(),
+            # )
             mlflow.pytorch.log_model(
                 model,
                 name=settings.MODEL.name.split(".")[-1],
-                signature=signature,
                 params=settings.MODEL.model_dump(exclude_none=True),
+                # signature=signature,
             )
             if settings.MLFLOW.client.register_model:
                 mlflow.register_model(

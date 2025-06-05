@@ -1,4 +1,5 @@
 import inspect
+from types import FunctionType
 from collections.abc import Sequence
 from typing import Any
 
@@ -23,9 +24,39 @@ def kwargs_compatible_with(cls: type, exclude: Sequence[str] = (), **kwargs) -> 
 
 
 def slice_to_list(idx: slice, length: int):
-    start = (idx.start or 0) % length
-    stop = (idx.stop or length - 1) % length
+    """
+    Convert a slice to a list of indices of length `length`.
+
+    When the slice is a reverse slice (i.e. `start` and `stop` are both zero and `step` is negative),
+    the resulting list will be a reversed list of indices of length `length`.
+
+    Args:
+        idx: The slice to convert.
+        length: The length of the resulting list.
+
+    Returns:
+        list[int]: A list of indices as defined by the slice.
+    """
+    start = (idx.start or 0) % (length + 1)
+    stop = (idx.stop or length) % (length + 1)
     step = idx.step or 1
     if start == stop == 0 and step < 0:
         start, stop = length - 1, 0
     return list(range(start, stop, step))
+
+
+def get_name(obj: object) -> str:
+    """
+    Return the name of a function or class. If `obj` is an instance,
+    return the class name of that instance. If it’s a function or class,
+    return its __name__. Otherwise, return the type’s name.
+    """
+    if isinstance(obj, FunctionType):
+        # It’s a function object
+        return obj.__name__
+    elif inspect.isclass(obj):
+        # It’s a class object
+        return obj.__name__
+    else:
+        # Assume it’s an instance; return its class’s name
+        return obj.__class__.__name__
