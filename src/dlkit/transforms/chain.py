@@ -26,7 +26,7 @@ class TransformChain(torch.nn.Module):
     transforms: ModuleList
     input_shape: tuple[int, ...] | Size
     transformed_shape: tuple[int, ...] | Size | None
-    fitted: bool
+    fitted: torch.Tensor
 
     def __init__(
         self,
@@ -60,7 +60,7 @@ class TransformChain(torch.nn.Module):
 
         self.input_shape = input_shape
         self.transformed_shape = None
-        self.fitted = False
+        self.register_buffer("fitted", torch.zeros(1, requires_grad=False))
 
     def fit(self, x: Tensor) -> None:
         """
@@ -87,7 +87,7 @@ class TransformChain(torch.nn.Module):
                 x = transform(x)
 
         # Mark as fitted and store the shape after all transforms
-        self.fitted = True
+        self.fitted = torch.ones(1, requires_grad=False)
         self.transformed_shape = tuple(x.shape[1:])
 
     def forward(self, x: Tensor) -> Tensor:
