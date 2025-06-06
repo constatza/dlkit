@@ -11,3 +11,13 @@ def mkdir_for_local(uri: AnyUrl) -> None:
     """
     path = uri.path if os.name != "nt" else uri.path.lstrip(r"/")  # Handle Windows paths correctly
     Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+
+def recommended_gunicorn_workers() -> int:
+    """
+    Compute Gunicorn’s recommended number of workers using the formula (2 * num_cores) + 1.
+    Raises RuntimeError if CPU count is unavailable.
+    """
+    num_cores = os.cpu_count() or 8
+    # Gunicorn’s recommended formula: (2 * n) + 1
+    return (2 * num_cores) + 1
