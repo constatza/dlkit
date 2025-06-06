@@ -1,5 +1,7 @@
 # Description: Convolutional blocks for use in neural networks.
 import math
+from collections.abc import Callable
+from typing import Literal
 
 import torch.nn as nn
 
@@ -15,6 +17,9 @@ class ConvolutionBlock1d(nn.Module):
         stride: int = 1,
         padding: str | int = "same",
         groups: int = 1,
+        activation: Callable | nn.Module = nn.functional.gelu,
+        normalize: Literal["layer", "batch"] | None = None,
+        dropout: float = 0.0,
     ):
         """A residual transposed convolutional block with upsampling.
 
@@ -25,7 +30,7 @@ class ConvolutionBlock1d(nn.Module):
         - batch_norm (bool): Whether to use batch normalization.
         """
         super().__init__()
-        self.activation = nn.GELU()
+        self.activation = activation
         self.conv1 = nn.Conv1d(
             in_channels,
             out_channels,
@@ -35,6 +40,12 @@ class ConvolutionBlock1d(nn.Module):
             stride=stride,
             groups=groups,
         )
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+        self.norm = nn.Identity()
+        if normalize == "layer":
+            self.norm = nn.LayerNorm([in_channels, in_timesteps])
+        elif normalize == "batch":
+            self.norm = nn.BatchNorm1d(in_channels)
 
         self.out_channels = out_channels
         self.in_channels = in_channels
@@ -42,8 +53,10 @@ class ConvolutionBlock1d(nn.Module):
         self.out_timesteps = output_size(in_timesteps, kernel_size, stride, padding)
 
     def forward(self, x):
-        x = self.activation(x)
+        x = self.dropout(x)
+        x = self.norm(x)
         x = self.conv1(x)
+        x = self.activation(x)
         return x
 
 
@@ -87,11 +100,6 @@ class DeconvolutionBlock1d(nn.Module):
         self.in_timesteps = in_timesteps
 
     def forward(self, x):
-        # x = torch.nn.functional.interpolate(
-        #     x,
-        #     size=self.in_timesteps,
-        #     mode="linear",
-        # )
         # x = self.layer_norm(x)
         x = self.activation(x)
         x = self.conv1(x)

@@ -1,15 +1,8 @@
-import torch
 from pydantic import ConfigDict, validate_call
-from torch import nn
-from torch.nn import Sequential
-from collections.abc import Sequence
 
 from dlkit.datatypes.dataset import Shape
-from dlkit.networks.blocks.latent import (
-    TensorToVectorBlock,
-    VectorToTensorBlock,
-)
 from dlkit.networks.cae.base import CAE
+from dlkit.networks.cae import SkipCAE1d
 
 
 class LinearCAE1d(CAE):
@@ -29,129 +22,18 @@ class LinearCAE1d(CAE):
         latent_size: int = 10,
         num_layers: int = 3,
         kernel_size: int = 3,
-        activation: nn.Module = nn.GELU(),
     ):
         super().__init__()
         self.save_hyperparameters(
             ignore=["activation"],
         )
 
-        self.activation = activation
-        initial_channels = shape.features[0]
-        initial_width = shape.features[1]
-
-        channels = torch.linspace(initial_channels, latent_channels, num_layers + 1).int().tolist()
-        timesteps = torch.linspace(initial_width, latent_width, num_layers + 1).int().tolist()
-
-        # Instantiate feature extractor and latent encoder
-
-        self.encoder = SkipEncoder(
-            channels=channels,
-            timesteps=timesteps,
-            latent_dim=latent_size,
+        cae = SkipCAE1d(
+            shape=shape,
+            latent_channels=latent_channels,
+            latent_width=latent_width,
+            latent_size=latent_size,
+            num_layers=num_layers,
             kernel_size=kernel_size,
+            activation=lambda x: x,
         )
-
-        # Instantiate latent decoder and feature decoder
-        self.decoder = SkipDecoder(
-            channels=channels,
-            timesteps=timesteps,
-            latent_dim=latent_size,
-            kernel_size=kernel_size,
-        )
-        self.smoothing_layer = nn.Sequential(
-            nn.SELU(),
-            nn.Conv1d(channels[0], channels[0], kernel_size=kernel_size, padding="same"),
-        )
-
-    def encode(self, x):
-        return self.encoder(x)
-
-    def decode(self, x):
-        x = self.decoder(x)
-        return self.smoothing_layer(x)
-
-
-class SkipEncoder(nn.Module):
-    def __init__(
-        self,
-        latent_dim: int,
-        channels: Sequence[int],
-        kernel_size: int = 3,
-        timesteps: Sequence[int] | None = None,
-    ):
-        """Complete encoder that compresses the input into a latent vector.
-
-        Parameters:
-        - latent_dim (int): Dimension of the latent vector.
-        - channels (List[int]): List of channels for each layer.
-        - kernel_size (int): Kernel size for convolutions.
-        - timesteps (List[int]): List of timesteps for adaptive pooling at each layer.
-        """
-        super().__init__()
-
-        layers = []
-        for i in range(len(timesteps) - 1):
-            layers.append(
-                nn.Conv1d(
-                    in_channels=channels[i],
-                    out_channels=channels[i + 1],
-                    kernel_size=kernel_size,
-                    padding="same",
-                    dilation=i + 1,
-                )
-            )
-            layers.append(nn.AdaptiveMaxPool1d(timesteps[i + 1]))
-
-        self.feature_extractor = Sequential(*layers)
-
-        self.feature_to_latent = TensorToVectorBlock(channels[-1], latent_dim)
-
-    def forward(self, x):
-        x = self.feature_extractor(x)
-        x = self.feature_to_latent(x)
-        return x
-
-
-class SkipDecoder(nn.Module):
-    def __init__(
-        self,
-        latent_dim: int,
-        channels: Sequence[int],
-        timesteps: Sequence[int],
-        kernel_size: int = 3,
-    ):
-        """Complete decoder that reconstructs the input from a latent vector.
-
-        Parameters:
-        - latent_dim (int): Dimension of the latent vector input.
-        - channels (List[int]): List of channels for each layer, in reverse order from the encoder.
-        - kernel_size (int): Kernel size for transposed convolutions.
-        - timesteps (List[int]): List of timesteps for adaptive upsampling.
-        """
-        super().__init__()
-        num_layers = len(timesteps) - 1
-        timesteps = timesteps[::-1]
-        channels = channels[::-1]
-
-        self.latent_to_feature = VectorToTensorBlock(latent_dim, (channels[0], timesteps[0]))
-
-        layers = []
-        for i in range(num_layers):
-            layers.append(
-                nn.Conv1d(
-                    in_channels=channels[i],
-                    out_channels=channels[i + 1],
-                    kernel_size=kernel_size,
-                    padding="same",
-                    dilation=i + 1,
-                )
-            )
-            layers.append(nn.Upsample(timesteps[i + 1]))
-
-        self.feature_decoder = Sequential(*layers)
-
-    def forward(self, x):
-        x = self.latent_to_feature(x)
-        x = self.feature_decoder(x)
-        return x
