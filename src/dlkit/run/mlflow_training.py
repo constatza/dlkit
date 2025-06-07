@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from lightning.pytorch import LightningDataModule
 
 from dlkit.datamodules import InMemoryModule
-from dlkit.datatypes.learning import TrainingState
+from dlkit.datatypes.learning import ModelState
 from dlkit.run.vanilla_training import train_vanilla
 from dlkit.settings import Settings
 from dlkit.setup.mlflow_client import initialize_mlflow_client
@@ -20,9 +20,7 @@ SETTINGS_FILENAME = "config.json"
 IDX_SPLIT_FILENAME = "idx_split.json"
 
 
-def train_mlflow(
-    settings: Settings, datamodule: LightningDataModule | None = None
-) -> TrainingState:
+def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = None) -> ModelState:
     """Trains, tests, and predicts using the provided configuration.
     This functions utilizes MLflow in order to monitor and track the
     training process, model performance, and other relevant metrics.
