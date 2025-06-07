@@ -1,18 +1,22 @@
 from .basic import (
     BasicTypeSettings,
+    BoolDistribution,
     IntDistribution,
     FloatDistribution,
-    IntHyper,
-    FloatHyper,
-    StrHyper,
+    IntHyperparameter,
+    FloatHyperparameter,
+    StrHyperparameter,
+    Hyperparameter,
 )
 
 
 __all__ = [
     "BasicTypeSettings",
+    "BoolDistribution",
     "IntDistribution",
     "FloatDistribution",
-    "IntHyper",
-    "FloatHyper",
-    "StrHyper",
+    "IntHyperparameter",
+    "FloatHyperparameter",
+    "StrHyperparameter",
+    "Hyperparameter",
 ]
