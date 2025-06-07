@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-from pydantic import FilePath, validate_call
+from pydantic import FilePath, validate_call, DirectoryPath
 from torchmetrics import Metric
 from torch.nn import Module
 
@@ -77,7 +77,7 @@ def import_from_path(class_name: str, path: Path, base: Path) -> type:
 
 
 @validate_call()
-def load_class(class_name: str, module_path: str, settings_path: FilePath | None = None):
+def load_class(class_name: str, module_path: str, settings_dir: DirectoryPath | None = None):
     """High-level loader: parse config, import module or file, and return the model class.
 
     Args:
@@ -88,8 +88,8 @@ def load_class(class_name: str, module_path: str, settings_path: FilePath | None
     Raises:
         ImportError or ValueError for any lookup or validation errors.
     """
-    if settings_path is not None and (r"/" in module_path or "\\" in module_path):
-        return import_from_path(class_name, Path(module_path), settings_path.parent)
+    if settings_dir is not None and (r"/" in module_path or "\\" in module_path):
+        return import_from_path(class_name, Path(module_path), settings_dir)
 
     return import_from_module(class_name=class_name, module_prefix=module_path)
 

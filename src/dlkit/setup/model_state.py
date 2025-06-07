@@ -41,7 +41,7 @@ def build_model_state(
 
     model = build_model(
         settings=settings.MODEL,
-        settings_path=settings.PATHS.settings,
+        settings_path=settings.PATHS.settings_dir,
         dataset=datamodule.dataset.raw,
     )
     if ckpt := settings.MODEL.checkpoint:
