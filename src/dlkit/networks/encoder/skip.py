@@ -1,10 +1,10 @@
 from collections.abc import Callable
 from torch import nn
-from torch.nn import Sequential, ModuleList
+from torch.nn import ModuleList
 from collections.abc import Sequence
 
 from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
-from dlkit.networks.blocks.residual import SkipConnection
+from dlkit.networks.blocks.skip import SkipConnection
 
 
 class SkipEncoder1d(nn.Module):
@@ -37,18 +37,16 @@ class SkipEncoder1d(nn.Module):
         for i in range(len(channels) - 1):
             layers.append(
                 SkipConnection(
-                    Sequential(
-                        ConvolutionBlock1d(
-                            in_channels=channels[i],
-                            out_channels=channels[i + 1],
-                            in_timesteps=timesteps[i],
-                            kernel_size=kernel_size,
-                            padding="same",
-                            normalize=normalize,
-                            dilation=dilation,
-                            activation=activation,
-                            dropout=dropout,
-                        ),
+                    ConvolutionBlock1d(
+                        in_channels=channels[i],
+                        out_channels=channels[i + 1],
+                        in_timesteps=timesteps[i],
+                        kernel_size=kernel_size,
+                        padding="same",
+                        normalize=normalize,
+                        dilation=dilation,
+                        activation=activation,
+                        dropout=dropout,
                     ),
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
