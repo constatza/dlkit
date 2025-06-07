@@ -85,7 +85,7 @@ class PipelineNetwork(LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self.forward(x)
+        y_hat = self(x)
         y_true = self.targets_chain(y)
         loss = self.loss_function(y_hat, y_true)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -134,7 +134,10 @@ class PipelineNetwork(LightningModule):
         x = batch[0]
         x = self.features_chain(x)
 
-        predictions = self.model.predict_step((x,), batch_idx)
+        if hasattr(self.model, "predict_step"):
+            predictions = self.model.predict_step((x,), batch_idx)
+        else:
+            predictions = self.model(x)
         if isinstance(predictions, torch.Tensor):
             return self._return_from_tensor(predictions)
         if isinstance(predictions, list | tuple):
