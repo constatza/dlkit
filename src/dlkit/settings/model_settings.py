@@ -6,7 +6,7 @@ from pydantic import Field, FilePath
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
-from dlkit.datatypes.basic import FloatHyper, IntHyper
+from dlkit.datatypes.basic import FloatHyperparameter, IntHyperparameter
 from .base_settings import HyperParameterSettings, ClassSettings
 from dlkit.datatypes.dataset import Shape
 from torchmetrics import Metric
@@ -18,7 +18,7 @@ class OptimizerSettings(HyperParameterSettings, ClassSettings[Optimizer]):
     parameters: Iterator[nn.Parameter] | None = Field(
         default=None, description="Parameters to optimize.", frozen=False
     )
-    lr: FloatHyper | None = Field(default=None, description="Learning rate.")
+    lr: FloatHyperparameter | None = Field(default=None, description="Learning rate.")
     weight_decay: float = Field(default=0.0, description="Optional weight decay.")
 
 
@@ -104,15 +104,19 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
         description="List of metrics to compute on the model at test time.",
     )
 
-    num_layers: IntHyper | None = Field(default=None, description="Number of layers.")
-    latent_size: IntHyper | None = Field(default=None, description="Latent dimension size.")
-    kernel_size: IntHyper | None = Field(default=None, description="Convolution kernel size.")
-    latent_channels: IntHyper | None = Field(
+    num_layers: IntHyperparameter | None = Field(default=None, description="Number of layers.")
+    latent_size: IntHyperparameter | None = Field(
+        default=None, description="Latent dimension size."
+    )
+    kernel_size: IntHyperparameter | None = Field(
+        default=None, description="Convolution kernel size."
+    )
+    latent_channels: IntHyperparameter | None = Field(
         default=None, description="Number of latent channels before reduce to vector."
     )
-    latent_width: IntHyper | None = Field(
+    latent_width: IntHyperparameter | None = Field(
         default=None, description="Latent width before reduce to vector."
     )
-    latent_height: IntHyper | None = Field(
+    latent_height: IntHyperparameter | None = Field(
         default=None, description="Latent height before reduce to vector."
     )

@@ -15,6 +15,7 @@ class TensorSubset(Transform):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        *,
         keep: Sequence[int] | slice,
         dim: int = 1,
         input_shape: tuple[int, ...] | None = None,
@@ -26,7 +27,7 @@ class TensorSubset(Transform):
             input_shape (tuple[int, ...], optional): The shape of the input data.
                 Defaults to None.
         """
-        super().__init__()
+        super().__init__(input_shape=input_shape)
         self.dim: int = dim
         self.length = None
         self._keep = keep
