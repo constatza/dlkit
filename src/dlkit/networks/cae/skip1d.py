@@ -33,6 +33,7 @@ class SkipCAE1d(CAE):
         activation: Callable[[torch.Tensor], torch.Tensor] = nn.functional.gelu,
         normalize: Literal["layer", "batch"] | None = None,
         dropout: float = 0.0,
+        transpose: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters(
@@ -56,7 +57,11 @@ class SkipCAE1d(CAE):
             activation=activation,
             dropout=dropout,
         )
-        self.feature_to_latent = TensorToVectorBlock(channels[-1], latent_size)
+        if transpose:
+            reduce_dim = timesteps[-1]
+        else:
+            reduce_dim = channels[-1]
+        self.feature_to_latent = TensorToVectorBlock(reduce_dim, latent_size, transpose=transpose)
 
         # Instantiate latent decoder and feature decoder
         self.latent_to_feature = VectorToTensorBlock(latent_size, (channels[-1], timesteps[-1]))

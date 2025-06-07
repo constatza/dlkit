@@ -9,17 +9,18 @@ import torch.nn as nn
 class ConvolutionBlock1d(nn.Module):
     def __init__(
         self,
+        *,
         in_channels: int,
         out_channels: int,
         in_timesteps: int,
         kernel_size: int = 3,
-        dilation: int = 1,
         stride: int = 1,
         padding: str | int = "same",
-        groups: int = 1,
         activation: Callable | nn.Module = nn.functional.gelu,
         normalize: Literal["layer", "batch"] | None = None,
         dropout: float = 0.0,
+        dilation: int = 1,
+        groups: int = 1,
     ):
         """A residual transposed convolutional block with upsampling.
 
@@ -40,7 +41,7 @@ class ConvolutionBlock1d(nn.Module):
             stride=stride,
             groups=groups,
         )
-        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+        self.dropout = nn.Dropout1d(dropout) if dropout > 0.0 else nn.Identity()
         self.norm = nn.Identity()
         if normalize == "layer":
             self.norm = nn.LayerNorm([in_channels, in_timesteps])

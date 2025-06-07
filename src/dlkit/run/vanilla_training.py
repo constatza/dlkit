@@ -56,13 +56,17 @@ def train_vanilla(
         training_state = train_state(training_state)
         logger.info("Training completed.")
     else:
-        logger.info("Training skipped as per configuration.")
+        logger.info("Training skipped.")
 
     trainer = training_state.trainer
     if settings.MODEL.predict:
         trainer.predict(training_state.model, datamodule=training_state.datamodule)
         logger.info("Prediction completed.")
+    else:
+        logger.info("Prediction skipped.")
     if settings.MODEL.test:
         trainer.test(training_state.model, datamodule=training_state.datamodule)
         logger.info("Testing completed.")
+    else:
+        logger.info("Testing skipped.")
     return training_state
