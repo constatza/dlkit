@@ -1,59 +1,13 @@
-import torch
-from lightning.pytorch import LightningDataModule, seed_everything
+from lightning.pytorch import LightningDataModule
 from pydantic import validate_call, ConfigDict
 
 from loguru import logger
-from dlkit.setup.datamodule import build_datamodule
-from dlkit.setup.model import build_model
-from dlkit.setup.trainer import build_trainer
 from dlkit.settings import Settings
-from dlkit.datatypes.learning import TrainingState
+from dlkit.datatypes.learning import ModelState
+from dlkit.setup.model_state import build_model_state
 
 
-def build_training_state(
-    settings: Settings, datamodule: LightningDataModule | None = None
-) -> TrainingState:
-    """Builds the training state based on the provided settings.
-
-    This function initializes the datamodule, trainer, and model using the
-    provided configuration. It then returns a TrainingState object containing
-    these components.
-
-    Args:
-        settings: The configuration object for the training process.
-        datamodule: An optional datamodule to use. If not provided, it will be
-
-
-    Returns:
-        TrainingState: An object containing the initialized trainer, model,
-        and datamodule.
-    """
-    torch.set_float32_matmul_precision(settings.precision)
-    seed_everything(settings.seed)
-
-    trainer = build_trainer(settings.TRAINER)
-
-    if datamodule is None:
-        datamodule = build_datamodule(
-            settings.DATAMODULE,
-            settings.DATASET,
-            settings.DATALOADER,
-            settings.PATHS,
-        )
-
-    model = build_model(
-        settings=settings.MODEL,
-        settings_path=settings.PATHS.settings,
-        dataset=datamodule.dataset.raw,
-    )
-    if ckpt := settings.MODEL.checkpoint:
-        logger.info(f"Loading model from checkpoint: {ckpt}")
-        model = model.__class__.load_from_checkpoint(ckpt_path=ckpt, strict=False)
-
-    return TrainingState(trainer=trainer, model=model, datamodule=datamodule, seed=settings.seed)
-
-
-def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingState[M_T, D_T]:
+def train_state[M_T, D_T](training_state: ModelState[M_T, D_T]) -> ModelState[M_T, D_T]:
     """Trains, tests, and predicts using the provided configuration.
 
     This function initializes the datamodule, trainer, and model using the
@@ -64,7 +18,7 @@ def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingSt
         training_state: The training state containing the model, datamodule,
             and trainer to be used for training.
     Returns:
-        TrainingState: An object containing the trained model, datamodule,
+        ModelState: An object containing the trained model, datamodule,
             and trainer after training, testing, and prediction.
     """
 
@@ -77,14 +31,14 @@ def train_state[M_T, D_T](training_state: TrainingState[M_T, D_T]) -> TrainingSt
 
     # Train and evaluate the model
     trainer.fit(model, datamodule=datamodule)
-    return TrainingState(trainer=trainer, model=model, datamodule=datamodule)
+    return ModelState(trainer=trainer, model=model, datamodule=datamodule)
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def train_vanilla(
     settings: Settings,
     datamodule: LightningDataModule | None = None,
-) -> TrainingState:
+) -> ModelState:
     """Trains, tests, and predicts using the provided configuration.
 
     This function initializes the training state and executes the training,
@@ -95,7 +49,7 @@ def train_vanilla(
         datamodule: An optional datamodule to use. If not provided, it will be
             built from the settings.
     """
-    training_state = build_training_state(settings, datamodule=datamodule)
+    training_state = build_model_state(settings, datamodule=datamodule)
 
     if settings.MODEL.train:
         logger.info("Starting training.")
