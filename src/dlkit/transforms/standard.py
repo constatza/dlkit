@@ -9,10 +9,9 @@ class StandardScaler(Transform):
     def __init__(
         self, dim: int | list[int] | None = None, input_shape: tuple[int, ...] | None = None
     ) -> None:
-        super().__init__()
+        super().__init__(input_shape)
         self.mean: torch.Tensor | None = None
         self.std: torch.Tensor | None = None
-        self.input_shape = (1, *input_shape)
         self.register_buffer("mean", torch.zeros(self.input_shape))
         self.register_buffer("std", torch.ones(self.input_shape))
         self.dim = dim or 0

@@ -6,9 +6,9 @@ epsilon = 1e-8
 
 
 class Permutation(Transform):
-    def __init__(self, dims: tuple[int], input_shape: tuple[int, ...] | None = None):
+    def __init__(self, *, dims: tuple[int], input_shape: tuple[int, ...]):
         """Must be a permutation and must be used before any other transforms."""
-        super().__init__()
+        super().__init__(input_shape=input_shape)
         self.dims = dims
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
