@@ -20,8 +20,7 @@ class ModelState[Model_T, DataModule_T]:
         datamodule: The DataModule instance providing the data.
     """
 
-    trainer: Trainer = field(kw_only=True)
     model: Model_T = field(kw_only=True)
+    trainer: Trainer | None = field(kw_only=True)
     datamodule: DataModule_T = field(kw_only=True)
-    precision: str = field(default="medium", kw_only=True)
     settings: Settings = field(default=None, kw_only=True)

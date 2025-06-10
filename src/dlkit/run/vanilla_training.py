@@ -2,7 +2,7 @@ from lightning.pytorch import LightningDataModule
 from pydantic import validate_call, ConfigDict
 
 from loguru import logger
-from dlkit.settings import Settings
+from dlkit.settings import Settings, RunMode
 from dlkit.datatypes.run import ModelState
 from dlkit.setup.model_state import build_model_state
 
@@ -35,7 +35,7 @@ def train_state[M_T, D_T](training_state: ModelState[M_T, D_T]) -> ModelState[M_
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-def train_vanilla(
+def train_simple(
     settings: Settings,
     datamodule: LightningDataModule | None = None,
 ) -> ModelState:
@@ -50,6 +50,8 @@ def train_vanilla(
             built from the settings.
     """
     training_state = build_model_state(settings, datamodule=datamodule)
+    if settings.RUN.continue_training and settings.PATHS.checkpoint:
+        logger.info(f"Continuing training from {settings.RUN.checkpoint_path}.")
 
     if settings.MODEL.train:
         logger.info("Starting training.")
@@ -64,7 +66,7 @@ def train_vanilla(
         logger.info("Prediction completed.")
     else:
         logger.info("Prediction skipped.")
-    if settings.MODEL.test:
+    if settings.MODEL.test or settings.RUN.mode is RunMode.OPTUNA:
         trainer.test(training_state.model, datamodule=training_state.datamodule)
         logger.info("Testing completed.")
     else:

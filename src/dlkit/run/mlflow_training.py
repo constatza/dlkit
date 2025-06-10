@@ -9,7 +9,7 @@ from lightning.pytorch import LightningDataModule
 
 from dlkit.datamodules import InMemoryModule
 from dlkit.datatypes.run import ModelState
-from dlkit.run.vanilla_training import train_vanilla
+from dlkit.run.vanilla_training import train_simple
 from dlkit.settings import Settings
 from dlkit.setup.mlflow_client import initialize_mlflow_client
 from dlkit.setup.mlflow_server import ServerProcess
@@ -43,7 +43,7 @@ def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = No
             mlflow.pytorch.autolog(log_models=False)
             mlflow.log_dict(settings.model_dump(), SETTINGS_FILENAME)
 
-            training_state = train_vanilla(settings, datamodule=datamodule)
+            training_state = train_simple(settings, datamodule=datamodule)
             model = training_state.model
             datamodule: InMemoryModule = training_state.datamodule
 
