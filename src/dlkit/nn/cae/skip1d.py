@@ -1,13 +1,13 @@
 import torch
 from collections.abc import Callable
 from pydantic import ConfigDict, validate_call
-from typing import Literal
 from torch import nn
 
 from dlkit.datatypes.dataset import Shape
-from dlkit.networks.cae.base import CAE
-from dlkit.networks.encoder.skip import SkipEncoder1d
-from dlkit.networks.encoder.latent import (
+from dlkit.datatypes.networks import NormalizerName
+from dlkit.nn.cae.base import CAE
+from dlkit.nn.encoder.skip import SkipEncoder1d
+from dlkit.nn.encoder.latent import (
     VectorToTensorBlock,
     TensorToVectorBlock,
 )
@@ -24,14 +24,15 @@ class SkipCAE1d(CAE):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        *,
         shape: Shape,
-        latent_channels: int = 5,
-        latent_width: int = 10,
-        latent_size: int = 10,
+        latent_channels: int,
+        latent_size: int,
+        latent_width: int = 1,
         num_layers: int = 3,
         kernel_size: int = 3,
         activation: Callable[[torch.Tensor], torch.Tensor] = nn.functional.gelu,
-        normalize: Literal["layer", "batch"] | None = None,
+        normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         transpose: bool = False,
     ):

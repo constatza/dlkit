@@ -1,8 +1,8 @@
 from pydantic import ConfigDict, validate_call
 
 from dlkit.datatypes.dataset import Shape
-from dlkit.networks.cae.base import CAE
-from dlkit.networks.cae import SkipCAE1d
+from dlkit.nn.cae.base import CAE
+from dlkit.nn.cae import SkipCAE1d
 
 
 class LinearCAE1d(CAE):

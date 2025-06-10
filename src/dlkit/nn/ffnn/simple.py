@@ -3,12 +3,13 @@ from typing import Literal
 
 import torch.nn as nn
 from torch import Tensor
-from dlkit.networks.blocks import DenseBlock
+from dlkit.nn.primitives import DenseBlock, SkipConnection
 
 
 class FeedForwardNN(nn.Module):
     def __init__(
         self,
+        *,
         shape: dict[str, tuple[int, ...]],
         layers: Sequence[int],
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
@@ -26,16 +27,16 @@ class FeedForwardNN(nn.Module):
 
         for i in range(self.num_layers - 1):
             self.layers.append(
-                # SkipConnection(
-                DenseBlock(
-                    layers[i],
-                    layers[i + 1],
-                    activation=activation,
-                    normalize=normalize,
-                    dropout=dropout,
-                ),
-                #     layer_type="linear",
-                # )
+                SkipConnection(
+                    DenseBlock(
+                        layers[i],
+                        layers[i + 1],
+                        activation=activation,
+                        normalize=normalize,
+                        dropout=dropout,
+                    ),
+                    layer_type="linear",
+                )
             )
 
         self.layers.append(nn.Linear(layers[-1], targets_size))
@@ -54,6 +55,9 @@ class ConstantWidthFFNN(FeedForwardNN):
         shape: dict[str, tuple[int, ...]],
         hidden_size: int | None = None,
         num_layers: int | None = None,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
         **kwargs,
     ):
         """Hidden layers with constant width and residual connections.
@@ -65,4 +69,11 @@ class ConstantWidthFFNN(FeedForwardNN):
             num_layers (int): Number of hidden layers.
         """
         layers = [hidden_size] * num_layers
-        super().__init__(shape, layers, **kwargs)
+        super().__init__(
+            shape=shape,
+            layers=layers,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            **kwargs,
+        )

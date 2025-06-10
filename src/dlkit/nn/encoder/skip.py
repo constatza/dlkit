@@ -3,8 +3,8 @@ from torch import nn
 from torch.nn import ModuleList
 from collections.abc import Sequence
 
-from dlkit.networks.blocks.convolutional import ConvolutionBlock1d
-from dlkit.networks.blocks.skip import SkipConnection
+from dlkit.nn.primitives.convolutional import ConvolutionBlock1d
+from dlkit.nn.primitives.skip import SkipConnection
 
 
 class SkipEncoder1d(nn.Module):
