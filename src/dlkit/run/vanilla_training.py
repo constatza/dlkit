@@ -3,7 +3,7 @@ from pydantic import validate_call, ConfigDict
 
 from loguru import logger
 from dlkit.settings import Settings
-from dlkit.datatypes.learning import ModelState
+from dlkit.datatypes.run import ModelState
 from dlkit.setup.model_state import build_model_state
 
 

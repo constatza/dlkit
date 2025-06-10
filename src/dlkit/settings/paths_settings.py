@@ -30,7 +30,7 @@ class PathSettings(BaseSettings):
         targets (FilePath | None): Path to the targets file, defaults to the features
             path if not provided.
         idx_split (FilePath | None): Path to the index split file.
-        ckpt_path (FilePath | None): Path to the checkpoint file.
+        checkpoint (FilePath | None): Path to the checkpoint file.
 
     Methods:
         populate_targets(cls, value, info): Ensures the targets path defaults to the
@@ -42,7 +42,7 @@ class PathSettings(BaseSettings):
     """
 
     root: DirectoryPath = Field(..., description="Root directory.")
-    settings_dir: DirectoryPath = Field(..., description="Path to the settings directory.")
+    settings: FilePath = Field(..., description="Path to the settings directory.")
 
     input_dir: DirectoryPath | None = Field(None, description="Input directory.")
     output_dir: DirectoryPath | None = Field(
@@ -63,7 +63,7 @@ class PathSettings(BaseSettings):
 
     # !! idx split default value must be None !!
     idx_split: FilePath | None = Field(default=None, description="Path to the index split file.")
-    ckpt_path: FilePath | None = Field(default=None, description="Path to the checkpoint file.")
+    checkpoint: FilePath | None = Field(default=None, description="Path to the checkpoint file.")
 
     @field_validator("targets")
     @classmethod

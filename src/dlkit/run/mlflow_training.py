@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from lightning.pytorch import LightningDataModule
 
 from dlkit.datamodules import InMemoryModule
-from dlkit.datatypes.learning import ModelState
+from dlkit.datatypes.run import ModelState
 from dlkit.run.vanilla_training import train_vanilla
 from dlkit.settings import Settings
 from dlkit.setup.mlflow_client import initialize_mlflow_client

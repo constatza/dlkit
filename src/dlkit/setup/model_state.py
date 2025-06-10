@@ -1,6 +1,5 @@
 import torch
-from loguru import logger
-from dlkit.datatypes.learning import ModelState
+from dlkit.datatypes.run import ModelState
 from lightning.pytorch import LightningDataModule, seed_everything
 from dlkit.settings import Settings
 from dlkit.setup.datamodule import build_datamodule
@@ -26,8 +25,8 @@ def build_model_state(
         ModelState: An object containing the initialized trainer, model,
         and datamodule.
     """
-    torch.set_float32_matmul_precision(settings.precision)
-    seed_everything(settings.seed)
+    torch.set_float32_matmul_precision(settings.RUN.precision)
+    seed_everything(settings.RUN.seed)
 
     trainer = build_trainer(settings.TRAINER)
 
@@ -41,11 +40,8 @@ def build_model_state(
 
     model = build_model(
         settings=settings.MODEL,
-        settings_path=settings.PATHS.settings_dir,
+        checkpoint=settings.PATHS.checkpoint,
         dataset=datamodule.dataset.raw,
     )
-    if ckpt := settings.MODEL.checkpoint:
-        logger.info(f"Loading model from checkpoint: {ckpt}")
-        model = model.__class__.load_from_checkpoint(ckpt_path=ckpt, strict=False)
 
     return ModelState(trainer=trainer, model=model, datamodule=datamodule, settings=settings)
