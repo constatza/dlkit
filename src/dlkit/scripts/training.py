@@ -1,9 +1,8 @@
 import sys
+from typing import Literal
 
 import click
-
-from dlkit.io.settings import load_validated_settings
-from dlkit.run.training import train
+from dlkit.run import run_from_path
 
 
 @click.command(
@@ -11,14 +10,12 @@ from dlkit.run.training import train
 )
 @click.argument("config-path", type=str)
 @click.option(
-    "--optuna", is_flag=True, default=False, help="Use Optuna for hyperparameter optimization."
+    "--mode", type=click.Choice(["training", "inference", "mlflow", "optuna"]), default="training"
 )
-@click.option("--mlflow", is_flag=True, default=False, help="Use MLflow for experiment tracking.")
-def main(config_path: str, optuna: bool, mlflow: bool) -> None:
+def main(config_path: str, mode: Literal["training", "inference", "mlflow", "optuna"]) -> None:
     """Main function to parse configuration and trigger training."""
     try:
-        settings = load_validated_settings(config_path)
-        train(settings, optuna=optuna, mlflow=mlflow)
+        run_from_path(config_path, mode=mode)
     except KeyboardInterrupt:
         click.echo("Training interrupted by user.")
         sys.exit(1)

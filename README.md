@@ -19,13 +19,17 @@ uv add git+https://github.com/constatza/dlkit
 ## Using the API
 
 To use the api, import the package and use the provided functions:
-~~~python
-from dlkit.io.settings import load_validated_settings
-from dlkit.run.training import train
 
+~~~python
+from dlkit.run import run, run_from_path
 settings_path = "./config.toml"
-settings = load_validated_settings(settings_path)
-training_state = train(settings, mlflow=True)
+training_state = run_from_path(settings_path, mode="training")
+~~~
+or with mlflow logging:
+~~~python
+from dlkit.run import run, run_from_path
+settings_path = "./config.toml"
+training_state = run(settings_path, mode="mlflow")
 ~~~
 The configuration file should include the following sections:
 ~~~toml
@@ -35,16 +39,14 @@ hidden_size = 32
 num_layers = 1
 scalar = 0.01
 
-
 [paths]
 input_dir = "./data"
 output_dir = "./results"
-features = "./data/features.npy"
+features = "./data/features.npy" # required
 targets = "./data/targets.npy"
 ~~~
 
 ## Running Scripts
-
 To execute the provided scripts, use:
 
 ### Training
@@ -54,14 +56,14 @@ uv run train path/to/config.toml
 ~~~
 or with mlflow logging
 ```bash
-uv run train --mlflow path/to/config.toml
+uv run train --mode mlflow path/to/config.toml
 ```
 This will automatically start the MLFlow server and log the training process.
 
 ### Hyperparameter Optimization
 For fine-tuning the model using hyperparameter optimization, run
 ~~~bash
-uv run train --optuna path/to/config.toml
+uv run train --mode optuna path/to/config.toml
 ~~~
 the configuration should include a section for optuna e.g.:
 ~~~toml
@@ -76,7 +78,7 @@ interval_steps=10
 ~~~
 and hyperparameter ranges for the model configuration e.g.:
 ~~~toml
-[model]
+[optuna.model]
 kernel_size = {low=3, high=7, step=2}
 hidden_size = {low=32, high=64}
 num_layers = {choices=[1, 2, 3]}
