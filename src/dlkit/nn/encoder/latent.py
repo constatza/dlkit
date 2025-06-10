@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from dlkit.networks.blocks.dense import DenseBlock
+from dlkit.nn.primitives.dense import DenseBlock
 
 
 class VectorToTensorBlock(nn.Module):

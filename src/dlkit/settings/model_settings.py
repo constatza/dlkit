@@ -64,7 +64,7 @@ class LossSettings(ClassSettings[Callable]):
 class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     name: str = Field(..., description="Model namespace path.")
     module_path: str = Field(
-        default="dlkit.networks",
+        default="dlkit.nn",
         description="Module path to the model.",
     )
 
@@ -104,18 +104,16 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
         description="List of metrics to compute on the model at test time.",
     )
 
-    num_layers: IntHyperparameter | None = Field(default=None, description="Number of layers.")
+    num_layers: IntHyperparameter | None = Field(default=3, description="Number of layers.")
     latent_size: IntHyperparameter | None = Field(
         default=None, description="Latent dimension size."
     )
-    kernel_size: IntHyperparameter | None = Field(
-        default=None, description="Convolution kernel size."
-    )
+    kernel_size: IntHyperparameter = Field(default=3, description="Convolution kernel size.")
     latent_channels: IntHyperparameter | None = Field(
         default=None, description="Number of latent channels before reduce to vector."
     )
-    latent_width: IntHyperparameter | None = Field(
-        default=None, description="Latent width before reduce to vector."
+    latent_width: IntHyperparameter = Field(
+        default=1, description="Latent width before reduce to vector."
     )
     latent_height: IntHyperparameter | None = Field(
         default=None, description="Latent height before reduce to vector."
