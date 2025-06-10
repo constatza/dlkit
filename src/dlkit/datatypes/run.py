@@ -3,7 +3,7 @@
 from typing import TypeVar
 from attr import define, field
 from lightning.pytorch import Trainer, LightningModule, LightningDataModule
-from dlkit.settings import Settings
+from dlkit.settings.general_settings import Settings
 
 Model_T = TypeVar("Model_T", bound=LightningModule)
 DataModule_T = TypeVar("DataModule_T", bound=LightningDataModule)

@@ -3,14 +3,15 @@ from .mlflow_training import train_mlflow
 from .optuna_training import train_optuna
 from loguru import logger
 from dlkit.io.settings import load_validated_settings
-from dlkit.datatypes.learning import ModelState
+from dlkit.datatypes.run import ModelState
+from dlkit.settings import RunMode
 
 
-def train(settings, optuna: bool = True, mlflow: bool = True):
-    if settings.OPTUNA.enable and optuna:
+def train(settings, optuna: bool = False, mlflow: bool = False):
+    if settings.RUN.mode is RunMode.OPTUNA or optuna:
         logger.info("Using Optuna for hyperparameter optimization.")
         return train_optuna(settings)
-    if settings.MLFLOW.enable and mlflow:
+    if settings.RUN.mode is RunMode.MLFLOW or mlflow:
         logger.info("Using MLflow for logging.")
         return train_mlflow(settings)
     return train_vanilla(settings)
