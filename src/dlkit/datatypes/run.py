@@ -1,15 +1,16 @@
-"""A module defining the TrainingState class for managing training sessions in PyTorch Lightning."""
+"""A module defining the ModelState class for managing training sessions in PyTorch Lightning."""
 
 from typing import TypeVar
 from attr import define, field
 from lightning.pytorch import Trainer, LightningModule, LightningDataModule
+from dlkit.settings.general_settings import Settings
 
 Model_T = TypeVar("Model_T", bound=LightningModule)
 DataModule_T = TypeVar("DataModule_T", bound=LightningDataModule)
 
 
 @define(frozen=True)
-class TrainingState[Model_T, DataModule_T]:
+class ModelState[Model_T, DataModule_T]:
     """A class to hold the state of a training session.
     It includes the trainer, model, and datamodule used during training.
 
@@ -19,8 +20,7 @@ class TrainingState[Model_T, DataModule_T]:
         datamodule: The DataModule instance providing the data.
     """
 
-    trainer: Trainer = field()
-    model: Model_T = field()
-    datamodule: DataModule_T = field()
-    precision: str = field(default="medium", kw_only=True)
-    seed: int = field(default=1, kw_only=True)
+    model: Model_T = field(kw_only=True)
+    trainer: Trainer | None = field(kw_only=True)
+    datamodule: DataModule_T = field(kw_only=True)
+    settings: Settings = field(default=None, kw_only=True)

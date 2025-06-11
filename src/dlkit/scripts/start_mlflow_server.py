@@ -25,6 +25,7 @@ def main(config_path: str = "./config.toml"):
             server.process.wait()
         except KeyboardInterrupt:
             logger.info("MLflow server stopped by user.")
+            sys.exit(0)
         except Exception as e:
             logger.error(f"Error while running MLflow server: {e}")
             sys.exit(1)

@@ -2,14 +2,13 @@ from typing import Any, Self
 
 from optuna.distributions import CategoricalChoiceType
 from optuna.trial import Trial
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, validate_call
 
 from dlkit.datatypes.basic import (
-    FloatHyper,
-    FloatDistribution,
-    IntHyper,
+    Hyperparameter,
     IntDistribution,
-    StrHyper,
+    FloatDistribution,
+    BoolDistribution,
     CategoricalDistribution,
 )
 from dlkit.utils.general import kwargs_compatible_with
@@ -67,9 +66,8 @@ class HyperParameterSettings(BaseSettings):
         return self.model_copy(update=resolved)
 
     @staticmethod
-    def get_optuna_suggestion(
-        trial: Trial, field: str, value: IntHyper | FloatHyper | StrHyper
-    ) -> CategoricalChoiceType:
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def get_optuna_suggestion(trial: Trial, field: str, value: Hyperparameter | Any) -> Any:
         """Get an Optuna suggestion based on the type of hyperparameter.
 
         Args:
@@ -79,16 +77,12 @@ class HyperParameterSettings(BaseSettings):
         Returns:
             CategoricalChoiceType: The suggested value for the hyperparameter.
         """
+        if isinstance(value, CategoricalDistribution) or isinstance(value, BoolDistribution):
+            return trial.suggest_categorical(field, choices=value.choices)
         if isinstance(value, IntDistribution):
-            return trial.suggest_int(name=field, low=value.low, high=value.high, step=value.step)
+            return trial.suggest_int(field, low=value.low, high=value.high, step=value.step)
         if isinstance(value, FloatDistribution):
             return trial.suggest_float(
-                name=field,
-                low=value.low,
-                high=value.high,
-                step=value.step,
-                log=value.log,
+                field, low=value.low, high=value.high, step=value.step, log=value.log
             )
-        if isinstance(value, CategoricalDistribution):
-            return trial.suggest_categorical(name=field, choices=value.choices)
         return value
