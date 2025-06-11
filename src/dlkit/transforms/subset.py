@@ -18,7 +18,7 @@ class TensorSubset(Transform):
         *,
         keep: Sequence[int] | slice,
         dim: int = 1,
-        input_shape: tuple[int, ...] | None = None,
+        input_shape: tuple[int, ...] | torch.Size | None = None,
     ) -> None:
         """
         Args:

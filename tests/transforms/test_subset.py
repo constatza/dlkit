@@ -116,6 +116,7 @@ def test_subsample_1d(case_1d):
     layer = TensorSubset(
         dim=dim,
         keep=keep,
+        input_shape=tensor.shape,
     )
     output = layer(tensor)
     assert torch.equal(output, expected), f"1D: got {output.tolist()}, expected {expected.tolist()}"
@@ -127,7 +128,7 @@ def test_subsample_2d(case_2d):
       Input (2×4), dim=1, keep=[0,3], drop=[1] → output [[5,8],[9,12]]
     """
     tensor, dim, keep, expected = case_2d
-    layer = TensorSubset(dim=dim, keep=keep)
+    layer = TensorSubset(dim=dim, keep=keep, input_shape=tensor.shape)
     output = layer(tensor)
     assert torch.equal(output, expected), f"2D: got {output.tolist()}, expected {expected.tolist()}"
 
@@ -141,6 +142,7 @@ def test_subsample_3d(case_3d):
     layer = TensorSubset(
         dim=dim,
         keep=keep,
+        input_shape=tensor.shape,
     )
     output = layer(tensor)
     assert torch.equal(output, expected), f"3D: got {output.tolist()}, expected {expected.tolist()}"
@@ -151,6 +153,7 @@ def test_subsample_1d_with_slice(case_1d_with_slice):
     layer = TensorSubset(
         dim=dim,
         keep=keep,
+        input_shape=tensor.shape,
     )
     output = layer(tensor)
     assert torch.equal(output, expected), f"1D: got {output.tolist()}, expected {expected.tolist()}"
