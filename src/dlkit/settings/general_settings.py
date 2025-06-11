@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .base_settings import BaseSettings
 from .datamodule_settings import DataModuleSettings, DatasetSettings, DataloaderSettings
@@ -7,6 +7,7 @@ from .model_settings import ModelSettings
 from .optuna_settings import OptunaSettings
 from .paths_settings import PathSettings
 from .trainer_settings import TrainerSettings
+from .run_settings import RunSettings, RunMode
 
 
 class Settings(BaseSettings):
@@ -14,6 +15,7 @@ class Settings(BaseSettings):
     model, paths, MLflow, Optuna, trainer, and data settings.
 
     Attributes:
+        RUN (RunSettings): Configuration for run settings.
         MODEL (ModelSettings): Configuration for model settings.
         PATHS (PathSettings): Configuration for paths settings.
         MLFLOW (MLflowSettings): Configuration for MLflow settings.
@@ -22,9 +24,9 @@ class Settings(BaseSettings):
         DATAMODULE (DataModuleSettings): Configuration for datamodule settings.
         DATASET (DatasetSettings): Configuration for dataset settings.
         DATALOADER (DataloaderSettings): Configuration for dataloader settings.
-        seed (int): Random seed for reproducibility.
     """
 
+    RUN: RunSettings = Field(default=RunSettings(), description="Run settings.")
     MODEL: ModelSettings
     PATHS: PathSettings
     MLFLOW: MLflowSettings
@@ -33,5 +35,14 @@ class Settings(BaseSettings):
     DATAMODULE: DataModuleSettings = Field(..., description="Datamodule settings.")
     DATASET: DatasetSettings = Field(..., description="Dataset settings.")
     DATALOADER: DataloaderSettings = Field(DataloaderSettings(), description="Dataloader settings.")
-    seed: int = Field(default=1, description="Random seed for reproducibility.")
-    precision: str = Field(default="medium", description="Precision for float32 matmul operations.")
+
+    @model_validator(mode="after")
+    def check_checkpoint_for_inference(self):
+        """
+        Ensure that when running in INFERENCE mode, checkpoint_path is provided.
+        """
+        if self.RUN.mode == RunMode.INFERENCE and not self.PATHS.checkpoint:
+            raise ValueError(
+                f"{self.PATHS.settings}: `checkpoint` path must be provided when running in inference mode."
+            )
+        return self

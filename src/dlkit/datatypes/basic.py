@@ -1,13 +1,14 @@
 from collections.abc import Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class BasicTypeSettings(BaseModel):
-    class Config:
-        frozen = True
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        validate_assignment=True,
+    )
 
 
 class IntDistribution(BasicTypeSettings):
@@ -24,7 +25,7 @@ class FloatDistribution(BasicTypeSettings):
     low: float
     high: float
     step: float | None = Field(default=None, description="Step size for the range.")
-    log: bool = Field(default=False, description="Whether to use log scale.")
+    log: bool | None = Field(default=False, description="Whether to use log scale.")
 
 
 class CategoricalDistribution[T](BasicTypeSettings):
@@ -35,6 +36,17 @@ class CategoricalDistribution[T](BasicTypeSettings):
     )
 
 
-IntHyper = int | IntDistribution | CategoricalDistribution[int] | tuple[int, ...]
-FloatHyper = float | FloatDistribution | CategoricalDistribution[float] | tuple[float, ...]
-StrHyper = str | CategoricalDistribution | CategoricalDistribution[str] | tuple[str, ...]
+class BoolDistribution(BasicTypeSettings):
+    """Boolean distribution for hyperparameters."""
+
+    choices: tuple[bool, bool] = Field(..., description="Tuple of 2 choices to toggle between.")
+
+
+type IntHyperparameter = int | IntDistribution | CategoricalDistribution[int]
+type FloatHyperparameter = float | FloatDistribution | CategoricalDistribution[float]
+type StrHyperparameter = str | CategoricalDistribution[str]
+type BoolHyperparameter = bool | BoolDistribution
+
+type Hyperparameter = (
+    BoolHyperparameter | IntHyperparameter | FloatHyperparameter | StrHyperparameter
+)

@@ -1,7 +1,9 @@
+import os
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic.networks import AnyUrl, FileUrl
 
 from .base_settings import BaseSettings
+from dlkit.utils.system_utils import recommended_gunicorn_workers
 
 
 class MLflowServerSettings(BaseSettings):
@@ -20,7 +22,8 @@ class MLflowServerSettings(BaseSettings):
 
     @property
     def command(self) -> list[str]:
-        return [
+        workers = recommended_gunicorn_workers()
+        command = [
             "mlflow",
             "server",
             "--host",
@@ -32,6 +35,18 @@ class MLflowServerSettings(BaseSettings):
             "--artifacts-destination",
             str(self.artifacts_destination),
         ]
+        if os.name != "nt":
+            command.extend([
+                "--gunicorn-opts",
+                f"-w={workers}",
+            ])
+        else:
+            command.extend([
+                "--waitress-opts",
+                f"--threads={workers}",
+            ])
+
+        return command
 
 
 class MLflowClientSettings(BaseSettings):

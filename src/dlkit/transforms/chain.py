@@ -7,12 +7,13 @@ from torch.nn import ModuleList
 
 from dlkit.settings.model_settings import TransformSettings
 from dlkit.utils.loading import init_class
+from .base import Transform
 
 
 # -------------------------------------------------------------------
 # Core decoupled pipeline
 # -------------------------------------------------------------------
-class TransformChain(torch.nn.Module):
+class TransformChain(Transform):
     """
         Pipeline for chaining multiple transformations together for ONE tensor stream.
     :w
@@ -26,12 +27,11 @@ class TransformChain(torch.nn.Module):
     transforms: ModuleList
     input_shape: tuple[int, ...] | Size
     transformed_shape: tuple[int, ...] | Size | None
-    fitted: torch.Tensor
 
     def __init__(
         self,
         transform_settings: Sequence[TransformSettings] | ModuleList,
-        input_shape: Sequence[int] | Size,
+        input_shape: Sequence[int] | Size | torch.Tensor,
     ) -> None:
         """
         Initialize the pipeline with a sequence of TransformSettings and an input shape.
@@ -46,7 +46,7 @@ class TransformChain(torch.nn.Module):
         Raises:
             ValueError: If input_shape or transform_settings fail Pydantic validation.
         """
-        super().__init__()
+        super().__init__(input_shape=input_shape)
         # Validate inputs
 
         # Convert input_shape to a tuple of ints
@@ -54,13 +54,11 @@ class TransformChain(torch.nn.Module):
         # Initialize transforms (pure function call, imported from elsewhere)
         # initialize_transforms returns a torch.nn.ModuleList of instantiated transform modules
         if not isinstance(transform_settings, ModuleList):
-            self.transforms = build_transforms(transform_settings, input_shape=input_shape)
+            self.transforms = build_transforms(transform_settings, input_shape)
         else:
             self.transforms = transform_settings
 
-        self.input_shape = input_shape
         self.transformed_shape = None
-        self.register_buffer("fitted", torch.zeros(1, requires_grad=False))
 
     def fit(self, x: Tensor) -> None:
         """
@@ -87,8 +85,8 @@ class TransformChain(torch.nn.Module):
                 x = transform(x)
 
         # Mark as fitted and store the shape after all transforms
-        self.fitted = torch.ones(1, requires_grad=False)
-        self.transformed_shape = tuple(x.shape[1:])
+        self.fitted = True
+        self.transformed_shape = tuple(x.shape)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -148,12 +146,12 @@ class TransformChain(torch.nn.Module):
 
 
 def warn_unfit_pipeline() -> None:
-    error = "Pipeline must be fitted before calling inverse_transform."
+    error = "Transform Chain called before fit."
     logger.warning(error)
 
 
 def build_transforms(
-    transform_seq: Sequence[TransformSettings], input_shape: tuple[int, ...] | None = None
+    transform_seq: Sequence[TransformSettings], input_shape: tuple[int, ...]
 ) -> ModuleList:
     """Initialize the transforms in the pipeline and provide shape information to each transform.
 
@@ -167,9 +165,8 @@ def build_transforms(
     dummy_input = torch.zeros((1, *input_shape))
     module_list = ModuleList()
     for transform in transform_seq:
-        module = init_class(transform, input_shape=input_shape)
+        module = init_class(transform, input_shape=dummy_input.shape)
         dummy_input = module(dummy_input)
         module_list.append(module)
-        input_shape = dummy_input.shape[1:]
 
     return module_list
