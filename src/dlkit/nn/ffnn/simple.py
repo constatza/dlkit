@@ -23,7 +23,7 @@ class FeedForwardNN(nn.Module):
         feature_size = shape["features"][0]
         targets_size = shape["targets"][0]
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(feature_size, layers[0]))
+        self.embedding_layer = nn.Linear(feature_size, layers[0])
 
         for i in range(self.num_layers - 1):
             self.layers.append(
@@ -39,13 +39,13 @@ class FeedForwardNN(nn.Module):
                 )
             )
 
-        self.layers.append(nn.Linear(layers[-1], targets_size))
+        self.regression_layer = nn.Linear(layers[-1], targets_size)
 
     def forward(self, x):
-        x = self.layers[0](x)
-        for layer in self.layers[1:-1]:
-            x = self.activation(layer(x))
-        x = self.layers[-1](x)
+        x = self.embedding_layer(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.regression_layer(x)
         return x
 
 

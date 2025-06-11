@@ -1,27 +1,24 @@
 import abc
 
-from lightning.pytorch import LightningModule
+from torch import nn
 
 
-class CAE(LightningModule):
-	def __init__(self):
-		super().__init__()
-		self.save_hyperparameters(ignore=['activation'])
+class CAE(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-	@abc.abstractmethod
-	def encode(self, x):
-		pass
+    @abc.abstractmethod
+    def encode(self, *args, **kwargs): ...
 
-	@abc.abstractmethod
-	def decode(self, x):
-		pass
+    @abc.abstractmethod
+    def decode(self, *args, **kwargs): ...
 
-	def forward(self, x):
-		encoding = self.encode(x)
-		return self.decode(encoding)
+    def forward(self, x):
+        encoding = self.encode(x)
+        return self.decode(encoding)
 
-	def predict_step(self, batch, batch_idx):
-		x = batch[0]
-		latent = self.encode(x)
-		y = self.decode(latent)
-		return {'predictions': y.detach(), 'latent': latent.detach()}
+    def predict_step(self, batch, batch_idx):
+        x = batch[0]
+        latent = self.encode(x)
+        y = self.decode(latent)
+        return {"predictions": y.detach(), "latent": latent.detach()}
