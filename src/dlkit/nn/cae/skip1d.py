@@ -6,7 +6,7 @@ from torch import nn
 from dlkit.datatypes.dataset import Shape
 from dlkit.datatypes.networks import NormalizerName
 from dlkit.nn.cae.base import CAE
-from dlkit.nn.encoder.skip import SkipEncoder1d
+from dlkit.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
 from dlkit.nn.encoder.latent import (
     VectorToTensorBlock,
     TensorToVectorBlock,
@@ -37,11 +37,16 @@ class SkipCAE1d(CAE):
         transpose: bool = False,
     ):
         super().__init__()
-        self.save_hyperparameters(
-            ignore=["activation"],
-        )
-
+        self.shape = shape
+        self.latent_channels = latent_channels
+        self.latent_width = latent_width
+        self.latent_size = latent_size
+        self.num_layers = num_layers
+        self.kernel_size = kernel_size
+        self.normalize = normalize
+        self.dropout = dropout
         self.activation = activation
+
         initial_channels = shape.features[0]
         initial_width = shape.features[1]
 
@@ -66,16 +71,13 @@ class SkipCAE1d(CAE):
 
         # Instantiate latent decoder and feature decoder
         self.latent_to_feature = VectorToTensorBlock(latent_size, (channels[-1], timesteps[-1]))
-        self.decoder = SkipEncoder1d(
+        self.decoder = SkipDecoder1d(
             channels[::-1],
             timesteps[::-1],
             kernel_size=kernel_size,
             normalize=normalize,
             activation=activation,
             dropout=dropout,
-        )
-        self.smoothing_layer = nn.Sequential(
-            nn.Conv1d(channels[0], channels[0], kernel_size=kernel_size, padding="same"),
         )
 
     def encode(self, x):
@@ -85,4 +87,4 @@ class SkipCAE1d(CAE):
     def decode(self, x):
         x = self.latent_to_feature(x)
         x = self.decoder(x)
-        return self.smoothing_layer(x)
+        return x

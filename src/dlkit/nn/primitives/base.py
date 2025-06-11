@@ -37,9 +37,10 @@ class PipelineNetwork(LightningModule):
 
         self.model = init_class(settings)
         self.datamodule = None
-        self.loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = init_class(
-            self.settings.loss_function
-        )
+
+        self.loss_function: Callable[[torch.Tensor, torch.Tensor, ...], torch.Tensor] = getattr(
+            self.model, "loss_function", None
+        ) or init_class(self.settings.loss_function)
         self.val_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
         self.test_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
         self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
@@ -86,16 +87,18 @@ class PipelineNetwork(LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
+        y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
-        loss = self.loss_function(y_hat, y_true)
+        loss = self.loss_function(y_hat, y_true, *rest)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
+        y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
-        val_loss = self.loss_function(y_hat, y_true)
+        val_loss = self.loss_function(y_hat, y_true, *rest)
         batch_values = self.val_metrics(y_hat, y_true)
         self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log_dict(batch_values, on_step=False, on_epoch=True)
@@ -107,8 +110,9 @@ class PipelineNetwork(LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
+        y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
-        loss = self.loss_function(y_hat, y_true)
+        loss = self.loss_function(y_hat, y_true, *rest)
         batch_values = self.test_metrics(y_hat, y_true)
         self.log_dict(batch_values, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -182,3 +186,11 @@ class PipelineNetwork(LightningModule):
         hparams = data.get("hyper_parameters") or data["hparams"]
         settings = ModelSettings.model_validate(hparams)
         return super().load_from_checkpoint(ckpt_path, settings=settings, **kwargs)
+
+
+def split_prediction_from_sequence(
+    predictions: Sequence[torch.Tensor],
+) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+    if isinstance(predictions, torch.Tensor):
+        return predictions, ()
+    return predictions[0], tuple(pred for pred in predictions[1:])

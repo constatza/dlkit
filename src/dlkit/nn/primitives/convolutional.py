@@ -54,10 +54,10 @@ class ConvolutionBlock1d(nn.Module):
         self.out_timesteps = output_size(in_timesteps, kernel_size, stride, padding)
 
     def forward(self, x):
-        x = self.dropout(x)
         x = self.norm(x)
         x = self.conv1(x)
         x = self.activation(x)
+        x = self.dropout(x)
         return x
 
 
