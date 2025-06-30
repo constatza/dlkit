@@ -41,14 +41,14 @@ def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = No
         ) as run:
             run_id = run.info.run_id
             mlflow.pytorch.autolog(log_models=False)
-            mlflow.log_dict(settings.model_dump(), SETTINGS_FILENAME)
+            mlflow.log_dict(settings.model_dump(exclude_none=True), SETTINGS_FILENAME)
+            mlflow.log_params(settings.MODEL.model_dump(exclude_none=True))
 
             training_state = train_simple(settings, datamodule=datamodule)
             model = training_state.model
             datamodule: InMemoryModule = training_state.datamodule
 
             mlflow.log_dict(datamodule.idx_split.model_dump(), IDX_SPLIT_FILENAME)
-            mlflow.log_params(model.hparams)
             mlflow.models.set_model(model)
 
             # Log the model
@@ -56,11 +56,6 @@ def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = No
             log_mlflow_dataset(features, settings.PATHS.features.as_uri())
             log_mlflow_dataset(targets, settings.PATHS.targets.as_uri())
 
-            # TODO: Add signature in a generic way
-            # signature = mlflow.models.infer_signature(
-            #     datamodule.dataset.train[0][0].cpu().numpy(),
-            #     datamodule.dataset.train[0][1].cpu().numpy(),
-            # )
             mlflow.pytorch.log_model(
                 model,
                 name=settings.MODEL.name.split(".")[-1],
