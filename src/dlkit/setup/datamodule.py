@@ -1,7 +1,7 @@
 from dlkit.datamodules import InMemoryModule
 from dlkit.utils.split import get_or_create_idx_split
 from dlkit.settings import DataloaderSettings, DataModuleSettings, PathSettings
-from dlkit.settings.datamodule_settings import DatasetSettings
+from dlkit.settings.dataset import DatasetSettings
 from dlkit.utils.loading import init_class
 
 
@@ -22,7 +22,7 @@ def build_datamodule(
     Returns:
         LightningDataModule: The LightningDataModule for the dataset.
     """
-    dataset = init_class(dataset_settings, **paths.model_dump())
+    dataset = init_class(dataset_settings)
 
     idx_split = get_or_create_idx_split(
         n=len(dataset),

@@ -1,8 +1,8 @@
-from asyncio import Protocol
+from typing import Protocol
 from pathlib import Path
 
 import torch
-from numpy import load
+from dlkit.io import load_array
 from dlkit.datatypes.dataset import Shape
 from .base import BaseDataset
 
@@ -30,19 +30,20 @@ class NumpyDataset(BaseDataset):
         dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__(features, targets)
-        features_np = load(str(features))
-        self.features = torch.from_numpy(features_np).type(dtype)
+        self.features = load_array(features, dtype=dtype)
         if targets is not None:
-            targets_np = load(str(targets))
-            self.targets = torch.from_numpy(targets_np).type(dtype)
+            self.targets = load_array(targets, dtype=dtype)
         else:
             self.targets = self.features
 
     def __len__(self) -> int:
         return self.features.size(0)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.features[idx], self.targets[idx]
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        return {
+            "features": self.features[idx],
+            "targets": self.targets[idx],
+        }
 
     @property
     def shape(self) -> Shape:

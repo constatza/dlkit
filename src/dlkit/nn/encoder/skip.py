@@ -44,7 +44,7 @@ class SkipEncoder1d(nn.Module):
                         kernel_size=kernel_size,
                         padding="same",
                         normalize=normalize,
-                        dilation=dilation,
+                        dilation=i + 1,
                         activation=activation,
                         dropout=dropout,
                     ),

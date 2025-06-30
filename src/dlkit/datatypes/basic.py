@@ -8,6 +8,8 @@ class BasicTypeSettings(BaseModel):
         frozen=True,
         extra="forbid",
         validate_assignment=True,
+        validate_by_alias=True,
+        validate_by_name=True,
     )
 
 

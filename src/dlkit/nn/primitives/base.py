@@ -1,6 +1,7 @@
-from collections.abc import Callable, Sequence
-
 import torch
+from collections.abc import Callable, Sequence
+from typing import Self
+
 from lightning import LightningModule, LightningDataModule
 from loguru import logger
 
@@ -45,7 +46,8 @@ class PipelineNetwork(LightningModule):
         self.test_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
         self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
 
-    def forward(self, x: torch.Tensor, apply_target_inverse_chain=False) -> torch.Tensor:
+    def forward(self, apply_target_inverse_chain=False, **kwargs) -> torch.Tensor:
+        x = kwargs.get("features", kwargs.get("x"))
         x = self.features_chain(x)
         x = self.model(x)
         if apply_target_inverse_chain:
@@ -85,8 +87,8 @@ class PipelineNetwork(LightningModule):
         logger.warning("Unknown data type in train loader.")
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
+        y = batch.pop("targets")
+        y_hat = self(**batch)
         y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
         loss = self.loss_function(y_hat, y_true, *rest)
@@ -94,7 +96,8 @@ class PipelineNetwork(LightningModule):
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        y = batch.pop("targets")
+
         y_hat = self.forward(x)
         y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
@@ -108,7 +111,7 @@ class PipelineNetwork(LightningModule):
         self.val_metrics.reset()  # Required when using multiple metrics and assigning self.val_metrics to a variable
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, y = batch["features"], batch["targets"]
         y_hat = self.forward(x)
         y_hat, rest = split_prediction_from_sequence(y_hat)
         y_true = self.targets_chain(y)
@@ -135,7 +138,7 @@ class PipelineNetwork(LightningModule):
         Returns:
             The predictions from the model.
         """
-        x = batch[0]
+        x = batch["features"]
         x = self.features_chain(x)
 
         if hasattr(self.model, "predict_step"):
@@ -180,7 +183,7 @@ class PipelineNetwork(LightningModule):
         return metrics
 
     @classmethod
-    def load_from_checkpoint(cls, ckpt_path: str, **kwargs):
+    def load_from_checkpoint(cls, ckpt_path: str, **kwargs) -> Self:
         """Load the model from a checkpoint."""
         data = torch.load(ckpt_path)
         hparams = data.get("hyper_parameters") or data["hparams"]

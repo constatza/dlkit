@@ -1,7 +1,7 @@
 from abc import abstractmethod
-from pathlib import Path
 from torch.utils.data import Dataset
 from dlkit.datatypes.dataset import Shape
+from pydantic import validate_call, FilePath
 
 
 class BaseDataset(Dataset):
@@ -11,10 +11,11 @@ class BaseDataset(Dataset):
     for getting the length of the dataset and retrieving items by index.
     """
 
+    @validate_call
     def __init__(
         self,
-        features: Path,
-        targets: Path | None = None,
+        features: FilePath,
+        targets: FilePath | None = None,
     ) -> None:
         """Initializes a new instance of the BaseDataset class.
 
