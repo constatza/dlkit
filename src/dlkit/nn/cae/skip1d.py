@@ -35,6 +35,7 @@ class SkipCAE1d(CAE):
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         transpose: bool = False,
+        dilation: int = 1,
     ):
         super().__init__()
         self.shape = shape
@@ -46,6 +47,8 @@ class SkipCAE1d(CAE):
         self.normalize = normalize
         self.dropout = dropout
         self.activation = activation
+        self.transpose = transpose
+        self.dilation = dilation
 
         initial_channels = shape.features[0]
         initial_width = shape.features[1]
@@ -62,6 +65,7 @@ class SkipCAE1d(CAE):
             normalize=normalize,
             activation=activation,
             dropout=dropout,
+            dilation=dilation,
         )
         if transpose:
             reduce_dim = timesteps[-1]
@@ -78,6 +82,7 @@ class SkipCAE1d(CAE):
             normalize=normalize,
             activation=activation,
             dropout=dropout,
+            dilation=dilation,
         )
 
     def encode(self, x):

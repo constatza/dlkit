@@ -9,6 +9,7 @@ from .optuna_settings import OptunaSettings, PrunerSettings, SamplerSettings
 from .paths_settings import PathSettings
 from .trainer_settings import TrainerSettings
 from .run_settings import RunSettings, RunMode
+from .dataset import DatasetSettings, GraphDatasetSettings
 
 __all__ = [
     "Settings",
@@ -27,4 +28,6 @@ __all__ = [
     "TrainerSettings",
     "RunSettings",
     "RunMode",
+    "DatasetSettings",
+    "GraphDatasetSettings",
 ]

@@ -8,7 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 
-def kwargs_compatible_with(cls: type, exclude: Sequence[str] = (), **kwargs) -> dict[str, Any]:
+def kwargs_compatible_with(
+    cls: type, exclude: Sequence[str] = (), **kwargs
+) -> dict[str, Any]:
     """Convert a dictionary to a format compatible with the constructor of a given class or function signature.
 
     Args:

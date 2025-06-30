@@ -7,8 +7,10 @@ from .basic import BasicTypeSettings
 class Shape(BasicTypeSettings):
     """Shape of a tensor or array.""" ""
 
-    features: tuple[int, ...] | None = Field(default=None)
-    targets: tuple[int, ...] | None = Field(default=None)
+    features: tuple[int, ...] | None = Field(default=None, alias="x")
+    targets: tuple[int, ...] | None = Field(default=None, alias="y")
+    edge_index: tuple[int, ...] | None = Field(default=None, alias="adjacency_matrix")
+    edge_attr: tuple[int, ...] | None = Field(default=None)
 
 
 @define

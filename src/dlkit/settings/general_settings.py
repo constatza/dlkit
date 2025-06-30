@@ -1,7 +1,8 @@
 from pydantic import Field, model_validator
 
 from .base_settings import BaseSettings
-from .datamodule_settings import DataModuleSettings, DatasetSettings, DataloaderSettings
+from .datamodule_settings import DataModuleSettings, DataloaderSettings
+from .dataset import DatasetSettings
 from .mlflow_settings import MLflowSettings
 from .model_settings import ModelSettings
 from .optuna_settings import OptunaSettings
@@ -30,11 +31,17 @@ class Settings(BaseSettings):
     MODEL: ModelSettings
     PATHS: PathSettings
     MLFLOW: MLflowSettings
-    OPTUNA: OptunaSettings = Field(default=OptunaSettings(), description="Optuna settings.")
-    TRAINER: TrainerSettings = Field(default=TrainerSettings(), description="Trainer settings.")
+    OPTUNA: OptunaSettings = Field(
+        default=OptunaSettings(), description="Optuna settings."
+    )
+    TRAINER: TrainerSettings = Field(
+        default=TrainerSettings(), description="Trainer settings."
+    )
     DATAMODULE: DataModuleSettings = Field(..., description="Datamodule settings.")
     DATASET: DatasetSettings = Field(..., description="Dataset settings.")
-    DATALOADER: DataloaderSettings = Field(DataloaderSettings(), description="Dataloader settings.")
+    DATALOADER: DataloaderSettings = Field(
+        DataloaderSettings(), description="Dataloader settings."
+    )
 
     @model_validator(mode="after")
     def check_checkpoint_for_inference(self):

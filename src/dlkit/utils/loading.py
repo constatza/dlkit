@@ -100,9 +100,9 @@ def init_class[T](
     """Initialize a class instance from ClassSettings.
 
     Args:
-            cls_settings:
-            settings_path:
-            **kwargs:
+            cls_settings (ClassSettings): The settings for the class to be initialized.
+            settings_path (FilePath | None): The path to the settings file.
+            **kwargs: Additional keyword arguments to pass to the class constructor.
 
     Returns:
             An instance of the class specified in cls_settings.

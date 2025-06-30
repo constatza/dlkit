@@ -19,12 +19,15 @@ class BaseSettings(BaseModel):
         frozen=True,
         validate_default=True,
         extra="allow",
+        validate_by_alias=True,
     )
 
     def to_dict_compatible_with(
         self, cls: type, exclude: tuple[str, ...] = (), **kwargs
     ) -> dict[str, Any]:
-        return kwargs_compatible_with(cls, exclude=exclude, **kwargs, **self.model_dump())
+        return kwargs_compatible_with(
+            cls, exclude=exclude, **kwargs, **self.model_dump()
+        )
 
 
 class ClassSettings[T](BaseSettings):
@@ -67,7 +70,9 @@ class HyperParameterSettings(BaseSettings):
 
     @staticmethod
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def get_optuna_suggestion(trial: Trial, field: str, value: Hyperparameter | Any) -> Any:
+    def get_optuna_suggestion(
+        trial: Trial, field: str, value: Hyperparameter | Any
+    ) -> Any:
         """Get an Optuna suggestion based on the type of hyperparameter.
 
         Args:
@@ -77,10 +82,14 @@ class HyperParameterSettings(BaseSettings):
         Returns:
             CategoricalChoiceType: The suggested value for the hyperparameter.
         """
-        if isinstance(value, CategoricalDistribution) or isinstance(value, BoolDistribution):
+        if isinstance(value, CategoricalDistribution) or isinstance(
+            value, BoolDistribution
+        ):
             return trial.suggest_categorical(field, choices=value.choices)
         if isinstance(value, IntDistribution):
-            return trial.suggest_int(field, low=value.low, high=value.high, step=value.step)
+            return trial.suggest_int(
+                field, low=value.low, high=value.high, step=value.step
+            )
         if isinstance(value, FloatDistribution):
             return trial.suggest_float(
                 field, low=value.low, high=value.high, step=value.step, log=value.log
