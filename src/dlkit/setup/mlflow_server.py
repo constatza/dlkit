@@ -1,6 +1,7 @@
 import os
-from signal import  SIGTERM
-from subprocess import  Popen
+from signal import SIGTERM
+import subprocess
+from subprocess import Popen
 from time import sleep
 
 import requests
@@ -10,6 +11,8 @@ from pydantic import validate_call
 
 from dlkit.settings import MLflowServerSettings
 from dlkit.utils.system_utils import mkdir_for_local
+
+WINDOWS_NEW_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 
 
 class ServerProcess:
@@ -46,20 +49,24 @@ class ServerProcess:
         """Spawn the subprocess as a new process group."""
         if self.process is not None:
             raise RuntimeError("Server already started.")
-        kwargs = {}
-        # UNIX: new session → new process group; Windows: CREATE_NEW_PROCESS_GROUP
-        if os.name == "posix":
-            kwargs["preexec_fn"] = os.setsid
-        else:
-            from signal import CREATE_NEW_PROCESS_GROUP
-            kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
+        popen_kwargs = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "shell": False,
+        }
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = WINDOWS_NEW_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
         # Start the server
         if _is_server_running(self._config.host, self._config.port):
-            logger.info(f"Server already running at {self._config.host}:{self._config.port}")
+            logger.info(
+                f"Server already running at {self._config.scheme}://{self._config.host}:{self._config.port}"
+            )
             self.is_active = False
             return
-        self.process = start_server(self._config, **kwargs)
+        self.process = start_server(self._config, **popen_kwargs)
         logger.info(f"Started server PID={self.process.pid}")
 
     def stop(self) -> None:
@@ -67,20 +74,20 @@ class ServerProcess:
         if not self.process:
             return
         proc: Popen = self.process
-        print(f"Stopping server PID={proc.pid}...")
         try:
+            print(f"Terminating server PID={proc.pid}...")
             # Graceful
             if os.name == "posix":
                 os.killpg(os.getpgid(proc.pid), SIGTERM)
             else:
                 from signal import CTRL_BREAK_EVENT
+
                 proc.send_signal(CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
             proc.wait(timeout=self._config.shutdown_timeout)
         except Exception as e:
             # Force‐kill
             proc.kill()
-            proc.wait()
-            logger.error("Unexpected error .Server process killed.")
+            logger.error(e)
             raise e
         finally:
             self.process = None
@@ -126,7 +133,7 @@ def start_server(config: MLflowServerSettings, **kwargs) -> Popen:
         mkdir_for_local(config.artifacts_destination)
 
     # Start in a new session on Unix
-    mlflow_process = Popen(config.command, shell=False, **kwargs)
+    mlflow_process = Popen(config.command, **kwargs)
     logger.info(f"Backend store URI: {config.backend_store_uri}")
     logger.info(f"Artifacts destination: {config.artifacts_destination}")
     return mlflow_process
