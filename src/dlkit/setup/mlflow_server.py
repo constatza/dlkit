@@ -1,6 +1,6 @@
 import os
-from signal import  SIGTERM
-from subprocess import  Popen
+from signal import SIGTERM
+from subprocess import Popen
 from time import sleep
 
 import requests
@@ -50,9 +50,6 @@ class ServerProcess:
         # UNIX: new session → new process group; Windows: CREATE_NEW_PROCESS_GROUP
         if os.name == "posix":
             kwargs["preexec_fn"] = os.setsid
-        else:
-            from signal import CREATE_NEW_PROCESS_GROUP
-            kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
         # Start the server
         if _is_server_running(self._config.host, self._config.port):
@@ -74,6 +71,7 @@ class ServerProcess:
                 os.killpg(os.getpgid(proc.pid), SIGTERM)
             else:
                 from signal import CTRL_BREAK_EVENT
+
                 proc.send_signal(CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
             proc.wait(timeout=self._config.shutdown_timeout)
         except Exception as e:
