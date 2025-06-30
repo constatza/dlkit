@@ -4,19 +4,20 @@ from lightning.pytorch import LightningDataModule
 
 from dlkit.run.mlflow_training import train_mlflow
 from dlkit.settings import Settings
+from loguru import logger
 
 
 def objective_mlflow(trial, settings: Settings, datamodule: LightningDataModule) -> float:
     trial.set_user_attr("mlflow_run_id", mlflow.active_run().info.run_id)
+    logger.info(f"Optuna trial number:{trial.number}")
 
     # Train the model and log metrics
-    model_settings = settings.MODEL.resolve(trial)
+    trial_model_settings = settings.MODEL.resolve(trial)
     training_state = train_mlflow(
-        settings.model_copy(update={"MODEL": model_settings}),
+        settings.model_copy(update={"MODEL": trial_model_settings}),
         datamodule=datamodule,
     )
     trainer = training_state.trainer
-    # trainer.test(training_state.model, datamodule=datamodule)
     test_loss = trainer.logged_metrics.get("test_loss")
 
     if test_loss is not None:
