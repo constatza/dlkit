@@ -10,6 +10,7 @@ from dlkit.setup.datamodule import build_datamodule
 from dlkit.setup.mlflow_client import initialize_mlflow_client
 from dlkit.utils.loading import init_class
 from dlkit.utils.optuna_utils import objective_mlflow
+from dlkit.settings import ModelSettings
 
 BEST_PARAMS_FILENAME = "best_params.json"
 
@@ -46,6 +47,13 @@ def train_optuna(settings: Settings) -> None:
                 pruner=pruner,
                 study_name=f"study_{experiment_id}",
             )
+            settings = settings.model_copy(
+                update={
+                    "MODEL": ModelSettings(
+                        **settings.MODEL.model_copy(update=settings.OPTUNA.model).model_dump()
+                    )
+                }
+            )
             obj_function = partial(objective_mlflow, settings=settings, datamodule=datamodule)
             study.optimize(
                 obj_function,
@@ -53,7 +61,7 @@ def train_optuna(settings: Settings) -> None:
             )
 
             mlflow.log_params(study.best_trial.params)
-            mlflow.log_metric("best_value", study.best_trial.value)
+            mlflow.log_metric("objective_best_value", study.best_trial.value)
             mlflow.log_dict(study.best_trial.params, BEST_PARAMS_FILENAME)
             logger.info("Optimization completed.")
             logger.info(f"Best trial: {study.best_trial.number}")
