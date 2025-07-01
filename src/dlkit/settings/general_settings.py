@@ -1,6 +1,6 @@
 from pydantic import Field, model_validator
 
-from .base_settings import BaseSettings
+from .base_settings import BasicSettings
 from .datamodule_settings import DataModuleSettings, DataloaderSettings
 from .dataset import DatasetSettings
 from .mlflow_settings import MLflowSettings
@@ -11,7 +11,7 @@ from .trainer_settings import TrainerSettings
 from .run_settings import RunSettings, RunMode
 
 
-class Settings(BaseSettings):
+class Settings(BasicSettings):
     """Configuration settings for DLkit, encapsulating various components such as
     model, paths, MLflow, Optuna, trainer, and data settings.
 
@@ -27,20 +27,22 @@ class Settings(BaseSettings):
         DATALOADER (DataloaderSettings): Configuration for dataloader settings.
     """
 
-    RUN: RunSettings = Field(default=RunSettings(), description="Run settings.")
     MODEL: ModelSettings
     PATHS: PathSettings
-    MLFLOW: MLflowSettings
-    OPTUNA: OptunaSettings = Field(
-        default=OptunaSettings(), description="Optuna settings."
-    )
+    RUN: RunSettings = Field(default_factory=RunSettings, description="Run settings.")
+    MLFLOW: MLflowSettings = Field(default_factory=MLflowSettings, description="MLflow settings.")
+    OPTUNA: OptunaSettings = Field(default_factory=OptunaSettings, description="Optuna settings.")
     TRAINER: TrainerSettings = Field(
-        default=TrainerSettings(), description="Trainer settings."
+        default_factory=TrainerSettings, description="Lightning Trainer settings."
     )
-    DATAMODULE: DataModuleSettings = Field(..., description="Datamodule settings.")
-    DATASET: DatasetSettings = Field(..., description="Dataset settings.")
+    DATAMODULE: DataModuleSettings = Field(
+        default_factory=DataModuleSettings, description="Lightning Datamodule settings."
+    )
+    DATASET: DatasetSettings = Field(
+        default_factory=DatasetSettings, description="Dataset settings."
+    )
     DATALOADER: DataloaderSettings = Field(
-        DataloaderSettings(), description="Dataloader settings."
+        default_factory=DataloaderSettings, description="Dataloader settings."
     )
 
     @model_validator(mode="after")
@@ -48,7 +50,7 @@ class Settings(BaseSettings):
         """
         Ensure that when running in INFERENCE mode, checkpoint_path is provided.
         """
-        if self.RUN.mode == RunMode.INFERENCE and not self.PATHS.checkpoint:
+        if self.RUN.mode == RunMode.INFERENCE and not self.MODEL.checkpoint:
             raise ValueError(
                 f"{self.PATHS.settings}: `checkpoint` path must be provided when running in inference mode."
             )

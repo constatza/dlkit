@@ -4,7 +4,7 @@ from optuna.samplers import BaseSampler
 
 from pydantic import Field
 
-from .base_settings import BaseSettings
+from .base_settings import BasicSettings
 from .base_settings import ClassSettings
 
 
@@ -29,7 +29,7 @@ class SamplerSettings(ClassSettings[BaseSampler]):
     seed: int | None = Field(default=None, description="Optional random seed for reproducibility.")
 
 
-class OptunaSettings(BaseSettings):
+class OptunaSettings(BasicSettings):
     n_trials: int = Field(
         default=10, description="Number of trials for hyperparameter optimization."
     )
