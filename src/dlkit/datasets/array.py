@@ -1,54 +1,44 @@
-from typing import Protocol
 from pathlib import Path
 
 import torch
-from dlkit.io import load_array
 from dlkit.datatypes.dataset import Shape
 from .base import BaseDataset
+from typing import TypedDict
 
 
-class ArrayDataset(Protocol):
-    """Protocol for a dataset that loads from numpy file paths or wraps existing tensors."""
+class SupervisedData(TypedDict):
+    """Data class for supervised datasets."""
 
-    features: torch.Tensor
-    targets: torch.Tensor
-    shape: Shape
+    x: torch.Tensor
+    y: torch.Tensor
 
 
-class NumpyDataset(BaseDataset):
+class SupervisedArrayDataset(BaseDataset):
     """Flexible dataset that loads from numpy file paths or wraps existing tensors.
 
     Args:
-        features: Path to numpy file or a torch.Tensor of features.
-        targets: Path to numpy file or a torch.Tensor of targets.
+        x: Path to numpy file or a torch.Tensor of x.
+        y: Path to numpy file or a torch.Tensor of targets.
     """
 
     def __init__(
         self,
-        features: Path,
-        targets: Path | None = None,
+        x: Path,
+        y: Path | None = None,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(features, targets)
-        self.features = load_array(features, dtype=dtype)
-        if targets is not None:
-            self.targets = load_array(targets, dtype=dtype)
-        else:
-            self.targets = self.features
+        super().__init__(x, y or x)
+        self.x = self.tensors[0]
+        self.y = self.tensors[1]
 
-    def __len__(self) -> int:
-        return self.features.size(0)
-
-    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        return {
-            "features": self.features[idx],
-            "targets": self.targets[idx],
-        }
+    def __getitem__(self, idx: int) -> SupervisedData:
+        x, y = super().__getitem__(idx)
+        return SupervisedData(x=x, y=y)
 
     @property
     def shape(self) -> Shape:
         """Returns the shape of the dataset."""
         return Shape(
-            features=self.features.shape[1:],
-            targets=self.targets.shape[1:],
+            features=self.x.shape[1:],
+            targets=self.y.shape[1:],
         )

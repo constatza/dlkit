@@ -10,7 +10,7 @@ from dlkit.utils.split import generate_split
 
 @pytest.fixture
 def ordered_dataset() -> TensorDataset:
-    """Dataset with features [[0], [1], ..., [99]] and dummy targets."""
+    """Dataset with x [[0], [1], ..., [99]] and dummy targets."""
     data = torch.arange(100).unsqueeze(1)  # Shape: (100, 1)
     targets = torch.zeros_like(data)  # Shape: (100, 1)
     return TensorDataset(data, targets)

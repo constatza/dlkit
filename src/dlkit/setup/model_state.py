@@ -8,6 +8,7 @@ from dlkit.settings import Settings, RunMode
 from dlkit.setup.datamodule import build_datamodule
 from dlkit.setup.model import build_model
 from dlkit.setup.trainer import build_trainer
+from dlkit.utils.loading import init_class
 
 
 def build_model_state(
@@ -37,18 +38,17 @@ def build_model_state(
         build_trainer(settings.TRAINER) if settings.RUN.mode is not RunMode.INFERENCE else None
     )
 
+    dataset = init_class(settings.DATASET)
+
     datamodule = datamodule or build_datamodule(
-        settings.DATAMODULE,
-        settings.DATASET,
-        settings.DATALOADER,
-        settings.PATHS,
+        settings=settings.DATAMODULE,
+        dataset=dataset,
+        dataloader_settings=settings.DATALOADER,
+        paths=settings.PATHS,
     )
 
-    model = build_model(
-        settings=settings.MODEL,
-        dataset=datamodule.dataset.raw,
-    )
-    checkpoint = checkpoint or settings.PATHS.checkpoint
+    model = build_model(settings=settings.MODEL, dataset=dataset)
+    checkpoint = checkpoint or settings.MODEL.checkpoint
     if checkpoint and (settings.RUN.mode is RunMode.INFERENCE):
         logger.info(f"Loading model from checkpoint: {checkpoint}")
         model = model.__class__.load_from_checkpoint(checkpoint)

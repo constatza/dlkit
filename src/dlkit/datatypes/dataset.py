@@ -1,16 +1,19 @@
 from attrs import define, field
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 from .basic import BasicTypeSettings
+from torch import Size
 
 
 class Shape(BasicTypeSettings):
     """Shape of a tensor or array.""" ""
 
-    features: tuple[int, ...] | None = Field(default=None, alias="x")
-    targets: tuple[int, ...] | None = Field(default=None, alias="y")
-    edge_index: tuple[int, ...] | None = Field(default=None, alias="adjacency_matrix")
-    edge_attr: tuple[int, ...] | None = Field(default=None)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    x: tuple[int, ...] | Size | None = Field(default=None, alias="features")
+    y: tuple[int, ...] | Size | None = Field(default=None, alias="targets")
+    edge_index: tuple[int, ...] | Size | None = Field(default=None, alias="adjacency_matrix")
+    edge_attr: tuple[int, ...] | Size | None = Field(default=None)
 
 
 @define

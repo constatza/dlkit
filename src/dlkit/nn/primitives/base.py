@@ -8,7 +8,11 @@ from loguru import logger
 from dlkit.settings import ModelSettings, OptimizerSettings, SchedulerSettings
 from dlkit.transforms.chain import TransformChain
 from dlkit.utils.loading import init_class
-from dlkit.utils.torch_utils import dataloader_to_tensor
+from dlkit.utils.torch_utils import (
+    dataloader_to_xy,
+    xy_from_batch,
+    split_first_from_sequence,
+)
 from dlkit.utils.general import get_name
 from torchmetrics import MetricCollection
 
@@ -28,10 +32,10 @@ class PipelineNetwork(LightningModule):
         super().save_hyperparameters(settings.model_dump(exclude_none=True, exclude_unset=True))
         self.settings = settings
         self.features_chain = TransformChain(
-            settings.feature_transforms, input_shape=settings.shape.features
+            settings.feature_transforms, input_shape=settings.shape.x
         )
         self.targets_chain = (
-            TransformChain(settings.target_transforms, input_shape=settings.shape.targets)
+            TransformChain(settings.target_transforms, input_shape=settings.shape.y)
             if not settings.is_autoencoder
             else self.features_chain
         )
@@ -44,10 +48,10 @@ class PipelineNetwork(LightningModule):
         ) or init_class(self.settings.loss_function)
         self.val_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
         self.test_metrics = MetricCollection({m.name: init_class(m) for m in self.settings.metrics})
-        self.example_input_array = torch.zeros((1, *settings.shape.features), dtype=torch.float32)
+        self.example_input_array = torch.zeros((1, *settings.shape.x), dtype=torch.float32)
 
-    def forward(self, apply_target_inverse_chain=False, **kwargs) -> torch.Tensor:
-        x = kwargs.get("features", kwargs.get("x"))
+    def forward(self, *args, apply_target_inverse_chain=False, **kwargs) -> torch.Tensor:
+        x = kwargs.get("x") or kwargs.get("x") or args[0]
         x = self.features_chain(x)
         x = self.model(x)
         if apply_target_inverse_chain:
@@ -75,7 +79,7 @@ class PipelineNetwork(LightningModule):
         self.targets_chain = self.targets_chain.to(self.device)
         # Fetch the ready train loader
         dl = self.trainer.datamodule.train_dataloader()
-        x, y = dataloader_to_tensor(dl)
+        x, y = dataloader_to_xy(dl)
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
             x = x.to(self.device)
             self.features_chain.fit(x)
@@ -87,19 +91,18 @@ class PipelineNetwork(LightningModule):
         logger.warning("Unknown data type in train loader.")
 
     def training_step(self, batch, batch_idx):
-        y = batch.pop("targets")
-        y_hat = self(**batch)
-        y_hat, rest = split_prediction_from_sequence(y_hat)
+        x, y = xy_from_batch(batch)
+        y_hat = self(x)
+        y_hat, rest = split_first_from_sequence(y_hat)
         y_true = self.targets_chain(y)
         loss = self.loss_function(y_hat, y_true, *rest)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
-        y = batch.pop("targets")
-
-        y_hat = self.forward(x)
-        y_hat, rest = split_prediction_from_sequence(y_hat)
+        x, y = xy_from_batch(batch)
+        y_hat = self(x)
+        y_hat, rest = split_first_from_sequence(y_hat)
         y_true = self.targets_chain(y)
         val_loss = self.loss_function(y_hat, y_true, *rest)
         batch_values = self.val_metrics(y_hat, y_true)
@@ -111,9 +114,9 @@ class PipelineNetwork(LightningModule):
         self.val_metrics.reset()  # Required when using multiple metrics and assigning self.val_metrics to a variable
 
     def test_step(self, batch, batch_idx):
-        x, y = batch["features"], batch["targets"]
+        x, y = xy_from_batch(batch)
         y_hat = self.forward(x)
-        y_hat, rest = split_prediction_from_sequence(y_hat)
+        y_hat, rest = split_first_from_sequence(y_hat)
         y_true = self.targets_chain(y)
         loss = self.loss_function(y_hat, y_true, *rest)
         batch_values = self.test_metrics(y_hat, y_true)
@@ -138,7 +141,7 @@ class PipelineNetwork(LightningModule):
         Returns:
             The predictions from the model.
         """
-        x = batch["features"]
+        x, _ = xy_from_batch(batch)
         x = self.features_chain(x)
 
         if hasattr(self.model, "predict_step"):
@@ -189,11 +192,3 @@ class PipelineNetwork(LightningModule):
         hparams = data.get("hyper_parameters") or data["hparams"]
         settings = ModelSettings.model_validate(hparams)
         return super().load_from_checkpoint(ckpt_path, settings=settings, **kwargs)
-
-
-def split_prediction_from_sequence(
-    predictions: Sequence[torch.Tensor],
-) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
-    if isinstance(predictions, torch.Tensor):
-        return predictions, ()
-    return predictions[0], tuple(pred for pred in predictions[1:])
