@@ -21,23 +21,23 @@ uv add git+https://github.com/constatza/dlkit
 To use the api, import the package and use the provided functions:
 
 ~~~python
-from dlkit.run import run, run_from_path
+from dlkit.run import run_from_path
 settings_path = "./config.toml"
 training_state = run_from_path(settings_path, mode="training")
 ~~~
 or with mlflow logging:
 ~~~python
-from dlkit.run import run, run_from_path
+from dlkit.run import run_from_path
 settings_path = "./config.toml"
-training_state = run(settings_path, mode="mlflow")
+training_state = run_from_path(settings_path, mode="mlflow")
 ~~~
 The configuration file should include the following sections:
 ~~~toml
 [model]
+name = "cae.SkipCAE1d"
 kernel_size = 5
 hidden_size = 32
 num_layers = 1
-scalar = 0.01
 
 [paths]
 input_dir = "./data"
@@ -46,7 +46,7 @@ features = "./data/features.npy" # required
 targets = "./data/targets.npy"
 ~~~
 
-## Running Scripts
+## Running CLI Scripts
 To execute the provided scripts, use:
 
 ### Training
@@ -86,15 +86,15 @@ scalar = {low=0.01, high=0.1}
 ~~~
 
 ### MLFlow Server
-If you want to see the MLflow GUI, when server is not auto-started from training, run
+If you want to see the MLflow GUI outside of a training session, run
 ~~~bash
 uv run server path/to/config.toml
 ~~~
-and open `http://{host}:{port}` where `host` and `port` are specified in the configuration:
+to start the server on `http://127.0.0.1:5000`. In case you want to specify the host and port, use the following configuration:
 ~~~toml
 [mlflow.server]
-host = "localhost"
-port = 5000
+host = "remote_host"
+port = 8888
 ~~~
 
 
