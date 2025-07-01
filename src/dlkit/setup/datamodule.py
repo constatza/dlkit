@@ -1,32 +1,42 @@
+from torch.utils.data import Dataset
+from types import MappingProxyType
+from lightning.pytorch import LightningDataModule
 from dlkit.datamodules import InMemoryModule
 from dlkit.utils.split import get_or_create_idx_split
-from dlkit.settings import DataloaderSettings, DataModuleSettings, PathSettings
-from dlkit.settings.dataset import DatasetSettings
+from dlkit.settings import DataloaderSettings, DataModuleSettings
+from dlkit.settings import PathSettings
 from dlkit.utils.loading import init_class
+from dlkit.datamodules import TimeSeriesDataModule, GraphDataModule
+
+dataset_map = MappingProxyType({
+    "GraphDataset": GraphDataModule,
+    "TimeSeriesDataset": TimeSeriesDataModule,
+    "InMemoryDataset": InMemoryModule,
+})
 
 
 def build_datamodule(
+    *,
     settings: DataModuleSettings,
-    dataset_settings: DatasetSettings,
+    dataset: Dataset,
     dataloader_settings: DataloaderSettings,
     paths: PathSettings,
-) -> InMemoryModule:
+) -> LightningDataModule:
     """Builds a datamodule based on the provided settings and dataset.
 
     Args:
         settings (DataModuleSettings): The settings for the datamodule.
-        dataset_settings (DatasetSettings): The settings for the dataset.
+        dataset (Dataset): The dataset to use for the datamodule.
         dataloader_settings (DataloaderSettings): The settings for the dataloader.
         paths (PathSettings): The paths for saving and loading data.
 
     Returns:
         LightningDataModule: The LightningDataModule for the dataset.
     """
-    dataset = init_class(dataset_settings)
 
     idx_split = get_or_create_idx_split(
         n=len(dataset),
-        filepath=paths.idx_split,
+        filepath=settings.idx_split_path,
         save_dir=paths.input_dir,
         test_size=settings.test_size,
         val_size=settings.val_size,

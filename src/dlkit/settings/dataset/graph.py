@@ -1,11 +1,13 @@
 from pydantic import Field
-from pydantic import FilePath
+from pydantic import FilePath, DirectoryPath
+
+from .base import DatasetSettings
 
 
-class GraphDatasetSettings:
-    features: FilePath = Field(..., description="Node features file path.", alias="x")
-    targets: FilePath | None = Field(
-        None, description="Node targets file path.", alias="y"
+class GraphDatasetSettings(DatasetSettings):
+    name: str = Field(default="GraphDataset", description="Dataset name.")
+    root: DirectoryPath | None = Field(
+        default=None, description="Root directory of the dataset.", alias="root_dir"
     )
-    edge_index: FilePath | None = Field(None, description="Edge index file path.")
-    edge_attr: FilePath | None = Field(None, description="Edge features file path.")
+    edge_index: FilePath | None = Field(default=None, description="Edge index file path.")
+    edge_attr: FilePath | None = Field(default=None, description="Edge x file path.")

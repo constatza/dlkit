@@ -29,6 +29,7 @@ dependencies = [
     "psutil>=7.0.0",
     "torchmetrics>=1.7.1",
     "pydantic-settings>=2.10.1",
+    "torch-geometric>=2.6.1",
 ]
 
 [dependency-groups]

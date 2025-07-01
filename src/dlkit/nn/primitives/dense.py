@@ -18,8 +18,8 @@ class DenseBlock(nn.Module):
         """Initializes a DenseBlock.
 
         Parameters:
-            in_features (int): Number of input features to the layer.
-            out_features (int): Number of output features from the layer.
+            in_features (int): Number of input x to the layer.
+            out_features (int): Number of output x from the layer.
             activation (Callable[[torch.Tensor], torch.Tensor], optional): Activation function to be used in the layer. Defaults to F.gelu.
         """
         super().__init__()

@@ -30,10 +30,6 @@ class InMemoryModule[Dataset_T](LightningDataModule):
         self.dataset.test = Subset(self.dataset.raw, self.idx_split.test)
         self.dataset.predict = self.dataset.raw
 
-        # self.shape = Shape(
-        #     features=self.dataset.train[0][0].shape, targets=self.dataset.train[0][1].shape
-        # )
-
     def train_dataloader(self):
         if self.dataset.train is None:
             raise RuntimeError("Call setup('fit') before setup('train')")

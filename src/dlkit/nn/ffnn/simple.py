@@ -20,8 +20,8 @@ class FeedForwardNN(nn.Module):
         super().__init__()
         self.num_layers = len(layers) - 1
         self.activation = activation
-        feature_size = shape["features"][0]
-        targets_size = shape["targets"][0]
+        feature_size = shape["x"][0]
+        targets_size = shape["y"][0]
         self.layers = nn.ModuleList()
         self.embedding_layer = nn.Linear(feature_size, layers[0])
 

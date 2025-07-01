@@ -76,7 +76,7 @@ class GraphNetwork(LightningModule):
         Training step for a batch of graph data.
 
         Args:
-            batch: A Data object containing features, edge_index, and targets.
+            batch: A Data object containing x, edge_index, and targets.
             batch_idx: Index of the batch.
         Returns:
             A dict containing the training loss.
