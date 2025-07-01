@@ -71,10 +71,10 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     shape: Shape | None = Field(default=None, description="Input shape of the model.")
 
     optimizer: OptimizerSettings = Field(
-        default=OptimizerSettings(), description="Optimizer settings."
+        default_factory=OptimizerSettings, description="Optimizer settings."
     )
     scheduler: SchedulerSettings = Field(
-        default=SchedulerSettings(), description="Scheduler settings."
+        default_factory=SchedulerSettings, description="Scheduler settings."
     )
 
     checkpoint: FilePath | None = Field(default=None, description="Path to the model checkpoint.")
@@ -86,12 +86,12 @@ class ModelSettings(HyperParameterSettings, ClassSettings[LightningModule]):
     predict: bool = Field(default=True, description="Whether to predict with the model.")
 
     loss_function: LossSettings = Field(
-        default=LossSettings(),
+        default_factory=LossSettings,
         description="Loss function settings for training and validation.",
     )
 
     feature_transforms: tuple[TransformSettings, ...] = Field(
-        default=(), description="List of transforms to apply to features."
+        default=(), description="List of transforms to apply to x."
     )
     target_transforms: tuple[TransformSettings, ...] = Field(
         default=(), description="List of transforms to apply to targets."

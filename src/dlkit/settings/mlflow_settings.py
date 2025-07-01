@@ -2,11 +2,11 @@ import os
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic.networks import AnyUrl, FileUrl
 
-from .base_settings import BaseSettings
+from .base_settings import BasicSettings
 from dlkit.utils.system_utils import recommended_gunicorn_workers
 
 
-class MLflowServerSettings(BaseSettings):
+class MLflowServerSettings(BasicSettings):
     scheme: str = Field(default="http", description="MLflow server scheme.")
     host: str = Field(default="127.0.0.1", description="MLflow server host address.")
     port: int = Field(default=5000, description="MLflow server port number.", gt=0, lt=65536)
@@ -49,7 +49,7 @@ class MLflowServerSettings(BaseSettings):
         return command
 
 
-class MLflowClientSettings(BaseSettings):
+class MLflowClientSettings(BasicSettings):
     experiment_name: str = Field(default="Experiment", description="MLflow experiment name.")
     run_name: str | None = Field(default=None, description="Name of the MLflow run.")
     tracking_uri: AnyUrl | None = Field(default=None, description="Tracking URI for MLflow.")
@@ -59,13 +59,13 @@ class MLflowClientSettings(BaseSettings):
     )
 
 
-class MLflowSettings(BaseSettings):
+class MLflowSettings(BasicSettings):
     enable: bool = Field(default=False, description="Whether to enable MLflow.")
     server: MLflowServerSettings = Field(
-        default=MLflowServerSettings(), description="MLflow server settings."
+        default_factory=MLflowServerSettings, description="MLflow server settings."
     )
     client: MLflowClientSettings = Field(
-        default=MLflowClientSettings(), description="MLflow client settings."
+        default_factory=MLflowClientSettings, description="MLflow client settings."
     )
 
     @field_validator("client", mode="after", check_fields=True)

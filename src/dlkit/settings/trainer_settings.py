@@ -4,7 +4,7 @@ from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger
 from pydantic import DirectoryPath, Field
 
-from .base_settings import BaseSettings, ClassSettings
+from .base_settings import BasicSettings, ClassSettings
 
 
 class CallbackSettings(ClassSettings[Callback]):
@@ -29,7 +29,7 @@ class LoggerSettings(ClassSettings[Logger]):
     )
 
 
-class TrainerSettings(BaseSettings):
+class TrainerSettings(BasicSettings):
     """TrainerSettings defines configuration options for training a model.
 
     Attributes:

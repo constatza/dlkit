@@ -2,7 +2,8 @@ from typing import Any, Self
 
 from optuna.distributions import CategoricalChoiceType
 from optuna.trial import Trial
-from pydantic import BaseModel, ConfigDict, validate_call
+from pydantic import ConfigDict, validate_call
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dlkit.datatypes.basic import (
     Hyperparameter,
@@ -14,23 +15,25 @@ from dlkit.datatypes.basic import (
 from dlkit.utils.general import kwargs_compatible_with
 
 
-class BaseSettings(BaseModel):
-    model_config = ConfigDict(
+class BasicSettings(BaseSettings):
+    model_config = SettingsConfigDict(
         frozen=True,
         validate_default=True,
         extra="allow",
         validate_by_alias=True,
+        validate_by_name=True,
+        validate_assignment=True,
+        nested_model_default_partial_update=True,
+        case_sensitive=True,
     )
 
     def to_dict_compatible_with(
         self, cls: type, exclude: tuple[str, ...] = (), **kwargs
     ) -> dict[str, Any]:
-        return kwargs_compatible_with(
-            cls, exclude=exclude, **kwargs, **self.model_dump()
-        )
+        return kwargs_compatible_with(cls, exclude=exclude, **kwargs, **self.model_dump())
 
 
-class ClassSettings[T](BaseSettings):
+class ClassSettings[T](BasicSettings):
     """Settings that include a class name and module path for dynamic loading.
 
     Attributes:
@@ -45,7 +48,7 @@ class ClassSettings[T](BaseSettings):
     )
 
 
-class HyperParameterSettings(BaseSettings):
+class HyperParameterSettings(BasicSettings):
     def resolve(
         self,
         trial: Trial | None = None,
@@ -70,9 +73,7 @@ class HyperParameterSettings(BaseSettings):
 
     @staticmethod
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def get_optuna_suggestion(
-        trial: Trial, field: str, value: Hyperparameter | Any
-    ) -> Any:
+    def get_optuna_suggestion(trial: Trial, field: str, value: Hyperparameter | Any) -> Any:
         """Get an Optuna suggestion based on the type of hyperparameter.
 
         Args:
@@ -82,14 +83,10 @@ class HyperParameterSettings(BaseSettings):
         Returns:
             CategoricalChoiceType: The suggested value for the hyperparameter.
         """
-        if isinstance(value, CategoricalDistribution) or isinstance(
-            value, BoolDistribution
-        ):
+        if isinstance(value, CategoricalDistribution) or isinstance(value, BoolDistribution):
             return trial.suggest_categorical(field, choices=value.choices)
         if isinstance(value, IntDistribution):
-            return trial.suggest_int(
-                field, low=value.low, high=value.high, step=value.step
-            )
+            return trial.suggest_int(field, low=value.low, high=value.high, step=value.step)
         if isinstance(value, FloatDistribution):
             return trial.suggest_float(
                 field, low=value.low, high=value.high, step=value.step, log=value.log

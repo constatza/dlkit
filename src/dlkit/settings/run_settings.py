@@ -1,5 +1,5 @@
 from enum import StrEnum
-from .base_settings import BaseSettings
+from .base_settings import BasicSettings
 from pydantic import Field
 
 
@@ -11,7 +11,7 @@ class RunMode(StrEnum):
     OPTUNA = "optuna"
 
 
-class RunSettings(BaseSettings):
+class RunSettings(BasicSettings):
     name: str = Field("run", description="Name of the run.")
     mode: RunMode = Field(RunMode.TRAINING, description="Mode of the run.")
     continue_training: bool = Field(

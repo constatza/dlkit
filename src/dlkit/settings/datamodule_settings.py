@@ -1,20 +1,16 @@
 from lightning import LightningDataModule  # noqa: D100
-from pydantic import Field, NonNegativeFloat
+from pydantic import Field, NonNegativeFloat, FilePath
 
-from .base_settings import BaseSettings, ClassSettings
+from .base_settings import ClassSettings, BasicSettings
 
 
-class DataloaderSettings(BaseSettings):
+class DataloaderSettings(BasicSettings):
     """Settings for the pytorch dataloader."""
 
     num_workers: int = Field(default=1, description="Number of worker processes.")
     batch_size: int = Field(default=64, description="Batch size.")
-    shuffle: bool = Field(
-        default=False, description="Whether to shuffle the training data set."
-    )
-    persistent_workers: bool = Field(
-        default=True, description="Whether to use persistent workers."
-    )
+    shuffle: bool = Field(default=False, description="Whether to shuffle the training data set.")
+    persistent_workers: bool = Field(default=True, description="Whether to use persistent workers.")
     pin_memory: bool = Field(default=True, description="Whether to pin memory.")
 
 
@@ -27,11 +23,16 @@ class DataModuleSettings(ClassSettings[LightningDataModule]):
         description="Module path where the datamodule class is located.",
     )
     dataloader: DataloaderSettings = Field(
-        default=DataloaderSettings(), description="Dataloader settings."
+        default_factory=DataloaderSettings, description="Dataloader settings."
     )
     test_size: NonNegativeFloat = Field(
         default=0.15, description="Fraction of data used for testing."
     )
     val_size: NonNegativeFloat = Field(
         default=0.15, description="Fraction of data used for validation."
+    )
+
+    # !! idx split default value must be None !!
+    idx_split_path: FilePath | None = Field(
+        default=None, description="Path to the index split file."
     )
