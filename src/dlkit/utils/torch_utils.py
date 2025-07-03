@@ -40,3 +40,17 @@ def split_first_from_sequence(
     if isinstance(tensors, torch.Tensor):
         return tensors, ()
     return tensors[0], tuple(pred for pred in tensors[1:])
+
+
+def ensure2d(tensor: torch.Tensor) -> torch.Tensor:
+    """Ensure that node‐ or graph‐level features are at least 2D.
+
+    Args:
+        tensor (torch.Tensor): The node‐ or graph‐level features.
+
+    Returns:
+        torch.Tensor: The node‐ or graph‐level features with at least 2D.
+    """
+    if tensor.dim() == 1:
+        tensor = tensor.unsqueeze(1)
+    return tensor

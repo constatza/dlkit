@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from pydantic import FilePath
 from torch import Tensor
@@ -7,26 +6,31 @@ from torch_geometric.transforms import GCNNorm
 from torch_geometric.utils import dense_to_sparse
 from dlkit.datatypes.dataset import Shape
 from dlkit.io import load_array
+from dlkit.utils.torch_utils import ensure2d
+from .base import register_dataset, BaseDataset
 
 
 PROCESSED_FILE_NAMES: list[str] = ["graph_data.pt"]
 
 
 def build_data_list(
-    features_np: np.ndarray,
-    targets_np: np.ndarray,
-    edge_index: Tensor,
-    edge_attr: Tensor,
+    *,
+    x: Tensor,
+    y: Tensor | None,
+    edge_index: Tensor | None,
+    edge_attr: Tensor | None,
 ) -> list[Data]:
     data_items: list[Data] = []
-    for i in range(features_np.shape[0]):
-        x = torch.tensor(features_np[i], dtype=torch.float)
-        y = torch.tensor(targets_np[i], dtype=torch.long)
-        data_items.append(Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y))
+    for i in range(x.shape[0]):
+        xi = ensure2d(x[i])
+        yi = ensure2d(y[i])
+
+        data_items.append(Data(x=xi, y=yi, edge_index=edge_index, edge_attr=edge_attr))
     return data_items
 
 
-class GraphDataset(InMemoryDataset):
+@register_dataset
+class GraphDataset(InMemoryDataset, BaseDataset):
     def __init__(
         self,
         x: FilePath,
@@ -35,10 +39,11 @@ class GraphDataset(InMemoryDataset):
         **kwargs,
     ):
         self._raw_paths = {"x": x, "edge_index": edge_index, "y": y}
-        self.features = load_array(x, dtype=torch.float)
-        self.targets = load_array(y, dtype=torch.long)
+        self.x = load_array(x, dtype=torch.float)
+        self.y = load_array(y, dtype=torch.float) if y else None
         self.adjacency = load_array(edge_index, dtype=torch.long)
         super().__init__(**kwargs)
+        self.process()
         self.load(self.processed_paths[0])
 
     @property
@@ -56,7 +61,7 @@ class GraphDataset(InMemoryDataset):
     def process(self) -> None:
         edge_index, edge_attr = dense_to_sparse(self.adjacency)
 
-        data_list = build_data_list(self.features, self.targets, edge_index, edge_attr)
+        data_list = build_data_list(x=self.x, y=self.y, edge_index=edge_index, edge_attr=edge_attr)
 
         if self.pre_transform:
             data_list = [self.pre_transform(d) for d in data_list]
@@ -66,10 +71,10 @@ class GraphDataset(InMemoryDataset):
     @property
     def shape(self) -> Shape:
         return Shape(
-            features=self.features.shape,
-            targets=self.targets.shape,
-            edge_index=self.adjacency.shape,
-            edge_attr=self.adjacency.shape,
+            x=self.x.shape,
+            y=self.y.shape,
+            edge_attr=self.edge_attr.shape,
+            edge_index=self.edge_index.shape,
         )
 
 

@@ -4,7 +4,7 @@ from pytorch_forecasting import TimeSeriesDataSet
 from dlkit.nn.primitives.base import PipelineNetwork
 from dlkit.settings import ModelSettings
 from dlkit.utils.loading import load_class
-from dlkit.nn.primitives.graph import GraphNetwork
+from dlkit.gnn.primitives import GraphNetwork
 from dlkit.datasets import GraphDataset, BaseDataset
 
 
