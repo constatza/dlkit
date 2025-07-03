@@ -1,7 +1,7 @@
 from pytorch_forecasting import TimeSeriesDataSet
 from torch.utils.data import DataLoader
 
-from dlkit.datamodules.base import InMemoryModule
+from dlkit.datamodules import InMemoryModule
 from dlkit.datasets import ForecastingDataset
 from dlkit.datasets.timeseries import polars_to_timeseries
 from dlkit.datatypes.dataset import SplitIndices
@@ -29,68 +29,68 @@ class TimeSeriesDataModule(InMemoryModule):
             # split samples w.r.t. group_ids and self.idx_split
 
             dataset = polars_to_timeseries(
-                self.dataset.raw[:],
-                self.dataset.raw.time_idx,
-                self.dataset.raw.target,
-                self.dataset.raw.group_ids,
-                **self.dataset.raw.kwargs,
+                self.split_dataset.raw[:],
+                self.split_dataset.raw.time_idx,
+                self.split_dataset.raw.target,
+                self.split_dataset.raw.group_ids,
+                **self.split_dataset.raw.kwargs,
             )
 
             train_ds = TimeSeriesDataSet.from_dataset(
                 dataset,
-                data=self.dataset.train[:].to_pandas(),
+                data=self.split_dataset.train[:].to_pandas(),
             )
             val_ds = TimeSeriesDataSet.from_dataset(
                 dataset,
-                data=self.dataset.validation[:].to_pandas(),
+                data=self.split_dataset.validation[:].to_pandas(),
                 predict=True,
                 stop_randomization=True,
             )
             test_ds = TimeSeriesDataSet.from_dataset(
                 dataset,
-                data=self.dataset.test[:].to_pandas(),
+                data=self.split_dataset.test[:].to_pandas(),
                 predict=True,
                 stop_randomization=True,
             )
 
             predict_ds = TimeSeriesDataSet.from_dataset(
                 dataset,
-                data=self.dataset.predict[:].to_pandas(),
+                data=self.split_dataset.predict[:].to_pandas(),
                 predict=True,
                 stop_randomization=True,
             )
 
-            self.dataset.train = train_ds
-            self.dataset.validation = val_ds
-            self.dataset.test = test_ds
-            self.dataset.predict = predict_ds
+            self.split_dataset.train = train_ds
+            self.split_dataset.validation = val_ds
+            self.split_dataset.test = test_ds
+            self.split_dataset.predict = predict_ds
             self.fitted = True
 
     def train_dataloader(self) -> DataLoader:
-        if not isinstance(self.dataset.train, TimeSeriesDataSet):
+        if not isinstance(self.split_dataset.train, TimeSeriesDataSet):
             raise RuntimeError("`setup('fit')` must be called before `train_dataloader()`")
-        dataloader_func = self.dataset.train.to_dataloader
+        dataloader_func = self.split_dataset.train.to_dataloader
         return dataloader_func(
             train=True, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def val_dataloader(self) -> DataLoader:
-        if not isinstance(self.dataset.validation, TimeSeriesDataSet):
+        if not isinstance(self.split_dataset.validation, TimeSeriesDataSet):
             raise RuntimeError("`setup('fit')` must be called before `val_dataloader()`")
-        return self.dataset.validation.to_dataloader(
+        return self.split_dataset.validation.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def test_dataloader(self) -> DataLoader:
-        if not isinstance(self.dataset.test, TimeSeriesDataSet):
+        if not isinstance(self.split_dataset.test, TimeSeriesDataSet):
             raise RuntimeError("`setup('test')` must be called before `test_dataloader()`")
-        return self.dataset.test.to_dataloader(
+        return self.split_dataset.test.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
 
     def predict_dataloader(self) -> DataLoader:
-        if not isinstance(self.dataset.predict, TimeSeriesDataSet):
+        if not isinstance(self.split_dataset.predict, TimeSeriesDataSet):
             raise RuntimeError("`setup('predict')` must be called before `predict_dataloader()`")
-        return self.dataset.predict.to_dataloader(
+        return self.split_dataset.predict.to_dataloader(
             train=False, **self.dataloader_settings.to_dict_compatible_with(DataLoader)
         )
