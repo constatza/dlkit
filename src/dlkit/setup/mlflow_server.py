@@ -68,6 +68,9 @@ class ServerProcess:
             return
         self.process = start_server(self._config, **popen_kwargs)
         logger.info(f"Started server PID={self.process.pid}")
+        logger.info(
+            f"Server running at {self._config.scheme}://{self._config.host}:{self._config.port}"
+        )
 
     def stop(self) -> None:
         """Attempt graceful terminate, then force‐kill after timeout."""

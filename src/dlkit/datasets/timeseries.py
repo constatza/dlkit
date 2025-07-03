@@ -7,8 +7,10 @@ from dlkit.io.tables import read_table
 from dlkit.datasets.base import BaseDataset
 from dlkit.datatypes.dataset import Shape
 from dlkit.utils.general import slice_to_list
+from .base import register_dataset
 
 
+@register_dataset
 class ForecastingDataset(BaseDataset):
     @validate_call
     def __init__(
