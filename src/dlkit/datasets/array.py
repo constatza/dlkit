@@ -1,9 +1,10 @@
-from pathlib import Path
-
 import torch
-from dlkit.datatypes.dataset import Shape
-from .base import BaseDataset
+from pathlib import Path
 from typing import TypedDict
+from .base import BaseDataset
+from dlkit.datatypes.dataset import Shape
+from dlkit.io import load_array
+from .base import register_dataset
 
 
 class SupervisedData(TypedDict):
@@ -13,6 +14,7 @@ class SupervisedData(TypedDict):
     y: torch.Tensor
 
 
+@register_dataset
 class SupervisedArrayDataset(BaseDataset):
     """Flexible dataset that loads from numpy file paths or wraps existing tensors.
 
@@ -27,9 +29,8 @@ class SupervisedArrayDataset(BaseDataset):
         y: Path | None = None,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(x, y or x)
-        self.x = self.tensors[0]
-        self.y = self.tensors[1]
+        self.x = load_array(x, dtype=dtype)
+        self.y = load_array(y, dtype=dtype) if y else self.x
 
     def __getitem__(self, idx: int) -> SupervisedData:
         x, y = super().__getitem__(idx)

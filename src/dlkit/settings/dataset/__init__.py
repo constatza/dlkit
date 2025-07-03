@@ -1,4 +1,3 @@
 from .base import DatasetSettings
-from .graph import GraphDatasetSettings
 
-__all__ = ["DatasetSettings", "GraphDatasetSettings"]
+__all__ = ["DatasetSettings"]
