@@ -45,32 +45,24 @@ class PathSettings(BasicSettings):
         None, description="Path to the settings directory.", alias="self"
     )
 
-    input_dir: DirectoryPath | None = Field(None, description="Input directory.")
-    output_dir: DirectoryPath | None = Field(
-        None, description="Output directory for generated files."
-    )
-    checkpoints_dir: DirectoryPath | None = Field(
-        None, description="Directory path for checkpoints."
-    )
-    figures_dir: DirectoryPath | None = Field(
-        default=None, description="Directory path for figures."
-    )
-    predictions_dir: DirectoryPath | None = Field(
-        None, description="Directory path for predictions."
-    )
+    input_dir: DirectoryPath | None = Field(None, description="Input directory.", alias="raw_dir")
+    output_dir: Path | None = Field(None, description="Output directory for generated files.")
+    checkpoints_dir: Path | None = Field(None, description="Directory path for checkpoints.")
+    figures_dir: Path | None = Field(default=None, description="Directory path for figures.")
+    predictions_dir: Path | None = Field(None, description="Directory path for predictions.")
 
-    mlruns_dir: DirectoryPath | None = Field(
-        None, description="Directory path for mlflow runs output."
-    )
+    mlruns_dir: Path | None = Field(None, description="Directory path for mlflow runs output.")
 
-    @model_validator(mode="after")
-    def ensure_directories(self):
-        update = {}
-        for key, value in self.model_extra.items():
-            value = Path(value)
-            if key.endswith("_dir") and not value.is_dir():
-                value = self.root_dir / key.split("_dir")[0]
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_directories(cls, data: dict) -> dict:
+        for field, value in data.items():
+            if value is None:
+                continue
+            value = Path(value).resolve()
+            if field.endswith("_dir") and not value.is_dir():
+                value = data["root_dir"] / field.split("_dir")[0]
                 value.mkdir(exist_ok=True, parents=True)
-            update[key] = value
-            logger.info(f"{key} set to {str(value)}")
-        return self.model_copy(update=update)
+                logger.info(f"{field} created at: {str(value)}")
+            data[field] = value
+        return data
