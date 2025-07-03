@@ -7,12 +7,14 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from lightning.pytorch import LightningDataModule
 
-from dlkit.datamodules import InMemoryModule
 from dlkit.datatypes.run import ModelState
 from dlkit.run.vanilla_training import train_simple
 from dlkit.settings import Settings
 from dlkit.setup.mlflow_client import initialize_mlflow_client
 from dlkit.setup.mlflow_server import ServerProcess
+from dlkit.datatypes.dataset import DLkitDataset
+from dlkit.datamodules.base import DLkitDataModule
+
 
 type Data = pl.DataFrame | pd.DataFrame | Tensor | ndarray
 
@@ -46,15 +48,23 @@ def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = No
 
             training_state = train_simple(settings, datamodule=datamodule)
             model = training_state.model
-            datamodule: InMemoryModule = training_state.datamodule
+            datamodule: DLkitDataModule = training_state.datamodule
 
             mlflow.log_dict(datamodule.idx_split.model_dump(), IDX_SPLIT_FILENAME)
             mlflow.models.set_model(model)
 
             # Log the model
-            features, targets = get_sample(datamodule.dataset.train)
-            log_mlflow_dataset(features, settings.PATHS.features.as_uri())
-            log_mlflow_dataset(targets, settings.PATHS.targets.as_uri())
+            dataset: DLkitDataset = datamodule.dataset
+            log_mlflow_dataset(dataset.x, settings.DATASET.x.as_uri())
+            if dataset.y is not None:
+                log_mlflow_dataset(dataset.y, settings.DATASET.y.as_uri())
+            if dataset.edge_index is not None:
+                log_mlflow_dataset(dataset.edge_index, settings.DATASET.edge_index.as_uri())
+            if dataset.edge_attr is not None and settings.DATASET.edge_attr:
+                log_mlflow_dataset(
+                    dataset.edge_attr,
+                    settings.DATASET.edge_attr.as_uri(),
+                )
 
             mlflow.pytorch.log_model(
                 model,
@@ -67,7 +77,7 @@ def train_mlflow(settings: Settings, datamodule: LightningDataModule | None = No
                     model_uri=f"runs:/{run_id}/model",
                     name=settings.MODEL.name,
                 )
-    return training_state
+        return training_state
 
 
 def get_sample(dataset: Dataset) -> Data:

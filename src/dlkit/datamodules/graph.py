@@ -17,3 +17,9 @@ class GraphDataModule(LightningDataModule):
 
     def test_dataloader(self):
         return PyGDataLoader(self.dataset[self.idx_split.test], **self.dataloader_kwargs)
+
+    def predict_dataloader(self):
+        return PyGDataLoader(
+            self.dataset[self.idx_split.predict or range(len(self.dataset))],
+            **self.dataloader_kwargs,
+        )

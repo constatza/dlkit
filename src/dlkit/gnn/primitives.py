@@ -88,8 +88,12 @@ class GraphNetwork(LightningModule):
         # Compute loss
         loss = self.loss_fn(out, y_true)
         # Log metrics
-        self.log("train_loss", loss, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"loss": loss}
+
+    def on_train_epoch_end(self) -> None:
+        lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+        self.log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
 
     def validation_step(self, batch: Data, batch_idx: int) -> dict[str, torch.Tensor]:
         """
@@ -99,8 +103,8 @@ class GraphNetwork(LightningModule):
         y_true = batch.y
         val_loss = self.loss_fn(out, y_true)
         metrics = self.val_metrics(out, y_true)
-        self.log("val_loss", val_loss, on_epoch=True, prog_bar=True)
-        self.log_dict(metrics, on_epoch=True)
+        self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
         return {"val_loss": val_loss}
 
     def on_validation_epoch_end(self) -> None:
@@ -117,8 +121,8 @@ class GraphNetwork(LightningModule):
         y_true = batch.y
         test_loss = self.loss_fn(out, y_true)
         metrics = self.test_metrics(out, y_true)
-        self.log("test_loss", test_loss, on_epoch=True, prog_bar=True)
-        self.log_dict(metrics, on_epoch=True)
+        self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
         return {"test_loss": test_loss}
 
     def on_test_epoch_end(self) -> None:
@@ -137,8 +141,11 @@ class GraphNetwork(LightningModule):
         Returns:
             Inverse-transformed predictions if applicable.
         """
-        preds = self.forward(batch)
-        return preds
+        if hasattr(self.model, "predict_step"):
+            predictions = self.model.predict_step(batch, batch_idx)
+        else:
+            predictions = self.model(batch)
+        return predictions
 
     @classmethod
     def load_from_checkpoint(cls, ckpt_path: str, **kwargs) -> Self:
