@@ -1,3 +1,6 @@
+from typing import Protocol
+
+import torch
 from attrs import define, field
 from pydantic import Field, ConfigDict
 
@@ -13,7 +16,7 @@ class Shape(BasicTypeSettings):
     x: tuple[int, ...] | Size | None = Field(default=None, alias="features")
     y: tuple[int, ...] | Size | None = Field(default=None, alias="targets")
     edge_index: tuple[int, ...] | Size | None = Field(default=None, alias="adjacency_matrix")
-    edge_attr: tuple[int, ...] | Size | None = Field(default=None)
+    edge_attr: tuple[int, ...] | Size | None = Field(default=None, alias="edge_features")
 
 
 @define
@@ -33,3 +36,10 @@ class SplitIndices(BasicTypeSettings):
 
     def __len__(self):
         return len(self.train) + len(self.validation) + len(self.test)
+
+
+class DLkitDataset(Protocol):
+    x: torch.Tensor
+    y: torch.Tensor | None
+    edge_index: torch.Tensor | None
+    edge_attr: torch.Tensor | None
