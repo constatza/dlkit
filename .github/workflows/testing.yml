@@ -4,25 +4,46 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
     strategy:
       matrix:
-        python-version: ["3.12"]  # Define the Python versions to test against
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
 
+      # 1) Install uv (latest v6.1.0) with built-in cache enabled
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
         with:
-          version: "0.5.4"  # Specify the desired version of uv
           enable-cache: true
+          version: latest
 
+      # 2) Fallback cache to survive GitHub’s cache-service 503s
+      - name: Cache uv artifacts
+        uses: actions/cache@v3
+        continue-on-error: true
+        with:
+          path: ${{ env.UV_CACHE_DIR }}
+          key: ${{ runner.os }}-uv-python-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-python-${{ matrix.python-version }}-
+            ${{ runner.os }}-uv-
+            ${{ runner.os }}-
+
+      # 3) Set up Python via uv
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      # 4) Synchronize all dependencies & extras
       - name: Synchronize dependencies
         run: uv sync --dev --all-extras
 
-      - name: Run tests
-        run: uv run pytest tests
+      # 5) Run pytest with verbose output
+      - name: Run pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest tests --maxfail=1 --disable-warnings -vv
