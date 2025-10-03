@@ -11,3 +11,11 @@ repos:
     rev: 0.7.3
     hooks:
       - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: sync-templates
+        name: Sync DLKit templates/examples
+        entry: python scripts/sync_templates.py --write
+        language: system
+        pass_filenames: false
