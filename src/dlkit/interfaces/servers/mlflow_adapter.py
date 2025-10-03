@@ -188,12 +188,11 @@ class MLflowServerAdapter(ContextualServerAdapter):
                     server_config = server_config.model_copy(
                         update={"artifacts_destination": f"file://{locations.mlartifacts_dir()}"}
                     )
-                else:
-                    # Ensure explicit artifacts destination honours root_dir
-                    server_config = self._normalize_server_config(server_config)
+                # Config is already normalized at line 154, no need to normalize again
                 self._ensure_local_storage(server_config)
-            except Exception:
+            except Exception as e:
                 # Best-effort; fall back to MLflow defaults
+                logger.debug(f"Failed to ensure local storage: {e}", exc_info=True)
                 pass
 
             # Start new server process
