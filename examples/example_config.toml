@@ -1,0 +1,31 @@
+[SESSION]
+# Human-readable run/session name (for logs and tracking)
+name = "my_training_session"
+# Inference mode flag (false = training)
+inference = false
+# Random seed for reproducibility
+seed = 42
+# Computation precision preset (e.g., '32', '16-mixed')
+precision = "32"
+# Optional root directory for path resolution
+root_dir = "./"
+
+[MODEL]
+# Model class path or registry alias
+name = "your.model.class"
+
+[TRAINING]
+
+[TRAINING.trainer]
+# Maximum number of epochs (Lightning Trainer)
+max_epochs = 100
+# Hardware accelerator: cpu | gpu | auto | tpu
+accelerator = "auto"
+
+[DATAMODULE]
+# DataModule class path or alias (dataflow loading)
+name = "your.datamodule.class"
+
+[DATASET]
+# Dataset class path or alias
+name = "your.dataset.class"

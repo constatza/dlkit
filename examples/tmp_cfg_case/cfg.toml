@@ -1,0 +1,51 @@
+[SESSION]
+name = "integration_test"
+inference = true
+seed = 42
+
+[PATHS]
+output_dir = "tmp_cfg_case/outputs"
+checkpoints_dir = "checkpoints"
+figures_dir = "figures"
+predictions_dir = "predictions"
+mlruns_dir = "mlruns"
+
+[DATASET]
+name = "FlexibleDataset"
+root_dir = "tmp_cfg_case/data"
+
+[[DATASET.features]]
+name = "X"
+path = "features.npy"
+
+[[DATASET.targets]]
+name = "y"
+path = "targets.npy"
+
+[DATASET.split]
+filepath = "split.txt"
+
+[DATAMODULE]
+batch_size = 8
+num_workers = 0
+
+[MODEL]
+name = "ConstantWidthFFNN"
+module_path = "dlkit.core.models.nn.ffnn.simple"
+
+[MODEL.params]
+hidden_size = 8
+num_layers = 1
+
+[TRAINING]
+epochs = 2
+
+[TRAINING.trainer]
+fast_dev_run = true
+enable_progress_bar = false
+enable_model_summary = false
+
+[TRAINING.optimizer]
+lr = 0.01
+
+MODEL.checkpoint = "tmp_cfg_case/model.ckpt"
