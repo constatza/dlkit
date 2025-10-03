@@ -1,0 +1,487 @@
+"""Integration test fixtures using direct Settings objects (no TOML).
+
+These fixtures generate tiny synthetic datasets and construct
+`GeneralSettings` instances programmatically to avoid relying on
+TOML parsing. This keeps integration tests fast and robust.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+import torch
+
+from dlkit.core.shape_specs import create_shape_spec
+from dlkit.tools.config import GeneralSettings
+from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.tools.config import (
+    SessionSettings,
+    DataModuleSettings,
+    DatasetSettings,
+    TrainingSettings,
+)
+from dlkit.tools.config.dataloader_settings import DataloaderSettings
+from dlkit.tools.config.trainer_settings import TrainerSettings
+from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.dataset_settings import IndexSplitSettings
+
+
+# Test constants - optimized for speed
+FEATURE_SIZE: int = 4
+TARGET_SIZE: int = 2
+NUM_SAMPLES: int = 20  # Reduced from 100 for faster testing
+BATCH_SIZE: int = 4  # Reduced from 8 for faster testing
+EPOCHS: int = 1  # Reduced from 2 for faster testing
+OPTUNA_TRIALS: int = 2
+
+
+@pytest.fixture
+def minimal_dataset(tmp_path: Path) -> dict[str, Path]:
+    """Create minimal supervised learning dataset for fast testing.
+
+    Creates very small synthetic dataflow files suitable for testing workflows
+    without requiring large amounts of compute time.
+
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Dictionary of paths to created dataset files.
+    """
+    # Generate small synthetic dataflow
+    np.random.seed(42)  # Reproducible test dataflow
+    X = np.random.randn(NUM_SAMPLES, FEATURE_SIZE).astype(np.float32)
+    y = np.random.randint(0, TARGET_SIZE, size=(NUM_SAMPLES, 1)).astype(np.float32)
+
+    # Create train/val/test split in the format expected by dlkit
+    # Use simple text format with indices separated by newlines
+    train_indices = "0 1 2 3 4 5 6 7 8 9 10 11"  # 12 samples for training
+    val_indices = "12 13 14 15"  # 4 samples for validation
+    test_indices = "16 17 18 19"  # 4 samples for testing
+
+    split_content = f"{train_indices}\n{val_indices}\n{test_indices}\n"
+
+    # Write dataflow files
+    data_dir = tmp_path / "dataflow"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    X_path = data_dir / "features.npy"
+    y_path = data_dir / "targets.npy"
+    split_path = data_dir / "split.txt"  # Use .txt format expected by dlkit
+
+    np.save(X_path, X)
+    np.save(y_path, y)
+    split_path.write_text(split_content)
+
+    return {
+        "features": X_path,
+        "targets": y_path,
+        "split": split_path,
+        "data_dir": data_dir,
+    }
+
+
+@pytest.fixture
+def minimal_model_checkpoint(tmp_path: Path) -> Path:
+    """Create a minimal pre-trained model checkpoint for inference testing.
+
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Path to the created checkpoint file.
+    """
+    checkpoint_path = tmp_path / "model.ckpt"
+    shape_spec = create_shape_spec(
+        {"X": (FEATURE_SIZE,), "y": (TARGET_SIZE,)},
+        default_input="X",
+        default_output="y",
+    )
+
+    checkpoint_payload = {
+        "state_dict": {
+            "linear.weight": torch.randn(TARGET_SIZE, FEATURE_SIZE),
+            "linear.bias": torch.zeros(TARGET_SIZE),
+        },
+        "dlkit_metadata": {
+            "version": "2.0",
+            "model_family": "dlkit_nn",
+            "wrapper_type": "StandardLightningWrapper",
+            "shape_spec": shape_spec.to_dict(),
+            "model_settings": {
+                "name": "ConstantWidthFFNN",
+                "module_path": "dlkit.core.models.nn.ffnn.simple",
+                "params": {
+                    "hidden_size": FEATURE_SIZE,
+                    "num_layers": 1,
+                },
+                "class_name": "ModelComponentSettings",
+            },
+            "entry_configs": {
+                "X": {"name": "X", "class_name": "Feature"},
+                "y": {"name": "y", "class_name": "Target"},
+            },
+        },
+    }
+
+    torch.save(checkpoint_payload, checkpoint_path)
+    return checkpoint_path
+
+
+def _make_settings(
+    *,
+    data_dir: Path,
+    output_dir: Path,
+    inference: bool = False,
+    batch_size: int = BATCH_SIZE,
+    epochs: int = EPOCHS,
+    checkpoint: Path | None = None,
+) -> GeneralSettings:
+    """Build a minimal GeneralSettings for training/inference.
+
+    Uses FlexibleDataset with X/y entries and a small FFNN model.
+    """
+    # Ensure directories exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        root=data_dir,
+        features=(Feature(name="X", path=data_dir / "features.npy"),),
+        targets=(Target(name="y", path=data_dir / "targets.npy"),),
+        split=IndexSplitSettings(),
+    )
+
+    datamodule = DataModuleSettings(
+        name="InMemoryModule",
+        module_path="dlkit.core.datamodules",
+        dataloader=DataloaderSettings(
+            num_workers=0,
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=False,
+            persistent_workers=False,
+        ),
+        batch_size=batch_size,
+        num_workers=0,
+    )
+
+    model = ModelComponentSettings(
+        name="ConstantWidthFFNN",
+        module_path="dlkit.core.models.nn.ffnn.simple",
+        hidden_size=4,  # Reduced from 8 for faster testing
+        num_layers=1,
+        checkpoint=checkpoint if inference else None,
+    )
+
+    training = TrainingSettings(
+        epochs=epochs,
+        trainer=TrainerSettings(
+            fast_dev_run=True,  # Use fast dev run for ultra-fast testing
+            enable_checkpointing=False,
+            accelerator="cpu",
+            enable_progress_bar=False,  # Disable progress bar for faster tests
+            enable_model_summary=False,  # Disable model summary for faster tests
+        ),
+    )
+
+    session = SessionSettings(name="integration_test", inference=inference, seed=42)
+
+    return GeneralSettings(
+        SESSION=session,
+        MLFLOW=None,
+        OPTUNA=None,
+        DATAMODULE=datamodule,
+        DATASET=dataset,
+        TRAINING=training,
+        MODEL=model,
+    )
+
+
+@pytest.fixture
+def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+    """Create GeneralSettings for vanilla training integration tests (no TOML)."""
+    return _make_settings(
+        data_dir=minimal_dataset["data_dir"],
+        output_dir=tmp_path / "outputs",
+        inference=False,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+    )
+
+
+@pytest.fixture
+def inference_settings(
+    minimal_dataset: dict[str, Path], minimal_model_checkpoint: Path, tmp_path: Path
+) -> GeneralSettings:
+    """Create GeneralSettings for inference integration tests (no TOML)."""
+    return _make_settings(
+        data_dir=minimal_dataset["data_dir"],
+        output_dir=tmp_path / "outputs",
+        inference=True,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        checkpoint=minimal_model_checkpoint,
+    )
+
+
+@pytest.fixture
+def mlflow_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+    """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
+    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+
+    # Start with base training settings
+    base_settings = _make_settings(
+        data_dir=minimal_dataset["data_dir"],
+        output_dir=tmp_path / "outputs",
+        inference=False,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+    )
+
+    # Enable MLflow using overrides
+    manager = BasicOverrideManager()
+    mlruns_dir = tmp_path / "mlruns"
+    mlruns_dir.mkdir(parents=True, exist_ok=True)
+    # Use a local file-based tracking URI to avoid requiring an HTTP server
+    mlflow_settings = manager.apply_overrides(
+        base_settings,
+        enable_mlflow=True,
+        experiment_name="test_experiment",
+        tracking_uri=str(mlruns_dir.as_uri()),
+    )
+
+    return mlflow_settings
+
+
+@pytest.fixture
+def mlflow_settings_http(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+    """Create GeneralSettings with MLflow enabled using HTTP tracking URI.
+
+    Uses localhost and default MLflow server port to align with server settings
+    so the tracker attempts to start a local server context. Tests patch the
+    server context to avoid starting a real process.
+    """
+    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+
+    base_settings = _make_settings(
+        data_dir=minimal_dataset["data_dir"],
+        output_dir=tmp_path / "outputs",
+        inference=False,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+    )
+
+    manager = BasicOverrideManager()
+    http_uri = "http://127.0.0.1:5000"
+    http_mlflow_settings = manager.apply_overrides(
+        base_settings,
+        enable_mlflow=True,
+        experiment_name="test_experiment_http",
+        tracking_uri=http_uri,
+    )
+
+    return http_mlflow_settings
+
+
+@pytest.fixture
+def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+    """Create GeneralSettings with Optuna enabled using overrides."""
+    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+
+    # Start with base training settings
+    base_settings = _make_settings(
+        data_dir=minimal_dataset["data_dir"],
+        output_dir=tmp_path / "outputs",
+        inference=False,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+    )
+
+    # Enable Optuna using overrides
+    manager = BasicOverrideManager()
+    optuna_settings = manager.apply_overrides(
+        base_settings, enable_optuna=True, trials=OPTUNA_TRIALS, study_name="test_study"
+    )
+    # Ensure isolated study storage per test to avoid cross-test accumulation
+    try:
+        unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
+        new_optuna = optuna_settings.OPTUNA.model_copy(
+            update={
+                "storage": unique_storage,
+                "study_name": f"test_study_{tmp_path.name}",
+            }
+        )
+        return optuna_settings.model_copy(update={"OPTUNA": new_optuna})
+    except Exception:
+        return optuna_settings
+
+
+@pytest.fixture
+def expected_training_metrics() -> dict[str, Any]:
+    """Expected structure and types for training metrics.
+
+    Returns:
+        Dictionary defining expected training result metrics.
+    """
+    return {
+        "required_keys": ["duration_seconds"],
+        "optional_keys": ["train_loss", "val_loss", "mlflow_run_id", "optuna_best_value"],
+        "numeric_keys": ["duration_seconds"],
+    }
+
+
+@pytest.fixture
+def expected_inference_result() -> dict[str, Any]:
+    """Expected structure for inference results.
+
+    Returns:
+        Dictionary defining expected inference result structure.
+    """
+    return {
+        "required_keys": ["predictions", "duration_seconds"],
+        "optional_keys": ["metrics"],
+        "predictions_shape": (4, TARGET_SIZE),  # test split size, output dimension
+    }
+
+
+@pytest.fixture
+def optuna_config_content(minimal_dataset: dict[str, Path], tmp_path: Path) -> str:
+    """Produce a minimal TOML config string enabling Optuna.
+
+    Uses the same tmp_path-backed dataset created by minimal_dataset so relative
+    resolution works when the test writes this content to a file in tmp_path.
+    """
+    data_dir = minimal_dataset["data_dir"]
+    # Keep paths relative to DATASET.root by specifying filenames only
+    return f"""
+[PATHS]
+output_dir = "outputs"
+
+[SESSION]
+name = "integration_test"
+inference = false
+seed = 42
+
+[DATASET]
+name = "FlexibleDataset"
+module_path = "dlkit.core.datasets"
+root_dir = "{data_dir.as_posix()}"
+
+[[DATASET.features]]
+name = "X"
+path = "features.npy"
+
+[[DATASET.targets]]
+name = "y"
+path = "targets.npy"
+
+[DATASET.split]
+filepath = "split.txt"
+
+[DATAMODULE]
+name = "InMemoryModule"
+module_path = "dlkit.core.datamodules"
+batch_size = {BATCH_SIZE}
+num_workers = 0
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = {BATCH_SIZE}
+shuffle = true
+pin_memory = false
+persistent_workers = false
+
+[MODEL]
+name = "ConstantWidthFFNN"
+module_path = "dlkit.core.models.nn.ffnn.simple"
+hidden_size = 4
+num_layers = 1
+
+[TRAINING]
+epochs = {EPOCHS}
+
+[TRAINING.trainer]
+max_steps = 1
+enable_checkpointing = false
+accelerator = "cpu"
+
+[OPTUNA]
+enabled = true
+n_trials = {OPTUNA_TRIALS}
+direction = "minimize"
+study_name = "test_study"
+"""
+
+
+@pytest.fixture
+def create_test_training_result():
+    """Factory fixture for creating TrainingResult instances for testing.
+
+    Returns:
+        Function that creates TrainingResult with specified parameters.
+    """
+
+    def _create_result(
+        duration: float = 10.0,
+        metrics: dict[str, Any] | None = None,
+        artifacts: dict[str, Path] | None = None,
+        model_state: Any = None,
+    ) -> TrainingResult:
+        return TrainingResult(
+            model_state=model_state,
+            metrics=metrics or {"train_loss": 0.5, "val_loss": 0.3},
+            artifacts=artifacts or {},
+            duration_seconds=duration,
+        )
+
+    return _create_result
+
+
+@pytest.fixture(autouse=True)
+def cleanup_mlflow_state():
+    """Clean up MLflow global state between tests to prevent interference.
+
+    MLflow's autologging and global tracking URI state can persist between tests
+    and cause issues when Optuna tests run after MLflow tests.
+    """
+    # Clean up before test
+    try:
+        import mlflow
+
+        # Disable autologging
+        mlflow.pytorch.autolog(disable=True)
+        # End any active runs
+        if mlflow.active_run():
+            mlflow.end_run()
+    except Exception:
+        pass
+
+    yield
+
+    # Clean up after test
+    try:
+        import mlflow
+
+        # Disable autologging
+        mlflow.pytorch.autolog(disable=True)
+        # End any active runs
+        if mlflow.active_run():
+            mlflow.end_run()
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def integration_test_timeout() -> int:
+    """Timeout for integration tests in seconds.
+
+    Returns:
+        Maximum time allowed for integration tests to complete.
+    """
+    return 10  # Reasonable timeout for integration tests with real server startup

@@ -1,0 +1,304 @@
+"""Fixtures for testing I/O system utilities.
+
+This module provides reusable fixtures for testing dynamic imports,
+path resolution, and class instantiation across the test suite.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+
+# Test module constants
+BUILTIN_MODULE_NAMES = [
+    "collections",
+    "os",
+    "sys",
+    "pathlib",
+    "json",
+    "itertools",
+]
+
+BUILTIN_CLASS_NAMES = [
+    ("collections", "defaultdict"),
+    ("pathlib", "Path"),
+    ("json", "JSONEncoder"),
+    ("itertools", "chain"),
+]
+
+NONEXISTENT_MODULE_NAMES = [
+    "nonexistent_module",
+    "fake.module.path",
+    "missing_package.submodule",
+]
+
+NONEXISTENT_CLASS_NAMES = [
+    ("collections", "NonExistentClass"),
+    ("pathlib", "FakePathClass"),
+    ("json", "MissingEncoder"),
+]
+
+
+@pytest.fixture
+def sample_module_names() -> list[str]:
+    """Provide sample module names for testing dynamic imports.
+
+    Returns:
+        List of valid Python module names that exist in the standard library.
+    """
+    return BUILTIN_MODULE_NAMES.copy()
+
+
+@pytest.fixture
+def sample_class_specs() -> list[tuple[str, str]]:
+    """Provide sample (module, class) pairs for testing class imports.
+
+    Returns:
+        List of (module_name, class_name) tuples that exist in the standard library.
+    """
+    return BUILTIN_CLASS_NAMES.copy()
+
+
+@pytest.fixture
+def nonexistent_modules() -> list[str]:
+    """Provide sample non-existent module names for error testing.
+
+    Returns:
+        List of module names that should not exist and cause ImportError.
+    """
+    return NONEXISTENT_MODULE_NAMES.copy()
+
+
+@pytest.fixture
+def nonexistent_classes() -> list[tuple[str, str]]:
+    """Provide sample non-existent class names for error testing.
+
+    Returns:
+        List of (module_name, class_name) tuples where class doesn't exist.
+    """
+    return NONEXISTENT_CLASS_NAMES.copy()
+
+
+@pytest.fixture
+def temp_python_module(tmp_path: Path) -> dict[str, Any]:
+    """Create a temporary Python module file for testing path-based imports.
+
+    Args:
+        tmp_path: pytest temporary directory fixture
+
+    Returns:
+        Dictionary containing module path info and expected content.
+    """
+    module_dir = tmp_path / "test_modules"
+    module_dir.mkdir()
+
+    # Create a simple module with a test class
+    module_content = '''
+"""Test module for dynamic import testing."""
+
+class TestClass:
+    """A simple test class for import verification."""
+
+    def __init__(self, value: int = 42, name: str = "test"):
+        self.value = value
+        self.name = name
+
+    def get_info(self) -> str:
+        return f"{self.name}: {self.value}"
+
+
+def test_function(x: int = 1) -> int:
+    """A simple test function."""
+    return x * 2
+
+
+TEST_CONSTANT = "test_value"
+'''
+
+    module_file = module_dir / "test_module.py"
+    module_file.write_text(module_content)
+
+    return {
+        "module_dir": module_dir,
+        "module_file": module_file,
+        "module_name": "test_module",
+        "class_name": "TestClass",
+        "function_name": "test_function",
+        "constant_name": "TEST_CONSTANT",
+        "expected_value": 42,
+        "expected_name": "test",
+    }
+
+
+@pytest.fixture
+def temp_python_package(tmp_path: Path) -> dict[str, Any]:
+    """Create a temporary Python package for testing package imports.
+
+    Args:
+        tmp_path: pytest temporary directory fixture
+
+    Returns:
+        Dictionary containing package path info and expected content.
+    """
+    package_dir = tmp_path / "test_packages" / "sample_package"
+    package_dir.mkdir(parents=True)
+
+    # Create __init__.py
+    init_content = '''
+"""Sample package for testing."""
+
+from .submodule import PackageClass
+
+__all__ = ["PackageClass"]
+'''
+    (package_dir / "__init__.py").write_text(init_content)
+
+    # Create a submodule
+    submodule_content = '''
+"""Submodule within the test package."""
+
+class PackageClass:
+    """A class defined in a package submodule."""
+
+    def __init__(self, package_value: str = "package_test"):
+        self.package_value = package_value
+
+    def get_package_info(self) -> str:
+        return f"Package: {self.package_value}"
+'''
+    (package_dir / "submodule.py").write_text(submodule_content)
+
+    return {
+        "package_dir": package_dir,
+        "package_name": "sample_package",
+        "class_name": "PackageClass",
+        "expected_value": "package_test",
+        "base_dir": tmp_path / "test_packages",
+    }
+
+
+@pytest.fixture
+def invalid_python_file(tmp_path: Path) -> Path:
+    """Create an invalid Python file for error testing.
+
+    Args:
+        tmp_path: pytest temporary directory fixture
+
+    Returns:
+        Path to file with invalid Python syntax.
+    """
+    invalid_file = tmp_path / "invalid_module.py"
+    invalid_file.write_text("This is not valid Python syntax !!@#$%")
+    return invalid_file
+
+
+@pytest.fixture
+def empty_directory(tmp_path: Path) -> Path:
+    """Create an empty directory without __init__.py for error testing.
+
+    Args:
+        tmp_path: pytest temporary directory fixture
+
+    Returns:
+        Path to directory that's not a valid Python package.
+    """
+    empty_dir = tmp_path / "empty_dir"
+    empty_dir.mkdir()
+    return empty_dir
+
+
+@pytest.fixture
+def mock_class_with_signature() -> type:
+    """Create a mock class with specific constructor signature for testing.
+
+    Returns:
+        Mock class with defined __init__ parameters.
+    """
+
+    class MockTestClass:
+        """Mock class for testing parameter filtering."""
+
+        def __init__(
+            self, required_param: str, optional_param: int = 100, another_param: bool = True
+        ):
+            self.required_param = required_param
+            self.optional_param = optional_param
+            self.another_param = another_param
+
+        def __repr__(self) -> str:
+            return f"MockTestClass(required={self.required_param}, optional={self.optional_param}, another={self.another_param})"
+
+    return MockTestClass
+
+
+@pytest.fixture
+def mock_function_with_signature() -> callable:
+    """Create a mock function with specific signature for testing.
+
+    Returns:
+        Mock function with defined parameters.
+    """
+
+    def mock_test_function(x: int, y: str = "default", z: float = 3.14) -> str:
+        """Mock function for testing parameter filtering."""
+        return f"x={x}, y={y}, z={z}"
+
+    return mock_test_function
+
+
+@pytest.fixture
+def kwargs_test_data() -> dict[str, Any]:
+    """Provide test kwargs dataflow for parameter filtering tests.
+
+    Returns:
+        Dictionary with various parameter types for testing.
+    """
+    return {
+        "required_param": "test_value",
+        "optional_param": 200,
+        "another_param": False,
+        "extra_param": "should_be_filtered",
+        "unknown_param": 999,
+        "x": 42,
+        "y": "custom",
+        "z": 2.718,
+        "invalid_extra": "not_used",
+    }
+
+
+@pytest.fixture
+def settings_dir_with_modules(tmp_path: Path) -> dict[str, Any]:
+    """Create a settings directory with Python modules for path resolution testing.
+
+    Args:
+        tmp_path: pytest temporary directory fixture
+
+    Returns:
+        Dictionary with settings directory info and module paths.
+    """
+    settings_dir = tmp_path / "settings"
+    settings_dir.mkdir()
+
+    # Create relative module path
+    rel_module_dir = settings_dir / "relative_modules"
+    rel_module_dir.mkdir()
+
+    rel_module_content = '''
+class RelativeClass:
+    """Class for testing relative path resolution."""
+
+    def __init__(self, rel_value: str = "relative"):
+        self.rel_value = rel_value
+'''
+
+    (rel_module_dir / "rel_module.py").write_text(rel_module_content)
+
+    return {
+        "settings_dir": settings_dir,
+        "relative_module_path": "relative_modules/rel_module.py",
+        "class_name": "RelativeClass",
+        "expected_value": "relative",
+    }

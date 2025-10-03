@@ -1,0 +1,337 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import torch
+from lightning.pytorch import Trainer
+from torch import nn, Tensor
+
+from dlkit.core.datasets.flexible import FlexibleDataset
+from dlkit.core.datamodules.array import InMemoryModule
+from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.config.components.model_components import (
+    ModelComponentSettings,
+    WrapperComponentSettings,
+)
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.transform_settings import TransformSettings
+from dlkit.core.models.wrappers.standard import StandardLightningWrapper
+from dlkit.core.models.nn.base import ShapeAwareModel
+from dlkit.core.shape_specs import IShapeSpec
+
+
+class IdentityHead(ShapeAwareModel):
+    """Simple identity model that maps x -> y shape.
+
+    Now follows the ShapeAware pattern with unified_shape parameter.
+    """
+
+    def __init__(self, *, unified_shape: IShapeSpec):
+        super().__init__(unified_shape=unified_shape)
+        self.last_x: Tensor | None = None
+
+        # Extract shapes from the unified shape spec
+        in_shape = unified_shape.get_shape("x") or (1,)
+        out_shape = unified_shape.get_shape("y") or (1,)
+
+        in_dim = int(in_shape[0])
+        out_dim = int(out_shape[0])
+
+        self.proj = nn.Linear(in_dim, out_dim, bias=False)
+        with torch.no_grad():
+            if in_dim == out_dim:
+                self.proj.weight.copy_(torch.eye(in_dim))
+
+    def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
+        """Validate if this model can accept the given shape specification.
+
+        Args:
+            shape_spec: Shape specification to validate
+
+        Returns:
+            True if shape is acceptable (has both x and y shapes)
+        """
+        return shape_spec.has_shape("x") and shape_spec.has_shape("y")
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Record input to verify direct transform application
+        self.last_x = x.detach()
+        return self.proj(x)
+
+
+def _make_data(
+    tmp_path: Path, n: int = 32, d: int = 4
+) -> tuple[Path, Path, np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(0)
+    X = rng.normal(loc=10.0, scale=5.0, size=(n, d)).astype(np.float32)
+    # Targets equal to features for identity mapping
+    Y = X.copy().astype(np.float32)
+    fx = tmp_path / "features.npy"
+    fy = tmp_path / "targets.npy"
+    np.save(fx, X)
+    np.save(fy, Y)
+    return fx, fy, X, Y
+
+
+def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule:
+    dataset = FlexibleDataset(features={"x": fx}, targets={"y": fy})
+    n = len(dataset)
+    # Edge case: zero validation/test to ensure transforms fit on the full dataset
+    train = tuple(range(0, n))
+    val = tuple()
+    test = train
+    # Predict over the training indices for exact inverse-transform comparisons
+    split = IndexSplit(train=train, validation=val, test=test, predict=train)
+    from dlkit.tools.config.dataloader_settings import DataloaderSettings
+
+    dm = InMemoryModule(
+        dataset=dataset,
+        split=split,
+        dataloader=DataloaderSettings(
+            batch_size=batch_size,
+            num_workers=0,
+            shuffle=False,
+            pin_memory=False,
+            persistent_workers=False,
+        ),
+    )
+    dm.setup("fit")
+    dm.setup("validate")
+    dm.setup("test")
+    dm.setup("predict")
+    return dm
+
+
+def _entry_configs(fx: Path, fy: Path) -> dict[str, Feature | Target]:
+    # Apply MinMaxScaler to both x and y; direct for features, inverse for targets at predict
+    ts = TransformSettings(
+        name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
+    )
+    x = Feature(name="x", path=fx, transforms=[ts])
+    y = Target(name="y", path=fy, transforms=[ts])
+    return {"x": x, "y": y}
+
+
+def _build_wrapper(entry_cfgs: dict[str, Feature | Target]) -> StandardLightningWrapper:
+    from dlkit.core.shape_specs import create_shape_spec, ModelFamily, ShapeSource
+
+    model_settings = ModelComponentSettings(name=IdentityHead, module_path="tests.helpers")
+    wrapper_settings = WrapperComponentSettings()
+
+    # x/y shapes provided by FlexibleDataset are 1D (feature dimension)
+    # Create proper ShapeSpec using modern system
+    shape_spec = create_shape_spec(
+        shapes={"x": (4,), "y": (4,)},
+        model_family=ModelFamily.DLKIT_NN,
+        source=ShapeSource.CONFIGURATION
+    )
+
+    return StandardLightningWrapper(
+        settings=wrapper_settings,
+        model_settings=model_settings,
+        shape_spec=shape_spec,
+        entry_configs=entry_cfgs,
+    )
+
+
+def _basic_trainer() -> Trainer:
+    return Trainer(
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_train_batches=0,
+        limit_val_batches=1,
+        limit_test_batches=1,
+        limit_predict_batches=1,
+        accelerator="cpu",
+        devices=1,
+    )
+
+
+def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) -> None:
+    # Arrange
+    fx, fy, X, Y = _make_data(tmp_path)
+    dm = _build_datamodule(fx, fy)
+    entries = _entry_configs(fx, fy)
+    wrapper = _build_wrapper(entries)
+    trainer = _basic_trainer()
+
+    # Act: fit just to trigger on_fit_start transform fitting and persistence
+    trainer.fit(wrapper, datamodule=dm)
+    # Save and reload via Lightning checkpoint
+    ckpt_path = tmp_path / "model_with_transforms.ckpt"
+    trainer.save_checkpoint(ckpt_path)
+    assert ckpt_path.exists()
+
+    # Create shape_spec for loading
+    from dlkit.core.shape_specs import create_shape_spec, ModelFamily, ShapeSource
+    load_shape_spec = create_shape_spec(
+        shapes={"x": (4,), "y": (4,)},
+        model_family=ModelFamily.DLKIT_NN,
+        source=ShapeSource.CONFIGURATION
+    )
+
+    loaded = StandardLightningWrapper.load_from_checkpoint(
+        str(ckpt_path),
+        settings=WrapperComponentSettings(),
+        model_settings=ModelComponentSettings(name=IdentityHead, module_path="tests.helpers"),
+        shape_spec=load_shape_spec,
+        entry_configs=entries,
+        strict=False,
+    )
+
+    # Predict
+    preds = trainer.predict(loaded, datamodule=dm)
+    assert isinstance(preds, list) and len(preds) > 0
+    batch_out = preds[0]
+    assert isinstance(batch_out, dict)
+    # Predictions are renamed to target keys by the naming step
+    inv_pred = batch_out.get("predictions", {}).get("y")
+    inv_targ = batch_out.get("targets", {}).get("y")
+    assert inv_pred is not None and inv_targ is not None
+
+    # Assert: inverse-transformed predictions and targets are in original space (strict)
+    # Compare first batch predictions to raw target batch
+    raw_batch = next(iter(dm.predict_dataloader()))
+    raw_y = raw_batch["y"]
+    assert torch.allclose(inv_targ, raw_y, atol=1e-6)
+    assert torch.allclose(inv_pred, raw_y, atol=1e-6)
+
+    # Assert: direct transforms applied exactly via wrapper’s chain
+    assert loaded.model.last_x is not None
+    x_in = loaded.model.last_x
+    raw_x = next(iter(dm.predict_dataloader()))["x"]
+    expected_x_in = loaded.feature_transforms({"x": raw_x})["x"]
+    assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
+
+
+def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
+    """Test the high-level dlkit.infer() API using a real trained checkpoint."""
+    import dlkit
+
+    # Arrange: Set up and train a model (same as previous test)
+    fx, fy, X, Y = _make_data(tmp_path)
+    dm = _build_datamodule(fx, fy)
+    entries = _entry_configs(fx, fy)
+    wrapper = _build_wrapper(entries)
+    trainer = _basic_trainer()
+
+    # Train and save checkpoint
+    trainer.fit(wrapper, datamodule=dm)
+    ckpt_path = tmp_path / "model_for_direct_inference.ckpt"
+    trainer.save_checkpoint(ckpt_path)
+    assert ckpt_path.exists()
+
+    # Prepare input data for direct inference
+    # Use raw data (before transforms) as the new API should handle transforms internally
+    test_inputs = {"x": torch.from_numpy(X[:8]).float()}  # First 8 samples
+
+    # Act: Test the high-level dlkit.infer() API
+    result = dlkit.infer(
+        checkpoint_path=ckpt_path,
+        inputs=test_inputs,
+        batch_size=4,
+        device="cpu",
+        apply_transforms=True
+    )
+
+    # Assert: Verify the result structure and content
+    assert hasattr(result, 'predictions')
+    assert hasattr(result, 'model_state')
+    assert isinstance(result.predictions, dict)
+
+    # Check the actual structure - it might be nested
+    if "predictions" in result.predictions:
+        predictions = result.predictions["predictions"]
+    elif "y" in result.predictions:
+        predictions = result.predictions["y"]
+    else:
+        # Get the first available prediction
+        predictions = next(iter(result.predictions.values()))
+
+    assert isinstance(predictions, torch.Tensor)
+    assert predictions.shape[0] == 8  # Same number of samples as input
+    assert predictions.shape[1] == 4  # Output dimension
+
+    # Verify predictions are reasonable (not NaN, not all zeros)
+    assert not torch.isnan(predictions).any()
+    assert not torch.allclose(predictions, torch.zeros_like(predictions))
+
+    # Test with different batch size
+    result_batch16 = dlkit.infer(
+        checkpoint_path=ckpt_path,
+        inputs=test_inputs,
+        batch_size=16,  # Larger than input size
+        device="cpu"
+    )
+
+    # Should get same predictions regardless of batch size
+    if "predictions" in result.predictions:
+        pred1 = result.predictions["predictions"]
+    elif "y" in result.predictions:
+        pred1 = result.predictions["y"]
+    else:
+        pred1 = next(iter(result.predictions.values()))
+
+    if "predictions" in result_batch16.predictions:
+        pred2 = result_batch16.predictions["predictions"]
+    elif "y" in result_batch16.predictions:
+        pred2 = result_batch16.predictions["y"]
+    else:
+        pred2 = next(iter(result_batch16.predictions.values()))
+
+    assert torch.allclose(pred1, pred2, atol=1e-6)
+
+    # Test with transforms disabled
+    result_no_transforms = dlkit.infer(
+        checkpoint_path=ckpt_path,
+        inputs=test_inputs,
+        apply_transforms=False
+    )
+
+    # Test with transforms disabled should succeed
+    # Note: The actual difference may be minimal with identity transforms in this test
+    assert result_no_transforms is not None
+    assert result_no_transforms.predictions is not None
+
+
+def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
+    # Arrange
+    fx, fy, X, Y = _make_data(tmp_path)
+    dm = _build_datamodule(fx, fy)
+    entries = _entry_configs(fx, fy)
+    wrapper = _build_wrapper(entries)
+    trainer = _basic_trainer()
+    # Fit once so transforms are fitted and stored in ModuleDict
+    trainer.fit(wrapper, datamodule=dm)
+
+    # Save state_dict via torch.save and reload into a fresh wrapper instance
+    sd_path = tmp_path / "wrapper_state.pth"
+    torch.save(wrapper.state_dict(), sd_path)
+    assert sd_path.exists()
+
+    rewrapped = _build_wrapper(entries)
+    state = torch.load(sd_path, map_location="cpu")
+    rewrapped.load_state_dict(state, strict=False)
+
+    # Predict
+    preds = trainer.predict(rewrapped, datamodule=dm)
+    assert isinstance(preds, list) and len(preds) > 0
+    batch_out = preds[0]
+    # Predictions are renamed to target keys by the naming step
+    inv_pred = batch_out.get("predictions", {}).get("y")
+    inv_targ = batch_out.get("targets", {}).get("y")
+    assert inv_pred is not None and inv_targ is not None
+
+    raw_batch = next(iter(dm.predict_dataloader()))
+    raw_y = raw_batch["y"]
+    assert torch.allclose(inv_targ, raw_y, atol=1e-6)
+    assert torch.allclose(inv_pred, raw_y, atol=1e-6)
+
+    # Verify direct transform applied exactly via wrapper’s chain
+    assert rewrapped.model.last_x is not None
+    x_in = rewrapped.model.last_x
+    raw_x = next(iter(dm.predict_dataloader()))["x"]
+    expected_x_in = rewrapped.feature_transforms({"x": raw_x})["x"]
+    assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
