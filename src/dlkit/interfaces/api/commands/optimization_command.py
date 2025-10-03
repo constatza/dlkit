@@ -1,0 +1,177 @@
+"""Optimization command implementation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from dlkit.interfaces.api.domain.errors import WorkflowError
+from dlkit.interfaces.api.domain.models import OptimizationResult
+from dlkit.interfaces.api.services import OptimizationService
+from dlkit.interfaces.api.overrides import basic_override_manager
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.protocols import BaseSettingsProtocol
+from .base import BaseCommand
+
+
+@dataclass(frozen=True)
+class OptimizationCommandInput:
+    """Input dataflow for optimization command."""
+
+    trials: int | None = None  # Override default should be None
+    mlflow: bool = False
+    checkpoint_path: Path | str | None = None
+    root_dir: Path | str | None = None
+    # Basic overrides
+    output_dir: Path | str | None = None
+    data_dir: Path | str | None = None
+    # Optuna overrides
+    study_name: str | None = None
+    # MLflow overrides
+    experiment_name: str | None = None
+    run_name: str | None = None
+    # Additional overrides
+    additional_overrides: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize additional_overrides if None."""
+        if self.additional_overrides is None:
+            object.__setattr__(self, "additional_overrides", {})
+
+
+class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResult]):
+    """Command for executing hyperparameter optimization workflows.
+
+    Handles Optuna-based optimization with parameter overrides,
+    validation, and proper error handling.
+    """
+
+    def __init__(self, command_name: str = "optimize") -> None:
+        """Initialize optimization command."""
+        super().__init__(command_name)
+        self.override_manager = basic_override_manager
+        self.optimization_service = OptimizationService()
+
+    def validate_input(
+        self, input_data: OptimizationCommandInput, settings: BaseSettingsProtocol
+    ) -> None:
+        """Validate optimization command input.
+
+        Args:
+            input_data: Optimization parameters and overrides
+            settings: DLKit configuration
+
+        Raises:
+            WorkflowError: On validation failure
+        """
+        try:
+            # Validate trials count
+            if input_data.trials <= 0:
+                raise WorkflowError(
+                    f"Trials must be positive, got: {input_data.trials}",
+                    {"command": "optimize", "error": "invalid_trials_count"},
+                )
+
+            # Build overrides dictionary
+            overrides = self._build_overrides_dict(input_data)
+
+            # Validate overrides
+            if overrides:
+                validation_errors = self.override_manager.validate_overrides(settings, **overrides)
+                if validation_errors:
+                    raise WorkflowError(
+                        f"Override validation failed: {'; '.join(validation_errors)}",
+                        {"command": "optimize", "validation_errors": "; ".join(validation_errors)},
+                    )
+
+        except WorkflowError:
+            raise
+        except Exception as e:
+            raise WorkflowError(
+                f"Input validation failed: {str(e)}", {"command": "optimize", "error": str(e)}
+            ) from e
+
+    def execute(
+        self, input_data: OptimizationCommandInput, settings: BaseSettingsProtocol, **kwargs: Any
+    ) -> OptimizationResult:
+        """Execute optimization command.
+
+        Args:
+            input_data: Optimization parameters and overrides
+            settings: DLKit configuration
+            **kwargs: Additional parameters
+
+        Returns:
+            OptimizationResult on successful execution
+
+        Raises:
+            WorkflowError: On execution failure
+        """
+        try:
+            # Validate input
+            self.validate_input(input_data, settings)
+
+            # Build and apply overrides
+            overrides = self._build_overrides_dict(input_data)
+            if overrides:
+                settings = self.override_manager.apply_overrides(settings, **overrides)
+
+            # Execute optimization
+            checkpoint = overrides.get("checkpoint_path") if overrides else None
+            return self.optimization_service.execute_optimization(
+                settings, input_data.trials, checkpoint
+            )
+
+        except WorkflowError:
+            raise
+        except Exception as e:
+            raise WorkflowError(
+                f"Optimization execution failed: {str(e)}",
+                {"command": "optimize", "error_type": type(e).__name__},
+            ) from e
+
+    def _build_overrides_dict(self, input_data: OptimizationCommandInput) -> dict[str, Any]:
+        """Build overrides dictionary from input
+
+        Args:
+            input_data: Optimization command input
+
+        Returns:
+            Dictionary of non-None overrides
+        """
+        overrides = {
+            k: v
+            for k, v in {
+                "checkpoint_path": (
+                    Path(input_data.checkpoint_path)
+                    if isinstance(input_data.checkpoint_path, str)
+                    else input_data.checkpoint_path
+                ),
+                "root_dir": (
+                    Path(input_data.root_dir)
+                    if isinstance(input_data.root_dir, str)
+                    else input_data.root_dir
+                ),
+                "output_dir": (
+                    Path(input_data.output_dir)
+                    if isinstance(input_data.output_dir, str)
+                    else input_data.output_dir
+                ),
+                "data_dir": (
+                    Path(input_data.data_dir)
+                    if isinstance(input_data.data_dir, str)
+                    else input_data.data_dir
+                ),
+                "trials": input_data.trials
+                if input_data.trials != 100
+                else None,  # Only override if changed from default
+                "study_name": input_data.study_name,
+                "experiment_name": input_data.experiment_name,
+                "run_name": input_data.run_name,
+                **(input_data.additional_overrides or {}),
+            }.items()
+            if v is not None
+        }
+
+        return overrides
