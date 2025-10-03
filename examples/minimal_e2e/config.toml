@@ -1,0 +1,42 @@
+[SESSION]
+name = "minimal_e2e"
+seed = 7
+inference = false
+
+[MODEL]
+# Use the custom model defined in this example
+name = "SimpleNet"
+module_path = "examples.minimal_e2e.model"
+
+[TRAINING]
+epochs = 3
+
+[TRAINING.trainer]
+accelerator = "cpu"
+default_root_dir = "./outputs"
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+batch_size = 16
+num_workers = 0
+
+[DATASET]
+name = "FlexibleDataset"
+type = "flexible"
+
+[[DATASET.features]]
+name = "x"
+path = "./data/x.txt"
+
+[[DATASET.targets]]
+name = "y"
+path = "./data/y.txt"
+
+[DATASET.split]
+val = 0.2
+test = 0.2
+
+[PATHS]
+output_dir = "./outputs"
