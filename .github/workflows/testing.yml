@@ -5,43 +5,43 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.12", "3.13"]
+        extra: ["",  "gpu"]
+        exclude:
+          - os: macos-latest
+            extra: gpu
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Install uv (latest v6.1.0) with built-in cache enabled
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
           version: latest
 
-      # 2) Fallback cache to survive GitHub’s cache-service 503s
       - name: Cache uv artifacts
         uses: actions/cache@v3
         continue-on-error: true
         with:
           path: ${{ env.UV_CACHE_DIR }}
           key: ${{ runner.os }}-uv-python-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-python-${{ matrix.python-version }}-
-            ${{ runner.os }}-uv-
-            ${{ runner.os }}-
 
-      # 3) Set up Python via uv
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      # 4) Synchronize all dependencies & extras
       - name: Synchronize dependencies
-        run: uv sync --dev --all-extras
+        shell: bash
+        run: |
+          if [[ "${{ matrix.extra }}" != "" ]]; then
+            uv sync --dev --extra ${{ matrix.extra }}
+          else
+            uv sync --dev
+          fi
 
-      # 5) Run pytest with verbose output
       - name: Run pytest
         shell: bash
         run: |

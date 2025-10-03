@@ -191,6 +191,16 @@ temp/
 lightning_logs
 *~
 
+# MLflow artifacts and tracking
+mlartifacts/
+
+# Personal configuration and documentation
+.claude/
+.dlkit/
+AGENTS.md
+CLAUDE.md
 
 .qodo
 .codiumai.toml
+# Allow example dataflow under examples/minimal_e2e
+!examples/minimal_e2e/data/*.csv
