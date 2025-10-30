@@ -7,6 +7,7 @@ from subprocess import Popen
 
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.tools.io import locations
+from dlkit.tools.io.path_normalizers import path_to_file_uri, path_to_sqlite_uri
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
 
 from .health_checker import HTTPHealthChecker
@@ -192,12 +193,14 @@ class MLflowServerAdapter(ContextualServerAdapter):
             logger.debug("Resolving storage locations and ensuring directories")
             try:
                 if not server_config.backend_store_uri:
+                    default_backend_path = locations.mlruns_dir()
                     server_config = server_config.model_copy(
-                        update={"backend_store_uri": locations.mlruns_backend_uri()}
+                        update={"backend_store_uri": path_to_sqlite_uri(default_backend_path)}
                     )
                 if not server_config.artifacts_destination:
+                    default_artifacts_path = locations.mlartifacts_dir()
                     server_config = server_config.model_copy(
-                        update={"artifacts_destination": f"file://{locations.mlartifacts_dir()}"}
+                        update={"artifacts_destination": path_to_file_uri(default_artifacts_path)}
                     )
                 # Ensure local storage directories (using injected service)
                 self._storage_ensurer.ensure_storage(server_config)

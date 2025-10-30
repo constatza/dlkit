@@ -240,7 +240,7 @@ batch_size = 32
 
 [[DATASET.features]]
 name = "old_feature"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 
 [MODEL]
 name = "LinearNetwork"
@@ -373,7 +373,7 @@ batch_size = 32
 [MODEL]
 name = "LinearNetwork"
 module_path = "dlkit.core.models.nn.ffnn"
-checkpoint = "{ckpt1}"
+checkpoint = "{ckpt1.as_posix()}"
 
 [TRAINING]
 epochs = 10

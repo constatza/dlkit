@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 import typer
 from hypothesis import given, strategies as st
 from typer.testing import CliRunner
@@ -337,105 +338,90 @@ class TestTrainCommandErrorHandling:
 class TestTrainCommandProperties:
     """Property-based tests for train command parameter validation."""
 
-    @given(st.integers(min_value=MIN_EPOCHS, max_value=MAX_EPOCHS))
-    def test_train_numeric_parameter_ranges(self, epochs: int) -> None:
+    @given(epochs=st.integers(min_value=MIN_EPOCHS, max_value=MAX_EPOCHS))
+    def test_train_numeric_parameter_ranges(
+        self,
+        epochs: int,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Test that numeric parameters accept valid ranges."""
-        from typer.testing import CliRunner
-        from pathlib import Path
-        import tempfile
-        from unittest.mock import Mock
+        tmp_dir = tmp_path_factory.mktemp("train_numeric")
+        cli_runner = CliRunner()
+        config_path = tmp_dir / "config.toml"
+        config_path.write_text("[SESSION]\nname = 'test'")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            cli_runner = CliRunner()
-            config_path = tmp_path / "config.toml"
-            config_path.write_text("[SESSION]\nname = 'test'")
+        mock_settings = Mock()
+        mock_settings.MLFLOW = Mock(is_active=False)
+        mock_settings.OPTUNA = Mock(is_active=False)
+        mock_result = Mock()
 
-            # Create mocks inside test
-            mock_settings = Mock()
-            mock_settings.MLFLOW = Mock(is_active=False)
-            mock_settings.OPTUNA = Mock(is_active=False)
-            mock_result = Mock()
+        with (
+            patch("dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings),
+            patch("dlkit.interfaces.cli.commands.train.validate_config"),
+            patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
+            patch("dlkit.interfaces.cli.commands.train.present_training_result"),
+        ):
+            result = cli_runner.invoke(
+                cli_app, ["train", "--epochs", str(epochs), str(config_path)]
+            )
+            assert result.exit_code == 0
 
-            with (
-                patch(
-                    "dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings
-                ),
-                patch("dlkit.interfaces.cli.commands.train.validate_config"),
-                patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
-                patch("dlkit.interfaces.cli.commands.train.present_training_result"),
-            ):
-                result = cli_runner.invoke(
-                    cli_app, ["train", "--epochs", str(epochs), str(config_path)]
-                )
-                assert result.exit_code == 0
-
-    @given(st.integers(min_value=MIN_TRIALS, max_value=MAX_TRIALS))
-    def test_train_strategy_with_trials(self, trials: int) -> None:
+    @given(trials=st.integers(min_value=MIN_TRIALS, max_value=MAX_TRIALS))
+    def test_train_strategy_with_trials(
+        self,
+        trials: int,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Test Optuna strategy with various trial counts."""
-        from typer.testing import CliRunner
-        from pathlib import Path
-        import tempfile
-        from unittest.mock import Mock
+        tmp_dir = tmp_path_factory.mktemp("train_trials")
+        cli_runner = CliRunner()
+        config_path = tmp_dir / "config.toml"
+        config_path.write_text("[SESSION]\nname = 'test'")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            cli_runner = CliRunner()
-            config_path = tmp_path / "config.toml"
-            config_path.write_text("[SESSION]\nname = 'test'")
+        mock_settings = Mock()
+        mock_settings.MLFLOW = Mock(is_active=False)
+        mock_settings.OPTUNA = Mock(is_active=False)
+        mock_result = Mock()
 
-            # Create mocks inside test
-            mock_settings = Mock()
-            mock_settings.MLFLOW = Mock(is_active=False)
-            mock_settings.OPTUNA = Mock(is_active=False)
-            mock_result = Mock()
+        with (
+            patch("dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings),
+            patch("dlkit.interfaces.cli.commands.train.validate_config"),
+            patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
+            patch("dlkit.interfaces.cli.commands.train.present_training_result"),
+        ):
+            # Note: Optuna optimization should use 'dlkit optimize' command, not train
+            result = cli_runner.invoke(
+                cli_app, ["train", "--epochs", str(trials), str(config_path)]
+            )
+            assert result.exit_code == 0
 
-            with (
-                patch(
-                    "dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings
-                ),
-                patch("dlkit.interfaces.cli.commands.train.validate_config"),
-                patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
-                patch("dlkit.interfaces.cli.commands.train.present_training_result"),
-            ):
-                # Note: Optuna optimization should use 'dlkit optimize' command, not train
-                result = cli_runner.invoke(
-                    cli_app, ["train", "--epochs", str(trials), str(config_path)]
-                )
-                assert result.exit_code == 0
-
-    @given(st.integers(min_value=MIN_PORT, max_value=MAX_PORT))
-    def test_train_mlflow_parameters(self, port: int) -> None:
+    @given(port=st.integers(min_value=MIN_PORT, max_value=MAX_PORT))
+    def test_train_mlflow_parameters(
+        self,
+        port: int,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Test MLflow strategy with various port configurations."""
-        from typer.testing import CliRunner
-        from pathlib import Path
-        import tempfile
-        from unittest.mock import Mock
+        tmp_dir = tmp_path_factory.mktemp("train_mlflow")
+        cli_runner = CliRunner()
+        config_path = tmp_dir / "config.toml"
+        config_path.write_text("[SESSION]\nname = 'test'")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            cli_runner = CliRunner()
-            config_path = tmp_path / "config.toml"
-            config_path.write_text("[SESSION]\nname = 'test'")
+        mock_settings = Mock()
+        mock_settings.MLFLOW = Mock(is_active=False)
+        mock_settings.OPTUNA = Mock(is_active=False)
+        mock_result = Mock()
 
-            # Create mocks inside test
-            mock_settings = Mock()
-            mock_settings.MLFLOW = Mock(is_active=False)
-            mock_settings.OPTUNA = Mock(is_active=False)
-            mock_result = Mock()
-
-            with (
-                patch(
-                    "dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings
-                ),
-                patch("dlkit.interfaces.cli.commands.train.validate_config"),
-                patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
-                patch("dlkit.interfaces.cli.commands.train.present_training_result"),
-            ):
-                result = cli_runner.invoke(
-                    cli_app, ["train", "--mlflow", "--mlflow-port", str(port), str(config_path)]
-                )
-                assert result.exit_code == 0
+        with (
+            patch("dlkit.interfaces.cli.commands.train.load_config", return_value=mock_settings),
+            patch("dlkit.interfaces.cli.commands.train.validate_config"),
+            patch("dlkit.interfaces.cli.commands.train.api_train", return_value=mock_result),
+            patch("dlkit.interfaces.cli.commands.train.present_training_result"),
+        ):
+            result = cli_runner.invoke(
+                cli_app, ["train", "--mlflow", "--mlflow-port", str(port), str(config_path)]
+            )
+            assert result.exit_code == 0
 
 
 class TestTrainCommandIntegration:

@@ -279,7 +279,7 @@ class TestNormalizeUserPath:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = normalize_user_path("~/runs", require_absolute=True)
-        assert result == fake_home / "runs"
+        assert result.resolve() == (fake_home / "runs").resolve()
 
     def test_coerce_root_dir_missing_slash(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Paths missing a leading slash but matching HOME prefix are repaired."""
@@ -292,7 +292,7 @@ class TestNormalizeUserPath:
 
         value = "home/tester/project"
         result = coerce_root_dir_to_absolute(value)
-        assert result == fake_home / "project"
+        assert result.resolve() == (fake_home / "project").resolve()
 
     def test_coerce_root_dir_requires_absolute(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Relative paths that cannot be coerced should return None when absolute required."""

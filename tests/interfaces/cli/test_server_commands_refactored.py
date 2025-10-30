@@ -178,13 +178,15 @@ class TestRefactoredServerCommands:
         config_path.write_text("[MLFLOW]\nenabled = true")
 
         mock_app_service = Mock()
+        artifacts_dir = (tmp_path / "mlflow" / "artifacts").resolve()
+
         mock_app_service.get_server_configuration_info.return_value = {
             "configured": True,
             "server": {
                 "host": "localhost",
                 "port": 5000,
                 "backend_store": "sqlite:///mlflow.db",
-                "artifacts": "/tmp/mlflow/artifacts",
+                "artifacts": str(artifacts_dir),
             },
             "client": {"tracking_uri": "http://localhost:5000", "experiment": "default"},
         }

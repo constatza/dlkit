@@ -248,6 +248,7 @@ class TestServerInfoCommand:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_settings: Mock,
+        tmp_path: Path,
     ) -> None:
         """Test info command with config file shows specific settings."""
 
@@ -258,7 +259,7 @@ class TestServerInfoCommand:
         mock_mlflow_settings.server.host = "localhost"
         mock_mlflow_settings.server.port = 5000
         mock_mlflow_settings.server.backend_store_uri = "sqlite:///test.db"
-        mock_mlflow_settings.server.artifacts_destination = "/tmp/artifacts"
+        mock_mlflow_settings.server.artifacts_destination = str((tmp_path / "artifacts").resolve())
         mock_mlflow_settings.client = Mock()
         mock_mlflow_settings.client.tracking_uri = "http://localhost:5000"
         mock_mlflow_settings.client.experiment_name = "test_experiment"

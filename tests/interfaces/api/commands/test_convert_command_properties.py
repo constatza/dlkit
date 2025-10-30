@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 from typing import Any
 
@@ -56,7 +55,11 @@ class TestConvertCommandProperties:
         max_examples=20, deadline=5000, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
     def test_validate_input_accepts_valid_parameters(
-        self, batch_size: int, opset: int, shape_dims: list[int]
+        self,
+        batch_size: int,
+        opset: int,
+        shape_dims: list[int],
+        tmp_path_factory: pytest.TempPathFactory,
     ) -> None:
         """Property: validate_input should accept all valid parameter combinations.
 
@@ -65,60 +68,62 @@ class TestConvertCommandProperties:
             opset: Valid ONNX opset version
             shape_dims: Valid shape dimensions
         """
-        with TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
+        tmp_path = tmp_path_factory.mktemp("convert_valid")
 
-            # Setup files
-            checkpoint = tmp_path / "model.ckpt"
-            checkpoint.write_text("mock")
-            output = tmp_path / "model.onnx"
+        # Setup files
+        checkpoint = tmp_path / "model.ckpt"
+        checkpoint.write_text("mock")
+        output = tmp_path / "model.onnx"
 
-            input_data = ConvertCommandInput(
-                checkpoint_path=checkpoint,
-                output_path=output,
-                shape=create_shape_spec(shape_dims),
-                batch_size=batch_size,
-                opset=opset,
-            )
+        input_data = ConvertCommandInput(
+            checkpoint_path=checkpoint,
+            output_path=output,
+            shape=create_shape_spec(shape_dims),
+            batch_size=batch_size,
+            opset=opset,
+        )
 
-            command = ConvertCommand()
+        command = ConvertCommand()
 
-            # Should not raise any exception
-            command.validate_input(input_data, Mock())
+        # Should not raise any exception
+        command.validate_input(input_data, Mock())
 
     @given(opset=invalid_opset_versions)
     @hypothesis_settings(
         max_examples=10, deadline=5000, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
-    def test_validate_input_rejects_invalid_opset(self, opset: int) -> None:
+    def test_validate_input_rejects_invalid_opset(
+        self,
+        opset: int,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Property: validate_input should reject opset versions < 9.
 
         Args:
             opset: Invalid ONNX opset version
         """
-        with TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
+        tmp_path = tmp_path_factory.mktemp("convert_invalid")
 
-            # Setup files
-            checkpoint = tmp_path / "model.ckpt"
-            checkpoint.write_text("mock")
-            output = tmp_path / "model.onnx"
+        # Setup files
+        checkpoint = tmp_path / "model.ckpt"
+        checkpoint.write_text("mock")
+        output = tmp_path / "model.onnx"
 
-            input_data = ConvertCommandInput(
-                checkpoint_path=checkpoint,
-                output_path=output,
-                shape="3,224,224",
-                batch_size=4,
-                opset=opset,
-            )
+        input_data = ConvertCommandInput(
+            checkpoint_path=checkpoint,
+            output_path=output,
+            shape="3,224,224",
+            batch_size=4,
+            opset=opset,
+        )
 
-            command = ConvertCommand()
+        command = ConvertCommand()
 
-            with pytest.raises(WorkflowError) as exc_info:
-                command.validate_input(input_data, Mock())
+        with pytest.raises(WorkflowError) as exc_info:
+            command.validate_input(input_data, Mock())
 
-            assert "Unsupported opset version" in str(exc_info.value)
-            assert exc_info.value.context["opset"] == opset
+        assert "Unsupported opset version" in str(exc_info.value)
+        assert exc_info.value.context["opset"] == opset
 
     @given(batch_size=valid_batch_sizes, shape_dims=single_dimension)
     @hypothesis_settings(max_examples=20, deadline=5000)
@@ -258,31 +263,27 @@ class TestConvertCommandProperties:
     @hypothesis_settings(
         max_examples=10, deadline=5000, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
-    @patch("dlkit.interfaces.api.commands.convert_command.torch.onnx.export")
-    @patch("dlkit.interfaces.api.commands.convert_command.torch.ones")
-    @patch(
-        "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
-    )
     def test_execute_result_properties(
         self,
-        mock_wrapper_factory: Mock,
-        mock_torch_ones: Mock,
-        mock_torch_export: Mock,
         batch_size: int,
         opset: int,
+        tmp_path_factory: pytest.TempPathFactory,
     ) -> None:
         """Property: execute should return ConvertResult with consistent properties.
 
         Args:
-            mock_wrapper_factory: Mock wrapper factory
-            mock_torch_ones: Mock torch.ones
-            mock_torch_export: Mock torch export
             batch_size: Batch size for execution
             opset: ONNX opset version
         """
-        with TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
+        tmp_path = tmp_path_factory.mktemp("convert_execute")
 
+        with (
+            patch(
+                "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
+            ) as mock_wrapper_factory,
+            patch("dlkit.interfaces.api.commands.convert_command.torch.ones") as mock_torch_ones,
+            patch("dlkit.interfaces.api.commands.convert_command.torch.onnx.export") as mock_torch_export,
+        ):
             # Setup files and mocks
             checkpoint = tmp_path / "model.ckpt"
             checkpoint.write_text("mock")
@@ -322,47 +323,56 @@ class TestConvertCommandProperties:
     @hypothesis_settings(
         max_examples=10, deadline=5000, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
-    def test_path_handling_properties(self, checkpoint_name: str, output_name: str) -> None:
+    def test_path_handling_properties(
+        self,
+        checkpoint_name: str,
+        output_name: str,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Property: Path handling should work with various valid filenames.
 
         Args:
             checkpoint_name: Generated checkpoint filename
             output_name: Generated output filename
         """
-        with TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
+        tmp_path = tmp_path_factory.mktemp("convert_paths")
 
-            # Clean up names to ensure they're valid filenames
-            safe_checkpoint = "".join(c for c in checkpoint_name if c.isalnum() or c in "._-")
-            safe_output = "".join(c for c in output_name if c.isalnum() or c in "._-")
+        # Clean up names to ensure they're valid filenames
+        safe_checkpoint = "".join(c for c in checkpoint_name if c.isalnum() or c in "._-")
+        safe_output = "".join(c for c in output_name if c.isalnum() or c in "._-")
 
-            if not safe_checkpoint:
-                safe_checkpoint = "checkpoint"
-            if not safe_output:
-                safe_output = "output"
+        if not safe_checkpoint:
+            safe_checkpoint = "checkpoint"
+        if not safe_output:
+            safe_output = "output"
 
-            checkpoint = tmp_path / f"{safe_checkpoint}.ckpt"
-            output = tmp_path / f"{safe_output}.onnx"
-            checkpoint.write_text("mock")
+        checkpoint = tmp_path / f"{safe_checkpoint}.ckpt"
+        output = tmp_path / f"{safe_output}.onnx"
+        checkpoint.write_text("mock")
 
-            input_data = ConvertCommandInput(
-                checkpoint_path=checkpoint,
-                output_path=output,
-                shape="3,224,224",
-                batch_size=4,
-                opset=17,
-            )
+        input_data = ConvertCommandInput(
+            checkpoint_path=checkpoint,
+            output_path=output,
+            shape="3,224,224",
+            batch_size=4,
+            opset=17,
+        )
 
-            command = ConvertCommand()
+        command = ConvertCommand()
 
-            # Should not raise exception for valid paths
-            command.validate_input(input_data, Mock())
+        # Should not raise exception for valid paths
+        command.validate_input(input_data, Mock())
 
     @given(batch_size_1=valid_batch_sizes, batch_size_2=valid_batch_sizes)
     @hypothesis_settings(
         max_examples=15, deadline=5000, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
-    def test_batch_size_mismatch_detection(self, batch_size_1: int, batch_size_2: int) -> None:
+    def test_batch_size_mismatch_detection(
+        self,
+        batch_size_1: int,
+        batch_size_2: int,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
         """Property: Batch size mismatches should be consistently detected.
 
         Args:
@@ -371,36 +381,35 @@ class TestConvertCommandProperties:
         """
         assume(batch_size_1 != batch_size_2)  # Only test mismatch cases
 
-        with TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
+        tmp_path = tmp_path_factory.mktemp("convert_batch_mismatch")
 
-            checkpoint = tmp_path / "model.ckpt"
-            checkpoint.write_text("mock")
-            output = tmp_path / "model.onnx"
+        checkpoint = tmp_path / "model.ckpt"
+        checkpoint.write_text("mock")
+        output = tmp_path / "model.onnx"
 
-            input_data = ConvertCommandInput(
-                checkpoint_path=checkpoint,
-                output_path=output,
-                shape=None,  # Force inference mode
-                batch_size=batch_size_1,
-                opset=17,
-            )
+        input_data = ConvertCommandInput(
+            checkpoint_path=checkpoint,
+            output_path=output,
+            shape=None,  # Force inference mode
+            batch_size=batch_size_1,
+            opset=17,
+        )
 
-            command = ConvertCommand()
+        command = ConvertCommand()
 
-            # Mock _parse_or_infer_shapes to return shape with different batch size
-            inferred_shapes = [(batch_size_2, 3, 224, 224)]
+        # Mock _parse_or_infer_shapes to return shape with different batch size
+        inferred_shapes = [(batch_size_2, 3, 224, 224)]
 
-            with patch.object(
-                command, "_parse_or_infer_shapes", return_value=(inferred_shapes, True)
+        with patch.object(
+            command, "_parse_or_infer_shapes", return_value=(inferred_shapes, True)
+        ):
+            with patch(
+                "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
             ):
-                with patch(
-                    "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
-                ):
-                    with pytest.raises(WorkflowError) as exc_info:
-                        command.execute(input_data, Mock())
+                with pytest.raises(WorkflowError) as exc_info:
+                    command.execute(input_data, Mock())
 
-                    # Properties of the error
-                    assert "Batch size mismatch" in str(exc_info.value)
-                    assert exc_info.value.context["expected_batch"] == batch_size_1
-                    assert batch_size_2 in exc_info.value.context["found_batches"]
+                # Properties of the error
+                assert "Batch size mismatch" in str(exc_info.value)
+                assert exc_info.value.context["expected_batch"] == batch_size_1
+                assert batch_size_2 in exc_info.value.context["found_batches"]

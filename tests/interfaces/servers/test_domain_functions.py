@@ -203,13 +203,13 @@ class TestStorageDecisionLogic:
 
         assert result is False
 
-    def test_should_use_default_storage_with_explicit_artifacts(self) -> None:
+    def test_should_use_default_storage_with_explicit_artifacts(self, tmp_path: Path) -> None:
         """Test storage decision when explicit artifacts destination is provided."""
         server_config = Mock()
         server_config.backend_store_uri = None
         server_config.artifacts_destination = None
 
-        overrides = {"artifacts_destination": "/tmp/artifacts"}
+        overrides = {"artifacts_destination": str((tmp_path / "artifacts").resolve())}
 
         result = should_use_default_storage(server_config, overrides)
 

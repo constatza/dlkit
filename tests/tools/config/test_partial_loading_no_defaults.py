@@ -185,7 +185,7 @@ test_ratio = 0.1
 
 [[DATASET.features]]
 name = "x"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 """)
 
         result = load_sections_config(config_path, {"DATASET": DatasetSettings}, validate=False)
@@ -275,11 +275,11 @@ class TestTypeCoercion:
         config_path = tmp_path / "config.toml"
         config_path.write_text(f"""
 [DATASET]
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [[DATASET.features]]
 name = "x"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 """)
 
         result = load_sections_config(config_path, {"DATASET": DatasetSettings}, validate=False)

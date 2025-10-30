@@ -33,12 +33,13 @@ def training_config_with_custom_root(tmp_path: Path) -> tuple[Path, Path]:
     # Create dummy data
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    np.save(data_dir / "train_data.npy", np.random.rand(100, 10))
+    data_file = data_dir / "train_data.npy"
+    np.save(data_file, np.random.rand(100, 10))
 
     config_content = f"""
 [SESSION]
 name = "integration-test-session"
-root_dir = "{custom_root}"
+root_dir = "{custom_root.as_posix()}"
 inference = false
 seed = 42
 precision = "single"
@@ -49,11 +50,11 @@ name = "SupervisedArrayDataset"
 
     [[DATASET.features]]
     name = "x"
-    path = "{data_dir / 'train_data.npy'}"
+    path = "{data_file.as_posix()}"
 
     [[DATASET.targets]]
     name = "y"
-    path = "{data_dir / 'train_data.npy'}"
+    path = "{data_file.as_posix()}"
 
     [DATASET.split]
     test_ratio = 0.15

@@ -16,7 +16,7 @@ dependencies = [
     "lightning<3.0.0,>=2.3.2",
     "mlflow>=3.0,<4.0",
     "optuna<5,>=4",
-    "torch>=2.4.0, <2.7.0",
+    "torch>=2.6.0, <2.9.0",
     "dynaconf>=3.2.10",
     "loguru>=0.7.3",
     "polars>=1.4.1,<2.0.0",
@@ -49,7 +49,7 @@ dev = [
 
 [project.optional-dependencies]
 # Linux or Windows GPU build
-gpu = ["torch>=2.4.0, <2.7.0"]
+gpu = ["torch>=2.6.0, <2.9.0"]
 
 [project.scripts]
 dlkit = "dlkit.interfaces.cli:cli_main"
@@ -62,25 +62,31 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 torch = [
-
-  # 2) GPU builds: only when `--extra gpu` on Linux or Windows
+  # GPU build only when explicitly requested via: uv sync --extra gpu
   { index  = "pytorch-gpu", extra   = "gpu", marker  = "sys_platform == 'linux' or sys_platform == 'win32'" },
 
-  # 3) Fallback: no extras or other platforms
-  { index  = "pypi", marker  = "extra == ''" },
+  # Default CPU build on Linux/Windows when no extras
+  { index  = "pytorch-cpu", marker  = "extra == '' and sys_platform == 'linux'" },
+
+  # macOS uses PyPI (Apple Silicon / CPU wheels are on PyPI)
+  { index  = "pypi",        marker  = "extra == '' and sys_platform == 'darwin'" }
 ]
 
+[[tool.uv.index]]
+name = "pypi"
+url  = "https://pypi.org/simple"
+explicit = true
 
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url  = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 
 [[tool.uv.index]]
 name = "pytorch-gpu"
-url = "https://download.pytorch.org/whl/cu124"
-explicit = true
-
-[[tool.uv.index]]
-name     = "pypi"
-url      = "https://pypi.org/simple"
+url  = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 
@@ -94,6 +100,11 @@ pythonpath = [
 ]
 markers = [
     "slow: kept for reference; no default deselection",
+]
+filterwarnings = [
+    # Suppress Pydantic serialization warnings for lazy-loaded settings
+    # These occur when settings use model_construct for partial loading without defaults
+    "ignore:Pydantic serializer warnings:UserWarning",
 ]
 
 

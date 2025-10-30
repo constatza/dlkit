@@ -71,10 +71,6 @@ class TestAPIConceptIntegration:
         # Simulate what happens in dlkit.infer()
 
         # 1. Create mock checkpoint with shape metadata in V3 format
-        import tempfile
-        import json
-        from pathlib import Path
-
         checkpoint_metadata = {
             'dlkit_metadata': {
                 'shape_spec': {
