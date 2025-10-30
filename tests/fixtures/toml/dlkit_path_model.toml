@@ -1,0 +1,29 @@
+# TOML config for dlkit path-based model resolution test
+[model]
+name = "cae.linear:LinearCAE1d"
+latent_size = 64
+num_layers = 2
+
+[trainer]
+max_epochs = 10
+enable_progress_bar = false
+enable_model_summary = false
+enable_checkpointing = false
+
+[datamodule]
+name = "InMemoryModule"
+
+[datamodule.dataset]
+features = "dummy/features.npy"
+
+[datamodule.dataloader]
+batch_size = 2
+num_workers = 0
+
+[lightning]
+loss_function = {name = "MSELoss"}
+optimizer = {name = "Adam", lr = 0.001}
+
+[paths]
+root = "dummy"
+output_dir = "dummy"

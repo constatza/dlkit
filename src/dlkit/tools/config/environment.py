@@ -7,6 +7,7 @@ and DLKit internal artifacts, while components maintain ownership of their speci
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,27 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dlkit.core.datatypes.secure_uris import SecurePath
+
+
+def _configure_mlflow_retry_defaults() -> None:
+    """Configure MLflow HTTP retry behavior with sensible defaults.
+
+    MLflow defaults to 7 retries with exponential backoff, which can cause long waits
+    when the server is unavailable. We reduce this to 2 retries for faster failure detection.
+    Users can override by setting these environment variables before importing dlkit.
+
+    Note: All MLflow HTTP environment variables must be integers (MLflow requirement).
+    """
+    if "MLFLOW_HTTP_REQUEST_MAX_RETRIES" not in os.environ:
+        os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] = "2"
+    if "MLFLOW_HTTP_REQUEST_TIMEOUT" not in os.environ:
+        os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] = "5"
+    if "MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR" not in os.environ:
+        os.environ["MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR"] = "1"
+
+
+# Configure MLflow retry behavior early, before MLflow is imported
+_configure_mlflow_retry_defaults()
 
 
 class DLKitEnvironment(BaseSettings):

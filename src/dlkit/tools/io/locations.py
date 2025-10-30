@@ -59,6 +59,10 @@ def _get_test_artifacts_root() -> Path:
     Returns:
         Path: tests/artifacts directory relative to project root
     """
+    explicit_root = os.environ.get("DLKIT_TEST_ARTIFACT_ROOT")
+    if explicit_root:
+        return Path(explicit_root).resolve()
+
     # Find project root (where tests/ directory exists)
     current = Path.cwd()
 
@@ -77,10 +81,29 @@ def root() -> Path:
 
     Priority:
     1) Thread-local path override context (set by CLI/API)
-    2) Current working directory
+    2) DLKitEnvironment.root_dir (from DLKIT_ROOT_DIR env var or SESSION.root_dir)
+    3) Current working directory
     """
+    from loguru import logger
+
     ctx_root = _root_from_context()
-    return ctx_root or Path.cwd()
+    if ctx_root:
+        logger.debug(f"Using root from PathOverrideContext: {ctx_root}")
+        return ctx_root
+
+    # Check DLKitEnvironment fallback
+    try:
+        env_root = global_environment.get_root_path()
+        if env_root != Path.cwd():
+            logger.debug(f"Using root from DLKitEnvironment: {env_root}")
+            return env_root
+    except Exception:
+        pass
+
+    # Fallback to CWD
+    cwd = Path.cwd()
+    logger.debug(f"Using root from current working directory (fallback): {cwd}")
+    return cwd
 
 
 def output(*parts: str, env: DLKitEnvironment | None = None) -> Path:
@@ -89,15 +112,34 @@ def output(*parts: str, env: DLKitEnvironment | None = None) -> Path:
     Honors path override context for output dir when present.
     In test environment, automatically routes to tests/artifacts.
     """
+    from loguru import logger
+
     # Check if we're in a test environment
     if _is_test_environment():
         # Use test-specific artifacts directory
         test_root = _get_test_artifacts_root()
-        return (test_root.joinpath(*parts)).resolve()
+        result = (test_root.joinpath(*parts)).resolve()
+        logger.debug(f"Resolved output path (test mode): {result}")
+        return result
 
     # Normal production path resolution
     base = resolve_with_context("output", env or global_environment)
-    return (base.joinpath(*parts)).resolve()
+    result = (base.joinpath(*parts)).resolve()
+
+    # Warn if we're falling back to CWD when SESSION.root_dir might be expected
+    cwd = Path.cwd()
+    if base.resolve() == (cwd / "output").resolve():
+        # Check if there's a SESSION.root_dir that's being ignored
+        import os
+        if not os.environ.get("DLKIT_ROOT_DIR"):
+            ctx = get_current_path_context()
+            if not ctx or not ctx.root_dir:
+                logger.debug(
+                    f"Output path resolved to CWD/output: {result}. "
+                    "If SESSION.root_dir is set, ensure PathOverrideContext is active."
+                )
+
+    return result
 
 
 def predictions_dir(*, env: DLKitEnvironment | None = None) -> Path:
@@ -126,7 +168,7 @@ def mlruns_dir(*, env: DLKitEnvironment | None = None) -> Path:
 
 def mlruns_backend_uri(*, env: DLKitEnvironment | None = None) -> str:
     # sqlite file under output/mlruns/mlflow.db
-    db_path = mlruns_dir(env=env) / "mlflow.db"
+    db_path = (mlruns_dir(env=env) / "mlflow.db").resolve()
     # Always format as POSIX so URIs remain consistent across platforms
     return f"sqlite:///{db_path.as_posix()}"
 

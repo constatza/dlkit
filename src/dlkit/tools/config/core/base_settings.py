@@ -26,6 +26,9 @@ class BasicSettings(BaseSettings):
         extra="forbid",
         # Fix pydantic-settings bug where model_validate is protected
         protected_namespaces=("settings_customise_sources",),
+        # Suppress serialization warnings when nested models are dicts (lazy validation mode)
+        ser_json_timedelta="float",
+        ser_json_bytes="base64",
     )
 
     def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:

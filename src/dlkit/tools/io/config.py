@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, TypeVar, cast, overload
+from typing import Any, TypeVar, cast, overload, get_origin, get_args, Union
 import sys
 import torch
 
@@ -14,6 +14,63 @@ from enum import Enum
 from tomlkit import document, table, dumps
 
 from .parsers import PartialTOMLParser
+
+# Python 3.10+ UnionType compatibility
+try:
+    from types import UnionType
+except ImportError:
+    UnionType = type(None)
+
+
+def _sync_session_root_to_environment(settings: Any) -> None:
+    """Synchronize SESSION.root_dir to global DLKitEnvironment if appropriate.
+
+    This provides a defensive fallback when PathOverrideContext is not active.
+    Respects precedence: DLKIT_ROOT_DIR env var > SESSION.root_dir > CWD.
+
+    Args:
+        settings: Loaded settings object (GeneralSettings or similar)
+    """
+    try:
+        import os
+        from dlkit.tools.config.environment import env as global_environment
+        from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
+        from loguru import logger
+
+        # Only update if DLKitEnvironment doesn't already have root_dir from env var
+        if os.environ.get("DLKIT_ROOT_DIR"):
+            # Explicit env var takes precedence - don't override
+            return
+
+        # Extract SESSION.root_dir if present
+        session = getattr(settings, "SESSION", None)
+        if session is None:
+            return
+
+        session_root_dir = getattr(session, "root_dir", None)
+        if session_root_dir is None:
+            return
+
+        normalized_root = coerce_root_dir_to_absolute(session_root_dir)
+        if normalized_root is None:
+            logger.debug(
+                "SESSION.root_dir is not absolute; skipping environment sync",
+                session_root_dir=str(session_root_dir),
+            )
+            return
+
+        # Update global environment for fallback resolution
+        # This ensures SESSION.root_dir is respected even when PathOverrideContext is not active
+        global_environment.root_dir = str(normalized_root)
+
+        logger.debug(
+            "Synchronized SESSION.root_dir to DLKitEnvironment for fallback path resolution",
+            session_root_dir=str(normalized_root),
+        )
+    except Exception as e:
+        # Non-fatal - path resolution will fall back to CWD if this fails
+        from loguru import logger
+        logger.debug(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
 
 
 # Type variable for BaseModel subclasses used throughout the module
@@ -403,6 +460,10 @@ def load_config[T: BaseModel](
             config_data,
         ) from e
 
+    # Sync SESSION.root_dir to global environment for defensive fallback
+    # This ensures SESSION.root_dir is respected even when PathOverrideContext is not active
+    _sync_session_root_to_environment(validated)
+
     # No post-PathsResolver step; path resolution is environment/config-based
     return cast(T, validated)
 
@@ -687,11 +748,127 @@ def _resolve_section_models(
     return resolved
 
 
+def _construct_without_defaults(
+    model_class: type[BaseModel],
+    data: dict[str, Any]
+) -> BaseModel:
+    """Construct Pydantic model with type coercion but no default filling.
+
+    This function enables lazy loading of partial configs by:
+    - Recursively handling nested Pydantic models for proper type construction
+    - Applying type coercion (str→Path, str→Enum, dict→NestedModel, etc.)
+    - NOT filling in defaults for missing fields
+    - Only including fields explicitly present in data
+
+    Args:
+        model_class: Pydantic model class to construct
+        data: Raw dictionary data from TOML file
+
+    Returns:
+        Model instance with only fields from data (no defaults)
+
+    Example:
+        >>> # TOML has: [DATASET]
+        >>> # (empty section)
+        >>> result = _construct_without_defaults(DatasetSettings, {})
+        >>> # result has NO split field with default ratios
+        >>> # vs model_validate would add split=IndexSplitSettings(test_ratio=0.15, ...)
+    """
+    # Get field info to identify nested Pydantic models
+    processed_data = {}
+    fields_set = set()
+
+    for key, value in data.items():
+        field_info = model_class.model_fields.get(key)
+        if field_info is None:
+            # Extra field (like in ExtrasSettings with extra="allow") - pass through
+            processed_data[key] = value
+            fields_set.add(key)
+            continue
+
+        # Mark field as explicitly set
+        fields_set.add(key)
+
+        # Check if field is a nested Pydantic model
+        field_type = field_info.annotation
+
+        # Handle Optional[SomeModel], Union[SomeModel, None], etc.
+        origin = get_origin(field_type)
+        if origin in (Union, UnionType):
+            # Extract non-None type from Union
+            args = get_args(field_type)
+            field_type = next((arg for arg in args if arg is not type(None)), field_type)
+
+        # If nested dict and field expects BaseModel, recursively construct
+        if isinstance(value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
+            # Recursively construct nested model without defaults
+            processed_data[key] = _construct_without_defaults(field_type, value)
+        elif isinstance(value, (list, tuple)):
+            # Handle lists/tuples of nested models
+            processed_items = []
+            for item in value:
+                # Check if the field is a container of BaseModel instances
+                # e.g., tuple[Feature, ...] or list[Target]
+                item_type = field_type
+                item_origin = get_origin(field_type)
+                if item_origin in (tuple, list):
+                    item_args = get_args(field_type)
+                    if item_args:
+                        # Get first arg type (e.g., Feature from tuple[Feature, ...])
+                        item_type = item_args[0]
+
+                if isinstance(item, dict) and isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                    processed_items.append(_construct_without_defaults(item_type, item))
+                else:
+                    processed_items.append(item)
+
+            # Preserve original type (tuple vs list) AND respect field type annotation
+            item_origin = get_origin(field_type)
+            if item_origin == tuple or isinstance(value, tuple):
+                # Field expects tuple or original value was tuple
+                processed_data[key] = tuple(processed_items)
+            else:
+                # Field expects list or no specific requirement
+                processed_data[key] = processed_items
+        else:
+            # For primitives and simple types, pass through as-is
+            # Pydantic's model_construct will handle basic type coercion
+            processed_data[key] = value
+
+    # Use model_construct with _fields_set to track explicitly set fields
+    # CRITICAL: _fields_set tells Pydantic which fields were explicitly set
+    instance = model_class.model_construct(_fields_set=fields_set, **processed_data)
+
+    # WORKAROUND: model_construct still fills defaults for fields with default_factory
+    # We need to remove those fields if they weren't explicitly in the data
+    # This preserves true partial loading without unwanted defaults from factories
+    for field_name, field_info in model_class.model_fields.items():
+        if field_name not in fields_set:
+            # Field was not in the original data
+            # Only remove fields with default_factory (like IndexSplitSettings())
+            # Keep simple defaults (like () or "string") - they're lightweight and expected
+            if field_info.default_factory is not None:
+                # Remove the factory-created default that model_construct added
+                # Use object.__delattr__ to bypass Pydantic's __delattr__
+                try:
+                    object.__delattr__(instance, field_name)
+                except AttributeError:
+                    # Field might not exist, that's fine
+                    pass
+
+    return instance
+
+
 def load_sections_config(
     config_path: Path | str,
     section_configs: Mapping[str, type[BaseModel] | None] | Sequence[str],
+    *,
+    validate: bool = False,
 ) -> dict[str, BaseModel]:
-    """Load and validate multiple sections from a TOML config file efficiently.
+    """Load multiple sections from a TOML config file with optional validation.
+
+    Supports lazy loading (default) where Pydantic validation is deferred,
+    or strict loading where validation happens immediately.
 
     When ``section_configs`` is a mapping, the behaviour matches the previous
     implementation. A convenient shorthand now permits passing an iterable of
@@ -702,19 +879,23 @@ def load_sections_config(
         config_path: Path to the TOML config file
         section_configs: Mapping of section names to their model classes *or*
             iterable of section names that use registered defaults.
+        validate: If True, use model_validate() for strict validation (eager).
+            If False (default), use model_construct() for lazy loading (deferred).
 
     Returns:
-        Dictionary mapping **uppercased** section names to validated model instances
+        Dictionary mapping **uppercased** section names to model instances
+        (validated if validate=True, unvalidated if validate=False)
 
     Raises:
         FileNotFoundError: If config file doesn't exist
         ConfigSectionError: If any required section is missing or lacks a registered model
-        ConfigValidationError: If validation fails for any section
+        ConfigValidationError: If validation=True and validation fails for any section
 
     Example:
+        >>> # Lazy loading (default) - no validation yet
         >>> configs = load_sections_config("config.toml", ["SESSION", "TRAINING"])
-        >>> session = configs["SESSION"]
-        >>> training = configs["TRAINING"]
+        >>> # Strict loading - validates immediately
+        >>> configs = load_sections_config("config.toml", ["SESSION"], validate=True)
     """
     config_path = Path(config_path)
     if not config_path.exists():
@@ -746,20 +927,40 @@ def load_sections_config(
 
     sections_data = _preprocess_sections(config_path, sections_data)
 
-    # Validate each section
-    validated_sections = {}
+    # Construct or validate each section based on validate parameter
+    constructed_sections = {}
     for section_name, model_class in resolved_models.items():
         section_data = sections_data[section_name]
         try:
-            validated_sections[section_name] = model_class.model_validate(section_data)
+            if validate:
+                # Strict mode: full validation with defaults filled
+                constructed_sections[section_name] = model_class.model_validate(section_data)
+            else:
+                # Lazy mode: type coercion WITHOUT default filling
+                # Uses smart constructor that handles nested models and type coercion
+                # but ONLY includes fields explicitly present in TOML
+                constructed_sections[section_name] = _construct_without_defaults(
+                    model_class, section_data
+                )
         except Exception as e:
+            mode = "validate" if validate else "construct"
             raise ConfigValidationError(
-                f"Failed to validate section '{section_name}' with {model_class.__name__}: {e}",
+                f"Failed to {mode} section '{section_name}' with {model_class.__name__}: {e}",
                 model_class.__name__,
                 section_data,
             ) from e
 
-    return validated_sections
+    # If we loaded a full settings object (GeneralSettings), sync SESSION.root_dir
+    # This handles partial loading with validate=True where a complete GeneralSettings is returned
+    if len(constructed_sections) > 1 and "SESSION" in constructed_sections:
+        # Create a mock settings object with SESSION attribute for synchronization
+        class _MockSettings:
+            pass
+        mock_settings = _MockSettings()
+        mock_settings.SESSION = constructed_sections["SESSION"]
+        _sync_session_root_to_environment(mock_settings)
+
+    return constructed_sections
 
 
 @overload
@@ -782,22 +983,27 @@ def load_section_config(
     config_path: Path | str,
     model_class: type[T] | None = None,
     section_name: str | None = None,
+    *,
+    validate: bool = False,
 ) -> BaseModel | T:
-    """Load and validate a single config section.
+    """Load a single config section with optional validation.
 
     Args:
         config_path: Path to the TOML config file
         model_class: Optional Pydantic model class to validate the section with
         section_name: Explicit section name (auto-detected from class name or
             registry when omitted)
+        validate: If True, use model_validate() for strict validation (eager).
+            If False (default), use model_construct() for lazy loading (deferred).
 
     Returns:
-        Validated model instance from the requested section
+        Model instance from the requested section
+        (validated if validate=True, unvalidated if validate=False)
 
     Raises:
         FileNotFoundError: If the config file doesn't exist
         ConfigSectionError: If the section is missing or lacks a registered model
-        ConfigValidationError: If validation fails for that section
+        ConfigValidationError: If validation=True and validation fails for that section
         ValueError: If neither ``model_class`` nor ``section_name`` are provided
     """
     resolved_section = section_name
@@ -818,7 +1024,7 @@ def load_section_config(
     if resolved_model is None:
         raise ValueError(f"Could not find registered model for section: {resolved_section}")
 
-    sections = load_sections_config(config_path, {resolved_section: resolved_model})
+    sections = load_sections_config(config_path, {resolved_section: resolved_model}, validate=validate)
     return sections[resolved_section.upper()]
 
 

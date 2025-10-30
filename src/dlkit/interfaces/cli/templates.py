@@ -16,9 +16,11 @@ def _get_default_optuna_storage() -> str:
     Returns:
         Default Optuna storage URL resolved through environment settings
     """
-    from dlkit.interfaces.servers.domain_functions import get_default_optuna_storage_url
+    from dlkit.tools.config.environment import DLKitEnvironment
+    from dlkit.interfaces.servers.path_resolution import ServerPathResolver
 
-    return get_default_optuna_storage_url()
+    path_resolver = ServerPathResolver(DLKitEnvironment())
+    return path_resolver.get_default_optuna_storage_url()
 
 
 def _get_environment_aware_output_dir() -> str:

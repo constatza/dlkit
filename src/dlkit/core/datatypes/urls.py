@@ -12,6 +12,7 @@ Important:
   or higher-level Pydantic utilities so behavior remains consistent across platforms.
 """
 
+import os
 import re
 from typing import Annotated, Any
 
@@ -35,6 +36,9 @@ from dlkit.core.datatypes.tilde_expansion import (
 def tilde_expand_strict(value: Any) -> Any:
     """Expand tildes using the shared tilde expansion utilities."""
 
+    if isinstance(value, os.PathLike):
+        value = os.fspath(value)
+
     if not isinstance(value, str) or "~" not in value:
         return value
 
@@ -47,10 +51,16 @@ def tilde_expand_strict(value: Any) -> Any:
 
 
 def local_path_security_check(value: Any) -> Any:
-    """Normalize local paths via pathlib expansion."""
+    """Normalize local paths while accepting os.PathLike inputs."""
+
+    if value is None:
+        return value
+
+    if isinstance(value, os.PathLike):
+        value = os.fspath(value)
 
     if not isinstance(value, str):
-        return value
+        raise TypeError("SecurePath values must be strings or path-like objects")
 
     return value.replace("\\", "/")
 

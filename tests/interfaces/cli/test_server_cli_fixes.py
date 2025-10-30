@@ -156,8 +156,10 @@ experiment_name = "test_experiment"
         # Simulate missing mlruns directory by using a different temp path
         test_mlruns = tmp_path / "test_mlruns"
 
-        with patch(
-            "dlkit.interfaces.servers.storage_adapter.get_default_mlruns_path",
+        # Patch the path resolver method (new architecture uses injected ServerPathResolver)
+        with patch.object(
+            storage_adapter._path_resolver,
+            "get_default_mlruns_path",
             return_value=test_mlruns,
         ):
             # Run storage setup - should be pure business logic now
@@ -224,8 +226,10 @@ experiment_name = "test_experiment"
         # Simulate missing mlruns directory
         test_mlruns = tmp_path / "test_business_logic_mlruns"
 
-        with patch(
-            "dlkit.interfaces.servers.storage_adapter.get_default_mlruns_path",
+        # Patch the path resolver method (new architecture uses injected ServerPathResolver)
+        with patch.object(
+            storage_adapter._path_resolver,
+            "get_default_mlruns_path",
             return_value=test_mlruns,
         ):
             # Run storage setup - should automatically create directory

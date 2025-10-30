@@ -216,8 +216,8 @@ class TestTrainCommandErrorHandling:
 
         result = cli_runner.invoke(cli_app, ["train", str(nonexistent_config)])
 
-        assert result.exit_code == 2  # Typer validation error
-        assert result.exit_code == 2  # File not found error
+        assert result.exit_code == 1  # Application error (file not found)
+        # Note: Application code handles missing files for better error messages
 
     def test_train_config_loading_error(
         self,

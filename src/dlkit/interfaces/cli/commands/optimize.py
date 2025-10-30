@@ -14,6 +14,12 @@ from dlkit.interfaces.api import optimize as api_optimize
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
 from ..middleware.error_handler import handle_api_error
+from ..params import (
+    CONFIG_PATH_ARG,
+    MLFLOW_FLAG,
+    OUTPUT_DIR_PARAM,
+    ROOT_DIR_PARAM,
+)
 
 # Create optimization command group
 app = typer.Typer(
@@ -26,24 +32,16 @@ console = Console()
 
 
 def _run_optimization_impl(
-    config_path: Annotated[Path, typer.Argument(help="Path to configuration file")],
+    config_path: CONFIG_PATH_ARG,
     trials: Annotated[
         int, typer.Option("--trials", "-n", help="Number of optimization trials")
     ] = 100,
     study_name: Annotated[
         str | None, typer.Option("--study-name", "-s", help="Name for the Optuna study")
     ] = None,
-    mlflow: Annotated[
-        bool, typer.Option("--mlflow", help="Enable MLflow tracking for optimization")
-    ] = False,
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
+    mlflow: MLFLOW_FLAG = False,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
 ) -> None:
     """Run hyperparameter optimization using Optuna.
 
@@ -122,24 +120,16 @@ def _run_optimization_impl(
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    config_path: Annotated[Path, typer.Argument(help="Path to configuration file")],
+    config_path: CONFIG_PATH_ARG,
     trials: Annotated[
         int, typer.Option("--trials", "-n", help="Number of optimization trials")
     ] = 100,
     study_name: Annotated[
         str | None, typer.Option("--study-name", "-s", help="Name for the Optuna study")
     ] = None,
-    mlflow: Annotated[
-        bool, typer.Option("--mlflow", help="Enable MLflow tracking for optimization")
-    ] = False,
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
+    mlflow: MLFLOW_FLAG = False,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
 ) -> None:
     """Run hyperparameter optimization using Optuna with configuration and parameter overrides."""
     if ctx.invoked_subcommand is not None:

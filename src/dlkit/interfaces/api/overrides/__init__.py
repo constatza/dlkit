@@ -6,12 +6,15 @@ and type safety.
 """
 
 from .manager import BasicOverrideManager, basic_override_manager
+from .normalizer import OverrideNormalizer
 from .types import BasicOverrides, MLflowOverrides, PathOverrides, TrainingOverrides
 
 __all__ = [
     # Override manager
     "BasicOverrideManager",
     "basic_override_manager",
+    # Override normalizer
+    "OverrideNormalizer",
     # Type definitions
     "BasicOverrides",
     "MLflowOverrides",

@@ -61,7 +61,11 @@ class PartialSettingsLoader:
         }
 
     def load_training_settings(self, config_path: Path | str) -> TrainingWorkflowSettings:
-        """Load settings optimized for training workflows.
+        """Load settings optimized for training workflows with lazy validation.
+
+        **Lazy Validation**: Settings are loaded without Pydantic validation by default.
+        Validation happens at build time when components are constructed, not at load time.
+        This allows incomplete configs with placeholder values or missing optional data.
 
         Only loads sections required for training:
         - Required: SESSION, DATAMODULE, DATASET, TRAINING
@@ -71,12 +75,16 @@ class PartialSettingsLoader:
             config_path: Path to TOML configuration file
 
         Returns:
-            TrainingWorkflowSettings: Training-specific settings instance
+            TrainingWorkflowSettings: Training-specific settings instance (unvalidated)
 
         Raises:
             FileNotFoundError: If config file doesn't exist
-            ConfigSectionError: If required sections are missing
-            ConfigValidationError: If validation fails
+            ConfigSectionError: If required sections are missing from TOML file
+
+        Note:
+            Validation errors (e.g., invalid paths, missing fields) will only surface
+            when settings are used to build components. Use `settings.model_validate()`
+            to validate explicitly before build if early error detection is needed.
         """
         from dlkit.tools.io.config import load_sections_config, check_section_exists
 
@@ -304,121 +312,6 @@ class PartialSettingsLoader:
             # Base workflow for any other combination
             return BaseWorkflowSettings(**typed_kwargs)
 
-    def load_custom_settings(
-        self,
-        config_path: Path | str,
-        settings_class: Type[T],
-        required_sections: list[str],
-        optional_sections: list[str] | None = None
-    ) -> T:
-        """Load configuration into a custom settings class with specified section requirements.
-
-        This method enables users to create their own settings classes that implement
-        BaseSettingsProtocol and load them with specific section requirements.
-        Useful for creating domain-specific configuration objects.
-
-        Args:
-            config_path: Path to TOML configuration file
-            settings_class: Custom settings class to instantiate (must implement BaseSettingsProtocol)
-            required_sections: Section names that must be present
-            optional_sections: Section names that are loaded if present
-
-        Returns:
-            Instance of the custom settings class
-
-        Raises:
-            ValueError: If settings_class doesn't implement BaseSettingsProtocol
-            ConfigSectionError: If required sections are missing
-            ConfigValidationError: If validation fails
-
-        Examples:
-            >>> # Create custom evaluation settings
-            >>> class EvaluationSettings(BaseWorkflowSettings):
-            ...     pass
-            >>>
-            >>> settings = loader.load_custom_settings(
-            ...     "config.toml",
-            ...     EvaluationSettings,
-            ...     required_sections=["MODEL", "DATASET"],
-            ...     optional_sections=["PATHS"]
-            ... )
-        """
-        from dlkit.tools.io.config import load_sections_config, check_section_exists
-
-        # Validate that settings_class is a subclass of BaseWorkflowSettings
-        if not issubclass(settings_class, BaseWorkflowSettings):
-            raise ValueError(
-                f"settings_class must be a subclass of BaseWorkflowSettings, "
-                f"got {settings_class}"
-            )
-
-        optional_sections = optional_sections or []
-        all_sections = required_sections + optional_sections
-
-        # Map section names to model classes
-        section_model_map = {
-            "SESSION": SessionSettings,
-            "MODEL": ModelComponentSettings,
-            "DATAMODULE": DataModuleSettings,
-            "DATASET": DatasetSettings,
-            "TRAINING": TrainingConfig,
-            "MLFLOW": MLflowSettings,
-            "OPTUNA": OptunaSettings,
-            "PATHS": PathsSettings,
-            "EXTRAS": ExtrasSettings,
-        }
-
-        # Validate section names
-        unknown_sections = [s for s in all_sections if s not in section_model_map]
-        if unknown_sections:
-            available_sections = list(section_model_map.keys())
-            raise ValueError(
-                f"Unknown sections: {unknown_sections}. "
-                f"Available sections: {available_sections}"
-            )
-
-        # Check required sections exist
-        required_section_models = {}
-        for section_name in required_sections:
-            if not check_section_exists(config_path, section_name):
-                raise ValueError(f"Required section [{section_name}] not found in config file")
-            required_section_models[section_name] = section_model_map[section_name]
-
-        # Check optional sections
-        optional_section_models = {}
-        for section_name in optional_sections:
-            if check_section_exists(config_path, section_name):
-                optional_section_models[section_name] = section_model_map[section_name]
-
-        # Load all sections
-        all_section_models = {**required_section_models, **optional_section_models}
-        sections_data = load_sections_config(config_path, all_section_models)
-
-        # Create instance of custom settings class
-        typed_kwargs: dict[str, Any] = {}
-        for key, value in sections_data.items():
-            if key == "SESSION":
-                typed_kwargs[key] = cast(SessionSettings, value)
-            elif key == "DATAMODULE":
-                typed_kwargs[key] = cast(DataModuleSettings, value)
-            elif key == "DATASET":
-                typed_kwargs[key] = cast(DatasetSettings, value)
-            elif key == "TRAINING":
-                typed_kwargs[key] = cast(TrainingConfig, value)
-            elif key == "MODEL":
-                typed_kwargs[key] = cast(ModelComponentSettings, value)
-            elif key == "MLFLOW":
-                typed_kwargs[key] = cast(MLflowSettings, value)
-            elif key == "OPTUNA":
-                typed_kwargs[key] = cast(OptunaSettings, value)
-            elif key == "PATHS":
-                typed_kwargs[key] = cast(PathsSettings, value)
-            elif key == "EXTRAS":
-                typed_kwargs[key] = cast(ExtrasSettings, value)
-
-        return settings_class(**typed_kwargs)
-
-
 # Default factory instance for convenience
 default_settings_loader = PartialSettingsLoader()
 
@@ -431,54 +324,95 @@ def load_settings(
     sections: list[str] | None = None,
     strict: bool = False
 ) -> BaseWorkflowSettings:
-    """Unified settings loading function with multiple loading strategies.
+    """Primary configuration loading API with flexible loading strategies.
 
-    This is the recommended primary API for loading settings. It provides three
-    loading strategies in order of preference:
+    **Standard Pattern**: For training workflows, use `load_training_settings()`
+    directly instead of this function. This function is for advanced use cases
+    requiring custom section combinations.
 
-    1. Mode-optimized loading (fastest, recommended)
-    2. Custom section loading (flexible)
-    3. All-sections loading (fallback)
+    Loading Strategies (in order of preference):
+    1. **Training workflows**: Use `load_training_settings()` (recommended)
+    2. **Custom sections**: Use `sections=["MODEL", "DATASET"]` for partial loading
+    3. **Inference**: Use `dlkit.interfaces.inference.infer()` API instead
 
     Args:
         config_path: Path to TOML configuration file
-        inference: If True, load for inference mode; if False, load for training mode
-        sections: Specific sections to load (overrides inference if provided)
+        inference: Deprecated - use `dlkit.interfaces.inference.infer()` instead
+        sections: List of specific sections to load (for custom workflows)
         strict: If True with sections, all specified sections must exist
 
     Returns:
-        BaseWorkflowSettings: Appropriate settings instance for the request
+        BaseWorkflowSettings: Settings instance with requested sections
 
     Examples:
-        >>> # Mode-optimized loading (recommended)
-        >>> settings = load_settings("config.toml", inference=False)  # training
-        >>> settings = load_settings("config.toml", inference=True)   # inference
-        >>> settings = load_settings("config.toml")  # defaults to training
+        >>> # RECOMMENDED: Use specific functions for common workflows
+        >>> from dlkit.tools.config import load_training_settings
+        >>> settings = load_training_settings("config.toml")
         >>>
-        >>> # Custom section loading
+        >>> # ADVANCED: Custom section combinations
         >>> settings = load_settings("config.toml", sections=["MODEL", "DATASET"])
         >>>
-        >>> # All-sections loading (backward compatibility)
-        >>> settings = load_settings("config.toml")
+        >>> # DEPRECATED: Inference mode (use inference API instead)
+        >>> # settings = load_settings("config.toml", inference=True)  # DON'T DO THIS
+        >>> from dlkit.interfaces.inference import infer
+        >>> result = infer(checkpoint_path, inputs)  # DO THIS INSTEAD
+
+    Raises:
+        ValueError: If inference=True (deprecated, use inference API)
+        ConfigSectionError: If requested sections are missing
     """
     if sections is not None:
-        # Strategy 1: Custom section loading (most flexible)
+        # Strategy: Custom section loading (advanced use cases)
         return default_settings_loader.load_sections(config_path, sections, strict=strict)
     elif inference:
-        # Strategy 2: Inference mode optimization (REMOVED)
-        # Use inference API instead: dlkit.interfaces.inference.infer
-        raise ValueError("Inference mode has been removed. Use dlkit.interfaces.inference.infer instead.")
+        # Inference mode is removed - direct users to proper API
+        raise ValueError(
+            "Inference mode has been removed from config loading. "
+            "Use the inference API instead: dlkit.interfaces.inference.infer()"
+        )
     else:
-        # Strategy 3: Training mode optimization (default)
+        # Default: Training mode
         return default_settings_loader.load_training_settings(config_path)
 
 
 def load_training_settings(config_path: Path | str) -> TrainingWorkflowSettings:
-    """Convenience function for loading training settings.
+    """Load configuration for training workflows (RECOMMENDED).
 
-    Loads sections optimized for training workflows:
+    **This is the standard entry point for loading training configurations.**
+
+    Loads sections optimized for training workflows with lazy validation:
     - Required: SESSION, DATAMODULE, DATASET, TRAINING
     - Optional: MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+
+    Lazy Validation Behavior:
+    - Fields are loaded WITHOUT Pydantic defaults (partial configs supported)
+    - Type coercion is applied (str→Path, dict→NestedModel, etc.)
+    - Validation happens at build time, not load time
+    - Enables programmatic overrides via `update_settings()`
+
+    Args:
+        config_path: Path to TOML configuration file
+
+    Returns:
+        TrainingWorkflowSettings: Training settings with lazy validation
+
+    Examples:
+        >>> # Standard training workflow
+        >>> from dlkit.tools.config import load_training_settings
+        >>> settings = load_training_settings("config.toml")
+        >>>
+        >>> # Partial config with programmatic overrides
+        >>> settings = load_training_settings("partial_config.toml")
+        >>> settings = update_settings(settings, {
+        ...     "DATASET": {"features": [...], "targets": [...]}
+        ... })
+        >>>
+        >>> # Validate explicitly if needed
+        >>> validated = settings.model_validate(settings.model_dump())
+
+    See Also:
+        - `update_settings()`: Merge updates into settings
+        - `load_sections()`: Load custom section combinations (advanced)
     """
     return default_settings_loader.load_training_settings(config_path)
 
@@ -497,7 +431,11 @@ def load_sections(
     *,
     strict: bool = False
 ) -> BaseWorkflowSettings:
-    """Convenience function for loading arbitrary configuration sections with maximum flexibility.
+    """Load arbitrary configuration sections with maximum flexibility.
+
+    **Advanced Use Only**: For most workflows, use `load_settings()` or
+    `load_training_settings()` instead. This function is for custom workflows
+    that need specific section combinations.
 
     Args:
         config_path: Path to TOML configuration file
@@ -509,35 +447,17 @@ def load_sections(
         BaseWorkflowSettings: Settings with only requested sections
 
     Examples:
-        >>> # Load only model and dataset configuration
+        >>> # Load only model and dataset configuration (for evaluation)
         >>> settings = load_sections("config.toml", ["MODEL", "DATASET"])
         >>>
-        >>> # Load experiment tracking configuration
+        >>> # Load experiment tracking configuration only
         >>> settings = load_sections("config.toml", ["MLFLOW", "OPTUNA"])
         >>>
         >>> # Strict loading ensures all sections exist
         >>> settings = load_sections("config.toml", ["MODEL", "DATASET"], strict=True)
+
+    Note:
+        For standard training workflows, prefer `load_training_settings()`.
+        For partial configs with programmatic overrides, use `load_settings()`.
     """
     return default_settings_loader.load_sections(config_path, sections, strict=strict)
-
-
-def load_custom_settings(
-    config_path: Path | str,
-    settings_class: Type[T],
-    required_sections: list[str],
-    optional_sections: list[str] | None = None
-) -> T:
-    """Convenience function for loading configuration into custom settings classes.
-
-    Args:
-        config_path: Path to TOML configuration file
-        settings_class: Custom settings class to instantiate
-        required_sections: Section names that must be present
-        optional_sections: Section names that are loaded if present
-
-    Returns:
-        Instance of the custom settings class
-    """
-    return default_settings_loader.load_custom_settings(
-        config_path, settings_class, required_sections, optional_sections
-    )

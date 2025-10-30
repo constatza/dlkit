@@ -15,6 +15,7 @@ from typing import Any
 from collections.abc import Generator
 
 from dlkit.tools.config.environment import DLKitEnvironment
+from dlkit.tools.utils.system_utils import normalize_user_path
 
 
 @dataclass
@@ -63,14 +64,17 @@ def path_override_context(overrides: dict[str, Any]) -> Generator[None]:
     Yields:
         None
     """
+    root_dir = normalize_user_path(overrides.get("root_dir"), require_absolute=True)
+    output_dir = normalize_user_path(overrides.get("output_dir"))
+    data_dir = normalize_user_path(overrides.get("data_dir"))
+    checkpoints_dir = normalize_user_path(overrides.get("checkpoints_dir"))
+
     # Convert overrides to PathOverrideContext
     context = PathOverrideContext(
-        root_dir=Path(overrides["root_dir"]) if overrides.get("root_dir") else None,
-        output_dir=Path(overrides["output_dir"]) if overrides.get("output_dir") else None,
-        data_dir=Path(overrides["data_dir"]) if overrides.get("data_dir") else None,
-        checkpoints_dir=Path(overrides["checkpoints_dir"])
-        if overrides.get("checkpoints_dir")
-        else None,
+        root_dir=root_dir,
+        output_dir=output_dir,
+        data_dir=data_dir,
+        checkpoints_dir=checkpoints_dir,
     )
 
     # Store the previous context
@@ -95,17 +99,22 @@ def resolve_with_context(component_path: str, env: DLKitEnvironment | None = Non
     Returns:
         Resolved path respecting current override context
     """
+    from loguru import logger
+
     # Get current override context
     context = get_current_path_context()
 
     # Determine effective root directory
     if context and context.root_dir:
         effective_root = context.root_dir
+        logger.debug(f"resolve_with_context: Using PathOverrideContext root: {effective_root}")
     elif env is not None:
         effective_root = env.get_root_path()
+        logger.debug(f"resolve_with_context: Using DLKitEnvironment root: {effective_root}")
     else:
         # Fallback to current working directory when no override is provided
         effective_root = Path.cwd()
+        logger.debug(f"resolve_with_context: Using CWD fallback: {effective_root}")
 
     # Handle specific component path overrides
     if context:
@@ -130,4 +139,4 @@ def resolve_with_context(component_path: str, env: DLKitEnvironment | None = Non
     registry, resolver_context = create_default_resolver_system(effective_root)
     resolved = registry.resolve(component_path, resolver_context)
 
-    return Path(resolved) if resolved is not None else effective_root / component_path
+    return Path(resolved) if resolved is not None else (effective_root / component_path).resolve()

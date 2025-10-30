@@ -90,10 +90,9 @@ def _ensure_storage_setup_at_cli_level(
 
     This separates user interaction (CLI concern) from business logic (API concern).
     """
-    from dlkit.interfaces.servers.domain_functions import (
-        should_use_default_storage,
-        get_default_mlruns_path,
-    )
+    from dlkit.tools.config.environment import DLKitEnvironment
+    from dlkit.interfaces.servers.server_configuration import should_use_default_storage
+    from dlkit.interfaces.servers.path_resolution import ServerPathResolver
     from dlkit.interfaces.servers.application_service import ServerApplicationService
     from dlkit.interfaces.servers.infrastructure_adapters import (
         TyperUserInteraction,
@@ -114,7 +113,9 @@ def _ensure_storage_setup_at_cli_level(
     if not should_use_default_storage(server_config, overrides):
         return  # No storage setup needed
 
-    mlruns_path = get_default_mlruns_path()
+    # Create path resolver and get default path
+    path_resolver = ServerPathResolver(DLKitEnvironment())
+    mlruns_path = path_resolver.get_default_mlruns_path()
     file_system = StandardFileSystemOperations()
 
     if file_system.directory_exists(mlruns_path):

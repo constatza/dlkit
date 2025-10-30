@@ -16,7 +16,6 @@ Notes:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -27,6 +26,15 @@ from dlkit.interfaces.api import predict_with_config as api_predict_with_config
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
 from ..middleware.error_handler import handle_api_error
+from ..params import (
+    BATCH_SIZE_PARAM,
+    CHECKPOINT_ARG,
+    CONFIG_PATH_ARG,
+    DATA_DIR_PARAM,
+    OUTPUT_DIR_PARAM,
+    ROOT_DIR_PARAM,
+    SAVE_PREDICTIONS_FLAG,
+)
 
 # Single prediction command group (no subcommands)
 app = typer.Typer(
@@ -41,37 +49,13 @@ console = Console()
 
 
 def _run_inference_impl(
-    config_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to configuration file",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-        ),
-    ],
-    checkpoint: Annotated[Path, typer.Argument(help="Path to model checkpoint")],
-    # Root override
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    # Basic overrides
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
-    data_dir: Annotated[
-        Path | None,
-        typer.Option("--dataflow-dir", "-d", help="Override dataflow directory from config"),
-    ] = None,
-    batch_size: Annotated[
-        int | None, typer.Option("--batch-size", "-b", help="Override batch size for inference")
-    ] = None,
-    save_predictions: Annotated[
-        bool, typer.Option("--save", "-s", help="Save predictions to file")
-    ] = True,
+    config_path: CONFIG_PATH_ARG,
+    checkpoint: CHECKPOINT_ARG,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
+    data_dir: DATA_DIR_PARAM = None,
+    batch_size: BATCH_SIZE_PARAM = None,
+    save_predictions: SAVE_PREDICTIONS_FLAG = True,
 ) -> None:
     """Run inference using a trained model with parameter overrides.
 
@@ -161,37 +145,13 @@ def _run_inference_impl(
 # Default inference entry: dlkit infer CONFIG.toml CHECKPOINT [options]
 @app.command(name="")
 def entry(
-    config_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to configuration file",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-        ),
-    ],
-    checkpoint: Annotated[Path, typer.Argument(help="Path to model checkpoint")],
-    # Root override
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    # Basic overrides
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
-    data_dir: Annotated[
-        Path | None,
-        typer.Option("--dataflow-dir", "-d", help="Override dataflow directory from config"),
-    ] = None,
-    batch_size: Annotated[
-        int | None, typer.Option("--batch-size", "-b", help="Override batch size for inference")
-    ] = None,
-    save_predictions: Annotated[
-        bool, typer.Option("--save", "-s", help="Save predictions to file")
-    ] = True,
+    config_path: CONFIG_PATH_ARG,
+    checkpoint: CHECKPOINT_ARG,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
+    data_dir: DATA_DIR_PARAM = None,
+    batch_size: BATCH_SIZE_PARAM = None,
+    save_predictions: SAVE_PREDICTIONS_FLAG = True,
 ) -> None:
     """Run inference with configuration and parameter overrides.
 
