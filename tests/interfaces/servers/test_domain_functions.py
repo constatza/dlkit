@@ -8,19 +8,23 @@ from unittest.mock import Mock
 
 import pytest
 
-from dlkit.interfaces.servers.domain_functions import (
+from dlkit.tools.config.environment import DLKitEnvironment
+from dlkit.interfaces.servers.server_configuration import (
     validate_mlflow_config,
     get_host_variants,
-    get_tracking_file_path,
+    should_use_default_storage,
+)
+from dlkit.interfaces.servers.path_resolution import ServerPathResolver
+from dlkit.interfaces.servers.server_tracking_operations import (
     load_tracking_data,
     save_tracking_data,
-    should_use_default_storage,
-    get_default_mlruns_path,
-    is_mlflow_process,
-    matches_host_port,
     add_server_to_tracking,
     remove_server_from_tracking,
     get_pids_for_server,
+)
+from dlkit.interfaces.servers.process_inspection import (
+    is_mlflow_process,
+    matches_host_port,
 )
 
 
@@ -103,7 +107,8 @@ class TestTrackingFileOperations:
 
     def test_get_tracking_file_path_returns_correct_path(self) -> None:
         """Test tracking file path generation."""
-        path = get_tracking_file_path()
+        path_resolver = ServerPathResolver(DLKitEnvironment())
+        path = path_resolver.get_tracking_file_path()
 
         assert path.name == "servers.json"
         assert path.parent.name == ".dlkit"
@@ -248,7 +253,8 @@ class TestStorageDecisionLogic:
 
     def test_get_default_mlruns_path_returns_current_directory(self) -> None:
         """Test that default MLruns path is in output subdirectory with environment awareness."""
-        path = get_default_mlruns_path()
+        path_resolver = ServerPathResolver(DLKitEnvironment())
+        path = path_resolver.get_default_mlruns_path()
 
         assert path.name == "mlruns"
         # With environment awareness, path is resolved through resolver system

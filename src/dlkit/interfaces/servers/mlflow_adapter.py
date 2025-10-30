@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 from typing import Any
-import os
 from subprocess import Popen
-from pathlib import Path
-
-from urllib.parse import urlparse
 
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.tools.io import locations
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
-from dlkit.tools.utils.system_utils import mkdir_for_local
 
 from .health_checker import HTTPHealthChecker
 from .process_manager import SubprocessManager
+from .config_normalizer import ServerConfigNormalizer
+from .config_applier import ServerConfigApplier
+from .storage_ensurer import ServerStorageEnsurer
 from .protocols import (
     ContextualServerAdapter,
     HealthChecker,
@@ -97,6 +95,9 @@ class MLflowServerAdapter(ContextualServerAdapter):
         health_timeout: float | None = None,
         request_timeout: float | None = None,
         poll_interval: float | None = None,
+        config_normalizer: ServerConfigNormalizer | None = None,
+        config_applier: ServerConfigApplier | None = None,
+        storage_ensurer: ServerStorageEnsurer | None = None,
     ) -> None:
         """Initialize MLflow server adapter.
 
@@ -107,6 +108,9 @@ class MLflowServerAdapter(ContextualServerAdapter):
             health_timeout: Timeout for health checks in seconds (defaults to MLflowServerSettings default)
             request_timeout: Timeout for individual health check requests in seconds (defaults to MLflowServerSettings default)
             poll_interval: Interval between health check polls in seconds (defaults to MLflowServerSettings default)
+            config_normalizer: Service for normalizing server configuration paths (defaults to ServerConfigNormalizer)
+            config_applier: Service for applying configuration overrides (defaults to ServerConfigApplier)
+            storage_ensurer: Service for ensuring local storage directories (defaults to ServerStorageEnsurer)
         """
         # Use MLflowServerSettings as single source of truth for defaults
         _defaults = MLflowServerSettings()
@@ -128,8 +132,14 @@ class MLflowServerAdapter(ContextualServerAdapter):
             self._has_custom_health_checker = False
         self._scheme = scheme
         self._current_server_info: ServerInfo | None = None
-        # NEW: Internal process tracking for SOLID compliance
+        # Internal process tracking for SOLID compliance
         self._process_tracker = _ServerProcessTracker(self._process_manager)
+        # Handle-to-ServerInfo mapping for type-safe internal tracking
+        self._handle_to_info: dict[str, ServerInfo] = {}
+        # Configuration services (with lazy defaults for non-breaking DI)
+        self._config_normalizer = config_normalizer or ServerConfigNormalizer()
+        self._config_applier = config_applier or ServerConfigApplier()
+        self._storage_ensurer = storage_ensurer or ServerStorageEnsurer()
 
     def start_server(
         self,
@@ -146,12 +156,13 @@ class MLflowServerAdapter(ContextualServerAdapter):
             ServerInfo containing server information
         """
         try:
-            # Apply server overrides if provided
+            # Apply server overrides if provided (using injected service)
             if overrides:
                 logger.debug("Applying server configuration overrides", overrides=overrides)
-                server_config = self._apply_server_overrides(server_config, overrides)
+                server_config = self._config_applier.apply_overrides(server_config, overrides)
 
-            server_config = self._normalize_server_config(server_config)
+            # Normalize server config (using injected service)
+            server_config = self._config_normalizer.normalize(server_config)
 
             # Pre-check: if an instance is already running, reuse it immediately
             server_url = self.get_server_url(server_config.host, server_config.port)
@@ -188,12 +199,11 @@ class MLflowServerAdapter(ContextualServerAdapter):
                     server_config = server_config.model_copy(
                         update={"artifacts_destination": f"file://{locations.mlartifacts_dir()}"}
                     )
-                # Config is already normalized at line 154, no need to normalize again
-                self._ensure_local_storage(server_config)
+                # Ensure local storage directories (using injected service)
+                self._storage_ensurer.ensure_storage(server_config)
             except Exception as e:
                 # Best-effort; fall back to MLflow defaults
                 logger.debug(f"Failed to ensure local storage: {e}", exc_info=True)
-                pass
 
             # Start new server process
             logger.debug(
@@ -213,8 +223,8 @@ class MLflowServerAdapter(ContextualServerAdapter):
                 )
                 try:
                     self._process_manager.stop_process(process)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to stop unhealthy server process (non-fatal): {e}")
                 # If another instance is already running, reuse it
                 status = health_checker.check_health(server_url)
                 if status.is_running:
@@ -244,9 +254,9 @@ class MLflowServerAdapter(ContextualServerAdapter):
                 pid=process.pid if hasattr(process, "pid") else None,
             )
 
-            # NEW: Internal process tracking
+            # Internal process tracking with type-safe mapping
             handle_id = self._process_tracker.register(server_info, process)
-            server_info._internal_handle_id = handle_id  # Internal use only
+            self._handle_to_info[handle_id] = server_info
 
             logger.info(
                 "MLflow server started successfully",
@@ -273,12 +283,14 @@ class MLflowServerAdapter(ContextualServerAdapter):
         """
         logger.debug("Starting MLflow server shutdown")
         try:
-            # Use internal process tracking first (SOLID compliance)
-            handle_id = getattr(server_info, "_internal_handle_id", None)
-            if handle_id and self._process_tracker.has_process(handle_id):
+            # Try to find server by handle ID (type-safe lookup)
+            handle_id = f"{server_info.host}:{server_info.port}"
+            if handle_id in self._handle_to_info and self._process_tracker.has_process(handle_id):
                 logger.debug(f"Stopping server using internal tracking: {handle_id}")
                 success = self._process_tracker.cleanup(handle_id)
                 if success:
+                    # Clean up mapping
+                    self._handle_to_info.pop(handle_id, None)
                     logger.info("MLflow server stopped", url=server_info.url)
                     return True
 
@@ -380,148 +392,6 @@ class MLflowServerAdapter(ContextualServerAdapter):
             wait_timeout=self._health_timeout,
             poll_interval=self._poll_interval,
         )
-
-    @staticmethod
-    def _apply_server_overrides(
-        server_config: MLflowServerSettings, overrides: dict[str, Any]
-    ) -> MLflowServerSettings:
-        """Apply server configuration overrides.
-
-        Args:
-            server_config: Base server configuration
-            overrides: Override values
-
-        Returns:
-            Updated server configuration
-        """
-        override_dict = {}
-        for key in ["host", "port", "backend_store_uri", "artifacts_destination"]:
-            if key in overrides:
-                override_dict[key] = overrides[key]
-
-        return server_config.model_copy(update=override_dict)
-
-    def _ensure_local_storage(self, config: MLflowServerSettings) -> None:
-        """Create local storage directories for backend & artifacts if needed.
-
-        Args:
-            config: MLflow server configuration
-
-        Raises:
-            RuntimeError: If directory creation fails
-        """
-        logger.debug("Ensuring local storage directories")
-        local_hosts = {"localhost", "127.0.0.1", "::1", None}
-
-        for attr in ("backend_store_uri", "artifacts_destination"):
-            uri = getattr(config, attr)
-            logger.debug(f"Checking {attr} = {uri}")
-            if uri is None:
-                continue
-
-            try:
-                parsed = urlparse(str(uri))
-            except Exception:
-                parsed = None
-
-            is_file = bool(parsed and (parsed.scheme in ("", "file")))
-            host_local = bool(parsed and (parsed.hostname in local_hosts))
-            logger.debug(f"{attr} is_file={is_file}, host_local={host_local}")
-
-            if is_file or host_local:
-                try:
-                    # mkdir_for_local expects an AnyUrl-like object or a file:// URL string
-                    to_pass = uri
-                    if not hasattr(uri, "path"):
-                        uri_str = str(uri)
-                        # Only add file:// prefix if it doesn't already have a scheme
-                        if "://" not in uri_str:
-                            to_pass = f"file://{_ensure_posix_path(uri_str)}"
-                        else:
-                            # For sqlite:// URIs, extract the path component
-                            if uri_str.startswith("sqlite:///"):
-                                # Extract path from sqlite:///path
-                                path = uri_str.replace("sqlite:///", "")
-                                to_pass = f"file:///{path}"
-                            else:
-                                to_pass = uri_str
-                    logger.debug(f"Creating directory for {attr}: {to_pass}")
-                    mkdir_for_local(to_pass)  # type: ignore[arg-type]
-                    logger.debug(f"Successfully created directory for {attr}")
-                except Exception as e:
-                    logger.error(f"Failed to create local directory for {attr}: {e}")
-                    raise RuntimeError(f"Directory creation failed for {attr}: {e}") from e
-
-        logger.debug("Local storage directories ensured successfully")
-
-    def _normalize_server_config(self, config: MLflowServerSettings) -> MLflowServerSettings:
-        """Normalize server paths relative to current root context."""
-
-        try:
-            root_dir = locations.root()
-        except Exception:
-            root_dir = Path.cwd()
-
-        updates: dict[str, Any] = {}
-
-        backend_uri = getattr(config, "backend_store_uri", None)
-        if backend_uri:
-            backend_str = str(backend_uri)
-            normalized_backend = self._normalize_backend_uri(backend_str, root_dir)
-            if normalized_backend != backend_str:
-                updates["backend_store_uri"] = normalized_backend
-
-        artifacts_dest = getattr(config, "artifacts_destination", None)
-        if artifacts_dest:
-            artifacts_str = str(artifacts_dest)
-            normalized_artifacts = self._normalize_artifacts_destination(artifacts_str, root_dir)
-            if normalized_artifacts != artifacts_str:
-                updates["artifacts_destination"] = normalized_artifacts
-
-        if updates:
-            return config.model_copy(update=updates)
-        return config
-
-    @staticmethod
-    def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
-        parsed = urlparse(uri)
-        if parsed.scheme not in {"file", "sqlite"}:
-            return uri
-
-        path = Path(parsed.path)
-        if path.is_absolute():
-            return uri
-
-        resolved = (root_dir / path).resolve()
-        if parsed.scheme == "sqlite":
-            return f"sqlite:///{resolved.as_posix()}"
-        return resolved.as_uri()
-
-    @staticmethod
-    def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:
-        parsed = urlparse(destination)
-
-        if parsed.scheme in {"", None}:
-            path = Path(destination)
-            if path.is_absolute():
-                return destination
-            return str((root_dir / path).resolve())
-
-        if parsed.scheme == "file":
-            path = Path(parsed.path)
-            if path.is_absolute():
-                return destination
-            resolved = (root_dir / path).resolve()
-            return resolved.as_uri()
-
-        return destination
-
-
-def _ensure_posix_path(p: str) -> str:
-    try:
-        return os.fspath(os.path.normpath(p)).replace("\\", "/")
-    except Exception:
-        return p
 
 
 class MLflowServerContext:

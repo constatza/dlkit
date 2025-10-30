@@ -116,7 +116,7 @@ class TestMLflowServerAdapterStartServer:
             error_message="Connection refused",
         )
 
-        with patch.object(mlflow_adapter, "_ensure_local_storage") as mock_ensure:
+        with patch.object(mlflow_adapter._storage_ensurer, "ensure_storage") as mock_ensure:
             server_info = mlflow_adapter.start_server(mlflow_server_config)
 
         assert isinstance(server_info, ServerInfo)
@@ -170,9 +170,9 @@ class TestMLflowServerAdapterStartServer:
 
         overrides = {"host": "0.0.0.0", "port": 8080}
 
-        with patch.object(mlflow_adapter, "_apply_server_overrides") as mock_apply:
+        with patch.object(mlflow_adapter._config_applier, "apply_overrides") as mock_apply:
             mock_apply.return_value = mlflow_server_config.model_copy(update=overrides)
-            with patch.object(mlflow_adapter, "_ensure_local_storage"):
+            with patch.object(mlflow_adapter._storage_ensurer, "ensure_storage"):
                 server_info = mlflow_adapter.start_server(mlflow_server_config, **overrides)
 
             assert server_info.host == overrides["host"]
@@ -197,7 +197,7 @@ class TestMLflowServerAdapterStartServer:
         # Mock health check failure after start
         mock_health_checker.wait_for_health.return_value = False
 
-        with patch.object(mlflow_adapter, "_ensure_local_storage"):
+        with patch.object(mlflow_adapter._storage_ensurer, "ensure_storage"):
             with pytest.raises(RuntimeError, match="MLflow server failed health check"):
                 mlflow_adapter.start_server(mlflow_server_config)
 
@@ -222,7 +222,7 @@ class TestMLflowServerAdapterStartServer:
         # Mock process start failure
         mock_process_manager.start_process.side_effect = RuntimeError("Process failed to start")
 
-        with patch.object(mlflow_adapter, "_ensure_local_storage"):
+        with patch.object(mlflow_adapter._storage_ensurer, "ensure_storage"):
             with pytest.raises(RuntimeError, match="Failed to start MLflow server"):
                 mlflow_adapter.start_server(mlflow_server_config)
 
@@ -344,31 +344,31 @@ class TestMLflowServerAdapterUtility:
         url = adapter.get_server_url("mlflow.example.com", 443)
         assert url == "https://mlflow.example.com:443"
 
-    @patch("dlkit.interfaces.servers.mlflow_adapter.mkdir_for_local")
+    @patch("dlkit.interfaces.servers.storage_ensurer.mkdir_for_local")
     def test_ensure_local_storage(
         self,
         mock_mkdir: Mock,
         mlflow_adapter: MLflowServerAdapter,
         mlflow_server_config: MLflowServerSettings,
     ) -> None:
-        """Test local storage directory creation."""
-        mlflow_adapter._ensure_local_storage(mlflow_server_config)
+        """Test local storage directory creation via storage ensurer service."""
+        mlflow_adapter._storage_ensurer.ensure_storage(mlflow_server_config)
 
         # Should create directories for local paths
         calls = mock_mkdir.call_args_list
         assert len(calls) >= 1  # At least artifacts destination
 
     def test_apply_server_overrides(self, mlflow_server_config: MLflowServerSettings) -> None:
-        """Test server configuration override application."""
+        """Test server configuration override application via config applier service."""
+        from dlkit.interfaces.servers.config_applier import ServerConfigApplier
+
         overrides = {
             "host": "0.0.0.0",
             "port": 8080,
             "backend_store_uri": "postgresql://user:pass@localhost/mlflow",
         }
 
-        updated_config = MLflowServerAdapter._apply_server_overrides(
-            mlflow_server_config, overrides
-        )
+        updated_config = ServerConfigApplier.apply_overrides(mlflow_server_config, overrides)
 
         assert updated_config.host == "0.0.0.0"
         assert updated_config.port == 8080
@@ -443,7 +443,7 @@ class TestMLflowServerAdapterIntegration:
             error_message="Connection refused",
         )
 
-        with patch.object(mlflow_adapter, "_ensure_local_storage"):
+        with patch.object(mlflow_adapter._storage_ensurer, "ensure_storage"):
             # Start server
             server_info = mlflow_adapter.start_server(mlflow_server_config)
             assert server_info.url == "http://localhost:5000"

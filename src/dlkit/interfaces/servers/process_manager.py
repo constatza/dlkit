@@ -147,13 +147,14 @@ class SubprocessManager(ProcessManager):
             "stdout": PIPE,
             "stderr": PIPE,
             "shell": False,
+            "text": False,  # Binary mode for type safety
         }
         if os.name != "nt":
             popen_kwargs["start_new_session"] = True
 
         try:
             logger.debug(f"SubprocessManager: Starting process with command: {' '.join(config.command)}")
-            process = Popen(config.command, **popen_kwargs)
+            process = cast(Popen[bytes], Popen(config.command, **popen_kwargs))
 
             # Create process context for coordinated management
             context = _ProcessContext(process=process)

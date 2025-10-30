@@ -206,7 +206,7 @@ class TestMLflowServerHealthChecking:
             health_checker=mock_health_checker,
         )
 
-        with patch.object(adapter, "_ensure_local_storage"):
+        with patch.object(adapter._storage_ensurer, "ensure_storage"):
             server_info = adapter.start_server(config)
 
         assert server_info.pid == 12345

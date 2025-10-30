@@ -92,7 +92,7 @@ class MLflowContextFactory(ServerContextFactory):
         Returns:
             MLflowServerContext ready for use
         """
-        from .domain_functions import validate_mlflow_config
+        from .server_configuration import validate_mlflow_config
         from .mlflow_adapter import MLflowServerContext
 
         validate_mlflow_config(mlflow_settings)

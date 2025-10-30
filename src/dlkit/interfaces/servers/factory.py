@@ -13,11 +13,6 @@ from .protocols import HealthChecker, ProcessManager, ServerAdapter
 class ServerFactory:
     """Factory for creating server adapters with appropriate dependencies."""
 
-    def __init__(self) -> None:
-        """Initialize server factory."""
-        self._process_managers: dict[str, ProcessManager] = {}
-        self._health_checkers: dict[str, HealthChecker] = {}
-
     def create_process_manager(
         self,
         manager_type: Literal["subprocess"] = "subprocess",
@@ -95,51 +90,6 @@ class ServerFactory:
             )
         else:
             raise ValueError(f"Unknown server adapter type: {adapter_type}")
-
-    def get_cached_process_manager(
-        self,
-        key: str,
-        manager_type: Literal["subprocess"] = "subprocess",
-        **kwargs: Any,
-    ) -> ProcessManager:
-        """Get a cached process manager or create a new one.
-
-        Args:
-            key: Cache key for the process manager
-            manager_type: Type of process manager to create if not cached
-            **kwargs: Configuration options for new process managers
-
-        Returns:
-            ProcessManager instance (cached or new)
-        """
-        if key not in self._process_managers:
-            self._process_managers[key] = self.create_process_manager(manager_type, **kwargs)
-        return self._process_managers[key]
-
-    def get_cached_health_checker(
-        self,
-        key: str,
-        checker_type: Literal["http", "composite"] = "http",
-        **kwargs: Any,
-    ) -> HealthChecker:
-        """Get a cached health checker or create a new one.
-
-        Args:
-            key: Cache key for the health checker
-            checker_type: Type of health checker to create if not cached
-            **kwargs: Configuration options for new health checkers
-
-        Returns:
-            HealthChecker instance (cached or new)
-        """
-        if key not in self._health_checkers:
-            self._health_checkers[key] = self.create_health_checker(checker_type, **kwargs)
-        return self._health_checkers[key]
-
-    def clear_cache(self) -> None:
-        """Clear all cached instances."""
-        self._process_managers.clear()
-        self._health_checkers.clear()
 
 
 # Global factory instance for convenience

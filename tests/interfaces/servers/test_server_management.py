@@ -62,7 +62,7 @@ class TestServerLifecycleManagement:
         )
         mock_health_checker.wait_for_health.return_value = True
 
-        with patch.object(adapter, "_ensure_local_storage"):
+        with patch.object(adapter._storage_ensurer, "ensure_storage"):
             # Start server
             server_info = adapter.start_server(test_server_config)
 
@@ -144,7 +144,7 @@ class TestServerLifecycleManagement:
 
             adapter = MLflowServerAdapter()
 
-            with patch.object(adapter, "_ensure_local_storage"):
+            with patch.object(adapter._storage_ensurer, "ensure_storage"):
                 with pytest.raises(RuntimeError, match="MLflow server failed health check"):
                     adapter.start_server(test_server_config)
 
@@ -188,8 +188,8 @@ class TestServerLifecycleManagement:
         )
 
         with (
-            patch.object(adapter1, "_ensure_local_storage"),
-            patch.object(adapter2, "_ensure_local_storage"),
+            patch.object(adapter1._storage_ensurer, "ensure_storage"),
+            patch.object(adapter2._storage_ensurer, "ensure_storage"),
         ):
             # First adapter starts server
             server_info1 = adapter1.start_server(test_server_config)
@@ -290,7 +290,7 @@ class TestServerErrorRecovery:
             )
             mock_health_checker.wait_for_health.return_value = True
 
-            with patch.object(adapter, "_ensure_local_storage"):
+            with patch.object(adapter._storage_ensurer, "ensure_storage"):
                 server_info = adapter.start_server(test_server_config)
 
             assert server_info.url == "http://localhost:5555"
@@ -332,7 +332,7 @@ class TestServerErrorRecovery:
 
             adapter = MLflowServerAdapter()
 
-            with patch.object(adapter, "_ensure_local_storage"):
+            with patch.object(adapter._storage_ensurer, "ensure_storage"):
                 server_info = adapter.start_server(test_server_config)
 
             # Stop should fail due to process cleanup failure
@@ -399,9 +399,9 @@ class TestServerConfigurationValidation:
 
         adapter = MLflowServerAdapter()
 
-        # _ensure_local_storage should handle creating directories
-        with patch("dlkit.interfaces.servers.mlflow_adapter.mkdir_for_local") as mock_mkdir:
-            adapter._ensure_local_storage(config)
+        # storage_ensurer should handle creating directories
+        with patch("dlkit.interfaces.servers.storage_ensurer.mkdir_for_local") as mock_mkdir:
+            adapter._storage_ensurer.ensure_storage(config)
             # Should have called mkdir_for_local for paths that need it
             assert mock_mkdir.called
 
@@ -417,15 +417,17 @@ class TestServerConfigurationValidation:
         adapter = MLflowServerAdapter()
 
         # Remote URIs should not trigger local directory creation
-        with patch("dlkit.interfaces.servers.mlflow_adapter.mkdir_for_local") as mock_mkdir:
-            adapter._ensure_local_storage(config)
+        with patch("dlkit.interfaces.servers.storage_ensurer.mkdir_for_local") as mock_mkdir:
+            adapter._storage_ensurer.ensure_storage(config)
             # Should not create directories for remote storage
             mock_mkdir.assert_not_called()
 
     def test_server_config_override_validation(
         self, test_server_config: MLflowServerSettings
     ) -> None:
-        """Test server configuration override validation."""
+        """Test server configuration override validation via config applier service."""
+        from dlkit.interfaces.servers.config_applier import ServerConfigApplier
+
         # Test valid overrides
         valid_overrides = {
             "host": "0.0.0.0",
@@ -433,7 +435,7 @@ class TestServerConfigurationValidation:
             "backend_store_uri": "sqlite:///new_path.db",
         }
 
-        updated_config = MLflowServerAdapter._apply_server_overrides(
+        updated_config = ServerConfigApplier.apply_overrides(
             test_server_config, valid_overrides
         )
 
@@ -494,7 +496,7 @@ class TestServerResourceManagement:
 
             adapter = MLflowServerAdapter()
 
-            with patch.object(adapter, "_ensure_local_storage"):
+            with patch.object(adapter._storage_ensurer, "ensure_storage"):
                 with pytest.raises(RuntimeError, match="MLflow server failed health check"):
                     adapter.start_server(test_server_config)
 

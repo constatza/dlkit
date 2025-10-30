@@ -197,7 +197,7 @@ class TestAdapterWithMockServer:
         mock_process_manager.start_process.side_effect = lambda config: mock_server.start().process
         mock_process_manager.stop_process.side_effect = lambda process: mock_server.stop()
 
-        with patch.object(adapter, "_ensure_local_storage"):
+        with patch.object(adapter._storage_ensurer, "ensure_storage"):
             # Start server through adapter
             server_info = adapter.start_server(mock_server_config)
 
@@ -266,7 +266,7 @@ class TestAdapterWithMockServer:
         mock_process_manager.start_process.side_effect = lambda config: mock_server.start().process
         mock_process_manager.stop_process.side_effect = lambda process: mock_server.stop()
 
-        with patch.object(adapter, "_ensure_local_storage"):
+        with patch.object(adapter._storage_ensurer, "ensure_storage"):
             with pytest.raises(RuntimeError, match="MLflow server failed health check"):
                 adapter.start_server(mock_server_config)
 
@@ -452,7 +452,7 @@ class TestMockServerIntegrationScenarios:
             patch.object(workflow_adapter._health_checker, "wait_for_health") as mock_wait,
             patch.object(workflow_adapter._process_manager, "start_process") as mock_start,
             patch.object(workflow_adapter._process_manager, "stop_process") as mock_stop,
-            patch.object(workflow_adapter, "_ensure_local_storage"),
+            patch.object(workflow_adapter._storage_ensurer, "ensure_storage"),
         ):
             mock_check.side_effect = lambda url: mock_server.check_health()
             mock_wait.return_value = True
@@ -491,7 +491,7 @@ class TestMockServerIntegrationScenarios:
             patch.object(workflow_adapter._health_checker, "wait_for_health") as mock_wait,
             patch.object(workflow_adapter._process_manager, "start_process") as mock_start,
             patch.object(workflow_adapter._process_manager, "stop_process") as mock_stop,
-            patch.object(workflow_adapter, "_ensure_local_storage"),
+            patch.object(workflow_adapter._storage_ensurer, "ensure_storage"),
         ):
             mock_check.side_effect = lambda url: mock_server.check_health()
             mock_start.side_effect = lambda config: mock_server.start().process
