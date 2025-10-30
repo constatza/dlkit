@@ -10,7 +10,7 @@ import pytest
 
 from dlkit.interfaces.servers.application_service import ServerApplicationService
 from dlkit.interfaces.servers.storage_adapter import MLflowStorageSetup
-from dlkit.interfaces.servers.domain_functions import should_use_default_storage
+from dlkit.interfaces.servers.server_configuration import should_use_default_storage
 
 
 class TestServerConfigReading:

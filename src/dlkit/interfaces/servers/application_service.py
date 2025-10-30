@@ -11,8 +11,10 @@ from .protocols import ServerInfo, ServerStatus, ServerAdapter
 
 if TYPE_CHECKING:  # pragma: no cover
     from dlkit.tools.config.mlflow_settings import MLflowServerSettings
+    from dlkit.tools.config.protocols import TrainingSettingsProtocol
 else:  # pragma: no cover - runtime fallback for typing only
     MLflowServerSettings = Any
+    TrainingSettingsProtocol = Any
 
 
 class ServerApplicationService:
@@ -33,15 +35,8 @@ class ServerApplicationService:
         """
         if server_adapter is None:
             # Extract timeout settings from server config if provided
-            kwargs = {}
-            if server_config:
-                if hasattr(server_config, "health_timeout"):
-                    kwargs["health_timeout"] = server_config.health_timeout
-                if hasattr(server_config, "request_timeout"):
-                    kwargs["request_timeout"] = server_config.request_timeout
-                if hasattr(server_config, "poll_interval"):
-                    kwargs["poll_interval"] = server_config.poll_interval
-            self._server_adapter = create_mlflow_adapter(**kwargs)
+            timeout_kwargs = self._extract_timeout_settings(server_config)
+            self._server_adapter = create_mlflow_adapter(**timeout_kwargs)
         else:
             self._server_adapter = server_adapter
         self._server_management = server_management or ServerManagementService()
@@ -148,8 +143,16 @@ class ServerApplicationService:
 
         try:
             from dlkit.interfaces.cli.adapters.config_adapter import load_config
+            from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
             settings = load_config(config_path)
+
+            # Type narrowing: Ensure we have TrainingSettingsProtocol
+            if not isinstance(settings, TrainingSettingsProtocol):
+                return {
+                    "configured": False,
+                    "message": "Configuration does not support MLflow (not a training configuration)",
+                }
 
             if not settings.MLFLOW or not settings.MLFLOW.enabled:
                 return {
@@ -200,9 +203,12 @@ class ServerApplicationService:
         """
         if config_path is not None:
             from dlkit.interfaces.cli.adapters.config_adapter import load_config
+            from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
             settings = load_config(config_path)
-            if settings.MLFLOW is not None:
+
+            # Type narrowing: Check if we have TrainingSettingsProtocol
+            if isinstance(settings, TrainingSettingsProtocol) and settings.MLFLOW is not None:
                 # Return the server settings directly, not a context wrapper
                 return settings.MLFLOW.server
 
@@ -215,6 +221,32 @@ class ServerApplicationService:
             backend_store_uri=backend_store_uri,
             artifacts_destination=artifacts_destination,
         )
+
+    def _extract_timeout_settings(self, server_config: Any) -> dict[str, Any]:
+        """Extract timeout settings from server configuration.
+
+        Replaces primitive hasattr obsession with centralized extraction logic.
+
+        Args:
+            server_config: Server configuration object
+
+        Returns:
+            Dictionary of timeout settings (empty if no config provided)
+        """
+        if not server_config:
+            return {}
+
+        timeout_settings = {}
+
+        # Extract known timeout attributes if they exist
+        if hasattr(server_config, "health_timeout"):
+            timeout_settings["health_timeout"] = server_config.health_timeout
+        if hasattr(server_config, "request_timeout"):
+            timeout_settings["request_timeout"] = server_config.request_timeout
+        if hasattr(server_config, "poll_interval"):
+            timeout_settings["poll_interval"] = server_config.poll_interval
+
+        return timeout_settings
 
     def _build_overrides_dict(
         self,

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 
 from dlkit.interfaces.servers.application_service import ServerApplicationService
+from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
 
 class TestServerApplicationService:
@@ -231,9 +232,11 @@ class TestServerApplicationService:
         config_path = tmp_path / "config.toml"
 
         # Mock settings with MLflow configuration
-        mock_settings = Mock()
+        # Use MagicMock with spec to satisfy TrainingSettingsProtocol isinstance check
+        mock_settings = MagicMock(spec=TrainingSettingsProtocol)
+
         mock_mlflow = Mock()
-        mock_mlflow.is_active = True
+        mock_mlflow.enabled = True
         mock_mlflow.server = Mock()
         mock_mlflow.server.host = "localhost"
         mock_mlflow.server.port = 5000
@@ -262,7 +265,8 @@ class TestServerApplicationService:
         """Test getting configuration info with inactive MLflow."""
         config_path = tmp_path / "config.toml"
 
-        mock_settings = Mock()
+        # Use MagicMock with spec to satisfy TrainingSettingsProtocol isinstance check
+        mock_settings = MagicMock(spec=TrainingSettingsProtocol)
         mock_settings.MLFLOW = None
         mock_load_config.return_value = mock_settings
 

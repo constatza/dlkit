@@ -5,7 +5,7 @@ from __future__ import annotations
 import psutil
 
 from .domain_protocols import ProcessKiller, ServerTracker
-from .domain_functions import is_mlflow_process, matches_host_port
+from .process_inspection import is_mlflow_process, matches_host_port
 
 
 class PsutilProcessKiller(ProcessKiller):

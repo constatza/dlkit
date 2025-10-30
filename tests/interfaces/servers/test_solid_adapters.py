@@ -25,7 +25,6 @@ class TestFileBasedServerTracker:
         """Create server tracker instance."""
         return FileBasedServerTracker()
 
-    @patch("dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path")
     @patch("dlkit.interfaces.servers.tracking_adapter.load_tracking_data")
     @patch("dlkit.interfaces.servers.tracking_adapter.save_tracking_data")
     @patch("dlkit.interfaces.servers.tracking_adapter.add_server_to_tracking")
@@ -34,39 +33,35 @@ class TestFileBasedServerTracker:
         mock_add_server: Mock,
         mock_save_data: Mock,
         mock_load_data: Mock,
-        mock_get_path: Mock,
         tracker: FileBasedServerTracker,
     ) -> None:
         """Test that track_server orchestrates domain functions correctly."""
-        mock_path = Mock()
-        mock_get_path.return_value = mock_path
         mock_load_data.return_value = {"existing:8080": [99999]}
         mock_add_server.return_value = {"existing:8080": [99999], "localhost:5000": [12345]}
 
         tracker.track_server("localhost", 5000, 12345)
 
-        mock_get_path.assert_called_once()
-        mock_load_data.assert_called_once_with(mock_path)
+        # Verify load_tracking_data was called (path comes from _path_resolver)
+        assert mock_load_data.call_count == 1
         mock_add_server.assert_called_once_with(
             {"existing:8080": [99999]}, "localhost", 5000, 12345
         )
-        mock_save_data.assert_called_once_with(
-            mock_path, {"existing:8080": [99999], "localhost:5000": [12345]}
-        )
+        # Verify save_tracking_data was called (path comes from _path_resolver)
+        assert mock_save_data.call_count == 1
+        assert mock_save_data.call_args[0][1] == {"existing:8080": [99999], "localhost:5000": [12345]}
 
-    @patch("dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path")
+    @patch("dlkit.interfaces.servers.tracking_adapter.load_tracking_data")
     def test_track_server_handles_exceptions_silently(
         self,
-        mock_get_path: Mock,
+        mock_load_data: Mock,
         tracker: FileBasedServerTracker,
     ) -> None:
         """Test that track_server handles exceptions silently."""
-        mock_get_path.side_effect = Exception("File system error")
+        mock_load_data.side_effect = Exception("File system error")
 
         # Should not raise exception
         tracker.track_server("localhost", 5000, 12345)
 
-    @patch("dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path")
     @patch("dlkit.interfaces.servers.tracking_adapter.load_tracking_data")
     @patch("dlkit.interfaces.servers.tracking_adapter.save_tracking_data")
     @patch("dlkit.interfaces.servers.tracking_adapter.remove_server_from_tracking")
@@ -75,75 +70,72 @@ class TestFileBasedServerTracker:
         mock_remove_server: Mock,
         mock_save_data: Mock,
         mock_load_data: Mock,
-        mock_get_path: Mock,
         tracker: FileBasedServerTracker,
+        tmp_path: Path,
     ) -> None:
         """Test that untrack_server orchestrates domain functions correctly."""
-        mock_path = Mock()
-        mock_path.exists.return_value = True
-        mock_get_path.return_value = mock_path
-        mock_load_data.return_value = {"localhost:5000": [12345]}
-        mock_remove_server.return_value = {}
+        # Create a real tracking file so exists() check passes
+        tracking_file = tmp_path / "servers.json"
+        tracking_file.touch()
 
-        tracker.untrack_server("localhost", 5000)
+        # Mock path resolver to return our test path
+        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=tracking_file):
+            mock_load_data.return_value = {"localhost:5000": [12345]}
+            mock_remove_server.return_value = {}
 
-        mock_path.exists.assert_called_once()
-        mock_load_data.assert_called_once_with(mock_path)
-        mock_remove_server.assert_called_once_with({"localhost:5000": [12345]}, "localhost", 5000)
-        mock_save_data.assert_called_once_with(mock_path, {})
+            tracker.untrack_server("localhost", 5000)
 
-    @patch("dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path")
+            mock_load_data.assert_called_once_with(tracking_file)
+            mock_remove_server.assert_called_once_with({"localhost:5000": [12345]}, "localhost", 5000)
+            mock_save_data.assert_called_once_with(tracking_file, {})
+
     def test_untrack_server_skips_if_file_missing(
         self,
-        mock_get_path: Mock,
         tracker: FileBasedServerTracker,
+        tmp_path: Path,
     ) -> None:
         """Test that untrack_server skips when tracking file doesn't exist."""
-        mock_path = Mock()
-        mock_path.exists.return_value = False
-        mock_get_path.return_value = mock_path
+        # Mock path resolver to return non-existent path
+        nonexistent_path = tmp_path / "nonexistent.json"
+        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=nonexistent_path):
+            # Should not raise exception and should skip operations
+            tracker.untrack_server("localhost", 5000)
 
-        tracker.untrack_server("localhost", 5000)
-
-        mock_path.exists.assert_called_once()
-        # Should not proceed to load/save dataflow
-
-    @patch("dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path")
     @patch("dlkit.interfaces.servers.tracking_adapter.load_tracking_data")
     @patch("dlkit.interfaces.servers.tracking_adapter.get_pids_for_server")
     def test_get_tracked_pids_calls_domain_functions_correctly(
         self,
         mock_get_pids: Mock,
         mock_load_data: Mock,
-        mock_get_path: Mock,
         tracker: FileBasedServerTracker,
+        tmp_path: Path,
     ) -> None:
         """Test that get_tracked_pids orchestrates domain functions correctly."""
-        mock_path = Mock()
-        mock_path.exists.return_value = True
-        mock_get_path.return_value = mock_path
-        mock_load_data.return_value = {"localhost:5000": [12345, 67890]}
-        mock_get_pids.return_value = [12345, 67890]
+        # Create a real tracking file so exists() check passes
+        tracking_file = tmp_path / "servers.json"
+        tracking_file.touch()
 
-        result = tracker.get_tracked_pids("localhost", 5000)
-
-        assert result == [12345, 67890]
-        mock_load_data.assert_called_once_with(mock_path)
-        mock_get_pids.assert_called_once_with({"localhost:5000": [12345, 67890]}, "localhost", 5000)
-
-    def test_get_tracked_pids_returns_empty_for_missing_file(
-        self, tracker: FileBasedServerTracker
-    ) -> None:
-        """Test that get_tracked_pids returns empty list for missing file."""
-        with patch(
-            "dlkit.interfaces.servers.tracking_adapter.get_tracking_file_path"
-        ) as mock_get_path:
-            mock_path = Mock()
-            mock_path.exists.return_value = False
-            mock_get_path.return_value = mock_path
+        # Mock path resolver to return our test path
+        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=tracking_file):
+            mock_load_data.return_value = {"localhost:5000": [12345], "127.0.0.1:5000": [67890]}
+            mock_get_pids.return_value = [12345, 67890]
 
             result = tracker.get_tracked_pids("localhost", 5000)
 
+            assert result == [12345, 67890]
+            mock_load_data.assert_called_once_with(tracking_file)
+            mock_get_pids.assert_called_once_with(
+                {"localhost:5000": [12345], "127.0.0.1:5000": [67890]}, "localhost", 5000
+            )
+
+    def test_get_tracked_pids_returns_empty_for_missing_file(
+        self, tracker: FileBasedServerTracker, tmp_path: Path
+    ) -> None:
+        """Test that get_tracked_pids returns empty list for missing file."""
+        # Mock path resolver to return non-existent path
+        nonexistent_path = tmp_path / "nonexistent.json"
+        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=nonexistent_path):
+            result = tracker.get_tracked_pids("localhost", 5000)
             assert result == []
 
 
@@ -425,31 +417,33 @@ class TestMLflowStorageSetup:
         mock_should_use_default.assert_called_once_with(server_config, overrides)
 
     @patch("dlkit.interfaces.servers.storage_adapter.should_use_default_storage")
-    @patch("dlkit.interfaces.servers.storage_adapter.get_default_mlruns_path")
     def test_ensure_storage_setup_uses_existing_directory(
         self,
-        mock_get_path: Mock,
         mock_should_use_default: Mock,
         mock_file_system: Mock,
         storage_setup: MLflowStorageSetup,
+        tmp_path,
     ) -> None:
         """Test storage setup uses existing directory."""
         mock_should_use_default.return_value = True
-        mock_path = Mock()
-        mock_get_path.return_value = mock_path
-        mock_file_system.directory_exists.return_value = True
+        mock_path = tmp_path / "mlruns"
+        mock_path.mkdir()
 
-        server_config = Mock()
-        result = storage_setup.ensure_storage_setup(server_config, {})
+        # Mock the path resolver
+        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+            mock_file_system.directory_exists.return_value = True
+
+            server_config = Mock()
+            result = storage_setup.ensure_storage_setup(server_config, {})
 
         assert result is server_config
         mock_file_system.directory_exists.assert_called_once_with(mock_path)
 
     @patch("dlkit.interfaces.servers.storage_adapter.should_use_default_storage")
-    @patch("dlkit.interfaces.servers.storage_adapter.get_default_mlruns_path")
+
     def test_ensure_storage_setup_creates_directory_automatically(
         self,
-        mock_get_path: Mock,
+
         mock_should_use_default: Mock,
         mock_user_interaction: Mock,
         mock_file_system: Mock,
@@ -458,11 +452,12 @@ class TestMLflowStorageSetup:
         """Test storage setup creates directory automatically (no user interaction)."""
         mock_should_use_default.return_value = True
         mock_path = Mock()
-        mock_get_path.return_value = mock_path
         mock_file_system.directory_exists.return_value = False
 
-        server_config = Mock()
-        result = storage_setup.ensure_storage_setup(server_config, {})
+        # Mock the path resolver to return our mock path
+        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+            server_config = Mock()
+            result = storage_setup.ensure_storage_setup(server_config, {})
 
         assert result is server_config
         # Storage adapter is now pure business logic - no user interaction
@@ -471,10 +466,10 @@ class TestMLflowStorageSetup:
         mock_file_system.create_directory.assert_called_once_with(mock_path)
 
     @patch("dlkit.interfaces.servers.storage_adapter.should_use_default_storage")
-    @patch("dlkit.interfaces.servers.storage_adapter.get_default_mlruns_path")
+
     def test_ensure_storage_setup_skips_when_directory_exists(
         self,
-        mock_get_path: Mock,
+
         mock_should_use_default: Mock,
         mock_user_interaction: Mock,
         mock_file_system: Mock,
@@ -483,11 +478,12 @@ class TestMLflowStorageSetup:
         """Test storage setup skips creation when directory already exists."""
         mock_should_use_default.return_value = True
         mock_path = Mock()
-        mock_get_path.return_value = mock_path
         mock_file_system.directory_exists.return_value = True  # Directory already exists
 
-        server_config = Mock()
-        result = storage_setup.ensure_storage_setup(server_config, {})
+        # Mock the path resolver to return our mock path
+        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+            server_config = Mock()
+            result = storage_setup.ensure_storage_setup(server_config, {})
 
         assert result is server_config
         # Should not attempt to create directory when it already exists
@@ -581,7 +577,7 @@ class TestMLflowContextFactory:
         """Create context factory instance."""
         return MLflowContextFactory()
 
-    @patch("dlkit.interfaces.servers.domain_functions.validate_mlflow_config")
+    @patch("dlkit.interfaces.servers.server_configuration.validate_mlflow_config")
     @patch("dlkit.interfaces.servers.mlflow_adapter.MLflowServerContext")
     def test_create_server_context_validates_and_creates(
         self,

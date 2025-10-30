@@ -1,6 +1,7 @@
 """Health checking implementation for server services."""
 
 import time
+from abc import ABC, abstractmethod
 
 import requests
 from loguru import logger
@@ -8,11 +9,144 @@ from loguru import logger
 from .protocols import HealthChecker, ServerStatus
 
 
-class HTTPHealthChecker(HealthChecker):
+class BaseHealthChecker(ABC, HealthChecker):
+    """Abstract base class for health checkers using the Template Method pattern.
+
+    This class implements the common wait/poll/backoff algorithm in `wait_for_health()`,
+    while delegating the actual health check logic to subclasses via `check_health()`.
+
+    The Template Method pattern is used here to eliminate ~60 lines of duplication
+    between HTTPHealthChecker and MLflowAPIHealthChecker.
+
+    Template Method: `wait_for_health()` - defines the algorithm skeleton
+    Hook Methods: `check_health()` - implemented by subclasses for specific health checks
+
+    Attributes:
+        _request_timeout: Default timeout for individual health check requests (seconds)
+        _wait_timeout: Default timeout for waiting for server to become healthy (seconds)
+        _poll_interval: Default interval between health check polls (seconds)
+    """
+
+    def __init__(
+        self,
+        request_timeout: float = 1.0,
+        wait_timeout: float = 10.0,
+        poll_interval: float = 0.5,
+    ) -> None:
+        """Initialize base health checker with timeout parameters.
+
+        Args:
+            request_timeout: Default timeout for individual health check requests (seconds)
+            wait_timeout: Default timeout for waiting for server to become healthy (seconds)
+            poll_interval: Default interval between health check polls (seconds)
+        """
+        self._request_timeout = request_timeout
+        self._wait_timeout = wait_timeout
+        self._poll_interval = poll_interval
+
+    @abstractmethod
+    def check_health(self, url: str, timeout: float | None = None) -> ServerStatus:
+        """Check server health at given URL.
+
+        This is the hook method that subclasses must implement with their
+        specific health check logic.
+
+        Args:
+            url: Server URL to check
+            timeout: Request timeout in seconds
+
+        Returns:
+            ServerStatus with health information
+        """
+
+    def wait_for_health(
+        self,
+        url: str,
+        timeout: float | None = None,
+        poll_interval: float | None = None,
+    ) -> bool:
+        """Wait for server to become healthy using exponential backoff.
+
+        This is the template method that defines the algorithm skeleton.
+        It uses the hook method `check_health()` for actual health checking.
+
+        Algorithm:
+        1. Initialize timeout and poll interval (with defaults)
+        2. Calculate deadline for timeout
+        3. Loop until deadline:
+           a. Call check_health() (hook method)
+           b. If healthy, return True
+           c. Sleep with exponential backoff
+           d. Update backoff (capped at 10.0s)
+        4. If deadline reached, return False
+
+        Args:
+            url: Server URL to check
+            timeout: Maximum time to wait in seconds (uses instance default if None)
+            poll_interval: Time between checks in seconds (uses instance default if None)
+
+        Returns:
+            True if server became healthy within timeout, False otherwise
+        """
+        if timeout is None:
+            timeout = self._wait_timeout
+        if poll_interval is None:
+            poll_interval = self._poll_interval
+
+        timeout = float(timeout)
+        backoff = float(poll_interval)
+        deadline = time.monotonic() + timeout
+
+        logger.debug(
+            f"⏱️  HEALTH CHECK START: Waiting for server at {url} "
+            f"(timeout: {timeout}s, poll_interval: {poll_interval}s)"
+        )
+
+        attempt = 0
+        current = time.monotonic()
+        while current < deadline:
+            attempt += 1
+            remaining = deadline - current
+
+            # Call the hook method implemented by subclasses
+            status = self.check_health(url, timeout=min(backoff, 10.0))
+            check_duration = status.response_time if status.response_time is not None else 0.0
+
+            logger.debug(
+                f"🔍 Health check attempt #{attempt}: status={status.is_running}, "
+                f"check_took={check_duration:.2f}s, backoff={backoff:.2f}s, remaining={remaining:.1f}s"
+            )
+
+            if status.is_running:
+                elapsed = timeout - remaining
+                logger.debug(
+                    f"✅ Server became healthy after {max(elapsed, 0.0):.1f}s ({attempt} attempts)"
+                )
+                return True
+
+            time.sleep(backoff)
+            logger.debug(f"💤 Slept for {backoff:.2f}s (scheduled)")
+            backoff = min(backoff * 1.5, 10.0)
+
+            current = time.monotonic()
+
+        logger.warning(
+            f"❌ Server did not become healthy within {timeout}s at {url} (tried {attempt} times)"
+        )
+        return False
+
+
+class HTTPHealthChecker(BaseHealthChecker):
     """Implementation of HealthChecker using HTTP requests.
 
     Default endpoint is '/'. MLflow's built-in server does not expose '/health'
     with a 200 status, but it returns 200 for the root path when running.
+
+    This class inherits the wait/poll/backoff algorithm from BaseHealthChecker
+    and implements only the HTTP-specific health check logic.
+
+    Attributes:
+        _health_endpoint: Health check endpoint path (e.g., '/', '/health')
     """
 
     def __init__(
@@ -30,13 +164,17 @@ class HTTPHealthChecker(HealthChecker):
             wait_timeout: Default timeout for waiting for server to become healthy (seconds)
             poll_interval: Default interval between health check polls (seconds)
         """
+        super().__init__(
+            request_timeout=request_timeout,
+            wait_timeout=wait_timeout,
+            poll_interval=poll_interval,
+        )
         self._health_endpoint = health_endpoint
-        self._request_timeout = request_timeout
-        self._wait_timeout = wait_timeout
-        self._poll_interval = poll_interval
 
     def check_health(self, url: str, timeout: float | None = None) -> ServerStatus:
         """Check server health using HTTP request.
+
+        This is the hook method implementation for HTTP-based health checking.
 
         Args:
             url: Base server URL to check
@@ -74,75 +212,20 @@ class HTTPHealthChecker(HealthChecker):
                 error_message=str(e),
             )
 
-    def wait_for_health(
-        self,
-        url: str,
-        timeout: float | None = None,
-        poll_interval: float | None = None,
-    ) -> bool:
-        """Wait for server to become healthy.
 
-        Args:
-            url: Server URL to check
-            timeout: Maximum time to wait in seconds
-            poll_interval: Time between checks in seconds
-
-        Returns:
-            True if server became healthy within timeout
-        """
-        if timeout is None:
-            timeout = self._wait_timeout
-        if poll_interval is None:
-            poll_interval = self._poll_interval
-
-        timeout = float(timeout)
-        backoff = float(poll_interval)
-        deadline = time.monotonic() + timeout
-
-        logger.debug(
-            f"⏱️  HEALTH CHECK START: Waiting for server at {url} (timeout: {timeout}s, poll_interval: {poll_interval}s)"
-        )
-
-        attempt = 0
-        current = time.monotonic()
-        while current < deadline:
-            attempt += 1
-            remaining = deadline - current
-
-            status = self.check_health(url, timeout=min(backoff, 10.0))
-            check_duration = status.response_time if status.response_time is not None else 0.0
-
-            logger.debug(
-                f"🔍 Health check attempt #{attempt}: status={status.is_running}, "
-                f"check_took={check_duration:.2f}s, backoff={backoff:.2f}s, remaining={remaining:.1f}s"
-            )
-
-            if status.is_running:
-                elapsed = timeout - remaining
-                logger.debug(
-                    f"✅ Server became healthy after {max(elapsed, 0.0):.1f}s ({attempt} attempts)"
-                )
-                return True
-
-            time.sleep(backoff)
-            logger.debug(f"💤 Slept for {backoff:.2f}s (scheduled)")
-            backoff = min(backoff * 1.5, 10.0)
-
-            current = time.monotonic()
-
-        logger.warning(
-            f"❌ Server did not become healthy within {timeout}s at {url} (tried {attempt} times)"
-        )
-        return False
-
-
-class MLflowAPIHealthChecker(HealthChecker):
+class MLflowAPIHealthChecker(BaseHealthChecker):
     """Health checker that validates MLflow API endpoints are ready.
 
     This checker validates that MLflow's REST API endpoints are actually ready
     to accept requests, not just that the HTTP server is responding. This is
     important because MLflow's database migrations can take several seconds
     after the HTTP server starts.
+
+    This class inherits the wait/poll/backoff algorithm from BaseHealthChecker
+    and implements only the MLflow API-specific health check logic.
+
+    Attributes:
+        _api_endpoint: MLflow API endpoint to validate (e.g., '/api/2.0/mlflow/experiments/search')
     """
 
     def __init__(
@@ -160,13 +243,17 @@ class MLflowAPIHealthChecker(HealthChecker):
             wait_timeout: Timeout for waiting for API to become ready (seconds)
             poll_interval: Interval between health check polls (seconds)
         """
+        super().__init__(
+            request_timeout=request_timeout,
+            wait_timeout=wait_timeout,
+            poll_interval=poll_interval,
+        )
         self._api_endpoint = api_endpoint
-        self._request_timeout = request_timeout
-        self._wait_timeout = wait_timeout
-        self._poll_interval = poll_interval
 
     def check_health(self, url: str, timeout: float | None = None) -> ServerStatus:
         """Check MLflow API health by making an API request.
+
+        This is the hook method implementation for MLflow API-based health checking.
 
         Args:
             url: Base server URL to check
@@ -211,59 +298,6 @@ class MLflowAPIHealthChecker(HealthChecker):
                 response_time=None,
                 error_message=str(e),
             )
-
-    def wait_for_health(
-        self,
-        url: str,
-        timeout: float | None = None,
-        poll_interval: float | None = None,
-    ) -> bool:
-        """Wait for MLflow API to become ready.
-
-        Args:
-            url: Server URL to check
-            timeout: Maximum time to wait in seconds
-            poll_interval: Time between checks in seconds
-
-        Returns:
-            True if API became ready within timeout
-        """
-        if timeout is None:
-            timeout = self._wait_timeout
-        if poll_interval is None:
-            poll_interval = self._poll_interval
-
-        deadline = time.monotonic() + float(timeout)
-        backoff = float(poll_interval)
-
-        logger.debug(f"⏱️  API HEALTH CHECK START: Waiting for MLflow API at {url} (timeout: {timeout}s)")
-
-        attempt = 0
-        while time.monotonic() < deadline:
-            attempt += 1
-            remaining = deadline - time.monotonic()
-            check_start = time.time()
-            status = self.check_health(url, timeout=min(backoff, 10.0))
-            check_duration = time.time() - check_start
-
-            logger.debug(
-                f"🔍 API health check attempt #{attempt}: status={status.is_running}, "
-                f"check_took={check_duration:.2f}s, backoff={backoff:.2f}s, remaining={remaining:.1f}s"
-            )
-
-            if status.is_running:
-                elapsed = timeout - remaining
-                logger.debug(f"✅ MLflow API became ready after {elapsed:.1f}s ({attempt} attempts)")
-                return True
-
-            sleep_start = time.time()
-            time.sleep(backoff)
-            sleep_duration = time.time() - sleep_start
-            logger.debug(f"💤 Slept for {sleep_duration:.2f}s")
-            backoff = min(backoff * 1.5, 10.0)
-
-        logger.warning(f"❌ MLflow API did not become ready within {timeout}s at {url} (tried {attempt} times)")
-        return False
 
 
 class CompositeHealthChecker(HealthChecker):

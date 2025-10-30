@@ -8,6 +8,9 @@ from .factory import (
 from .health_checker import CompositeHealthChecker, HTTPHealthChecker
 from .mlflow_adapter import MLflowServerAdapter, MLflowServerContext
 from .process_manager import SubprocessManager
+from .config_normalizer import ServerConfigNormalizer
+from .config_applier import ServerConfigApplier
+from .storage_ensurer import ServerStorageEnsurer
 from .protocols import (
     ContextualServerAdapter,
     HealthChecker,
@@ -46,6 +49,10 @@ __all__ = [
     "SubprocessManager",
     "HTTPHealthChecker",
     "CompositeHealthChecker",
+    # Configuration Services
+    "ServerConfigNormalizer",
+    "ServerConfigApplier",
+    "ServerStorageEnsurer",
     # Services
     "ServerManagementService",
     "ServerApplicationService",
