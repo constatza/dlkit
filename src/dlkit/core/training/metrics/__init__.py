@@ -1,244 +1,125 @@
-"""Modern, composable metrics system following SOLID principles.
+"""Modern metrics system with functional core and torchmetrics integration.
 
 This module provides a comprehensive metrics framework with:
-- Protocol-based interfaces for type safety
-- Strategy patterns for composable aggregation and normalization
-- Factory patterns for easy metric creation
-- Template method patterns for consistent computation flow
-- Function-like callable interface for intuitive usage
+    - Functional core: Pure, composable metric functions
+    - TorchMetrics wrappers: Stateful wrappers for MetricCollection and MLflow
+    - Standard metrics delegation: Aliases to external torchmetrics library
+    - Loss compatibility: Functional metrics can be used as differentiable losses
 
-All metrics can be used both as methods and as callable functions:
+Architecture:
+    functional.py            - Pure functional implementations (metric-specific)
+    ../functional.py         - Shared loss/metric functions (differentiable)
+    torchmetrics_wrappers.py - Custom torchmetrics.Metric classes
+    compat.py                - Delegates to external torchmetrics
+
+All custom metrics are compatible with:
+    - torchmetrics.MetricCollection
+    - MLflow logging
+    - Distributed training (DDP)
+    - PyTorch Lightning
+
+Note:
+    For loss functions, see dlkit.core.training.functional which provides
+    differentiable implementations suitable for backpropagation.
 
 Examples:
     >>> import torch
-    >>> from dlkit.core.training.metrics import create_metric
+    >>> from dlkit.core.training.metrics import (
+    ...     MeanSquaredError,  # Standard metric from torchmetrics
+    ...     NormalizedVectorNormError,  # Custom metric
+    ... )
+    >>> from torchmetrics import MetricCollection
     >>>
-    >>> # Create metrics
-    >>> mse = create_metric("mse")
-    >>> mae = create_metric("mae")
+    >>> # Use custom metrics in MetricCollection
+    >>> metrics = MetricCollection({
+    ...     'mse': MeanSquaredError(),
+    ...     'norm_error': NormalizedVectorNormError(norm_ord=2),
+    ... })
     >>>
-    >>> # Sample dataflow
-    >>> predictions = torch.tensor([1.0, 2.0, 3.0])
-    >>> targets = torch.tensor([1.1, 1.9, 3.1])
+    >>> preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    >>> target = torch.tensor([[1.1, 1.9], [3.1, 3.9]])
     >>>
-    >>> # Both syntaxes work identically:
-    >>> error1 = mse.compute(predictions, targets)  # Method syntax
-    >>> error2 = mse(predictions, targets)  # Function syntax
-    >>> assert torch.allclose(error1, error2)  # Same result
+    >>> metrics.update(preds, target)
+    >>> results = metrics.compute()
+    >>> # Results can be logged to MLflow!
     >>>
-    >>> # Functional programming style:
-    >>> metrics = [mse, mae]
-    >>> errors = [metric(predictions, targets) for metric in metrics]
-    >>>
-    >>> # Higher-order functions:
-    >>> results = list(map(lambda m: m(predictions, targets), metrics))
+    >>> # Functional interface (for advanced users)
+    >>> from dlkit.core.training.metrics.functional import (
+    ...     normalized_vector_norm_error,
+    ...     temporal_derivative_error,
+    ... )
+    >>> error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
 """
 
-# Core protocol interfaces
-from .protocols import IMetric, IAggregator, INormalizer, IMetricRegistry, IMetricFactory
+# ============================================================================
+# STANDARD METRICS (delegated to external torchmetrics)
+# ============================================================================
 
-# Base classes and patterns
-from .base import BaseMetric, CompositeMetric, MetricDecorator
-
-# Concrete metric implementations
-from .implementations import (
-    MeanSquaredErrorMetric,
-    MeanAbsoluteErrorMetric,
-    RootMeanSquaredErrorMetric,
-    NormalizedVectorNormErrorMetric,
-    MSEOverVarianceMetric,
-    TemporalDerivativeMetric,
+from .compat import (
+    MeanSquaredError,
+    MeanAbsoluteError,
+    MeanSquaredLogError,
+    MeanAbsolutePercentageError,
+    R2Score,
 )
 
-# Aggregation strategies
-from .aggregators import (
-    MeanAggregator,
-    SumAggregator,
-    VectorNormAggregator,
-    StdAggregator,
-    MEAN_AGGREGATOR,
-    SUM_AGGREGATOR,
-    L2_AGGREGATOR,
-    L1_AGGREGATOR,
-    STD_AGGREGATOR,
+# ============================================================================
+# CUSTOM TORCHMETRICS WRAPPERS (our specialized metrics)
+# ============================================================================
+
+from .torchmetrics_wrappers import (
+    NormalizedVectorNormError,
+    TemporalDerivativeError,
 )
 
-# Normalization strategies
-from .normalizers import (
-    VarianceNormalizer,
-    StandardDeviationNormalizer,
-    VectorNormNormalizer,
-    NaiveForecastNormalizer,
-    VARIANCE_NORMALIZER,
-    STD_NORMALIZER,
-    L2_NORM_NORMALIZER,
-    L1_NORM_NORMALIZER,
-    NAIVE_FORECAST_NORMALIZER,
-)
+# ============================================================================
+# FUNCTIONAL INTERFACE (for advanced users)
+# ============================================================================
 
-# Registry and factory system
-from .registry import (
-    MetricRegistry,
-    AggregatorRegistry,
-    NormalizerRegistry,
-    MetricFactory,
-    get_global_metric_registry,
-    get_global_aggregator_registry,
-    get_global_normalizer_registry,
-    get_global_metric_factory,
+from .functional import (
+    # Composable primitives
+    compute_error_vectors,
+    compute_vector_norm,
+    safe_divide,
+    apply_aggregation,
+    # Vector metrics
+    normalized_vector_norm_error,
+    normalized_l1_error,
+    normalized_l2_error,
+    normalized_linf_error,
+    # Temporal metrics
+    compute_temporal_derivative,
+    temporal_derivative_error,
+    first_derivative_error,
+    second_derivative_error,
 )
 
 
-def create_metric(
-    metric_type: str, aggregator: str = None, normalizer: str = None, **kwargs
-) -> IMetric:
-    """Create a metric using the global factory.
-
-    Args:
-        metric_type: Type of metric to create (mse, mae, rmse, etc.)
-        aggregator: Name of aggregation strategy (mean, sum, l2_norm, etc.)
-        normalizer: Name of normalization strategy (variance, std, etc.)
-        **kwargs: Additional metric-specific parameters
-
-    Returns:
-        Configured metric instance
-
-    Examples:
-        >>> # Basic MSE metric
-        >>> mse = create_metric("mse")
-        >>>
-        >>> # MAE with sum aggregation
-        >>> mae_sum = create_metric("mae", aggregator="sum")
-        >>>
-        >>> # MSE with variance normalization
-        >>> mse_normalized = create_metric("mse", normalizer="variance")
-        >>>
-        >>> # Custom parameters
-        >>> metric = create_metric("mse", eps=1e-10, dim=0)
-    """
-    factory = get_global_metric_factory()
-    return factory.create_metric(metric_type, aggregator, normalizer, **kwargs)
-
-
-def create_normalized_vector_norm_error(
-    vector_dim: int = -1, norm_ord: int = 2, aggregator: str = "mean", eps: float = 1e-8, **kwargs
-) -> NormalizedVectorNormErrorMetric:
-    """Create normalized vector norm error metric for 2D
-
-    This metric computes the error between predicted and target vectors,
-    where each vector is normalized by the target vector's norm. Perfect
-    for measuring relative error in vector predictions.
-
-    Args:
-        vector_dim: Dimension along which vectors are defined (default: -1)
-        norm_ord: Order of the norm (1, 2, inf, etc.) (default: 2)
-        aggregator: Name of aggregation strategy (default: "mean")
-        eps: Small value for numerical stability (default: 1e-8)
-        **kwargs: Additional parameters
-
-    Returns:
-        Configured NormalizedVectorNormErrorMetric instance
-
-    Examples:
-        >>> import torch
-        >>>
-        >>> # Create metric for 2D vectors with L2 norm
-        >>> metric = create_normalized_vector_norm_error()
-        >>>
-        >>> # Sample 2D vector dataflow (each row is a vector)
-        >>> predictions = torch.tensor([[1.0, 0.0], [0.0, 2.0]])
-        >>> targets = torch.tensor([[1.0, 1.0], [2.0, 0.0]])
-        >>>
-        >>> # Compute normalized error
-        >>> error = metric.compute(predictions, targets)
-        >>> print(f"Normalized vector error: {error:.4f}")
-        >>>
-        >>> # L1 norm with sum aggregation
-        >>> l1_metric = create_normalized_vector_norm_error(norm_ord=1, aggregator="sum")
-    """
-    factory = get_global_metric_factory()
-    return factory.create_normalized_vector_norm_error(
-        vector_dim=vector_dim, norm_ord=norm_ord, aggregator=aggregator, eps=eps, **kwargs
-    )
-
-
-def create_composite_metric(
-    name: str, metrics: list[IMetric], weights: list[float] = None
-) -> CompositeMetric:
-    """Create a composite metric from multiple metrics.
-
-    Args:
-        name: Name for the composite metric
-        metrics: List of metrics to combine
-        weights: Optional weights for weighted combination
-
-    Returns:
-        CompositeMetric instance
-
-    Examples:
-        >>> # Equal weight combination
-        >>> mse = create_metric("mse")
-        >>> mae = create_metric("mae")
-        >>> composite = create_composite_metric("mse_mae", [mse, mae])
-        >>>
-        >>> # Weighted combination (70% MSE, 30% MAE)
-        >>> weighted = create_composite_metric("weighted_error", [mse, mae], weights=[0.7, 0.3])
-    """
-    import torch
-
-    weights_tensor = torch.tensor(weights) if weights else None
-    return CompositeMetric(name, metrics, weights_tensor)
-
+# ============================================================================
+# PUBLIC API
+# ============================================================================
 
 __all__ = [
-    # Protocol interfaces
-    "IMetric",
-    "IAggregator",
-    "INormalizer",
-    "IMetricRegistry",
-    "IMetricFactory",
-    # Base classes
-    "BaseMetric",
-    "CompositeMetric",
-    "MetricDecorator",
-    # Metric implementations
-    "MeanSquaredErrorMetric",
-    "MeanAbsoluteErrorMetric",
-    "RootMeanSquaredErrorMetric",
-    "NormalizedVectorNormErrorMetric",
-    "MSEOverVarianceMetric",
-    "TemporalDerivativeMetric",
-    # Aggregators
-    "MeanAggregator",
-    "SumAggregator",
-    "VectorNormAggregator",
-    "StdAggregator",
-    "MEAN_AGGREGATOR",
-    "SUM_AGGREGATOR",
-    "L2_AGGREGATOR",
-    "L1_AGGREGATOR",
-    "STD_AGGREGATOR",
-    # Normalizers
-    "VarianceNormalizer",
-    "StandardDeviationNormalizer",
-    "VectorNormNormalizer",
-    "NaiveForecastNormalizer",
-    "VARIANCE_NORMALIZER",
-    "STD_NORMALIZER",
-    "L2_NORM_NORMALIZER",
-    "L1_NORM_NORMALIZER",
-    "NAIVE_FORECAST_NORMALIZER",
-    # Registry and factory
-    "MetricRegistry",
-    "AggregatorRegistry",
-    "NormalizerRegistry",
-    "MetricFactory",
-    "get_global_metric_registry",
-    "get_global_aggregator_registry",
-    "get_global_normalizer_registry",
-    "get_global_metric_factory",
-    # Convenience functions
-    "create_metric",
-    "create_normalized_vector_norm_error",
-    "create_composite_metric",
+    # Standard metrics (from torchmetrics)
+    "MeanSquaredError",
+    "MeanAbsoluteError",
+    "MeanSquaredLogError",
+    "MeanAbsolutePercentageError",
+    "R2Score",
+    # Custom torchmetrics wrappers
+    "NormalizedVectorNormError",
+    "TemporalDerivativeError",
+    # Functional interface
+    "compute_error_vectors",
+    "compute_vector_norm",
+    "safe_divide",
+    "apply_aggregation",
+    "normalized_vector_norm_error",
+    "normalized_l1_error",
+    "normalized_l2_error",
+    "normalized_linf_error",
+    "compute_temporal_derivative",
+    "temporal_derivative_error",
+    "first_derivative_error",
+    "second_derivative_error",
 ]
