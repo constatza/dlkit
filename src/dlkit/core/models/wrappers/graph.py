@@ -4,18 +4,27 @@ This module provides a Lightning wrapper for graph neural networks that
 work with PyTorch Geometric Data objects, integrating with the dlkit processing pipeline.
 """
 
+from __future__ import annotations
+
+import warnings
 from typing import Any
 
 from torch import Tensor
-from torch_geometric.data import Data
+from torch_geometric.data import Batch, Data
 
-from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
-from dlkit.tools.config.data_entries import DataEntry, Target
+from dlkit.core.datatypes.networks import GraphDict, GraphInput
 from dlkit.runtime.pipelines.classifiers import NameBasedClassifier
+from dlkit.runtime.pipelines.graph_support import (
+    GraphBatchPayload,
+    GraphDataExtractionStep,
+    GraphModelInvocationStep,
+    PyGBatchAdapter,
+)
 from dlkit.runtime.pipelines.model_invokers import StandardModelInvoker
-from dlkit.runtime.pipelines.context import ProcessingContext
+from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
+from dlkit.tools.config.data_entries import DataEntry
+
 from .base import ProcessingLightningWrapper
-import warnings
 
 
 class GraphLightningWrapper(ProcessingLightningWrapper):
@@ -54,6 +63,8 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             entry_configs: Data entry configurations for pipeline setup
             **kwargs: Additional arguments passed to base class
         """
+        self._graph_adapter = kwargs.pop("graph_batch_adapter", None) or PyGBatchAdapter()
+
         super().__init__(
             settings=settings,
             model_settings=model_settings,
@@ -61,11 +72,12 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             **kwargs,
         )
 
-    def forward(self, data: Data) -> Tensor:
+    def forward(self, data: Data | Batch) -> Tensor:
         """Forward pass through the model with PyG Data input.
 
         Args:
-            data: PyTorch Geometric Data object containing x, edge_index, etc.
+            data: PyTorch Geometric Data or Batch object containing x, edge_index, etc.
+                  Batch objects are created by PyG DataLoader for batched graphs.
 
         Returns:
             Model output tensor
@@ -89,9 +101,6 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         Args:
             entry_configs: Data entry configurations
         """
-        # Create graph-specific model invoker
-        model_invoker = GraphModelInvoker(self.model)
-
         # Create output classifier
         output_classifier = self._create_output_classifier()
         # Warn and skip dlkit transforms for PyG graphs to avoid conflicts with PyG transforms
@@ -107,45 +116,37 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         # Set up pipelines with graph-specific components (no dlkit TransformApplicationStep)
         from dlkit.runtime.pipelines.pipeline import (
-            ProcessingPipeline,
-            DataExtractionStep,
-            ModelInvocationStep,
+            LossPairingStep,
             OutputClassificationStep,
             OutputNamingStep,
-            LossDataAggregationStep,
-            ValidationDataStep,
+            PrecisionValidationStep,
+            ProcessingPipeline,
         )
 
-        # Training pipeline
-        # Create namer (use base default)
         output_namer = self._create_output_namer()
+        is_autoencoder = getattr(self._wrapper_settings, "is_autoencoder", False)
 
-        extraction_train = DataExtractionStep(entry_configs)
-        invocation_train = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
+        def build_pipeline(include_loss_pairing: bool) -> ProcessingPipeline:
+            local_invoker = GraphModelInvoker(self.model)
+            if include_loss_pairing:
+                next_step = LossPairingStep(entry_configs, is_autoencoder=is_autoencoder)
+            else:
+                next_step = None
+
+            classification_step = OutputClassificationStep(
                 output_classifier,
-                OutputNamingStep(
-                    output_namer,
-                    LossDataAggregationStep(entry_configs),
-                ),
-            ),
-        )
-        extraction_train.set_next(invocation_train)
-        self.train_pipeline = ProcessingPipeline(extraction_train)
+                OutputNamingStep(output_namer, next_step),
+            )
+            invocation_step = GraphModelInvocationStep(local_invoker, classification_step)
+            precision_step = PrecisionValidationStep(local_invoker, invocation_step)
+            extraction_step = GraphDataExtractionStep(entry_configs, self._graph_adapter, precision_step)
+            return ProcessingPipeline(extraction_step)
 
-        # Validation and test pipelines
-        extraction_val = DataExtractionStep(entry_configs)
-        invocation_val = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(output_namer, ValidationDataStep()),
-            ),
-        )
-        extraction_val.set_next(invocation_val)
-        self.val_pipeline = ProcessingPipeline(extraction_val)
+        # Training pipeline with loss pairing
+        self.train_pipeline = build_pipeline(include_loss_pairing=True)
 
+        # Validation/test pipeline mirrors training pipeline
+        self.val_pipeline = build_pipeline(include_loss_pairing=True)
         self.test_pipeline = self.val_pipeline
 
     def _setup_predict_pipeline(self, entry_configs: dict[str, DataEntry]) -> None:
@@ -163,161 +164,24 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         # Build predict pipeline - direct: extraction → invocation (no transforms)
         from dlkit.runtime.pipelines.pipeline import (
-            ProcessingPipeline,
-            DataExtractionStep,
-            ModelInvocationStep,
             OutputClassificationStep,
             OutputNamingStep,
+            PrecisionValidationStep,
+            ProcessingPipeline,
         )
 
-        extraction_predict = DataExtractionStep(entry_configs)
-        invocation_predict = ModelInvocationStep(
+        precision_step = PrecisionValidationStep(
             model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(output_namer)  # Terminates here - no loss pairing
+            GraphModelInvocationStep(
+                model_invoker,
+                OutputClassificationStep(
+                    output_classifier,
+                    OutputNamingStep(output_namer),
+                ),
             ),
         )
-        extraction_predict.set_next(invocation_predict)
+        extraction_predict = GraphDataExtractionStep(entry_configs, self._graph_adapter, precision_step)
         self.predict_pipeline = ProcessingPipeline(extraction_predict)
-
-    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Training step for graph dataflow using processing pipeline.
-
-        Args:
-            batch: Dictionary containing graph data (or PyG Data object)
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing the training loss
-        """
-        # Handle both dict and PyG Data input formats
-        if hasattr(batch, 'x'):  # PyG Data object
-            batch_dict = self._data_to_dict(batch)  # type: ignore[arg-type]
-        else:
-            batch_dict = batch
-
-        # Process through pipeline
-        context = self.train_pipeline.execute(batch_dict)
-
-        # Compute loss
-        loss = self._compute_loss(context)
-
-        # Log metrics
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        return {"loss": loss}
-
-    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Validation step for graph dataflow using processing pipeline.
-
-        Args:
-            batch: Dictionary containing graph data (or PyG Data object)
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing validation metrics
-        """
-        # Handle both dict and PyG Data input formats
-        if hasattr(batch, 'x'):  # PyG Data object
-            batch_dict = self._data_to_dict(batch)  # type: ignore[arg-type]
-        else:
-            batch_dict = batch
-
-        # Process through pipeline
-        context = self.val_pipeline.execute(batch_dict)
-
-        # Compute loss and metrics
-        val_loss = self._compute_loss(context)
-        metrics = self._compute_metrics(context, self.val_metrics)
-
-        # Log metrics
-        self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
-
-        return {"val_loss": val_loss}
-
-    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Test step for graph dataflow using processing pipeline.
-
-        Args:
-            batch: Dictionary containing graph data (or PyG Data object)
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing test metrics
-        """
-        # Handle both dict and PyG Data input formats
-        if hasattr(batch, 'x'):  # PyG Data object
-            batch_dict = self._data_to_dict(batch)  # type: ignore[arg-type]
-        else:
-            batch_dict = batch
-
-        # Process through pipeline
-        context = self.test_pipeline.execute(batch_dict)
-
-        # Compute loss and metrics
-        test_loss = self._compute_loss(context)
-        metrics = self._compute_metrics(context, self.test_metrics)
-
-        # Log metrics
-        self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
-
-        return {"test_loss": test_loss}
-
-    def predict_step(self, batch: dict[str, Tensor], batch_idx: int):
-        """Prediction step for graph dataflow using pipeline.
-
-        Args:
-            batch: Dictionary containing graph data (or PyG Data object)
-            batch_idx: Index of the batch
-
-        Returns:
-            dict[str, torch.Tensor | dict]: Dictionary with ``predictions``, ``targets``, and ``latents``.
-        """
-        # Handle both dict and PyG Data input formats
-        if hasattr(batch, 'x'):  # PyG Data object
-            batch_dict = self._data_to_dict(batch)  # type: ignore[arg-type]
-        else:
-            batch_dict = batch
-        context = self.predict_pipeline.execute(batch_dict)
-
-        # No transforms for graph models - return predictions directly
-        return {"predictions": dict(context.predictions), "targets": dict(context.targets), "latents": context.latents}
-
-    def _data_to_dict(self, data: Data) -> dict[str, Tensor]:
-        """Convert a PyG Data object to a dict of tensors.
-
-        Args:
-            data (torch_geometric.data.Data): PyG Data object.
-
-        Returns:
-            dict[str, torch.Tensor]: Dictionary representation of the
-        """
-        result = {}
-
-        # Common PyG attributes
-        if hasattr(data, "x") and data.x is not None:
-            result["x"] = data.x
-        if hasattr(data, "edge_index") and data.edge_index is not None:
-            result["edge_index"] = data.edge_index
-        if hasattr(data, "edge_attr") and data.edge_attr is not None:
-            result["edge_attr"] = data.edge_attr
-        if hasattr(data, "y") and data.y is not None:
-            result["y"] = data.y
-        if hasattr(data, "batch") and data.batch is not None:
-            result["batch"] = data.batch
-
-        # Additional attributes
-        for key in data.keys():
-            if key not in result and hasattr(data, key):
-                value = getattr(data, key)
-                if isinstance(value, Tensor):
-                    result[key] = value
-
-        return result
-
 
 
 class GraphModelInvoker(StandardModelInvoker):
@@ -333,38 +197,26 @@ class GraphModelInvoker(StandardModelInvoker):
         Args:
             model: Graph neural network model
         """
-        super().__init__(model, input_mode="single")
+        super().__init__(model, input_mode="kwargs")
 
-    def invoke(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Invoke graph model with features.
+    def invoke(self, features: GraphDict) -> GraphDict:  # type: ignore[override]
+        """Invoke graph model using tensor keyword arguments."""
+        return super().invoke(features)
 
-        Args:
-            features: Dictionary of feature tensors
-
-        Returns:
-            Dictionary of model outputs
-        """
-        # Convert features back to PyG Data format if needed
-        data = self._dict_to_data(features)
-
-        # Invoke model
-        outputs = self._model(data)
-
-        return self._normalize_outputs(outputs)
-
-    def _dict_to_data(self, features: dict[str, Tensor]) -> Data:
-        """Convert feature dictionary back to PyG Data object.
-
-        Args:
-            features: Dictionary of feature tensors
-
-        Returns:
-            PyG Data object
-        """
-        data = Data()
-
-        for key, tensor in features.items():
-            setattr(data, key, tensor)
-
-        return data
-
+    def invoke_with_payload(
+        self,
+        features: GraphDict,
+        *,
+        payload: GraphBatchPayload | None = None,
+    ) -> GraphDict:
+        """Invoke graph model with tensor kwargs and fallback to original batch."""
+        try:
+            return super().invoke(features)
+        except RuntimeError as exc:
+            if payload and isinstance(payload.original, (Data, Batch)):
+                try:
+                    outputs = self._model(payload.original)
+                    return self._normalize_outputs(outputs)
+                except Exception as fallback_exc:  # pragma: no cover - rare fallback path
+                    raise RuntimeError(f"Graph model invocation failed: {fallback_exc}") from fallback_exc
+            raise exc
