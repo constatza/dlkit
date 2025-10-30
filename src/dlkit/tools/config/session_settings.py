@@ -5,7 +5,8 @@ training flows. Detailed training/inference configuration lives at the
 GeneralSettings top level (TRAINING, DATAMODULE, DATASET, etc.).
 """
 
-from pydantic import Field, model_validator
+from typing import Any
+from pydantic import Field, model_validator, field_validator
 from dlkit.core.datatypes.secure_uris import SecurePath
 
 from .core.base_settings import BasicSettings
@@ -31,7 +32,7 @@ class SessionSettings(BasicSettings):
         precision: Precision for computation
     """
 
-    name: str = Field(default="session", description="Name of the session")
+    name: str = Field(default="dlkit-session", description="Name of the session")
     inference: bool = Field(default=False, description="Run in inference mode when true")
 
     # Global session settings
@@ -48,6 +49,48 @@ class SessionSettings(BasicSettings):
             " it drives all standard locations under <root>/output."
         ),
     )
+
+    @field_validator("precision", mode="before")
+    @classmethod
+    def validate_precision(cls, v: Any) -> PrecisionStrategy:
+        """Validate and normalize precision input using alias support.
+
+        This validator accepts precision values in various formats (enum values,
+        semantic string aliases) and normalizes them to PrecisionStrategy.
+        Integers and numeric strings are rejected.
+
+        Args:
+            v: Precision value from config (string or PrecisionStrategy)
+
+        Returns:
+            Normalized PrecisionStrategy enum value
+
+        Raises:
+            ValueError: If precision value is invalid (e.g., "wtf", 64, "64")
+
+        Examples:
+            Valid inputs: "double", "float64", "single", "float32", etc.
+            Invalid inputs: "wtf", "foo", 64, "64", etc.
+        """
+        # Already a PrecisionStrategy - pass through
+        if isinstance(v, PrecisionStrategy):
+            return v
+
+        # Reject integers
+        if isinstance(v, int):
+            raise ValueError(
+                f"Invalid precision value in [SESSION] configuration: "
+                f"Integer values not supported. Use semantic aliases like 'double', 'single', 'float64', etc."
+            )
+
+        # Use from_string to parse and validate (handles str only)
+        try:
+            return PrecisionStrategy.from_string(v)
+        except ValueError as e:
+            # Re-raise with context about where the error occurred
+            raise ValueError(
+                f"Invalid precision value in [SESSION] configuration: {e}"
+            ) from e
 
     @model_validator(mode="after")
     def validate_mode_configuration(self):

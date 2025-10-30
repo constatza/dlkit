@@ -33,13 +33,16 @@ def build_components():
             self.logged_metrics = {"val_loss": 0.45, "accuracy": 0.92}
             self.called = {"fit": 0, "predict": 0, "test": 0}
 
-        def fit(self, model, datamodule=None):
+        def fit(self, model, datamodule=None, **kwargs):
+            """Match PyTorch Lightning Trainer.fit() signature."""
             self.called["fit"] += 1
 
-        def predict(self, model, datamodule=None):
+        def predict(self, model, datamodule=None, **kwargs):
+            """Match PyTorch Lightning Trainer.predict() signature."""
             self.called["predict"] += 1
 
-        def test(self, model, datamodule=None):
+        def test(self, model, datamodule=None, **kwargs):
+            """Match PyTorch Lightning Trainer.test() signature."""
             self.called["test"] += 1
 
     return BuildComponents(

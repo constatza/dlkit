@@ -62,9 +62,6 @@ class LinearNetwork(ShapeAwareModel):
         else:
             self.norm = None
 
-        # Apply precision to newly created parameters
-        self.ensure_precision_applied()
-
     def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
         """Check if this LinearNetwork can accept the given shape specification."""
         # Additional validation: check for required dimensions

@@ -26,14 +26,14 @@ from dlkit.core.shape_specs import create_shape_spec
 class ProductionTestModel(ShapeAwareModel):
     """Realistic model for production testing."""
 
-    def __init__(self, shape, precision=None, **kwargs):
+    def __init__(self, shape, **kwargs):
         # Convert shape dict to unified_shape
         if isinstance(shape, dict):
             unified_shape = create_shape_spec(shape)
         else:
             # Assume it's already a shape spec
             unified_shape = shape
-        super().__init__(unified_shape=unified_shape, precision=precision, **kwargs)
+        super().__init__(unified_shape=unified_shape, **kwargs)
 
         # Extract shapes from unified_shape for building layers
         input_shape = unified_shape.get_input_shape()
@@ -46,7 +46,12 @@ class ProductionTestModel(ShapeAwareModel):
             torch.nn.ReLU(),
         )
         self.decoder = torch.nn.Linear(64, output_shape[0])
-        self.ensure_precision_applied()
+
+        # Apply precision from context (simulating Lightning behavior)
+        service = get_precision_service()
+        precision_strategy = service.resolve_precision()
+        dtype = precision_strategy.to_torch_dtype()
+        self.to(dtype)
 
     def accepts_shape(self, shape_spec):
         """Accept any valid shape specification."""
@@ -90,11 +95,12 @@ class TestComprehensivePrecision:
         feature = Feature(name="input", path=sample_datasets["float32"])
         target = Target(name="output", path=sample_datasets["float32"])
 
-        # Load dataflow with session precision
-        input_data = load_array(feature.path, precision_provider=session)
-        target_data = load_array(target.path, precision_provider=session)
+        # Load data with session precision using context
+        with precision_override(session.get_precision_strategy()):
+            input_data = load_array(feature.path)
+            target_data = load_array(target.path)
 
-        # Verify dataflow precision
+        # Verify data precision
         assert input_data.dtype == torch.float16
         assert target_data.dtype == torch.float16
 
@@ -120,8 +126,9 @@ class TestComprehensivePrecision:
         # Default session
         session = SessionSettings(precision=PrecisionStrategy.FULL_32)
 
-        # Normal operation
-        data_normal = load_array(sample_datasets["float32"], precision_provider=session)
+        # Normal operation with context
+        with precision_override(session.get_precision_strategy()):
+            data_normal = load_array(sample_datasets["float32"])
         assert data_normal.dtype == torch.float32
 
         # Override for memory-constrained operation
@@ -302,7 +309,8 @@ class TestComprehensivePrecision:
             PrecisionStrategy.MIXED_16,
             PrecisionStrategy.FULL_64,
         ]:
-            model = ProductionTestModel(shape, precision=strategy)
+            with precision_override(strategy):
+                model = ProductionTestModel(shape)
             models[strategy] = model
 
         # Verify models have expected precision
@@ -363,13 +371,14 @@ class TestComprehensivePrecision:
         # Simulate production pipeline with multiple precision requirements
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
 
-        # Data loading phase
+        # Data loading phase with precision context
         features = []
-        for i, (name, path) in enumerate(sample_datasets.items()):
-            feature = Feature(name=f"feature_{i}", path=path)
-            data = load_array(feature.path, precision_provider=session)
-            features.append(data)
-            assert data.dtype == torch.float16
+        with precision_override(session.get_precision_strategy()):
+            for i, (name, path) in enumerate(sample_datasets.items()):
+                feature = Feature(name=f"feature_{i}", path=path)
+                data = load_array(feature.path)
+                features.append(data)
+                assert data.dtype == torch.float16
 
         # Model creation phase
         shape = {"x": (20,), "y": (5,)}
@@ -396,8 +405,8 @@ class TestComprehensivePrecision:
             validation_data = load_array(sample_datasets["float32"])
             validation_model = ProductionTestModel(shape)
 
-            # Cast input to validation model precision
-            validation_input = validation_model.cast_input(sample_input)
+            # Cast input to validation model precision (manual cast for validation)
+            validation_input = sample_input.to(torch.float64)
             validation_output = validation_model(validation_input)
 
             assert validation_data.dtype == torch.float64

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import Literal
+from collections.abc import Callable
 
 import torch
 from torch import Tensor, nn
@@ -8,9 +9,6 @@ from torch import Tensor, nn
 from dlkit.core.models.nn.base import ShapeAwareModel
 from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.core.shape_specs import IShapeSpec, NullShapeSpec
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from dlkit.tools.config.precision import PrecisionStrategy
 
 
 class NormScaledFFNN(ShapeAwareModel):
@@ -21,13 +19,14 @@ class NormScaledFFNN(ShapeAwareModel):
       2) Predicting x_scaled = base_model(b_scaled)
       3) Rescaling x: x = x_scaled * ||b||_p
 
+    Precision is managed by PyTorch Lightning's precision plugins via the Trainer.
+
     Args:
         base_model: Underlying module that operates on normalized inputs.
         unified_shape: Shape specification describing (b, x) dimensions.
         norm: Which vector norm to use for scaling; one of {"l2", "l1", "linf"}.
         eps_gain: Multiplier for machine epsilon used to avoid division by zero.
         keep_stats: When True, :meth:`forward` returns ``(x, {"norm": norms})``.
-        precision: Optional precision override forwarded to :class:`ShapeAwareModel`.
     """
 
     SUPPORTED_NORMS = {"l2", "l1", "linf"}
@@ -42,7 +41,6 @@ class NormScaledFFNN(ShapeAwareModel):
         norm: str = DEFAULT_NORM,
         eps_gain: float = DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        precision: PrecisionStrategy | None = None,
     ) -> None:
         if base_model is None:
             msg = (
@@ -64,13 +62,10 @@ class NormScaledFFNN(ShapeAwareModel):
 
         pending_base_model = base_model
 
-        super().__init__(unified_shape=unified_shape, precision=precision)
+        super().__init__(unified_shape=unified_shape)
 
         # Register the base model once the nn.Module initialization completed
         self.base_model = pending_base_model
-
-        self.ensure_precision_applied()
-
 
     def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
         if isinstance(shape_spec, NullShapeSpec):
@@ -102,11 +97,14 @@ class NormScaledFFNN(ShapeAwareModel):
         return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
 
     def forward(self, x: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
-        b = self.cast_input(x)
+        # Input casting is now handled by Lightning's precision plugin
+        b = x
         if not torch.is_floating_point(b):
             raise TypeError(f"Expected floating point tensor, received dtype={b.dtype}.")
         if b.ndim < 1:
-            raise ValueError(f"Expected b to have at least 1 dimension, got shape {tuple(b.shape)}.")
+            raise ValueError(
+                f"Expected b to have at least 1 dimension, got shape {tuple(b.shape)}."
+            )
 
         norms = self._vector_norm(b)
         eps = self._compute_eps(b, self.eps_gain)
@@ -122,7 +120,10 @@ class NormScaledFFNN(ShapeAwareModel):
 
 
 class NormScaledLinearFFNN(NormScaledFFNN):
-    """NormScaledFFNN with a single Linear layer as the base network."""
+    """NormScaledFFNN with a single Linear layer as the base network.
+
+    Precision is managed by PyTorch Lightning's precision plugins via the Trainer.
+    """
 
     def __init__(
         self,
@@ -132,7 +133,6 @@ class NormScaledLinearFFNN(NormScaledFFNN):
         norm: str = NormScaledFFNN.DEFAULT_NORM,
         eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        precision: PrecisionStrategy | None = None,
     ) -> None:
         input_shape = unified_shape.get_input_shape()
         output_shape = unified_shape.get_output_shape()
@@ -148,12 +148,14 @@ class NormScaledLinearFFNN(NormScaledFFNN):
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
-            precision=precision,
         )
 
 
 class NormScaledConstantWidthFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by ConstantWidthFFNN."""
+    """NormScaledFFNN backed by ConstantWidthFFNN.
+
+    Precision is managed by PyTorch Lightning's precision plugins via the Trainer.
+    """
 
     def __init__(
         self,
@@ -164,7 +166,6 @@ class NormScaledConstantWidthFFNN(NormScaledFFNN):
         norm: str = NormScaledFFNN.DEFAULT_NORM,
         eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        precision: PrecisionStrategy | None = None,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -177,7 +178,6 @@ class NormScaledConstantWidthFFNN(NormScaledFFNN):
             activation=activation_fn,
             normalize=normalize,  # type: ignore[arg-type]
             dropout=dropout,
-            precision=precision,
         )
         super().__init__(
             base_model=base_model,
@@ -185,5 +185,4 @@ class NormScaledConstantWidthFFNN(NormScaledFFNN):
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
-            precision=precision,
         )

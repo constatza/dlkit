@@ -25,6 +25,6 @@ class SchedulerSettings(ComponentSettings[LRScheduler]):
     )
     factor: float = Field(default=0.5, description="Reduction factor")
     patience: int = Field(
-        default=50, description="Number of epochs with no improvement before reducing the LR"
+        default=1000, description="Number of epochs with no improvement before reducing the LR"
     )
     min_lr: float = Field(default=1e-8, description="Minimum learning rate")

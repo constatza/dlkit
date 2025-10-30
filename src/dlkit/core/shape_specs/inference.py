@@ -135,6 +135,125 @@ class CheckpointMetadataStrategy(ShapeInferenceStrategy):
         return 0
 
 
+class GraphDatasetStrategy(ShapeInferenceStrategy):
+    """Strategy to infer shapes from PyTorch Geometric datasets."""
+
+    @staticmethod
+    def _pyg_types() -> tuple[type | None, type | None]:
+        try:
+            from torch_geometric.data import Data, Batch  # type: ignore
+        except Exception:  # pragma: no cover - PyG optional at import time
+            return (None, None)
+        return (Data, Batch)
+
+    def can_infer(self, context: InferenceContext) -> bool:
+        """Graph inference requires a dataset with PyG Data samples."""
+        if context.dataset is None:
+            return False
+        sample = self._safe_sample(context.dataset)
+        return self._is_graph_sample(sample)
+
+    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+        """Infer graph-centric shapes using PyG metadata."""
+        sample = self._safe_sample(context.dataset)
+        graph = self._extract_graph_sample(sample)
+        if graph is None:
+            return None
+
+        shapes = self._collect_graph_shapes(graph)
+        if not shapes:
+            return None
+
+        entries = {
+            name: ShapeEntry(name=name, dimensions=dims)
+            for name, dims in shapes.items()
+        }
+        default_output = "y" if "y" in shapes else None
+        return ShapeData(
+            entries=entries,
+            model_family=ModelFamily.GRAPH,
+            source=ShapeSource.GRAPH_DATASET,
+            default_input="x",
+            default_output=default_output,
+        )
+
+    def get_priority(self) -> int:
+        """High priority for graph datasets (after checkpoint metadata)."""
+        return 1
+
+    def _safe_sample(self, dataset: Any) -> Any:
+        try:
+            return dataset[0]
+        except Exception:
+            return None
+
+    def _is_graph_sample(self, sample: Any) -> bool:
+        Data, Batch = self._pyg_types()
+        if Data is None:
+            return False
+        if isinstance(sample, (Data, Batch)):
+            return True
+        if isinstance(sample, dict):
+            return any(self._is_graph_sample(item) for item in sample.values())
+        if isinstance(sample, (list, tuple)):
+            return any(self._is_graph_sample(item) for item in sample)
+        return False
+
+    def _extract_graph_sample(self, sample: Any):
+        Data, Batch = self._pyg_types()
+        if Data is None:
+            return None
+        if isinstance(sample, (Data, Batch)):
+            return sample
+        if isinstance(sample, dict):
+            for item in sample.values():
+                graph = self._extract_graph_sample(item)
+                if graph is not None:
+                    return graph
+        if isinstance(sample, (list, tuple)):
+            for item in sample:
+                graph = self._extract_graph_sample(item)
+                if graph is not None:
+                    return graph
+        return None
+
+    def _collect_graph_shapes(self, graph: Any) -> Dict[str, tuple[int, ...]]:
+        shapes: Dict[str, tuple[int, ...]] = {}
+
+        x = getattr(graph, "x", None)
+        if hasattr(x, "shape") and x.shape:
+            feature_dim = int(x.shape[-1]) if len(x.shape) > 1 else int(x.shape[0])
+            if feature_dim > 0:
+                shapes["x"] = (feature_dim,)
+
+        edge_attr = getattr(graph, "edge_attr", None)
+        if hasattr(edge_attr, "shape") and edge_attr.shape:
+            attr_dim = (
+                int(edge_attr.shape[-1]) if len(edge_attr.shape) > 1 else 1
+            )
+            if attr_dim > 0:
+                shapes["edge_attr"] = (attr_dim,)
+
+        edge_weight = getattr(graph, "edge_weight", None)
+        if hasattr(edge_weight, "shape") and edge_weight.shape:
+            shapes["edge_weight"] = (1,)
+
+        y = getattr(graph, "y", None)
+        if hasattr(y, "shape") and y.shape:
+            if y.ndim == 0:
+                shapes["y"] = (1,)
+            elif y.ndim == 1:
+                target_dim = int(y.shape[0])
+                if target_dim > 0:
+                    shapes["y"] = (target_dim,)
+            else:
+                target_dim = int(y.shape[-1])
+                if target_dim > 0:
+                    shapes["y"] = (target_dim,)
+
+        return shapes
+
+
 class DatasetSamplingStrategy(ShapeInferenceStrategy):
     """Strategy to infer shapes by sampling from dataset."""
 
@@ -459,6 +578,7 @@ class ShapeInferenceChain:
         """
         return [
             CheckpointMetadataStrategy(),
+            GraphDatasetStrategy(),
             DatasetSamplingStrategy(),
             ConfigurationStrategy(),
             DefaultFallbackStrategy(),

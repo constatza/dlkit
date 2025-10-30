@@ -41,6 +41,15 @@ class StandardModelInvoker(ModelInvoker):
         self._input_mode = input_mode
         self._expected_inputs = expected_inputs or []
 
+    @property
+    def model(self) -> nn.Module:
+        """Get the underlying PyTorch model.
+
+        Returns:
+            The PyTorch nn.Module being invoked
+        """
+        return self._model
+
     def invoke(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Invoke the model with the provided features.
 
@@ -134,6 +143,15 @@ class MultiInputModelInvoker(ModelInvoker):
         self._model = model
         self._input_mapping = input_mapping or {}
 
+    @property
+    def model(self) -> nn.Module:
+        """Get the underlying PyTorch model.
+
+        Returns:
+            The PyTorch nn.Module being invoked
+        """
+        return self._model
+
     def invoke(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Invoke the model with mapped feature inputs.
 
@@ -223,6 +241,15 @@ class SequenceModelInvoker(ModelInvoker):
         self._model = model
         self._sequence_key = sequence_key
         self._attention_key = attention_key
+
+    @property
+    def model(self) -> nn.Module:
+        """Get the underlying PyTorch model.
+
+        Returns:
+            The PyTorch nn.Module being invoked
+        """
+        return self._model
 
     def invoke(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Invoke the sequence model with appropriate inputs.

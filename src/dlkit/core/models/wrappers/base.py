@@ -20,6 +20,7 @@ from dlkit.tools.config import (
     WrapperComponentSettings,
 )
 from dlkit.tools.config.data_entries import DataEntry, Target
+from dlkit.tools.config.core.updater import update_settings
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 from dlkit.runtime.pipelines.pipeline import (
@@ -89,6 +90,16 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         # Initialize model with ABC-based factory
         self.model = self._create_abc_model(model_settings, shape_spec)
 
+        # Apply precision to model immediately after creation
+        # Lightning's precision plugin will convert the wrapper, but we need to ensure
+        # the nested model is also converted. This matches the pattern in test models.
+        from dlkit.interfaces.api.services.precision_service import get_precision_service
+
+        precision_service = get_precision_service()
+        precision_strategy = precision_service.resolve_precision()
+        dtype = precision_strategy.to_torch_dtype()
+        self.model = self.model.to(dtype=dtype)
+
         # Ensure wrapper keeps a canonical reference to model-provided shape specs
         if self.shape_spec is None:
             self._assign_shape_spec(self._derive_shape_spec_from_model())
@@ -116,6 +127,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         # Keep a direct reference to wrapper settings for pipeline decisions
         self._wrapper_settings = settings
 
+        # Ensure lr/learning_rate hyperparameters mirror optimizer settings
+        self._sync_lr_hparam()
+
         # Initialize processing pipelines
         self._entry_configs = entry_configs or {}
 
@@ -134,12 +148,38 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._setup_processing_pipelines(self._entry_configs)
         self._setup_predict_pipeline(self._entry_configs)
 
+    def configure_model(self) -> None:
+        """Ensure precision is maintained after Lightning setup/checkpoint restore.
+
+        Lightning calls this hook after:
+        - Initial model creation
+        - Checkpoint restoration (e.g., during LR tuning)
+        - Strategy setup
+
+        This ensures the nested model's dtype persists even after checkpoint operations
+        that might reconstruct the model. Critical for LR tuning which saves/restores
+        checkpoints.
+        """
+        super().configure_model()
+
+        # Reapply precision to nested model
+        # This is idempotent and safe to call multiple times
+        from dlkit.interfaces.api.services.precision_service import get_precision_service
+
+        precision_service = get_precision_service()
+        precision_strategy = precision_service.resolve_precision()
+        dtype = precision_strategy.to_torch_dtype()
+        self.model = self.model.to(dtype=dtype)
+
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Save enhanced metadata including complete shape information.
 
         Ensures comprehensive model reconstruction information persists across
         checkpoint saves/loads, eliminating the need for manual shape parameters
         during inference.
+
+        This method is pure - it only reads state and writes to the checkpoint dict.
+        No side effects (state mutations) are performed during checkpoint save.
         """
         super().on_save_checkpoint(checkpoint)
 
@@ -148,7 +188,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             'version': '2.0',
             'model_family': self._detect_model_family(),
             'wrapper_type': self.__class__.__name__,
-            'dlkit_version': '2.0'  # For future compatibility
         }
 
         # Save enhanced shape information using ShapeSpec
@@ -156,7 +195,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         if active_shape_spec is not None and not active_shape_spec.is_empty():
             canonical_spec = active_shape_spec.with_canonical_aliases()
             dlkit_metadata['shape_spec'] = canonical_spec.to_dict()
-            self._assign_shape_spec(canonical_spec)
 
         # Save model settings for reconstruction
         dlkit_metadata['model_settings'] = self._serialize_model_settings()
@@ -242,23 +280,53 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         Reconstructs shape information when loading from checkpoint using the
         modern shape specification metadata persisted alongside the weights.
+
+        Raises:
+            ValueError: If checkpoint version is unsupported or metadata format is invalid.
         """
         super().on_load_checkpoint(checkpoint)
 
-        # Try to restore from enhanced metadata first
-        if 'dlkit_metadata' in checkpoint:
-            metadata = checkpoint['dlkit_metadata']
+        # Check for dlkit_metadata (required for v2.0+)
+        if 'dlkit_metadata' not in checkpoint:
+            # Legacy checkpoint without dlkit_metadata
+            raise ValueError(
+                "Checkpoint missing 'dlkit_metadata'. This checkpoint uses a legacy format "
+                "that is no longer supported. Please re-train your model with the current "
+                "version of dlkit to generate a compatible checkpoint."
+            )
 
-            # Restore shape from ShapeSpec if available
-            if 'shape_spec' in metadata:
-                try:
-                    from dlkit.core.shape_specs import ShapeSystemFactory
+        metadata = checkpoint['dlkit_metadata']
 
-                    factory = ShapeSystemFactory.create_production_system()
-                    loaded_spec = factory.create_shape_spec_from_serialized(metadata['shape_spec'])
-                    self._assign_shape_spec(loaded_spec)
-                except Exception:
-                    pass
+        # Validate version (BREAKING: only support v2.0+)
+        version = metadata.get('version')
+        if version is None:
+            raise ValueError(
+                "Checkpoint metadata missing 'version' field. Cannot verify compatibility."
+            )
+
+        if version != '2.0':
+            raise ValueError(
+                f"Unsupported checkpoint version '{version}'. This version of dlkit only "
+                f"supports version '2.0'. If you have an older checkpoint, please re-train "
+                f"your model with the current version."
+            )
+
+        # Restore shape from ShapeSpec if available
+        if 'shape_spec' in metadata:
+            try:
+                from dlkit.core.shape_specs import ShapeSystemFactory
+
+                factory = ShapeSystemFactory.create_production_system()
+                loaded_spec = factory.create_shape_spec_from_serialized(metadata['shape_spec'])
+                self._assign_shape_spec(loaded_spec)
+            except Exception as e:
+                # Log warning but don't fail the load - shape reconstruction is best-effort
+                import warnings
+                warnings.warn(
+                    f"Could not restore shape specification from checkpoint: {e}",
+                    RuntimeWarning,
+                    stacklevel=2
+                )
 
     def _derive_shape_spec_from_model(self) -> IShapeSpec | None:
         """Extract shape specification from the instantiated model when possible."""
@@ -365,6 +433,126 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             # Silently ignore logging errors in test scenarios
             pass
 
+    def _get_attached_trainer(self) -> Any:
+        """Return the attached trainer or fabric shim without triggering Lightning errors."""
+        trainer = getattr(self, "_trainer", None)
+        if trainer is not None:
+            return trainer
+
+        fabric = getattr(self, "_fabric", None)
+        if fabric is not None:
+            try:
+                from lightning.pytorch.core.module import _TrainerFabricShim
+
+                return _TrainerFabricShim(fabric=fabric)
+            except Exception:  # pragma: no cover - fabric usage is rare in tests
+                return None
+
+        return None
+
+    def _get_optimizer_lr(self) -> float | None:
+        """Resolve the effective learning rate from optimizer settings or trainer state."""
+        raw_lr = getattr(self.optimizer, "lr", None)
+        if isinstance(raw_lr, (float, int)):
+            return float(raw_lr)
+
+        trainer = self._get_attached_trainer()
+        if trainer and getattr(trainer, "optimizers", None):
+            try:
+                return float(trainer.optimizers[0].param_groups[0]["lr"])
+            except (KeyError, IndexError, TypeError, ValueError):
+                return None
+
+        return None
+
+    def _sync_lr_hparam(self) -> None:
+        """Synchronise stored hyperparameters with the current learning rate value."""
+        lr_value = self._get_optimizer_lr()
+        if not hasattr(self, "hparams"):
+            return
+
+        self.hparams["lr"] = lr_value
+        self.hparams["learning_rate"] = lr_value
+
+    @property
+    def lr(self) -> float | None:
+        """Expose lr attribute for Lightning LR finder compatibility."""
+        return self._get_optimizer_lr()
+
+    @lr.setter
+    def lr(self, value: float) -> None:
+        numeric = float(value)
+        self.optimizer = update_settings(self.optimizer, {"lr": numeric})
+        trainer = self._get_attached_trainer()
+        if trainer and getattr(trainer, "optimizers", None):
+            for optimizer in trainer.optimizers:
+                for param_group in optimizer.param_groups:
+                    param_group["lr"] = numeric
+        self._sync_lr_hparam()
+
+    @property
+    def learning_rate(self) -> float | None:
+        """Alias maintained for frameworks expecting learning_rate attribute."""
+        return self.lr
+
+    @learning_rate.setter
+    def learning_rate(self, value: float) -> None:
+        self.lr = value
+
+    def _log_stage_outputs(
+        self,
+        stage: str,
+        loss: Tensor | None,
+        metrics: dict[str, Any] | None = None,
+    ) -> None:
+        """Centralized metric logging hook for training stages.
+
+        Args:
+            stage: Stage identifier ("train", "val", "test").
+            loss: Scalar loss tensor for the stage.
+            metrics: Optional dictionary of additional metrics to log.
+        """
+        if loss is not None:
+            loss_name = self._format_metric_name(stage, "loss")
+            self._safe_log(
+                loss_name,
+                loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+        if metrics:
+            formatted: dict[str, Any] = {}
+            for key, value in metrics.items():
+                metric_name = self._format_metric_name(stage, key)
+                formatted[metric_name] = value
+
+            self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
+
+    def _format_metric_name(self, stage: str, name: str) -> str:
+        """Normalize metric names according to stage-specific conventions."""
+
+        stage_lower = stage.lower()
+        name_lower = name.lower()
+
+        aliases = {
+            "train": ("train", "training"),
+            "val": ("val", "valid", "validation"),
+            "test": ("test", "testing"),
+        }
+
+        for alias in aliases.get(stage_lower, (stage_lower,)):
+            if name_lower.startswith(alias):
+                return name
+
+        if stage_lower == "test":
+            if name_lower.endswith(" test"):
+                return name
+            return f"{name} test"
+
+        # Default: prefix with stage for all stages (including val)
+        return f"{stage_lower}_{name}"
+
     @abstractmethod
     def forward(self, *args, **kwargs) -> Tensor:
         """Forward pass through the model.
@@ -390,8 +578,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         # Compute loss using processed dataflow
         loss = self._compute_loss(context)
 
-        # Log metrics
-        self._safe_log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        # Log metrics centrally for orchestration
+        self._log_stage_outputs("train", loss)
 
         return {"loss": loss}
 
@@ -412,9 +600,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         val_loss = self._compute_loss(context)
         metrics = self._compute_metrics(context, self.val_metrics)
 
-        # Log metrics
-        self._safe_log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self._safe_log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
+        # Log metrics centrally for orchestration
+        self._log_stage_outputs("val", val_loss, metrics)
 
         return {"val_loss": val_loss}
 
@@ -435,9 +622,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         test_loss = self._compute_loss(context)
         metrics = self._compute_metrics(context, self.test_metrics)
 
-        # Log metrics
-        self._safe_log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self._safe_log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
+        # Log metrics centrally for orchestration
+        self._log_stage_outputs("test", test_loss, metrics)
 
         return {"test_loss": test_loss}
 
@@ -502,6 +688,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     ) -> dict[str, Any]:
         """Compute metrics from processing context.
 
+        Ensures predictions and targets use the model's dtype (user's configured precision)
+        for metric computation. This maintains precision consistency throughout the pipeline.
+
         Args:
             context (ProcessingContext): Processing context with predictions and targets.
             metrics (MetricCollection): Metrics collection to compute.
@@ -515,6 +704,17 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         # Use first prediction and target for metrics
         pred = next(iter(context.predictions.values()))
         target = next(iter(context.targets.values()))
+
+        # Ensure both use model's dtype (maintains user's precision choice)
+        # If model doesn't have dtype property, skip casting
+        if hasattr(self.model, "dtype"):
+            model_dtype = self.model.dtype
+
+            # Cast if needed (defensive - should already match from pipeline)
+            if pred.is_floating_point() and pred.dtype != model_dtype:
+                pred = pred.to(dtype=model_dtype)
+            if target.is_floating_point() and target.dtype != model_dtype:
+                target = target.to(dtype=model_dtype)
 
         return metrics(pred, target)
 

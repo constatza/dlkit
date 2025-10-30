@@ -67,9 +67,6 @@ class FeedForwardNN(ShapeAwareModel):
 
         self.regression_layer = nn.Linear(layers[-1], targets_size)
 
-        # Apply precision to newly created parameters
-        self.ensure_precision_applied()
-
     def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
         """Check if this FeedForwardNN can accept the given shape specification."""
         # Explicitly reject NullShapeSpec - FeedForwardNN needs real shapes

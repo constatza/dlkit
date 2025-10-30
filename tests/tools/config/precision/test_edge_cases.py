@@ -23,7 +23,7 @@ from dlkit.core.shape_specs import create_shape_spec
 class BrokenModel(ShapeAwareModel):
     """Model that intentionally breaks during precision application."""
 
-    def __init__(self, shape, precision=None, break_on_precision=False, **kwargs):
+    def __init__(self, shape, break_on_precision=False, **kwargs):
         self._break_on_precision = break_on_precision
 
         # Convert shape dict to unified_shape
@@ -32,7 +32,7 @@ class BrokenModel(ShapeAwareModel):
         else:
             unified_shape = shape
 
-        super().__init__(unified_shape=unified_shape, precision=precision, **kwargs)
+        super().__init__(unified_shape=unified_shape, **kwargs)
 
         # Extract shapes for building layers
         input_shape = unified_shape.get_input_shape()
@@ -41,8 +41,11 @@ class BrokenModel(ShapeAwareModel):
         # Always create linear layer
         self.linear = torch.nn.Linear(input_shape[0], output_shape[0])
 
-        # Try to apply precision - this will fail if break_on_precision=True
-        self.ensure_precision_applied()
+        # Apply precision from context (simulating Lightning behavior)
+        service = get_precision_service()
+        precision_strategy = service.resolve_precision()
+        dtype = precision_strategy.to_torch_dtype()
+        self.to(dtype)
 
     def accepts_shape(self, shape_spec):
         """Accept any valid shape specification."""
@@ -70,16 +73,17 @@ class TestPrecisionEdgeCases:
         return file_path
 
     def test_precision_with_corrupted_data(self, corrupted_data_file):
-        """Test precision handling with corrupted dataflow files."""
+        """Test precision handling with corrupted data files."""
         print("\n=== Testing Precision with Corrupted Data ===")
 
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
 
         # Should raise appropriate error, not precision-related error
-        with pytest.raises(Exception):  # Could be various errors depending on loader
-            load_array(corrupted_data_file, precision_provider=session)
+        with precision_override(session.get_precision_strategy()):
+            with pytest.raises(Exception):  # Could be various errors depending on loader
+                load_array(corrupted_data_file)
 
-        print("✅ Corrupted dataflow handling works correctly")
+        print("✅ Corrupted data handling works correctly")
 
     def test_precision_memory_pressure(self, tmp_path):
         """Test precision behavior under memory pressure."""
@@ -123,12 +127,12 @@ class TestPrecisionEdgeCases:
 
         # Model that breaks during precision application
         with pytest.raises(RuntimeError, match="Model precision application failed"):
-            BrokenModel(shape, precision=PrecisionStrategy.MIXED_16, break_on_precision=True)
+            with precision_override(PrecisionStrategy.MIXED_16):
+                BrokenModel(shape, break_on_precision=True)
 
         # Normal model should work fine
-        normal_model = BrokenModel(
-            shape, precision=PrecisionStrategy.MIXED_16, break_on_precision=False
-        )
+        with precision_override(PrecisionStrategy.MIXED_16):
+            normal_model = BrokenModel(shape, break_on_precision=False)
         assert next(normal_model.parameters()).dtype == torch.float16
 
         print("✅ Broken model handling works correctly")

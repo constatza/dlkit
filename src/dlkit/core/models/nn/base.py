@@ -3,8 +3,6 @@ from typing import Any
 from torch import Tensor, nn
 import torch
 
-from dlkit.tools.config.precision import PrecisionStrategy
-from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.core.shape_specs import IShapeSpec
 
 
@@ -27,20 +25,17 @@ class ShapeAwareModel(ABC, nn.Module):
         model = MyShapeAwareModel(unified_shape=shape_spec, **kwargs)
     """
 
-    def __init__(self, *, unified_shape: IShapeSpec, precision: PrecisionStrategy | None = None, **kwargs):
+    def __init__(self, *, unified_shape: IShapeSpec, **kwargs):
         """Initialize ShapeAwareModel with required shape specification.
 
         Args:
             unified_shape: Required shape specification for model architecture
-            precision: Optional precision strategy override
             **kwargs: Additional model-specific parameters
         """
         super().__init__()
 
-        # Store precision and shape
-        self._precision_strategy = precision
+        # Store shape
         self._unified_shape = unified_shape
-        self._precision_applied = False
 
         # Validate shape immediately
         if not self.accepts_shape(unified_shape):
@@ -66,53 +61,24 @@ class ShapeAwareModel(ABC, nn.Module):
         """
         return self._unified_shape
 
-    def _apply_precision(self) -> None:
-        """Apply precision strategy to model weights."""
-        if self._precision_applied:
-            return
+    @property
+    def dtype(self) -> torch.dtype:
+        """Get model's current dtype from parameters.
 
-        precision_service = get_precision_service()
-
-        provider = None
-        if self._precision_strategy is not None:
-            strategy = self._precision_strategy
-
-            class ModelPrecisionProvider:
-                def get_precision_strategy(self) -> PrecisionStrategy:
-                    return strategy
-
-            provider = ModelPrecisionProvider()
-
-        target_dtype = precision_service.get_torch_dtype(provider)
-        self.to(dtype=target_dtype)
-        self._precision_applied = True
-
-    def ensure_precision_applied(self) -> None:
-        """Ensure precision has been applied to model weights."""
-        self._apply_precision()
-
-    def cast_input(self, x: Tensor) -> Tensor:
-        """Cast input tensor to model's precision.
-
-        Args:
-            x: Input tensor to cast
+        This property infers the dtype from the model's parameters, following
+        PyTorch Lightning's pattern. The actual dtype is determined by Lightning's
+        precision parameter during training.
 
         Returns:
-            Tensor cast to model's precision dtype
+            The dtype of the model's parameters
+
+        Raises:
+            RuntimeError: If model has no parameters
         """
-        precision_service = get_precision_service()
-        provider = None
-        if self._precision_strategy is not None:
-            strategy = self._precision_strategy
-
-            class ModelPrecisionProvider:
-                def get_precision_strategy(self) -> PrecisionStrategy:
-                    return strategy
-
-            provider = ModelPrecisionProvider()
-
-        target_dtype = precision_service.get_torch_dtype(provider)
-        return x.to(dtype=target_dtype)
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            raise RuntimeError(f"{self.__class__.__name__} has no parameters, cannot determine dtype")
 
     @abstractmethod
     def forward(self, x: Any) -> Any:
@@ -143,66 +109,32 @@ class ShapeAgnosticModel(ABC, nn.Module):
         model = MyShapeAgnosticModel(**model_specific_kwargs)
     """
 
-    def __init__(self, *, precision: PrecisionStrategy | None = None, **kwargs):
+    def __init__(self, **kwargs):
         """Initialize ShapeAgnosticModel without shape requirements.
 
         Args:
-            precision: Optional precision strategy override
             **kwargs: Model-specific parameters
         """
         super().__init__()
 
-        # Store precision
-        self._precision_strategy = precision
-        self._precision_applied = False
+    @property
+    def dtype(self) -> torch.dtype:
+        """Get model's current dtype from parameters.
 
-    def _apply_precision(self) -> None:
-        """Apply precision strategy to model weights."""
-        if self._precision_applied:
-            return
-
-        precision_service = get_precision_service()
-
-        provider = None
-        if self._precision_strategy is not None:
-            strategy = self._precision_strategy
-
-            class ModelPrecisionProvider:
-                def get_precision_strategy(self) -> PrecisionStrategy:
-                    return strategy
-
-            provider = ModelPrecisionProvider()
-
-        target_dtype = precision_service.get_torch_dtype(provider)
-        self.to(dtype=target_dtype)
-        self._precision_applied = True
-
-    def ensure_precision_applied(self) -> None:
-        """Ensure precision has been applied to model weights."""
-        self._apply_precision()
-
-    def cast_input(self, x: Tensor) -> Tensor:
-        """Cast input tensor to model's precision.
-
-        Args:
-            x: Input tensor to cast
+        This property infers the dtype from the model's parameters, following
+        PyTorch Lightning's pattern. The actual dtype is determined by Lightning's
+        precision parameter during training.
 
         Returns:
-            Tensor cast to model's precision dtype
+            The dtype of the model's parameters
+
+        Raises:
+            RuntimeError: If model has no parameters
         """
-        precision_service = get_precision_service()
-        provider = None
-        if self._precision_strategy is not None:
-            strategy = self._precision_strategy
-
-            class ModelPrecisionProvider:
-                def get_precision_strategy(self) -> PrecisionStrategy:
-                    return strategy
-
-            provider = ModelPrecisionProvider()
-
-        target_dtype = precision_service.get_torch_dtype(provider)
-        return x.to(dtype=target_dtype)
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            raise RuntimeError(f"{self.__class__.__name__} has no parameters, cannot determine dtype")
 
     @abstractmethod
     def forward(self, x: Any) -> Any:
@@ -215,5 +147,3 @@ class ShapeAgnosticModel(ABC, nn.Module):
             Output from the model
         """
         ...
-
-

@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import torch
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Mapping, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Final
 
 
 class PrecisionStrategy(StrEnum):
@@ -141,6 +144,75 @@ class PrecisionStrategy(StrEnum):
         return memory_factors[self]
 
     @classmethod
+    def get_alias_map(cls) -> Mapping[str, "PrecisionStrategy"]:
+        """Get the comprehensive alias mapping for precision values.
+
+        This method returns the authoritative mapping of all supported precision
+        formats to their corresponding PrecisionStrategy enum values. This mapping
+        is used by from_string() for validation and can be imported by tests.
+
+        Returns:
+            Immutable mapping of string aliases to PrecisionStrategy values.
+        """
+        return _PRECISION_ALIAS_MAP
+
+    @classmethod
+    def from_string(cls, value: str) -> PrecisionStrategy:
+        """Create PrecisionStrategy from string with support for common aliases.
+
+        This method accepts various precision format strings and normalizes them
+        to the appropriate PrecisionStrategy. Only semantic string aliases are supported
+        (no integers, no numeric strings like "64").
+
+        Supported formats:
+            - Float64/Double: "double", "float64", "f64", "fp64"
+            - Float32/Single: "single", "float32", "f32", "fp32"
+            - Float16/Half: "half", "float16", "f16", "fp16"
+            - Mixed16: "mixed16", "mixed_16"
+            - BFloat16: "bfloat16", "bf16"
+            - BFloat16 Mixed: "bfloat16_mixed", "bf16_mixed"
+
+        Args:
+            value: Precision string to parse (case-insensitive).
+
+        Returns:
+            Corresponding PrecisionStrategy enum value.
+
+        Raises:
+            ValueError: If precision value is not recognized. Error message includes
+                       all supported formats.
+
+        Examples:
+            >>> PrecisionStrategy.from_string("double")
+            PrecisionStrategy.FULL_64
+            >>> PrecisionStrategy.from_string("float32")
+            PrecisionStrategy.FULL_32
+            >>> PrecisionStrategy.from_string("half")
+            PrecisionStrategy.TRUE_16
+            >>> PrecisionStrategy.from_string("mixed16")
+            PrecisionStrategy.MIXED_16
+            >>> PrecisionStrategy.from_string("wtf")  # doctest: +SKIP
+            ValueError: Invalid precision value: 'wtf'...
+        """
+        # Normalize string to lowercase for case-insensitive matching
+        value_lower = value.lower().strip()
+
+        if value_lower in _PRECISION_ALIAS_MAP:
+            return _PRECISION_ALIAS_MAP[value_lower]
+
+        # Value not recognized - provide helpful error message
+        raise ValueError(
+            f"Invalid precision value: '{value}'. "
+            f"Supported aliases (case-insensitive):\n"
+            f"  - Float64/Double: double, float64, f64, fp64\n"
+            f"  - Float32/Single: single, float32, f32, fp32\n"
+            f"  - Float16/Half: half, float16, f16, fp16\n"
+            f"  - Mixed16: mixed16, mixed_16\n"
+            f"  - BFloat16: bfloat16, bf16\n"
+            f"  - BFloat16 Mixed: bfloat16_mixed, bf16_mixed"
+        )
+
+    @classmethod
     def from_lightning_precision(
         cls,
         precision: str
@@ -160,6 +232,9 @@ class PrecisionStrategy(StrEnum):
     ) -> PrecisionStrategy:
         """Create PrecisionStrategy from Lightning Trainer precision value.
 
+        This method handles Lightning's numeric integer format for backwards
+        compatibility (64, 32, 16) and converts them to semantic strings.
+
         Args:
             precision: Lightning Trainer precision parameter value.
 
@@ -174,35 +249,47 @@ class PrecisionStrategy(StrEnum):
             PrecisionStrategy.MIXED_16
             >>> PrecisionStrategy.from_lightning_precision(32)
             PrecisionStrategy.FULL_32
-        """
-        # Handle legacy integer values
-        if precision == 64:
-            precision = "64"
-        elif precision == 32:
-            precision = "32"
-        elif precision == 16:
-            precision = "16-mixed"
 
-        lightning_to_strategy = {
-            "64": cls.FULL_64,
-            "64-true": cls.FULL_64,
-            "32": cls.FULL_32,
-            "32-true": cls.FULL_32,
-            "16-mixed": cls.MIXED_16,
-            "16": cls.TRUE_16,
-            "16-true": cls.TRUE_16,
-            "bf16-mixed": cls.MIXED_BF16,
-            "bf16": cls.TRUE_BF16,
-            "bf16-true": cls.TRUE_BF16,
+        Note:
+            This method is maintained for backwards compatibility with Lightning.
+            New code should use from_string() which supports semantic aliases.
+        """
+        # Handle Legacy integer values from Lightning
+        if isinstance(precision, int):
+            if precision == 64:
+                return cls.FULL_64
+            elif precision == 32:
+                return cls.FULL_32
+            elif precision == 16:
+                return cls.MIXED_16  # Default to mixed for integer 16
+            else:
+                raise ValueError(
+                    f"Invalid Lightning precision integer: {precision}. "
+                    f"Supported: 64, 32, 16"
+                )
+
+        # Handle Lightning string formats (including numeric strings)
+        value_str = str(precision).lower().strip()
+
+        # Map Lightning numeric strings to semantic aliases
+        lightning_numeric_map = {
+            "64": "float64",
+            "64-true": "float64",
+            "32": "float32",
+            "32-true": "float32",
+            "16": "half",
+            "16-true": "half",
+            "16-mixed": "mixed16",
+            "bf16": "bfloat16",
+            "bf16-true": "bfloat16",
+            "bf16-mixed": "bfloat16_mixed",
         }
 
-        if precision not in lightning_to_strategy:
-            raise ValueError(
-                f"Unsupported precision value: {precision}. "
-                f"Supported values: {list(lightning_to_strategy.keys())}"
-            )
+        if value_str in lightning_numeric_map:
+            return cls.from_string(lightning_numeric_map[value_str])
 
-        return lightning_to_strategy[precision]
+        # Try direct lookup for semantic strings
+        return cls.from_string(value_str)
 
     @classmethod
     def get_default(cls) -> PrecisionStrategy:
@@ -220,3 +307,34 @@ class PrecisionStrategy(StrEnum):
     def __repr__(self) -> str:
         """Detailed representation for debugging."""
         return f"PrecisionStrategy.{self.name}('{self.value}')"
+
+
+# Authoritative precision alias mapping - single source of truth
+# This mapping is used by from_string() and can be imported by tests
+# ONLY semantic string aliases - no integers, no numeric strings
+_PRECISION_ALIAS_MAP: "Final[Mapping[str, PrecisionStrategy]]" = {
+    # Float64/Double precision aliases
+    "double": PrecisionStrategy.FULL_64,
+    "float64": PrecisionStrategy.FULL_64,
+    "f64": PrecisionStrategy.FULL_64,
+    "fp64": PrecisionStrategy.FULL_64,
+    # Float32/Single precision aliases
+    "single": PrecisionStrategy.FULL_32,
+    "float32": PrecisionStrategy.FULL_32,
+    "f32": PrecisionStrategy.FULL_32,
+    "fp32": PrecisionStrategy.FULL_32,
+    # Float16/Half precision aliases
+    "half": PrecisionStrategy.TRUE_16,
+    "float16": PrecisionStrategy.TRUE_16,
+    "f16": PrecisionStrategy.TRUE_16,
+    "fp16": PrecisionStrategy.TRUE_16,
+    # Mixed16 aliases
+    "mixed16": PrecisionStrategy.MIXED_16,
+    "mixed_16": PrecisionStrategy.MIXED_16,
+    # BFloat16 true precision aliases
+    "bfloat16": PrecisionStrategy.TRUE_BF16,
+    "bf16": PrecisionStrategy.TRUE_BF16,
+    # BFloat16 mixed precision aliases
+    "bfloat16_mixed": PrecisionStrategy.MIXED_BF16,
+    "bf16_mixed": PrecisionStrategy.MIXED_BF16,
+}

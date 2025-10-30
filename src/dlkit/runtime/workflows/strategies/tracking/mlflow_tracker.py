@@ -345,6 +345,102 @@ class MLflowTracker(IExperimentTracker):
         except Exception as e:
             raise RuntimeError("Couldn't log settings") from e
 
+    def log_dataset_to_run(
+        self, datamodule: Any, run_context: IRunContext, settings: GeneralSettings
+    ) -> None:
+        """Log dataset to MLflow run.
+
+        Converts DLKit datasets to MLflow dataset format and logs them for reproducibility.
+        Currently supports FlexibleDataset with NumPy conversion. Other dataset types
+        are logged as warnings.
+
+        Args:
+            datamodule: Lightning DataModule containing the dataset
+            run_context: Active run context to log to
+            settings: Settings containing dataset configuration
+
+        Example:
+            ```python
+            with tracker.create_run("training") as run:
+                tracker.log_dataset_to_run(datamodule, run, settings)
+                # Logs dataset with features and targets to MLflow
+            ```
+        """
+        try:
+            # Extract dataset from datamodule
+            dataset = getattr(datamodule, "dataset", None)
+            if dataset is None:
+                logger.debug("No dataset found in datamodule, skipping dataset logging")
+                return
+
+            # Import here to avoid circular dependencies
+            from dlkit.core.datasets.flexible import FlexibleDataset
+            import mlflow.data
+
+            # Type-based mapping: currently only NumPy (FlexibleDataset)
+            if isinstance(dataset, FlexibleDataset):
+                # Convert torch tensors to numpy
+                features_np = {k: v.cpu().numpy() for k, v in dataset.features.items()}
+                targets_np = {k: v.cpu().numpy() for k, v in dataset.targets.items()} if dataset.targets else None
+
+                # Extract dataset name and source
+                dataset_name = getattr(settings.DATASET, "name", None) or "training_data"
+
+                # Try to extract source path from dataset features (first feature path if available)
+                dataset_source = None
+                try:
+                    ds_settings = settings.DATASET
+                    if hasattr(ds_settings, "features") and ds_settings.features:
+                        # Get first feature's path
+                        first_feature = next(iter(ds_settings.features), None)
+                        if first_feature and hasattr(first_feature, "path"):
+                            dataset_source = str(first_feature.path)
+                except Exception:
+                    pass
+
+                # Create MLflow NumpyDataset
+                mlflow_dataset = mlflow.data.from_numpy(
+                    features=features_np,
+                    targets=targets_np,
+                    name=dataset_name,
+                    source=dataset_source
+                )
+
+                # Prepare tags with dataset metadata
+                tags = {}
+                try:
+                    split_cfg = settings.DATASET.split
+                    tags["split_test_ratio"] = str(split_cfg.test_ratio)
+                    tags["split_val_ratio"] = str(split_cfg.val_ratio)
+                except Exception:
+                    pass
+
+                # Add dataset type from meta if available
+                try:
+                    # Access from BuildComponents.meta would require passing it
+                    # For now, infer from settings
+                    dataset_type = getattr(settings.DATASET, "type", None)
+                    if dataset_type:
+                        tags["dataset_type"] = str(dataset_type)
+                except Exception:
+                    pass
+
+                # Log the dataset
+                run_context.log_dataset(mlflow_dataset, context="training", tags=tags if tags else None)
+                logger.info(f"Logged dataset '{dataset_name}' to MLflow")
+
+            else:
+                # Other dataset types not yet supported
+                dataset_class_name = type(dataset).__name__
+                logger.warning(
+                    f"Dataset type '{dataset_class_name}' not yet supported for MLflow logging. "
+                    f"Only FlexibleDataset (NumPy) is currently supported."
+                )
+
+        except Exception as e:
+            # Don't fail the run if dataset logging fails
+            logger.warning(f"Failed to log dataset to MLflow: {e}")
+
     def setup_mlflow_config(
         self,
         mlflow_config: Any,

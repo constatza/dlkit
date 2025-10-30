@@ -98,7 +98,8 @@ class MLflowClientFactory:
 
         try:
             # Simple connectivity test - try to list experiments with trimmed timeouts
-            with _temporary_request_settings(timeout=3.0, max_retries=1, backoff_factor=0.1):
+            # Note: All MLflow HTTP env vars must be integers
+            with _temporary_request_settings(timeout=3, max_retries=1, backoff_factor=1):
                 client.search_experiments()
             return True
         except Exception as e:
@@ -133,9 +134,9 @@ class MLflowClientFactory:
 
 @contextmanager
 def _temporary_request_settings(
-    timeout: float,
+    timeout: int,
     max_retries: int,
-    backoff_factor: float,
+    backoff_factor: int,
 ) -> None:
     """Temporarily override MLflow HTTP request behaviour for fast validation.
 
@@ -145,9 +146,11 @@ def _temporary_request_settings(
     the relevant environment-driven knobs so the check either succeeds quickly
     or fails within a couple of seconds, and restore the original configuration
     afterwards to avoid side effects for real workloads.
+
+    Note: All MLflow HTTP environment variables must be integers.
     """
 
-    def _swap(env_var, value: float | int) -> tuple[bool, str | None]:
+    def _swap(env_var, value: int) -> tuple[bool, str | None]:
         was_set = env_var.is_set()
         previous = env_var.get_raw() if was_set else None
         env_var.set(str(value))
@@ -157,7 +160,7 @@ def _temporary_request_settings(
         (MLFLOW_HTTP_REQUEST_TIMEOUT, timeout),
         (MLFLOW_HTTP_REQUEST_MAX_RETRIES, max_retries),
         (MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR, backoff_factor),
-        (MLFLOW_HTTP_REQUEST_BACKOFF_JITTER, 0.0),
+        (MLFLOW_HTTP_REQUEST_BACKOFF_JITTER, 0),
     ]
 
     state: list[tuple] = []

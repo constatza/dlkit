@@ -72,8 +72,8 @@ class TestLossComponentSettings:
         """Test LossComponentSettings initialization with default values."""
         settings = LossComponentSettings()
 
-        assert settings.name == "mean_squared_error"
-        assert settings.module_path == "torchmetrics.functional.regression"
+        assert settings.name == "mse"
+        assert settings.module_path == "dlkit.core.training.functional"
 
     def test_initialization_with_custom_data(self, loss_component_data: dict[str, Any]) -> None:
         """Test LossComponentSettings initialization with custom
@@ -143,9 +143,11 @@ class TestModelComponentSettings:
         Args:
             model_component_with_checkpoint_data: Model with checkpoint dataflow fixture
         """
+        from pathlib import Path
+
         settings = ModelComponentSettings(**model_component_with_checkpoint_data)
 
-        assert settings.checkpoint is not None and settings.checkpoint.name == "model.ckpt"
+        assert settings.checkpoint is not None and Path(settings.checkpoint).name == "model.ckpt"
 
     def test_initialization_allows_extra_fields(self) -> None:
         """Test ModelComponentSettings allows extra fields (extra='allow')."""
@@ -249,7 +251,6 @@ class TestWrapperComponentSettings:
         assert settings.name == "StandardWrapper"
         assert settings.optimizer.name == "Adam"
         assert settings.scheduler.name == "StepLR"
-        assert settings.checkpoint is not None and settings.checkpoint.name == "wrapper.ckpt"
         assert settings.train is True
         assert settings.predict is False
         assert len(settings.metrics) == 2
@@ -267,18 +268,6 @@ class TestWrapperComponentSettings:
         assert settings.is_autoencoder is True
         assert settings.optimizer.lr == 0.001
         assert settings.optimizer.weight_decay == 0.01
-
-    def test_has_checkpoint_property(self, wrapper_component_data: dict[str, Any]) -> None:
-        """Test has_checkpoint property works correctly.
-
-        Args:
-            wrapper_component_data: Wrapper dataflow with checkpoint fixture
-        """
-        settings_with_checkpoint = WrapperComponentSettings(**wrapper_component_data)
-        settings_without_checkpoint = WrapperComponentSettings()
-
-        assert settings_with_checkpoint.has_checkpoint is True
-        assert settings_without_checkpoint.has_checkpoint is False
 
     def test_has_metrics_property(self, wrapper_component_data: dict[str, Any]) -> None:
         """Test has_metrics property works correctly.

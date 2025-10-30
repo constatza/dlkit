@@ -138,7 +138,7 @@ class BasicOverrideManager:
         training_overrides = {
             k: v
             for k, v in overrides.items()
-            if k in ["epochs", "batch_size", "learning_rate", "train", "test", "predict"]
+            if k in ["epochs", "batch_size", "learning_rate", "train", "test", "predict", "loss_function", "loss_module"]
             and v is not None
         }
 
@@ -179,6 +179,22 @@ class BasicOverrideManager:
             opt_updates = {"lr": float(training_overrides["learning_rate"])}
             new_opt = tr.optimizer.model_copy(update=opt_updates)
             new_training = tr.model_copy(update={"optimizer": new_opt})
+            current_settings = current_settings.model_copy(update={"TRAINING": new_training})
+
+        # Handle loss_function override -> TRAINING.loss_function
+        if "loss_function" in training_overrides and current_settings.TRAINING is not None:
+            from dlkit.tools.config.components.model_components import LossComponentSettings
+
+            loss_name = training_overrides["loss_function"]
+            loss_module = training_overrides.get("loss_module", "dlkit.core.training.functional")
+
+            new_loss = LossComponentSettings(
+                name=loss_name,
+                module_path=loss_module,
+            )
+            new_training = current_settings.TRAINING.model_copy(
+                update={"loss_function": new_loss}
+            )
             current_settings = current_settings.model_copy(update={"TRAINING": new_training})
 
         return current_settings
@@ -284,9 +300,11 @@ class BasicOverrideManager:
             # Create minimal Optuna settings - user should configure properly
             n_trials = optuna_overrides.get("trials", 3)  # Minimal default for testing
             study_name = optuna_overrides.get("study_name", "default_study")
-            from dlkit.interfaces.servers.domain_functions import get_default_optuna_storage_url
+            from dlkit.interfaces.servers.path_resolution import ServerPathResolver
+            from dlkit.tools.config.environment import DLKitEnvironment
 
-            storage = optuna_overrides.get("storage", get_default_optuna_storage_url())
+            resolver = ServerPathResolver(DLKitEnvironment())
+            storage = optuna_overrides.get("storage", resolver.get_default_optuna_storage_url())
 
             default_optuna = OptunaSettings(
                 enabled=True, n_trials=n_trials, study_name=study_name, storage=storage

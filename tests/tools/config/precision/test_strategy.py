@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.precision.strategy import _PRECISION_ALIAS_MAP
 
 
 class TestPrecisionStrategy:
@@ -102,10 +103,10 @@ class TestPrecisionStrategy:
 
     def test_from_lightning_precision_invalid(self):
         """Test invalid Lightning precision values raise ValueError."""
-        with pytest.raises(ValueError, match="Unsupported precision value"):
+        with pytest.raises(ValueError, match="Invalid precision value"):
             PrecisionStrategy.from_lightning_precision("invalid")
 
-        with pytest.raises(ValueError, match="Unsupported precision value"):
+        with pytest.raises(ValueError, match="Invalid Lightning precision integer"):
             PrecisionStrategy.from_lightning_precision(42)
 
     def test_string_representation(self):
@@ -122,3 +123,135 @@ class TestPrecisionStrategy:
         assert PrecisionStrategy.FULL_32.to_lightning_precision() == 32
         assert PrecisionStrategy.TRUE_16.to_lightning_precision() == "16-true"
         assert PrecisionStrategy.TRUE_BF16.to_lightning_precision() == "bf16-true"
+
+
+class TestPrecisionStringAliases:
+    """Test suite for precision string alias support and validation.
+
+    NOTE: These tests use ONLY semantic string aliases (no integers, no numeric strings).
+    from_string() now rejects numeric strings like "64" - use "float64" or "double" instead.
+    """
+
+    def test_from_string_float64_aliases(self):
+        """Test from_string with float64/double aliases."""
+        assert PrecisionStrategy.from_string("double") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("float64") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("f64") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("fp64") == PrecisionStrategy.FULL_64
+
+    def test_from_string_float32_aliases(self):
+        """Test from_string with float32/single aliases."""
+        assert PrecisionStrategy.from_string("single") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("float32") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("f32") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("fp32") == PrecisionStrategy.FULL_32
+
+    def test_from_string_float16_aliases(self):
+        """Test from_string with float16/half aliases."""
+        assert PrecisionStrategy.from_string("half") == PrecisionStrategy.TRUE_16
+        assert PrecisionStrategy.from_string("float16") == PrecisionStrategy.TRUE_16
+        assert PrecisionStrategy.from_string("f16") == PrecisionStrategy.TRUE_16
+        assert PrecisionStrategy.from_string("fp16") == PrecisionStrategy.TRUE_16
+
+    def test_from_string_mixed16_aliases(self):
+        """Test from_string with mixed16 aliases."""
+        assert PrecisionStrategy.from_string("mixed16") == PrecisionStrategy.MIXED_16
+        assert PrecisionStrategy.from_string("mixed_16") == PrecisionStrategy.MIXED_16
+
+    def test_from_string_bfloat16_aliases(self):
+        """Test from_string with bfloat16 aliases."""
+        assert PrecisionStrategy.from_string("bfloat16") == PrecisionStrategy.TRUE_BF16
+
+    def test_from_string_case_insensitive(self):
+        """Test that from_string is case-insensitive."""
+        assert PrecisionStrategy.from_string("DOUBLE") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("Double") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("FLOAT32") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("Single") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("HALF") == PrecisionStrategy.TRUE_16
+        assert PrecisionStrategy.from_string("F64") == PrecisionStrategy.FULL_64
+
+    def test_from_string_with_whitespace(self):
+        """Test that from_string handles whitespace."""
+        assert PrecisionStrategy.from_string(" double ") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_string("  single  ") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_string("  float64  ") == PrecisionStrategy.FULL_64
+
+    def test_from_string_invalid_string(self):
+        """Test that invalid strings raise helpful ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            PrecisionStrategy.from_string("wtf")
+
+        error_msg = str(exc_info.value)
+        assert "Invalid precision value: 'wtf'" in error_msg
+        assert "Supported aliases" in error_msg
+        assert "Float64/Double:" in error_msg
+        assert "Float32/Single:" in error_msg
+
+    def test_from_string_rejects_numeric_strings(self):
+        """Test that numeric strings are rejected."""
+        invalid_numeric_strings = ["64", "32", "16"]
+
+        for numeric_str in invalid_numeric_strings:
+            with pytest.raises(ValueError, match="Invalid precision value"):
+                PrecisionStrategy.from_string(numeric_str)
+
+    def test_from_string_invalid_types(self):
+        """Test that invalid precision values raise appropriate errors."""
+        invalid_values = [
+            "foo",
+            "bar",
+            "float128",
+            "8",
+            "mixed32",
+            "true16",
+            "fp8",
+        ]
+
+        for invalid_value in invalid_values:
+            with pytest.raises(ValueError, match="Invalid precision value"):
+                PrecisionStrategy.from_string(invalid_value)
+
+    def test_from_lightning_precision_handles_integers(self):
+        """Test that from_lightning_precision handles Lightning's integer format."""
+        # from_lightning_precision should handle integers for backwards compat
+        assert PrecisionStrategy.from_lightning_precision(64) == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_lightning_precision(32) == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_lightning_precision(16) == PrecisionStrategy.MIXED_16
+
+    def test_from_lightning_precision_handles_numeric_strings(self):
+        """Test that from_lightning_precision handles Lightning's numeric string format."""
+        # from_lightning_precision should handle numeric strings like "64"
+        assert PrecisionStrategy.from_lightning_precision("64") == PrecisionStrategy.FULL_64
+        assert PrecisionStrategy.from_lightning_precision("32") == PrecisionStrategy.FULL_32
+        assert PrecisionStrategy.from_lightning_precision("16-mixed") == PrecisionStrategy.MIXED_16
+
+    def test_comprehensive_alias_coverage(self):
+        """Test comprehensive coverage of all supported aliases.
+
+        This test imports the authoritative alias map from the source module
+        to ensure tests stay in sync with the actual implementation.
+        """
+        # Test all aliases from the authoritative mapping
+        for alias, expected_strategy in _PRECISION_ALIAS_MAP.items():
+            result = PrecisionStrategy.from_string(alias)
+            assert result == expected_strategy, f"Alias '{alias}' should map to {expected_strategy}, got {result}"
+
+    def test_alias_map_accessible(self):
+        """Test that alias map is accessible via get_alias_map()."""
+        alias_map = PrecisionStrategy.get_alias_map()
+
+        # Verify it's the same as the imported map
+        assert alias_map is _PRECISION_ALIAS_MAP
+
+        # Verify some key aliases exist
+        assert alias_map["double"] == PrecisionStrategy.FULL_64
+        assert alias_map["single"] == PrecisionStrategy.FULL_32
+        assert alias_map["half"] == PrecisionStrategy.TRUE_16
+        assert alias_map["float64"] == PrecisionStrategy.FULL_64
+
+        # Verify numeric strings and integers are NOT in the map
+        assert "64" not in alias_map
+        assert "32" not in alias_map
+        assert 64 not in alias_map
+        assert 32 not in alias_map

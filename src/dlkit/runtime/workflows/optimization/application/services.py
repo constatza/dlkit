@@ -477,6 +477,9 @@ class OptimizationOrchestrator:
         - Final child run for best retrain
         """
         with self._experiment_tracker.create_study_run(study) as study_context:
+            # Track optimization duration
+            start_time = time.time()
+
             # Log study metadata
             study_context.log_study_metadata(study)
 
@@ -583,7 +586,7 @@ class OptimizationOrchestrator:
             self._study_manager.save_study(study)
 
             # Create final result
-            total_duration = time.time() - time.time()  # TODO: Fix timing
+            total_duration = time.time() - start_time
             result = OptimizationResult(
                 study=study,
                 best_trial=best_trial,

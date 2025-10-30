@@ -50,6 +50,9 @@ class FlexibleDataset(BaseDataset):
     Entries are provided as collections of name/path pairs. The key used in
     __getitem__ output is the entry name, and the value is the tensor slice
     at the requested index.
+
+    Precision handling is automatic via the global precision service. Use
+    precision_override() context to control the dtype of loaded tensors.
     """
 
     def __init__(
@@ -57,7 +60,6 @@ class FlexibleDataset(BaseDataset):
         *,
         features: Iterable[Any] | dict[str, Any],
         targets: Iterable[Any] | dict[str, Any] | None = None,
-        dtype: torch.dtype = torch.float32,
     ) -> None:
         feat_map = _normalize_entries(features)
         targ_map = _normalize_entries(targets)
@@ -65,11 +67,13 @@ class FlexibleDataset(BaseDataset):
         if not feat_map and not targ_map:
             raise ValueError("At least one feature or target entry is required")
 
+        # Precision is automatically resolved from global precision service
+        # which checks precision context (set via precision_override())
         self.features: dict[str, Tensor] = {
-            k: load_array(v, dtype=dtype) for k, v in feat_map.items()
+            k: load_array(v) for k, v in feat_map.items()
         }
         self.targets: dict[str, Tensor] = {
-            k: load_array(v, dtype=dtype) for k, v in targ_map.items()
+            k: load_array(v) for k, v in targ_map.items()
         }
 
         # Validate consistent length across all tensors

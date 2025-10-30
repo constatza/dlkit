@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
 from dlkit.nn.ffnn import (
@@ -63,7 +64,8 @@ def test_norm_scaled_constant_width_ffnn_is_scale_equivariant_for_positive_scala
     assert torch.allclose(scaled_solution, base_solution * scale, atol=1e-5)
 
 
-def test_norm_scaled_linear_ffnn_casts_integer_inputs_to_float():
+def test_norm_scaled_linear_ffnn_rejects_integer_inputs():
+    """Model should raise TypeError for integer inputs (Lightning handles casting)."""
     shape = _make_vector_shape(2)
     module = NormScaledLinearFFNN(unified_shape=shape, bias=False)
 
@@ -71,7 +73,6 @@ def test_norm_scaled_linear_ffnn_casts_integer_inputs_to_float():
         module.base_model.weight.copy_(torch.eye(2))
 
     rhs = torch.tensor([1, 2], dtype=torch.int32)
-    predicted = module(rhs)
 
-    assert torch.is_floating_point(predicted)
-    assert torch.allclose(predicted, rhs.to(dtype=predicted.dtype))
+    with pytest.raises(TypeError, match="Expected floating point tensor"):
+        module(rhs)

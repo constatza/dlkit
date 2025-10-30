@@ -69,6 +69,48 @@ class ClientBasedRunContext(IRunContext):
         except Exception as e:
             logger.warning(f"Failed to set tag {key}: {e}")
 
+    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+        """Log dataset using MLflow client.
+
+        Args:
+            dataset: MLflow dataset object (from mlflow.data.from_numpy, etc.)
+            context: Optional context string (e.g., "training", "validation")
+            tags: Optional dictionary of tags to associate with the dataset
+        """
+        try:
+            # Convert mlflow.data.Dataset to mlflow.entities.Dataset for client API
+            from mlflow.entities import DatasetInput, InputTag
+
+            # Extract dataset metadata
+            dataset_name = getattr(dataset, "name", None)
+            dataset_digest = getattr(dataset, "digest", None)
+            dataset_source = getattr(dataset, "source", None)
+            dataset_source_type = None
+
+            if dataset_source:
+                dataset_source_type = getattr(dataset_source, "_source_type", None)
+                if not dataset_source_type:
+                    # Try to get from source string representation
+                    source_str = str(dataset_source)
+                    if source_str.startswith("http"):
+                        dataset_source_type = "http"
+                    elif source_str.startswith("s3://"):
+                        dataset_source_type = "s3"
+                    else:
+                        dataset_source_type = "local"
+
+            # Create DatasetInput entity with proper InputTag objects
+            dataset_input = DatasetInput(
+                dataset=dataset,
+                tags=[InputTag(key=k, value=v) for k, v in (tags or {}).items()]
+            )
+
+            # Log using client's log_inputs method (takes list of datasets)
+            self._client.log_inputs(self._run_id, [dataset_input])
+
+        except Exception as e:
+            logger.warning(f"Failed to log dataset: {e}")
+
     def log_batch(
         self,
         metrics: list[tuple[str, float, int]] | None = None,
