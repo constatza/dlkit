@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pathlib
 import os
 import shutil
 import socket
 from collections.abc import Iterator
 
+from _pytest.tmpdir import TempPathFactory
 import psutil
 import pytest
 
 from dlkit.tools.io import load_config
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.environment import env as global_environment
+
+_ORIGINAL_HOME_ENV = os.environ.get("HOME")
+_ORIGINAL_DLKIT_ROOT_DIR = os.environ.get("DLKIT_ROOT_DIR")
+_ORIGINAL_PATH_HOME = pathlib.Path.home
+_ORIGINAL_ENV_ROOT = global_environment.root_dir
+_TEST_SESSION_ROOT: Path | None = None
+_TEST_HOME_DIR: Path | None = None
+_TEST_ARTIFACTS_DIR: Path | None = None
 
 
 def _find_free_port(host: str = "127.0.0.1") -> int:
@@ -201,12 +212,33 @@ def pytest_configure(config):
     1. Test environment variables are properly set
     2. Test artifacts directory is prepared
     """
-    # Set environment variable to clearly indicate test environment
+    global _TEST_SESSION_ROOT, _TEST_HOME_DIR, _TEST_ARTIFACTS_DIR
+
     os.environ["DLKIT_TEST_MODE"] = "1"
 
-    # Ensure test artifacts directory exists
-    artifacts_dir = _get_test_artifacts_dir()
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    tmp_factory = getattr(config, "_tmp_path_factory", None)
+    if tmp_factory is None:
+        tmp_factory = TempPathFactory.from_config(config)
+        config._tmp_path_factory = tmp_factory
+
+    session_root = Path(str(tmp_factory.getbasetemp())) / "dlkit"
+    home_dir = session_root / "home"
+    artifacts_dir = session_root / "tests" / "artifacts"
+    root_dir = session_root / "root"
+
+    for directory in (home_dir, artifacts_dir, root_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    os.environ["HOME"] = str(home_dir)
+    os.environ["DLKIT_TEST_ARTIFACT_ROOT"] = str(artifacts_dir)
+    os.environ.setdefault("DLKIT_ROOT_DIR", str(root_dir))
+
+    pathlib.Path.home = classmethod(lambda cls, _home=home_dir: _home)  # type: ignore[assignment]
+    global_environment.root_dir = str(root_dir)
+
+    _TEST_SESSION_ROOT = session_root
+    _TEST_HOME_DIR = home_dir
+    _TEST_ARTIFACTS_DIR = artifacts_dir
 
 
 def pytest_unconfigure(config):
@@ -217,6 +249,24 @@ def pytest_unconfigure(config):
     """
     # Clean up test environment variable
     os.environ.pop("DLKIT_TEST_MODE", None)
+    os.environ.pop("DLKIT_TEST_ARTIFACT_ROOT", None)
+
+    if _ORIGINAL_HOME_ENV is None:
+        os.environ.pop("HOME", None)
+    else:
+        os.environ["HOME"] = _ORIGINAL_HOME_ENV
+
+    os.environ.pop("DLKIT_ROOT_DIR", None)
+    if _ORIGINAL_DLKIT_ROOT_DIR is not None:
+        os.environ["DLKIT_ROOT_DIR"] = _ORIGINAL_DLKIT_ROOT_DIR
+
+    pathlib.Path.home = _ORIGINAL_PATH_HOME
+
+    global _TEST_SESSION_ROOT, _TEST_HOME_DIR, _TEST_ARTIFACTS_DIR
+    _TEST_SESSION_ROOT = None
+    _TEST_HOME_DIR = None
+    _TEST_ARTIFACTS_DIR = None
+    global_environment.root_dir = _ORIGINAL_ENV_ROOT
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: D401
@@ -291,19 +341,11 @@ def _fake_socket_when_restricted():  # noqa: D401
 def _writable_home_dir():  # noqa: D401
     """Point HOME to a writable directory to allow file-based tracking.
 
-    Some sandboxes disallow writing to the real home. By redirecting HOME to
-    the current workspace, functions using Path.home() (e.g., server tracking
-    file path) can persist as expected and tests stay hermetic.
+    Some sandboxes disallow writing to the real home. The path is configured
+    during pytest startup to ensure isolation under the session temp directory.
     """
-    # Ensure environment variable reflects a writable directory
-    os.environ.setdefault("HOME", str(Path.cwd()))
-    # Also monkeypatch Path.home() to avoid platform-specific resolution (e.g., /etc/passwd)
-    try:
-        import pathlib
-
-        pathlib.Path.home = classmethod(lambda cls: Path.cwd())  # type: ignore[assignment]
-    except Exception:
-        pass
+    if _TEST_HOME_DIR is None:
+        raise RuntimeError("Test home directory was not initialized")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -315,22 +357,10 @@ def _setup_test_artifacts_cleanup():  # noqa: D401
     2. Cleans up all artifacts after the test session completes
     3. Ensures test isolation by providing a clean slate
     """
-    # Find project root (where tests/ directory exists)
-    current = Path.cwd()
-    tests_artifacts_dir = None
+    if _TEST_ARTIFACTS_DIR is None:
+        raise RuntimeError("Test artifacts directory was not initialized")
 
-    # Try to find tests directory going up the directory tree
-    for parent in [current] + list(current.parents):
-        tests_dir = parent / "tests"
-        if tests_dir.exists() and tests_dir.is_dir():
-            tests_artifacts_dir = tests_dir / "artifacts"
-            break
-
-    # Fallback: use current working directory + tests/artifacts
-    if tests_artifacts_dir is None:
-        tests_artifacts_dir = current / "tests" / "artifacts"
-
-    # Ensure the artifacts directory exists
+    tests_artifacts_dir = _TEST_ARTIFACTS_DIR
     tests_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     # Yield control to run tests
@@ -352,6 +382,13 @@ def _get_test_artifacts_dir() -> Path:
     Returns:
         Path: Path to tests/artifacts directory
     """
+    if _TEST_ARTIFACTS_DIR is not None:
+        return _TEST_ARTIFACTS_DIR
+
+    explicit_root = os.environ.get("DLKIT_TEST_ARTIFACT_ROOT")
+    if explicit_root:
+        return Path(explicit_root)
+
     # Find project root (where tests/ directory exists)
     current = Path.cwd()
 

@@ -1,0 +1,33 @@
+# Training workflow settings fixture
+[execution]
+mode = "training"
+seed = 42
+
+[model]
+name = "ffnn.simple:ConstantWidthFFNN"
+hidden_size = 3
+num_layers = 1
+
+[trainer]
+max_epochs = 1
+fast_dev_run = true
+accelerator = "cpu"
+enable_checkpointing = false
+
+[datamodule]
+name = "InMemoryModule"
+
+[datamodule.dataset]
+x = "data/features.npy"
+root = "data"
+
+[datamodule.dataloader]
+batch_size = 2
+num_workers = 0
+
+[paths]
+root = "../"
+output_dir = "data/output"
+
+[mlflow]
+enable = false

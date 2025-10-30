@@ -349,7 +349,11 @@ dataroot = "./test_data"
         assert len(sections) >= 0  # May or may not detect malformed section
 
     def test_validation_error_in_section(self, tmp_path):
-        """Test handling of validation errors in section data."""
+        """Test handling of validation errors in section data.
+
+        Note: With lazy validation (default), validation errors don't raise immediately.
+        Use validate=True to test eager validation behavior.
+        """
         invalid_config = tmp_path / "invalid.toml"
         invalid_config.write_text("""
 [PATHS]
@@ -357,8 +361,10 @@ dataroot = 123  # Invalid type - should be string
 input = "./test_data/input"
 """)
 
+        # With lazy validation (default), this may not raise
+        # With eager validation (validate=True), it should raise
         with pytest.raises(ConfigValidationError) as exc_info:
-            load_section_config(invalid_config, PathsTestSettings, "PATHS")
+            load_section_config(invalid_config, PathsTestSettings, "PATHS", validate=True)
 
         assert "PathsTestSettings" in str(exc_info.value)
         assert "Failed to validate section" in str(exc_info.value)

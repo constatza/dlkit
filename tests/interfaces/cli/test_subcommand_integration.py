@@ -151,10 +151,10 @@ def test_main_app_lists_all_subcommands(cli_runner: CliRunner) -> None:
 
 def test_subcommand_error_handling(cli_runner: CliRunner) -> None:
     """Test that subcommands handle errors appropriately."""
-    # Test with invalid subcommand arguments
+    # Test with invalid subcommand arguments (non-existent config file)
     result = cli_runner.invoke(cli_app, ["train", "invalid-subcmd"])
-    # Should return error exit code
-    assert result.exit_code == ERROR_EXIT_CODE
+    # Should return application error exit code (file not found)
+    assert result.exit_code == 1  # Application handles missing files
 
 
 def test_mixed_valid_invalid_args(cli_runner: CliRunner) -> None:

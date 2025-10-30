@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -14,6 +13,22 @@ from dlkit.interfaces.api import train as api_train, validate_config
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result
 from ..middleware.error_handler import handle_api_error
+from ..params import (
+    BATCH_SIZE_PARAM,
+    CHECKPOINT_PARAM,
+    CONFIG_PATH_ARG,
+    DATA_DIR_PARAM,
+    EPOCHS_PARAM,
+    EXPERIMENT_NAME_PARAM,
+    LEARNING_RATE_PARAM,
+    MLFLOW_FLAG,
+    MLFLOW_HOST_PARAM,
+    MLFLOW_PORT_PARAM,
+    OUTPUT_DIR_PARAM,
+    ROOT_DIR_PARAM,
+    RUN_NAME_PARAM,
+    VALIDATE_ONLY_FLAG,
+)
 
 # Create training command group
 app = typer.Typer(
@@ -25,61 +40,20 @@ console = Console()
 
 
 def _run_training_impl(
-    config_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to configuration file",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-        ),
-    ],
-    mlflow: Annotated[bool, typer.Option("--mlflow", help="Enable MLflow tracking")] = False,
-    checkpoint: Annotated[
-        Path | None,
-        typer.Option("--checkpoint", "-c", help="Path to checkpoint for resuming training"),
-    ] = None,
-    validate_only: Annotated[
-        bool, typer.Option("--validate-only", help="Only validate configuration without training")
-    ] = False,
-    # Root override
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    # Basic overrides
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
-    data_dir: Annotated[
-        Path | None,
-        typer.Option("--dataflow-dir", "-d", help="Override dataflow directory from config"),
-    ] = None,
-    # Training overrides
-    epochs: Annotated[
-        int | None, typer.Option("--epochs", "-e", help="Override number of training epochs")
-    ] = None,
-    batch_size: Annotated[
-        int | None, typer.Option("--batch-size", "-b", help="Override batch size for training")
-    ] = None,
-    learning_rate: Annotated[
-        float | None, typer.Option("--learning-rate", "-l", help="Override learning rate")
-    ] = None,
-    # MLflow overrides
-    mlflow_host: Annotated[
-        str | None, typer.Option("--mlflow-host", help="Override MLflow server hostname")
-    ] = None,
-    mlflow_port: Annotated[
-        int | None, typer.Option("--mlflow-port", help="Override MLflow server port")
-    ] = None,
-    experiment_name: Annotated[
-        str | None, typer.Option("--experiment-name", help="Override MLflow experiment name")
-    ] = None,
-    run_name: Annotated[
-        str | None, typer.Option("--run-name", help="Override MLflow run name")
-    ] = None,
+    config_path: CONFIG_PATH_ARG,
+    mlflow: MLFLOW_FLAG = False,
+    checkpoint: CHECKPOINT_PARAM = None,
+    validate_only: VALIDATE_ONLY_FLAG = False,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
+    data_dir: DATA_DIR_PARAM = None,
+    epochs: EPOCHS_PARAM = None,
+    batch_size: BATCH_SIZE_PARAM = None,
+    learning_rate: LEARNING_RATE_PARAM = None,
+    mlflow_host: MLFLOW_HOST_PARAM = None,
+    mlflow_port: MLFLOW_PORT_PARAM = None,
+    experiment_name: EXPERIMENT_NAME_PARAM = None,
+    run_name: RUN_NAME_PARAM = None,
 ) -> None:
     """Run training workflow with configuration and parameter overrides.
 
@@ -205,61 +179,20 @@ def _run_training_impl(
 # Default training entry (no subcommands): dlkit train <config>
 @app.callback(invoke_without_command=True)
 def entry(
-    config_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to configuration file",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-        ),
-    ],
-    mlflow: Annotated[bool, typer.Option("--mlflow", help="Enable MLflow tracking")] = False,
-    checkpoint: Annotated[
-        Path | None,
-        typer.Option("--checkpoint", "-c", help="Path to checkpoint for resuming training"),
-    ] = None,
-    validate_only: Annotated[
-        bool, typer.Option("--validate-only", help="Only validate configuration without training")
-    ] = False,
-    # Root override
-    root_dir: Annotated[
-        Path | None,
-        typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-    ] = None,
-    # Basic overrides
-    output_dir: Annotated[
-        Path | None,
-        typer.Option("--output-dir", "-o", help="Override output directory from config"),
-    ] = None,
-    data_dir: Annotated[
-        Path | None,
-        typer.Option("--dataflow-dir", "-d", help="Override dataflow directory from config"),
-    ] = None,
-    # Training overrides
-    epochs: Annotated[
-        int | None, typer.Option("--epochs", "-e", help="Override number of training epochs")
-    ] = None,
-    batch_size: Annotated[
-        int | None, typer.Option("--batch-size", "-b", help="Override batch size for training")
-    ] = None,
-    learning_rate: Annotated[
-        float | None, typer.Option("--learning-rate", "-l", help="Override learning rate")
-    ] = None,
-    # MLflow overrides
-    mlflow_host: Annotated[
-        str | None, typer.Option("--mlflow-host", help="Override MLflow server hostname")
-    ] = None,
-    mlflow_port: Annotated[
-        int | None, typer.Option("--mlflow-port", help="Override MLflow server port")
-    ] = None,
-    experiment_name: Annotated[
-        str | None, typer.Option("--experiment-name", help="Override MLflow experiment name")
-    ] = None,
-    run_name: Annotated[
-        str | None, typer.Option("--run-name", help="Override MLflow run name")
-    ] = None,
+    config_path: CONFIG_PATH_ARG,
+    mlflow: MLFLOW_FLAG = False,
+    checkpoint: CHECKPOINT_PARAM = None,
+    validate_only: VALIDATE_ONLY_FLAG = False,
+    root_dir: ROOT_DIR_PARAM = None,
+    output_dir: OUTPUT_DIR_PARAM = None,
+    data_dir: DATA_DIR_PARAM = None,
+    epochs: EPOCHS_PARAM = None,
+    batch_size: BATCH_SIZE_PARAM = None,
+    learning_rate: LEARNING_RATE_PARAM = None,
+    mlflow_host: MLFLOW_HOST_PARAM = None,
+    mlflow_port: MLFLOW_PORT_PARAM = None,
+    experiment_name: EXPERIMENT_NAME_PARAM = None,
+    run_name: RUN_NAME_PARAM = None,
 ) -> None:
     """Train machine learning models with configuration and overrides.
 

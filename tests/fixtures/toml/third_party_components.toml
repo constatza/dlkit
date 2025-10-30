@@ -1,0 +1,30 @@
+# TOML config for third-party components test
+[model]
+name = "Linear"
+module_path = "torch.nn"
+in_features = 784
+out_features = 10
+
+[lightning]
+loss_function = {name = "CrossEntropyLoss", module_path = "torch.nn"}
+optimizer = {name = "Adam", lr = 0.001}
+
+[trainer]
+max_epochs = 1
+enable_progress_bar = false
+enable_model_summary = false
+enable_checkpointing = false
+
+[datamodule]
+name = "InMemoryModule"
+
+[datamodule.dataset]
+features = "dummy/features.npy"
+
+[datamodule.dataloader]
+batch_size = 2
+num_workers = 0
+
+[paths]
+root = "dummy"
+output_dir = "dummy"

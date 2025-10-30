@@ -9,7 +9,7 @@ from typing import Any
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import InferenceResult
 from dlkit.interfaces.api.services import InferenceService
-from dlkit.interfaces.api.overrides import basic_override_manager
+from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from .base import BaseCommand
@@ -122,41 +122,23 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
             ) from e
 
     def _build_overrides_dict(self, input_data: InferenceCommandInput) -> dict[str, Any]:
-        """Build overrides dictionary from input
+        """Build overrides dictionary from input using OverrideNormalizer.
+
+        Delegates to OverrideNormalizer.build_overrides_dict() for automatic
+        path normalization and None-filtering. This eliminates duplication
+        across command classes.
 
         Args:
             input_data: Inference command input
 
         Returns:
-            Dictionary of non-None overrides
+            Dictionary of non-None overrides with paths normalized to Path objects
         """
-        overrides = {
-            k: v
-            for k, v in {
-                "checkpoint_path": (
-                    Path(input_data.checkpoint_path)
-                    if isinstance(input_data.checkpoint_path, str)
-                    else input_data.checkpoint_path
-                ),
-                "root_dir": (
-                    Path(input_data.root_dir)
-                    if isinstance(input_data.root_dir, str)
-                    else input_data.root_dir
-                ),
-                "output_dir": (
-                    Path(input_data.output_dir)
-                    if isinstance(input_data.output_dir, str)
-                    else input_data.output_dir
-                ),
-                "data_dir": (
-                    Path(input_data.data_dir)
-                    if isinstance(input_data.data_dir, str)
-                    else input_data.data_dir
-                ),
-                "batch_size": input_data.batch_size,
-                **(input_data.additional_overrides or {}),
-            }.items()
-            if v is not None
-        }
-
-        return overrides
+        return OverrideNormalizer.build_overrides_dict(
+            checkpoint_path=input_data.checkpoint_path,
+            root_dir=input_data.root_dir,
+            output_dir=input_data.output_dir,
+            data_dir=input_data.data_dir,
+            batch_size=input_data.batch_size,
+            additional_overrides=input_data.additional_overrides,
+        )

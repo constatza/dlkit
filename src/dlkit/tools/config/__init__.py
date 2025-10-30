@@ -34,6 +34,7 @@ from .core import (
     FactoryProvider,
     BuildContext,
 )
+from .core.updater import update_settings
 
 # Main settings
 from .general_settings import GeneralSettings
@@ -58,7 +59,7 @@ from .factories import (
     load_training_settings,
     # BREAKING CHANGE: load_inference_settings removed
     load_sections,
-    load_custom_settings,
+    # REMOVED: load_custom_settings (use load_sections instead)
 )
 
 # Flattened functional settings
@@ -103,7 +104,7 @@ __all__ = [
     "load_training_settings",
     # BREAKING CHANGE: load_inference_settings removed
     "load_sections",
-    "load_custom_settings",
+    # REMOVED: load_custom_settings (use load_sections instead)
     # Core infrastructure
     "BasicSettings",
     "ComponentSettings",
@@ -112,6 +113,7 @@ __all__ = [
     "ComponentRegistry",
     "FactoryProvider",
     "BuildContext",
+    "update_settings",
     # Flattened functional settings
     "MLflowSettings",
     "OptunaSettings",

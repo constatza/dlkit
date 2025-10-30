@@ -10,7 +10,7 @@ from loguru import logger
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import TrainingResult
 from dlkit.interfaces.api.services import TrainingService
-from dlkit.interfaces.api.overrides import basic_override_manager
+from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from .base import BaseCommand
@@ -70,6 +70,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
                 if validation_errors:
                     error_msg = f"Override validation failed: {'; '.join(validation_errors)}"
                     logger.error(
+                        "{}",
                         error_msg,
                         command="train",
                         validation_errors=validation_errors,
@@ -83,7 +84,13 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             raise
         except Exception as e:
             error_msg = f"Input validation failed: {str(e)}"
-            logger.error(error_msg, command="train", error_type=type(e).__name__, exc_info=True)
+            logger.error(
+                "{}",
+                error_msg,
+                command="train",
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             raise WorkflowError(error_msg, {"command": "train", "error": str(e)}) from e
 
     def execute(
@@ -132,7 +139,8 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
 
         except WorkflowError as e:
             logger.error(
-                f"Training execution failed: {e.message}",
+                "Training execution failed: {}",
+                e.message,
                 command="train",
                 context=e.context,
             )
@@ -140,6 +148,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
         except Exception as e:
             error_msg = f"Training execution failed: {str(e)}"
             logger.error(
+                "{}",
                 error_msg,
                 command="train",
                 error_type=type(e).__name__,
@@ -150,49 +159,33 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             ) from e
 
     def _build_overrides_dict(self, input_data: TrainCommandInput) -> dict[str, Any]:
-        """Build overrides dictionary from input
+        """Build overrides dictionary from input using OverrideNormalizer.
+
+        Delegates to OverrideNormalizer.build_overrides_dict() for automatic
+        path normalization and None-filtering. This eliminates duplication
+        across command classes.
 
         Args:
             input_data: Training command input
 
         Returns:
-            Dictionary of non-None overrides
+            Dictionary of non-None overrides with paths normalized to Path objects
         """
-        # Build base overrides (None values filtered out)
-        overrides = {
-            k: v
-            for k, v in {
-                "checkpoint_path": (
-                    Path(input_data.checkpoint_path)
-                    if isinstance(input_data.checkpoint_path, str)
-                    else input_data.checkpoint_path
-                ),
-                "root_dir": (
-                    Path(input_data.root_dir)
-                    if isinstance(input_data.root_dir, str)
-                    else input_data.root_dir
-                ),
-                "output_dir": (
-                    Path(input_data.output_dir)
-                    if isinstance(input_data.output_dir, str)
-                    else input_data.output_dir
-                ),
-                "data_dir": (
-                    Path(input_data.data_dir)
-                    if isinstance(input_data.data_dir, str)
-                    else input_data.data_dir
-                ),
-                "epochs": input_data.epochs,
-                "batch_size": input_data.batch_size,
-                "learning_rate": input_data.learning_rate,
-                "mlflow_host": input_data.mlflow_host,
-                "mlflow_port": input_data.mlflow_port,
-                "experiment_name": input_data.experiment_name,
-                "run_name": input_data.run_name,
-                **input_data.additional_overrides,
-            }.items()
-            if v is not None
-        }
+        # Use shared normalizer for path normalization and None-filtering
+        overrides = OverrideNormalizer.build_overrides_dict(
+            checkpoint_path=input_data.checkpoint_path,
+            root_dir=input_data.root_dir,
+            output_dir=input_data.output_dir,
+            data_dir=input_data.data_dir,
+            epochs=input_data.epochs,
+            batch_size=input_data.batch_size,
+            learning_rate=input_data.learning_rate,
+            mlflow_host=input_data.mlflow_host,
+            mlflow_port=input_data.mlflow_port,
+            experiment_name=input_data.experiment_name,
+            run_name=input_data.run_name,
+            additional_overrides=input_data.additional_overrides,
+        )
 
         # Always include mlflow boolean since it's always meaningful
         overrides["mlflow"] = input_data.mlflow
