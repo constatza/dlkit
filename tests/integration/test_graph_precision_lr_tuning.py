@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,11 @@ from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="MPS backend on macOS lacks float64 support",
+)
 
 class TestGraphPrecisionLRTuning:
     """Test GNN models with float64 precision and LR tuning."""

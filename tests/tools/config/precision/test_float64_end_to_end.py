@@ -9,9 +9,11 @@ This module tests the complete float64 precision pipeline to ensure:
 6. Invalid precision strings raise validation errors
 """
 
+import sys
+from pathlib import Path
+
 import pytest
 import torch
-from pathlib import Path
 
 from dlkit.tools.config.precision import PrecisionStrategy
 from dlkit.tools.config.precision.strategy import _PRECISION_ALIAS_MAP
@@ -22,6 +24,12 @@ from dlkit.interfaces.api.services.precision_service import get_precision_servic
 from dlkit.interfaces.api.domain.precision import precision_override, get_precision_context
 from dlkit.core.shape_specs import create_shape_spec
 from dlkit.core.models.nn.base import ShapeAwareModel
+
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="MPS backend on macOS lacks float64 support",
+)
 
 
 class Float64TestModel(ShapeAwareModel):

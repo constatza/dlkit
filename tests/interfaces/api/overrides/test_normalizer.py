@@ -10,17 +10,18 @@ from dlkit.interfaces.api.overrides.normalizer import OverrideNormalizer
 class TestNormalizePath:
     """Test path normalization."""
 
-    def test_normalize_path_from_string(self) -> None:
+    def test_normalize_path_from_string(self, tmp_path: Path) -> None:
         """String paths should be converted to Path objects."""
-        result = OverrideNormalizer.normalize_path("/tmp/test")
+        target = tmp_path / "absolute" / "test"
+        result = OverrideNormalizer.normalize_path(str(target))
         assert isinstance(result, Path)
-        assert result == Path("/tmp/test")
+        assert result.resolve() == target.resolve()
 
-    def test_normalize_path_from_path(self) -> None:
+    def test_normalize_path_from_path(self, tmp_path: Path) -> None:
         """Path objects should be passed through unchanged."""
-        input_path = Path("/tmp/test")
+        input_path = (tmp_path / "path_object").resolve()
         result = OverrideNormalizer.normalize_path(input_path)
-        assert result == Path("/tmp/test")
+        assert result.resolve() == input_path
 
     def test_normalize_path_from_none(self) -> None:
         """None values should be preserved."""
@@ -45,7 +46,7 @@ class TestNormalizePath:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = OverrideNormalizer.normalize_path("~/data")
-        assert result == fake_home / "data"
+        assert result.resolve() == (fake_home / "data").resolve()
 
     def test_normalize_root_dir_requires_absolute(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Root dir normalization enforces absolute paths."""
@@ -57,7 +58,7 @@ class TestNormalizePath:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = OverrideNormalizer.normalize_path("home/tester/project", require_absolute=True)
-        assert result == fake_home / "project"
+        assert result.resolve() == (fake_home / "project").resolve()
 
     def test_normalize_root_dir_invalid_relative(self) -> None:
         """Relative root_dir values that cannot be coerced are discarded."""
@@ -68,13 +69,14 @@ class TestNormalizePath:
 class TestBuildOverridesDict:
     """Test override dictionary building."""
 
-    def test_build_overrides_with_path_normalization(self) -> None:
+    def test_build_overrides_with_path_normalization(self, tmp_path: Path) -> None:
         """Path fields should be automatically normalized to Path objects."""
+        base = tmp_path / "overrides"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
-            root_dir="/tmp/root",
-            output_dir="/tmp/output",
-            data_dir="/tmp/data",
+            checkpoint_path=str(base / "model.ckpt"),
+            root_dir=str(base / "root"),
+            output_dir=str(base / "output"),
+            data_dir=str(base / "data"),
         )
 
         assert isinstance(result["checkpoint_path"], Path)
@@ -82,10 +84,11 @@ class TestBuildOverridesDict:
         assert isinstance(result["output_dir"], Path)
         assert isinstance(result["data_dir"], Path)
 
-    def test_build_overrides_filters_none_values(self) -> None:
+    def test_build_overrides_filters_none_values(self, tmp_path: Path) -> None:
         """None values should be filtered from the result."""
+        checkpoint = tmp_path / "model.ckpt"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
+            checkpoint_path=str(checkpoint),
             root_dir=None,
             output_dir=None,
             batch_size=32,
@@ -112,10 +115,11 @@ class TestBuildOverridesDict:
         assert result["experiment_name"] == "test_exp"
         assert result["mlflow"] is True
 
-    def test_build_overrides_handles_mixed_types(self) -> None:
+    def test_build_overrides_handles_mixed_types(self, tmp_path: Path) -> None:
         """Should handle mixed path and non-path overrides."""
+        checkpoint = tmp_path / "model.ckpt"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
+            checkpoint_path=str(checkpoint),
             batch_size=64,
             root_dir=None,
             experiment_name="mixed_test",
@@ -136,22 +140,23 @@ class TestBuildOverridesDict:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = OverrideNormalizer.build_overrides_dict(root_dir="home/tester/project")
-        assert result["root_dir"] == fake_home / "project"
+        assert result["root_dir"].resolve() == (fake_home / "project").resolve()
 
-    def test_build_overrides_with_path_objects(self) -> None:
+    def test_build_overrides_with_path_objects(self, tmp_path: Path) -> None:
         """Path objects should be preserved, not converted."""
-        input_path = Path("/tmp/model.ckpt")
+        input_path = (tmp_path / "model.ckpt").resolve()
         result = OverrideNormalizer.build_overrides_dict(
             checkpoint_path=input_path,
             batch_size=32,
         )
 
-        assert result["checkpoint_path"] == input_path
+        assert result["checkpoint_path"].resolve() == input_path
 
-    def test_build_overrides_with_additional_overrides(self) -> None:
+    def test_build_overrides_with_additional_overrides(self, tmp_path: Path) -> None:
         """Additional overrides dict should be flattened into result."""
+        checkpoint = tmp_path / "model.ckpt"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
+            checkpoint_path=str(checkpoint),
             batch_size=32,
             additional_overrides={"custom_key": "custom_value", "another": 123},
         )
@@ -161,10 +166,11 @@ class TestBuildOverridesDict:
         assert result["custom_key"] == "custom_value"
         assert result["another"] == 123
 
-    def test_build_overrides_additional_overrides_filters_none(self) -> None:
+    def test_build_overrides_additional_overrides_filters_none(self, tmp_path: Path) -> None:
         """None values in additional_overrides should be filtered."""
+        checkpoint = tmp_path / "model.ckpt"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
+            checkpoint_path=str(checkpoint),
             additional_overrides={"keep_me": "value", "filter_me": None},
         )
 
@@ -186,10 +192,11 @@ class TestBuildOverridesDict:
 
         assert result == {}
 
-    def test_build_overrides_additional_overrides_none_handled(self) -> None:
+    def test_build_overrides_additional_overrides_none_handled(self, tmp_path: Path) -> None:
         """None additional_overrides should be handled gracefully."""
+        checkpoint = tmp_path / "model.ckpt"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
+            checkpoint_path=str(checkpoint),
             additional_overrides=None,
         )
 
@@ -214,13 +221,13 @@ class TestPathFields:
 class TestIntegrationWithCommandInput:
     """Integration tests simulating command input usage."""
 
-    def test_train_command_override_pattern(self) -> None:
+    def test_train_command_override_pattern(self, tmp_path: Path) -> None:
         """Simulate train command override building."""
-        # Simulate TrainCommandInput attributes
+        base = tmp_path / "train"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
-            root_dir="/tmp/root",
-            output_dir="/tmp/output",
+            checkpoint_path=str(base / "model.ckpt"),
+            root_dir=str(base / "root"),
+            output_dir=str(base / "output"),
             data_dir=None,
             epochs=100,
             batch_size=32,
@@ -246,13 +253,14 @@ class TestIntegrationWithCommandInput:
         assert result["run_name"] == "test_run"
         assert result["custom"] == "value"
 
-    def test_inference_command_override_pattern(self) -> None:
+    def test_inference_command_override_pattern(self, tmp_path: Path) -> None:
         """Simulate inference command override building."""
+        base = tmp_path / "infer"
         result = OverrideNormalizer.build_overrides_dict(
-            checkpoint_path="/tmp/model.ckpt",
-            root_dir="/tmp/root",
+            checkpoint_path=str(base / "model.ckpt"),
+            root_dir=str(base / "root"),
             output_dir=None,
-            data_dir="/tmp/data",
+            data_dir=str(base / "data"),
             batch_size=16,
             additional_overrides=None,
         )
@@ -263,13 +271,14 @@ class TestIntegrationWithCommandInput:
         assert "output_dir" not in result
         assert result["batch_size"] == 16
 
-    def test_optimization_command_override_pattern(self) -> None:
+    def test_optimization_command_override_pattern(self, tmp_path: Path) -> None:
         """Simulate optimization command override building."""
+        base = tmp_path / "opt"
         result = OverrideNormalizer.build_overrides_dict(
             checkpoint_path=None,
-            root_dir="/tmp/root",
-            output_dir="/tmp/output",
-            data_dir="/tmp/data",
+            root_dir=str(base / "root"),
+            output_dir=str(base / "output"),
+            data_dir=str(base / "data"),
             trials=50,  # Conditional: only if != 100
             study_name="optuna_study",
             experiment_name="test_exp",

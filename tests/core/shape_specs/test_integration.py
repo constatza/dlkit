@@ -6,8 +6,6 @@ in realistic scenarios.
 
 import pytest
 from pathlib import Path
-import tempfile
-import json
 import torch
 from unittest.mock import Mock, patch
 
@@ -99,7 +97,7 @@ class TestFullSystemIntegration:
         assert shape_spec.get_input_shape() == (32,)
         assert shape_spec.get_output_shape() == (4,)
 
-    def test_end_to_end_checkpoint_serialization_roundtrip(self, shape_factory):
+    def test_end_to_end_checkpoint_serialization_roundtrip(self, shape_factory, tmp_path: Path):
         """Test complete checkpoint serialization and deserialization."""
         # Create original shape spec
         original_spec = create_shape_spec(
@@ -112,31 +110,25 @@ class TestFullSystemIntegration:
         serializer = VersionedShapeSerializer()
         serialized = serializer.serialize(original_spec.get_shape_data())
 
-        # Create mock checkpoint
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.pth', delete=False) as f:
-            checkpoint_path = Path(f.name)
+        checkpoint_path = tmp_path / "checkpoints" / "sample.pth"
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            # Save checkpoint with shape metadata
-            checkpoint_data = {
-                'model_state_dict': {},
-                'dlkit_metadata': {
-                    'shape_spec': serialized.to_dict()
-                }
+        checkpoint_data = {
+            'model_state_dict': {},
+            'dlkit_metadata': {
+                'shape_spec': serialized.to_dict()
             }
-            torch.save(checkpoint_data, checkpoint_path)
+        }
+        torch.save(checkpoint_data, checkpoint_path)
 
-            # Create inference engine and infer from checkpoint
-            inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
-            reconstructed_spec = inference_engine.infer_from_checkpoint(checkpoint_path)
+        # Create inference engine and infer from checkpoint
+        inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
+        reconstructed_spec = inference_engine.infer_from_checkpoint(checkpoint_path)
 
-            # Verify roundtrip
-            assert reconstructed_spec.get_shape("x") == (784,)
-            assert reconstructed_spec.get_shape("y") == (10,)
-            assert reconstructed_spec.model_family() == ModelFamily.DLKIT_NN.value
-
-        finally:
-            checkpoint_path.unlink()
+        # Verify roundtrip
+        assert reconstructed_spec.get_shape("x") == (784,)
+        assert reconstructed_spec.get_shape("y") == (10,)
+        assert reconstructed_spec.model_family() == ModelFamily.DLKIT_NN.value
 
     def test_caching_performance_integration(self, shape_factory, sample_dataset, sample_model_settings):
         """Test caching integration with performance benefits."""
@@ -314,7 +306,12 @@ class TestFullSystemIntegration:
         # The exact behavior depends on the specific validation rules
 
     @patch('torch.load')
-    def test_checkpoint_loading_error_handling(self, mock_torch_load, shape_factory):
+    def test_checkpoint_loading_error_handling(
+        self,
+        mock_torch_load,
+        shape_factory,
+        tmp_path: Path,
+    ):
         """Test error handling during checkpoint loading."""
         # Mock torch.load to raise an exception
         mock_torch_load.side_effect = RuntimeError("Corrupted checkpoint")
@@ -322,14 +319,14 @@ class TestFullSystemIntegration:
         inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
 
         # Should fallback gracefully when checkpoint loading fails
-        with tempfile.NamedTemporaryFile(suffix='.pth') as f:
-            checkpoint_path = Path(f.name)
-            shape_spec = inference_engine.infer_from_checkpoint(checkpoint_path)
+        checkpoint_path = tmp_path / "error.pth"
+        checkpoint_path.touch()
+        shape_spec = inference_engine.infer_from_checkpoint(checkpoint_path)
 
-            # Should provide fallback result
-            assert shape_spec is not None
-            # Should be external family as fallback
-            assert shape_spec.model_family() == ModelFamily.EXTERNAL.value
+        # Should provide fallback result
+        assert shape_spec is not None
+        # Should be external family as fallback
+        assert shape_spec.model_family() == ModelFamily.EXTERNAL.value
 
 
 class TestRealWorldScenarios:

@@ -294,7 +294,7 @@ experiment_name = "test_experiment"
         assert result_without_config.host == "localhost"
         assert result_without_config.port == 9999
         assert str(result_without_config.backend_store_uri) == "sqlite:///default.db"
-        assert str(result_without_config.artifacts_destination) == "./artifacts"
+        assert Path(result_without_config.artifacts_destination) == Path("./artifacts")
 
     def test_config_file_vs_defaults_return_same_type(self, tmp_path: Path) -> None:
         """Test that both config file and default paths return the same type."""

@@ -30,7 +30,7 @@ class TestMLflowResourceManagerThreadSafety:
         """
         # Configure minimal MLflow settings
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -51,7 +51,7 @@ class TestMLflowResourceManagerThreadSafety:
             tmp_path: Temporary directory fixture
         """
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -84,7 +84,7 @@ class TestMLflowResourceManagerThreadSafety:
             tmp_path: Temporary directory fixture
         """
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -111,7 +111,7 @@ class TestConflictDetection:
         # This test requires mocking server_info since we can't actually start a server
         # with a different URI than the client config
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns_client"
+            tracking_uri=(tmp_path / "mlruns_client").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -119,7 +119,7 @@ class TestConflictDetection:
 
         # Mock server_info with a different URI
         mock_server_info = Mock()
-        mock_server_info.url = f"file://{tmp_path}/mlruns_server"
+        mock_server_info.url = (tmp_path / "mlruns_server").as_uri()
 
         # Directly set server_info to simulate the conflict
         with pytest.raises(RuntimeError, match="Conflicting tracking URIs detected"):
@@ -132,7 +132,7 @@ class TestConflictDetection:
         Args:
             tmp_path: Temporary directory fixture
         """
-        tracking_uri = f"file://{tmp_path}/mlruns"
+        tracking_uri = (tmp_path / "mlruns").as_uri()
         client_config = MLflowClientSettings(tracking_uri=tracking_uri)
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -158,18 +158,18 @@ class TestConflictDetection:
             tmp_path: Temporary directory fixture
         """
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         manager = MLflowResourceManager(mlflow_config)
 
         # First set
-        manager._set_global_tracking_uri(f"file://{tmp_path}/mlruns1")
+        manager._set_global_tracking_uri((tmp_path / "mlruns1").as_uri())
 
         # Attempt to change to different URI should raise error
         with pytest.raises(RuntimeError, match="Attempting to change global tracking URI"):
-            manager._set_global_tracking_uri(f"file://{tmp_path}/mlruns2")
+            manager._set_global_tracking_uri((tmp_path / "mlruns2").as_uri())
 
 
 class TestStackConsistencyValidation:
@@ -182,7 +182,7 @@ class TestStackConsistencyValidation:
             tmp_path: Temporary directory fixture
         """
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
@@ -210,7 +210,7 @@ class TestStateSnapshot:
             tmp_path: Temporary directory fixture
         """
         client_config = MLflowClientSettings(
-            tracking_uri=f"file://{tmp_path}/mlruns"
+            tracking_uri=(tmp_path / "mlruns").as_uri()
         )
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 

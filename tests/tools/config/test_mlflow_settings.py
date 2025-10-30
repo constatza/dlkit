@@ -20,18 +20,20 @@ from dlkit.tools.config.mlflow_settings import (
 
 
 @pytest.fixture
-def mlflow_server_data() -> dict[str, Any]:
+def mlflow_server_data(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     """Sample dataflow for MLflowServerSettings testing.
 
     Returns:
         Dict[str, Any]: MLflow server configuration
     """
+    artifacts_dir = tmp_path_factory.mktemp("mlflow_artifacts") / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
     return {
         "scheme": "https",
         "host": "mlflow.example.com",
         "port": 443,
         "backend_store_uri": "sqlite:///mlflow.db",
-        "artifacts_destination": "file:///tmp/artifacts",
+        "artifacts_destination": artifacts_dir.resolve().as_uri(),
         "num_workers": 8,
         "keep_alive_interval": 10,
         "shutdown_timeout": 30,

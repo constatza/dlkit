@@ -1,6 +1,5 @@
 """Tests for partial config loading to verify training vs inference sections."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -59,16 +58,11 @@ custom_param = "test"
 
 
 @pytest.fixture
-def config_file(full_config_content):
+def config_file(tmp_path: Path, full_config_content: str):
     """Create temporary config file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
-        f.write(full_config_content)
-        config_path = Path(f.name)
-
-    yield config_path
-
-    # Cleanup
-    config_path.unlink()
+    config_path = tmp_path / "full_config.toml"
+    config_path.write_text(full_config_content)
+    return config_path
 
 
 class TestPartialConfigLoading:
@@ -176,7 +170,7 @@ class TestPartialConfigLoading:
         # Should not have other sections in this case (they'll be None)
         # This demonstrates the flexibility of load_sections
 
-    def test_load_sections_with_strict_mode(self):
+    def test_load_sections_with_strict_mode(self, tmp_path: Path):
         """Test that strict mode works correctly."""
         # Create minimal config without TRAINING section
         minimal_config = """
@@ -193,19 +187,14 @@ name = "TestDataModule"
 name = "TestDataset"
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
-            f.write(minimal_config)
-            config_path = Path(f.name)
+        config_path = tmp_path / "minimal.toml"
+        config_path.write_text(minimal_config)
 
-        try:
-            # Should work with non-strict mode
-            settings = load_sections(config_path, ["MODEL", "DATASET"], strict=False)
-            assert settings.MODEL is not None
-            assert settings.DATASET is not None
+        # Should work with non-strict mode
+        settings = load_sections(config_path, ["MODEL", "DATASET"], strict=False)
+        assert settings.MODEL is not None
+        assert settings.DATASET is not None
 
-            # Should fail with strict mode when requesting missing sections
-            with pytest.raises(ValueError, match="Required sections missing"):
-                load_sections(config_path, ["MODEL", "DATASET", "TRAINING"], strict=True)
-
-        finally:
-            config_path.unlink()
+        # Should fail with strict mode when requesting missing sections
+        with pytest.raises(ValueError, match="Required sections missing"):
+            load_sections(config_path, ["MODEL", "DATASET", "TRAINING"], strict=True)

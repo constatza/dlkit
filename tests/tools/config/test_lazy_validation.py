@@ -132,7 +132,7 @@ class TestProgrammaticOverrides:
         config_path.write_text(f"""
 [SESSION]
 name = "test_override"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -194,7 +194,7 @@ class TestPreBuildValidation:
         config_path.write_text(f"""
 [SESSION]
 name = "test_bad_paths"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -206,11 +206,11 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 
 [[DATASET.targets]]
 name = "y"
-path = "{targets_path}"
+path = "{targets_path.as_posix()}"
 
 [MODEL]
 name = "LinearNetwork"
@@ -277,7 +277,7 @@ module_path = "torch.nn"
         config_path.write_text(f"""
 [SESSION]
 name = "test_fail_fast"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -289,11 +289,11 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 
 [[DATASET.targets]]
 name = "y"
-path = "{targets_path}"
+path = "{targets_path.as_posix()}"
 
 [MODEL]
 name = "LinearNetwork"
@@ -342,7 +342,7 @@ module_path = "torch.nn"
         config_path.write_text(f"""
 [SESSION]
 name = "test_settings"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -401,7 +401,7 @@ module_path = "torch.nn"
         config_path.write_text(f"""
 [SESSION]
 name = "test_structure"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -413,11 +413,11 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x"
-path = "{features_path}"
+path = "{features_path.as_posix()}"
 
 [[DATASET.targets]]
 name = "y"
-path = "{targets_path}"
+path = "{targets_path.as_posix()}"
 
 [MODEL]
 name = "LinearNetwork"
@@ -467,7 +467,7 @@ class TestEndToEndLazyValidation:
         config_path.write_text(f"""
 [SESSION]
 name = "test_e2e"
-root_dir = "{tmp_path}"
+root_dir = "{tmp_path.as_posix()}"
 
 [DATAMODULE]
 name = "InMemoryModule"

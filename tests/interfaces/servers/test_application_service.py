@@ -101,6 +101,7 @@ class TestServerApplicationService:
         app_service: ServerApplicationService,
         mock_adapter: Mock,
         mock_management_service: Mock,
+        tmp_path: Path,
     ) -> None:
         """Test starting server with parameter overrides."""
         mock_server_config = Mock()
@@ -112,11 +113,13 @@ class TestServerApplicationService:
         mock_server_info.port = 8080
         mock_adapter.start_server.return_value = mock_server_info
 
+        artifacts_destination = str((tmp_path / "artifacts").resolve())
+
         app_service.start_server(
             host="0.0.0.0",
             port=8080,
             backend_store_uri="sqlite:///test.db",
-            artifacts_destination="/tmp/artifacts",
+            artifacts_destination=artifacts_destination,
         )
 
         # Verify overrides passed to adapter
@@ -125,7 +128,7 @@ class TestServerApplicationService:
         assert call_kwargs["host"] == "0.0.0.0"
         assert call_kwargs["port"] == 8080
         assert call_kwargs["backend_store_uri"] == "sqlite:///test.db"
-        assert call_kwargs["artifacts_destination"] == "/tmp/artifacts"
+        assert Path(call_kwargs["artifacts_destination"]) == Path(artifacts_destination)
 
     def test_stop_server_checks_status_first(
         self,
@@ -241,7 +244,7 @@ class TestServerApplicationService:
         mock_mlflow.server.host = "localhost"
         mock_mlflow.server.port = 5000
         mock_mlflow.server.backend_store_uri = "sqlite:///test.db"
-        mock_mlflow.server.artifacts_destination = "/tmp/artifacts"
+        mock_mlflow.server.artifacts_destination = str((tmp_path / "artifacts").resolve())
         mock_mlflow.client = Mock()
         mock_mlflow.client.tracking_uri = "http://localhost:5000"
         mock_mlflow.client.experiment_name = "test_experiment"
@@ -307,18 +310,22 @@ class TestServerApplicationService:
         assert "artifacts_destination" not in overrides
 
     def test_load_server_configuration_creates_defaults_without_config(
-        self, app_service: ServerApplicationService
+        self,
+        app_service: ServerApplicationService,
+        tmp_path: Path,
     ) -> None:
         """Test that server configuration loading creates defaults without config."""
+        artifacts_destination = str((tmp_path / "artifacts").resolve())
+
         result = app_service._load_server_configuration(
-            None, "0.0.0.0", 8080, "sqlite:///test.db", "/tmp/artifacts"
+            None, "0.0.0.0", 8080, "sqlite:///test.db", artifacts_destination
         )
 
         # Should create MLflowServerSettings with provided values
         assert result.host == "0.0.0.0"
         assert result.port == 8080
         assert result.backend_store_uri == "sqlite:///test.db"
-        assert result.artifacts_destination == "/tmp/artifacts"
+        assert Path(result.artifacts_destination) == Path(artifacts_destination)
 
     def test_load_server_configuration_uses_defaults_for_missing_values(
         self, app_service: ServerApplicationService

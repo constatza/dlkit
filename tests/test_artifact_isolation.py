@@ -38,10 +38,13 @@ def test_artifacts_directory_is_created(test_artifacts_dir: Path) -> None:
     assert "tests/artifacts" in test_artifacts_dir.as_posix(), "Should be under tests/artifacts"
 
 
-def test_artifact_creation_and_isolation() -> None:
+def test_artifact_creation_and_isolation(test_artifacts_dir: Path) -> None:
     """Test that creating artifacts during tests works and they're isolated."""
     # Create some mock artifacts
     mlruns_path = mlruns_dir()
+    mlruns_path.parent.mkdir(parents=True, exist_ok=True)
+    if mlruns_path.exists() and not mlruns_path.is_dir():
+        mlruns_path.unlink()
     mlruns_path.mkdir(parents=True, exist_ok=True)
 
     test_artifact = mlruns_path / "test_artifact.txt"

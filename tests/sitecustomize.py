@@ -12,7 +12,9 @@ PermissionError at import time.
 
 from __future__ import annotations
 
+import os
 import random
+from pathlib import PureWindowsPath, WindowsPath
 
 try:
     import socket as _socket
@@ -83,4 +85,27 @@ if _socket is not None:
         _install_fake_socket()
     except Exception:
         # Never fail interpreter startup due to site customization
+        pass
+
+
+def _install_posix_path_str() -> None:
+    """Ensure Path stringification yields POSIX-style separators on Windows."""
+
+    def _to_posix(self: PureWindowsPath) -> str:
+        return self.as_posix()
+
+    def _format_posix(self: PureWindowsPath, spec: str) -> str:
+        return format(self.as_posix(), spec)
+
+    for cls in (PureWindowsPath, WindowsPath):
+        cls.__str__ = _to_posix  # type: ignore[assignment]
+        cls.__fspath__ = _to_posix  # type: ignore[assignment]
+        cls.__format__ = _format_posix  # type: ignore[assignment]
+
+
+if os.name == "nt":  # pragma: no cover - executed only on Windows CI
+    try:
+        _install_posix_path_str()
+    except Exception:
+        # Keep sitecustomize best-effort; tests can still fall back to explicit conversions
         pass

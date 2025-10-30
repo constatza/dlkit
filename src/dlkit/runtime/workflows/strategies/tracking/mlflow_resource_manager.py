@@ -16,6 +16,7 @@ from dlkit.interfaces.servers import health_checker as health_checker_module
 from dlkit.interfaces.servers import mlflow_adapter as mlflow_adapter_module
 
 from .mlflow_client_factory import MLflowClientFactory
+from dlkit.tools.io.path_normalizers import canonicalize_file_uri
 
 
 # Sentinels allow tests to override server primitives while enabling integration
@@ -46,7 +47,13 @@ def _normalize_tracking_uri(uri: str | None) -> str | None:
     """
     if not uri:
         return uri
-    return uri.rstrip("/")
+
+    stripped = uri.rstrip("/")
+
+    if stripped.lower().startswith("file://"):
+        return canonicalize_file_uri(stripped)
+
+    return stripped
 
 
 def _resolve_server_context_cls():
@@ -329,10 +336,13 @@ class MLflowResourceManager:
             )
 
             adapter_cls = _resolve_server_adapter_cls()
+            configured_timeout = getattr(server_config, "health_timeout", None)
+            timeout_seconds = float(configured_timeout) if configured_timeout is not None else 30.0
+            timeout_seconds = max(timeout_seconds, 20.0)
             adapter = adapter_cls(
                 health_checker=health_checker,
-                # Use longer health timeout for server startup
-                health_timeout=20.0,
+                # Honor settings-defined timeout while enforcing a sensible minimum
+                health_timeout=timeout_seconds,
             )
 
             # Create and start server context

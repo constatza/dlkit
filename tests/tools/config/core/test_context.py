@@ -17,8 +17,6 @@ from dlkit.tools.config.core.context import BuildContext
 TEST_MODE = "testing"
 TEST_DEVICE = "cpu"
 TEST_SEED = 42
-TEST_WORKING_DIR = Path("/tmp/test")
-TEST_CHECKPOINT = Path("/tmp/model.ckpt")
 
 
 class TestBuildContextClass:
@@ -36,27 +34,32 @@ class TestBuildContextClass:
         assert context.overrides == {}  # Default factory
 
     def test_build_context_initialization_complete(
-        self, build_context_data: dict[str, Any]
+        self,
+        build_context_data: dict[str, Any],
+        tmp_path: Path,
     ) -> None:
         """Test BuildContext initialization with all fields specified.
 
         Args:
             build_context_data: Complete build context dataflow fixture
         """
+        working_directory = tmp_path / "custom"
+        checkpoint_path = tmp_path / "model.ckpt"
+
         context = BuildContext(
             mode=build_context_data["mode"],
             device=build_context_data["device"],
             random_seed=build_context_data["random_seed"],
-            working_directory=Path("/tmp/custom"),
-            checkpoint_path=TEST_CHECKPOINT,
+            working_directory=working_directory,
+            checkpoint_path=checkpoint_path,
             overrides=build_context_data["overrides"],
         )
 
         assert context.mode == build_context_data["mode"]
         assert context.device == build_context_data["device"]
         assert context.random_seed == build_context_data["random_seed"]
-        assert context.working_directory == Path("/tmp/custom")
-        assert context.checkpoint_path == TEST_CHECKPOINT
+        assert context.working_directory == working_directory
+        assert context.checkpoint_path == checkpoint_path
         assert context.overrides == build_context_data["overrides"]
 
     def test_build_context_with_overrides_merges_correctly(

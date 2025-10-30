@@ -32,14 +32,16 @@ def mock_health_checker() -> Mock:
 
 
 @pytest.fixture
-def mlflow_server_config() -> MLflowServerSettings:
+def mlflow_server_config(tmp_path_factory: pytest.TempPathFactory) -> MLflowServerSettings:
     """Create MLflow server configuration."""
+    artifacts_dir = tmp_path_factory.mktemp("mlflow_adapter") / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
     return MLflowServerSettings(
         scheme="http",
         host="localhost",
         port=5000,
         backend_store_uri="sqlite:///test.db",
-        artifacts_destination="file:///tmp/mlflow-artifacts",  # Use file:// URL format
+        artifacts_destination=artifacts_dir.resolve().as_uri(),
     )
 
 
@@ -126,8 +128,9 @@ class TestMLflowServerAdapterStartServer:
         assert server_info.pid == 12345
         assert server_info.process is not None
 
-        mock_ensure.assert_called_once_with(mlflow_server_config)
-        mock_process_manager.start_process.assert_called_once_with(mlflow_server_config)
+        expected_config = mlflow_adapter._config_normalizer.normalize(mlflow_server_config)
+        mock_ensure.assert_called_once_with(expected_config)
+        mock_process_manager.start_process.assert_called_once_with(expected_config)
         mock_health_checker.wait_for_health.assert_called_once_with(
             "http://localhost:5000", timeout=0.1
         )

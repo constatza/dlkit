@@ -7,39 +7,31 @@ ensuring that relative paths are resolved relative to the environment root.
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Any
 
+from pydantic import TypeAdapter
+
+from dlkit.core.datatypes.urls import ArtifactDestination
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
 from dlkit.tools.io import locations
+from dlkit.tools.io.path_normalizers import (
+    normalize_file_uri,
+    normalize_sqlite_uri,
+    resolve_local_path,
+)
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+_ARTIFACT_ADAPTER = TypeAdapter(ArtifactDestination)
+
 
 class ServerConfigNormalizer:
-    """Normalizes server configuration paths relative to environment root.
-
-    This service is responsible for ensuring that relative paths in the
-    server configuration are resolved to absolute paths relative to the
-    DLKit environment root directory.
-
-    Responsibilities:
-        - Resolve relative backend_store_uri paths
-        - Resolve relative artifacts_destination paths
-        - Preserve absolute paths and remote URIs
-        - Handle various URI schemes (file://, sqlite://, etc.)
-    """
+    """Normalizes server configuration paths relative to environment root."""
 
     def normalize(self, config: MLflowServerSettings) -> MLflowServerSettings:
-        """Normalize server paths relative to current root context.
+        """Normalize server paths relative to current root context."""
 
-        Args:
-            config: Server configuration to normalize
-
-        Returns:
-            Normalized server configuration with absolute paths
-        """
         try:
             root_dir = locations.root()
         except Exception:
@@ -67,52 +59,37 @@ class ServerConfigNormalizer:
 
     @staticmethod
     def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
-        """Normalize backend store URI relative to root directory.
+        """Normalize backend store URI relative to root directory."""
 
-        Args:
-            uri: Backend store URI to normalize
-            root_dir: Root directory for path resolution
+        normalized_sqlite = normalize_sqlite_uri(uri, root_dir)
+        if normalized_sqlite:
+            return normalized_sqlite
 
-        Returns:
-            Normalized backend store URI
-        """
-        parsed = urlparse(uri)
-        if parsed.scheme not in {"file", "sqlite"}:
+        normalized_file = normalize_file_uri(uri, root_dir)
+        if normalized_file:
+            return normalized_file
+
+        if "://" in uri:
             return uri
 
-        path = Path(parsed.path)
-        if path.is_absolute():
-            return uri
-
-        resolved = (root_dir / path).resolve()
-        if parsed.scheme == "sqlite":
-            return f"sqlite:///{resolved.as_posix()}"
-        return resolved.as_uri()
+        resolved = resolve_local_path(uri, root_dir)
+        try:
+            return resolved.as_uri()
+        except ValueError:
+            return resolved.as_posix()
 
     @staticmethod
     def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:
-        """Normalize artifacts destination relative to root directory.
+        """Normalize artifacts destination relative to root directory."""
 
-        Args:
-            destination: Artifacts destination to normalize
-            root_dir: Root directory for path resolution
+        normalized = _ARTIFACT_ADAPTER.validate_python(destination)
 
-        Returns:
-            Normalized artifacts destination
-        """
-        parsed = urlparse(destination)
+        normalized_file = normalize_file_uri(normalized, root_dir)
+        if normalized_file:
+            return normalized_file
 
-        if parsed.scheme in {"", None}:
-            path = Path(destination)
-            if path.is_absolute():
-                return destination
-            return str((root_dir / path).resolve())
+        if "://" in normalized:
+            return normalized
 
-        if parsed.scheme == "file":
-            path = Path(parsed.path)
-            if path.is_absolute():
-                return destination
-            resolved = (root_dir / path).resolve()
-            return resolved.as_uri()
-
-        return destination
+        resolved = resolve_local_path(normalized, root_dir)
+        return resolved.as_posix()

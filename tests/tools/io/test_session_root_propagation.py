@@ -25,10 +25,12 @@ def test_config_with_session_root(tmp_path: Path) -> Path:
     session_root = tmp_path / "my_custom_root"
     session_root.mkdir(parents=True, exist_ok=True)
 
+    data_path = (tmp_path / "data.npy").as_posix()
+
     config_content = f"""
 [SESSION]
 name = "test-session"
-root_dir = "{session_root}"
+root_dir = "{session_root.as_posix()}"
 inference = false
 seed = 42
 
@@ -38,11 +40,11 @@ name = "SupervisedArrayDataset"
 
     [[DATASET.features]]
     name = "x"
-    path = "{tmp_path / 'data.npy'}"
+    path = "{data_path}"
 
     [[DATASET.targets]]
     name = "y"
-    path = "{tmp_path / 'data.npy'}"
+    path = "{data_path}"
 
     [DATASET.split]
     test_ratio = 0.2
@@ -112,7 +114,7 @@ def test_env_var_takes_precedence_over_session_root(test_config_with_session_roo
 
     try:
         # Set env var
-        os.environ["DLKIT_ROOT_DIR"] = str(env_root)
+        os.environ["DLKIT_ROOT_DIR"] = env_root.as_posix()
 
         # Reset global environment to pick up env var
         from dlkit.tools.config.environment import DLKitEnvironment
