@@ -37,7 +37,7 @@ class MockRunContext(IRunContext):
         """Get the run ID for this tracking run."""
         return self._run_id
 
-    def log_metrics(self, metrics: dict[str, float]) -> None:
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         self.logged_metrics.update(metrics)
 
     def log_params(self, params: dict[str, Any]) -> None:
@@ -48,6 +48,12 @@ class MockRunContext(IRunContext):
 
     def set_tag(self, key: str, value: str) -> None:
         self.tags[key] = value
+
+    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+        """Mock dataset logging."""
+        if not hasattr(self, "logged_datasets"):
+            self.logged_datasets = []
+        self.logged_datasets.append({"dataset": dataset, "context": context, "tags": tags})
 
 
 class MockExperimentTracker(IExperimentTracker):
@@ -130,8 +136,7 @@ def build_components():
 
     @dataclass(frozen=True)
     class DummyModel:
-        def ensure_precision_applied(self):
-            pass
+        pass
 
     trainer = Mock()
     trainer.callbacks = []
@@ -160,9 +165,9 @@ def test_tracking_decorator_single_responsibility(
 
     # Verify tracking was performed
     assert len(mock_tracker.created_runs) == 1
-    # Experiment name priority: SESSION.name → MLFLOW.client.experiment_name → "DLKit"
-    # Default SESSION.name is "session", so that takes priority
-    assert mock_tracker.created_runs[0]["experiment_name"] == "session"
+    # Experiment name priority: MLFLOW.client.experiment_name → SESSION.name → "DLKit"
+    # Explicit MLFLOW.client.experiment_name takes priority over SESSION.name
+    assert mock_tracker.created_runs[0]["experiment_name"] == "test_experiment"
     assert mock_tracker.created_runs[0]["run_name"] == "test_run"
 
     # Verify settings were logged
@@ -173,7 +178,8 @@ def test_tracking_decorator_single_responsibility(
 
     # Verify result enrichment
     assert isinstance(result, TrainingResult)
-    assert mock_tracker.run_context.logged_metrics == {"val_loss": 0.5, "accuracy": 0.95}
+    # Only non-stage-specific metrics should be logged (val_loss is filtered out)
+    assert mock_tracker.run_context.logged_metrics == {"accuracy": 0.95}
     assert mock_tracker.run_context.logged_params["metric_status"] == "ok"
 
 
@@ -187,7 +193,8 @@ def test_tracking_decorator_composition_pattern(mock_tracker, mlflow_settings, b
 
     assert isinstance(result, TrainingResult)
     assert len(mock_tracker.created_runs) == 1
-    assert mock_tracker.run_context.logged_metrics["val_loss"] == 0.5
+    # val_loss is filtered out as it's a stage-specific metric already logged by MLflowEpochLogger
+    assert "val_loss" not in mock_tracker.run_context.logged_metrics
 
 
 def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_components):

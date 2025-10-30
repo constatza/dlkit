@@ -95,25 +95,17 @@ def loss_component_data() -> dict[str, Any]:
 
 
 @pytest.fixture
-def wrapper_component_data(tmp_path) -> dict[str, Any]:
+def wrapper_component_data() -> dict[str, Any]:
     """Sample dataflow for WrapperComponentSettings testing.
-
-    Args:
-        tmp_path: Pytest temporary path fixture
 
     Returns:
         Dict[str, Any]: Wrapper component configuration
     """
-    # Create a temporary checkpoint file for validation
-    checkpoint_file = tmp_path / "wrapper.ckpt"
-    checkpoint_file.write_text("fake wrapper checkpoint")
-
     return {
         "name": "StandardWrapper",
         "module_path": "test.wrappers",
         "optimizer": {"name": "Adam", "lr": 0.001, "weight_decay": 0.01},
         "scheduler": {"name": "StepLR", "step_size": 10, "gamma": 0.9},
-        "checkpoint": str(checkpoint_file),
         "train": True,
         "test": True,
         "predict": False,

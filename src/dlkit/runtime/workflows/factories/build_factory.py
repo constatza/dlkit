@@ -22,6 +22,7 @@ from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 from dlkit.tools.config.components.model_components import WrapperComponentSettings
 from dlkit.core.models.wrappers.factories import WrapperFactory
 from dlkit.tools.io.split_provider import get_or_create_split
+from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
 from .model_detection import detect_model_type, ModelType, requires_shape_spec
 
 
@@ -62,6 +63,30 @@ class FlexibleBuildStrategy(IBuildStrategy):
             return True
 
     def build(self, settings: GeneralSettings) -> BuildComponents:
+        # Use precision context for entire build process
+        # This ensures all components (dataset, model) use consistent precision
+        from dlkit.interfaces.api.domain.precision import precision_override
+        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+
+        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+
+        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
+        ctx = get_current_path_context()
+        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
+        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
+        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
+
+        with precision_override(precision_strategy):
+            if needs_path_context:
+                # Set up defensive path context from SESSION.root_dir
+                with path_override_context({"root_dir": session_root_dir}):
+                    return self._build_with_precision(settings)
+            else:
+                # Path context already active or SESSION.root_dir not set
+                return self._build_with_precision(settings)
+
+    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+        """Internal build method that executes within precision context."""
         # Determine mode
         mode = (
             "inference"
@@ -95,12 +120,16 @@ class FlexibleBuildStrategy(IBuildStrategy):
                     # Mirror x for targets if y is None to preserve old behavior
                     x_path = legacy_x
                     y_path = legacy_y or legacy_x
-                    # Build FlexibleDataset directly to avoid pydantic FilePath constraints on-the-fly
-                    dataset = FlexibleDataset(features={"x": x_path}, targets={"y": y_path})
-                else:
-                    # Build from flexible entries provided in settings
+                    # Build FlexibleDataset - precision handled by context
                     dataset = FlexibleDataset(
-                        features=ds_settings.features, targets=ds_settings.targets
+                        features={"x": x_path},
+                        targets={"y": y_path}
+                    )
+                else:
+                    # Build from flexible entries - precision handled by context
+                    dataset = FlexibleDataset(
+                        features=ds_settings.features,
+                        targets=ds_settings.targets
                     )
         # Default factory construction
         if dataset is None:
@@ -205,7 +234,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
                     )
             except Exception:
                 pass
-            trainer = trn_cfg.build()
+            trainer = trn_cfg.build(session=settings.SESSION)
 
         return BuildComponents(
             model=model,
@@ -222,7 +251,13 @@ class FlexibleBuildStrategy(IBuildStrategy):
 
 
 class BuildFactory:
-    """Factory that selects an appropriate build strategy and constructs components."""
+    """Factory that selects an appropriate build strategy and constructs components.
+
+    **Pre-Build Validation**: This factory validates settings before building components.
+    Settings loaded with lazy validation (default) are validated here using Pydantic's
+    model_validate() to ensure all required fields are present and valid before
+    constructing expensive runtime components.
+    """
 
     def __init__(self, strategies: list[IBuildStrategy] | None = None) -> None:
         # Order: graph -> timeseries -> flexible (fallback)
@@ -232,7 +267,50 @@ class BuildFactory:
             FlexibleBuildStrategy(),
         ]
 
+    def _validate_settings(self, settings: GeneralSettings) -> None:
+        """Validate settings before building components.
+
+        This triggers Pydantic validation on the settings object, which validates:
+        - Required fields are present
+        - File paths exist (FilePath fields)
+        - Field types are correct
+        - Custom validators pass
+
+        Args:
+            settings: Settings to validate
+
+        Raises:
+            ValidationError: If settings validation fails (Pydantic error with details)
+        """
+        from pydantic import ValidationError
+
+        try:
+            # Re-validate using model_validate to catch all validation errors
+            # Use model_dump(mode='python') to get the raw data
+            settings.__class__.model_validate(settings.model_dump(mode='python'))
+        except ValidationError:
+            # Re-raise as-is for clear error messages
+            raise
+
     def build_components(self, settings: GeneralSettings) -> BuildComponents:
+        """Build runtime components with pre-build validation.
+
+        Validates settings first (triggers Pydantic validation for lazy-loaded configs),
+        then selects and executes appropriate build strategy.
+
+        Args:
+            settings: General settings (may be unvalidated from lazy loading)
+
+        Returns:
+            BuildComponents: Validated and constructed runtime components
+
+        Raises:
+            ValidationError: If settings validation fails before build
+        """
+        # Validate settings before building (fail-fast with clear errors)
+        self._validate_settings(settings)
+
+        # Build components using appropriate strategy
         for strat in self._strategies:
             if strat.can_handle(settings):
                 return strat.build(settings)
@@ -256,6 +334,29 @@ class GraphBuildStrategy(IBuildStrategy):
             return False
 
     def build(self, settings: GeneralSettings) -> BuildComponents:
+        # Use precision context for entire build process
+        from dlkit.interfaces.api.domain.precision import precision_override
+        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+
+        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+
+        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
+        ctx = get_current_path_context()
+        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
+        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
+        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
+
+        with precision_override(precision_strategy):
+            if needs_path_context:
+                # Set up defensive path context from SESSION.root_dir
+                with path_override_context({"root_dir": session_root_dir}):
+                    return self._build_with_precision(settings)
+            else:
+                # Path context already active or SESSION.root_dir not set
+                return self._build_with_precision(settings)
+
+    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+        """Internal build method that executes within precision context."""
         mode = (
             "inference"
             if (settings.SESSION and getattr(settings.SESSION, "inference", False))
@@ -310,8 +411,11 @@ class GraphBuildStrategy(IBuildStrategy):
             pass
         datamodule: LightningDataModule = FactoryProvider.create_component(dm_settings, dm_context)
 
-        # Register entry configs for user access (graphs may not have explicit entry configs)
-        entry_configs = None  # Graph strategy doesn't use flexible entry configs by default
+        # Register entry configs for user access (graphs use heuristic-based extraction)
+        # Pass empty dict to trigger heuristic fallback in DataExtractionStep:
+        # - Keys like 'y', 'target', 'label' → targets
+        # - All other keys ('x', 'edge_index', etc.) → features
+        entry_configs = {}  # Empty dict triggers heuristic-based extraction
         registry = DataEntryRegistry.get_instance()
         if entry_configs:
             registry.register_entries(entry_configs)
@@ -358,7 +462,7 @@ class GraphBuildStrategy(IBuildStrategy):
                     )
             except Exception:
                 pass
-            trainer = trn_cfg.build()
+            trainer = trn_cfg.build(session=settings.SESSION)
 
         return BuildComponents(
             model=model,
@@ -385,6 +489,29 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             return False
 
     def build(self, settings: GeneralSettings) -> BuildComponents:
+        # Use precision context for entire build process
+        from dlkit.interfaces.api.domain.precision import precision_override
+        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+
+        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+
+        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
+        ctx = get_current_path_context()
+        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
+        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
+        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
+
+        with precision_override(precision_strategy):
+            if needs_path_context:
+                # Set up defensive path context from SESSION.root_dir
+                with path_override_context({"root_dir": session_root_dir}):
+                    return self._build_with_precision(settings)
+            else:
+                # Path context already active or SESSION.root_dir not set
+                return self._build_with_precision(settings)
+
+    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+        """Internal build method that executes within precision context."""
         mode = (
             "inference"
             if (settings.SESSION and getattr(settings.SESSION, "inference", False))
@@ -512,7 +639,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             and (not getattr(settings.SESSION, "inference", False))
             and settings.TRAINING
         ):
-            trainer = settings.TRAINING.trainer.build()
+            trainer = settings.TRAINING.trainer.build(session=settings.SESSION)
 
         return BuildComponents(
             model=model,

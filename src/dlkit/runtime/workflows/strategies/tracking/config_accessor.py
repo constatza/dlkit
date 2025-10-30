@@ -1,0 +1,156 @@
+"""Type-safe configuration accessor to replace getattr chains.
+
+Single Responsibility: Provide typed access to nested configuration values with fallbacks.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from dlkit.tools.config import GeneralSettings
+
+
+class ConfigAccessor:
+    """Type-safe access to configuration settings.
+
+    Eliminates primitive obsession by replacing getattr chains with typed methods.
+    Provides defaults and safe navigation through nested settings.
+
+    Args:
+        settings: Global configuration settings
+    """
+
+    def __init__(self, settings: GeneralSettings):
+        """Initialize with global settings.
+
+        Args:
+            settings: Global configuration settings
+        """
+        self._settings = settings
+
+    def get_model_name(self) -> str:
+        """Get model name with fallback.
+
+        Returns:
+            Model name from settings or default "DLKitModel"
+        """
+        return self._get_nested("MODEL", "name", default="DLKitModel")
+
+    def get_session_root_dir(self) -> Path | None:
+        """Get session root directory.
+
+        Returns:
+            Root directory path or None if not configured
+        """
+        return self._get_nested("SESSION", "root_dir", default=None)
+
+    def get_mlflow_config(self) -> Any:
+        """Get MLflow configuration section.
+
+        Returns:
+            MLflow configuration object or None
+        """
+        return getattr(self._settings, "MLFLOW", None)
+
+    def get_mlflow_client_config(self) -> Any:
+        """Get MLflow client configuration.
+
+        Returns:
+            Client configuration object or None
+        """
+        mlflow_config = self.get_mlflow_config()
+        return getattr(mlflow_config, "client", None) if mlflow_config else None
+
+    def get_run_name(self) -> str | None:
+        """Get configured run name from MLflow client settings.
+
+        Returns:
+            Run name or None if not configured
+        """
+        client = self.get_mlflow_client_config()
+        return getattr(client, "run_name", None) if client else None
+
+    def should_register_model(self) -> bool:
+        """Check if model registration is enabled.
+
+        Returns:
+            True if model registration is enabled
+        """
+        client = self.get_mlflow_client_config()
+        return bool(client and getattr(client, "register_model", False))
+
+    def get_extras(self) -> Any | None:
+        """Get EXTRAS configuration section.
+
+        Returns:
+            EXTRAS configuration object or None
+        """
+        return getattr(self._settings, "EXTRAS", None)
+
+    def get_mlflow_params(self) -> dict[str, Any]:
+        """Get user-defined MLflow parameters from EXTRAS.
+
+        Returns:
+            Dictionary of parameters or empty dict
+        """
+        extras = self.get_extras()
+        if not extras:
+            return {}
+
+        params = getattr(extras, "mlflow_params", None)
+        return params if isinstance(params, dict) else {}
+
+    def get_mlflow_artifacts(self) -> list[str]:
+        """Get user-defined artifact paths from EXTRAS.
+
+        Returns:
+            List of artifact paths
+        """
+        extras = self.get_extras()
+        if not extras:
+            return []
+
+        artifacts = getattr(extras, "mlflow_artifacts", None)
+        if not artifacts:
+            return []
+
+        # Normalize to list
+        if isinstance(artifacts, (list, tuple)):
+            return list(artifacts)
+        return [artifacts]
+
+    def get_mlflow_artifacts_toml(self) -> dict[str, dict[str, Any]]:
+        """Get user-defined TOML artifacts from EXTRAS.
+
+        Returns:
+            Dictionary mapping artifact names to data dicts
+        """
+        extras = self.get_extras()
+        if not extras:
+            return {}
+
+        artifacts = getattr(extras, "mlflow_artifacts_toml", None)
+        return artifacts if isinstance(artifacts, dict) else {}
+
+    def _get_nested(self, *keys: str, default: Any = None) -> Any:
+        """Safe nested attribute access with default.
+
+        Args:
+            *keys: Sequence of attribute names to traverse
+            default: Default value if any attribute is missing
+
+        Returns:
+            Nested attribute value or default
+
+        Example:
+            >>> accessor._get_nested("MODEL", "name", default="default")
+            # Equivalent to: getattr(getattr(settings, "MODEL", None), "name", "default")
+        """
+        obj = self._settings
+        for key in keys:
+            if obj is None:
+                return default
+            obj = getattr(obj, key, None)
+
+        return obj if obj is not None else default

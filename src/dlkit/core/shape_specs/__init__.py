@@ -41,9 +41,7 @@ from .serialization import (
     VersionedShapeSerializer, SerializationFormat, SerializationVersion,
     SerializedShape, ShapeFormatMigrator
 )
-from .checkpoint_persistence import (
-    ShapeCheckpointMixin, CheckpointShapeLoader, enable_shape_persistence
-)
+from .checkpoint_loader import CheckpointShapeLoader
 
 __all__ = [
     # Core interfaces and implementations
@@ -106,8 +104,6 @@ __all__ = [
     "SerializedShape",
     "ShapeFormatMigrator",
 
-    # Checkpoint persistence system
-    "ShapeCheckpointMixin",
+    # Checkpoint utilities
     "CheckpointShapeLoader",
-    "enable_shape_persistence",
 ]

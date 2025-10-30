@@ -25,38 +25,37 @@ _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType({
 def load_array(
     path: FilePath,
     dtype: torch.dtype | None = None,
-    precision_provider: object | None = None,
     **kwargs,
 ) -> Tensor:
     """Load an array or tensor from disk with precision-aware dtype resolution.
 
-    This function loads dataflow from various file formats and applies consistent
-    precision handling based on the session configuration or explicit overrides.
+    This function loads data from various file formats and applies consistent
+    precision handling based on the precision context or explicit overrides.
+
+    Precision is resolved automatically from the global precision service,
+    which checks the precision context (set via precision_override()) and
+    falls back to the global default (FULL_32).
 
     Args:
         path: A FilePath pointing to .npy, .txt/.csv, or .pt/.pth file.
-        dtype: Explicit torch.dtype to convert the loaded dataflow to.
-               If None, uses precision service to resolve from session/context.
-        precision_provider: Optional provider for precision strategy.
-                           If None, uses global precision service.
+        dtype: Explicit torch.dtype to convert the loaded data to.
+               If None, uses precision service to resolve from context.
         **kwargs: Forwarded to the underlying loader (e.g. np.load or torch.load).
 
     Returns:
-        A torch.Tensor containing the loaded dataflow with appropriate precision.
+        A torch.Tensor containing the loaded data with appropriate precision.
 
     Raises:
         ValueError: If `path.suffix` is not one of the supported extensions.
         TypeError: If the loader returns a type other than np.ndarray or Tensor.
 
     Examples:
-        # Use session precision (default)
-        tensor = load_array("npy")
+        # Use precision from context (recommended)
+        with precision_override(PrecisionStrategy.FULL_64):
+            tensor = load_array("data.npy")  # Automatically float64
 
-        # Override with explicit dtype
-        tensor = load_array("npy", dtype=torch.float16)
-
-        # Use custom precision provider
-        tensor = load_array("npy", precision_provider=my_provider)
+        # Override with explicit dtype (rare cases)
+        tensor = load_array("data.npy", dtype=torch.float16)
     """
     suffix = Path(path).suffix.lower()
     loader = _LOADER_MAP.get(suffix)
@@ -66,12 +65,7 @@ def load_array(
     # Resolve target dtype using precision service if not explicitly provided
     if dtype is None:
         precision_service = get_precision_service()
-        # Cast to the protocol type for the service call
-        from typing import cast
-        from dlkit.interfaces.api.domain.precision import PrecisionProvider
-
-        provider = cast(PrecisionProvider, precision_provider) if precision_provider else None
-        dtype = precision_service.get_torch_dtype(provider)
+        dtype = precision_service.get_torch_dtype()
 
     data = loader(path, **kwargs)
     if isinstance(data, np.ndarray):

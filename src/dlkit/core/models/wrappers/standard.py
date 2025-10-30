@@ -443,7 +443,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         """Handle checkpoint loading.
 
         Ensures transform chains are properly loaded and caches are hydrated.
+        Also validates checkpoint version via base class.
         """
+        # Call base class to validate version and restore metadata
+        super().on_load_checkpoint(checkpoint)
+
         # Lightning will automatically load the fitted_transforms ModuleDict
         # Then hydrate caches from it
         self._hydrate_transforms_from_module_dict()
@@ -635,7 +639,7 @@ class BareWrapper(StandardLightningWrapper):
             # If no target, assume supervised learning isn't the goal
             loss = torch.tensor(0.0, requires_grad=True)
 
-        self._safe_log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
     def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
@@ -656,6 +660,7 @@ class BareWrapper(StandardLightningWrapper):
 
         # Simple loss computation
         batch_values = list(batch.values())
+        metrics = None
         if len(batch_values) >= 2:
             target = batch_values[1]
             val_loss = self.loss_function(output, target)
@@ -663,11 +668,10 @@ class BareWrapper(StandardLightningWrapper):
             # Compute metrics if available
             if self.val_metrics:
                 metrics = self.val_metrics(output, target)
-                self._safe_log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
         else:
             val_loss = torch.tensor(0.0)
 
-        self._safe_log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self._log_stage_outputs("val", val_loss, metrics)
         return {"val_loss": val_loss}
 
     def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
@@ -685,15 +689,15 @@ class BareWrapper(StandardLightningWrapper):
         output = self.forward(x)
 
         batch_values = list(batch.values())
+        metrics = None
         if len(batch_values) >= 2:
             target = batch_values[1]
             test_loss = self.loss_function(output, target)
 
             if self.test_metrics:
                 metrics = self.test_metrics(output, target)
-                self._safe_log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
         else:
             test_loss = torch.tensor(0.0)
 
-        self._safe_log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}

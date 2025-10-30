@@ -109,27 +109,14 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
 
     Follows SRP by handling only training-specific configuration.
     Implements TrainingSettingsProtocol for type safety and ISP compliance.
-    Uses default_factory for typical training workflows but allows None for partial loading.
+
+    Note: With lazy validation, fields can be None during config load.
+    Validation happens at build time, not load time.
     """
 
-    # Core infrastructure settings (required for training)
-    # Note: These override the base class but are assignment-compatible
-    # Base allows None, we require specific instances - this is LSP compatible
-    def __init__(self, **data):
-        # Ensure required fields have defaults if not provided
-        if 'SESSION' not in data or data['SESSION'] is None:
-            data['SESSION'] = SessionSettings()
-        if 'DATAMODULE' not in data or data['DATAMODULE'] is None:
-            data['DATAMODULE'] = DataModuleSettings()
-        if 'DATASET' not in data or data['DATASET'] is None:
-            data['DATASET'] = DatasetSettings()
-        if 'TRAINING' not in data or data['TRAINING'] is None:
-            data['TRAINING'] = TrainingConfig()
-        super().__init__(**data)
-
-    # Training-specific sections (required)
-    TRAINING: TrainingConfig = Field(
-        default_factory=TrainingConfig,
+    # Training-specific sections (optional during lazy load, validated at build time)
+    TRAINING: TrainingConfig | None = Field(
+        default=None,
         description="Core training configuration with nested library settings",
     )
 
@@ -180,19 +167,10 @@ class InferenceWorkflowSettings(BaseWorkflowSettings):
     Follows SRP by handling only inference-specific configuration.
     Deliberately excludes training/optimization sections per ISP.
     Implements InferenceSettingsProtocol for type safety.
-    """
 
-    # Core infrastructure settings (required for inference)
-    # Note: These override the base class but are assignment-compatible
-    def __init__(self, **data):
-        # Ensure required fields have defaults if not provided
-        if 'SESSION' not in data or data['SESSION'] is None:
-            data['SESSION'] = SessionSettings()
-        if 'DATAMODULE' not in data or data['DATAMODULE'] is None:
-            data['DATAMODULE'] = DataModuleSettings()
-        if 'DATASET' not in data or data['DATASET'] is None:
-            data['DATASET'] = DatasetSettings()
-        super().__init__(**data)
+    Note: With lazy validation, fields can be None during config load.
+    Validation happens at build time, not load time.
+    """
 
     _workflow_type: ClassVar[str] = "inference"
 

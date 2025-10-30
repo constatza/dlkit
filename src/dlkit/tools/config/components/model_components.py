@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 from collections.abc import Callable
+from pathlib import Path
 
 from lightning import LightningModule
 from pydantic import Field, FilePath
@@ -38,16 +39,35 @@ class LossComponentSettings(ComponentSettings[Callable]):
 
     This replaces LossSettings.build() with factory pattern.
 
+    The default module path uses dlkit's shared functional module, which provides:
+    - Standard losses (mse, mae, etc.) from torchmetrics.functional
+    - Custom differentiable losses (huber, quantile, normalized, etc.)
+    - All functions are pure, differentiable, and usable as both loss and metric
+
     Args:
         component_name: Name/class of the loss function
         module_path: Module path to the loss function
+
+    Examples:
+        >>> # Standard MSE loss (default)
+        >>> LossComponentSettings()  # Uses mse from dlkit.core.training.functional
+        >>>
+        >>> # Custom loss from shared module
+        >>> LossComponentSettings(name="huber_loss")
+        >>>
+        >>> # External loss from torchmetrics
+        >>> LossComponentSettings(
+        ...     name="mean_absolute_error",
+        ...     module_path="torchmetrics.functional.regression"
+        ... )
     """
 
     name: str | Callable = Field(
-        default="mean_squared_error", description="Name of the loss function"
+        default="mse", description="Name of the loss function (default: mse)"
     )
     module_path: str = Field(
-        default="torchmetrics.functional.regression", description="Module path to the loss function"
+        default="dlkit.core.training.functional",
+        description="Module path to the loss function (default: shared functional module)",
     )
 
 
@@ -57,13 +77,18 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
     This replaces ModelSettings.build() with factory pattern.
     All model construction logic is moved to factories.
 
-    The checkpoint field is optional for training (resume training) but required for inference.
-    This allows the same config file to work for both modes.
+    Checkpoint Usage (Workflow-Specific):
+    - Training resume: Use TRAINING.resume_from_checkpoint (full training state)
+    - Inference: Use checkpoint field below (model weights only)
+    - Standalone inference: Use InferenceConfig.model_checkpoint_path
+
+    The checkpoint field in this class is for inference workflows only.
+    For resuming training, use TRAINING.resume_from_checkpoint instead.
 
     Args:
         component_name: Model class name or type
         module_path: Module path to the model
-        checkpoint: Optional checkpoint path (required for inference, optional for training)
+        checkpoint: Checkpoint path for inference (model weights only, NOT for training resume)
         shape: Input shape for the model
         Various model architecture parameters as hyperparameters
     """
@@ -73,10 +98,13 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
     name: str | type[nn.Module] = Field(..., description="Model namespace path")
     module_path: str = Field(default="dlkit.core.models.nn", description="Module path to the model")
 
-    # Shared checkpoint field - optional for training, required for inference
-    checkpoint: FilePath | None = Field(
+    # Checkpoint for inference (NOT for training resume)
+    checkpoint: Path | str | None = Field(
         default=None,
-        description="Path to model checkpoint (optional for training, required for inference)",
+        description=(
+            "Checkpoint path for inference workflows (model weights only). "
+            "For resuming training, use TRAINING.resume_from_checkpoint instead."
+        ),
     )
 
 
@@ -123,7 +151,6 @@ class WrapperComponentSettings(ComponentSettings[nn.Module]):
         module_path: Module path to wrapper
         optimizer: Optimizer configuration
         scheduler: Scheduler configuration
-        checkpoint: Model checkpoint path
         Training flags and loss configuration
         Transform configurations
         Metrics configuration
@@ -143,9 +170,6 @@ class WrapperComponentSettings(ComponentSettings[nn.Module]):
     scheduler: SchedulerSettings = Field(
         default_factory=SchedulerSettings, description="Scheduler settings"
     )
-
-    # Model state
-    checkpoint: FilePath | None = Field(default=None, description="Path to model checkpoint")
 
     # Training flags
     train: bool = Field(default=True, description="Whether to train the model")
@@ -170,15 +194,6 @@ class WrapperComponentSettings(ComponentSettings[nn.Module]):
             "computation (via LossPairingStep)."
         ),
     )
-
-    @property
-    def has_checkpoint(self) -> bool:
-        """Check if checkpoint path is configured.
-
-        Returns:
-            bool: True if checkpoint path is set
-        """
-        return self.checkpoint is not None
 
     @property
     def has_metrics(self) -> bool:

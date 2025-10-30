@@ -13,23 +13,17 @@ from dlkit.tools.config import GeneralSettings
 def determine_experiment_name(settings: GeneralSettings, mlflow_config: Any = None) -> str:
     """Determine experiment name using priority chain with guard clauses.
 
-    Priority: SESSION.name → MLFLOW.client.experiment_name → "DLKit"
-    (Explicit config overrides session name)
+    Priority: MLFLOW.client.experiment_name → SESSION.name (with default "dlkit-session")
+    (Explicit MLflow config overrides session name)
 
     Args:
         settings: Configuration settings
         mlflow_config: Optional MLflow configuration
 
     Returns:
-        Experiment name
+        Experiment name (always returns a value via SESSION.name default)
     """
-    # Guard: Check SESSION.name first – session defines the canonical experiment scope
-    if hasattr(settings, "SESSION") and settings.SESSION:
-        session_name = getattr(settings.SESSION, "name", None)
-        if session_name:
-            return session_name
-
-    # Guard: Check MLFLOW.client.experiment_name next (explicit config override)
+    # Guard: Check MLFLOW.client.experiment_name first (explicit config override)
     if mlflow_config:
         client = getattr(mlflow_config, "client", None)
         if client and hasattr(client, "experiment_name") and client.experiment_name:
@@ -37,8 +31,9 @@ def determine_experiment_name(settings: GeneralSettings, mlflow_config: Any = No
             if client.experiment_name != "Experiment":
                 return client.experiment_name
 
-    # Fallback: Default experiment name
-    return "DLKit"
+    # Use SESSION.name (which has default "dlkit-session" in SessionSettings)
+    # This always returns a value since SESSION.name has a default
+    return settings.SESSION.name
 
 
 def determine_study_name(settings: GeneralSettings, optuna_config: Any) -> str:

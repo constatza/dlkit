@@ -81,7 +81,19 @@ class TrainerSettings(ComponentSettings[Trainer]):
         description="Lightning precision parameter. If None, uses session precision strategy.",
     )
 
-    def build(self) -> Trainer:
+    def build(self, session: "SessionSettings | None" = None) -> Trainer:
+        """Build PyTorch Lightning Trainer with precision resolution.
+
+        Args:
+            session: Optional SessionSettings to use as precision provider.
+                     If not provided, will use global default precision.
+
+        Returns:
+            Configured PyTorch Lightning Trainer instance.
+        """
+        # Import here to avoid circular imports
+        from dlkit.tools.config.session_settings import SessionSettings
+
         # Build callbacks via factory
         callbacks: list[Callback] = [ModelSummary(max_depth=2)]
         for callback in self.callbacks:
@@ -104,7 +116,8 @@ class TrainerSettings(ComponentSettings[Trainer]):
         lightning_precision = self.precision
         if lightning_precision is None:
             # Use session precision strategy if not explicitly set
-            lightning_precision = precision_service.get_lightning_precision()
+            # Pass session as provider so precision service can read session.precision
+            lightning_precision = precision_service.get_lightning_precision(provider=session)
             loguru_logger.info(f"Using session precision strategy: {lightning_precision}")
         else:
             loguru_logger.info(f"Using explicit trainer precision: {lightning_precision}")

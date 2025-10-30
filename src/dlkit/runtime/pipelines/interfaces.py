@@ -89,6 +89,16 @@ class ModelInvoker(ABC):
     different ways without the calling code needing to know the specifics.
     """
 
+    @property
+    @abstractmethod
+    def model(self):
+        """Get the underlying PyTorch model.
+
+        Returns:
+            The PyTorch nn.Module being invoked
+        """
+        pass
+
     @abstractmethod
     def invoke(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Invoke the model with the provided features.

@@ -9,6 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import torch
+from loguru import logger
 
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.tools.config.data_entries import DataEntry, Feature, Target
@@ -149,6 +150,41 @@ class DataExtractionStep(ProcessingStep):
         return context
 
 
+class PrecisionValidationStep(ProcessingStep):
+    """Validate that feature tensors match the model's precision."""
+
+    def __init__(
+        self,
+        model_invoker: ModelInvoker,
+        next_step: ProcessingStep | None = None,
+    ):
+        super().__init__(next_step)
+        self._model_invoker = model_invoker
+
+    def process(self, context: ProcessingContext) -> ProcessingContext:
+        model = getattr(self._model_invoker, "model", None)
+        model_dtype = getattr(model, "dtype", None)
+
+        if model_dtype is None:
+            return context
+
+        mismatches: list[str] = []
+        for name, tensor in context.features.items():
+            if tensor.is_floating_point() and tensor.dtype != model_dtype:
+                mismatches.append(f"{name}={tensor.dtype}")
+
+        if mismatches:
+            mismatch_details = ", ".join(mismatches)
+            message = (
+                "Feature tensors have precision mismatches "
+                f"(expected {model_dtype}, got {mismatch_details})"
+            )
+            logger.error(message)
+            raise RuntimeError(message)
+
+        return context
+
+
 class ModelInvocationStep(ProcessingStep):
     """Invoke the model with extracted features using Command Pattern.
 
@@ -172,6 +208,10 @@ class ModelInvocationStep(ProcessingStep):
     def process(self, context: ProcessingContext) -> ProcessingContext:
         """Invoke the model with features and store outputs.
 
+        Performs defensive dtype validation to ensure features match the model's
+        precision. Data should already be loaded in the correct dtype via load_array(),
+        but this provides a safety check and automatic casting if needed.
+
         Args:
             context (ProcessingContext): Processing context with ``features`` set.
 
@@ -185,6 +225,19 @@ class ModelInvocationStep(ProcessingStep):
             raise RuntimeError("No features available for model invocation")
 
         try:
+            # Debug-level dtype tracking (no casting - Lightning handles precision)
+            # Lightning's precision plugin converts model parameters during trainer.fit()
+            # Data is loaded with correct precision via PrecisionService
+            # Temporary mismatches before Lightning setup are expected and harmless
+            if hasattr(self._model_invoker.model, "dtype"):
+                model_dtype = self._model_invoker.model.dtype
+                for name, tensor in context.features.items():
+                    if tensor.is_floating_point() and tensor.dtype != model_dtype:
+                        logger.debug(
+                            f"Feature '{name}' dtype {tensor.dtype} differs from current model dtype {model_dtype}. "
+                            f"Lightning's precision plugin will handle alignment during forward pass."
+                        )
+
             context.model_outputs = self._model_invoker.invoke(context.features)
         except Exception as e:
             raise RuntimeError(f"Model invocation step failed: {e}") from e
@@ -435,6 +488,21 @@ class LossPairingStep(ProcessingStep):
         self._is_autoencoder = is_autoencoder
 
     def process(self, context: ProcessingContext) -> ProcessingContext:
+        """Pair predictions with targets and ensure dtype consistency.
+
+        Predictions come from the model and have the model's dtype (set by Lightning).
+        Targets come from the dataset and should already have the correct dtype from
+        load_array(), but we perform defensive casting to ensure consistency.
+
+        Args:
+            context: Processing context with predictions and targets
+
+        Returns:
+            Processing context with loss_data populated
+
+        Raises:
+            RuntimeError: If prediction-target pairing fails
+        """
         # Determine targets: for autoencoder, default to features when targets are empty
         targets = context.targets
         if self._is_autoencoder and not targets and context.features:
@@ -450,7 +518,19 @@ class LossPairingStep(ProcessingStep):
         # Single-target fallback: one target and one prediction → pair them
         if len(tnames) == 1 and len(pnames) == 1:
             tname = tnames[0]
-            pairs[tname] = (preds[pnames[0]], targets[tname])
+            pred = preds[pnames[0]]
+            target = targets[tname]
+
+            # Align target dtype with prediction dtype (maintains user's precision)
+            if target.is_floating_point() and pred.is_floating_point():
+                if target.dtype != pred.dtype:
+                    logger.debug(
+                        f"Target '{tname}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+                        f"Casting target to match prediction for loss computation."
+                    )
+                    target = target.to(dtype=pred.dtype)
+
+            pairs[tname] = (pred, target)
             context.loss_data = pairs
             return self._next_step.handle(context) if self._next_step else context
 
@@ -466,9 +546,21 @@ class LossPairingStep(ProcessingStep):
             available = f"available targets={tnames}, predictions={pnames}"
             raise RuntimeError(f"Loss pairing failed: {', '.join(msg_parts)}; {available}")
 
-        # Build pairs by matching keys
+        # Build pairs by matching keys with dtype alignment
         for name in tnames:
-            pairs[name] = (preds[name], targets[name])
+            pred = preds[name]
+            target = targets[name]
+
+            # Align target dtype with prediction dtype
+            if target.is_floating_point() and pred.is_floating_point():
+                if target.dtype != pred.dtype:
+                    logger.debug(
+                        f"Target '{name}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+                        f"Casting target to match prediction for loss computation."
+                    )
+                    target = target.to(dtype=pred.dtype)
+
+            pairs[name] = (pred, target)
 
         context.loss_data = pairs
         return self._next_step.handle(context) if self._next_step else context

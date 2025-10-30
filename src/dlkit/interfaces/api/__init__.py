@@ -36,7 +36,6 @@ from dlkit.tools.config import GeneralSettings
 from .functions import (
     # Core workflow functions
     train,
-    infer,  # BREAKING CHANGE: Now inference only
     predict_with_config,  # NEW: Lightning-based simple prediction
     optimize,
     # Configuration functions

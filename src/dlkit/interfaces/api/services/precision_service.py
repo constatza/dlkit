@@ -220,8 +220,19 @@ class PrecisionService:
         Returns:
             Model with weights cast to appropriate precision.
         """
-        target_dtype = self.get_torch_dtype(provider, default)
-        return model.to(dtype=target_dtype)
+        precision = self.resolve_precision(provider, default)
+        target_dtype = precision.to_torch_dtype()
+        model = model.to(dtype=target_dtype)
+
+        # Sync precision metadata for DLKit models that track effective precision
+        if hasattr(model, "_precision_dtype"):
+            model._precision_dtype = target_dtype  # type: ignore[attr-defined]
+        if hasattr(model, "_precision_applied"):
+            model._precision_applied = True  # type: ignore[attr-defined]
+        if hasattr(model, "_effective_precision_strategy"):
+            model._effective_precision_strategy = precision  # type: ignore[attr-defined]
+
+        return model
 
     def get_precision_info(
         self,

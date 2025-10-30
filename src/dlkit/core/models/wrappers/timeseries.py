@@ -47,7 +47,7 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
         # If PF-style tuple/list batch, avoid pipeline and compute a trivial differentiable loss.
         if isinstance(batch, (tuple, list)):
             loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
-            self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+            self._log_stage_outputs("train", loss)
             return {"loss": loss}
         # Otherwise, use standard pipeline processing
         return super().training_step(batch, batch_idx)
@@ -55,14 +55,14 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
     def validation_step(self, batch, batch_idx: int):  # type: ignore[override]
         if isinstance(batch, (tuple, list)):
             val_loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
-            self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+            self._log_stage_outputs("val", val_loss)
             return {"val_loss": val_loss}
         return super().validation_step(batch, batch_idx)
 
     def test_step(self, batch, batch_idx: int):  # type: ignore[override]
         if isinstance(batch, (tuple, list)):
             test_loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
-            self.log("test_loss", test_loss, on_step=False, on_epoch=True, prog_bar=True)
+            self._log_stage_outputs("test", test_loss)
             return {"test_loss": test_loss}
         return super().test_step(batch, batch_idx)
 

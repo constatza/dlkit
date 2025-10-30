@@ -140,6 +140,39 @@ class IRunContext(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+        """Log a dataset to the active run.
+
+        Logs dataset metadata for reproducibility and lineage tracking. Accepts MLflow
+        dataset objects created via mlflow.data.from_numpy(), mlflow.data.from_pandas(), etc.
+
+        Args:
+            dataset: MLflow dataset object (e.g., from mlflow.data.from_numpy()).
+            context: Optional context string describing dataset usage (e.g., "training", "validation").
+            tags: Optional dictionary of tags to associate with the dataset.
+
+        Example:
+            ```python
+            import mlflow.data
+            import numpy as np
+
+            # Create MLflow dataset
+            features = np.random.rand(100, 10)
+            targets = np.random.rand(100, 1)
+            dataset = mlflow.data.from_numpy(
+                features=features,
+                targets=targets,
+                name="training_data",
+                source="data/train.npy"
+            )
+
+            # Log to run
+            run_context.log_dataset(dataset, context="training")
+            ```
+        """
+        raise NotImplementedError
+
 
 class IExperimentTracker(ABC):
     """Abstract experiment tracker following Dependency Inversion Principle.
@@ -320,6 +353,16 @@ class NullRunContext(IRunContext):
         Args:
             key: Ignored.
             value: Ignored.
+        """
+        pass
+
+    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+        """No-op dataset logging.
+
+        Args:
+            dataset: Ignored.
+            context: Ignored.
+            tags: Ignored.
         """
         pass
 

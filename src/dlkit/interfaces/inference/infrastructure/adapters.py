@@ -38,7 +38,18 @@ class CheckpointReconstructor:
         self,
         checkpoint_path: Path
     ) -> Optional[ModelComponentSettings]:
-        """Reconstruct model settings from checkpoint metadata."""
+        """Reconstruct model settings from checkpoint metadata.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file
+
+        Returns:
+            ModelComponentSettings if found, None otherwise
+
+        Note:
+            Only supports v2.0+ checkpoints with 'dlkit_metadata'. Legacy checkpoints
+            without this metadata format are no longer supported.
+        """
         try:
             if not checkpoint_path.exists():
                 logger.warning(f"Checkpoint not found: {checkpoint_path}")
@@ -51,18 +62,32 @@ class CheckpointReconstructor:
                 logger.warning(f"Invalid checkpoint format: expected dict, got {type(checkpoint)}")
                 return None
 
-            # Try enhanced metadata first
-            metadata = checkpoint.get('dlkit_metadata', {})
-            if metadata and 'model_settings' in metadata:
-                settings_data = metadata['model_settings']
-                return self._deserialize_model_settings(settings_data)
+            # Only support dlkit_metadata format (v2.0+)
+            if 'dlkit_metadata' not in checkpoint:
+                logger.error(
+                    "Checkpoint missing 'dlkit_metadata'. This checkpoint uses a legacy format "
+                    "that is no longer supported. Please re-train your model with the current "
+                    "version of dlkit to generate a compatible checkpoint."
+                )
+                return None
 
-            # Legacy checkpoint - cannot reconstruct model settings
-            logger.warning(
-                "Legacy checkpoint format detected without model settings. "
-                "Automatic reconstruction not supported for this checkpoint format."
-            )
-            return None
+            metadata = checkpoint['dlkit_metadata']
+
+            # Validate version
+            version = metadata.get('version')
+            if version != '2.0':
+                logger.error(
+                    f"Unsupported checkpoint version '{version}'. Only version '2.0' is supported. "
+                    "Please re-train your model with the current version of dlkit."
+                )
+                return None
+
+            if 'model_settings' not in metadata:
+                logger.warning("Checkpoint metadata missing 'model_settings' field")
+                return None
+
+            settings_data = metadata['model_settings']
+            return self._deserialize_model_settings(settings_data)
 
         except Exception as e:
             logger.warning(f"Failed to reconstruct model settings from {checkpoint_path}: {e}")
@@ -184,6 +209,17 @@ class PyTorchModelLoader:
     ) -> ModelState:
         """Load PyTorch model from checkpoint with proper state management."""
         try:
+            # Validate checkpoint exists and warn if not
+            if not checkpoint_path.exists():
+                logger.warning(
+                    f"Checkpoint file not found: {checkpoint_path}. "
+                    f"This will likely cause inference to fail."
+                )
+                raise WorkflowError(
+                    f"Checkpoint file not found: {checkpoint_path}",
+                    {"component": "PyTorchModelLoader", "checkpoint": str(checkpoint_path)}
+                )
+
             logger.info(f"Loading model from checkpoint: {checkpoint_path}")
 
             # Create build context for model instantiation
@@ -271,9 +307,15 @@ class PyTorchModelLoader:
             state_dict = checkpoint
 
         # Handle common key prefix issues
-        if isinstance(state_dict, dict) and all(k.startswith("model.") for k in state_dict.keys()):
+        # Use any() instead of all() because Lightning checkpoints contain multiple key prefixes
+        # (model.*, fitted_transforms.*, optimizer_states.*, etc.)
+        if isinstance(state_dict, dict) and any(k.startswith("model.") for k in state_dict.keys()):
             logger.info("Stripping 'model.' prefix from state dict keys")
-            state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
+            # Only strip prefix from keys that actually have it
+            state_dict = {
+                k.replace("model.", "", 1) if k.startswith("model.") else k: v
+                for k, v in state_dict.items()
+            }
 
         return state_dict
 

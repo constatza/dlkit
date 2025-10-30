@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field
 
 from .core.base_settings import BasicSettings
 from .trainer_settings import TrainerSettings
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .components.model_components import LossComponentSettings, MetricComponentSettings
+from .lr_tuner_settings import LRTunerSettings
 
 
 class TrainingSettings(BasicSettings):
@@ -24,10 +27,14 @@ class TrainingSettings(BasicSettings):
     Args:
         trainer: PyTorch Lightning trainer settings (library-specific - kept nested)
         optimizer: Optimizer and scheduler settings (library-specific - kept nested)
+        scheduler: Learning rate scheduler settings
+        resume_from_checkpoint: Checkpoint to resume training from (full state)
         epochs: Number of training epochs
         patience: Early stopping patience
         monitor_metric: Metric to monitor for early stopping
         mode: Monitoring mode (min/max)
+        loss_function: Loss function configuration
+        metrics: Metrics to compute during training
     """
 
     # Library-specific configurations (kept nested as requested)
@@ -41,6 +48,16 @@ class TrainingSettings(BasicSettings):
         default=None, description="Learning rate scheduler settings"
     )
 
+    # Checkpoint for resuming training
+    resume_from_checkpoint: Path | str | None = Field(
+        default=None,
+        description=(
+            "Checkpoint to resume training from. Includes full training state: "
+            "model weights, optimizer state, scheduler state, epoch, global step, etc. "
+            "This checkpoint is used by PyTorch Lightning's Trainer.fit(ckpt_path=...)"
+        )
+    )
+
     # Core training parameters (flattened)
     epochs: int = Field(default=100, description="Number of training epochs")
     patience: int = Field(default=10, description="Early stopping patience")
@@ -48,6 +65,10 @@ class TrainingSettings(BasicSettings):
         default="val_loss", description="Metric to monitor for early stopping"
     )
     mode: str = Field(default="min", description="Monitoring mode (min/max for early stopping)")
+    lr_tuner: LRTunerSettings | None = Field(
+        default=None,
+        description="Learning rate tuner settings. If configured, automatic LR tuning runs before training."
+    )
 
     # Loss function and metrics configuration
     loss_function: LossComponentSettings = Field(

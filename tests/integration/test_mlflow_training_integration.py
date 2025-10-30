@@ -55,7 +55,7 @@ class TestMLflowTrainingIntegration:
 
         # Verify MLflow run was created
         tracking_uri = mlflow_settings.MLFLOW.client.tracking_uri
-        # Use same logic as tracking system: SESSION.name → MLFLOW.client.experiment_name → "DLKit"
+        # Use same logic as tracking system: MLFLOW.client.experiment_name → SESSION.name
         from dlkit.runtime.workflows.strategies.tracking.naming import determine_experiment_name
         experiment_name = determine_experiment_name(mlflow_settings, mlflow_settings.MLFLOW)
         client = MlflowClient(tracking_uri=tracking_uri)

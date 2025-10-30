@@ -6,6 +6,7 @@ by organizing dataflow into logical categories.
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import torch
 
@@ -35,6 +36,7 @@ class ProcessingContext:
         latents: Intermediate model representations
         predictions: Model predictions corresponding to targets
         loss_data: Combined dataflow for loss computation
+        artifacts: Auxiliary objects attached by pipeline steps (e.g., original graph batches)
     """
 
     # Input dataflow
@@ -52,6 +54,9 @@ class ProcessingContext:
     # Final processed dataflow
     loss_data: dict[str, torch.Tensor] = field(default_factory=dict)
 
+    # Auxiliary attachments for pipeline-specific data (e.g., original graph batches)
+    artifacts: dict[str, Any] = field(default_factory=dict)
+
     def clear(self) -> None:
         """Clear all dataflow from the context.
 
@@ -64,6 +69,7 @@ class ProcessingContext:
         self.latents.clear()
         self.predictions.clear()
         self.loss_data.clear()
+        self.artifacts.clear()
 
     def get_all_data(self) -> dict[str, torch.Tensor]:
         """Get all available dataflow combined into a single dictionary.
