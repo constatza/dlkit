@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.core.shape_specs import create_shape_spec
+from dlkit.core.shape_specs import create_shape_spec, ModelFamily
 from dlkit.tools.config import GeneralSettings
 from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import (
@@ -25,7 +25,10 @@ from dlkit.tools.config import (
 )
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.tools.config.trainer_settings import TrainerSettings
-from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.components.model_components import (
+    ModelComponentSettings,
+    MetricComponentSettings,
+)
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.dataset_settings import IndexSplitSettings
 
@@ -37,6 +40,12 @@ NUM_SAMPLES: int = 20  # Reduced from 100 for faster testing
 BATCH_SIZE: int = 4  # Reduced from 8 for faster testing
 EPOCHS: int = 1  # Reduced from 2 for faster testing
 OPTUNA_TRIALS: int = 2
+
+# Graph-specific constants
+NUM_NODES: int = 5  # Small graph for fast testing
+NODE_FEATURES: int = 3  # Node feature dimension
+EDGE_FEATURES: int = 2  # Edge feature dimension
+NUM_GRAPHS: int = 10  # Number of graphs in dataset
 
 
 @pytest.fixture
@@ -79,6 +88,68 @@ def minimal_dataset(tmp_path: Path) -> dict[str, Path]:
 
     return {
         "features": X_path,
+        "targets": y_path,
+        "split": split_path,
+        "data_dir": data_dir,
+    }
+
+
+@pytest.fixture
+def minimal_graph_dataset(tmp_path: Path) -> dict[str, Path]:
+    """Create minimal graph dataset for fast testing.
+
+    Creates small synthetic graph data suitable for testing graph workflows
+    without requiring large amounts of compute time.
+
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Dictionary of paths to created graph dataset files.
+    """
+    # Generate small synthetic graph data
+    np.random.seed(42)  # Reproducible test data
+
+    # Node features: (NUM_GRAPHS, NUM_NODES, NODE_FEATURES)
+    x = np.random.randn(NUM_GRAPHS, NUM_NODES, NODE_FEATURES).astype(np.float32)
+
+    # Adjacency matrix: (NUM_NODES, NUM_NODES) - same for all graphs
+    # Create a simple connected graph
+    adjacency = np.zeros((NUM_NODES, NUM_NODES), dtype=np.float32)
+    # Add edges: 0-1, 1-2, 2-3, 3-4, 4-0 (cycle)
+    adjacency[0, 1] = 1.0
+    adjacency[1, 2] = 1.0
+    adjacency[2, 3] = 1.0
+    adjacency[3, 4] = 1.0
+    adjacency[4, 0] = 1.0
+
+    # Target: (NUM_GRAPHS, NUM_NODES, TARGET_SIZE)
+    y = np.random.randn(NUM_GRAPHS, NUM_NODES, TARGET_SIZE).astype(np.float32)
+
+    # Create train/val/test split
+    train_indices = "0 1 2 3 4 5"  # 6 graphs for training
+    val_indices = "6 7"  # 2 graphs for validation
+    test_indices = "8 9"  # 2 graphs for testing
+
+    split_content = f"{train_indices}\n{val_indices}\n{test_indices}\n"
+
+    # Write data files
+    data_dir = tmp_path / "graph_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    x_path = data_dir / "node_features.npy"
+    adjacency_path = data_dir / "adjacency.npy"
+    y_path = data_dir / "targets.npy"
+    split_path = data_dir / "split.txt"
+
+    np.save(x_path, x)
+    np.save(adjacency_path, adjacency)
+    np.save(y_path, y)
+    split_path.write_text(split_content)
+
+    return {
+        "node_features": x_path,
+        "adjacency": adjacency_path,
         "targets": y_path,
         "split": split_path,
         "data_dir": data_dir,
@@ -188,6 +259,12 @@ def _make_settings(
             enable_progress_bar=False,  # Disable progress bar for faster tests
             enable_model_summary=False,  # Disable model summary for faster tests
         ),
+        metrics=(
+            MetricComponentSettings(
+                name="MeanSquaredError",
+                module_path="dlkit.core.training.metrics",
+            ),
+        ),
     )
 
     session = SessionSettings(name="integration_test", inference=inference, seed=42)
@@ -227,6 +304,95 @@ def inference_settings(
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
         checkpoint=minimal_model_checkpoint,
+    )
+
+
+@pytest.fixture
+def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+    """Create GeneralSettings for graph model training integration tests.
+
+    Uses GraphDataset with node features, adjacency matrix, and targets.
+    Model is a small GProjection graph neural network.
+
+    Args:
+        minimal_graph_dataset: Fixture providing graph dataset paths
+        tmp_path: Pytest temporary directory fixture
+
+    Returns:
+        GeneralSettings configured for graph workflow testing
+    """
+    output_dir = tmp_path / "graph_outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset = DatasetSettings(
+        name="GraphDataset",
+        module_path="dlkit.core.datasets.graph",
+        root=minimal_graph_dataset["data_dir"],
+        x=minimal_graph_dataset["node_features"],
+        edge_index=minimal_graph_dataset["adjacency"],
+        y=minimal_graph_dataset["targets"],
+    )
+
+    datamodule = DataModuleSettings(
+        name="GraphDataModule",
+        module_path="dlkit.core.datamodules.graph",
+        dataloader=DataloaderSettings(
+            num_workers=0,
+            batch_size=2,  # Small batch for graph data
+            shuffle=True,
+            pin_memory=False,
+            persistent_workers=False,
+        ),
+        batch_size=2,
+        num_workers=0,
+    )
+
+    # Create explicit shape spec for graph model
+    # Graph models need: x (node features), y (targets)
+    shape_spec = create_shape_spec(
+        shapes={
+            "x": (NODE_FEATURES,),  # Node feature dimension (batch-free)
+            "y": (TARGET_SIZE,),  # Output dimension (batch-free)
+        },
+        default_input="x",
+        default_output="y",
+        model_family=ModelFamily.GRAPH,  # Specify graph model family
+    )
+
+    model = ModelComponentSettings(
+        name="GProjection",
+        module_path="dlkit.core.models.nn.graph.projection_networks",
+        hidden_size=4,  # Small hidden size for fast testing
+        unified_shape=shape_spec,  # Provide explicit shape spec
+    )
+
+    training = TrainingSettings(
+        epochs=1,
+        trainer=TrainerSettings(
+            fast_dev_run=True,  # Use fast dev run for ultra-fast testing
+            enable_checkpointing=False,
+            accelerator="cpu",
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        ),
+        metrics=(
+            MetricComponentSettings(
+                name="MeanSquaredError",
+                module_path="dlkit.core.training.metrics",
+            ),
+        ),
+    )
+
+    session = SessionSettings(name="graph_integration_test", inference=False, seed=42)
+
+    return GeneralSettings(
+        SESSION=session,
+        MLFLOW=None,
+        OPTUNA=None,
+        DATAMODULE=datamodule,
+        DATASET=dataset,
+        TRAINING=training,
+        MODEL=model,
     )
 
 

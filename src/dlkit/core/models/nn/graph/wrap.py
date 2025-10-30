@@ -1,16 +1,30 @@
+import warnings
+
 import torch
 from torch_geometric.data import Data
 
 from dlkit.core.models.nn import BaseWrapper
 
 
-class GraphNetwork(BaseWrapper):
+class LegacyGraphWrapper(BaseWrapper):
     """
-    A LightningModule wrapper for PyTorch Geometric networks.
+    **DEPRECATED**: Legacy LightningModule wrapper for PyTorch Geometric networks.
+
+    .. deprecated:: 0.x
+        Use :class:`dlkit.core.models.wrappers.GraphLightningWrapper` instead.
+        This legacy wrapper does not use the modern ProcessingLightningWrapper
+        architecture and will be removed in a future version.
 
     This class handles the training, validation, testing, and prediction
     loops for graph-based models built with PyTorch Geometric.
     Pure functions and model components are separated for clarity and testability.
+
+    Note:
+        The modern :class:`GraphLightningWrapper` provides:
+        - Full pipeline integration (extraction, invocation, classification)
+        - Better precision handling
+        - Consistent architecture with standard/timeseries workflows
+        - Shape specification support
     """
 
     def __init__(
@@ -18,6 +32,13 @@ class GraphNetwork(BaseWrapper):
         *args,
         **kwargs,
     ) -> None:
+        warnings.warn(
+            "LegacyGraphWrapper is deprecated and will be removed in a future version. "
+            "Use dlkit.core.models.wrappers.GraphLightningWrapper instead, which provides "
+            "full pipeline integration and consistent architecture.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(
             *args,
             **kwargs,
@@ -93,3 +114,7 @@ class GraphNetwork(BaseWrapper):
         else:
             predictions = self.model(batch)
         return predictions
+
+
+# Backwards compatibility alias (deprecated)
+GraphNetwork = LegacyGraphWrapper
