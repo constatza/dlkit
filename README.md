@@ -87,103 +87,219 @@ Examples:
   res = train(cfg, strategy="mlflow", epochs=20, batch_size=64)
   ```
 
-## Inference (New)
+## Inference
 
-DLKit now provides a dedicated inference system that operates independently from training configurations. **No configuration files are required** - everything needed is extracted from the model checkpoint using enhanced checkpoint metadata that includes model settings, shape specifications, and transform configurations.
+DLKit provides an industry-standard inference system with **stateful predictors** that load models once and reuse them for multiple predictions. **No configuration files are required** - everything needed is extracted from the checkpoint using enhanced metadata.
 
-### Default Method: Direct Inference
+### Recommended Method: Stateful Predictors
 
-The **recommended and default approach** requires only a checkpoint and input data:
+The **primary and most efficient approach** uses stateful predictor objects:
 
 ```python
-from dlkit.interfaces.api import infer
+from dlkit import load_predictor
 
-# Primary/default inference method - no config files needed
-# Automatic model reconstruction from enhanced checkpoint metadata
-result = infer(
-    checkpoint_path="model.ckpt",  # Contains all necessary metadata
-    inputs={"x": torch.randn(32, 10)},
-    batch_size=16,
-    apply_transforms=True  # Automatically applies saved transforms
-)
-predictions = result.predictions
-```
-
-### Alternative Configuration Methods
-
-**File-based inputs:**
-```python
-# Direct file input
-result = infer(
+# Load model ONCE
+predictor = load_predictor(
     checkpoint_path="model.ckpt",
-    inputs={"features": "data/test_features.csv"},
-    batch_size=32
+    device="cuda",              # "auto", "cpu", "cuda", "mps"
+    batch_size=32,
+    apply_transforms=True       # Automatically applies saved transforms
 )
+
+# Predict MANY times (no reloading!)
+result1 = predictor.predict({"x": torch.randn(32, 10)})
+result2 = predictor.predict({"x": torch.randn(32, 10)})
+result3 = predictor.predict({"x": torch.randn(32, 10)})
+
+# Cleanup when done
+predictor.unload()
 ```
 
-**Manual InferenceConfig (optional):**
+**Why this is faster**: The model is loaded from disk once and cached in memory. Each `predict()` call performs only a fast forward pass without any checkpoint I/O.
+
+### Context Manager (Automatic Cleanup)
+
+For one-shot or temporary inference, use the context manager:
+
 ```python
-from dlkit.interfaces.inference import InferenceConfig
-from dlkit.interfaces.inference.api import infer_with_config
+from dlkit import load_predictor
 
-config = InferenceConfig(
-    model_checkpoint_path="model.ckpt",
-    batch_size=16,
-    device="cuda",
-    apply_transforms=True
-)
-result = infer_with_config(config, inputs)
+# Model loads on entry, auto-cleans on exit
+with load_predictor("model.ckpt", device="cuda") as predictor:
+    result = predictor.predict({"x": torch.randn(32, 10)})
+# Automatic cleanup - no need to call unload()
 ```
 
-**Lightning-based prediction (uses training config):**
+### Config-Based Batch Inference
+
+For inference on full datasets defined in configuration files:
+
 ```python
-from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.config import load_settings
+from dlkit import load_predictor
 
-# For scenarios requiring Lightning framework and training datasets
-cfg = load_settings("config.toml", inference=True)
-result = predict_with_config(cfg, "model.ckpt")
+predictor = load_predictor("model.ckpt")
+
+# Predict on dataset/split from config (yields results per batch)
+for batch_result in predictor.predict_from_config("config.toml"):
+    predictions = batch_result.predictions
+    process_batch(predictions)
+
+predictor.unload()
 ```
+
+### Flexible Input Formats
+
+Predictors accept multiple input formats:
+
+```python
+# Tensors
+result = predictor.predict({"x": torch.randn(32, 10)})
+
+# NumPy arrays
+result = predictor.predict({"x": np.random.randn(32, 10)})
+
+# File paths
+result = predictor.predict({"features": "data/test_features.csv"})
+
+# Mixed formats
+result = predictor.predict({
+    "x": torch.randn(32, 10),
+    "metadata": "data/metadata.npy"
+})
+```
+
+## Transform Pipelines (Training → Inference)
+
+DLKit ships a unified transform system that fits data transforms during training, persists them in checkpoints, and reapplies them automatically during inference. This gives you scikit-learn style `fit ↔ transform ↔ inverse_transform` semantics without writing glue code.
+
+### Declaring Transforms in Configuration
+
+Attach transforms to features/targets in your TOML config via `TransformSettings`:
+
+```toml
+[DATASET.entries.x]
+path = "data/features.npy"
+dtype = "float32"
+[[DATASET.entries.x.transforms]]
+name = "MinMaxScaler"
+module_path = "dlkit.core.training.transforms.minmax"
+dim = 0
+
+# Per-sample L2 normalization (no fitting required)
+[[DATASET.entries.x.transforms]]
+name = "SampleNormL2"
+module_path = "dlkit.core.training.transforms.sample_norm"
+eps = 1e-8
+
+[DATASET.entries.y]
+path = "data/targets.npy"
+dtype = "float32"
+[[DATASET.entries.y.transforms]]
+name = "PCA"
+module_path = "dlkit.core.training.transforms.pca"
+n_components = 8
+```
+
+**Available Transforms:**
+
+- **MinMaxScaler** (`dlkit.core.training.transforms.minmax`): Min-max normalization to [-1, 1] range (fittable, invertible)
+- **StandardScaler** (`dlkit.core.training.transforms.standard`): Z-score normalization using mean/std (fittable, invertible)
+- **PCA** (`dlkit.core.training.transforms.pca`): Principal component analysis for dimensionality reduction (fittable, invertible)
+- **SampleNormL2** (`dlkit.core.training.transforms.sample_norm`): Per-sample L2 normalization (invertible only - does not require fitting)
+- **Permutation** (`dlkit.core.training.transforms.permute`): Permute tensor dimensions
+- **TensorSubset** (`dlkit.core.training.transforms.subset`): Extract tensor subsets
+- **SpectralRadiusNorm** (`dlkit.core.training.transforms.spectral`): Spectral radius normalization for matrices
+
+During training the `StandardLightningWrapper` builds a `TransformChain` per entry, fits it once (across the entire training split), and stores the fitted chain inside `fitted_transforms.*` in the checkpoint.
+
+### Persistence Guarantees
+
+- Transforms are cached globally and written to the checkpoint alongside model weights.
+- Saving via Lightning (`Trainer.save_checkpoint`) or a raw `state_dict()` preserves the fitted chains.
+- Loading the wrapper or `load_predictor()` reconstructs the exact chain, including running stats (e.g., min/max, PCA components).
+
+### Inference Behavior
+
+`load_predictor(..., apply_transforms=True)` (default) will:
+
+1. Apply feature transforms before forwarding through the model.
+2. Apply inverse target transforms on the outputs so predictions land back in the user’s original space.
+
+For advanced workflows:
+
+- **Raw inputs + default behavior** (recommended):
+
+  ```python
+  with dlkit.load_predictor("model.ckpt", apply_transforms=True) as predictor:
+      result = predictor.predict({"x": torch.from_numpy(raw_features)})
+      predictions = result.predictions["y"]  # already inverse-transformed
+  ```
+
+- **Pre-transformed tensors**: If you already normalized features, disable the automatic pass to avoid double application:
+
+  ```python
+  normalized = my_chain({"x": raw_features})["x"]
+  with dlkit.load_predictor("model.ckpt", apply_transforms=False) as predictor:
+      logits = predictor.predict({"x": normalized})
+  ```
+
+- **Manual control**: Use `TransformChainExecutor.from_checkpoint("model.ckpt")` to pull out the fitted chains for custom serving stacks (e.g., streaming inference, Spark jobs). Apply `apply_feature_transforms()` or `apply_inverse_target_transforms()` against your own tensors whenever needed.
+
+These guarantees are covered by the integration tests in `tests/integration/test_transforms_persistence_and_inference.py`.
 
 ## Breaking Changes
 
-### Inference API Changes
-- **`infer()` function**: Now dedicated to inference only (lightweight, checkpoint-based)
-- **`predict_with_config()` function**: New function for Lightning-based simple prediction using training configs
-- **`InferenceWorkflowSettings`**: Removed from config system
-- **`load_inference_settings()`**: ❌ **REMOVED** - no longer exists
-- **Default inference method**: Now direct `infer(checkpoint_path, inputs)` - no settings loading required
-- **Configuration files**: Not needed for basic inference - everything extracted from checkpoint
+### Inference API Changes (v2.0+)
 
-### Config System Updates
-- **Optional PATHS section**: New `[PATHS]` section available for standardized path configuration
-- **Partial config loading**: New efficient section-based loading APIs in `dlkit.tools.io.config`
-- **Path resolution**: Enhanced SecurePath system with automatic resolution
-- **Enhanced checkpoint format**: All checkpoints now include comprehensive metadata for shape-free inference
+**Removed APIs**:
+- ❌ `infer()` function - replaced with `load_predictor()`
+- ❌ `predict_with_config()` function
+- ❌ `InferenceService` class
+- ❌ `InferenceWorkflowSettings`
+- ❌ `load_inference_settings()` function
+
+**New Stateful Predictor API**:
+- ✅ `load_predictor()` - primary inference API (loads once, predicts many)
+- ✅ `CheckpointPredictor` - stateful predictor object
+- ✅ `validate_checkpoint()` - checkpoint validation utility
+- ✅ `get_checkpoint_info()` - checkpoint metadata extraction
+
+### Why the Change?
+
+The old `infer()` function loaded the model from checkpoint **on every call**, causing hundreds of redundant loads during iterative workflows. The new stateful predictor architecture provides:
+
+- **10-100x performance improvement** for multi-inference workflows
+- Industry-standard API matching PyTorch, scikit-learn, and Hugging Face
+- Clear model lifecycle management (load → predict × N → unload)
+- No configuration files required - everything extracted from checkpoint
 
 ### Migration Guide
+
 ```python
-# ❌ OLD (no longer works)
-from dlkit.interfaces.api import infer
-from dlkit.tools.config import load_inference_settings  # REMOVED
-cfg = load_inference_settings("config.toml")  # REMOVED
-result = infer(cfg)  # Old signature
+# ❌ OLD (removed)
+from dlkit import infer
+for data in dataset:
+    result = infer("model.ckpt", data)  # Reloaded 100+ times!
+    process(result)
 
-# ✅ NEW - Default/Recommended Method
-from dlkit.interfaces.api import infer
-# No config loading needed - direct inference
-result = infer(
-    checkpoint_path="model.ckpt",
-    inputs=your_input_data,  # tensors, dicts, arrays, or file paths
-    batch_size=32,  # optional
-    device="auto"   # optional
-)
+# ✅ NEW (efficient)
+from dlkit import load_predictor
 
-# ✅ Alternative: Lightning-based prediction (if you need training config)
-from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.config import load_settings
-cfg = load_settings("config.toml", inference=True)
-result = predict_with_config(cfg, "model.ckpt")
+# Load model ONCE
+predictor = load_predictor("model.ckpt", device="cuda")
+
+# Predict many times (no reloading!)
+for data in dataset:
+    result = predictor.predict(data)  # Fast forward pass only
+    process(result)
+
+predictor.unload()
+
+# ✅ Or with context manager (automatic cleanup)
+with load_predictor("model.ckpt") as predictor:
+    for data in dataset:
+        result = predictor.predict(data)
+        process(result)
 ```
 
 ### Enhanced Checkpoint Format
@@ -296,9 +412,11 @@ When adding or updating validation utilities, **use Pydantic types for all URL p
 
 ## Inference Transforms
 
-DLKit automatically applies transforms during inference using configurations saved in the enhanced checkpoint format. This includes applying direct transforms to feature tensors before model invocation and applying inverse transforms to predictions/targets in the predict output. **No configuration files are needed** - transforms are automatically restored from checkpoint metadata.
+DLKit automatically applies transforms during inference using configurations saved in checkpoint metadata. **No configuration files are needed** - transforms are automatically restored and applied.
 
-- Configuration: attach transforms to `[DATASET].features` and `[DATASET].targets` entries. Example (excerpt):
+### Configuration
+
+Attach transforms to `[DATASET].features` and `[DATASET].targets` entries during training:
 
 ```toml
 [DATASET]
@@ -315,26 +433,35 @@ targets = [
 ]
 ```
 
-- Programmatic toggles on the wrapper (default True):
-  - `model.apply_feature_transforms`: when False, direct transforms are not applied before inference.
-  - `model.apply_inverse_target_transforms`: when False, inverse transforms are not applied to predictions/targets in the predict output.
+### Usage with Predictor
 
-Example:
+Control transform application during inference:
+
 ```python
-# Given a built wrapper and datamodule
-model.apply_feature_transforms = True
-model.apply_inverse_target_transforms = True
-preds = trainer.predict(model, datamodule=dm)
+from dlkit import load_predictor
+
+# With transforms (default)
+predictor = load_predictor("model.ckpt", apply_transforms=True)
+result = predictor.predict({"x": raw_data})  # Transforms applied automatically
+
+# Without transforms (raw data)
+predictor = load_predictor("model.ckpt", apply_transforms=False)
+result = predictor.predict({"x": already_normalized_data})
 ```
 
-- Manual helpers (optional):
-  - `model.feature_transforms({"x": x_raw})` → dict with transformed features
-  - `model.target_transforms_inverse({"y": y_pred})` → dict with inverse-transformed predictions
+### How It Works
 
-Notes
-- Transform chains are automatically saved in the enhanced checkpoint metadata and restored during inference. DLKit fits chains once on training data and reuses them for validation/test/predict.
-- Enhanced checkpoints include complete transform state, enabling shape-free inference without manual configuration.
-- For graph/timeseries wrappers that manage their own featurization/encoders, entry-based transforms are ignored by design to avoid conflicts.
+- **Training**: Transform chains are fitted once on training data and saved in checkpoint metadata
+- **Inference**: Predictors automatically load and apply saved transforms
+  - Feature transforms applied before model forward pass
+  - Inverse target transforms applied to predictions after model forward pass
+- **Config-free**: No manual configuration needed - everything restored from checkpoint
+
+### Notes
+
+- Transform state is part of the enhanced checkpoint format
+- For graph/timeseries wrappers with custom featurization, entry-based transforms are ignored to avoid conflicts
+- Transform application can be toggled per-predictor instance
 
 ## Loss Pairing Rules
 
