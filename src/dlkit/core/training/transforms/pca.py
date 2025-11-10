@@ -5,6 +5,7 @@ import torch
 from loguru import logger
 
 from .base import Transform
+from .interfaces import IFittableTransform, IInvertibleTransform
 
 
 def reshaper2d(func):
@@ -23,7 +24,7 @@ def reshaper2d(func):
     return wrapper
 
 
-class PCA(Transform):
+class PCA(Transform, IFittableTransform, IInvertibleTransform):
     """Principal Component Analysis (PCA) transformer using torch.pca_lowrank.
 
     This transformer computes the principal components efficiently by leveraging

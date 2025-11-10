@@ -6,6 +6,8 @@ from .pca import PCA
 from .standard import StandardScaler
 from .subset import TensorSubset
 from .spectral import SpectralRadiusNorm
+from .sample_norm import SampleNormL2
+from .interfaces import IInvertibleTransform, IFittableTransform, ISerializableTransform
 
 __all__ = [
     "TransformChain",
@@ -17,4 +19,8 @@ __all__ = [
     "TensorSubset",
     "BaseTransform",
     "SpectralRadiusNorm",
+    "SampleNormL2",
+    "IInvertibleTransform",
+    "IFittableTransform",
+    "ISerializableTransform",
 ]

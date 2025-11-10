@@ -8,12 +8,13 @@ from torch.nn import ModuleList
 from dlkit.tools.config.transform_settings import TransformSettings
 from dlkit.tools.config import BuildContext, FactoryProvider
 from .base import Transform
+from .interfaces import IFittableTransform, IInvertibleTransform
 
 
 # -------------------------------------------------------------------
 # Core decoupled pipeline
 # -------------------------------------------------------------------
-class TransformChain(Transform):
+class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
     """Pipeline for chaining multiple transformations for one tensor stream.
 
     This class manages a sequence of transforms (e.g., scalers, normalizers, PCA),
@@ -72,23 +73,21 @@ class TransformChain(Transform):
     def fit(self, x: Tensor) -> None:
         """Fit the chain and propagate the intermediate output.
 
-        Each transform is fitted in sequence (if it exposes ``fit``) and then applied
-        to produce the next input for the subsequent transform.
+        Each transform is fitted in sequence (if it implements IFittableTransform)
+        and then applied to produce the next input for the subsequent transform.
 
         Args:
-            x (torch.Tensor): Input tensor to fit on (e.g., all training features).
+            x: Input tensor to fit on (e.g., all training features).
 
         Raises:
-            RuntimeError: If any transform ``fit`` raises an error.
+            RuntimeError: If any transform fit() raises an error.
         """
-        # Record the original shape before any transforms
-
         with torch.inference_mode():
             for transform in self.transforms:
-                # If the transform supports fitting, call .fit(...)
-                if hasattr(transform, "fit") and callable(transform.fit):
+                # If the transform is fittable (implements IFittableTransform), fit it
+                if isinstance(transform, IFittableTransform):
                     transform.fit(x)
-                # Regardless, apply the transform to produce the next input
+                # Apply the transform to produce the next input
                 x = transform(x)
 
         # Mark as fitted and store the shape after all transforms
@@ -118,15 +117,18 @@ class TransformChain(Transform):
     def inverse_transform(self, x: Tensor) -> Tensor:
         """Apply the inverse transform chain in reverse order.
 
+        Only transforms implementing IInvertibleTransform are inverted. Non-invertible
+        transforms in the chain will raise a TypeError.
+
         Args:
-            x (torch.Tensor): Tensor to invert (e.g., model output on transformed scale).
+            x: Tensor to invert (e.g., model output on transformed scale).
 
         Returns:
-            torch.Tensor: Tensor mapped back to the original space.
+            Tensor mapped back to the original space.
 
         Raises:
-            RuntimeError: If ``fit(...)`` was not called before inverse.
-            AttributeError: If any transform lacks ``inverse_transform(...)``.
+            RuntimeError: If fit() was not called before inverse.
+            TypeError: If any transform in chain doesn't implement IInvertibleTransform.
         """
         if not self.fitted:
             warn_unfit_pipeline()
@@ -136,11 +138,11 @@ class TransformChain(Transform):
         # inverse_transform() does not use inference mode, in case the loss function is computed
         # using the output of inverse_transform().
         for transform in reversed(self.transforms):
-            if not hasattr(transform, "inverse_transform") or not callable(
-                transform.inverse_transform
-            ):
-                raise AttributeError(
-                    f"Transform `{transform.__class__.__name__}` does not support inverse_transform."
+            if not isinstance(transform, IInvertibleTransform):
+                raise TypeError(
+                    f"Transform `{transform.__class__.__name__}` does not implement "
+                    f"IInvertibleTransform and cannot be inverted. All transforms in a "
+                    f"chain must be invertible to use inverse_transform()."
                 )
             x = transform.inverse_transform(x)
         return x

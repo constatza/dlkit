@@ -9,15 +9,29 @@ from loguru import logger
 
 
 class Transform(BaseTransform, nn.Module):
-    """Base class for tensor transformations.
+    """Base class for tensor transformations with SOLID-compliant design.
 
-    Subclasses must implement a forward method.
-    The inverse method is optional; if provided, it must return a Maybe[torch.Tensor]:
-    Some if the inverse is successful, or Nothing otherwise.
-    The fit method is also optional; if present, it will be applied before forward.
+    This class provides the foundation for all transforms in DLKit. It integrates
+    with PyTorch's nn.Module for device management and checkpoint persistence.
+
+    Architecture:
+    - Subclasses MUST implement forward()
+    - Subclasses SHOULD implement inverse_transform() if invertible (inherit from IInvertibleTransform)
+    - Subclasses SHOULD implement fit() if fittable (inherit from IFittableTransform)
+    - Fitted state stored as torch.Tensor buffer for checkpoint persistence
+
+    Design Patterns:
+    - Template Method: Provides fitted property, subclasses implement fit()
+    - State Pattern: fitted flag tracked via tensor buffer
+
+    Example:
+        >>> class MyTransform(Transform, IInvertibleTransform):
+        ...     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        ...         return x * 2
+        ...     def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
+        ...         return x / 2
     """
 
-    input_shape: tuple[int, ...] | None
     apply_inverse: bool
     _fitted: torch.Tensor
     input_shape: torch.Tensor
@@ -27,7 +41,8 @@ class Transform(BaseTransform, nn.Module):
         """Initialize the transform.
 
         Args:
-            input_shape (tuple[int, ...], optional): The shape of the input dataflow INCLUDING the first which is the batch dimension.
+            input_shape: The shape of the input tensor INCLUDING the batch dimension.
+                Example: (32, 64) for batch_size=32, features=64
         """
         super().__init__()
         if not input_shape:
@@ -37,27 +52,42 @@ class Transform(BaseTransform, nn.Module):
         self.register_buffer("input_shape", torch.tensor(input_shape))
 
     @abstractmethod
-    def forward(self, x: torch.Tensor) -> torch.Tensor: ...
-
-    @abstractmethod
-    def inverse_transform(self, y: torch.Tensor) -> torch.Tensor: ...
-
-    def transform(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the transformation to the input tensor."""
-        return self.forward(x)
-
-    def fit(self, data: torch.Tensor) -> None:
-        """Fit the transformation to the
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the transformation to the input tensor.
 
         Args:
-            data (torch.Tensor): The dataflow to fit the transformation to.
+            x: Input tensor to transform.
+
+        Returns:
+            Transformed tensor.
         """
-        self.fitted = True
+        ...
+
+    def transform(self, x: torch.Tensor) -> torch.Tensor:
+        """Alias for forward() - applies the transformation.
+
+        Args:
+            x: Input tensor to transform.
+
+        Returns:
+            Transformed tensor.
+        """
+        return self.forward(x)
 
     @property
     def fitted(self) -> bool:
+        """Whether the transform has been fitted to data.
+
+        Returns:
+            True if fit() has been called, False otherwise.
+        """
         return self.get_buffer("_fitted").item() == 1
 
     @fitted.setter
     def fitted(self, value: bool) -> None:
+        """Set the fitted state.
+
+        Args:
+            value: True to mark as fitted, False otherwise.
+        """
         self._fitted.fill_(1 if value else 0)

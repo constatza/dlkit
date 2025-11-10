@@ -1,19 +1,18 @@
 import torch
 
 from dlkit.core.training.transforms.base import Transform
+from dlkit.core.training.transforms.interfaces import IFittableTransform, IInvertibleTransform
 
 
-class StandardScaler(Transform):
-    mean: torch.Tensor | None = None
-
+class StandardScaler(Transform, IFittableTransform, IInvertibleTransform):
     def __init__(
         self, dim: int | list[int] | None = None, input_shape: tuple[int, ...] | None = None
     ) -> None:
         super().__init__(input_shape)
-        self.mean: torch.Tensor | None = None
-        self.std: torch.Tensor | None = None
-        self.register_buffer("mean", torch.zeros(self.input_shape))
-        self.register_buffer("std", torch.ones(self.input_shape))
+        # Convert tensor to tuple for torch.zeros/ones
+        shape_tuple = tuple(self.input_shape.tolist()) if isinstance(self.input_shape, torch.Tensor) else tuple(self.input_shape)
+        self.register_buffer("mean", torch.zeros(shape_tuple))
+        self.register_buffer("std", torch.ones(shape_tuple))
         self.dim = dim or 0
 
     def fit(self, data: torch.Tensor) -> None:
