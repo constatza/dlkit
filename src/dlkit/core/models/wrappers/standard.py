@@ -14,6 +14,7 @@ from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
 from dlkit.tools.config.data_entries import DataEntry, Target
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.core.training.transforms.chain import TransformChain
+from dlkit.core.training.transforms.interfaces import IInvertibleTransform
 from dlkit.runtime.pipelines.pipeline import (
     ProcessingPipeline,
     DataExtractionStep,
@@ -318,7 +319,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         """Apply inverse transforms for targets/predictions by entry name.
 
         Looks up transform chains in caches or in ``fitted_transforms`` and applies
-        ``inverse_transform`` when available. Entries without a chain are returned unchanged.
+        ``inverse_transform`` when available using isinstance(IInvertibleTransform).
+        Entries without an invertible chain are returned unchanged.
         """
         out: dict[str, Tensor] = {}
         cache = None
@@ -334,9 +336,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                 chain = None
             if chain is None and isinstance(self.fitted_transforms, ModuleDict):
                 fitted_chain = self.fitted_transforms.get(name)  # type: ignore[misc]
-                if fitted_chain is not None and hasattr(fitted_chain, 'inverse_transform'):
+                if fitted_chain is not None and isinstance(fitted_chain, IInvertibleTransform):
                     chain = fitted_chain
-            if chain is not None and hasattr(chain, 'inverse_transform'):
+            if chain is not None and isinstance(chain, IInvertibleTransform):
                 try:
                     out[name] = chain.inverse_transform(tensor)
                 except Exception:
