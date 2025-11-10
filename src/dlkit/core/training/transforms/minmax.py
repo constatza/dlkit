@@ -3,10 +3,11 @@ from collections.abc import Sequence
 import torch
 
 from dlkit.core.training.transforms.base import Transform
+from dlkit.core.training.transforms.interfaces import IFittableTransform, IInvertibleTransform
 from pydantic import validate_call, ConfigDict
 
 
-class MinMaxScaler(Transform):
+class MinMaxScaler(Transform, IFittableTransform, IInvertibleTransform):
     """Minimum-Maximum Scaler."""
 
     min: torch.Tensor
