@@ -20,6 +20,7 @@ from dlkit.tools.config.components.model_components import ModelComponentSetting
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.interfaces.api.domain.errors import WorkflowError
+from dlkit.interfaces.inference.checkpoint_utils import extract_state_dict
 
 
 class ModelReconstructionBuilder:
@@ -261,23 +262,8 @@ class ModelReconstructionBuilder:
             )
 
     def _extract_state_dict(self) -> Dict[str, Any]:
-        """Extract state dict from checkpoint with fallback handling.
-
-        Returns:
-            State dictionary for model loading
-        """
-        if "state_dict" in self.checkpoint:
-            state_dict = self.checkpoint["state_dict"]
-        else:
-            # Fallback: assume entire checkpoint is state dict
-            state_dict = self.checkpoint
-
-        # Handle common key prefix issues
-        if isinstance(state_dict, dict) and all(k.startswith("model.") for k in state_dict.keys()):
-            logger.info("Stripping 'model.' prefix from state dict keys")
-            state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
-
-        return state_dict
+        """Extract state dict from checkpoint with automatic prefix stripping."""
+        return extract_state_dict(self.checkpoint)
 
     def _deserialize_model_settings(self, settings_data: Dict[str, Any]) -> Optional[ModelComponentSettings]:
         """Deserialize model settings from checkpoint metadata.

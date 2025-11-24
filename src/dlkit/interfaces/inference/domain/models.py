@@ -10,10 +10,14 @@ import torch
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from dlkit.core.shape_specs import ShapeSpec
 from dlkit.tools.config.components.model_components import ModelComponentSettings
+
+# Import only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from dlkit.core.training.transforms.chain import TransformChain
 
 
 class ModelStateType(Enum):
@@ -29,11 +33,16 @@ class ModelState:
 
     This encapsulates the model and its associated metadata,
     ensuring consistent state management throughout the inference pipeline.
+
+    Transforms are separated by data entry type (Feature vs Target) to maintain
+    clear separation of concerns and eliminate runtime filtering.
     """
     model: Any  # PyTorch model
     state_type: ModelStateType
     device: str
     shape_spec: Optional[ShapeSpec] = None
+    feature_transforms: Optional[Dict[str, TransformChain]] = None
+    target_transforms: Optional[Dict[str, TransformChain]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     error_info: Optional[Dict[str, Any]] = None
 
@@ -52,6 +61,8 @@ class ModelState:
             state_type=self.state_type,
             device=device,
             shape_spec=self.shape_spec,
+            feature_transforms=self.feature_transforms,
+            target_transforms=self.target_transforms,
             metadata=self.metadata,
             error_info=self.error_info
         )
@@ -63,6 +74,8 @@ class ModelState:
             state_type=ModelStateType.INFERENCE_READY,
             device=self.device,
             shape_spec=self.shape_spec,
+            feature_transforms=self.feature_transforms,
+            target_transforms=self.target_transforms,
             metadata=self.metadata,
             error_info=self.error_info
         )
@@ -74,6 +87,8 @@ class ModelState:
             state_type=ModelStateType.ERROR,
             device=self.device,
             shape_spec=self.shape_spec,
+            feature_transforms=self.feature_transforms,
+            target_transforms=self.target_transforms,
             metadata=self.metadata,
             error_info=error_info
         )
