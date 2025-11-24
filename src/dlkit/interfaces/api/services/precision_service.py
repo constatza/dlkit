@@ -261,6 +261,51 @@ class PrecisionService:
             "context_override": self._context.get_override(),
         }
 
+    def infer_precision_from_model(
+        self, model: torch.nn.Module
+    ) -> PrecisionStrategy | None:
+        """Infer precision strategy from a model's parameter dtype.
+
+        Inspects the model's parameters to determine the effective precision
+        being used. This is useful for inferring precision from loaded checkpoints
+        during inference.
+
+        Args:
+            model: PyTorch model to inspect.
+
+        Returns:
+            Inferred PrecisionStrategy based on model parameter dtype,
+            or None if model has no parameters or dtype cannot be determined.
+
+        Examples:
+            >>> service = PrecisionService()
+            >>> model = torch.nn.Linear(10, 5).to(torch.float32)
+            >>> precision = service.infer_precision_from_model(model)
+            >>> assert precision == PrecisionStrategy.FULL_32
+        """
+        try:
+            # Get first parameter's dtype
+            first_param = next(model.parameters(), None)
+            if first_param is None:
+                return None
+
+            param_dtype = first_param.dtype
+
+            # Map torch.dtype to PrecisionStrategy
+            # For inference, we use "true" precision modes (not mixed)
+            # since the model weights are already in the target dtype
+            dtype_to_strategy = {
+                torch.float64: PrecisionStrategy.FULL_64,
+                torch.float32: PrecisionStrategy.FULL_32,
+                torch.float16: PrecisionStrategy.TRUE_16,
+                torch.bfloat16: PrecisionStrategy.TRUE_BF16,
+            }
+
+            return dtype_to_strategy.get(param_dtype)
+
+        except (StopIteration, AttributeError):
+            return None
+
     def __repr__(self) -> str:
         """String representation for debugging."""
         context_info = f"context_override={self._context.get_override()}"

@@ -10,13 +10,15 @@ class TransformMixin(Callback):
     def __init__(self, settings: ModelComponentSettings) -> None:
         super().__init__()  # important for cooperative MRO
         feature_transforms = getattr(settings, "feature_transforms")
+        # Shape validation still useful for early error detection, but not passed to TransformChain
         feature_shape = None
         if getattr(settings, "shape", None) is not None:
             feature_shape = getattr(settings.shape, "x", None)
         if feature_shape is None:
             msg = "TransformMixin requires settings.shape.x to be defined"
             raise ValueError(msg)
-        self.features_chain = TransformChain(feature_transforms, input_shape=feature_shape)
+        # Shape will be inferred during fit() in on_train_start()
+        self.features_chain = TransformChain(feature_transforms)
         target_shape = None
         if getattr(settings, "shape", None) is not None:
             target_shape = getattr(settings.shape, "y", None)
@@ -26,8 +28,9 @@ class TransformMixin(Callback):
             raise ValueError(msg)
 
         target_transforms = getattr(settings, "target_transforms")
+        # Shape will be inferred during fit() in on_train_start()
         self.targets_chain = (
-            TransformChain(target_transforms, input_shape=target_shape or feature_shape)
+            TransformChain(target_transforms)
             if not is_autoencoder
             else self.features_chain
         )

@@ -10,7 +10,6 @@ import torch
 
 from dlkit.tools.io.arrays import load_array
 from dlkit.tools.config.data_entries import DataEntry, Feature, Target
-from dlkit.tools.config.transform_settings import TransformSettings
 from .interfaces import DataProvider
 
 
@@ -40,9 +39,9 @@ class FileDataProvider(DataProvider):
             entry (DataEntry): Data entry configuration to check.
 
         Returns:
-            bool: True if entry is Feature or Target, False otherwise.
+            bool: True if entry is Feature or Target with a file path, False otherwise.
         """
-        return isinstance(entry, (Feature, Target))
+        return isinstance(entry, (Feature, Target)) and entry.has_path()
 
     def load_data(self, entry: DataEntry, idx: int) -> torch.Tensor:
         """Load dataflow for a specific entry and index.
@@ -124,19 +123,6 @@ class FileDataProvider(DataProvider):
             self._raw_cache[entry.name] = raw_data
         except Exception as e:
             raise RuntimeError(f"Failed to load dataflow for {entry.name}: {e}") from e
-
-    def _apply_transforms(
-        self,
-        data: torch.Tensor,
-        transform_configs: list[TransformSettings],
-    ) -> torch.Tensor:
-        """No-op for transforms at provider level.
-
-        Transforms are applied in the processing pipeline. This method remains for
-        backward compatibility but returns the dataflow unchanged.
-        """
-        return data
-
 
 class ProviderRegistry:
     """Registry for managing dataflow providers using Registry Pattern.

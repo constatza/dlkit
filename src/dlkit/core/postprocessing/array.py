@@ -171,8 +171,13 @@ def to_plot_data(
                     result[k] = stack_batches(v, mode="list")
             else:
                 result[k] = to_numpy(v)
-        if isinstance(targets, Mapping):
-            result["targets"] = {k: to_numpy(v) for k, v in targets.items()}
+        # Add targets if provided
+        if targets is not None:
+            if isinstance(targets, Mapping):
+                result["targets"] = {k: to_numpy(v) for k, v in targets.items()}
+            else:
+                # Assume targets is an array-like object
+                result["tgt/y"] = to_numpy(targets)
         return result
 
     # Single object → numpy
