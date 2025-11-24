@@ -9,6 +9,7 @@ from typing import Any
 import torch
 from torch import Tensor
 from torch.nn import ModuleDict
+from loguru import logger
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
 from dlkit.tools.config.data_entries import DataEntry, Target
@@ -37,8 +38,12 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     standard training, validation, and test steps using the processing pipeline
     with full dlkit transform support.
 
+    Transforms are separated by data entry type (Feature vs Target) to maintain
+    clear separation of concerns and eliminate runtime filtering.
+
     Attributes:
-        fitted_transforms (torch.nn.ModuleDict): Persisted fitted transform chains per entry name.
+        fitted_feature_transforms (torch.nn.ModuleDict): Persisted feature transform chains.
+        fitted_target_transforms (torch.nn.ModuleDict): Persisted target transform chains.
         apply_feature_transforms (bool): Toggle for feature transform application during inference.
         apply_inverse_target_transforms (bool): Toggle for inverse target transform application.
 
@@ -80,7 +85,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
 
         # Initialize transform-specific attributes after super().__init__()
-        self.fitted_transforms: ModuleDict = ModuleDict()
+        # Separate Feature and Target transforms for clear separation of concerns
+        self.fitted_feature_transforms: ModuleDict = ModuleDict()
+        self.fitted_target_transforms: ModuleDict = ModuleDict()
         self.apply_feature_transforms: bool = True
         self.apply_inverse_target_transforms: bool = True
 
@@ -116,7 +123,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Build training steps
         self._extraction_step_train = DataExtractionStep(entry_configs)
         self._transform_step_train = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True
+            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
         )
         from dlkit.runtime.pipelines.pipeline import LossPairingStep
 
@@ -140,7 +147,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Build validation steps (share cache; disable fitting later in on_fit_start if needed)
         self._extraction_step_val = DataExtractionStep(entry_configs)
         self._transform_step_val = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True
+            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
         )
         invocation_val = ModelInvocationStep(
             model_invoker,
@@ -163,7 +170,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Test pipeline mirrors validation
         self._extraction_step_test = DataExtractionStep(entry_configs)
         self._transform_step_test = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True
+            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
         )
         invocation_test = ModelInvocationStep(
             model_invoker,
@@ -202,7 +209,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Build predict steps
         self._extraction_step_predict = DataExtractionStep(entry_configs)
         self._transform_step_predict = TransformApplicationStep(
-            entry_configs, cache=self._shared_transform_cache, fit_during_apply=False
+            entry_configs, cache=self._shared_transform_cache, fit_during_apply=False, wrapper=self
         )
 
         # Chain: extraction → transform → invocation
@@ -268,7 +275,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             cfg = entry_cfgs[name]
 
             # Build a single chain per entry and fit globally
-            chain = TransformChain(getattr(cfg, "transforms", ()), input_shape=tuple(stacked.shape))
+            # Shape will be inferred from stacked data during fit()
+            chain = TransformChain(getattr(cfg, "transforms", ()))
             if hasattr(chain, "fit"):
                 chain.fit(stacked)
 
@@ -277,8 +285,12 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             self._transform_step_val.cache[name] = chain  # type: ignore[attr-defined]
             self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
 
-            # Persist to module dict for checkpointing
-            self.fitted_transforms[name] = chain
+            # Persist to appropriate module dict based on data entry type
+            from dlkit.tools.config.data_entries import Feature, Target
+            if isinstance(cfg, Target):
+                self.fitted_target_transforms[name] = chain
+            elif isinstance(cfg, Feature):
+                self.fitted_feature_transforms[name] = chain
 
         # Disable any further fitting during application for all phases
         self._transform_step_train.set_fit_enabled(False)  # type: ignore[attr-defined]
@@ -290,7 +302,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         """Apply configured feature transforms to a features dict.
 
         Uses available transform chains from runtime caches (train/val/test) or from
-        the persisted ``fitted_transforms`` ModuleDict when caches are empty.
+        the persisted ``fitted_feature_transforms`` ModuleDict when caches are empty.
         Entries without a chain are returned unchanged.
         """
         out: dict[str, Tensor] = {}
@@ -305,8 +317,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                 chain = cache.get(name)
             except Exception:
                 chain = None
-            if chain is None and isinstance(self.fitted_transforms, ModuleDict):
-                fitted_chain = self.fitted_transforms.get(name)  # type: ignore[misc]
+            if chain is None and isinstance(self.fitted_feature_transforms, ModuleDict):
+                fitted_chain = self.fitted_feature_transforms.get(name)  # type: ignore[misc]
                 if fitted_chain is not None and callable(fitted_chain):
                     chain = fitted_chain
             if chain is not None and callable(chain):
@@ -318,7 +330,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     def target_transforms_inverse(self, tensors: dict[str, Tensor]) -> dict[str, Tensor]:
         """Apply inverse transforms for targets/predictions by entry name.
 
-        Looks up transform chains in caches or in ``fitted_transforms`` and applies
+        Looks up transform chains in caches or in ``fitted_target_transforms`` and applies
         ``inverse_transform`` when available using isinstance(IInvertibleTransform).
         Entries without an invertible chain are returned unchanged.
         """
@@ -334,8 +346,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                 chain = cache.get(name)
             except Exception:
                 chain = None
-            if chain is None and isinstance(self.fitted_transforms, ModuleDict):
-                fitted_chain = self.fitted_transforms.get(name)  # type: ignore[misc]
+            if chain is None and isinstance(self.fitted_target_transforms, ModuleDict):
+                fitted_chain = self.fitted_target_transforms.get(name)  # type: ignore[misc]
                 if fitted_chain is not None and isinstance(fitted_chain, IInvertibleTransform):
                     chain = fitted_chain
             if chain is not None and isinstance(chain, IInvertibleTransform):
@@ -347,33 +359,157 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                 out[name] = tensor
         return out
 
+    def _restore_fitted_transforms_from_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Manually restore fitted transforms ModuleDicts from checkpoint.
+
+        Lightning's load_state_dict with strict=False skips transform keys
+        when ModuleDicts are empty. This method reconstructs chains from
+        checkpoint state_dict using the original transform configurations.
+
+        Supports both legacy (fitted_transforms) and modern (fitted_feature_transforms/
+        fitted_target_transforms) checkpoint formats.
+        """
+        from dlkit.core.training.transforms.chain import TransformChain
+        from dlkit.tools.config.data_entries import Feature, Target
+
+        logger.info("Starting manual restoration of fitted transforms from checkpoint")
+
+        try:
+            state_dict = checkpoint.get("state_dict", {})
+            inference_metadata = checkpoint.get("inference_metadata", {})
+
+            # Check for modern format (separate feature/target transforms)
+            has_modern_format = any(k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.") for k in state_dict.keys())
+            has_legacy_format = any(k.startswith("fitted_transforms.") for k in state_dict.keys())
+
+            logger.info(f"Checkpoint format: modern={has_modern_format}, legacy={has_legacy_format}")
+
+            # Get entry configs from metadata (contains original transform settings)
+            entry_configs_data = inference_metadata.get("entry_configs", {})
+
+            # Helper function to process transform keys for a given prefix and target ModuleDict
+            def restore_transforms(prefix: str, target_module_dict: ModuleDict, entry_filter_func=None):
+                """Restore transforms with a specific prefix into target ModuleDict."""
+                transform_keys = [k for k in state_dict.keys() if k.startswith(f"{prefix}.")]
+
+                if not transform_keys:
+                    logger.debug(f"No {prefix} found in checkpoint")
+                    return
+
+                # Group keys by entry name
+                entry_states: dict[str, dict[str, Any]] = {}
+                for key in transform_keys:
+                    parts = key.split(".", 2)  # ['prefix', 'entry_name', 'rest...']
+                    if len(parts) >= 2:
+                        entry_name = parts[1]
+                        state_key = parts[2] if len(parts) > 2 else ""
+
+                        # Apply filter if provided
+                        entry_config = entry_configs_data.get(entry_name)
+                        if entry_filter_func and not entry_filter_func(entry_config):
+                            continue
+
+                        if entry_name not in entry_states:
+                            entry_states[entry_name] = {}
+
+                        if state_key:
+                            entry_states[entry_name][state_key] = state_dict[key]
+
+                # Reconstruct each TransformChain
+                for entry_name, entry_state in entry_states.items():
+                    try:
+                        entry_config = entry_configs_data.get(entry_name)
+                        transform_settings = []
+                        if entry_config and hasattr(entry_config, 'transforms'):
+                            transform_settings = entry_config.transforms
+                        elif entry_config and isinstance(entry_config, dict):
+                            transform_settings = entry_config.get('transforms', [])
+
+                        logger.info(f"Reconstructing {prefix} chain for '{entry_name}' with {len(transform_settings)} transforms")
+
+                        # Create chain with original settings, then load fitted state
+                        chain = TransformChain(transform_settings)
+                        result = chain.load_state_dict(entry_state, strict=False)
+
+                        # Manually register any unexpected keys as buffers
+                        if result.unexpected_keys:
+                            for unexpected_key in result.unexpected_keys:
+                                try:
+                                    parts = unexpected_key.split('.')
+                                    module = chain
+                                    for part in parts[:-1]:
+                                        if part.isdigit():
+                                            module = module[int(part)]
+                                        else:
+                                            module = getattr(module, part)
+                                    buffer_name = parts[-1]
+                                    buffer_value = entry_state[unexpected_key]
+                                    module.register_buffer(buffer_name, buffer_value)
+                                    logger.debug(f"Manually registered buffer: {unexpected_key}")
+                                except Exception as e:
+                                    logger.warning(f"Could not register unexpected key {unexpected_key}: {e}")
+
+                        target_module_dict[entry_name] = chain
+                        logger.info(f"Successfully restored {prefix} chain for '{entry_name}'")
+                    except Exception as e:
+                        logger.error(f"Failed to restore {prefix} chain for '{entry_name}': {e}")
+
+            # Restore based on checkpoint format
+            if has_modern_format:
+                restore_transforms("fitted_feature_transforms", self.fitted_feature_transforms,
+                                 entry_filter_func=lambda cfg: isinstance(cfg, Feature))
+                restore_transforms("fitted_target_transforms", self.fitted_target_transforms,
+                                 entry_filter_func=lambda cfg: isinstance(cfg, Target))
+            elif has_legacy_format:
+                # Legacy format - separate based on entry_configs
+                logger.info("Loading legacy format, separating transforms by entry type")
+                restore_transforms("fitted_transforms", self.fitted_feature_transforms,
+                                 entry_filter_func=lambda cfg: isinstance(cfg, Feature))
+                restore_transforms("fitted_transforms", self.fitted_target_transforms,
+                                 entry_filter_func=lambda cfg: isinstance(cfg, Target))
+            else:
+                logger.debug("No fitted transforms found in checkpoint")
+
+        except Exception as e:
+            logger.warning(f"Failed to restore fitted_transforms from checkpoint: {e}")
+
     def _hydrate_transforms_from_module_dict(self) -> None:
-        """Populate transform caches from persisted ModuleDict and disable fitting.
+        """Populate transform caches from persisted ModuleDicts and disable fitting.
 
         Enables inference-only runs with just a predict_dataloader by reusing transform
-        chains loaded from checkpoint.
+        chains loaded from checkpoint. Hydrates both feature and target transforms.
         """
         try:
-            if (
-                not isinstance(self.fitted_transforms, ModuleDict)
-                or len(self.fitted_transforms) == 0
-            ):
+            has_feature_transforms = (
+                isinstance(self.fitted_feature_transforms, ModuleDict)
+                and len(self.fitted_feature_transforms) > 0
+            )
+            has_target_transforms = (
+                isinstance(self.fitted_target_transforms, ModuleDict)
+                and len(self.fitted_target_transforms) > 0
+            )
+
+            if not has_feature_transforms and not has_target_transforms:
                 return
         except Exception:
             return
 
-        # Copy into all phase caches and disable fitting
-        for name, chain in self.fitted_transforms.items():
-            # chain is a TransformChain module
-            if hasattr(self, '_transform_step_train'):
-                self._transform_step_train.cache[name] = chain  # type: ignore[attr-defined]
-            if hasattr(self, '_transform_step_val'):
-                self._transform_step_val.cache[name] = chain  # type: ignore[attr-defined]
-            if hasattr(self, '_transform_step_test'):
-                self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
-            # Include predict pipeline in transform chain hydration
-            if hasattr(self, '_transform_step_predict'):
-                self._transform_step_predict.cache[name] = chain  # type: ignore[attr-defined]
+        # Helper to copy transforms into caches
+        def hydrate_cache(transforms_dict: ModuleDict):
+            for name, chain in transforms_dict.items():
+                if hasattr(self, '_transform_step_train'):
+                    self._transform_step_train.cache[name] = chain  # type: ignore[attr-defined]
+                if hasattr(self, '_transform_step_val'):
+                    self._transform_step_val.cache[name] = chain  # type: ignore[attr-defined]
+                if hasattr(self, '_transform_step_test'):
+                    self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
+                # Include predict pipeline in transform chain hydration
+                if hasattr(self, '_transform_step_predict'):
+                    self._transform_step_predict.cache[name] = chain  # type: ignore[attr-defined]
+
+        # Hydrate both feature and target transforms
+        hydrate_cache(self.fitted_feature_transforms)
+        hydrate_cache(self.fitted_target_transforms)
 
         # Disable fitting during application for all phases
         if hasattr(self, '_transform_step_train'):
@@ -385,29 +521,55 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Predict pipeline already has fit disabled by design
 
     def _persist_transform_caches(self) -> None:
-        """Persist any cached transform chains into the ModuleDict for checkpointing.
+        """Persist cached transform chains into ModuleDicts for checkpointing.
 
-        Collects chains from train/val/test caches, and registers missing ones under
-        ``self.fitted_transforms`` so they become part of the Lightning module state.
+        Collects chains from train/val/test caches and registers them in the
+        appropriate ModuleDict (feature vs target) based on entry_configs.
         """
-        try:
-            caches = []
-            for attr in ("_transform_step_train", "_transform_step_val", "_transform_step_test", "_transform_step_predict"):
-                step = getattr(self, attr, None)
-                if step is not None and hasattr(step, "cache"):
-                    caches.append(step.cache)
-            if not caches:
-                return
-            for cache in caches:
-                for name, chain in cache.items():
-                    try:
-                        if name not in self.fitted_transforms:
-                            self.fitted_transforms[name] = chain
-                    except Exception:
-                        # Be resilient; this is a best-effort registration
-                        pass
-        except Exception:
+        from dlkit.tools.config.data_entries import Feature, Target
+
+        # Guard: No entry configs, can't separate
+        if not self._entry_configs:
             return
+
+        # Collect all caches
+        caches = self._collect_transform_caches()
+        if not caches:
+            return
+
+        # Persist each chain to appropriate ModuleDict
+        for cache in caches:
+            for name, chain in cache.items():
+                self._persist_single_chain(name, chain)
+
+    def _collect_transform_caches(self) -> list[dict]:
+        """Collect transform caches from all pipeline steps."""
+        caches = []
+        for attr in ("_transform_step_train", "_transform_step_val", "_transform_step_test", "_transform_step_predict"):
+            step = getattr(self, attr, None)
+            if step is not None and hasattr(step, "cache"):
+                caches.append(step.cache)
+        return caches
+
+    def _persist_single_chain(self, name: str, chain: Any) -> None:
+        """Persist a single transform chain to appropriate ModuleDict."""
+        from dlkit.tools.config.data_entries import Feature, Target
+
+        try:
+            entry_config = self._entry_configs.get(name)
+            if not entry_config:
+                return
+
+            # Route to appropriate ModuleDict based on type
+            if isinstance(entry_config, Target):
+                if name not in self.fitted_target_transforms:
+                    self.fitted_target_transforms[name] = chain
+            elif isinstance(entry_config, Feature):
+                if name not in self.fitted_feature_transforms:
+                    self.fitted_feature_transforms[name] = chain
+        except Exception:
+            # Be resilient; this is best-effort registration
+            pass
 
     def on_predict_start(self) -> None:
         """Hydrate caches when loading from checkpoint for inference.
@@ -432,14 +594,44 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         super().on_save_checkpoint(checkpoint)
 
         # Save inference metadata for inference
+        feature_names = [name for name, cfg in self._entry_configs.items() if not isinstance(cfg, Target)]
+        target_names = [name for name, cfg in self._entry_configs.items() if isinstance(cfg, Target)]
+        feature_transform_names = list(self.fitted_feature_transforms.keys()) if self.fitted_feature_transforms else []
+        target_transform_names = list(self.fitted_target_transforms.keys()) if self.fitted_target_transforms else []
+
         checkpoint["inference_metadata"] = {
             "entry_configs": self._entry_configs,
             "wrapper_settings": self._wrapper_settings.model_dump() if hasattr(self._wrapper_settings, 'model_dump') else dict(self._wrapper_settings),
-            "feature_names": [name for name, cfg in self._entry_configs.items() if not isinstance(cfg, Target)],
-            "target_names": [name for name, cfg in self._entry_configs.items() if isinstance(cfg, Target)],
-            "transform_names": list(self.fitted_transforms.keys()) if self.fitted_transforms else [],
+            "feature_names": feature_names,
+            "target_names": target_names,
+            "feature_transform_names": feature_transform_names,
+            "target_transform_names": target_transform_names,
             "model_shape": getattr(self, 'shape', None),
         }
+
+    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
+        """Override load_state_dict to ensure fitted_transforms are restored.
+
+        Handles both Lightning checkpoint loading and direct torch.load scenarios.
+        """
+        # First, let PyTorch/Lightning load what it can
+        result = super().load_state_dict(state_dict, strict=strict, assign=assign)
+
+        # Then manually restore fitted_transforms (which may have been skipped)
+        # Create a minimal checkpoint dict for restoration
+        # Use self._entry_configs if available (wrapper already has this from __init__)
+        checkpoint = {
+            "state_dict": state_dict,
+            "inference_metadata": {
+                "entry_configs": self._entry_configs if hasattr(self, '_entry_configs') else {}
+            }
+        }
+        self._restore_fitted_transforms_from_checkpoint(checkpoint)
+
+        # Hydrate caches from the restored transforms
+        self._hydrate_transforms_from_module_dict()
+
+        return result
 
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Handle checkpoint loading.
@@ -450,7 +642,10 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # Call base class to validate version and restore metadata
         super().on_load_checkpoint(checkpoint)
 
-        # Lightning will automatically load the fitted_transforms ModuleDict
+        # Manually restore fitted_transforms from checkpoint
+        # Lightning's load_state_dict with strict=False skips these keys if ModuleDict is empty
+        self._restore_fitted_transforms_from_checkpoint(checkpoint)
+
         # Then hydrate caches from it
         self._hydrate_transforms_from_module_dict()
 
