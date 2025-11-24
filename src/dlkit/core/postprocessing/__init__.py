@@ -28,10 +28,10 @@ def to_plot_data(preds: Any, targets: Any | None = None) -> Any:
     if isinstance(preds, list) and preds:
         if any(is_graph_output(p) for p in preds):
             return to_plot_graph_data(preds, targets)
-        return to_plot_array_data(preds)
+        return to_plot_array_data(preds, targets)
     if is_graph_output(preds):
         return to_plot_graph_data(preds, targets)
-    return to_plot_array_data(preds)
+    return to_plot_array_data(preds, targets)
 
 
 __all__ = [

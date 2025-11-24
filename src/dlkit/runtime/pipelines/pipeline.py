@@ -346,6 +346,7 @@ class TransformApplicationStep(ProcessingStep):
         *,
         cache: dict[str, TransformChain] | None = None,
         fit_during_apply: bool = True,
+        wrapper: "ProcessingLightningWrapper | None" = None,
     ):
         super().__init__(next_step)
         self._entry_configs = entry_configs
@@ -355,6 +356,8 @@ class TransformApplicationStep(ProcessingStep):
         self._enable_fit: bool = fit_during_apply
         # Allow disabling transform application entirely (runtime toggle)
         self._enabled: bool = True
+        # Reference to wrapper for accessing fitted_transforms (single source of truth)
+        self._wrapper = wrapper
 
     def process(self, context: ProcessingContext) -> ProcessingContext:
         # Apply transforms to features and targets if configured
@@ -387,11 +390,71 @@ class TransformApplicationStep(ProcessingStep):
     def _get_or_build_transforms(
         self, name: str, entry: DataEntry, tensor: torch.Tensor
     ) -> TransformChain:
+        """Get or build a transform chain for the given entry.
+
+        Lookup order:
+        1. Check local cache (for performance during training)
+        2. Check wrapper.fitted_transforms (single source of truth for persistence)
+        3. Create new chain (fallback with warnings)
+
+        Args:
+            name: Name of the entry (e.g., "features").
+            entry: DataEntry configuration containing transform settings.
+            tensor: Tensor to get shape from (for validation).
+
+        Returns:
+            TransformChain instance for the entry.
+        """
+        # First check local cache (fast path during training)
         cached = self._transform_cache.get(name)
         if cached is not None:
             return cached
-        # Build a TransformChain for this entry using its configured settings
-        chain = TransformChain(entry.transforms, input_shape=tuple(tensor.shape))
+
+        # Second, check wrapper's fitted transforms (loaded from checkpoint)
+        # Try both feature and target transforms (separated by type)
+        if self._wrapper is not None:
+            fitted_chain = None
+
+            # Check feature transforms first
+            if hasattr(self._wrapper, 'fitted_feature_transforms'):
+                try:
+                    fitted_chain = self._wrapper.fitted_feature_transforms[name]
+                    logger.debug(f"Using fitted feature transform chain for '{name}'")
+                except KeyError:
+                    pass
+
+            # If not found in features, check target transforms
+            if fitted_chain is None and hasattr(self._wrapper, 'fitted_target_transforms'):
+                try:
+                    fitted_chain = self._wrapper.fitted_target_transforms[name]
+                    logger.debug(f"Using fitted target transform chain for '{name}'")
+                except KeyError:
+                    pass
+
+            # If found in either, cache and return
+            if fitted_chain is not None:
+                self._transform_cache[name] = fitted_chain
+                return fitted_chain
+
+            # Not found in either - log available keys for debugging
+            feature_keys = list(self._wrapper.fitted_feature_transforms.keys()) if hasattr(self._wrapper, 'fitted_feature_transforms') else []
+            target_keys = list(self._wrapper.fitted_target_transforms.keys()) if hasattr(self._wrapper, 'fitted_target_transforms') else []
+            logger.warning(
+                f"Transform chain '{name}' not found in wrapper transforms. "
+                f"Available: features={feature_keys}, targets={target_keys}"
+            )
+
+        # FALLBACK: Build new chain (should only happen during initial training)
+        logger.warning(
+            f"⚠️  CREATING NEW UNFITTED TRANSFORM CHAIN for '{name}' ⚠️\n"
+            f"   This should only happen during initial training.\n"
+            f"   If this occurs during inference/prediction after loading a checkpoint,\n"
+            f"   it indicates a bug in transform persistence/restoration.\n"
+            f"   Context: wrapper={self._wrapper is not None}, "
+            f"cache_empty={len(self._transform_cache)==0}, "
+            f"fitted_transforms={'present' if self._wrapper and hasattr(self._wrapper, 'fitted_transforms') else 'missing'}"
+        )
+        chain = TransformChain(entry.transforms)
         self._transform_cache[name] = chain
         return chain
 
