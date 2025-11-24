@@ -52,11 +52,16 @@ class TestBasicIntegration:
             inference_settings: Pre-configured inference settings with dataset and checkpoint.
             minimal_model_checkpoint: Pre-created model checkpoint for inference.
         """
-        # Act - Run inference using the new API
+        # Act - Run inference using the new stateful predictor API
         # Convert settings to inputs
         test_inputs = {"x": torch.randn(5, 4), "y": torch.randn(5, 1)}  # Basic test inputs
-        inference_result = dlkit.infer(checkpoint_path=minimal_model_checkpoint, inputs=test_inputs)
 
-        # Assert - Validate results
-        assert inference_result.duration_seconds >= 0
-        assert inference_result.predictions is not None
+        # Use the new predictor API
+        predictor = dlkit.load_predictor(checkpoint_path=minimal_model_checkpoint, device="cpu")
+        try:
+            predictions = predictor.predict(test_inputs)
+
+            # Assert - Validate results
+            assert predictions is not None
+        finally:
+            predictor.unload()

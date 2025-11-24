@@ -9,7 +9,7 @@ from pathlib import Path
 import tomllib
 
 # Surface primary application APIs
-from .interfaces.api import infer, optimize, train, validate_config
+from .interfaces.api import load_predictor, optimize, train, validate_config
 
 # Provide convenient access to configuration helpers and registries
 from .tools.config.general_settings import GeneralSettings
@@ -56,7 +56,7 @@ def _resolve_version() -> str:
 __all__ = [
     "__version__",
     "train",
-    "infer",
+    "load_predictor",  # NEW: Stateful predictor API
     "optimize",
     "validate_config",
     "GeneralSettings",

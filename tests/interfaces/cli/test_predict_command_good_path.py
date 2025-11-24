@@ -1,9 +1,9 @@
-"""Tests for prediction command (Lightning-based prediction with training configs)."""
+"""Tests for prediction command (stateful predictor-based inference with training configs)."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
 from typer.testing import CliRunner
 
@@ -14,12 +14,12 @@ from dlkit.tools.config import GeneralSettings
 
 class TestPredictCommand:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.api_predict_with_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_predictor")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_predict_with_valid_inputs_succeeds(
         self,
         mock_present_result: Mock,
-        mock_api_predict: Mock,
+        mock_load_predictor: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
@@ -28,7 +28,11 @@ class TestPredictCommand:
         mock_successful_inference_result,
     ) -> None:
         mock_load_config.return_value = sample_settings
-        mock_api_predict.return_value = mock_successful_inference_result
+
+        # Create a mock predictor that returns batch results
+        mock_predictor = MagicMock()
+        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_load_predictor.return_value = mock_predictor
 
         result = cli_runner.invoke(
             predict_app, [str(sample_config_path), str(sample_checkpoint_path)]
@@ -37,7 +41,9 @@ class TestPredictCommand:
         assert result.exit_code == 0
 
         mock_load_config.assert_called_once()
-        mock_api_predict.assert_called_once()
+        mock_load_predictor.assert_called_once()
+        mock_predictor.predict_from_config.assert_called_once()
+        mock_predictor.unload.assert_called_once()
         mock_present_result.assert_called_once()
 
     def test_infer_with_missing_checkpoint_fails(
@@ -71,10 +77,10 @@ class TestPredictCommand:
         mock_load_config.assert_called_once()
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.api_predict_with_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_predictor")
     def test_infer_with_parameter_overrides(
         self,
-        mock_api_predict: Mock,
+        mock_load_predictor: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
@@ -84,7 +90,11 @@ class TestPredictCommand:
         tmp_path: Path,
     ) -> None:
         mock_load_config.return_value = sample_settings
-        mock_api_predict.return_value = mock_successful_inference_result
+
+        # Create a mock predictor that returns batch results
+        mock_predictor = MagicMock()
+        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_load_predictor.return_value = mock_predictor
 
         output_dir = tmp_path / "custom_output"
         data_dir = tmp_path / "custom_data"
@@ -179,12 +189,12 @@ class TestPredictMainCallback:
 
 class TestPredictHelperFunctions:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.api_predict_with_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_predictor")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_saves_predictions_by_default(
         self,
         mock_present_result: Mock,
-        mock_api_predict: Mock,
+        mock_load_predictor: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
@@ -194,7 +204,11 @@ class TestPredictHelperFunctions:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
         mock_load_config.return_value = sample_settings
-        mock_api_predict.return_value = mock_successful_inference_result
+
+        # Create a mock predictor that returns batch results
+        mock_predictor = MagicMock()
+        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_load_predictor.return_value = mock_predictor
 
         _run_inference_impl(config_path=sample_config_path, checkpoint=sample_checkpoint_path)
 
@@ -203,12 +217,12 @@ class TestPredictHelperFunctions:
         assert kwargs.get("save_predictions", True) is True
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.api_predict_with_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_predictor")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_can_disable_prediction_saving(
         self,
         mock_present_result: Mock,
-        mock_api_predict: Mock,
+        mock_load_predictor: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
@@ -218,7 +232,11 @@ class TestPredictHelperFunctions:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
         mock_load_config.return_value = sample_settings
-        mock_api_predict.return_value = mock_successful_inference_result
+
+        # Create a mock predictor that returns batch results
+        mock_predictor = MagicMock()
+        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_load_predictor.return_value = mock_predictor
 
         _run_inference_impl(
             config_path=sample_config_path,

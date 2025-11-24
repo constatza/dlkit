@@ -42,10 +42,10 @@ def load_config(
             )
 
         # Load settings with workflow-specific partial loading for optimal performance
-        if workflow_type == "training":
+        # Note: load_inference_settings was removed - inference now uses training settings
+        # which include all necessary sections for dataset/dataloader configuration
+        if workflow_type == "training" or workflow_type == "inference":
             load_fn = load_training_settings
-        elif workflow_type == "inference":
-            load_fn = load_inference_settings
         else:
             # For general loading, default to training workflow since it has all sections
             # This ensures compatibility with configs that have MLFLOW/OPTUNA sections
