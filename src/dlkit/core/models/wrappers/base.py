@@ -241,6 +241,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             # Exclude base fields and checkpoint
             params = {}
             if hasattr(settings, 'model_dump'):
+                # Use exclude_none=False to keep None values (important for reconstruction)
+                # Don't use mode='json' as it can't serialize ABCMeta types that may be in settings
                 all_fields = settings.model_dump()
                 excluded = {'name', 'module_path', 'checkpoint'}
                 params = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
@@ -252,6 +254,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 'class_name': class_name
             }
         except Exception:
+            # Return empty dict on serialization failure - checkpoint will be valid
+            # but may not support automatic inference without explicit model_settings
             return {}
 
     def _serialize_entry_configs(self) -> dict[str, Any]:

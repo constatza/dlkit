@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+import dlkit
 
 import numpy as np
 import torch
+import pytest
 from lightning.pytorch import Trainer
 from torch import nn, Tensor
 
@@ -149,6 +153,45 @@ def _basic_trainer() -> Trainer:
     )
 
 
+def _extract_prediction_tensor(result: Any) -> torch.Tensor:
+    """Retrieve the first tensor prediction from nested inference outputs."""
+    queue: list[Any] = [result.predictions]
+    while queue:
+        current = queue.pop(0)
+        if torch.is_tensor(current):
+            return current
+        if isinstance(current, dict):
+            queue.extend(current.values())
+    raise AssertionError("Inference result did not contain tensor predictions")
+
+
+@pytest.fixture(scope="module")
+def predictor_transform_setup(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """Train a lightweight checkpoint with fitted transforms for reuse across tests."""
+    tmp_dir = Path(tmp_path_factory.mktemp("predictor_transform_space"))
+    fx, fy, X, Y = _make_data(tmp_dir)
+    dm = _build_datamodule(fx, fy)
+    entries = _entry_configs(fx, fy)
+    wrapper = _build_wrapper(entries)
+    trainer = _basic_trainer()
+
+    trainer.fit(wrapper, datamodule=dm)
+    ckpt_path = tmp_dir / "predictor_space.ckpt"
+    trainer.save_checkpoint(ckpt_path)
+
+    raw_features = torch.from_numpy(X).float()
+    raw_targets = torch.from_numpy(Y).float()
+    normalized_features = wrapper.feature_transforms({"x": raw_features})["x"]
+
+    return {
+        "checkpoint": ckpt_path,
+        "raw_features": raw_features,
+        "raw_targets": raw_targets,
+        "normalized_features": normalized_features,
+        "wrapper": wrapper,
+    }
+
+
 def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) -> None:
     # Arrange
     fx, fy, X, Y = _make_data(tmp_path)
@@ -227,14 +270,14 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     # Use raw data (before transforms) as the new API should handle transforms internally
     test_inputs = {"x": torch.from_numpy(X[:8]).float()}  # First 8 samples
 
-    # Act: Test the high-level dlkit.infer() API
-    result = dlkit.infer(
+    # Act: Test the high-level dlkit.load_predictor() API
+    with dlkit.load_predictor(
         checkpoint_path=ckpt_path,
-        inputs=test_inputs,
         batch_size=4,
         device="cpu",
         apply_transforms=True
-    )
+    ) as predictor:
+        result = predictor.predict(test_inputs)
 
     # Assert: Verify the result structure and content
     assert hasattr(result, 'predictions')
@@ -259,12 +302,12 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     assert not torch.allclose(predictions, torch.zeros_like(predictions))
 
     # Test with different batch size
-    result_batch16 = dlkit.infer(
+    with dlkit.load_predictor(
         checkpoint_path=ckpt_path,
-        inputs=test_inputs,
         batch_size=16,  # Larger than input size
         device="cpu"
-    )
+    ) as predictor:
+        result_batch16 = predictor.predict(test_inputs)
 
     # Should get same predictions regardless of batch size
     if "predictions" in result.predictions:
@@ -284,16 +327,85 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     assert torch.allclose(pred1, pred2, atol=1e-6)
 
     # Test with transforms disabled
-    result_no_transforms = dlkit.infer(
+    with dlkit.load_predictor(
         checkpoint_path=ckpt_path,
-        inputs=test_inputs,
         apply_transforms=False
-    )
+    ) as predictor:
+        result_no_transforms = predictor.predict(test_inputs)
 
     # Test with transforms disabled should succeed
     # Note: The actual difference may be minimal with identity transforms in this test
     assert result_no_transforms is not None
     assert result_no_transforms.predictions is not None
+
+
+def test_predictor_returns_original_space_by_default(
+    predictor_transform_setup: dict[str, Any]
+) -> None:
+    """load_predictor must apply transforms so outputs match raw targets."""
+    raw_batch = predictor_transform_setup["raw_features"][:8].clone()
+    expected = predictor_transform_setup["raw_targets"][:8]
+
+    with dlkit.load_predictor(
+        checkpoint_path=predictor_transform_setup["checkpoint"],
+        batch_size=4,
+        device="cpu",
+        apply_transforms=True,
+    ) as predictor:
+        result = predictor.predict({"x": raw_batch})
+
+    predictions = _extract_prediction_tensor(result)
+    assert torch.allclose(predictions, expected, atol=1e-6)
+
+
+def test_predictor_accepts_pretransformed_inputs_when_disabled(
+    predictor_transform_setup: dict[str, Any]
+) -> None:
+    """Users can supply normalized tensors when apply_transforms=False."""
+    normalized_batch = predictor_transform_setup["normalized_features"][:8].clone()
+
+    with dlkit.load_predictor(
+        checkpoint_path=predictor_transform_setup["checkpoint"],
+        batch_size=4,
+        device="cpu",
+        apply_transforms=False,
+    ) as predictor:
+        result = predictor.predict({"x": normalized_batch})
+
+    predictions = _extract_prediction_tensor(result)
+    assert torch.allclose(predictions, normalized_batch, atol=1e-6)
+
+
+def test_manual_inverse_matches_default_path(
+    predictor_transform_setup: dict[str, Any]
+) -> None:
+    """Manual transform handling should match builtin behavior."""
+    raw_batch = predictor_transform_setup["raw_features"][:8].clone()
+    normalized_batch = predictor_transform_setup["normalized_features"][:8].clone()
+    wrapper: StandardLightningWrapper = predictor_transform_setup["wrapper"]
+
+    with dlkit.load_predictor(
+        checkpoint_path=predictor_transform_setup["checkpoint"],
+        batch_size=4,
+        device="cpu",
+        apply_transforms=True,
+    ) as predictor_default:
+        default_result = predictor_default.predict({"x": raw_batch})
+
+    default_predictions = _extract_prediction_tensor(default_result)
+
+    with dlkit.load_predictor(
+        checkpoint_path=predictor_transform_setup["checkpoint"],
+        batch_size=4,
+        device="cpu",
+        apply_transforms=False,
+    ) as predictor_manual:
+        manual_result = predictor_manual.predict({"x": normalized_batch})
+
+    manual_predictions = _extract_prediction_tensor(manual_result)
+    manual_predictions_raw = wrapper.target_transforms_inverse({"y": manual_predictions})["y"]
+
+    assert torch.allclose(manual_predictions_raw, default_predictions, atol=1e-6)
 
 
 def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
