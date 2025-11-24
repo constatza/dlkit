@@ -170,8 +170,11 @@ processed/
 interim/
 external/
 temp/
+tmp/
 **/mlflow/
 **/mlruns/
+\.?uv*/
+
 *.zip
 *.tar
 *.gz
@@ -182,7 +185,6 @@ temp/
 *.xlsx
 *.db
 *.dbf
-/.idea
 
 *.ckpt
 *.png
@@ -200,7 +202,6 @@ mlartifacts/
 AGENTS.md
 CLAUDE.md
 
-.qodo
 .codiumai.toml
 # Allow example dataflow under examples/minimal_e2e
 !examples/minimal_e2e/data/*.csv
