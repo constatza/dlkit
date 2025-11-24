@@ -249,6 +249,60 @@ These guarantees are covered by the integration tests in `tests/integration/test
 
 ## Breaking Changes
 
+### Transform API Changes (v2.1+)
+
+**Breaking Change: `input_shape` Parameter Removed**
+
+All transforms have been refactored to eliminate the redundant `input_shape` parameter. Transforms now integrate with the existing `shape_spec` system, providing a single source of truth for shape information.
+
+**What Changed:**
+- ❌ `Transform.__init__(input_shape=...)` - removed parameter
+- ❌ `MinMaxScaler(dim=0, input_shape=(32, 64))` - old API
+- ❌ `TransformChain(settings, input_shape=(32, 64))` - old API
+
+**New Shape-Aware API:**
+- ✅ Transforms support **lazy shape allocation** - no shape needed at construction
+- ✅ Shape-aware transforms implement `IShapeAwareTransform` with `configure_shape()` method
+- ✅ Shapes automatically inferred during `fit()` or provided via `shape_spec`
+- ✅ `TransformChain` uses analytical shape inference (no dummy tensor execution)
+
+**Migration Examples:**
+
+```python
+# ❌ OLD (removed)
+from dlkit.core.training.transforms import MinMaxScaler, PCA
+scaler = MinMaxScaler(dim=0, input_shape=(32, 64))
+pca = PCA(n_components=10, input_shape=(32, 64))
+
+# ✅ NEW (lazy allocation)
+scaler = MinMaxScaler(dim=0)  # Shape inferred during fit()
+pca = PCA(n_components=10)
+scaler.fit(train_data)  # Automatically allocates buffers from data.shape
+pca.fit(train_data)
+
+# ✅ NEW (with shape_spec - used internally by pipelines)
+from dlkit.core.shape_specs import create_shape_spec
+shape_spec = create_shape_spec({"features": (32, 64)})
+scaler = MinMaxScaler(dim=0)
+scaler.configure_shape(shape_spec, "features")  # Eager allocation
+```
+
+**Configuration Files**: No changes needed - TOML configs remain the same. The `shape_spec` is handled automatically by the training system.
+
+**Why the Change?**
+
+- **Single source of truth**: Eliminates redundant shape tracking between transforms and `shape_spec`
+- **Better performance**: Analytical shape inference replaces dummy tensor execution
+- **Cleaner API**: Transforms are truly composable without shape boilerplate
+- **Architectural alignment**: Follows same pattern as `ShapeAwareModel` from neural network layer
+
+**New Error Types:**
+- `TransformNotFittedError` - raised when using unfitted transform (replaces generic `RuntimeError`)
+- `ShapeMismatchError` - raised when shapes are incompatible
+- `TransformChainError` - wraps errors from transform chains with context
+
+---
+
 ### Inference API Changes (v2.0+)
 
 **Removed APIs**:

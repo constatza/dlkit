@@ -15,7 +15,6 @@ import torch
 from dlkit.runtime.pipelines.interfaces import DataProvider
 from dlkit.runtime.pipelines.providers import FileDataProvider
 from dlkit.tools.config.data_entries import DataEntry, Feature, Target, Latent, Prediction
-from dlkit.tools.config.transform_settings import TransformSettings
 
 
 # Test dataflow constants
@@ -142,20 +141,6 @@ def prediction_entry() -> Prediction:
     return Prediction(
         name="test_prediction", target_name="test_target", dtype=TEST_DTYPE, write=True
     )
-
-
-@pytest.fixture
-def transform_settings() -> list[TransformSettings]:
-    """Create sample transform settings for testing.
-
-    Returns:
-        list[TransformSettings]: Sample transform configurations
-    """
-    return [
-        TransformSettings(
-            name="TestTransform", module_path="dlkit.core.training.transforms.test", dim=0
-        )
-    ]
 
 
 @pytest.fixture

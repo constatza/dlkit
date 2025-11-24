@@ -36,7 +36,6 @@ from dlkit.tools.config import GeneralSettings
 from .functions import (
     # Core workflow functions
     train,
-    predict_with_config,  # NEW: Lightning-based simple prediction
     optimize,
     # Configuration functions
     validate_config,
@@ -46,18 +45,16 @@ from .functions import (
     execute,
 )
 
-# BREAKING CHANGE: Import new inference API
+# NEW INFERENCE API: Stateful predictors
 from dlkit.interfaces.inference import (
-    infer,
-    predict,
-    InferenceInput,
-    InferenceConfig,
+    load_predictor,
+    validate_checkpoint,
+    get_checkpoint_info,
 )
 
 # Initialize command dispatcher with all available commands
 _dispatcher = get_dispatcher()
 _dispatcher.register_command("train", TrainCommand)
-_dispatcher.register_command("infer", InferenceCommand)
 _dispatcher.register_command("optimize", OptimizationCommand)
 _dispatcher.register_command("validate_config", ValidationCommand)
 _dispatcher.register_command("generate_template", GenerateTemplateCommand)
@@ -68,14 +65,12 @@ __all__ = [
     # Main workflow functions
     "execute",  # Unified intelligent workflow function
     "train",
-    "infer",  # BREAKING CHANGE: Now inference only
-    "predict_with_config",  # NEW: Lightning-based simple prediction
+    "load_predictor",  # NEW: Primary inference API
     "optimize",
     "validate_config",
-    # NEW: Inference API
-    "predict",
-    "InferenceInput",
-    "InferenceConfig",
+    # Inference utilities
+    "validate_checkpoint",
+    "get_checkpoint_info",
     # Configuration functions
     "generate_template",
     "validate_template",
@@ -88,7 +83,6 @@ __all__ = [
     "ConfigurationError",
     "StrategyError",
     "GenerateTemplateCommandInput",
-    "InferenceCommandInput",  # Legacy - may be removed
     "OptimizationCommandInput",
     "TrainCommandInput",
     "ValidateTemplateCommandInput",

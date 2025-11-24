@@ -221,10 +221,13 @@ class TestABCShapeArchitecture:
         # Step 3: Create dummy input data for inference
         inputs = {"X": torch.randn(10, 4)}  # Batch of 10 samples, 4 features (matching training data)
 
-        # Step 4: Run inference using new API (should load shapes automatically)
-        inference_result = dlkit.infer(checkpoint_path, inputs)
-        assert inference_result is not None
-        assert inference_result.predictions is not None
+        # Step 4: Run inference using new stateful predictor API (should load shapes automatically)
+        predictor = dlkit.load_predictor(checkpoint_path, device="cpu")
+        try:
+            predictions = predictor.predict(inputs)
+            assert predictions is not None
+        finally:
+            predictor.unload()
 
         # QUALITY CHECK 6: Verify weights persisted correctly (not random)
         # Load checkpoint again to verify the inference API loaded the same weights

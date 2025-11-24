@@ -6,8 +6,8 @@ Usage patterns:
   `CHECKPOINT` as the same value or omit the CLI argument in future versions.
 
 Notes:
-- This uses Lightning-based prediction with training configurations and datasets
-- For direct inference without config files, use the Python API: dlkit.interfaces.api.infer()
+- This uses stateful predictor-based inference with training configurations and datasets
+- For direct inference without config files, use the Python API: dlkit.load_predictor()
 - Today the CLI requires a `CHECKPOINT` argument; if your config contains
   `[MODEL].checkpoint`, the CLI argument will take precedence when provided.
   This keeps behavior explicit while remaining compatible with common practice.
@@ -21,7 +21,7 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.interfaces.api import predict_with_config as api_predict_with_config
+from dlkit.interfaces.inference.api import load_predictor
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -106,24 +106,77 @@ def _run_inference_impl(
 
         console.print(f"🔮 Loading model from checkpoint: {effective_checkpoint}")
 
-        # Execute inference with overrides
+        # Execute inference using new stateful predictor API
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Running inference...", total=None)
-            inference_result = api_predict_with_config(
-                training_settings=settings,
-                checkpoint_path=effective_checkpoint,
-                root_dir=root_dir,
-                output_dir=output_dir,
-                data_dir=data_dir,
-                batch_size=batch_size,
-            )
-            progress.remove_task(task)
+            # Load predictor once
+            load_task = progress.add_task("Loading predictor...", total=None)
 
-        result = inference_result
+            # Determine effective batch size
+            effective_batch_size = batch_size if batch_size is not None else 32
+
+            # Create predictor with context manager for automatic cleanup
+            predictor = load_predictor(
+                checkpoint_path=effective_checkpoint,
+                device="auto",
+                batch_size=effective_batch_size,
+                apply_transforms=True,
+                auto_load=True
+            )
+            progress.remove_task(load_task)
+
+            # Run inference on dataset from config
+            inference_task = progress.add_task("Running inference...", total=None)
+
+            # Collect all batch results
+            all_predictions = []
+            total_duration = 0.0
+
+            for batch_result in predictor.predict_from_config(settings):
+                all_predictions.append(batch_result.predictions)
+                total_duration += batch_result.duration_seconds
+
+            progress.remove_task(inference_task)
+
+            # Unload predictor to free resources
+            predictor.unload()
+
+        # Combine predictions from all batches
+        import torch
+        if all_predictions:
+            # Handle different prediction types
+            if isinstance(all_predictions[0], dict):
+                # Combine dict predictions by concatenating each key
+                combined_predictions = {}
+                for key in all_predictions[0].keys():
+                    values = [pred[key] for pred in all_predictions if key in pred]
+                    if values and torch.is_tensor(values[0]):
+                        combined_predictions[key] = torch.cat(values, dim=0)
+                    else:
+                        combined_predictions[key] = values
+                predictions = combined_predictions
+            elif torch.is_tensor(all_predictions[0]):
+                # Concatenate tensor predictions
+                predictions = torch.cat(all_predictions, dim=0)
+            else:
+                # Keep as list for other types
+                predictions = all_predictions
+        else:
+            predictions = None
+
+        # Create InferenceResult for presentation
+        from dlkit.interfaces.api.domain.models import InferenceResult
+
+        result = InferenceResult(
+            model_state=None,
+            predictions=predictions,
+            metrics=None,
+            duration_seconds=total_duration
+        )
+
         console.print("🎉 Inference completed successfully!")
 
         # Present results

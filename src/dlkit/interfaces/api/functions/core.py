@@ -18,12 +18,10 @@ from dlkit.interfaces.api.domain import (
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_settings import TrainingWorkflowSettings
 
-# BREAKING CHANGE: Import new inference API
-from dlkit.interfaces.inference.api import (
-    infer as inference_api_infer,
-    predict,
-    InferenceInput,
-)
+# Inference API removed - use load_predictor() instead
+# from dlkit import load_predictor
+# predictor = load_predictor("model.ckpt")
+# result = predictor.predict(inputs)
 
 # Get the global command dispatcher
 _dispatcher = get_dispatcher()
@@ -104,99 +102,14 @@ def train(
     return _dispatcher.execute("train", input_data, settings)
 
 
-# BREAKING CHANGE: Replace old infer() function with new API
-
-def infer(
-    checkpoint_path: Path | str,
-    inputs: Any,
-    device: str = "auto",
-    batch_size: int = 32,
-    apply_transforms: bool = True
-) -> InferenceResult:
-    """Execute inference from checkpoint only.
-
-    BREAKING CHANGE: This function now provides standalone inference
-    that requires only a model checkpoint and input data. No training
-    configuration files or datasets are needed.
-
-    Args:
-        checkpoint_path: Path to trained model checkpoint
-        inputs: Input data (tensors, dict, arrays, or file path)
-        device: Device specification ("auto", "cpu", "cuda", "mps")
-        batch_size: Batch size for processing
-        apply_transforms: Whether to apply fitted transforms
-
-    Returns:
-        InferenceResult: Inference execution result
-
-    Raises:
-        WorkflowError: On inference execution failure
-
-    Example:
-        >>> # New inference API
-        >>> result = infer("model.ckpt", {"x": torch.randn(32, 10)})
-        >>> predictions = result.predictions
-        >>>
-        >>> # For prediction mode with training config, use predict()
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("config.toml")
-        >>> result = predict(settings, "model.ckpt")
-
-    Migration:
-        Old code:
-            settings = load_inference_settings("config.toml")
-            result = infer(settings, "model.ckpt")
-
-        New code:
-            result = infer("model.ckpt", your_input_data)
-            # OR for prediction mode:
-            settings = load_training_settings("config.toml")
-            result = predict(settings, "model.ckpt")
-    """
-    return inference_api_infer(
-        checkpoint_path=checkpoint_path,
-        inputs=inputs,
-        device=device,
-        batch_size=batch_size,
-        apply_transforms=apply_transforms
-    )
-
-
-# BREAKING CHANGE: Add new simple prediction function
-
-def predict_with_config(
-    training_settings: TrainingWorkflowSettings,
-    checkpoint_path: Path | str,
-    **overrides: Any
-) -> InferenceResult:
-    """Execute simple prediction using Lightning framework.
-
-    This function provides the traditional Lightning-based inference approach
-    for validation and testing scenarios where training configuration
-    and datasets are available.
-
-    Args:
-        training_settings: Training workflow settings (BREAKING: InferenceWorkflowSettings no longer supported)
-        checkpoint_path: Path to model checkpoint
-        **overrides: Additional parameter overrides
-
-    Returns:
-        InferenceResult: Inference execution result
-
-    Example:
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("config.toml")
-        >>> result = predict_with_config(settings, "model.ckpt", batch_size=64)
-
-    Note:
-        This replaces the old infer() function when used with training configurations.
-        For inference, use infer() directly.
-    """
-    return predict(
-        training_settings=training_settings,
-        checkpoint_path=checkpoint_path,
-        **overrides
-    )
+# REMOVED: Old infer() and predict_with_config() functions
+# Use the new load_predictor() API instead:
+#
+#   from dlkit import load_predictor
+#   predictor = load_predictor("model.ckpt", device="cuda")
+#   result = predictor.predict(inputs)
+#
+# See documentation for migration guide.
 
 
 def optimize(

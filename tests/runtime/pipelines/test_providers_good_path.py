@@ -176,20 +176,6 @@ class TestFileDataProviderCacheManagement:
         assert torch.equal(original_data, reloaded_data)
 
 
-class TestFileDataProviderTransforms:
-    """Test FileDataProvider transform handling (backward compatibility)."""
-
-    def test_apply_transforms_no_op(
-        self,
-        file_data_provider: FileDataProvider,
-        sample_torch_data: torch.Tensor,
-        transform_settings: list,
-    ) -> None:
-        """Test that _apply_transforms returns dataflow unchanged (no-op)."""
-        result = file_data_provider._apply_transforms(sample_torch_data, transform_settings)
-        assert torch.equal(result, sample_torch_data)
-
-
 class TestFileDataProviderErrors:
     """Test FileDataProvider error handling scenarios."""
 

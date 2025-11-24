@@ -47,6 +47,16 @@ class ModelStateError(DLKitError):
     pass
 
 
+class ModelLoadingError(DLKitError):
+    """Model checkpoint loading error.
+
+    Raised when model weights fail to load from checkpoint,
+    such as state dict key mismatches or missing critical parameters.
+    """
+
+    pass
+
+
 class PluginError(DLKitError):
     """Plugin configuration or execution error."""
 

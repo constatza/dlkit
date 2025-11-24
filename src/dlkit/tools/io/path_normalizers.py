@@ -72,7 +72,16 @@ def normalize_sqlite_uri(uri: str, root_dir: Path) -> str | None:
     except ValidationError:
         return None
 
-    canonical_path = canonicalize_file_path(url.path)
+    # SQLite URIs use sqlite:////absolute/path format (4 slashes total).
+    # Pydantic parses this as url.path = "//absolute/path" (2 leading slashes).
+    # This double-slash causes canonicalize_file_path() to misinterpret the path
+    # as a Windows UNC network path (e.g., \\server\share).
+    # For absolute paths, strip one leading slash before canonicalization.
+    path = url.path
+    if path.startswith('//') and not path.startswith('///'):
+        path = path[1:]  # Remove one leading slash for absolute paths
+
+    canonical_path = canonicalize_file_path(path)
     resolved_path_str = _resolve_canonical_path_str(canonical_path, root_dir)
 
     if resolved_path_str.startswith("/"):

@@ -100,6 +100,7 @@ pythonpath = [
 ]
 markers = [
     "slow: kept for reference; no default deselection",
+    "regression: critical regression tests that must never be removed or modified",
 ]
 filterwarnings = [
     # Suppress Pydantic serialization warnings for lazy-loaded settings
