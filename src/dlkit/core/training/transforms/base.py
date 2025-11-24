@@ -1,11 +1,8 @@
 from abc import abstractmethod
-from collections.abc import Sequence
-from pydantic import validate_call, ConfigDict
 
 import torch
 import torch.nn as nn
 from torch_geometric.transforms import BaseTransform
-from loguru import logger
 
 
 class Transform(BaseTransform, nn.Module):
@@ -18,11 +15,19 @@ class Transform(BaseTransform, nn.Module):
     - Subclasses MUST implement forward()
     - Subclasses SHOULD implement inverse_transform() if invertible (inherit from IInvertibleTransform)
     - Subclasses SHOULD implement fit() if fittable (inherit from IFittableTransform)
+    - Subclasses SHOULD implement configure_shape() if shape-aware (inherit from IShapeAwareTransform)
     - Fitted state stored as torch.Tensor buffer for checkpoint persistence
 
     Design Patterns:
     - Template Method: Provides fitted property, subclasses implement fit()
     - State Pattern: fitted flag tracked via tensor buffer
+    - Dependency Inversion: Shape info provided via IShapeSpec (not stored here)
+
+    Shape Handling Philosophy:
+    - Transforms no longer store input_shape as this duplicates the shape_spec system
+    - Shape-aware transforms implement IShapeAwareTransform and receive shapes via configure_shape()
+    - Shape-agnostic transforms work with any compatible tensor without shape info
+    - This eliminates redundant shape tracking and couples transforms to the mature shape_spec system
 
     Example:
         >>> class MyTransform(Transform, IInvertibleTransform):
@@ -34,22 +39,18 @@ class Transform(BaseTransform, nn.Module):
 
     apply_inverse: bool
     _fitted: torch.Tensor
-    input_shape: torch.Tensor
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, input_shape: Sequence[int] | torch.Size | torch.Tensor) -> None:
+    def __init__(self) -> None:
         """Initialize the transform.
 
-        Args:
-            input_shape: The shape of the input tensor INCLUDING the batch dimension.
-                Example: (32, 64) for batch_size=32, features=64
+        Note:
+            Shape information is no longer passed to __init__(). Shape-aware transforms
+            should implement IShapeAwareTransform and receive shapes via configure_shape(),
+            or allocate buffers lazily during fit() from data.shape.
         """
         super().__init__()
-        if not input_shape:
-            logger.warning("No input shape provided. Assuming input shape (1,)")
         self.apply_inverse = True
         self.register_buffer("_fitted", torch.zeros(1, requires_grad=False))
-        self.register_buffer("input_shape", torch.tensor(input_shape))
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:

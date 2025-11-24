@@ -26,8 +26,12 @@ Example:
 """
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import torch
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs import IShapeSpec
 
 
 class IInvertibleTransform(ABC):
@@ -185,5 +189,75 @@ class ISerializableTransform(ABC):
 
         Returns:
             Reconstructed transform instance with restored state.
+        """
+        pass
+
+
+class IShapeAwareTransform(ABC):
+    """Interface for transforms that require shape information.
+
+    Shape-aware transforms need to know tensor shapes to properly allocate
+    buffers, validate dimensions, or configure their behavior. This interface
+    follows the same pattern as ShapeAwareModel from the neural network layer.
+
+    Transforms implementing this interface can receive shape information via:
+    1. configure_shape() method (preferred, uses shape_spec system)
+    2. Lazy inference from data during fit() (fallback)
+
+    The shape_spec system provides a single source of truth for shapes throughout
+    the codebase, eliminating redundant shape tracking.
+
+    Example:
+        >>> class MinMaxScaler(Transform, IFittableTransform, IShapeAwareTransform):
+        ...     def __init__(self, dim: int = 0):
+        ...         super().__init__()
+        ...         self.dim = dim
+        ...         self._shape_configured = False
+        ...
+        ...     def configure_shape(
+        ...         self, shape_spec: IShapeSpec, entry_name: str
+        ...     ) -> None:
+        ...         shape = shape_spec.get_shape(entry_name)
+        ...         moments_shape = self._compute_moments_shape(shape)
+        ...         self.register_buffer("min", torch.zeros(moments_shape))
+        ...         self.register_buffer("max", torch.ones(moments_shape))
+        ...         self._shape_configured = True
+        ...
+        ...     def fit(self, data: torch.Tensor) -> None:
+        ...         if not self._shape_configured:
+        ...             # Lazy allocation from data shape
+        ...             moments_shape = self._compute_moments_shape(data.shape)
+        ...             self.register_buffer("min", torch.zeros(moments_shape))
+        ...             self.register_buffer("max", torch.ones(moments_shape))
+        ...         # ... fit logic ...
+
+    Note:
+        Shape-aware transforms should still support lazy initialization from data
+        during fit() as a fallback when shape_spec is not available.
+    """
+
+    @abstractmethod
+    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+        """Configure transform with shape information from shape_spec.
+
+        This method is called by the factory/pipeline system to provide shape
+        information before fit() or forward() is called. Transforms should use
+        this to pre-allocate buffers or validate their configuration.
+
+        Args:
+            shape_spec: Shape specification containing all entry shapes.
+            entry_name: Name of the entry to get shape for (e.g., "features").
+
+        Side Effects:
+            May allocate tensor buffers, validate dimensions, or store shape info.
+
+        Raises:
+            ShapeMismatchError: If shape is incompatible with transform config.
+
+        Example:
+            >>> scaler = MinMaxScaler(dim=0)
+            >>> shape_spec = create_shape_spec({"features": (32, 64)})
+            >>> scaler.configure_shape(shape_spec, "features")
+            >>> # scaler now has pre-allocated min/max buffers of shape (1, 64)
         """
         pass

@@ -59,7 +59,7 @@ class TestInterfaceSegregation:
 
     def test_isinstance_checks_work_at_runtime(self):
         """isinstance() checks work correctly for ABC mixins."""
-        scaler = MinMaxScaler(dim=0, input_shape=(32, 64))
+        scaler = MinMaxScaler(dim=0)
 
         assert isinstance(scaler, IFittableTransform)
         assert isinstance(scaler, IInvertibleTransform)
@@ -152,7 +152,7 @@ class TestArchitecturalConstraints:
 
     def test_fitted_state_uses_tensor_buffer(self):
         """Fitted state must use torch.Tensor buffer for checkpoint persistence."""
-        scaler = MinMaxScaler(dim=0, input_shape=(32, 64))
+        scaler = MinMaxScaler(dim=0)
 
         # Check that _fitted is registered as a buffer
         assert "_fitted" in scaler._buffers, (
@@ -211,7 +211,7 @@ class TestInvariants:
 
     def test_fitted_transforms_have_fitted_property(self):
         """All IFittableTransform instances must have fitted property."""
-        scaler = MinMaxScaler(dim=0, input_shape=(32, 64))
+        scaler = MinMaxScaler(dim=0)
 
         # Initially not fitted
         assert not scaler.fitted, "Transform should not be fitted initially"
@@ -224,9 +224,9 @@ class TestInvariants:
     def test_invertible_transforms_have_inverse_transform_method(self):
         """All IInvertibleTransform instances must have inverse_transform method."""
         invertible_transforms = [
-            MinMaxScaler(dim=0, input_shape=(32, 64)),
-            StandardScaler(dim=0, input_shape=(32, 64)),
-            PCA(n_components=10, input_shape=(32, 64)),
+            MinMaxScaler(dim=0),
+            StandardScaler(dim=0),
+            PCA(n_components=10),
         ]
 
         for transform in invertible_transforms:
@@ -243,9 +243,9 @@ class TestInvariants:
         import torch.nn as nn
 
         transform_instances = [
-            MinMaxScaler(dim=0, input_shape=(32, 64)),
-            StandardScaler(dim=0, input_shape=(32, 64)),
-            PCA(n_components=10, input_shape=(32, 64)),
+            MinMaxScaler(dim=0),
+            StandardScaler(dim=0),
+            PCA(n_components=10),
         ]
 
         for transform in transform_instances:

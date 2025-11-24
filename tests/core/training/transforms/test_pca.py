@@ -63,7 +63,7 @@ def pca_2_components() -> PCA:
     Returns:
         Unfitted PCA instance.
     """
-    return PCA(n_components=2, input_shape=(100, 5))
+    return PCA(n_components=2)
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def pca_5_components() -> PCA:
     Returns:
         Unfitted PCA instance.
     """
-    return PCA(n_components=5, input_shape=(100, 5))
+    return PCA(n_components=5)
 
 
 # ============================================================================
@@ -168,7 +168,7 @@ class TestPCAGoodPath:
         self, correlated_data: torch.Tensor
     ) -> None:
         """Total explained variance should be reasonable for correlated data."""
-        pca = PCA(n_components=3, input_shape=correlated_data.shape)
+        pca = PCA(n_components=3)
         pca.fit(correlated_data)
 
         # With highly correlated data, 3 components should capture significant variance
@@ -179,7 +179,7 @@ class TestPCAGoodPath:
         self, multidim_data: torch.Tensor
     ) -> None:
         """PCA should handle 3D data by reshaping correctly."""
-        pca = PCA(n_components=3, input_shape=multidim_data.shape)
+        pca = PCA(n_components=3)
         pca.fit(multidim_data)
 
         # Forward should flatten (20, 8, 6) -> (160, 6) internally then project to (160, 3)
@@ -231,20 +231,22 @@ class TestPCAEdgeCases:
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
     ) -> None:
         """Calling forward before fit should raise RuntimeError."""
-        with pytest.raises(RuntimeError, match="PCA has not been fitted"):
+        from dlkit.core.training.transforms.errors import TransformNotFittedError
+        with pytest.raises(TransformNotFittedError):
             pca_2_components.forward(simple_2d_data)
 
     def test_inverse_before_fit_raises_error(
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
     ) -> None:
         """Calling inverse_transform before fit should raise RuntimeError."""
+        from dlkit.core.training.transforms.errors import TransformNotFittedError
         projected = torch.randn(100, 2)
-        with pytest.raises(RuntimeError, match="PCA has not been fitted"):
+        with pytest.raises(TransformNotFittedError):
             pca_2_components.inverse_transform(projected)
 
     def test_single_component_pca(self, simple_2d_data: torch.Tensor) -> None:
         """PCA with single component should work."""
-        pca = PCA(n_components=1, input_shape=simple_2d_data.shape)
+        pca = PCA(n_components=1)
         pca.fit(simple_2d_data)
         projected = pca.forward(simple_2d_data)
 
@@ -257,7 +259,7 @@ class TestPCAEdgeCases:
         torch.manual_seed(789)
         data_1d = torch.randn(50, 1)
 
-        pca = PCA(n_components=1, input_shape=data_1d.shape)
+        pca = PCA(n_components=1)
         pca.fit(data_1d)
         projected = pca.forward(data_1d)
 
@@ -268,7 +270,7 @@ class TestPCAEdgeCases:
         self, multidim_data: torch.Tensor
     ) -> None:
         """Fit should respect the dim parameter for feature dimension."""
-        pca = PCA(n_components=3, input_shape=multidim_data.shape)
+        pca = PCA(n_components=3)
 
         # Fit along last dimension (default)
         pca.fit(multidim_data, dim=-1)
@@ -304,7 +306,7 @@ class TestPCAProperties:
         self, simple_2d_data: torch.Tensor
     ) -> None:
         """Explained variance should be sorted in descending order."""
-        pca = PCA(n_components=4, input_shape=simple_2d_data.shape)
+        pca = PCA(n_components=4)
         pca.fit(simple_2d_data)
 
         assert pca.explained_variance is not None
@@ -318,7 +320,7 @@ class TestPCAProperties:
         self, correlated_data: torch.Tensor
     ) -> None:
         """Projected data variance should match explained variance ordering."""
-        pca = PCA(n_components=5, input_shape=correlated_data.shape)
+        pca = PCA(n_components=5)
         pca.fit(correlated_data)
         projected = pca.forward(correlated_data)
 
@@ -339,7 +341,7 @@ class TestPCAProperties:
         data = torch.randn(n_samples, n_features)
 
         # Use ALL components (full rank)
-        pca = PCA(n_components=n_features, input_shape=data.shape)
+        pca = PCA(n_components=n_features)
         pca.fit(data)
 
         projected = pca.forward(data)
@@ -361,7 +363,7 @@ class TestPCAProperties:
         torch.manual_seed(888)
         data = torch.randn(100, 10)
 
-        pca = PCA(n_components=8, input_shape=data.shape)
+        pca = PCA(n_components=8)
         pca.fit(data)
 
         assert pca.explained_variance_ratio is not None
@@ -394,7 +396,7 @@ class TestPCAProperties:
 
         data = torch.stack([comp1, comp2, comp3], dim=1)
 
-        pca = PCA(n_components=3, input_shape=data.shape)
+        pca = PCA(n_components=3)
         pca.fit(data)
 
         # First component should explain most variance
@@ -419,7 +421,7 @@ class TestPCAProperties:
         # Test with different numbers of components
         errors = []
         for n_comp in [10, 7, 5, 3, 1]:
-            pca = PCA(n_components=n_comp, input_shape=data.shape)
+            pca = PCA(n_components=n_comp)
             pca.fit(data)
             projected = pca.forward(data)
             reconstructed = pca.inverse_transform(projected)
@@ -444,7 +446,7 @@ class TestPCAIntegration:
         self, correlated_data: torch.Tensor
     ) -> None:
         """Complete pipeline: fit -> transform -> inverse."""
-        pca = PCA(n_components=5, input_shape=correlated_data.shape)
+        pca = PCA(n_components=5)
 
         # Fit
         pca.fit(correlated_data)
@@ -470,7 +472,7 @@ class TestPCAIntegration:
         train_data = simple_2d_data[:80]
         test_data = simple_2d_data[80:]
 
-        pca = PCA(n_components=3, input_shape=train_data.shape)
+        pca = PCA(n_components=3)
         pca.fit(train_data)
 
         # Transform test data
@@ -485,7 +487,7 @@ class TestPCAIntegration:
         self, simple_2d_data: torch.Tensor
     ) -> None:
         """PCA should give consistent results with batched processing."""
-        pca = PCA(n_components=3, input_shape=simple_2d_data.shape)
+        pca = PCA(n_components=3)
         pca.fit(simple_2d_data)
 
         # Process all at once

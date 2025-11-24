@@ -1,22 +1,86 @@
 import torch
 
 from dlkit.core.training.transforms.base import Transform
+from dlkit.core.training.transforms.interfaces import IInvertibleTransform
+from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
-epsilon = 1e-8
 
+class Permutation(Transform, IInvertibleTransform):
+    """Permute tensor dimensions (shape-agnostic transform).
 
-class Permutation(Transform):
-    def __init__(self, *, dims: tuple[int], input_shape: tuple[int, ...]):
-        """Must be a permutation and must be used before any other transforms."""
-        super().__init__(input_shape=input_shape)
+    This transform reorders the dimensions of a tensor according to a specified
+    permutation. It's fully shape-agnostic - it works with any tensor shape that
+    has enough dimensions for the permutation.
+
+    Example:
+        >>> # Swap last two dimensions: (B, H, W) → (B, W, H)
+        >>> perm = Permutation(dims=(0, 2, 1))
+        >>> data = torch.randn(32, 64, 128)
+        >>> permuted = perm(data)  # Shape: (32, 128, 64)
+        >>> restored = perm.inverse_transform(permuted)  # Back to (32, 64, 128)
+    """
+
+    dims: tuple[int, ...]
+    _inverse_dims: tuple[int, ...]
+
+    def __init__(self, *, dims: tuple[int, ...]) -> None:
+        """Initialize permutation transform.
+
+        Args:
+            dims: Dimension permutation order. Must be a valid permutation
+                (each index 0 to len(dims)-1 appears exactly once).
+
+        Example:
+            >>> # Swap last two dims
+            >>> perm = Permutation(dims=(0, 2, 1))
+        """
+        super().__init__()
         self.dims = dims
+        # Precompute inverse permutation for efficiency
+        self._inverse_dims = self._compute_inverse_permutation(dims)
+
+    @staticmethod
+    def _compute_inverse_permutation(dims: tuple[int, ...]) -> tuple[int, ...]:
+        """Compute the inverse permutation mapping.
+
+        Args:
+            dims: Forward permutation.
+
+        Returns:
+            Inverse permutation that undoes the forward permutation.
+        """
+        inverse = [0] * len(dims)
+        for i, dim in enumerate(dims):
+            inverse[dim] = i
+        return tuple(inverse)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Permute tensor dimensions.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Tensor with permuted dimensions.
+        """
         return x.permute(self.dims)
 
     def inverse_transform(self, y: torch.Tensor) -> torch.Tensor:
-        inverse_dims = [0] * len(self.dims)
-        for i, dim in enumerate(self.dims):
-            inverse_dims[dim] = i
+        """Inverse permutation to restore original dimension order.
 
-        return y.permute(*inverse_dims)
+        Args:
+            y: Permuted tensor.
+
+        Returns:
+            Tensor with original dimension order.
+        """
+        return y.permute(self._inverse_dims)
+
+
+# Register shape inference function
+@register_shape_inference(Permutation)
+def _infer_permutation_output_shape(
+    input_shape: tuple[int, ...], dims: tuple[int, ...], **kwargs
+) -> tuple[int, ...]:
+    """Permutation reorders dimensions according to dims parameter."""
+    return tuple(input_shape[d] for d in dims)

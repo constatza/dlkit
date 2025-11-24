@@ -1,55 +1,116 @@
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
-
-from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import IFittableTransform, IInvertibleTransform
 from pydantic import validate_call, ConfigDict
 
+from dlkit.core.training.transforms.base import Transform
+from dlkit.core.training.transforms.interfaces import (
+    IFittableTransform,
+    IInvertibleTransform,
+    IShapeAwareTransform,
+)
+from dlkit.core.training.transforms.errors import TransformNotFittedError, ShapeMismatchError
+from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
-class MinMaxScaler(Transform, IFittableTransform, IInvertibleTransform):
-    """Minimum-Maximum Scaler."""
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs import IShapeSpec
+
+
+class MinMaxScaler(Transform, IFittableTransform, IInvertibleTransform, IShapeAwareTransform):
+    """Minimum-Maximum Scaler that normalizes data to the range [-1, 1].
+
+    This transform computes min and max statistics along specified dimensions
+    and uses them to scale the data. It supports both eager buffer allocation
+    (via configure_shape()) and lazy allocation (during fit()).
+
+    The scaler accumulates global min/max when fit() is called multiple times,
+    making it suitable for batch-wise fitting on large datasets.
+    """
 
     min: torch.Tensor
     max: torch.Tensor
-    dim: int | Sequence[int]
+    dim: tuple[int, ...]
+    _shape_configured: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
-        self, *, dim: int | Sequence[int] = 0, input_shape: Sequence[int] | torch.Size
-    ) -> None:
-        """Important: This scaler transforms dataflow in the range [-1, 1] by default!!!
+    def __init__(self, *, dim: int | Sequence[int] = 0) -> None:
+        """Initialize MinMaxScaler.
 
         Args:
-            dim (int | Sequence[int], optional): The dimension(s) along which to compute
-                the minimum and maximum values. Defaults to 0.
-        """
-        super().__init__(input_shape=input_shape)
-        dim = dim if isinstance(dim, Sequence) else (dim,)
-        size = len(self.input_shape)
-        # assure that dim has nonegative values
-        self.dim = tuple([idx % size for idx in dim])
+            dim: The dimension(s) along which to compute min and max values.
+                Defaults to 0 (batch dimension). Can be int or sequence of ints.
 
-        # create zero tensors with the same number of dimensions as the input dataflow
-        # but with reduced size along the specified dimensions dim
-        moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(self.input_shape)])
+        Example:
+            >>> # Create scaler for normalizing along batch dimension
+            >>> scaler = MinMaxScaler(dim=0)
+            >>>
+            >>> # Optionally configure with shape_spec
+            >>> scaler.configure_shape(shape_spec, "features")
+            >>>
+            >>> # Or just fit directly (lazy allocation)
+            >>> scaler.fit(train_data)
+        """
+        super().__init__()
+        self.dim = dim if isinstance(dim, Sequence) else (dim,)
+        self._shape_configured = False
+
+    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+        """Configure scaler with shape information for buffer pre-allocation.
+
+        Args:
+            shape_spec: Shape specification containing entry shapes.
+            entry_name: Name of the entry to get shape for.
+
+        Raises:
+            ShapeMismatchError: If shape has incompatible dimensions.
+        """
+        shape = shape_spec.get_shape(entry_name)
+        if shape is None:
+            return  # Skip configuration if shape not available
+
+        # Normalize dim indices to be positive
+        self.dim = tuple([idx % len(shape) for idx in self.dim])
+
+        # Compute moments shape (1 along reduction dims, original size elsewhere)
+        moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(shape)])
+
+        # Pre-allocate min/max buffers
         self.register_buffer("min", torch.zeros(moments_shape))
         self.register_buffer("max", torch.ones(moments_shape))
+        self._shape_configured = True
 
     def fit(self, data: torch.Tensor) -> None:
         """Compute (and accumulate) the min/max along specified dimensions.
 
-        Adjusts the internal state to store the minimum and maximum values found in
-        the provided tensor, enabling subsequent scaling operations. If called multiple
-        times (e.g., during global fitting over multiple batches), the scaler accumulates
-        global min/max values across calls.
+        If buffers haven't been pre-allocated via configure_shape(), they are
+        allocated lazily from the data shape. When called multiple times,
+        accumulates global min/max values.
 
         Args:
-            data (torch.Tensor): Input dataflow used to determine the min and max values for
-                scaling. The dimensions to be considered are set during initialization via ``dim``.
+            data: Input tensor to compute min/max statistics from.
+                Shape varies but must be compatible with dim specification.
+
+        Example:
+            >>> scaler = MinMaxScaler(dim=0)
+            >>> scaler.fit(batch1)  # Computes min/max
+            >>> scaler.fit(batch2)  # Accumulates global min/max
         """
+        # Lazy buffer allocation if not configured
+        if not self._shape_configured:
+            # Normalize dim indices
+            self.dim = tuple([idx % len(data.shape) for idx in self.dim])
+
+            # Compute moments shape from data
+            moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(data.shape)])
+            self.register_buffer("min", torch.zeros(moments_shape, device=data.device))
+            self.register_buffer("max", torch.ones(moments_shape, device=data.device))
+            self._shape_configured = True
+
+        # Compute current batch statistics
         current_min = torch.amin(input=data, dim=self.dim, keepdim=True)
         current_max = torch.amax(input=data, dim=self.dim, keepdim=True)
+
         if self.fitted:
             # Accumulate global min/max across multiple fit() calls
             self.min = torch.minimum(self.min, current_min)
@@ -60,11 +121,40 @@ class MinMaxScaler(Transform, IFittableTransform, IInvertibleTransform):
             self.fitted = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Scale to interval [-1, 1]."""
-        return 2 * (x - self.min) / (self.max - self.min) - 1
+        """Scale tensor to interval [-1, 1].
+
+        Args:
+            x: Input tensor to scale.
+
+        Returns:
+            Scaled tensor in range [-1, 1].
+
+        Raises:
+            TransformNotFittedError: If fit() hasn't been called yet.
+        """
+        if not self.fitted:
+            raise TransformNotFittedError("MinMaxScaler")
+        return 2 * (x - self.min) / (self.max - self.min + 1e-8) - 1
 
     def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
-        """Return a module that lazily computes the inverse transformation
-        using the current min and max values at runtime.
+        """Inverse scale from [-1, 1] back to original range.
+
+        Args:
+            x: Scaled tensor in range [-1, 1].
+
+        Returns:
+            Tensor in original value range.
+
+        Raises:
+            TransformNotFittedError: If fit() hasn't been called yet.
         """
+        if not self.fitted:
+            raise TransformNotFittedError("MinMaxScaler")
         return (x + 1) / 2 * (self.max - self.min) + self.min
+
+
+# Register shape inference function (MinMaxScaler preserves shape)
+@register_shape_inference(MinMaxScaler)
+def _infer_minmax_output_shape(input_shape: tuple[int, ...], **kwargs) -> tuple[int, ...]:
+    """MinMaxScaler preserves input shape."""
+    return input_shape

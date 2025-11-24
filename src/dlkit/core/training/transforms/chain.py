@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, Size
@@ -8,7 +9,12 @@ from torch.nn import ModuleList
 from dlkit.tools.config.transform_settings import TransformSettings
 from dlkit.tools.config import BuildContext, FactoryProvider
 from .base import Transform
-from .interfaces import IFittableTransform, IInvertibleTransform
+from .interfaces import IFittableTransform, IInvertibleTransform, IShapeAwareTransform
+from .errors import TransformNotFittedError, TransformChainError
+from .shape_inference import infer_output_shape, SHAPE_INFERENCE_REGISTRY
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs import IShapeSpec
 
 
 # -------------------------------------------------------------------
@@ -19,56 +25,74 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
 
     This class manages a sequence of transforms (e.g., scalers, normalizers, PCA),
     providing methods to fit them in order, apply them (``forward``), and apply their
-    inverse transformations (``inverse_transform``). Use two instances to handle
-    features and targets separately.
+    inverse transformations (``inverse_transform``).
 
-    Args:
-        transform_settings (Sequence[TransformSettings] | ModuleList): Transform settings or
-            an existing ModuleList of instantiated transforms to chain.
-        input_shape (Sequence[int] | Size | torch.Tensor): Full input tensor shape including
-            the batch dimension. If a tensor is provided, its shape is used.
+    The chain uses analytical shape inference (pure functions) for efficiency, with
+    optional dummy tensor validation for compatibility checking.
 
     Example:
-        Create and use a transform chain for features::
-
-            chain = TransformChain(settings.feature_transforms, input_shape=(32, 64))
-            chain.fit(x_train)  # type: torch.Tensor
-            x_train_t = chain(x_train)
-            x_orig = chain.inverse_transform(x_train_t)
+        >>> # Create chain with analytical shape inference
+        >>> chain = TransformChain(
+        ...     transform_settings,
+        ...     shape_spec=shape_spec,
+        ...     entry_name="features"
+        ... )
+        >>> chain.fit(x_train)
+        >>> x_transformed = chain(x_train)
+        >>> x_orig = chain.inverse_transform(x_transformed)
     """
 
     transforms: ModuleList
-    input_shape: tuple[int, ...] | Size
-    transformed_shape: tuple[int, ...] | Size | None
+    transformed_shape: tuple[int, ...] | None
+    _shape_spec: "IShapeSpec | None"
+    _entry_name: str | None
+    _inverse_mode: bool
 
     def __init__(
         self,
         transform_settings: Sequence[TransformSettings] | ModuleList,
-        input_shape: Sequence[int] | Size | torch.Tensor,
+        shape_spec: "IShapeSpec | None" = None,
+        entry_name: str | None = None,
+        validate_execution: bool = False,
+        inverse_mode: bool = False,
     ) -> None:
-        """
-        Initialize the pipeline with a sequence of TransformSettings and an input shape.
+        """Initialize the transform chain.
 
         Args:
-            transform_settings: Sequence of TransformSettings to instantiate.
-            input_shape: Full input tensor shape including the batch dimension.
+            transform_settings: Sequence of TransformSettings to instantiate,
+                or an existing ModuleList of transforms.
+            shape_spec: Optional shape specification for transforms.
+            entry_name: Optional entry name to look up shape in shape_spec.
+            validate_execution: If True, execute dummy tensors to validate
+                transform compatibility. Default False (use analytical inference).
 
-        Raises:
-            ValueError: If input_shape or transform_settings fail Pydantic validation.
+        Example:
+            >>> # Analytical inference (recommended)
+            >>> chain = TransformChain(settings, shape_spec=spec, entry_name="features")
+            >>>
+            >>> # With validation (slower but validates compatibility)
+            >>> chain = TransformChain(
+            ...     settings,
+            ...     shape_spec=spec,
+            ...     entry_name="features",
+            ...     validate_execution=True
+            ... )
         """
-        super().__init__(input_shape=input_shape)
-        # Validate inputs
+        super().__init__()
+        self._shape_spec = shape_spec
+        self._entry_name = entry_name
+        self.transformed_shape = None
 
-        # Convert input_shape to a tuple of ints
-
-        # Initialize transforms (pure function call, imported from elsewhere)
-        # initialize_transforms returns a torch.nn.ModuleList of instantiated transform modules
+        # Build transforms with shape inference
         if not isinstance(transform_settings, ModuleList):
-            self.transforms = build_transforms(transform_settings, input_shape)
+            self.transforms, self.transformed_shape = build_transforms(
+                transform_settings,
+                shape_spec=shape_spec,
+                entry_name=entry_name,
+                validate_execution=validate_execution,
+            )
         else:
             self.transforms = transform_settings
-
-        self.transformed_shape = None
 
     def fit(self, x: Tensor) -> None:
         """Fit the chain and propagate the intermediate output.
@@ -80,15 +104,21 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
             x: Input tensor to fit on (e.g., all training features).
 
         Raises:
-            RuntimeError: If any transform fit() raises an error.
+            TransformChainError: If any transform fit() raises an error.
         """
-        with torch.inference_mode():
-            for transform in self.transforms:
-                # If the transform is fittable (implements IFittableTransform), fit it
+        for i, transform in enumerate(self.transforms):
+            try:
+                # If the transform is fittable, fit it
                 if isinstance(transform, IFittableTransform):
                     transform.fit(x)
                 # Apply the transform to produce the next input
                 x = transform(x)
+            except Exception as e:
+                raise TransformChainError(
+                    transform_index=i,
+                    transform_name=transform.__class__.__name__,
+                    cause=e,
+                ) from e
 
         # Mark as fitted and store the shape after all transforms
         self.fitted = True
@@ -98,20 +128,27 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
         """Apply the transform chain.
 
         Args:
-            x (torch.Tensor): Input tensor to transform.
+            x: Input tensor to transform.
 
         Returns:
-            torch.Tensor: Transformed tensor.
+            Transformed tensor.
 
         Raises:
-            RuntimeError: If ``fit(...)`` was not called before transform.
+            TransformNotFittedError: If fit() was not called before forward().
+            TransformChainError: If any transform application fails.
         """
         if not self.fitted:
-            warn_unfit_pipeline()
+            raise TransformNotFittedError("TransformChain")
 
-        with torch.inference_mode():
-            for transform in self.transforms:
+        for i, transform in enumerate(self.transforms):
+            try:
                 x = transform(x)
+            except Exception as e:
+                raise TransformChainError(
+                    transform_index=i,
+                    transform_name=transform.__class__.__name__,
+                    cause=e,
+                ) from e
         return x
 
     def inverse_transform(self, x: Tensor) -> Tensor:
@@ -127,63 +164,126 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
             Tensor mapped back to the original space.
 
         Raises:
-            RuntimeError: If fit() was not called before inverse.
+            TransformNotFittedError: If fit() was not called before inverse.
             TypeError: If any transform in chain doesn't implement IInvertibleTransform.
+            TransformChainError: If any inverse transform fails.
         """
         if not self.fitted:
-            warn_unfit_pipeline()
+            raise TransformNotFittedError("TransformChain")
 
         # Go through the transforms in reverse
-        # !!IMPORTANT!!
-        # inverse_transform() does not use inference mode, in case the loss function is computed
-        # using the output of inverse_transform().
-        for transform in reversed(self.transforms):
+        # NOTE: No inference mode, in case loss function is computed using inverse output
+        for i, transform in enumerate(reversed(self.transforms)):
             if not isinstance(transform, IInvertibleTransform):
                 raise TypeError(
                     f"Transform `{transform.__class__.__name__}` does not implement "
                     f"IInvertibleTransform and cannot be inverted. All transforms in a "
                     f"chain must be invertible to use inverse_transform()."
                 )
-            x = transform.inverse_transform(x)
+            try:
+                x = transform.inverse_transform(x)
+            except Exception as e:
+                raise TransformChainError(
+                    transform_index=len(self.transforms) - 1 - i,
+                    transform_name=transform.__class__.__name__,
+                    cause=e,
+                ) from e
         return x
 
-    def inverse(self):
+    def inverse(self) -> "TransformChain":
         """Return a new TransformChain with the transforms reversed.
 
         Returns:
-            TransformChain: New chain with reversed transform order.
+            New chain with reversed transform order.
         """
         return TransformChain(
-            transform_settings=self.transforms[::-1], input_shape=self.transformed_shape
+            transform_settings=self.transforms[::-1],
+            shape_spec=self._shape_spec,
+            entry_name=self._entry_name,
         )
-
-
-def warn_unfit_pipeline() -> None:
-    """Log a warning when a chain is used before fitting."""
-    logger.warning("Transform Chain called before fit.")
 
 
 def build_transforms(
-    transform_seq: Sequence[TransformSettings], input_shape: tuple[int, ...]
-) -> ModuleList:
-    """Instantiate each transform with shape propagation.
+    transform_seq: Sequence[TransformSettings],
+    shape_spec: "IShapeSpec | None" = None,
+    entry_name: str | None = None,
+    validate_execution: bool = False,
+) -> tuple[ModuleList, tuple[int, ...] | None]:
+    """Instantiate transforms with analytical shape inference or validation.
+
+    This function uses pure analytical shape inference by default for efficiency.
+    Optionally, dummy tensor execution can be used to validate transform compatibility.
 
     Args:
-        transform_seq (Sequence[TransformSettings]): List of transform settings.
-        input_shape (tuple[int, ...]): Full input tensor shape including the batch dimension.
+        transform_seq: List of transform settings to instantiate.
+        shape_spec: Optional shape specification for initial shape.
+        entry_name: Optional entry name to look up in shape_spec.
+        validate_execution: If True, execute dummy tensors for validation.
 
     Returns:
-        ModuleList: List of initialized transform modules with propagated shapes.
+        Tuple of (ModuleList of transforms, final output shape or None).
+
+    Example:
+        >>> # Analytical inference (fast)
+        >>> transforms, output_shape = build_transforms(
+        ...     settings, shape_spec=spec, entry_name="features"
+        ... )
+        >>>
+        >>> # With validation (slower)
+        >>> transforms, output_shape = build_transforms(
+        ...     settings,
+        ...     shape_spec=spec,
+        ...     entry_name="features",
+        ...     validate_execution=True
+        ... )
     """
-    # input_shape is expected to include the batch dimension already
-    dummy_input = torch.zeros(input_shape)
+    # Get initial shape from shape_spec
+    current_shape = None
+    if shape_spec and entry_name:
+        current_shape = shape_spec.get_shape(entry_name)
+
     module_list = ModuleList()
-    for transform in transform_seq:
-        module = FactoryProvider.create_component(
-            transform,
-            BuildContext(mode="transform_chain", overrides={"input_shape": dummy_input.shape}),
+
+    # Optional: Create dummy tensor for validation
+    dummy_input = None
+    if validate_execution and current_shape is not None:
+        dummy_input = torch.zeros(current_shape)
+        logger.debug(f"Transform chain validation mode enabled with shape {current_shape}")
+
+    for transform_settings in transform_seq:
+        # Create build context (no input_shape override needed)
+        context = BuildContext(
+            mode="transform_chain",
+            shape_spec=shape_spec,
+            entry_name=entry_name,
         )
-        dummy_input = module(dummy_input)
+
+        # Instantiate transform
+        module = FactoryProvider.create_component(transform_settings, context)
+
+        # Configure shape if transform is shape-aware
+        if isinstance(module, IShapeAwareTransform) and shape_spec and entry_name:
+            module.configure_shape(shape_spec, entry_name)
+
+        # Analytical shape inference (always computed for tracking)
+        if current_shape is not None:
+            transform_type = type(module)
+            if transform_type in SHAPE_INFERENCE_REGISTRY:
+                # Get transform params for shape inference
+                transform_params = transform_settings.model_dump(exclude={"name", "module_path"})
+                current_shape = infer_output_shape(
+                    transform_type, current_shape, **transform_params
+                )
+
+        # Optional: Validate with dummy execution
+        if validate_execution and dummy_input is not None:
+            dummy_input = module(dummy_input)
+            if current_shape is not None:
+                assert tuple(dummy_input.shape) == current_shape, (
+                    f"Shape mismatch: analytical={current_shape}, "
+                    f"execution={tuple(dummy_input.shape)}"
+                )
+
         module_list.append(module)
 
-    return module_list
+    return module_list, current_shape

@@ -1,14 +1,21 @@
 from functools import wraps
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
 from loguru import logger
 
 from .base import Transform
-from .interfaces import IFittableTransform, IInvertibleTransform
+from .interfaces import IFittableTransform, IInvertibleTransform, IShapeAwareTransform
+from .errors import TransformNotFittedError, InvalidTransformConfigurationError, ShapeMismatchError
+from .shape_inference import register_shape_inference
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs import IShapeSpec
 
 
 def reshaper2d(func):
+    """Decorator to handle multi-dimensional inputs by flattening to 2D."""
+
     @wraps(func)
     def wrapper(*args):
         data_position = len(args) - 1
@@ -24,40 +31,83 @@ def reshaper2d(func):
     return wrapper
 
 
-class PCA(Transform, IFittableTransform, IInvertibleTransform):
+class PCA(Transform, IFittableTransform, IInvertibleTransform, IShapeAwareTransform):
     """Principal Component Analysis (PCA) transformer using torch.pca_lowrank.
 
     This transformer computes the principal components efficiently by leveraging
-    torch.pca_lowrank. It projects dataflow onto the computed components and provides
-    an inverse transformation module for approximate reconstruction.
-    Additionally, it computes the explained variance ratio of the selected components
-    relative to the total variance in the
+    torch.pca_lowrank. It projects data onto the computed components and provides
+    an inverse transformation for approximate reconstruction.
 
     The transformer treats all dimensions prior to the last as sample dimensions.
-    For example, for dataflow with shape (N, T, D), it will be reshaped to (N*T, D)
+    For example, for data with shape (N, T, D), it will be reshaped to (N*T, D)
     where the last dimension is considered as the feature dimension.
+
+    The number of components can be validated against input shape via configure_shape(),
+    or determined dynamically during fit().
     """
 
-    def __init__(
-        self, *, n_components: int, n_power_iterations: int = 2, input_shape: Sequence[int]
-    ) -> None:
+    mean: torch.Tensor | None
+    components: torch.Tensor | None
+    explained_variance: torch.Tensor | None
+    explained_variance_ratio: torch.Tensor | None
+    total_explained_variance: float | None
+    n_components: int
+    n_power_iterations: int
+    _shape_configured: bool
+
+    def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
 
         Args:
-            n_components (int): Number of principal components to compute.
-            n_power_iterations (int, optional): Number of power iterations for pca_lowrank.
-                Defaults to 2.
+            n_components: Number of principal components to compute.
+            n_power_iterations: Number of power iterations for pca_lowrank. Defaults to 2.
+
+        Raises:
+            InvalidTransformConfigurationError: If n_components <= 0.
+
+        Example:
+            >>> pca = PCA(n_components=10)
+            >>> pca.fit(train_data)
+            >>> reduced = pca(train_data)
         """
-        super().__init__(input_shape=input_shape)
+        if n_components <= 0:
+            raise InvalidTransformConfigurationError(
+                f"n_components must be positive, got {n_components}"
+            )
+
+        super().__init__()
         self.n_components = n_components
         self.n_power_iterations = n_power_iterations
-        self.mean: torch.Tensor | None = None
-        self.components: torch.Tensor | None = None  # Shape: (n_components, n_features)
-        self.explained_variance: torch.Tensor | None = None
-        self.explained_variance_ratio: torch.Tensor | None = None
-        self.total_explained_variance: float | None = None
-        self.fitted: bool = False
-        self._orig_shape: tuple[int, ...] | None = None
+        self.mean = None
+        self.components = None
+        self.explained_variance = None
+        self.explained_variance_ratio = None
+        self.total_explained_variance = None
+        self._shape_configured = False
+
+    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+        """Configure PCA with shape information for validation.
+
+        Args:
+            shape_spec: Shape specification containing entry shapes.
+            entry_name: Name of the entry to get shape for.
+
+        Raises:
+            ShapeMismatchError: If n_components > input features.
+        """
+        shape = shape_spec.get_shape(entry_name)
+        if shape is None:
+            return
+
+        n_features = shape[-1]  # Last dimension is features
+        if self.n_components > n_features:
+            raise ShapeMismatchError(
+                expected=(n_features,),
+                actual=(self.n_components,),
+                context=f"n_components ({self.n_components}) must be <= n_features ({n_features})",
+            )
+
+        self._shape_configured = True
 
     def fit(self, data: torch.Tensor, dim: int = -1) -> None:
         """Fit the PCA transformer on the input
@@ -110,46 +160,60 @@ class PCA(Transform, IFittableTransform, IInvertibleTransform):
 
     @reshaper2d
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        """Project the input dataflow onto the principal components.
+        """Project the input data onto the principal components.
 
         Args:
-            data (torch.Tensor): Input dataflow of shape (..., n_features). For example,
-                (N, T, D) where D is the feature dimension.
+            data: Input data of shape (..., n_features).
 
         Returns:
-            torch.Tensor: Projected dataflow of shape (n_samples, n_components),
-            where n_samples is the product of all dimensions except the last.
+            Projected data of shape (..., n_components).
+
+        Raises:
+            TransformNotFittedError: If fit() hasn't been called yet.
         """
         if not self.fitted or self.mean is None or self.components is None:
-            raise RuntimeError("PCA has not been fitted yet. Call `fit` before `forward`.")
+            raise TransformNotFittedError("PCA")
 
-        # If dataflow is more than 2D, flatten all dimensions except the last.
-
-        # Center the dataflow using the stored mean.
+        # Center the data using the stored mean
         data_centered = data - self.mean
-        # Project the dataflow onto the principal components.
+        # Project onto principal components
         projected = torch.matmul(data_centered, self.components.T)
 
         return projected
 
     @reshaper2d
     def inverse_transform(self, projected: torch.Tensor) -> torch.Tensor:
-        """Return a module that performs the inverse transformation (approximate reconstruction).
+        """Perform inverse transformation (approximate reconstruction).
 
-        This module reconstructs the original dataflow from the projected  If the number
-        of components is less than the original feature dimensions, the reconstruction is approximate.
+        Reconstructs the original data from projected data. If n_components
+        is less than the original feature dimensions, reconstruction is approximate.
+
+        Args:
+            projected: Projected data of shape (..., n_components).
 
         Returns:
-            nn.Module: A module that performs the inverse transformation.
+            Reconstructed data of shape (..., n_features).
+
+        Raises:
+            TransformNotFittedError: If fit() hasn't been called yet.
         """
         if not self.fitted or self.mean is None or self.components is None:
-            raise RuntimeError(
-                "PCA has not been fitted yet. Call `fit` before using the inverse transformation."
-            )
+            raise TransformNotFittedError("PCA")
+
         device = projected.device
         mean = self.mean.to(device)
         components = self.components.to(device)
-        # Reconstruct the dataflow: approximate inverse of the PCA projection.
+
+        # Reconstruct: approximate inverse of PCA projection
         reconstructed = torch.matmul(projected, components) + mean
 
         return reconstructed
+
+
+# Register shape inference function (PCA reduces last dimension)
+@register_shape_inference(PCA)
+def _infer_pca_output_shape(
+    input_shape: tuple[int, ...], n_components: int, **kwargs
+) -> tuple[int, ...]:
+    """PCA reduces the last dimension to n_components."""
+    return input_shape[:-1] + (n_components,)

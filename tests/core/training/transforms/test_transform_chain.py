@@ -11,7 +11,8 @@ def test_transform_chain_build_fit_forward_inverse() -> None:
     ts = TransformSettings(
         name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
     )
-    chain = TransformChain([ts], input_shape=(2, 2))
+    # No shape_spec needed - transforms will infer from data
+    chain = TransformChain([ts])
 
     x = torch.tensor([[0.0, 1.0], [2.0, 3.0]])
     chain.fit(x)
