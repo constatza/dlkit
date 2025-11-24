@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Iterable
 
+import numpy as np
 import torch
 from torch import Tensor
 
@@ -9,15 +10,26 @@ from dlkit.tools.io import load_array
 from .base import BaseDataset, register_dataset
 
 
-def _normalize_entries(entries: Any) -> dict[str, Path]:
-    """Normalize various entry specs into a mapping of name -> Path.
+def _normalize_entries(entries: Any) -> dict[str, Path | Tensor | np.ndarray]:
+    """Normalize various entry specs into a mapping of name -> (path OR value).
 
     Supports:
-    - list[settings.data_entries.Feature | settings.data_entries.Target]
+    - list[settings.data_entries.Feature | settings.data_entries.Target] (with .path or .value)
     - list[dict] with keys {"name", "path"}
     - dict[name, path]
+
+    For DataEntry objects (Feature/Target):
+    - If entry.has_value() is True, extracts the in-memory .value (tensor/array)
+    - Otherwise, extracts the file path from .path attribute
+    - This enables both file-based (production) and in-memory (testing) workflows
+
+    Args:
+        entries: Collection of entry specifications
+
+    Returns:
+        Dictionary mapping entry name to either a file path or in-memory tensor/array
     """
-    result: dict[str, Path] = {}
+    result: dict[str, Path | Tensor | np.ndarray] = {}
     if entries is None:
         return result
 
@@ -29,7 +41,14 @@ def _normalize_entries(entries: Any) -> dict[str, Path]:
 
     # list[...] entries
     for item in entries:  # type: ignore[assignment]
-        if hasattr(item, "name") and hasattr(item, "path"):
+        # Check for DataEntry objects with .value attribute (in-memory data)
+        if hasattr(item, "has_value") and callable(item.has_value) and item.has_value():
+            result[str(item.name)] = item.value
+        # Check for DataEntry objects with .path attribute (file-based data)
+        elif hasattr(item, "has_path") and callable(item.has_path) and item.has_path():
+            result[str(item.name)] = Path(item.path)
+        # Legacy support: direct name/path attributes
+        elif hasattr(item, "name") and hasattr(item, "path"):
             result[str(getattr(item, "name"))] = Path(getattr(item, "path"))
         elif isinstance(item, dict):
             name = item.get("name")
@@ -41,6 +60,43 @@ def _normalize_entries(entries: Any) -> dict[str, Path]:
             raise TypeError("Unsupported entry type; expected settings entry, dict, or mapping")
 
     return result
+
+
+def _load_or_convert_tensor(
+    source: Path | Tensor | np.ndarray,
+    dtype: torch.dtype | None = None,
+) -> Tensor:
+    """Pure function: convert source to torch.Tensor with dtype handling.
+
+    Handles both file paths (production) and in-memory data (testing).
+    Respects precision context via PrecisionService for dtype resolution.
+
+    Args:
+        source: File path OR in-memory tensor/array
+        dtype: Target dtype (uses PrecisionService if None)
+
+    Returns:
+        torch.Tensor with appropriate dtype
+    """
+    # Case 1: Already a torch.Tensor or numpy array (in-memory data)
+    if isinstance(source, (torch.Tensor, np.ndarray)):
+        tensor = torch.as_tensor(source)  # Zero-copy for numpy arrays
+
+        # Apply dtype conversion if specified
+        if dtype is not None:
+            return tensor.to(dtype=dtype)
+
+        # Use PrecisionService for dtype if not specified
+        # This respects the global precision context set by precision_override()
+        from dlkit.interfaces.api.services.precision_service import get_precision_service
+
+        precision_service = get_precision_service()
+        resolved_dtype = precision_service.get_torch_dtype()
+        return tensor.to(dtype=resolved_dtype)
+
+    # Case 2: File path - delegate to existing load_array()
+    # load_array() already handles PrecisionService integration
+    return load_array(source, dtype=dtype)
 
 
 @register_dataset
@@ -69,11 +125,12 @@ class FlexibleDataset(BaseDataset):
 
         # Precision is automatically resolved from global precision service
         # which checks precision context (set via precision_override())
+        # Handles both file paths (production) and in-memory values (testing)
         self.features: dict[str, Tensor] = {
-            k: load_array(v) for k, v in feat_map.items()
+            k: _load_or_convert_tensor(v) for k, v in feat_map.items()
         }
         self.targets: dict[str, Tensor] = {
-            k: load_array(v) for k, v in targ_map.items()
+            k: _load_or_convert_tensor(v) for k, v in targ_map.items()
         }
 
         # Validate consistent length across all tensors
