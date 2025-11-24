@@ -28,14 +28,20 @@ class CheckpointTransformLoader:
         """Initialize the checkpoint transform loader."""
         pass
 
-    def load_fitted_transforms(self, checkpoint_path: Path | str) -> dict[str, TransformChain]:
+    def load_fitted_transforms(
+        self,
+        checkpoint_path: Path | str
+    ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
         """Load fitted transform chains from a checkpoint file.
+
+        Separates Feature and Target transforms from the beginning for clear
+        separation of concerns and fail-fast ambiguity detection.
 
         Args:
             checkpoint_path: Path to the Lightning checkpoint file
 
         Returns:
-            Dictionary mapping entry names to fitted transform chains
+            Tuple of (feature_transforms, target_transforms) dictionaries
 
         Raises:
             FileNotFoundError: If checkpoint file doesn't exist
@@ -44,10 +50,9 @@ class CheckpointTransformLoader:
 
         Example:
             >>> loader = CheckpointTransformLoader()
-            >>> transforms = loader.load_fitted_transforms("model.ckpt")
-            >>> x_transform = transforms.get("x")
-            >>> if x_transform:
-            ...     transformed_x = x_transform(raw_x)
+            >>> feature_transforms, target_transforms = loader.load_fitted_transforms("model.ckpt")
+            >>> x_transform = feature_transforms.get("x")
+            >>> y_transform = target_transforms.get("y")
         """
         checkpoint_path = Path(checkpoint_path)
 
@@ -60,68 +65,181 @@ class CheckpointTransformLoader:
         except Exception as e:
             raise ValueError(f"Failed to load checkpoint: {e}") from e
 
-        # Extract fitted transforms from the checkpoint
-        fitted_transforms = self._extract_fitted_transforms(checkpoint)
+        # Extract fitted transforms from the checkpoint (separated by type)
+        feature_transforms, target_transforms = self._extract_fitted_transforms(checkpoint)
 
-        if not fitted_transforms:
-            # Return empty dict if no transforms available (e.g., graph/timeseries models)
-            return {}
+        return feature_transforms, target_transforms
 
-        return fitted_transforms
-
-    def _extract_fitted_transforms(self, checkpoint: dict[str, Any]) -> dict[str, TransformChain]:
-        """Extract fitted transforms from checkpoint data.
+    def _extract_fitted_transforms(
+        self,
+        checkpoint: dict[str, Any]
+    ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
+        """Extract fitted transforms from checkpoint data, separated by type.
 
         Args:
             checkpoint: Loaded checkpoint dictionary
 
         Returns:
-            Dictionary of fitted transform chains
+            Tuple of (feature_transforms, target_transforms) dictionaries
 
         Raises:
             ValueError: If transform extraction fails
         """
-        fitted_transforms = {}
+        from dlkit.tools.config.data_entries import Feature, Target
 
-        # Check for fitted_transforms in the state_dict (Lightning ModuleDict)
+        feature_transforms = {}
+        target_transforms = {}
+
         state_dict = checkpoint.get("state_dict", {})
+        inference_metadata = checkpoint.get("inference_metadata", {})
+        entry_configs = inference_metadata.get("entry_configs", {})
 
-        # Look for fitted_transforms keys in state_dict
-        transform_keys = [key for key in state_dict.keys() if key.startswith("fitted_transforms.")]
+        # Guard: No entry configs means we can't separate transforms
+        if not entry_configs:
+            return feature_transforms, target_transforms
 
-        if transform_keys:
-            # Reconstruct ModuleDict from state_dict
-            module_dict = ModuleDict()
+        # Check for modern format (separate feature/target) or legacy format
+        has_modern = self._has_modern_format(state_dict)
+        has_legacy = self._has_legacy_format(state_dict)
 
-            # Extract transform state dicts
-            transform_state_dicts = {}
-            for key in transform_keys:
-                # Parse key: "fitted_transforms.entry_name.layer.weight" -> "entry_name"
-                parts = key.split(".", 2)
-                if len(parts) >= 2:
-                    entry_name = parts[1]
-                    param_path = ".".join(parts[2:]) if len(parts) > 2 else ""
+        # Extract based on format
+        if has_modern:
+            feature_transforms = self._load_transforms_by_prefix("fitted_feature_transforms", state_dict, entry_configs)
+            target_transforms = self._load_transforms_by_prefix("fitted_target_transforms", state_dict, entry_configs)
+        elif has_legacy:
+            # Legacy format - separate during loading
+            all_transforms = self._load_transforms_by_prefix("fitted_transforms", state_dict, entry_configs)
+            feature_transforms, target_transforms = self._separate_by_type(all_transforms, entry_configs)
 
-                    if entry_name not in transform_state_dicts:
-                        transform_state_dicts[entry_name] = {}
+        return feature_transforms, target_transforms
 
-                    if param_path:
-                        transform_state_dicts[entry_name][param_path] = state_dict[key]
+    def _has_modern_format(self, state_dict: dict[str, Any]) -> bool:
+        """Check if checkpoint uses modern format (separate feature/target transforms)."""
+        return any(k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.")
+                  for k in state_dict.keys())
 
-            # Reconstruct TransformChain instances
-            for entry_name, transform_state_dict in transform_state_dicts.items():
-                try:
-                    # Create empty TransformChain and load state
-                    # Use a placeholder shape that will be updated when state is loaded
-                    placeholder_shape = (1, 1)  # Minimal placeholder shape
-                    transform_chain = TransformChain([], input_shape=placeholder_shape)
-                    transform_chain.load_state_dict(transform_state_dict)
-                    fitted_transforms[entry_name] = transform_chain
-                except Exception as e:
-                    # Log warning but continue with other transforms
-                    print(f"Warning: Failed to load transform chain for '{entry_name}': {e}")
+    def _has_legacy_format(self, state_dict: dict[str, Any]) -> bool:
+        """Check if checkpoint uses legacy format (mixed fitted_transforms)."""
+        return any(k.startswith("fitted_transforms.") for k in state_dict.keys())
 
-        return fitted_transforms
+    def _load_transforms_by_prefix(
+        self,
+        prefix: str,
+        state_dict: dict[str, Any],
+        entry_configs: dict[str, Any]
+    ) -> dict[str, TransformChain]:
+        """Load all transforms with given prefix from state_dict."""
+        transforms = {}
+
+        # Group state dict keys by entry name
+        transform_state_dicts = self._group_by_entry_name(prefix, state_dict)
+
+        # Reconstruct each TransformChain
+        for entry_name, transform_state in transform_state_dicts.items():
+            chain = self._reconstruct_chain(entry_name, transform_state, entry_configs)
+            if chain is not None:
+                transforms[entry_name] = chain
+
+        return transforms
+
+    def _group_by_entry_name(self, prefix: str, state_dict: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Group state dict keys by entry name."""
+        grouped = {}
+
+        for key in state_dict.keys():
+            if not key.startswith(f"{prefix}."):
+                continue
+
+            # Parse: "prefix.entry_name.param.path" -> "entry_name"
+            parts = key.split(".", 2)
+            if len(parts) < 2:
+                continue
+
+            entry_name = parts[1]
+            param_path = parts[2] if len(parts) > 2 else ""
+
+            if entry_name not in grouped:
+                grouped[entry_name] = {}
+
+            if param_path:
+                grouped[entry_name][param_path] = state_dict[key]
+
+        return grouped
+
+    def _reconstruct_chain(
+        self,
+        entry_name: str,
+        transform_state: dict[str, Any],
+        entry_configs: dict[str, Any]
+    ) -> TransformChain | None:
+        """Reconstruct a TransformChain from state dict."""
+        try:
+            # Get transform settings from entry config
+            entry_config = entry_configs.get(entry_name)
+            transform_settings = []
+
+            if entry_config and hasattr(entry_config, 'transforms'):
+                transform_settings = entry_config.transforms
+            elif entry_config and isinstance(entry_config, dict):
+                transform_settings = entry_config.get('transforms', [])
+
+            # Create and load chain
+            chain = TransformChain(transform_settings)
+            result = chain.load_state_dict(transform_state, strict=False)
+
+            # Register unexpected keys as buffers
+            self._register_unexpected_buffers(chain, result.unexpected_keys, transform_state)
+
+            return chain
+
+        except Exception as e:
+            print(f"Warning: Failed to load transform chain for '{entry_name}': {e}")
+            return None
+
+    def _register_unexpected_buffers(
+        self,
+        chain: TransformChain,
+        unexpected_keys: list[str],
+        transform_state: dict[str, Any]
+    ) -> None:
+        """Register unexpected keys as buffers in the chain."""
+        if not unexpected_keys:
+            return
+
+        for unexpected_key in unexpected_keys:
+            try:
+                parts = unexpected_key.split('.')
+                module = chain
+                for part in parts[:-1]:
+                    if part.isdigit():
+                        module = module[int(part)]
+                    else:
+                        module = getattr(module, part)
+                buffer_name = parts[-1]
+                buffer_value = transform_state[unexpected_key]
+                module.register_buffer(buffer_name, buffer_value)
+            except Exception:
+                pass  # Silently skip registration failures
+
+    def _separate_by_type(
+        self,
+        all_transforms: dict[str, TransformChain],
+        entry_configs: dict[str, Any]
+    ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
+        """Separate transforms into feature and target based on entry_configs."""
+        from dlkit.tools.config.data_entries import Feature, Target
+
+        feature_transforms = {}
+        target_transforms = {}
+
+        for name, chain in all_transforms.items():
+            entry_config = entry_configs.get(name)
+            if isinstance(entry_config, Target):
+                target_transforms[name] = chain
+            elif isinstance(entry_config, Feature):
+                feature_transforms[name] = chain
+
+        return feature_transforms, target_transforms
 
     def get_inference_metadata(self, checkpoint_path: Path | str) -> dict[str, Any]:
         """Get inference metadata from checkpoint.

@@ -17,12 +17,12 @@ from .domain.ports import (
 )
 
 from .application.use_cases import (
-    InferenceUseCase,
-    ModelReconstructionUseCase,
+    ModelLoadingUseCase,
+    InferenceExecutionUseCase,
     ShapeInferenceUseCase
 )
 
-from .application.orchestrators import InferenceOrchestrator
+from .factory import PredictorFactory
 
 from .infrastructure.adapters import (
     PyTorchModelLoader,
@@ -30,6 +30,8 @@ from .infrastructure.adapters import (
     TorchModelStateManager,
     DirectInferenceExecutor
 )
+
+from .transforms.checkpoint_loader import CheckpointTransformLoader
 
 from dlkit.core.shape_specs import ShapeInferenceEngine, ShapeSystemFactory
 from .domain.models import InferenceContext
@@ -70,14 +72,15 @@ class InferenceContainer:
         self._checkpoint_reconstructor: Optional[ICheckpointReconstructor] = None
         self._shape_inference_chain: Optional[IShapeInferenceChain] = None
         self._inference_executor: Optional[IInferenceExecutor] = None
+        self._transform_loader: Optional[CheckpointTransformLoader] = None
 
-        # Use cases
+        # Use cases (NEW ARCHITECTURE)
         self._shape_inference_use_case: Optional[ShapeInferenceUseCase] = None
-        self._model_reconstruction_use_case: Optional[ModelReconstructionUseCase] = None
-        self._inference_use_case: Optional[InferenceUseCase] = None
+        self._model_loading_use_case: Optional[ModelLoadingUseCase] = None
+        self._inference_execution_use_case: Optional[InferenceExecutionUseCase] = None
 
-        # Orchestrators
-        self._inference_orchestrator: Optional[InferenceOrchestrator] = None
+        # Factory
+        self._predictor_factory: Optional[PredictorFactory] = None
 
     def get_model_state_manager(self) -> IModelStateManager:
         """Get or create model state manager."""
@@ -119,6 +122,12 @@ class InferenceContainer:
             self._inference_executor = DirectInferenceExecutor()
         return self._inference_executor
 
+    def get_transform_loader(self) -> CheckpointTransformLoader:
+        """Get or create transform loader."""
+        if self._transform_loader is None:
+            self._transform_loader = CheckpointTransformLoader()
+        return self._transform_loader
+
     def get_shape_inference_use_case(self) -> ShapeInferenceUseCase:
         """Get or create shape inference use case."""
         if self._shape_inference_use_case is None:
@@ -127,46 +136,51 @@ class InferenceContainer:
             )
         return self._shape_inference_use_case
 
-    def get_model_reconstruction_use_case(self) -> ModelReconstructionUseCase:
-        """Get or create model reconstruction use case."""
-        if self._model_reconstruction_use_case is None:
-            self._model_reconstruction_use_case = ModelReconstructionUseCase(
+    def get_model_loading_use_case(self) -> ModelLoadingUseCase:
+        """Get or create model loading use case."""
+        if self._model_loading_use_case is None:
+            self._model_loading_use_case = ModelLoadingUseCase(
                 checkpoint_reconstructor=self.get_checkpoint_reconstructor(),
                 shape_inference_use_case=self.get_shape_inference_use_case(),
                 model_loader=self.get_model_loader(),
-                model_state_manager=self.get_model_state_manager()
+                model_state_manager=self.get_model_state_manager(),
+                transform_loader=self.get_transform_loader()
             )
-        return self._model_reconstruction_use_case
+        return self._model_loading_use_case
 
-    def get_inference_use_case(self) -> InferenceUseCase:
-        """Get or create inference use case."""
-        if self._inference_use_case is None:
-            self._inference_use_case = InferenceUseCase(
-                model_reconstruction_use_case=self.get_model_reconstruction_use_case(),
+    def get_inference_execution_use_case(self) -> InferenceExecutionUseCase:
+        """Get or create inference execution use case."""
+        if self._inference_execution_use_case is None:
+            self._inference_execution_use_case = InferenceExecutionUseCase(
                 inference_executor=self.get_inference_executor(),
                 model_state_manager=self.get_model_state_manager()
             )
-        return self._inference_use_case
+        return self._inference_execution_use_case
 
-    def get_inference_orchestrator(self) -> InferenceOrchestrator:
-        """Get or create inference orchestrator."""
-        if self._inference_orchestrator is None:
-            self._inference_orchestrator = InferenceOrchestrator(
-                inference_use_case=self.get_inference_use_case()
+    def get_predictor_factory(self) -> PredictorFactory:
+        """Get or create predictor factory.
+
+        This is the main entry point for the new inference architecture.
+        """
+        if self._predictor_factory is None:
+            self._predictor_factory = PredictorFactory(
+                model_loading_use_case=self.get_model_loading_use_case(),
+                inference_execution_use_case=self.get_inference_execution_use_case()
             )
-        return self._inference_orchestrator
+        return self._predictor_factory
 
 
 # Global container instance
 _container = InferenceContainer()
 
 
-def get_inference_orchestrator() -> InferenceOrchestrator:
-    """Get the main inference orchestrator.
+def get_predictor_factory() -> PredictorFactory:
+    """Get the predictor factory (main entry point for new architecture).
 
-    This is the primary entry point for the new architecture.
+    Returns:
+        PredictorFactory for creating predictors
     """
-    return _container.get_inference_orchestrator()
+    return _container.get_predictor_factory()
 
 
 def reset_container() -> None:
