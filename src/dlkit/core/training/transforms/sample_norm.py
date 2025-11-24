@@ -4,16 +4,21 @@ Normalizes each sample by its L2 norm, treating all features as a single vector.
 This is useful when the magnitude of feature vectors matters less than their direction.
 """
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
-
-from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import IInvertibleTransform
 from pydantic import validate_call, ConfigDict
 
+from dlkit.core.training.transforms.base import Transform
+from dlkit.core.training.transforms.interfaces import IInvertibleTransform, IShapeAwareTransform
+from dlkit.core.training.transforms.errors import TransformApplicationError
+from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
-class SampleNormL2(Transform, IInvertibleTransform):
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs import IShapeSpec
+
+
+class SampleNormL2(Transform, IInvertibleTransform, IShapeAwareTransform):
     """Normalize each sample by its L2 norm with mutable-attribute inverse pattern.
 
     This transform normalizes each sample (row) in the batch by its L2 norm,
@@ -37,7 +42,7 @@ class SampleNormL2(Transform, IInvertibleTransform):
 
     Example:
         >>> import torch
-        >>> transform = SampleNormL2(input_shape=(32, 10))  # batch_size=32, features=10
+        >>> transform = SampleNormL2(eps=1e-8)
         >>> data = torch.randn(32, 10)
         >>>
         >>> # Forward: normalize and store norms
@@ -50,42 +55,57 @@ class SampleNormL2(Transform, IInvertibleTransform):
     """
 
     eps: float
-    feature_dims: tuple[int, ...]
+    feature_dims: tuple[int, ...] | None
     _last_norms: torch.Tensor | None  # Mutable attribute for runtime statistics
+    _shape_configured: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         *,
-        input_shape: Sequence[int] | torch.Size,
         eps: float = 1e-8,
         feature_dims: tuple[int, ...] | None = None
     ) -> None:
         """Initialize the sample normalization transform.
 
         Args:
-            input_shape: Shape of the input tensor INCLUDING batch dimension.
-                Example: (batch_size, num_features) or (batch_size, height, width, channels)
             eps: Small constant to prevent division by zero when computing norms.
                 Defaults to 1e-8.
             feature_dims: Dimensions to compute norm across. If None, computes norm
                 across all dimensions except the batch dimension (dim 0).
+                This is inferred from data shape during forward() or from configure_shape().
                 Example: For shape (B, H, W, C), feature_dims=(1, 2, 3) computes
                 norm across spatial and channel dimensions for each sample.
+
+        Example:
+            >>> # Default: norm across all feature dims (inferred from data)
+            >>> transform = SampleNormL2()
+            >>>
+            >>> # Explicit: norm across specific dimensions
+            >>> transform = SampleNormL2(feature_dims=(1, 2, 3))
         """
-        super().__init__(input_shape=input_shape)
+        super().__init__()
         self.eps = eps
+        self.feature_dims = feature_dims
+        self._last_norms = None
+        self._shape_configured = False
 
-        # By default, compute norm across all dimensions except batch (dim 0)
-        if feature_dims is None:
-            self.feature_dims = tuple(range(1, len(input_shape)))
-        else:
-            self.feature_dims = feature_dims
+    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+        """Configure feature dimensions from shape information.
 
-        # Mutable attribute for storing per-sample norms (runtime state)
-        # This enables true inverse transformation
-        # Shape varies per batch: (batch_size, 1, 1, ...) with keepdim=True
-        self._last_norms: torch.Tensor | None = None
+        Args:
+            shape_spec: Shape specification containing entry shapes.
+            entry_name: Name of the entry to get shape for.
+        """
+        shape = shape_spec.get_shape(entry_name)
+        if shape is None:
+            return
+
+        # If feature_dims not explicitly set, default to all except batch (dim 0)
+        if self.feature_dims is None:
+            self.feature_dims = tuple(range(1, len(shape)))
+
+        self._shape_configured = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Normalize each sample by its L2 norm and store norms for inverse.
@@ -93,6 +113,9 @@ class SampleNormL2(Transform, IInvertibleTransform):
         This method computes the L2 norm for each sample, stores it in _last_norms,
         and returns the normalized tensor. The stored norms enable true inverse
         transformation.
+
+        If feature_dims hasn't been configured, it's inferred from the data shape
+        (all dimensions except batch dimension 0).
 
         Args:
             x: Input tensor with shape (batch_size, ...).
@@ -105,11 +128,15 @@ class SampleNormL2(Transform, IInvertibleTransform):
             Stores per-sample norms in self._last_norms for inverse_transform().
 
         Example:
-            >>> transform = SampleNormL2(input_shape=(32, 10))
+            >>> transform = SampleNormL2()
             >>> data = torch.randn(32, 10)
             >>> normalized = transform(data)
             >>> # Now _last_norms contains the norms for each of the 32 samples
         """
+        # Lazy configuration from data shape if not already configured
+        if self.feature_dims is None:
+            self.feature_dims = tuple(range(1, len(x.shape)))
+
         # Compute L2 norm for each sample across feature dimensions
         # keepdim=True ensures broadcasting works correctly
         norms = torch.norm(x, p=2, dim=self.feature_dims, keepdim=True)
@@ -167,3 +194,10 @@ class SampleNormL2(Transform, IInvertibleTransform):
 
         # Denormalize: x_original = y * ||x||_2
         return y * self._last_norms
+
+
+# Register shape inference function (SampleNormL2 preserves shape)
+@register_shape_inference(SampleNormL2)
+def _infer_sample_norm_output_shape(input_shape: tuple[int, ...], **kwargs) -> tuple[int, ...]:
+    """SampleNormL2 preserves input shape."""
+    return input_shape

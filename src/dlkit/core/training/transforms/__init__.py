@@ -8,7 +8,20 @@ from .subset import TensorSubset
 from .spectral import SpectralRadiusNorm
 from .sample_norm import SampleNormL2
 from .manager import TransformManager
-from .interfaces import IInvertibleTransform, IFittableTransform, ISerializableTransform
+from .interfaces import (
+    IInvertibleTransform,
+    IFittableTransform,
+    ISerializableTransform,
+    IShapeAwareTransform,
+)
+from .errors import (
+    TransformError,
+    TransformNotFittedError,
+    ShapeMismatchError,
+    TransformChainError,
+    TransformApplicationError,
+    InvalidTransformConfigurationError,
+)
 
 __all__ = [
     "TransformChain",
@@ -16,7 +29,6 @@ __all__ = [
     "PCA",
     "StandardScaler",
     "Permutation",
-    "TransformChain",
     "TensorSubset",
     "BaseTransform",
     "SpectralRadiusNorm",
@@ -25,4 +37,11 @@ __all__ = [
     "IInvertibleTransform",
     "IFittableTransform",
     "ISerializableTransform",
+    "IShapeAwareTransform",
+    "TransformError",
+    "TransformNotFittedError",
+    "ShapeMismatchError",
+    "TransformChainError",
+    "TransformApplicationError",
+    "InvalidTransformConfigurationError",
 ]

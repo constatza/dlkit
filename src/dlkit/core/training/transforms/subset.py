@@ -1,16 +1,30 @@
 import torch
 from collections.abc import Sequence
 from pydantic import validate_call, ConfigDict
+
 from .base import Transform
+from .interfaces import IInvertibleTransform, IFittableTransform
+from .shape_inference import register_shape_inference
 from dlkit.tools.utils.general import slice_to_list
 
 
-class TensorSubset(Transform):
-    """
-    Subsample a tensor along a given dimension.
+class TensorSubset(Transform, IFittableTransform, IInvertibleTransform):
+    """Subsample a tensor along a given dimension (shape-agnostic transform).
+
+    This transform selects specific indices along a dimension. While it can
+    benefit from knowing the dimension size (via fit()), it works shape-agnostically
+    by inferring the dimension size from data when needed.
+
+    Example:
+        >>> # Keep specific indices along dimension 1
+        >>> subset = TensorSubset(keep=[0, 2, 5], dim=1)
+        >>> data = torch.randn(32, 100)  # batch_size=32, features=100
+        >>> subsetted = subset(data)  # Shape: (32, 3)
     """
 
     _keep: Sequence[int] | slice
+    dim: int
+    length: int | None
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
@@ -18,21 +32,25 @@ class TensorSubset(Transform):
         *,
         keep: Sequence[int] | slice,
         dim: int = 1,
-        input_shape: tuple[int, ...] | torch.Size | None = None,
     ) -> None:
-        """
+        """Initialize tensor subset transform.
+
         Args:
-            keep (Sequence[int] | slice): Indices to keep along `dim`.
-            dim (int, optional): Dimension along which to subset. Defaults to 1.
-            input_shape (tuple[int, ...], optional): The shape of the input
-                Defaults to None.
+            keep: Indices to keep along the specified dimension.
+                Can be a sequence of ints or a slice object.
+            dim: Dimension along which to subset. Defaults to 1.
+
+        Example:
+            >>> # Keep first 10 features
+            >>> subset = TensorSubset(keep=slice(0, 10), dim=1)
+            >>>
+            >>> # Keep specific indices
+            >>> subset = TensorSubset(keep=[0, 5, 10, 15], dim=1)
         """
-        super().__init__(input_shape=input_shape)
-        self.dim: int = dim
+        super().__init__()
+        self.dim = dim
         self.length = None
         self._keep = keep
-        if input_shape:
-            self.fit(torch.zeros(input_shape))
 
     @property
     def keep(self):
@@ -44,23 +62,65 @@ class TensorSubset(Transform):
         self.length = data.size(self.dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        """Subset tensor along specified dimension.
+
         Args:
             x: Input tensor of arbitrary shape.
-        Returns:
-            A tensor where, along `self.dim`, only indices in `self.keep`
-            that are not in `self.drop` are retained, in ascending order.
-        """
 
-        # Build a sorted list of indices in [0, size_along_dim)
-        # excluding those in drop and keeping only those in keep
-        self.fit(x)
+        Returns:
+            Tensor with only specified indices kept along self.dim.
+            Shape is same as input except dimension self.dim is reduced.
+
+        Example:
+            >>> subset = TensorSubset(keep=[0, 2, 5], dim=1)
+            >>> data = torch.randn(32, 100)
+            >>> result = subset(data)  # Shape: (32, 3)
+        """
+        # Auto-fit from data if not already fitted
+        if self.length is None:
+            self.fit(x)
+
+        # Build sorted list of indices to keep
         final_indices = sorted(set(range(self.length)) & set(self.keep))
 
-        # Create a full‐dimensional “slice(None)” list
+        # Create full-dimensional slice(None) list
         indexer = [slice(None)] * x.ndim
-        indexer[self.dim] = list(final_indices)  # use list of ints to index that dim
+        indexer[self.dim] = list(final_indices)  # Index specific dimension
         return x[tuple(indexer)]
 
     def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
+        """Identity inverse transform (no true inverse for subset).
+
+        Args:
+            x: Subsetted tensor.
+
+        Returns:
+            Same tensor (no reconstruction of dropped indices).
+        """
         return x
+
+
+# Register shape inference function
+@register_shape_inference(TensorSubset)
+def _infer_tensor_subset_output_shape(
+    input_shape: tuple[int, ...],
+    keep: Sequence[int] | slice,
+    dim: int = 1,
+    **kwargs
+) -> tuple[int, ...]:
+    """TensorSubset reduces the specified dimension to len(keep)."""
+    output_shape = list(input_shape)
+
+    # Compute length from keep parameter
+    if isinstance(keep, slice):
+        # Handle slice objects
+        start = keep.start or 0
+        stop = keep.stop or input_shape[dim]
+        step = keep.step or 1
+        length = len(range(start, stop, step))
+    else:
+        # Handle lists/tuples
+        length = len(keep)
+
+    output_shape[dim] = length
+    return tuple(output_shape)
