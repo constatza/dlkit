@@ -357,7 +357,12 @@ class MLflowStudyRunContext(IStudyRunContext):
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".toml", delete=False, prefix="best_trial_config_"
             ) as temp_file:
-                write_config(settings, temp_file.name, exclude_unset=True)
+                write_config(
+                    settings,
+                    temp_file.name,
+                    exclude_unset=True,
+                    exclude_value_entries=True,
+                )
                 temp_path = Path(temp_file.name)
 
             try:
@@ -428,7 +433,12 @@ class MLflowTrialRunContext(ITrialRunContext):
 
             # Create temporary TOML file with unset values excluded
             with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as temp_file:
-                write_config(settings, temp_file.name, exclude_unset=True)
+                write_config(
+                    settings,
+                    temp_file.name,
+                    exclude_unset=True,
+                    exclude_value_entries=True,
+                )
                 temp_path = Path(temp_file.name)
 
             try:

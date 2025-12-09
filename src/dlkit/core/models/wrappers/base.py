@@ -7,6 +7,11 @@ integrate with the dlkit.runtime.pipelines pipeline system.
 from abc import abstractmethod, ABC
 from typing import Any
 
+# Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
+# This must happen before any Lightning checkpoint operations
+from dlkit.tools.utils.checkpoint_security import configure_checkpoint_loading
+configure_checkpoint_loading()
+
 import torch
 from lightning import LightningModule
 from torch import Tensor
@@ -19,7 +24,7 @@ from dlkit.tools.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import DataEntry, Target
+from dlkit.tools.config.data_entries import DataEntry, Target, is_feature_entry, is_target_entry
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
@@ -775,10 +780,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Returns:
             Dictionary mapping feature names to Feature configurations
         """
-        from dlkit.tools.config.data_entries import Feature
         return {
             name: config for name, config in self._entry_configs.items()
-            if isinstance(config, Feature)
+            if is_feature_entry(config)
         }
 
     def get_target_configs(self) -> dict[str, DataEntry]:
@@ -789,7 +793,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         return {
             name: config for name, config in self._entry_configs.items()
-            if isinstance(config, Target)
+            if is_target_entry(config)
         }
 
     def _is_dlkit_model(self, model_settings) -> bool:

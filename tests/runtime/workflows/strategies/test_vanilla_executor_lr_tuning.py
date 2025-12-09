@@ -276,12 +276,17 @@ class TestVanillaExecutorLRTuning:
         # Verify tuner was still called
         mock_lr_tuner.tune.assert_called_once()
 
-    def test_immutable_optimizer_update(
+    def test_mutable_optimizer_update(
         self,
         mock_components: BuildComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
-        """Test that optimizer update uses immutable update_settings."""
+        """Test that optimizer update uses mutable update_settings.
+
+        With frozen=False, update_settings now mutates in-place rather than
+        creating new objects. This is intentional to avoid serialization issues
+        with excluded fields like ValueFeature.value.
+        """
         executor = VanillaExecutor()
 
         original_optimizer = mock_components.model.optimizer
@@ -301,11 +306,11 @@ class TestVanillaExecutorLRTuning:
                 settings_with_lr_tuner,
             )
 
-        # Verify new optimizer object was created (immutable update)
-        assert mock_components.model.optimizer is not original_optimizer
+        # Verify optimizer object is mutated in-place (same object)
+        assert mock_components.model.optimizer is original_optimizer
 
         # Verify new LR is set
         assert mock_components.model.optimizer.lr == 0.009
 
-        # Verify original optimizer unchanged
-        assert original_optimizer.lr == original_lr
+        # Verify original_lr was updated (since it's the same object)
+        assert original_optimizer.lr == 0.009

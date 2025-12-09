@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from typing import Any
-from urllib.parse import urlparse
 
 import mlflow
 from mlflow import MlflowClient
 
 from dlkit.tools.config.mlflow_settings import MLflowClientSettings
+from dlkit.tools.io.url_utils import parse_url
 from mlflow.environment_variables import (
     MLFLOW_HTTP_REQUEST_TIMEOUT,
     MLFLOW_HTTP_REQUEST_MAX_RETRIES,
@@ -53,7 +53,7 @@ class MLflowClientFactory:
         # Validate tracking URI if provided
         if uri:
             try:
-                parsed = urlparse(uri)
+                parsed = parse_url(uri)
                 if not parsed.scheme:
                     logger.warning(f"Tracking URI missing scheme: {uri}")
             except Exception as e:

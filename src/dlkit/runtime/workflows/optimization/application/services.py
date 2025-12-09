@@ -13,6 +13,10 @@ from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import (
+    TrainingWorkflowConfig,
+    OptimizationWorkflowConfig,
+)
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory, BuildComponents
 
@@ -160,7 +164,7 @@ class TrialExecutor:
     def execute_trial(
         self,
         trial: Trial,
-        base_settings: GeneralSettings,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         hyperparameters: dict[str, Any],
         trial_context: Any = None,
         enable_checkpointing: bool = False,
@@ -228,8 +232,10 @@ class TrialExecutor:
             raise TrialFailedException(f"Trial execution failed: {e}") from e
 
     def _apply_hyperparameters(
-        self, base_settings: GeneralSettings, hyperparameters: dict[str, Any]
-    ) -> GeneralSettings:
+        self,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        hyperparameters: dict[str, Any],
+    ) -> GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig:
         """Apply hyperparameters to base settings.
 
         Args:
@@ -254,7 +260,7 @@ class TrialExecutor:
     def _execute_training(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         trial_context: Any = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
@@ -404,7 +410,7 @@ class OptimizationOrchestrator:
     def execute_optimization(
         self,
         study_name: str,
-        base_settings: GeneralSettings,
+        base_settings: GeneralSettings | OptimizationWorkflowConfig,
         n_trials: int,
         direction: OptimizationDirection,
         sampler_config: dict[str, Any] | None = None,
@@ -467,7 +473,7 @@ class OptimizationOrchestrator:
             ) from e
 
     def _execute_with_tracking(
-        self, study: Study, base_settings: GeneralSettings
+        self, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
     ) -> OptimizationResult:
         """Execute optimization with experiment tracking.
 
@@ -602,7 +608,7 @@ class OptimizationOrchestrator:
             return result
 
     def _execute_without_tracking(
-        self, study: Study, base_settings: GeneralSettings
+        self, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
         # Similar logic but without tracking context managers
@@ -679,7 +685,9 @@ class OptimizationOrchestrator:
             started_at=datetime.now(),
         )
 
-    def _sample_hyperparameters(self, trial: Trial, study: Study, base_settings: GeneralSettings) -> dict[str, Any]:
+    def _sample_hyperparameters(
+        self, trial: Trial, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
+    ) -> dict[str, Any]:
         """Sample hyperparameters for a trial using Optuna's suggest methods.
 
         Args:

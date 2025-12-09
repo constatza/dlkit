@@ -9,7 +9,17 @@ processing pipeline (TransformApplicationStep).
 import torch
 
 from dlkit.tools.io.arrays import load_array
-from dlkit.tools.config.data_entries import DataEntry, Feature, Target
+from dlkit.tools.config.data_entries import (
+    DataEntry,
+    PathBasedEntry,
+    ValueBasedEntry,
+    PathFeature,
+    PathTarget,
+    ValueFeature,
+    ValueTarget,
+    is_feature_entry,
+    is_target_entry,
+)
 from .interfaces import DataProvider
 
 
@@ -32,16 +42,27 @@ class FileDataProvider(DataProvider):
     def can_handle(self, entry: DataEntry) -> bool:
         """Check if this provider can handle the given dataflow entry type.
 
-        This provider only handles file-based entries (``Feature`` and ``Target``).
-        It cannot handle latent entries which have no file paths.
+        This provider handles:
+        - PathBasedEntry instances (PathFeature, PathTarget) with valid paths
+        - ValueBasedEntry instances (ValueFeature, ValueTarget) with in-memory values
+        - Legacy Feature/Target with has_path() returning True
+
+        It cannot handle latent entries, predictions, or placeholder entries.
 
         Args:
             entry (DataEntry): Data entry configuration to check.
 
         Returns:
-            bool: True if entry is Feature or Target with a file path, False otherwise.
+            bool: True if entry has data (path or value), False otherwise.
         """
-        return isinstance(entry, (Feature, Target)) and entry.has_path()
+        # New hierarchy: PathBasedEntry with valid path
+        if isinstance(entry, PathBasedEntry):
+            return entry.has_path()  # False for placeholders
+        # New hierarchy: ValueBasedEntry always has value
+        if isinstance(entry, ValueBasedEntry):
+            return entry.has_value()  # False for placeholders
+        # Legacy fallback: any entry with has_path() or has_value()
+        return entry.has_path() or entry.has_value()
 
     def load_data(self, entry: DataEntry, idx: int) -> torch.Tensor:
         """Load dataflow for a specific entry and index.
@@ -95,11 +116,11 @@ class FileDataProvider(DataProvider):
         self._cache.clear()
         self._raw_cache.clear()
 
-    def _load_and_transform_data(self, entry: Feature | Target) -> None:
+    def _load_and_transform_data(self, entry: DataEntry) -> None:
         """Load raw dataflow and apply transforms, caching the result.
 
         Args:
-            entry: File-based dataflow entry to load and transform
+            entry: Data entry to load and transform (PathBasedEntry or ValueBasedEntry)
         """
         # Load raw dataflow if not already cached
         if entry.name not in self._raw_cache:
@@ -109,19 +130,41 @@ class FileDataProvider(DataProvider):
         # Cache raw dataflow directly as the accessed tensor source
         self._cache[entry.name] = self._raw_cache[entry.name]
 
-    def _load_raw_data(self, entry: Feature | Target) -> None:
-        """Load raw dataflow from file and cache it.
+    def _load_raw_data(self, entry: DataEntry) -> None:
+        """Load raw dataflow from file or in-memory value and cache it.
 
         Args:
-            entry: File-based dataflow entry to load
+            entry: Data entry to load (PathBasedEntry with path or ValueBasedEntry with value)
 
         Raises:
             RuntimeError: If file loading fails
+            ValueError: If entry has neither path nor value
         """
         try:
-            raw_data = load_array(entry.path, dtype=entry.dtype)
-            self._raw_cache[entry.name] = raw_data
+            # ValueBasedEntry: convert in-memory value to tensor
+            if isinstance(entry, ValueBasedEntry) and entry.has_value():
+                raw_data = torch.as_tensor(entry.value)
+                if entry.dtype is not None:
+                    raw_data = raw_data.to(dtype=entry.dtype)
+                self._raw_cache[entry.name] = raw_data
+            # PathBasedEntry: load from file
+            elif isinstance(entry, PathBasedEntry) and entry.has_path() and entry.path is not None:
+                raw_data = load_array(entry.path, dtype=entry.dtype)
+                self._raw_cache[entry.name] = raw_data
+            # Legacy fallback: check has_value/has_path methods
+            elif entry.has_value():
+                raw_data = torch.as_tensor(getattr(entry, "value"))
+                if entry.dtype is not None:
+                    raw_data = raw_data.to(dtype=entry.dtype)
+                self._raw_cache[entry.name] = raw_data
+            elif entry.has_path():
+                raw_data = load_array(getattr(entry, "path"), dtype=entry.dtype)
+                self._raw_cache[entry.name] = raw_data
+            else:
+                raise ValueError(f"Entry '{entry.name}' has neither path nor value")
         except Exception as e:
+            if isinstance(e, ValueError):
+                raise
             raise RuntimeError(f"Failed to load dataflow for {entry.name}: {e}") from e
 
 class ProviderRegistry:
@@ -136,7 +179,7 @@ class ProviderRegistry:
         _providers: List of registered dataflow providers
     """
 
-    def __init__(self, providers: list[DataProvider] = None):
+    def __init__(self, providers: list[DataProvider] | None = None):
         """Initialize the provider registry.
 
         Args:

@@ -13,10 +13,21 @@ from dlkit.interfaces.api.domain import (
 from dlkit.interfaces.api.services.execution_service import ExecutionService
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.tools.config.workflow_configs import (
+    TrainingWorkflowConfig,
+    InferenceWorkflowConfig,
+    OptimizationWorkflowConfig,
+)
 
 
 def execute(
-    settings: BaseSettingsProtocol,
+    settings: (
+        TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig
+        | GeneralSettings
+        | BaseSettingsProtocol
+    ),
     mlflow: bool = False,
     checkpoint_path: Path | str | None = None,
     root_dir: Path | str | None = None,
@@ -44,7 +55,7 @@ def execute(
     manual strategy specification, following SOLID principles for clean separation of concerns.
 
     Args:
-        settings: Parsed and validated configuration settings
+        settings: Parsed and validated configuration settings (supports new workflow configs or legacy GeneralSettings)
         mlflow: Enable MLflow tracking (overrides config settings)
         checkpoint_path: Optional checkpoint path (required for inference, optional for others)
         root_dir: Override the root directory for path resolution

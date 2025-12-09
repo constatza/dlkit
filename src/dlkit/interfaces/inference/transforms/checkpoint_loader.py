@@ -227,16 +227,16 @@ class CheckpointTransformLoader:
         entry_configs: dict[str, Any]
     ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
         """Separate transforms into feature and target based on entry_configs."""
-        from dlkit.tools.config.data_entries import Feature, Target
+        from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
 
         feature_transforms = {}
         target_transforms = {}
 
         for name, chain in all_transforms.items():
             entry_config = entry_configs.get(name)
-            if isinstance(entry_config, Target):
+            if is_target_entry(entry_config):
                 target_transforms[name] = chain
-            elif isinstance(entry_config, Feature):
+            elif is_feature_entry(entry_config):
                 feature_transforms[name] = chain
 
         return feature_transforms, target_transforms

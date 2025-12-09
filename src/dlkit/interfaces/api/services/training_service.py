@@ -44,12 +44,7 @@ class TrainingService:
         start_time = time.time()
 
         try:
-            # Ensure standard run directories exist under the output root
-            try:
-                provisioning.ensure_run_dirs()
-            except Exception as e:
-                logger.debug(f"Failed to ensure run directories (non-fatal): {e}")
-            # If settings define a root_dir, apply it as a temporary path context unless already overridden
+            # Extract root_dir from settings BEFORE any directory creation
             overrides: dict[str, Any] = {}
             ctx = get_current_path_context()
             try:
@@ -58,12 +53,24 @@ class TrainingService:
                     overrides["root_dir"] = root_from_cfg
             except Exception as e:
                 logger.debug(f"Failed to extract root_dir from settings (non-fatal): {e}")
-            # Phase 1 orchestration: build + execute via Orchestrator
+
+            # Establish path context and ensure directories within that context
+            # This prevents creating directories at CWD when SESSION.root_dir is configured
             orchestrator = Orchestrator()
             if overrides:
                 with path_override_context(overrides):
+                    # Ensure standard run directories exist under the configured root
+                    try:
+                        provisioning.ensure_run_dirs()
+                    except Exception as e:
+                        logger.debug(f"Failed to ensure run directories (non-fatal): {e}")
                     exec_result = orchestrator.execute_training(settings)
             else:
+                # Ensure standard run directories exist under the default root
+                try:
+                    provisioning.ensure_run_dirs()
+                except Exception as e:
+                    logger.debug(f"Failed to ensure run directories (non-fatal): {e}")
                 exec_result = orchestrator.execute_training(settings)
             duration = time.time() - start_time
             value = exec_result

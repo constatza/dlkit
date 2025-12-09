@@ -238,8 +238,6 @@ def _make_settings(
             pin_memory=False,
             persistent_workers=False,
         ),
-        batch_size=batch_size,
-        num_workers=0,
     )
 
     model = ModelComponentSettings(
@@ -343,8 +341,6 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
             pin_memory=False,
             persistent_workers=False,
         ),
-        batch_size=2,
-        num_workers=0,
     )
 
     # Create explicit shape spec for graph model
@@ -553,8 +549,6 @@ filepath = "split.txt"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
-batch_size = {BATCH_SIZE}
-num_workers = 0
 
 [DATAMODULE.dataloader]
 num_workers = 0

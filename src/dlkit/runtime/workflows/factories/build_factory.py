@@ -13,6 +13,11 @@ from pathlib import Path
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import (
+    TrainingWorkflowConfig,
+    InferenceWorkflowConfig,
+    OptimizationWorkflowConfig,
+)
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.core.datatypes.split import IndexSplit
@@ -20,10 +25,18 @@ from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
 from dlkit.core.shape_specs import IShapeSpec, ShapeInferenceEngine, ShapeSystemFactory, InferenceContext
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 from dlkit.tools.config.components.model_components import WrapperComponentSettings
+from dlkit.tools.config.data_entries import (
+    Feature,
+    Target,
+    convert_to_tensor_entries,
+)
 from dlkit.core.models.wrappers.factories import WrapperFactory
 from dlkit.tools.io.split_provider import get_or_create_split
 from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
 from .model_detection import detect_model_type, ModelType, requires_shape_spec
+
+# Type alias for settings that can be passed to build strategies
+WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True)
@@ -40,17 +53,23 @@ class BuildComponents:
 class IBuildStrategy:
     """Interface for build strategies (dataset/wrapper families)."""
 
-    def can_handle(self, settings: GeneralSettings) -> bool:  # pragma: no cover - interface
+    def can_handle(
+        self, settings: WorkflowSettings
+    ) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def build(self, settings: GeneralSettings) -> BuildComponents:  # pragma: no cover - interface
+    def build(
+        self, settings: WorkflowSettings
+    ) -> BuildComponents:  # pragma: no cover - interface
         raise NotImplementedError
 
 
 class FlexibleBuildStrategy(IBuildStrategy):
     """Default build strategy for flexible array-like datasets."""
 
-    def can_handle(self, settings: GeneralSettings) -> bool:
+    def can_handle(
+        self, settings: WorkflowSettings
+    ) -> bool:
         # Default/fallback strategy; always true unless an explicit dataset type is provided
         try:
             ds = settings.DATASET
@@ -62,7 +81,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
         except Exception:
             return True
 
-    def build(self, settings: GeneralSettings) -> BuildComponents:
+    def build(
+        self, settings: WorkflowSettings
+    ) -> BuildComponents:
         # Use precision context for entire build process
         # This ensures all components (dataset, model) use consistent precision
         from dlkit.interfaces.api.domain.precision import precision_override
@@ -85,7 +106,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
                 # Path context already active or SESSION.root_dir not set
                 return self._build_with_precision(settings)
 
-    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
         """Internal build method that executes within precision context."""
         # Determine mode
         mode = (
@@ -122,18 +143,22 @@ class FlexibleBuildStrategy(IBuildStrategy):
                     y_path = legacy_y or legacy_x
                     # Build FlexibleDataset - precision handled by context
                     dataset = FlexibleDataset(
-                        features={"x": x_path},
-                        targets={"y": y_path}
+                        features=convert_to_tensor_entries([Feature(name="x", path=x_path)]),
+                        targets=convert_to_tensor_entries([Target(name="y", path=y_path)]),
                     )
                 else:
                     # Build from flexible entries - precision handled by context
                     dataset = FlexibleDataset(
-                        features=ds_settings.features,
-                        targets=ds_settings.targets
+                        features=convert_to_tensor_entries(getattr(ds_settings, "features", ())),
+                        targets=convert_to_tensor_entries(getattr(ds_settings, "targets", ())),
                     )
         # Default factory construction
         if dataset is None:
-            dataset = FactoryProvider.create_component(ds_settings, context)
+            ds_overrides = {
+                "features": convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ()),
+                "targets": convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ()),
+            }
+            dataset = FactoryProvider.create_component(ds_settings, context.with_overrides(**ds_overrides))
 
         # Get or create split (with caching)
         split_cfg = settings.DATASET.split
@@ -146,13 +171,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
         )
 
         # Build datamodule with overrides (keep original settings object for test patching)
-        # Apply dataloader overrides (e.g., batch_size, num_workers) via settings facade
-        try:
-            dm_loader_cfg = settings.DATAMODULE.get_dataloader_config()
-        except Exception:
-            dm_loader_cfg = getattr(settings.DATAMODULE, "dataloader", {})
         dm_context = context.with_overrides(
-            dataset=dataset, split=index_split, dataloader=dm_loader_cfg
+            dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
         datamodule: LightningDataModule = FactoryProvider.create_component(
             settings.DATAMODULE, dm_context
@@ -254,9 +274,8 @@ class BuildFactory:
     """Factory that selects an appropriate build strategy and constructs components.
 
     **Pre-Build Validation**: This factory validates settings before building components.
-    Settings loaded with lazy validation (default) are validated here using Pydantic's
-    model_validate() to ensure all required fields are present and valid before
-    constructing expensive runtime components.
+    Settings are eagerly validated when loaded; this step ensures required sections
+    are present before constructing expensive runtime components.
     """
 
     def __init__(self, strategies: list[IBuildStrategy] | None = None) -> None:
@@ -267,47 +286,47 @@ class BuildFactory:
             FlexibleBuildStrategy(),
         ]
 
-    def _validate_settings(self, settings: GeneralSettings) -> None:
-        """Validate settings before building components.
+    def _validate_settings(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> None:
+        """Validate settings completeness before building components.
 
-        This triggers Pydantic validation on the settings object, which validates:
-        - Required fields are present
-        - File paths exist (FilePath fields)
-        - Field types are correct
-        - Custom validators pass
+        This uses workflow-specific completeness validators that check:
+        - Required sections are present (not None)
+        - Required fields within sections are populated
+        - File paths exist
+        - Cross-section validation (e.g., OPTUNA.enabled for optimization)
 
         Args:
             settings: Settings to validate
 
         Raises:
-            ValidationError: If settings validation fails (Pydantic error with details)
+            ConfigValidationError: If settings are incomplete or invalid
         """
-        from pydantic import ValidationError
+        from dlkit.tools.config.validators import validate_config_complete
 
-        try:
-            # Re-validate using model_validate to catch all validation errors
-            # Use model_dump(mode='python') to get the raw data
-            settings.__class__.model_validate(settings.model_dump(mode='python'))
-        except ValidationError:
-            # Re-raise as-is for clear error messages
-            raise
+        # Use the new completeness validators
+        validate_config_complete(settings)
 
-    def build_components(self, settings: GeneralSettings) -> BuildComponents:
+    def build_components(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> BuildComponents:
         """Build runtime components with pre-build validation.
 
-        Validates settings first (triggers Pydantic validation for lazy-loaded configs),
+        Validates settings completeness first (ensures all required sections present),
         then selects and executes appropriate build strategy.
 
         Args:
-            settings: General settings (may be unvalidated from lazy loading)
+            settings: Workflow config (TrainingWorkflowConfig, InferenceWorkflowConfig,
+                     OptimizationWorkflowConfig) or legacy GeneralSettings
 
         Returns:
             BuildComponents: Validated and constructed runtime components
 
         Raises:
-            ValidationError: If settings validation fails before build
+            ConfigValidationError: If settings are incomplete or invalid
         """
-        # Validate settings before building (fail-fast with clear errors)
+        # Validate settings completeness before building (fail-fast with clear errors)
         self._validate_settings(settings)
 
         # Build components using appropriate strategy
@@ -321,7 +340,9 @@ class BuildFactory:
 class GraphBuildStrategy(IBuildStrategy):
     """Build strategy for graph (PyG) datasets and models."""
 
-    def can_handle(self, settings: GeneralSettings) -> bool:
+    def can_handle(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> bool:
         try:
             ds = settings.DATASET
             dm = settings.DATAMODULE
@@ -333,7 +354,9 @@ class GraphBuildStrategy(IBuildStrategy):
         except Exception:
             return False
 
-    def build(self, settings: GeneralSettings) -> BuildComponents:
+    def build(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> BuildComponents:
         # Use precision context for entire build process
         from dlkit.interfaces.api.domain.precision import precision_override
         from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
@@ -355,7 +378,7 @@ class GraphBuildStrategy(IBuildStrategy):
                 # Path context already active or SESSION.root_dir not set
                 return self._build_with_precision(settings)
 
-    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
         """Internal build method that executes within precision context."""
         mode = (
             "inference"
@@ -376,8 +399,14 @@ class GraphBuildStrategy(IBuildStrategy):
         try:
             ds_settings = settings.DATASET
             fp = getattr(ds_settings, "features_path", None)
-            if fp is not None:
+            resolved_features = convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ())
+            resolved_targets = convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ())
+            if resolved_features:
+                ds_overrides["features"] = resolved_features
+            elif fp is not None:
                 ds_overrides["features"] = fp
+            if resolved_targets:
+                ds_overrides["targets"] = resolved_targets
         except Exception:
             pass
 
@@ -393,12 +422,8 @@ class GraphBuildStrategy(IBuildStrategy):
             explicit_filepath=split_cfg.filepath,
         )
 
-        try:
-            dm_loader_cfg = settings.DATAMODULE.get_dataloader_config()
-        except Exception:
-            dm_loader_cfg = getattr(settings.DATAMODULE, "dataloader", {})
         dm_context = context.with_overrides(
-            dataset=dataset, split=index_split, dataloader=dm_loader_cfg
+            dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
         # Default to graph-aware datamodule when no explicit datamodule is provided
         dm_settings = settings.DATAMODULE
@@ -476,7 +501,9 @@ class GraphBuildStrategy(IBuildStrategy):
 class TimeSeriesBuildStrategy(IBuildStrategy):
     """Build strategy for time series / forecasting datasets and models."""
 
-    def can_handle(self, settings: GeneralSettings) -> bool:
+    def can_handle(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> bool:
         try:
             ds = settings.DATASET
             dm = settings.DATAMODULE
@@ -488,7 +515,9 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         except Exception:
             return False
 
-    def build(self, settings: GeneralSettings) -> BuildComponents:
+    def build(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ) -> BuildComponents:
         # Use precision context for entire build process
         from dlkit.interfaces.api.domain.precision import precision_override
         from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
@@ -510,7 +539,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
                 # Path context already active or SESSION.root_dir not set
                 return self._build_with_precision(settings)
 
-    def _build_with_precision(self, settings: GeneralSettings) -> BuildComponents:
+    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
         """Internal build method that executes within precision context."""
         mode = (
             "inference"
@@ -530,8 +559,14 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         try:
             ds_settings = settings.DATASET
             fp = getattr(ds_settings, "features_path", None)
-            if fp is not None:
+            resolved_features = convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ())
+            resolved_targets = convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ())
+            if resolved_features:
+                ds_overrides["features"] = resolved_features
+            elif fp is not None:
                 ds_overrides["features"] = fp
+            if resolved_targets:
+                ds_overrides["targets"] = resolved_targets
         except Exception:
             pass
         dataset = FactoryProvider.create_component(
@@ -546,12 +581,8 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             explicit_filepath=split_cfg.filepath,
         )
 
-        try:
-            dm_loader_cfg = settings.DATAMODULE.get_dataloader_config()
-        except Exception:
-            dm_loader_cfg = getattr(settings.DATAMODULE, "dataloader", {})
         dm_context = context.with_overrides(
-            dataset=dataset, split=index_split, dataloader=dm_loader_cfg
+            dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
         # Default to time-series-aware datamodule when no explicit datamodule is provided
         dm_settings = settings.DATAMODULE
