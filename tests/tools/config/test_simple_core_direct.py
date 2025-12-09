@@ -66,19 +66,12 @@ class MockTrial:
 
 
 def test_basic_settings_creation():
-    """Test basic settings can be created and are frozen."""
+    """Test basic settings can be created."""
     settings = MockBasicSettings(name="test", value=100)
 
     assert settings.name == "test"
     assert settings.value == 100
     assert settings.enabled is True
-
-    # Should be frozen
-    try:
-        settings.name = "modified"
-        assert False, "Should have raised ValidationError"
-    except ValidationError:
-        pass  # Expected
 
 
 def test_component_settings_creation():

@@ -31,17 +31,6 @@ class TestBasicSettings:
         assert settings.value == basic_settings_data["value"]
         assert settings.enabled == basic_settings_data["enabled"]
 
-    def test_basic_settings_frozen_immutable(self, basic_settings_data: dict[str, Any]) -> None:
-        """Test BasicSettings instances are frozen/immutable.
-
-        Args:
-            basic_settings_data: Valid settings dataflow fixture
-        """
-        settings = MockBasicSettings(**basic_settings_data)
-
-        with pytest.raises(ValidationError, match="frozen"):
-            settings.name = "modified_name"
-
     def test_basic_settings_validation_on_creation(self) -> None:
         """Test BasicSettings validates dataflow on creation."""
         with pytest.raises(ValidationError):

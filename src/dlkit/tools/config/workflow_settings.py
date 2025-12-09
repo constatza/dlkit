@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, ValidationInfo
 
 from .core.base_settings import BasicSettings
 from .session_settings import SessionSettings
@@ -17,6 +17,7 @@ from .training_settings import TrainingSettings as TrainingConfig
 from .components.model_components import ModelComponentSettings
 from .extras_settings import ExtrasSettings
 from .paths_settings import PathsSettings
+from .data_entries import PathFeature, PathTarget
 
 
 class BaseWorkflowSettings(BasicSettings):
@@ -56,6 +57,34 @@ class BaseWorkflowSettings(BasicSettings):
 
     # Workflow identification (template method pattern support)
     _workflow_type: ClassVar[str] = "base"
+
+    @model_validator(mode="after")
+    def validate_nested_paths(self, info: ValidationInfo) -> "BaseWorkflowSettings":
+        """Validate nested DATASET paths with eager validation.
+
+        Pydantic does not automatically propagate validation context to nested models.
+        This validator explicitly validates feature/target paths at the top-level,
+        ensuring path existence checks for fail-fast error detection.
+
+        Args:
+            info: Pydantic validation info (unused, kept for compatibility).
+
+        Returns:
+            The validated settings instance.
+
+        Raises:
+            ValueError: If any feature/target path is specified but does not exist.
+        """
+        # Validate DATASET nested paths
+        if self.DATASET is not None:
+            for feature in self.DATASET.features:
+                if isinstance(feature, PathFeature) and feature.path is not None and not feature.path.exists():
+                    raise ValueError(f"Feature path does not exist: {feature.path}")
+            for target in self.DATASET.targets:
+                if isinstance(target, PathTarget) and target.path is not None and not target.path.exists():
+                    raise ValueError(f"Target path does not exist: {target.path}")
+
+        return self
 
     @property
     def is_training(self) -> bool:
@@ -110,11 +139,11 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
     Follows SRP by handling only training-specific configuration.
     Implements TrainingSettingsProtocol for type safety and ISP compliance.
 
-    Note: With lazy validation, fields can be None during config load.
-    Validation happens at build time, not load time.
+    Optional sections can be omitted in the initial TOML and injected later
+    via programmatic updates.
     """
 
-    # Training-specific sections (optional during lazy load, validated at build time)
+    # Training-specific sections (optional at load, validated before build)
     TRAINING: TrainingConfig | None = Field(
         default=None,
         description="Core training configuration with nested library settings",
@@ -168,8 +197,7 @@ class InferenceWorkflowSettings(BaseWorkflowSettings):
     Deliberately excludes training/optimization sections per ISP.
     Implements InferenceSettingsProtocol for type safety.
 
-    Note: With lazy validation, fields can be None during config load.
-    Validation happens at build time, not load time.
+    Optional sections can be omitted initially and supplied before execution.
     """
 
     _workflow_type: ClassVar[str] = "inference"

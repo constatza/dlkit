@@ -1,16 +1,68 @@
-"""Settings updater with deep merge and full validation.
+"""Settings updater with deep merge and in-place mutation.
 
-This module provides a simple interface for updating nested Pydantic settings
-without manual nested model_copy() calls.
+This module provides the core `update_settings()` function for mutating nested
+Pydantic settings in-place. The mutable settings architecture (frozen=False with
+validate_assignment=True) was chosen to prevent data loss with excluded fields.
+
+Architecture Rationale
+----------------------
+DLKit uses mutable settings (frozen=False) instead of immutable settings to solve
+a critical issue with value-based data entries:
+
+**Problem with Immutable (frozen=True):**
+- ValueFeature.value is marked with exclude=True (not serialized)
+- model_copy() requires serialization → deserialization
+- Excluded fields are LOST during this cycle
+- Result: In-memory arrays disappear after updates
+
+**Solution with Mutable (frozen=False):**
+- Direct attribute mutation (no serialization)
+- Object identity preserved across updates
+- Excluded fields (like ValueFeature.value) remain intact
+- validate_assignment=True ensures type safety on every setattr()
+
+Common Use Cases
+----------------
+1. Adding features to existing dataset configuration:
+   >>> from dlkit.tools.config import load_settings
+   >>> from dlkit.tools.config.data_entries import Feature
+   >>> config = load_settings("config.toml")
+   >>> new_feature = Feature(name="z", path="data/z.npy")
+   >>> update_settings(config.DATASET, {
+   ...     "features": config.DATASET.features + (new_feature,)
+   ... })
+
+2. Updating optimizer learning rate:
+   >>> update_settings(config, {
+   ...     "TRAINING": {"optimizer": {"lr": 0.001}}
+   ... })
+
+3. Injecting in-memory data:
+   >>> import numpy as np
+   >>> features = np.random.randn(1000, 20).astype(np.float32)
+   >>> update_settings(config.DATASET, {
+   ...     "features": (Feature(name="x", value=features),)
+   ... })
+
+Technical Details
+-----------------
+- Returns the SAME object (mutated in-place)
+- Deep merges nested dictionaries
+- Recursively updates nested BaseModel instances
+- Validation happens automatically via validate_assignment=True
+- No serialization overhead
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeVar, Union, cast, get_args, get_origin
+from types import UnionType
 
 from pydantic import BaseModel
 
 from .base_settings import BasicSettings
+
+T = TypeVar("T", bound=BaseModel)
 
 _EMPTY = object()
 
@@ -20,66 +72,87 @@ def update_settings(
     updates: dict[str, Any],
     validate: bool = True,
 ) -> BasicSettings:
-    """Deep merge updates into settings with full validation.
+    """Update settings by direct mutation - NO serialization.
 
-    This function merges the updates dict into the settings, preserving all
-    unspecified fields. It correctly handles:
-    - Nested Pydantic models: recursively merges
+    This function mutates the settings in-place, preserving object identity.
+    It correctly handles:
+    - Nested Pydantic models: recursively updates in-place
     - Plain dicts (like EXTRAS): overwrites completely
-    - All other types: overwrites
+    - All other types: overwrites via setattr
+
+    Because settings now have frozen=False, direct mutation is allowed.
+    validate_assignment=True ensures type safety on each setattr.
 
     Args:
-        settings: Current settings instance
+        settings: Settings instance to mutate in-place
         updates: Nested dict of updates (only specified fields are overwritten)
-        validate: If True, re-validate entire result after merge (default: True)
+        validate: Ignored (validation happens automatically via validate_assignment)
 
     Returns:
-        New settings instance with updates applied and optionally validated
+        The same settings instance (mutated in-place)
 
     Examples:
         Update nested fields without losing other settings:
-        >>> new_settings = update_settings(settings, {
+        >>> update_settings(settings, {
         ...     "DATASET": {
         ...         "features": [Feature(name="x", path="data.npy")]
         ...     }
         ... })
 
         Update multiple sections at once:
-        >>> new_settings = update_settings(settings, {
+        >>> update_settings(settings, {
         ...     "TRAINING": {"epochs": 100},
         ...     "MLFLOW": {"server": {"host": "localhost"}},
         ... })
 
-        Skip validation for performance (use with caution):
-        >>> new_settings = update_settings(
-        ...     settings,
-        ...     {"TRAINING": {"epochs": 100}},
-        ...     validate=False
-        ... )
+        Settings are mutated in-place (same object returned):
+        >>> orig_id = id(settings)
+        >>> new_settings = update_settings(settings, {"TRAINING": {"epochs": 100}})
+        >>> assert id(new_settings) == orig_id
     """
-    # Get current state as dict
-    current = settings.model_dump()
+    # Recursively apply updates by direct attribute assignment
+    for key, value in updates.items():
+        # Guard clause: Check if field exists (or if model allows extras)
+        has_field = hasattr(settings, key)
+        allows_extras = False
+        if hasattr(settings, 'model_config'):
+            config = settings.model_config
+            allows_extras = (isinstance(config, dict) and config.get('extra') == 'allow')
 
-    # Merge using the original settings object to check types
-    merged = _deep_merge(current, updates, settings)
+        if not has_field and not allows_extras:
+            raise ValueError(f"Unknown setting: {key}")
 
-    # Always use model_validate to ensure proper type coercion of nested models
-    # This prevents serialization warnings about dicts instead of proper Pydantic models
-    if validate:
-        # model_validate forces complete re-validation of all fields
-        # All nested Pydantic models are re-instantiated and validated
-        return settings.__class__.model_validate(merged)
-    else:
-        # Skip custom validators but still do type coercion
-        # This ensures nested dicts are properly converted to Pydantic models
-        # preventing serialization warnings while bypassing field validation
-        try:
-            # Use model_validate without strict mode - allows type coercion without full validation
-            return settings.__class__.model_validate(merged, strict=False)
-        except Exception:
-            # Fallback to model_construct if model_validate fails
-            # This can happen with very incomplete configs during lazy loading
-            return settings.__class__.model_construct(**merged)
+        current = getattr(settings, key, None)
+
+        # Handle different value types with pattern matching
+        match (value, current):
+            # BaseModel update on BaseModel field - convert to dict and recurse
+            case (BaseModel(), BaseModel()):
+                value_dict = value.model_dump(exclude_unset=True)
+                update_settings(current, value_dict, validate=validate)
+
+            # BaseModel update on non-BaseModel field - replace
+            case (BaseModel(), _):
+                setattr(settings, key, value)
+
+            # Dict update on BaseModel field - recurse
+            case (dict(), BaseModel()):
+                update_settings(current, value, validate=validate)
+
+            # Dict update on dict field - merge
+            case (dict(), dict()):
+                merged_dict = _merge_plain_dict(current, value)
+                setattr(settings, key, merged_dict)
+
+            # Dict on None (new field with extra="allow") - set
+            case (dict(), None):
+                setattr(settings, key, value)
+
+            # Any other case - direct assignment
+            case _:
+                setattr(settings, key, value)
+
+    return settings
 
 
 def _deep_merge(
@@ -155,9 +228,78 @@ def _merge_plain_dict(base: dict[str, Any], updates: dict[str, Any]) -> dict[str
     return merged
 
 
-def _normalize_update_value(value: Any) -> Any:
-    """Convert BaseModel updates into partial dictionaries for safe merging."""
+def _construct_with_nested_models(
+    model_class: type[T],
+    data: dict[str, Any],
+) -> T:
+    """Construct Pydantic model with proper nested model reconstruction.
 
+    This function ensures that nested dicts are converted to their proper
+    Pydantic model types when using model_construct as a fallback. This
+    prevents AttributeError when accessing methods on nested models that
+    ended up as plain dicts.
+
+    Args:
+        model_class: Pydantic model class to construct.
+        data: Dictionary data to construct from.
+
+    Returns:
+        Model instance with all nested models properly constructed.
+    """
+    processed_data: dict[str, Any] = {}
+
+    for key, value in data.items():
+        field_info = model_class.model_fields.get(key)
+        if field_info is None:
+            # Extra field - pass through as-is
+            processed_data[key] = value
+            continue
+
+        # Determine the expected field type
+        field_type = field_info.annotation
+
+        # Handle Optional[SomeModel], Union[SomeModel, None], etc.
+        origin = get_origin(field_type)
+        if origin in (Union, UnionType):
+            args = get_args(field_type)
+            field_type = next((arg for arg in args if arg is not type(None)), field_type)
+
+        # Recursively construct nested Pydantic models
+        if isinstance(value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
+            processed_data[key] = _construct_with_nested_models(field_type, value)
+        elif isinstance(value, (list, tuple)):
+            # Handle lists/tuples of nested models
+            processed_items = []
+            item_type = field_type
+            item_origin = get_origin(field_type)
+            if item_origin in (tuple, list):
+                item_args = get_args(field_type)
+                if item_args:
+                    item_type = item_args[0]
+
+            for item in value:
+                if isinstance(item, dict) and isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                    processed_items.append(_construct_with_nested_models(item_type, item))
+                else:
+                    processed_items.append(item)
+
+            # Preserve original container type
+            if isinstance(value, tuple):
+                processed_data[key] = tuple(processed_items)
+            else:
+                processed_data[key] = processed_items
+        else:
+            processed_data[key] = value
+
+    return model_class.model_construct(**processed_data)
+
+
+def _normalize_update_value(value: Any) -> Any:
+    """Convert BaseModel updates into partial dictionaries for safe merging.
+
+    This ensures that all nested Pydantic models are serialized to dicts,
+    allowing proper re-validation with context when model_validate is called.
+    """
     if isinstance(value, BaseModel):
         # Only materialise explicitly set fields to avoid clobbering defaults
         data = value.model_dump(exclude_unset=True)
@@ -173,5 +315,16 @@ def _normalize_update_value(value: Any) -> Any:
                 continue
             normalized[key] = normalized_value
         return normalized
+
+    if isinstance(value, (list, tuple)):
+        # Recursively normalize items in sequences
+        # This ensures BaseModel instances inside tuples/lists are converted to dicts
+        normalized_items = [_normalize_update_value(item) for item in value]
+        # Filter out _EMPTY items
+        normalized_items = [item for item in normalized_items if item is not _EMPTY]
+        # Preserve original container type
+        if isinstance(value, tuple):
+            return tuple(normalized_items)
+        return normalized_items
 
     return value

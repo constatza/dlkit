@@ -24,6 +24,8 @@ name = "original_name"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -68,6 +70,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -122,6 +126,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -148,13 +154,13 @@ module_path = "torch.nn"
         new_settings = update_settings(settings, {
             "SESSION": {"name": "updated_session"},
             "TRAINING": {"epochs": 100},
-            "DATAMODULE": {"batch_size": 64}
+            "DATAMODULE": {"dataloader": {"batch_size": 64}}
         })
 
         # All updates should be applied
         assert new_settings.SESSION.name == "updated_session"
         assert new_settings.TRAINING.epochs == 100
-        assert new_settings.DATAMODULE.batch_size == 64
+        assert new_settings.DATAMODULE.dataloader.batch_size == 64
 
         # Unspecified fields preserved
         assert new_settings.TRAINING.optimizer.lr == settings.TRAINING.optimizer.lr
@@ -173,6 +179,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -234,6 +242,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -285,6 +295,8 @@ name = "original"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -323,6 +335,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -366,6 +380,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -411,6 +427,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -453,6 +471,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -500,6 +520,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -555,6 +577,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -604,6 +628,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -646,6 +672,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -677,11 +705,11 @@ module_path = "torch.nn"
         assert new_settings.SESSION.name == "updated"
 
 
-class TestImmutability:
-    """Test that original settings remain unchanged."""
+class TestMutability:
+    """Test that settings are mutated in-place (no longer immutable)."""
 
-    def test_original_settings_unchanged(self, tmp_path):
-        """Test that update creates new instance, leaving original unchanged."""
+    def test_original_settings_mutated(self, tmp_path):
+        """Test that update mutates the same instance (not a copy)."""
         config_path = tmp_path / "config.toml"
         config_path.write_text("""
 [SESSION]
@@ -690,6 +718,8 @@ name = "original"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -712,10 +742,8 @@ module_path = "torch.nn"
 
         settings = load_training_settings(config_path)
 
-        # Capture original state
-        original_dump = settings.model_dump()
-        original_name = settings.SESSION.name
-        original_epochs = settings.TRAINING.epochs
+        # Capture original id
+        original_id = id(settings)
 
         # Update settings
         new_settings = update_settings(settings, {
@@ -723,14 +751,13 @@ module_path = "torch.nn"
             "TRAINING": {"epochs": 999}
         })
 
-        # Original should be completely unchanged
-        assert settings.SESSION.name == original_name
-        assert settings.TRAINING.epochs == original_epochs
-        assert settings.model_dump() == original_dump
+        # Should be the same instance (mutated in-place)
+        assert id(new_settings) == original_id
+        assert new_settings is settings
 
-        # New settings should have updates
-        assert new_settings.SESSION.name == "modified"
-        assert new_settings.TRAINING.epochs == 999
+        # Original IS modified (mutation, not copy)
+        assert settings.SESSION.name == "modified"
+        assert settings.TRAINING.epochs == 999
 
 
 class TestEdgeCases:
@@ -746,6 +773,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -793,6 +822,8 @@ name = "test"
 [DATAMODULE]
 name = "InMemoryModule"
 module_path = "dlkit.core.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 32
 
 [DATASET]
@@ -819,3 +850,36 @@ module_path = "torch.nn"
         new_settings = update_settings(settings, {})
 
         assert new_settings.model_dump() == settings.model_dump()
+
+
+class TestInstanceHelper:
+    """Test the BasicSettings.update_with convenience method."""
+
+    def test_update_with_matches_functional_helper(self, tmp_path):
+        """Ensure update_with delegates to update_settings and preserves type."""
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("""
+[SESSION]
+name = "instance_helper"
+
+[TRAINING]
+epochs = 1
+
+[TRAINING.optimizer]
+name = "Adam"
+lr = 0.001
+
+[TRAINING.loss_function]
+name = "MSELoss"
+module_path = "torch.nn"
+""")
+
+        settings = load_training_settings(config_path)
+
+        via_method = settings.update_with({"SESSION": {"name": "updated_name"}})
+
+        assert via_method.SESSION.name == "updated_name"
+        # update_with returns the same instance (mutation)
+        assert via_method is settings
+        # Original instance IS changed (mutation, not immutability)
+        assert settings.SESSION.name == "updated_name"
