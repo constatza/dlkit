@@ -10,8 +10,58 @@ from collections.abc import Callable
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _load_npz(path: Path | str, array_key: str | None = None, **kwargs) -> np.ndarray:
+    """Load a single array from an NPZ file.
+
+    NPZ files can contain multiple named arrays. This function extracts a single
+    array either by explicit key or through auto-detection for single-array files.
+
+    Args:
+        path: Path to the .npz file.
+        array_key: Name of the array to extract. If None, auto-detects for
+                   single-array files.
+        **kwargs: Forwarded to np.load (e.g., mmap_mode='r').
+
+    Returns:
+        The numpy array extracted from the NPZ file.
+
+    Raises:
+        ValueError: If array_key is None and file contains multiple arrays,
+                   or if the specified array_key is not found in the file.
+
+    Examples:
+        # Auto-detection for single-array npz
+        arr = _load_npz("data.npz")
+
+        # Explicit key for multi-array npz
+        features = _load_npz("data.npz", array_key="features")
+        targets = _load_npz("data.npz", array_key="targets")
+    """
+    npz = np.load(path, **kwargs)
+    keys = list(npz.keys())
+
+    if array_key is None:
+        # Auto-detect for single array
+        if len(keys) == 1:
+            return npz[keys[0]]
+        raise ValueError(
+            f"NPZ file '{path}' contains multiple arrays {keys}. "
+            f"Specify array_key to select one."
+        )
+
+    # Use explicit key
+    if array_key not in keys:
+        raise ValueError(
+            f"Array key '{array_key}' not found in NPZ file '{path}'. "
+            f"Available keys: {keys}"
+        )
+    return npz[array_key]
+
+
 # Frozen, immutable loader map, typed as a Mapping
 _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType({
+    ".npz": _load_npz,
     ".npy": np.load,
     ".txt": np.loadtxt,
     ".csv": np.loadtxt,
@@ -37,16 +87,18 @@ def load_array(
     falls back to the global default (FULL_32).
 
     Args:
-        path: A FilePath pointing to .npy, .txt/.csv, or .pt/.pth file.
+        path: A FilePath pointing to .npy, .npz, .txt/.csv, or .pt/.pth file.
         dtype: Explicit torch.dtype to convert the loaded data to.
                If None, uses precision service to resolve from context.
         **kwargs: Forwarded to the underlying loader (e.g. np.load or torch.load).
+                 For .npz files, pass array_key to select a specific array.
 
     Returns:
         A torch.Tensor containing the loaded data with appropriate precision.
 
     Raises:
-        ValueError: If `path.suffix` is not one of the supported extensions.
+        ValueError: If `path.suffix` is not one of the supported extensions,
+                   or if .npz file requires array_key but none provided.
         TypeError: If the loader returns a type other than np.ndarray or Tensor.
 
     Examples:
@@ -56,6 +108,10 @@ def load_array(
 
         # Override with explicit dtype (rare cases)
         tensor = load_array("data.npy", dtype=torch.float16)
+
+        # Load from NPZ file with explicit array key
+        features = load_array("data.npz", array_key="features")
+        targets = load_array("data.npz", array_key="targets")
     """
     suffix = Path(path).suffix.lower()
     loader = _LOADER_MAP.get(suffix)
@@ -84,8 +140,9 @@ def load_array_with_session_precision(path: FilePath, **kwargs) -> Tensor:
     the session precision without allowing dtype overrides.
 
     Args:
-        path: A FilePath pointing to .npy, .txt/.csv, or .pt/.pth file.
+        path: A FilePath pointing to .npy, .npz, .txt/.csv, or .pt/.pth file.
         **kwargs: Forwarded to the underlying loader (e.g. np.load or torch.load).
+                 For .npz files, pass array_key to select a specific array.
 
     Returns:
         A torch.Tensor loaded with session-consistent precision.
