@@ -19,6 +19,36 @@ Ensure that `uv` is installed on your system. For official installation instruct
 uv add git+https://github.com/constatza/dlkit
 ~~~
 
+## Supported Data Formats
+
+DLKit's `FlexibleDataset` supports multiple array file formats out of the box:
+
+- **NumPy**: `.npy` (single array), `.npz` (multi-array archive)
+- **PyTorch**: `.pt`, `.pth` (tensor files)
+- **Text**: `.txt`, `.csv` (array data)
+
+### NPZ Multi-Array Support
+
+For `.npz` files containing multiple arrays, the entry `name` is automatically used as the array key:
+
+```toml
+# data.npz contains arrays: "features", "targets", "latent"
+
+[[DATASET.features]]
+name = "features"  # Used as array key in NPZ
+path = "data.npz"
+
+[[DATASET.features]]
+name = "latent"    # Loads different array from same file
+path = "data.npz"
+
+[[DATASET.targets]]
+name = "targets"   # Used as array key
+path = "data.npz"
+```
+
+See `src/dlkit/core/datasets/README.md` for detailed documentation and examples.
+
 ## Quick Start (CLI)
 
 
@@ -261,7 +291,7 @@ All transforms have been refactored to eliminate the redundant `input_shape` par
 - ❌ `TransformChain(settings, input_shape=(32, 64))` - old API
 
 **New Shape-Aware API:**
-- ✅ Transforms support **lazy shape allocation** - no shape needed at construction
+- ✅ Transforms support **automatic shape allocation** - no shape needed at construction
 - ✅ Shape-aware transforms implement `IShapeAwareTransform` with `configure_shape()` method
 - ✅ Shapes automatically inferred during `fit()` or provided via `shape_spec`
 - ✅ `TransformChain` uses analytical shape inference (no dummy tensor execution)
@@ -274,7 +304,7 @@ from dlkit.core.training.transforms import MinMaxScaler, PCA
 scaler = MinMaxScaler(dim=0, input_shape=(32, 64))
 pca = PCA(n_components=10, input_shape=(32, 64))
 
-# ✅ NEW (lazy allocation)
+# ✅ NEW (automatic allocation)
 scaler = MinMaxScaler(dim=0)  # Shape inferred during fit()
 pca = PCA(n_components=10)
 scaler.fit(train_data)  # Automatically allocates buffers from data.shape
@@ -421,16 +451,16 @@ All paths are resolved relative to SESSION.root_dir using DLKit's SecurePath sys
 
 ## Enhanced IO System
 
-DLKit now provides a comprehensive IO system with efficient partial config loading and protocol-based design:
+DLKit provides a comprehensive IO system with efficient section-level config loading and protocol-based design:
 
-### Partial Config Loading
+### Partial Config Loading (Section-Level)
 
-Load only specific config sections without parsing the entire file:
+Load only specific config sections with eager validation; missing sections are supported only at whole-section granularity (e.g., omit `DATASET`/`DATAMODULE`/`MODEL` and inject later):
 
 ```python
 from dlkit.tools.io.config import load_sections_config, load_section_config
 
-# Load multiple sections efficiently
+# Load multiple sections efficiently (eager validation)
 sections = load_sections_config("config.toml", ["MODEL", "DATASET"])
 model_config = sections["MODEL"]
 dataset_config = sections["DATASET"]
@@ -599,6 +629,328 @@ from dlkit.tools.config import GeneralSettings
 cfg = GeneralSettings.from_toml_file("config.toml")
 res = train(cfg, epochs=20, batch_size=64, learning_rate=1e-3)
 ```
+
+## Configuration Architecture: Mutable Settings with Validation
+
+DLKit uses a **mutable settings architecture** with `frozen=False` and `validate_assignment=True`. This design choice enables efficient in-place updates while maintaining type safety through automatic validation on every assignment.
+
+### Why Mutable Settings?
+
+The architecture shifted from `frozen=True` (immutable) to `frozen=False` (mutable) to solve critical issues with value-based data entries:
+
+**Problem with Immutable Approach:**
+```python
+# ❌ OLD: Serialization lost excluded fields
+feature = ValueFeature(name="x", value=np.array([1, 2, 3]))  # value marked exclude=True
+dataset = DatasetSettings(features=[feature])
+
+# Immutable update required serialization:
+updated = dataset.model_copy(update={"some_field": "value"})
+# Problem: feature.value was excluded from serialization → LOST!
+```
+
+**Solution with Mutable Approach:**
+```python
+# ✅ NEW: Direct mutation preserves object identity
+feature = ValueFeature(name="x", value=np.array([1, 2, 3]))
+dataset = DatasetSettings(features=[feature])
+
+# Mutable update preserves the original object:
+update_settings(dataset, {"some_field": "value"})
+# feature.value preserved (same object reference, no serialization)
+```
+
+### Key Benefits
+
+1. **Preserves excluded fields**: No serialization means `ValueFeature.value` (marked `exclude=True`) is never lost
+2. **Type safety maintained**: `validate_assignment=True` ensures every `setattr()` is type-checked
+3. **Efficient updates**: No deep copying overhead for large nested structures
+4. **Predictable behavior**: Same object identity after updates (important for cross-references)
+
+### Using `update_settings()` for Configuration Updates
+
+The `update_settings()` function provides a clean API for mutating nested settings in-place:
+
+```python
+from dlkit.tools.config.core.updater import update_settings
+from dlkit.tools.config import load_settings
+
+# Load existing config
+config = load_settings("config.toml")
+
+# Add features to existing dataset configuration
+from dlkit.tools.config.data_entries import Feature
+
+new_features = [
+    Feature(name="x3", path="/data/feature3.npy"),
+    Feature(name="x4", value=np.random.randn(100, 10))  # in-memory
+]
+
+# Update dataset by adding new features (mutable, in-place)
+update_settings(config.DATASET, {
+    "features": config.DATASET.features + tuple(new_features)
+})
+
+# Multiple nested updates in one call
+update_settings(config, {
+    "TRAINING": {
+        "epochs": 100,
+        "optimizer": {"lr": 0.001}
+    },
+    "DATAMODULE": {
+        "dataloader": {"batch_size": 64}
+    }
+})
+
+# Returns same object (mutated in-place)
+assert id(config) == id(update_settings(config, {...}))
+```
+
+### Common Update Patterns
+
+**1. Adding features to dataset:**
+```python
+# Load config
+config = load_settings("config.toml")
+
+# Create new features
+new_feature = Feature(name="z", path="data/z.npy")
+
+# Add to existing features (immutable tuple concatenation)
+update_settings(config.DATASET, {
+    "features": config.DATASET.features + (new_feature,)
+})
+```
+
+**2. Replacing entire sections:**
+```python
+from dlkit.tools.config import DatasetSettings
+from dlkit.tools.config.data_entries import Feature, Target
+
+# Replace entire DATASET section
+update_settings(config, {
+    "DATASET": DatasetSettings(
+        name="FlexibleDataset",
+        features=(Feature(name="x", path="new_data.npy"),),
+        targets=(Target(name="y", path="labels.npy"),)
+    )
+})
+```
+
+**3. Deep nested updates:**
+```python
+# Update deeply nested fields without replacing parent objects
+update_settings(config, {
+    "TRAINING": {
+        "optimizer": {
+            "lr": 0.001,
+            "weight_decay": 1e-5
+        }
+    }
+})
+# Only lr and weight_decay are updated, other optimizer fields preserved
+```
+
+**4. Updating with in-memory arrays:**
+```python
+import numpy as np
+
+# Inject in-memory data (zero file I/O)
+features = np.random.randn(1000, 20).astype(np.float32)
+update_settings(config.DATASET, {
+    "features": (Feature(name="x_mem", value=features),)
+})
+```
+
+### Notes
+
+- **In-place mutation**: `update_settings()` mutates the input object and returns it
+- **Validation**: Type validation happens automatically via `validate_assignment=True`
+- **Nested merging**: Updates are deep-merged - only specified fields are overwritten
+- **Object identity**: Same object before and after update (no copying)
+- **No serialization**: Preserves object references and excluded fields
+
+## Programmatic Configuration (Hybrid TOML + Python)
+
+DLKit supports a powerful hybrid pattern combining TOML configuration with programmatic section injection. This is ideal for API workflows, experiments, and dynamic data scenarios where some configuration comes from files while other parts are generated at runtime.
+
+### When to Use This Pattern
+
+- **API Workflows**: Accepting data from HTTP requests, databases, or other sources
+- **Experiments**: Iterating over datasets programmatically while keeping base config stable
+- **Testing**: Injecting test data without creating temporary TOML files
+- **Dynamic Paths**: Generating data paths based on runtime conditions
+- **Parameterized Runs**: Sweeping over different dataset/model combinations programmatically
+
+### Basic Pattern
+
+The workflow consists of four steps (all eager validation; optional sections are whole modules):
+
+1. **Load partial config** from TOML (required sections only, e.g., `SESSION`, `TRAINING`)
+2. **Inject whole sections programmatically** using Pydantic's `model_copy(update=...)`
+3. **Validate completeness** before building components
+4. **Build and execute** using standard API
+
+### Example 1: Injecting Dataset Configuration
+
+Create a minimal TOML with only training settings:
+
+```toml
+# base_config.toml - Only defines training parameters
+[SESSION]
+name = "my_experiment"
+seed = 42
+precision = "32"
+
+[MODEL]
+name = "examples.minimal_e2e.model.SimpleNet"
+
+[TRAINING]
+[TRAINING.trainer]
+max_epochs = 100
+accelerator = "auto"
+
+[TRAINING.optimizer]
+name = "Adam"
+lr = 0.001
+```
+
+Then inject the dataset section programmatically:
+
+```python
+from dlkit.tools.io.config import load_training_config_eager
+from dlkit.tools.config import DatasetSettings
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.validators import validate_training_config_complete
+from dlkit.runtime.workflows.factories.build_factory import BuildFactory
+
+# 1. Load partial config from TOML
+config = load_training_config_eager("base_config.toml")
+
+# 2. Inject DATASET section programmatically
+config = config.model_copy(update={
+    "DATASET": DatasetSettings(
+        name="FlexibleDataset",
+        features=(
+            Feature(name="x1", path="/data/features1.npy"),
+            Feature(name="x2", path="/data/features2.npy"),
+        ),
+        targets=(
+            Target(name="y", path="/data/labels.npy"),
+        )
+    )
+})
+
+# 3. Validate completeness before building
+validate_training_config_complete(config)
+
+# 4. Build and train
+components = BuildFactory().build_components(config)
+```
+
+### Example 2: In-Memory Array Injection
+
+For testing or API workflows, inject raw arrays directly without file I/O:
+
+```python
+import numpy as np
+from dlkit.tools.io.config import load_training_config_eager
+from dlkit.tools.config import DatasetSettings
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.interfaces.api import train
+
+# Load base config
+config = load_training_config_eager("base_config.toml")
+
+# Generate or receive data from API/database
+features = np.random.randn(1000, 10).astype(np.float32)
+labels = np.random.randn(1000, 1).astype(np.float32)
+
+# Inject dataset with in-memory arrays (zero file I/O!)
+config = config.model_copy(update={
+    "DATASET": DatasetSettings(
+        name="FlexibleDataset",
+        features=(Feature(name="x", value=features),),
+        targets=(Target(name="y", value=labels),)
+    )
+})
+
+# Train directly on in-memory data
+result = train(config, epochs=10)
+```
+
+### Example 3: Programmatic Model Injection
+
+Inject model configuration dynamically:
+
+```python
+from dlkit.tools.config import ModelComponentSettings
+
+config = load_training_config_eager("base_config.toml")
+
+# Inject model configuration
+config = config.model_copy(update={
+    "MODEL": ModelComponentSettings(
+        name="MyCustomModel",
+        module_path="my_models.networks",
+        hyperparams={"hidden_dim": 128, "num_layers": 3}
+    )
+})
+```
+
+### Example 4: Experiment Loop
+
+Iterate over multiple datasets while keeping training config stable:
+
+```python
+from pathlib import Path
+from dlkit.tools.io.config import load_training_config_eager
+from dlkit.tools.config import DatasetSettings
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.validators import validate_training_config_complete
+from dlkit.interfaces.api import train
+
+datasets = [
+    ("experiment_1", Path("/data/exp1/features.npy"), Path("/data/exp1/labels.npy")),
+    ("experiment_2", Path("/data/exp2/features.npy"), Path("/data/exp2/labels.npy")),
+    ("experiment_3", Path("/data/exp3/features.npy"), Path("/data/exp3/labels.npy")),
+]
+
+base_config = load_training_config_eager("base_config.toml")
+
+for exp_name, feature_path, label_path in datasets:
+    # Inject dataset for this experiment
+    config = base_config.model_copy(update={
+        "SESSION": base_config.SESSION.model_copy(update={"name": exp_name}),
+        "DATASET": DatasetSettings(
+            name="FlexibleDataset",
+            features=(Feature(name="x", path=str(feature_path)),),
+            targets=(Target(name="y", path=str(label_path)),)
+        )
+    })
+
+    # Validate and train
+    validate_training_config_complete(config)
+    result = train(config, epochs=50)
+    print(f"{exp_name}: {result.metrics}")
+```
+
+### Benefits
+
+- **Separation of concerns**: Static training parameters in TOML, dynamic data in Python
+- **Type safety**: Full Pydantic validation on injected sections
+- **Fail-fast**: Eager validation catches errors immediately
+- **Flexibility**: Mix file-based and in-memory data as needed
+- **Testability**: No temporary files needed for testing
+- **Auditability**: Base config remains unchanged, variations are explicit in code
+
+### Notes
+
+- `load_training_config_eager()` validates sections **present in TOML** immediately
+- Missing sections (like `DATASET`, `DATAMODULE`) can be injected later
+- Always call `validate_training_config_complete()` before `BuildFactory.build_components()`
+- Use `model_copy(update=...)` to create modified configs (Pydantic immutability)
+- In-memory arrays use `.value` attribute (XOR with `.path` - enforced by Pydantic)
 
 ## Template and Config Utilities
 

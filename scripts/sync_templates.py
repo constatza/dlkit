@@ -14,7 +14,7 @@ Currently maintained targets:
 
 from __future__ import annotations
 
-import argparse
+from collections.abc import Callable
 from pathlib import Path
 import sys
 
@@ -58,8 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     root = _project_root()
 
     # Targets to maintain: (generator, destination)
-    targets: list[tuple[callable[[], str], Path]] = [
-        (lambda: build_template_text("training"), root / "examples" / "example_config.toml"),
+    targets: list[tuple[Callable[[], str], Path]] = [
         (lambda: build_template_text("training"), root / "config" / "templates" / "training.toml"),
         (
             lambda: build_template_text("inference"),
