@@ -8,10 +8,9 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from dlkit.core.datatypes.urls import FileUrl, SQLiteUrl
+from dlkit.core.datatypes.urls import FileUrl
 
 _FILE_URL_ADAPTER = TypeAdapter(FileUrl)
-_SQLITE_URL_ADAPTER = TypeAdapter(SQLiteUrl)
 
 
 def canonicalize_file_path(path_str: str) -> str:
@@ -64,31 +63,6 @@ def normalize_file_uri(uri: str, root_dir: Path) -> str | None:
     return f"file://{_path_component_for_file_uri(resolved_path_str)}"
 
 
-def normalize_sqlite_uri(uri: str, root_dir: Path) -> str | None:
-    """Normalize sqlite:/// URIs relative to a root directory."""
-
-    try:
-        url = _SQLITE_URL_ADAPTER.validate_python(uri)
-    except ValidationError:
-        return None
-
-    # SQLite URIs use sqlite:////absolute/path format (4 slashes total).
-    # Pydantic parses this as url.path = "//absolute/path" (2 leading slashes).
-    # This double-slash causes canonicalize_file_path() to misinterpret the path
-    # as a Windows UNC network path (e.g., \\server\share).
-    # For absolute paths, strip one leading slash before canonicalization.
-    path = url.path
-    if path.startswith('//') and not path.startswith('///'):
-        path = path[1:]  # Remove one leading slash for absolute paths
-
-    canonical_path = canonicalize_file_path(path)
-    resolved_path_str = _resolve_canonical_path_str(canonical_path, root_dir)
-
-    if resolved_path_str.startswith("/"):
-        return f"sqlite://{resolved_path_str}"
-    return f"sqlite:///{resolved_path_str}"
-
-
 def resolve_local_path(path_like: str | Path, root_dir: Path) -> Path:
     """Resolve a local path value relative to a root directory."""
 
@@ -114,17 +88,6 @@ def path_to_file_uri(path: Path) -> str:
     resolved = path if path.is_absolute() else path.resolve()
     canonical_path = canonicalize_file_path(resolved.as_posix())
     return f"file://{_path_component_for_file_uri(canonical_path)}"
-
-
-def path_to_sqlite_uri(path: Path) -> str:
-    """Convert a local Path to a canonical sqlite:/// URI."""
-
-    resolved = path if path.is_absolute() else path.resolve()
-    canonical_path = canonicalize_file_path(resolved.as_posix())
-
-    if canonical_path.startswith("/"):
-        return f"sqlite://{canonical_path}"
-    return f"sqlite:///{canonical_path}"
 
 
 def _path_component_for_file_uri(canonical_path: str) -> str:

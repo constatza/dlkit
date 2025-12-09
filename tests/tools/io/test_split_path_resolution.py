@@ -62,9 +62,9 @@ name = "SupervisedArrayDataset"
 
 [DATAMODULE]
 name = "InMemoryModule"
-batch_size = 16
 
     [DATAMODULE.dataloader]
+    batch_size = 16
     num_workers = 0
     persistent_workers = false
 
@@ -139,7 +139,8 @@ def test_splits_saved_to_session_root_dir(training_config_with_custom_root: tupl
             )
 
             # Verify split file was actually created in the correct location
-            split_file = expected_splits_dir / f"{settings.SESSION.name}_split.json"
+            # Note: filename now includes num_samples to prevent stale cache bugs
+            split_file = expected_splits_dir / f"{settings.SESSION.name}_100_split.json"
             assert split_file.exists(), (
                 f"Split file not found at expected location: {split_file}\n"
                 f"Checked in: {expected_splits_dir}"
@@ -204,7 +205,8 @@ def test_splits_respect_session_root_without_session_name(training_config_with_c
             )
 
             # Verify split file exists in correct location
-            split_file = expected_splits_dir / f"{session_name}_split.json"
+            # Note: filename now includes num_samples
+            split_file = expected_splits_dir / f"{session_name}_100_split.json"
             assert split_file.exists(), f"Split file not found: {split_file}"
 
     finally:
@@ -244,7 +246,8 @@ def test_multiple_splits_with_different_sessions(training_config_with_custom_roo
                 )
 
                 # Verify split file exists in correct location
-                split_file = expected_splits_dir / f"{session_name}_split.json"
+                # Note: filename now includes num_samples
+                split_file = expected_splits_dir / f"{session_name}_100_split.json"
                 assert split_file.exists(), (
                     f"Split file for session '{session_name}' not found at: {split_file}"
                 )

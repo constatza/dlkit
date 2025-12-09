@@ -44,12 +44,22 @@ def get_or_create_split(
         logger.info(f"Loading split indices from {explicit_filepath}")
         return load_split_indices(explicit_filepath)
 
-    # Strategy 2: Try loading cached split
-    split_file = splits_dir() / f"{session_name}_split.json"
+    # Strategy 2: Try loading cached split with size-aware filename
+    split_file = splits_dir() / f"{session_name}_{num_samples}_split.json"
     if split_file.exists():
         try:
             logger.info(f"Loading cached split from {split_file}")
-            return load_split_indices(split_file)
+            cached_split = load_split_indices(split_file)
+
+            # Validate cached split matches dataset size
+            total_cached = len(cached_split.train) + len(cached_split.validation) + len(cached_split.test)
+            if total_cached != num_samples:
+                logger.warning(
+                    f"Cached split size ({total_cached}) doesn't match dataset ({num_samples}). "
+                    "Regenerating split."
+                )
+            else:
+                return cached_split
         except Exception as e:
             logger.warning(f"Failed to load split from {split_file}: {e}. Generating new split.")
 
@@ -62,7 +72,7 @@ def get_or_create_split(
     )
     index_split = splitter.split()
 
-    # Save for future use
+    # Save for future use with size in filename
     try:
         save_split_indices(index_split, split_file)
         logger.info(f"Saved split indices to {split_file}")

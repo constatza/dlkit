@@ -6,8 +6,8 @@ from typing import Any
 from subprocess import Popen
 
 from dlkit.tools.utils.logging_config import get_logger
-from dlkit.tools.io import locations
-from dlkit.tools.io.path_normalizers import path_to_file_uri, path_to_sqlite_uri
+from dlkit.tools.io import locations, url_resolver
+from dlkit.tools.io.path_normalizers import path_to_file_uri
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
 
 from .health_checker import HTTPHealthChecker
@@ -195,7 +195,7 @@ class MLflowServerAdapter(ContextualServerAdapter):
                 if not server_config.backend_store_uri:
                     default_backend_path = locations.mlruns_dir()
                     server_config = server_config.model_copy(
-                        update={"backend_store_uri": path_to_sqlite_uri(default_backend_path)}
+                        update={"backend_store_uri": url_resolver.build_uri(default_backend_path, scheme="sqlite")}
                     )
                 if not server_config.artifacts_destination:
                     default_artifacts_path = locations.mlartifacts_dir()

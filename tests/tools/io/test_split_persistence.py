@@ -43,7 +43,7 @@ def test_get_or_create_split_generates_new_split(tmp_path: Path):
     assert isinstance(split, IndexSplit)
     assert len(split.train) + len(split.validation) + len(split.test) == 100
     # Should have saved the split
-    split_file = splits_dir() / "test_session_split.json"
+    split_file = splits_dir() / "test_session_100_split.json"
     assert split_file.exists()
 
 
@@ -114,7 +114,7 @@ def test_get_or_create_split_different_sessions_create_different_splits():
 def test_get_or_create_split_handles_corrupt_cache(tmp_path: Path):
     """Test that corrupt cache files are regenerated."""
     # Create a corrupt cache file
-    split_file = splits_dir() / "corrupt_test_split.json"
+    split_file = splits_dir() / "corrupt_test_50_split.json"
     split_file.parent.mkdir(parents=True, exist_ok=True)
     with split_file.open("w") as f:
         f.write("not valid json{{{")

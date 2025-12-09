@@ -168,9 +168,10 @@ def mlruns_dir(*, env: DLKitEnvironment | None = None) -> Path:
 
 def mlruns_backend_uri(*, env: DLKitEnvironment | None = None) -> str:
     # sqlite file under output/mlruns/mlflow.db
+    from dlkit.tools.io import url_resolver
+
     db_path = (mlruns_dir(env=env) / "mlflow.db").resolve()
-    # Always format as POSIX so URIs remain consistent across platforms
-    return f"sqlite:///{db_path.as_posix()}"
+    return url_resolver.build_uri(db_path, scheme="sqlite")
 
 
 def mlartifacts_dir(*, env: DLKitEnvironment | None = None) -> Path:
@@ -178,6 +179,7 @@ def mlartifacts_dir(*, env: DLKitEnvironment | None = None) -> Path:
 
 
 def optuna_storage_uri(*, env: DLKitEnvironment | None = None) -> str:
+    from dlkit.tools.io import url_resolver
+
     db_path = output("optuna.db", env=env)
-    # Always format as POSIX so URIs remain consistent across platforms
-    return f"sqlite:///{db_path.as_posix()}"
+    return url_resolver.build_uri(db_path, scheme="sqlite")

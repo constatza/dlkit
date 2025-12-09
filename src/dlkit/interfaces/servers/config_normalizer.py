@@ -13,12 +13,8 @@ from pydantic import TypeAdapter
 
 from dlkit.core.datatypes.urls import ArtifactDestination
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
-from dlkit.tools.io import locations
-from dlkit.tools.io.path_normalizers import (
-    normalize_file_uri,
-    normalize_sqlite_uri,
-    resolve_local_path,
-)
+from dlkit.tools.io import locations, url_resolver
+from dlkit.tools.io.path_normalizers import normalize_file_uri, resolve_local_path
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -61,22 +57,16 @@ class ServerConfigNormalizer:
     def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
         """Normalize backend store URI relative to root directory."""
 
-        normalized_sqlite = normalize_sqlite_uri(uri, root_dir)
-        if normalized_sqlite:
-            return normalized_sqlite
+        # url_resolver handles both sqlite:// and file:// URIs
+        if url_resolver.is_local_uri(uri) or not ("://" in uri):
+            try:
+                return url_resolver.normalize_uri(uri, root_dir)
+            except ValueError:
+                # If normalization fails, pass through for remote URIs
+                pass
 
-        normalized_file = normalize_file_uri(uri, root_dir)
-        if normalized_file:
-            return normalized_file
-
-        if "://" in uri:
-            return uri
-
-        resolved = resolve_local_path(uri, root_dir)
-        try:
-            return resolved.as_uri()
-        except ValueError:
-            return resolved.as_posix()
+        # Non-local URIs (http://, s3://, etc.) pass through unchanged
+        return uri
 
     @staticmethod
     def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:

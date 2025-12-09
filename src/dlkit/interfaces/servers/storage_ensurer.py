@@ -6,9 +6,8 @@ exist for MLflow server backend and artifacts storage.
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
+from dlkit.tools.io.url_utils import parse_url
 from dlkit.tools.utils.system_utils import mkdir_for_local
 from dlkit.tools.utils.logging_config import get_logger
 
@@ -48,12 +47,12 @@ class ServerStorageEnsurer:
                 continue
 
             try:
-                parsed = urlparse(str(uri))
+                parsed = parse_url(str(uri))
             except Exception:
                 parsed = None
 
             is_file = bool(parsed and (parsed.scheme in ("", "file")))
-            host_local = bool(parsed and (parsed.hostname in local_hosts))
+            host_local = bool(parsed and (parsed.host in local_hosts))
             logger.debug(f"{attr} is_file={is_file}, host_local={host_local}")
 
             if is_file or host_local:

@@ -52,7 +52,9 @@ name = "SupervisedArrayDataset"
 
 [DATAMODULE]
 name = "InMemoryModule"
-batch_size = 32
+
+    [DATAMODULE.dataloader]
+    batch_size = 32
 
 [MODEL]
 name = "SimpleMLP"
