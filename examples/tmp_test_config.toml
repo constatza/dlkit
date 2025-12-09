@@ -1,9 +1,0 @@
-[SESSION]
-name = "test"
-inference = true
-
-[MODEL]
-name = "ConstantWidthFFNN"
-module_path = "dlkit.core.models.nn.ffnn.simple"
-
-MODEL.checkpoint = "./dummy.ckpt"
