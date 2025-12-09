@@ -120,8 +120,10 @@ def complete_config_data() -> dict[str, Any]:
         "DATAMODULE": {
             "name": "IntegrationDataModule",
             "module_path": "test.datamodules",
-            "batch_size": 64,
-            "num_workers": 8,
+            "dataloader": {
+                "batch_size": 64,
+                "num_workers": 8,
+            },
         },
         "TRAINING": {"epochs": 50, "trainer": {"accelerator": "cpu"}},
     }
@@ -163,6 +165,8 @@ n_trials = 10
 [DATAMODULE]
 name = "IntegrationDataModule"
 module_path = "test.datamodules"
+
+[DATAMODULE.dataloader]
 batch_size = 64
 num_workers = 8
 
@@ -295,7 +299,7 @@ class TestGeneralSettingsEndToEndIntegration:
         assert settings.MLFLOW.enabled is True
         assert settings.MLFLOW.client.experiment_name == "integration_experiment"  # Configured value
         assert settings.OPTUNA.enabled is True
-        assert settings.DATAMODULE.batch_size == 64
+        assert settings.DATAMODULE.dataloader.batch_size == 64
 
     def test_settings_mode_specific_configuration_access(
         self, complete_config_data: dict[str, Any]
@@ -322,7 +326,7 @@ class TestGeneralSettingsEndToEndIntegration:
         assert training_config.max_epochs == 50
 
         datamodule_config = settings.get_datamodule_config()
-        assert datamodule_config.batch_size == 64
+        assert datamodule_config.dataloader.batch_size == 64
 
     # Legacy hyperparameter sampling test removed (sampling moved to samplers).
 

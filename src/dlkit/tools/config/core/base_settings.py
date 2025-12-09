@@ -1,4 +1,49 @@
-"""Core settings base classes with SOLID principles."""
+"""Core settings base classes with SOLID principles.
+
+Architecture: Mutable Settings with Validation
+-----------------------------------------------
+DLKit uses a mutable settings architecture (frozen=False) with validate_assignment=True
+to prevent data loss while maintaining type safety. This design choice solves critical
+issues with excluded fields in value-based data entries.
+
+Key Configuration:
+- frozen=False: Allows direct mutation (no serialization overhead)
+- validate_assignment=True: Type-checks every attribute assignment
+- extra='forbid': Strict validation for most settings
+- extra='allow': Permissive for ComponentSettings (user-defined fields)
+
+Why Not Immutable (frozen=True)?
+---------------------------------
+Immutable settings would require model_copy() for updates, which involves:
+1. Serialization (model_dump)
+2. Deserialization (model_validate)
+
+Problem: Fields marked with exclude=True (like ValueFeature.value) are NOT serialized,
+so they get LOST during the serialize → deserialize cycle.
+
+Example of the problem:
+>>> feature = ValueFeature(name="x", value=np.array([1, 2, 3]))
+>>> dataset = DatasetSettings(features=[feature])
+>>> updated = dataset.model_copy(update={"some_field": "value"})
+# feature.value is LOST because it was excluded from serialization!
+
+Mutable Solution:
+>>> feature = ValueFeature(name="x", value=np.array([1, 2, 3]))
+>>> dataset = DatasetSettings(features=[feature])
+>>> update_settings(dataset, {"some_field": "value"})
+# feature.value is PRESERVED (no serialization, same object identity)
+
+Type Safety:
+- validate_assignment=True ensures every setattr() is type-checked
+- Same safety guarantees as frozen=True, but without serialization overhead
+- Pydantic validates types on assignment, preventing invalid mutations
+
+Usage:
+>>> from dlkit.tools.config.core.updater import update_settings
+>>> config = load_settings("config.toml")
+>>> update_settings(config, {"TRAINING": {"epochs": 100}})
+# Returns same object (mutated in-place)
+"""
 
 from __future__ import annotations
 
@@ -16,17 +61,20 @@ class BasicSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        frozen=True,
+        frozen=False,
         validate_default=True,
         validate_by_alias=True,
         validate_by_name=True,
         validate_assignment=True,
-        nested_model_default_partial_update=True,
+        # NOTE: frozen=False allows direct mutation to avoid serialization
+        # This prevents serialize→deserialize cycles that lose excluded fields
+        # (e.g., ValueFeature.value marked with exclude=True).
+        # validate_assignment=True still ensures type safety on mutation.
         case_sensitive=True,
         extra="forbid",
         # Fix pydantic-settings bug where model_validate is protected
         protected_namespaces=("settings_customise_sources",),
-        # Suppress serialization warnings when nested models are dicts (lazy validation mode)
+        # Suppress serialization warnings when nested models are dicts
         ser_json_timedelta="float",
         ser_json_bytes="base64",
     )
@@ -49,6 +97,33 @@ class BasicSettings(BaseSettings):
         return self.model_dump(exclude_none=True, exclude=extra)
 
     # Deliberately no "to_dict_compatible_with": construction belongs in factories.
+
+    def update_with(self, updates: dict[str, Any], *, validate: bool = True) -> "BasicSettings":
+        """Update this settings instance in-place via deep merge.
+
+        This is a convenience wrapper around ``update_settings`` that performs
+        in-place mutation while preserving the concrete settings type.
+
+        Architecture Note:
+            With frozen=False, this method mutates the instance in-place rather
+            than creating a new copy. This prevents data loss with excluded fields
+            (e.g., ValueFeature.value). The method returns self for chaining.
+
+        Args:
+            updates: Nested mapping of fields to update
+            validate: Ignored (validation happens automatically via validate_assignment)
+
+        Returns:
+            The same settings instance (mutated in-place) for method chaining.
+
+        Example:
+            >>> config = load_settings("config.toml")
+            >>> config.update_with({"TRAINING": {"epochs": 100}})
+            >>> # config is mutated in-place
+        """
+        from dlkit.tools.config.core.updater import update_settings
+
+        return update_settings(self, updates, validate=validate)
 
 
 class ComponentSettings[T](BasicSettings):

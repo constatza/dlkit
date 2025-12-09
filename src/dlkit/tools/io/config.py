@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, TypeVar, cast, overload, get_origin, get_args, Union
+from typing import Any, TypeVar, cast, overload, TYPE_CHECKING
 import sys
 import torch
 
@@ -15,11 +15,12 @@ from tomlkit import document, table, dumps
 
 from .parsers import PartialTOMLParser
 
-# Python 3.10+ UnionType compatibility
-try:
-    from types import UnionType
-except ImportError:
-    UnionType = type(None)
+if TYPE_CHECKING:
+    from dlkit.tools.config.workflow_configs import (
+        TrainingWorkflowConfig,
+        InferenceWorkflowConfig,
+        OptimizationWorkflowConfig,
+    )
 
 
 def _sync_session_root_to_environment(settings: Any) -> None:
@@ -339,8 +340,9 @@ def load_config[T: BaseModel](
             # 0) CLI/path override context (highest priority)
             try:
                 ctx = get_current_path_context()
-                if ctx and getattr(ctx, "root_dir", None):
-                    return _Path(ctx.root_dir).resolve()
+                root_dir = getattr(ctx, "root_dir", None) if ctx else None
+                if root_dir is not None:
+                    return _Path(root_dir).resolve()
             except Exception:
                 pass
 
@@ -518,6 +520,39 @@ def _to_toml_compatible(value: Any) -> Any:
     return value
 
 
+def _exclude_value_entries(data: dict[str, Any]) -> dict[str, Any]:
+    """Strip in-memory ValueBasedEntry payloads from dataset sections.
+
+    This keeps configs lightweight for logging while preserving structural
+    information (names, dtype, transforms, write flags).
+    """
+    dataset = data.get("DATASET")
+    if not isinstance(dataset, dict):
+        return data
+
+    sanitized_dataset = dict(dataset)
+
+    def _strip_value_field(entries: Any) -> Any:
+        if not isinstance(entries, (list, tuple)):
+            return entries
+        cleaned: list[Any] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                cleaned.append({k: v for k, v in entry.items() if k != "value"})
+            else:
+                cleaned.append(entry)
+        return cleaned
+
+    if "features" in sanitized_dataset:
+        sanitized_dataset["features"] = _strip_value_field(sanitized_dataset.get("features"))
+    if "targets" in sanitized_dataset:
+        sanitized_dataset["targets"] = _strip_value_field(sanitized_dataset.get("targets"))
+
+    sanitized = dict(data)
+    sanitized["DATASET"] = sanitized_dataset
+    return sanitized
+
+
 def write_config(
     config: BaseModel | dict[str, Any],
     output_path: Path | str,
@@ -525,6 +560,7 @@ def write_config(
     by_alias: bool = True,
     exclude_none: bool = True,
     exclude_unset: bool = False,
+    exclude_value_entries: bool = False,
     sort_sections: bool = True,
 ) -> Path:
     """Write a DLKit configuration to a TOML file.
@@ -538,6 +574,7 @@ def write_config(
         by_alias: Dump using field aliases (e.g., PATHS.root instead of root_dir)
         exclude_none: Exclude fields that are None
         exclude_unset: Exclude fields that were not explicitly set (for Pydantic models only)
+        exclude_value_entries: When True, strip in-memory DataEntry values from Dataset sections
         sort_sections: Write sections in sorted order for stable diffs
 
     Returns:
@@ -551,6 +588,9 @@ def write_config(
         )
     else:
         data = dict(config)
+
+    if exclude_value_entries:
+        data = _exclude_value_entries(data)
 
     # Create TOML document and add sections
     doc = document()
@@ -600,8 +640,9 @@ def _preprocess_sections(config_path: Path, sections: dict[str, Any]) -> dict[st
     def _resolve_root_dir(session_data: dict[str, Any] | None) -> _Path:
         try:
             ctx = get_current_path_context()
-            if ctx and getattr(ctx, "root_dir", None):
-                return _Path(ctx.root_dir).resolve()
+            root_dir = getattr(ctx, "root_dir", None) if ctx else None
+            if root_dir is not None:
+                return _Path(root_dir).resolve()
         except Exception:
             pass
 
@@ -748,127 +789,11 @@ def _resolve_section_models(
     return resolved
 
 
-def _construct_without_defaults(
-    model_class: type[BaseModel],
-    data: dict[str, Any]
-) -> BaseModel:
-    """Construct Pydantic model with type coercion but no default filling.
-
-    This function enables lazy loading of partial configs by:
-    - Recursively handling nested Pydantic models for proper type construction
-    - Applying type coercion (str→Path, str→Enum, dict→NestedModel, etc.)
-    - NOT filling in defaults for missing fields
-    - Only including fields explicitly present in data
-
-    Args:
-        model_class: Pydantic model class to construct
-        data: Raw dictionary data from TOML file
-
-    Returns:
-        Model instance with only fields from data (no defaults)
-
-    Example:
-        >>> # TOML has: [DATASET]
-        >>> # (empty section)
-        >>> result = _construct_without_defaults(DatasetSettings, {})
-        >>> # result has NO split field with default ratios
-        >>> # vs model_validate would add split=IndexSplitSettings(test_ratio=0.15, ...)
-    """
-    # Get field info to identify nested Pydantic models
-    processed_data = {}
-    fields_set = set()
-
-    for key, value in data.items():
-        field_info = model_class.model_fields.get(key)
-        if field_info is None:
-            # Extra field (like in ExtrasSettings with extra="allow") - pass through
-            processed_data[key] = value
-            fields_set.add(key)
-            continue
-
-        # Mark field as explicitly set
-        fields_set.add(key)
-
-        # Check if field is a nested Pydantic model
-        field_type = field_info.annotation
-
-        # Handle Optional[SomeModel], Union[SomeModel, None], etc.
-        origin = get_origin(field_type)
-        if origin in (Union, UnionType):
-            # Extract non-None type from Union
-            args = get_args(field_type)
-            field_type = next((arg for arg in args if arg is not type(None)), field_type)
-
-        # If nested dict and field expects BaseModel, recursively construct
-        if isinstance(value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
-            # Recursively construct nested model without defaults
-            processed_data[key] = _construct_without_defaults(field_type, value)
-        elif isinstance(value, (list, tuple)):
-            # Handle lists/tuples of nested models
-            processed_items = []
-            for item in value:
-                # Check if the field is a container of BaseModel instances
-                # e.g., tuple[Feature, ...] or list[Target]
-                item_type = field_type
-                item_origin = get_origin(field_type)
-                if item_origin in (tuple, list):
-                    item_args = get_args(field_type)
-                    if item_args:
-                        # Get first arg type (e.g., Feature from tuple[Feature, ...])
-                        item_type = item_args[0]
-
-                if isinstance(item, dict) and isinstance(item_type, type) and issubclass(item_type, BaseModel):
-                    processed_items.append(_construct_without_defaults(item_type, item))
-                else:
-                    processed_items.append(item)
-
-            # Preserve original type (tuple vs list) AND respect field type annotation
-            item_origin = get_origin(field_type)
-            if item_origin == tuple or isinstance(value, tuple):
-                # Field expects tuple or original value was tuple
-                processed_data[key] = tuple(processed_items)
-            else:
-                # Field expects list or no specific requirement
-                processed_data[key] = processed_items
-        else:
-            # For primitives and simple types, pass through as-is
-            # Pydantic's model_construct will handle basic type coercion
-            processed_data[key] = value
-
-    # Use model_construct with _fields_set to track explicitly set fields
-    # CRITICAL: _fields_set tells Pydantic which fields were explicitly set
-    instance = model_class.model_construct(_fields_set=fields_set, **processed_data)
-
-    # WORKAROUND: model_construct still fills defaults for fields with default_factory
-    # We need to remove those fields if they weren't explicitly in the data
-    # This preserves true partial loading without unwanted defaults from factories
-    for field_name, field_info in model_class.model_fields.items():
-        if field_name not in fields_set:
-            # Field was not in the original data
-            # Only remove fields with default_factory (like IndexSplitSettings())
-            # Keep simple defaults (like () or "string") - they're lightweight and expected
-            if field_info.default_factory is not None:
-                # Remove the factory-created default that model_construct added
-                # Use object.__delattr__ to bypass Pydantic's __delattr__
-                try:
-                    object.__delattr__(instance, field_name)
-                except AttributeError:
-                    # Field might not exist, that's fine
-                    pass
-
-    return instance
-
-
 def load_sections_config(
     config_path: Path | str,
     section_configs: Mapping[str, type[BaseModel] | None] | Sequence[str],
-    *,
-    validate: bool = False,
 ) -> dict[str, BaseModel]:
-    """Load multiple sections from a TOML config file with optional validation.
-
-    Supports lazy loading (default) where Pydantic validation is deferred,
-    or strict loading where validation happens immediately.
+    """Load multiple sections from a TOML config file with eager validation.
 
     When ``section_configs`` is a mapping, the behaviour matches the previous
     implementation. A convenient shorthand now permits passing an iterable of
@@ -879,12 +804,10 @@ def load_sections_config(
         config_path: Path to the TOML config file
         section_configs: Mapping of section names to their model classes *or*
             iterable of section names that use registered defaults.
-        validate: If True, use model_validate() for strict validation (eager).
-            If False (default), use model_construct() for lazy loading (deferred).
 
     Returns:
         Dictionary mapping **uppercased** section names to model instances
-        (validated if validate=True, unvalidated if validate=False)
+        validated eagerly with defaults populated.
 
     Raises:
         FileNotFoundError: If config file doesn't exist
@@ -892,10 +815,7 @@ def load_sections_config(
         ConfigValidationError: If validation=True and validation fails for any section
 
     Example:
-        >>> # Lazy loading (default) - no validation yet
         >>> configs = load_sections_config("config.toml", ["SESSION", "TRAINING"])
-        >>> # Strict loading - validates immediately
-        >>> configs = load_sections_config("config.toml", ["SESSION"], validate=True)
     """
     config_path = Path(config_path)
     if not config_path.exists():
@@ -932,32 +852,25 @@ def load_sections_config(
     for section_name, model_class in resolved_models.items():
         section_data = sections_data[section_name]
         try:
-            if validate:
-                # Strict mode: full validation with defaults filled
-                constructed_sections[section_name] = model_class.model_validate(section_data)
-            else:
-                # Lazy mode: type coercion WITHOUT default filling
-                # Uses smart constructor that handles nested models and type coercion
-                # but ONLY includes fields explicitly present in TOML
-                constructed_sections[section_name] = _construct_without_defaults(
-                    model_class, section_data
-                )
+            constructed_sections[section_name] = model_class.model_validate(
+                section_data, context={"strict": True}
+            )
         except Exception as e:
-            mode = "validate" if validate else "construct"
             raise ConfigValidationError(
-                f"Failed to {mode} section '{section_name}' with {model_class.__name__}: {e}",
+                f"Failed to validate section '{section_name}' with {model_class.__name__}: {e}",
                 model_class.__name__,
                 section_data,
             ) from e
 
     # If we loaded a full settings object (GeneralSettings), sync SESSION.root_dir
-    # This handles partial loading with validate=True where a complete GeneralSettings is returned
+    # This handles partial loading where a complete GeneralSettings is returned
     if len(constructed_sections) > 1 and "SESSION" in constructed_sections:
         # Create a mock settings object with SESSION attribute for synchronization
         class _MockSettings:
-            pass
-        mock_settings = _MockSettings()
-        mock_settings.SESSION = constructed_sections["SESSION"]
+            def __init__(self, session: Any) -> None:
+                self.SESSION = session
+
+        mock_settings = _MockSettings(constructed_sections["SESSION"])
         _sync_session_root_to_environment(mock_settings)
 
     return constructed_sections
@@ -983,22 +896,18 @@ def load_section_config(
     config_path: Path | str,
     model_class: type[T] | None = None,
     section_name: str | None = None,
-    *,
-    validate: bool = False,
 ) -> BaseModel | T:
-    """Load a single config section with optional validation.
+    """Load a single config section with eager validation.
 
     Args:
         config_path: Path to the TOML config file
         model_class: Optional Pydantic model class to validate the section with
         section_name: Explicit section name (auto-detected from class name or
             registry when omitted)
-        validate: If True, use model_validate() for strict validation (eager).
-            If False (default), use model_construct() for lazy loading (deferred).
 
     Returns:
         Model instance from the requested section
-        (validated if validate=True, unvalidated if validate=False)
+        validated eagerly
 
     Raises:
         FileNotFoundError: If the config file doesn't exist
@@ -1024,7 +933,7 @@ def load_section_config(
     if resolved_model is None:
         raise ValueError(f"Could not find registered model for section: {resolved_section}")
 
-    sections = load_sections_config(config_path, {resolved_section: resolved_model}, validate=validate)
+    sections = load_sections_config(config_path, {resolved_section: resolved_model})
     return sections[resolved_section.upper()]
 
 
@@ -1076,3 +985,117 @@ def get_available_sections(config_path: Path | str) -> list[str]:
 
     parser = PartialTOMLParser()
     return parser.get_available_sections(config_path)
+
+
+# ============================================================================
+# New Eager Loading Functions for Workflow Configs
+# ============================================================================
+
+
+def load_training_config_eager(config_path: Path | str) -> "TrainingWorkflowConfig":
+    """Load training config with eager Pydantic validation.
+
+    This replaces the lazy loading pattern with eager validation while supporting
+    programmatic section injection. Config sections present in TOML are validated
+    immediately (fail-fast on typos/types). Missing optional sections can be
+    injected programmatically before build time.
+
+    Args:
+        config_path: Path to TOML configuration file
+
+    Returns:
+        TrainingWorkflowConfig with eagerly validated sections
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValidationError: If config has type errors or invalid values
+        ConfigValidationError: If required sections missing from TOML
+
+    Example:
+        ```python
+        # Load partial config (eager validation of present fields)
+        config = load_training_config_eager("config.toml")
+
+        # Inject optional sections programmatically
+        config = config.model_copy(update={
+            "DATASET": DatasetSettings(features=(...))
+        })
+
+        # Validate completeness before build
+        from dlkit.tools.config.validators import validate_training_config_complete
+        validate_training_config_complete(config)
+
+        # Build components
+        components = BuildFactory().build_components(config)
+        ```
+    """
+    from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
+
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Use the Dynaconf-backed loader to stay consistent with IO stack
+    toml_data = load_config(config_path, raw=True)
+
+    # Eager validation - fails fast on typos/types
+    config = TrainingWorkflowConfig.model_validate(toml_data)
+
+    # Sync root_dir to environment
+    _sync_session_root_to_environment(config)
+
+    return config
+
+
+def load_inference_config_eager(config_path: Path | str) -> "InferenceWorkflowConfig":
+    """Load inference config with eager Pydantic validation.
+
+    Args:
+        config_path: Path to TOML configuration file
+
+    Returns:
+        InferenceWorkflowConfig with eagerly validated sections
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValidationError: If config has type errors or invalid values
+    """
+    from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    toml_data = load_config(config_path, raw=True)
+    config = InferenceWorkflowConfig.model_validate(toml_data)
+
+    _sync_session_root_to_environment(config)
+
+    return config
+
+
+def load_optimization_config_eager(config_path: Path | str) -> "OptimizationWorkflowConfig":
+    """Load optimization config with eager Pydantic validation.
+
+    Args:
+        config_path: Path to TOML configuration file
+
+    Returns:
+        OptimizationWorkflowConfig with eagerly validated sections
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValidationError: If config has type errors or invalid values
+    """
+    from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig
+
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    toml_data = load_config(config_path, raw=True)
+    config = OptimizationWorkflowConfig.model_validate(toml_data)
+
+    _sync_session_root_to_environment(config)
+
+    return config

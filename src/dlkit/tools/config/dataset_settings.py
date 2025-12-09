@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from pydantic import Field, NonNegativeFloat, FilePath, DirectoryPath
+from pydantic import Field, NonNegativeFloat, FilePath, DirectoryPath, model_validator, ValidationInfo
 
 from .core.base_settings import ComponentSettings, BasicSettings
 from .enums import DatasetFamily
-from .data_entries import Feature, Target
+from .data_entries import (
+    Feature,
+    Target,
+    FeatureType,
+    TargetType,
+    PathFeature,
+    PathTarget,
+)
 
 
 class IndexSplitSettings(BasicSettings):
@@ -86,13 +93,42 @@ class DatasetSettings(ComponentSettings):
     root: DirectoryPath | None = Field(
         default=None, description="Root directory of the dataset", alias="root_dir"
     )
-    # Flexible entries only: arrays of Feature/Target settings
-    features: tuple[Feature, ...] = Field(default=(), description="Flexible feature entries")
-    targets: tuple[Target, ...] = Field(default=(), description="Flexible target entries")
+    # Flexible entries only: lists of Feature/Target settings (mutable for runtime updates)
+    features: list[FeatureType] = Field(default_factory=list, description="Flexible feature entries")
+    targets: list[TargetType] = Field(default_factory=list, description="Flexible target entries")
 
     split: IndexSplitSettings = Field(
         default_factory=IndexSplitSettings, description="Index split configuration"
     )
+
+    @model_validator(mode="after")
+    def validate_nested_paths(self, info: ValidationInfo) -> "DatasetSettings":
+        """Validate nested Feature/Target paths with eager validation.
+
+        Pydantic does not automatically propagate validation context to nested models.
+        This validator explicitly validates features and targets paths, ensuring
+        path existence checks are performed for fail-fast error detection.
+
+        Args:
+            info: Pydantic validation info (unused, kept for compatibility).
+
+        Returns:
+            The validated DatasetSettings instance.
+
+        Raises:
+            ValueError: If any feature/target path is specified but does not exist.
+        """
+        # Validate features
+        for feature in self.features:
+            if isinstance(feature, PathFeature) and feature.path is not None and not feature.path.exists():
+                raise ValueError(f"Feature path does not exist: {feature.path}")
+
+        # Validate targets
+        for target in self.targets:
+            if isinstance(target, PathTarget) and target.path is not None and not target.path.exists():
+                raise ValueError(f"Target path does not exist: {target.path}")
+
+        return self
 
     @property
     def has_targets(self) -> bool:
@@ -119,9 +155,11 @@ class DatasetSettings(ComponentSettings):
         """
         files: dict[str, Path | None] = {}
         for f in self.features:
-            files[f.name] = Path(f.path)
+            if isinstance(f, PathFeature) and f.name is not None and f.path is not None:
+                files[f.name] = Path(f.path)
         for t in self.targets:
-            files[t.name] = Path(t.path)
+            if isinstance(t, PathTarget) and t.name is not None and t.path is not None:
+                files[t.name] = Path(t.path)
         return files
 
     def get_split_config(self) -> dict:
@@ -131,3 +169,12 @@ class DatasetSettings(ComponentSettings):
             dict: Index split configuration
         """
         return self.split.to_dict()
+
+    def get_init_kwargs(self, exclude: set[str] | None = None) -> dict[str, Any]:
+        """Return initialization kwargs preserving nested DataEntry objects."""
+        base = super().get_init_kwargs(exclude)
+        # Preserve DataEntry instances instead of serialized dicts
+        base["features"] = list(self.features)
+        base["targets"] = list(self.targets)
+        base["split"] = self.split
+        return base

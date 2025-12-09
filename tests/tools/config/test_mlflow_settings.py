@@ -307,17 +307,6 @@ class TestMLflowSettings:
 
         assert settings.tracking_uri == "http://localhost:5000/"
 
-    def test_settings_frozen_immutable(self, mlflow_settings_data: dict[str, Any]) -> None:
-        """Test MLflowSettings instances are frozen/immutable.
-
-        Args:
-            mlflow_settings_data: MLflow settings dataflow fixture
-        """
-        settings = MLflowSettings(**mlflow_settings_data)
-
-        with pytest.raises(ValidationError, match="frozen"):
-            settings.enabled = False
-
     @given(st.booleans())
     def test_mlflow_property_enabled_state(self, enabled: bool) -> None:
         """Property test: MLflow enabled state works correctly.

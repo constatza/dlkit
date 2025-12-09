@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypeVar, cast, Any, Type
+from typing import cast, Any
 
 from .workflow_settings import (
     BaseWorkflowSettings,
@@ -19,9 +19,6 @@ from .mlflow_settings import MLflowSettings
 from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
 from .extras_settings import ExtrasSettings
-
-T = TypeVar("T", bound=BaseWorkflowSettings)
-
 
 class PartialSettingsLoader:
     """Factory class for efficient partial config loading.
@@ -41,11 +38,11 @@ class PartialSettingsLoader:
         # Section mapping for workflow types
         self._base_required_sections = {
             "SESSION": SessionSettings,
-            "DATAMODULE": DataModuleSettings,
-            "DATASET": DatasetSettings,
         }
 
         self._base_optional_sections = {
+            "DATAMODULE": DataModuleSettings,
+            "DATASET": DatasetSettings,
             "MODEL": ModelComponentSettings,
             "PATHS": PathsSettings,
             "EXTRAS": ExtrasSettings,
@@ -61,15 +58,11 @@ class PartialSettingsLoader:
         }
 
     def load_training_settings(self, config_path: Path | str) -> TrainingWorkflowSettings:
-        """Load settings optimized for training workflows with lazy validation.
-
-        **Lazy Validation**: Settings are loaded without Pydantic validation by default.
-        Validation happens at build time when components are constructed, not at load time.
-        This allows incomplete configs with placeholder values or missing optional data.
+        """Load settings optimized for training workflows with eager validation.
 
         Only loads sections required for training:
-        - Required: SESSION, DATAMODULE, DATASET, TRAINING
-        - Optional: MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+        - Required: SESSION, TRAINING
+        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
 
         Args:
             config_path: Path to TOML configuration file
@@ -80,11 +73,6 @@ class PartialSettingsLoader:
         Raises:
             FileNotFoundError: If config file doesn't exist
             ConfigSectionError: If required sections are missing from TOML file
-
-        Note:
-            Validation errors (e.g., invalid paths, missing fields) will only surface
-            when settings are used to build components. Use `settings.model_validate()`
-            to validate explicitly before build if early error detection is needed.
         """
         from dlkit.tools.io.config import load_sections_config, check_section_exists
 
@@ -380,28 +368,22 @@ def load_training_settings(config_path: Path | str) -> TrainingWorkflowSettings:
 
     **This is the standard entry point for loading training configurations.**
 
-    Loads sections optimized for training workflows with lazy validation:
-    - Required: SESSION, DATAMODULE, DATASET, TRAINING
-    - Optional: MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
-
-    Lazy Validation Behavior:
-    - Fields are loaded WITHOUT Pydantic defaults (partial configs supported)
-    - Type coercion is applied (str→Path, dict→NestedModel, etc.)
-    - Validation happens at build time, not load time
-    - Enables programmatic overrides via `update_settings()`
+    Loads sections optimized for training workflows with eager validation:
+    - Required: SESSION, TRAINING
+    - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
 
     Args:
         config_path: Path to TOML configuration file
 
     Returns:
-        TrainingWorkflowSettings: Training settings with lazy validation
+        TrainingWorkflowSettings: Training settings with eagerly validated sections
 
     Examples:
         >>> # Standard training workflow
         >>> from dlkit.tools.config import load_training_settings
         >>> settings = load_training_settings("config.toml")
         >>>
-        >>> # Partial config with programmatic overrides
+        >>> # Partial config with programmatic overrides (optional sections injected later)
         >>> settings = load_training_settings("partial_config.toml")
         >>> settings = update_settings(settings, {
         ...     "DATASET": {"features": [...], "targets": [...]}
