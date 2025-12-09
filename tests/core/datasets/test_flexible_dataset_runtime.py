@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from dlkit.core.datasets.flexible import FlexibleDataset
+from dlkit.tools.config.data_entries import Feature, Target
 
 
 def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
@@ -23,8 +24,8 @@ def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
     np.save(y_path, Y)
 
     ds = FlexibleDataset(
-        features=[{"name": "x1", "path": x1_path}, {"name": "x2", "path": x2_path}],
-        targets=[{"name": "y", "path": y_path}],
+        features=[Feature(name="x1", path=x1_path), Feature(name="x2", path=x2_path)],
+        targets=[Target(name="y", path=y_path)],
     )
 
     assert len(ds) == 5
