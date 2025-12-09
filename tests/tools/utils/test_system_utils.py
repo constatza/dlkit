@@ -114,19 +114,15 @@ class TestMkdirForLocal:
 
     def test_file_url_with_absolute_path(self, tmp_path: Path) -> None:
         """Test file:///absolute/path format."""
-        # When Pydantic sees file:///tmp/path, it keeps the absolute path /tmp/path
-        # Our logic strips one leading / making it tmp/path (relative)
-        # This is the expected behavior for file:/// (3 slashes)
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
 
-            # Using a relative-looking name in the file URL
-            uri = "file:///file_url_test/data.txt"
+            target = tmp_path / "file_url_test" / "data.txt"
+            uri = f"file://{target.as_posix()}"
             mkdir_for_local(uri)
 
-            # Should create relative to cwd
-            expected = tmp_path / "file_url_test"
+            expected = target.parent
             assert expected.exists()
         finally:
             os.chdir(original_cwd)
@@ -199,11 +195,12 @@ class TestMkdirForLocal:
             os.chdir(tmp_path)
 
             # Create a Url object for a relative path
-            url_obj = Url("file:///pydantic_test/data.txt")
+            target = tmp_path / "pydantic_test" / "data.txt"
+            url_obj = Url(f"file://{target.as_posix()}")
 
             mkdir_for_local(url_obj)
 
-            assert (tmp_path / "pydantic_test").exists()
+            assert target.parent.exists()
         finally:
             os.chdir(original_cwd)
 

@@ -9,66 +9,33 @@ from pydantic_core import Url
 from dlkit.core.datatypes.urls import tilde_expand_strict
 
 
-def mkdir_for_local(uri: Url | str) -> None:
-    """Ensure the local directory for the given URI or path exists.
+def mkdir_for_local(uri: Url | str, *, root: Path | None = None) -> None:
+    """Ensure the local directory for the given URI or path exists."""
+    # Lazy import to avoid circular import during package initialization
+    from dlkit.tools.io import url_resolver
 
-    Uses Pydantic URL types for proper parsing.
+    root_path = root or Path.cwd()
+    uri_str = str(uri)
 
-    SQLite URI semantics on Unix:
-    - sqlite:///path or sqlite:///./path -> relative path
-    - sqlite:////path -> absolute path /path
-
-    Args:
-        uri: Either a Pydantic Url object or a string (path or URI)
-    """
-    # Plain string without scheme - treat as path
-    if isinstance(uri, str):
-        if "://" not in uri:
-            # Plain path string
-            Path(uri).parent.mkdir(parents=True, exist_ok=True)
-            return
-
-        # Try to parse as URL
-        try:
-            uri = Url(uri)
-        except Exception:
-            # If parsing fails, treat as plain path
-            Path(uri).parent.mkdir(parents=True, exist_ok=True)
-            return
-
-    # Now we have a Pydantic Url object
-    scheme = uri.scheme
-    if scheme not in ("file", "sqlite"):
-        # Non-local schemes: nothing to do
+    # Ignore clearly remote schemes early
+    if "://" in uri_str and not url_resolver.is_local_uri(uri_str):
         return
 
-    path_str = uri.path or ""
+    try:
+        resolved = url_resolver.resolve_local_uri(uri_str, root_path)
+    except ValueError:
+        # Unsupported scheme or malformed URI: treat as plain path parent creation
+        Path(uri_str).parent.mkdir(parents=True, exist_ok=True)
+        return
 
-    if os.name == "nt":
-        # Windows: strip leading slashes
-        path_str = path_str.lstrip(r"/")
+    current_scheme = url_resolver.scheme(uri_str)
+    if current_scheme == "sqlite":
+        target_dir = resolved.parent
     else:
-        # Unix: handle SQLite URI path semantics
-        # The key insight: after Pydantic parses "sqlite:///./path",
-        # the path component is "/./path" (starts with /. for relative)
-        # or "//path" for absolute (from sqlite:////path)
+        # Heuristic: create the path itself when it looks like a directory
+        target_dir = resolved if resolved.suffix == "" else resolved.parent
 
-        # Collapse excessive leading slashes (5+ slashes) down to 2
-        while path_str.startswith("///"):
-            path_str = path_str[1:]
-
-        # Now distinguish:
-        # "//path" -> absolute path "/path" (from sqlite:////path)
-        # "/path" where path starts with . or .. -> relative (from sqlite:///./path)
-        # "/path" otherwise -> relative (from sqlite:///path)
-        if path_str.startswith("//"):
-            # Absolute: strip one slash to get /path
-            path_str = path_str[1:]
-        elif path_str.startswith("/"):
-            # Relative: strip leading slash
-            path_str = path_str[1:]
-
-    Path(path_str).parent.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _get_reference_home() -> Path:
