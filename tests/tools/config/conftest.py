@@ -89,7 +89,9 @@ def sample_general_settings_data() -> dict[str, Any]:
         "DATAMODULE": {
             "name": "TestDataModule",
             "module_path": "test.datamodules",
-            "batch_size": 64,
+            "dataloader": {
+                "batch_size": 64,
+            },
         },
         "DATASET": {"name": "TestDataset", "module_path": "test.datasets"},
         "TRAINING": {
