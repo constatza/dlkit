@@ -10,7 +10,15 @@ from __future__ import annotations
 from typing import Any
 from threading import Lock
 
-from dlkit.tools.config.data_entries import DataEntry, Feature, Target, Latent, Prediction
+from dlkit.tools.config.data_entries import (
+    DataEntry,
+    Feature,
+    Target,
+    Latent,
+    Prediction,
+    is_feature_entry,
+    is_target_entry,
+)
 
 
 class DataEntryRegistry:
@@ -86,7 +94,7 @@ class DataEntryRegistry:
         with self._lock:
             return {
                 name: entry for name, entry in self._entries.items()
-                if isinstance(entry, Feature)
+                if is_feature_entry(entry)
             }
 
     def get_targets(self) -> dict[str, Target]:
@@ -98,7 +106,7 @@ class DataEntryRegistry:
         with self._lock:
             return {
                 name: entry for name, entry in self._entries.items()
-                if isinstance(entry, Target)
+                if is_target_entry(entry)
             }
 
     def get_latents(self) -> dict[str, Latent]:

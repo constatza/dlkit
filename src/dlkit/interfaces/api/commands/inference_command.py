@@ -12,6 +12,7 @@ from dlkit.interfaces.api.services import InferenceService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 from .base import BaseCommand
 
 
@@ -47,12 +48,16 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
         self.override_manager = basic_override_manager
         self.inference_service = InferenceService()
 
-    def validate_input(self, input_data: InferenceCommandInput, settings: BaseSettingsProtocol) -> None:
+    def validate_input(
+        self,
+        input_data: InferenceCommandInput,
+        settings: InferenceWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+    ) -> None:
         """Validate inference command input.
 
         Args:
             input_data: Inference parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new InferenceWorkflowConfig or legacy GeneralSettings)
 
         Raises:
             WorkflowError: On validation failure
@@ -85,13 +90,16 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
             ) from e
 
     def execute(
-        self, input_data: InferenceCommandInput, settings: BaseSettingsProtocol, **kwargs: Any
+        self,
+        input_data: InferenceCommandInput,
+        settings: InferenceWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        **kwargs: Any,
     ) -> InferenceResult:
         """Execute inference command.
 
         Args:
             input_data: Inference parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new InferenceWorkflowConfig or legacy GeneralSettings)
             **kwargs: Additional parameters
 
         Returns:

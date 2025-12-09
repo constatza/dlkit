@@ -159,19 +159,9 @@ class BasicOverrideManager:
 
         # (Removed) pipeline flag overrides; not part of simplified TrainingSettings
 
-        # Handle batch_size override -> DATAMODULE.batch_size and DATAMODULE.dataloader.batch_size
+        # Handle batch_size override -> DATAMODULE.dataloader.batch_size
         if "batch_size" in training_overrides and current_settings.DATAMODULE is not None:
-            dm = current_settings.DATAMODULE
-            # Update convenience field
-            dm_updates: dict[str, Any] = {"batch_size": training_overrides["batch_size"]}
-            # Also update nested dataloader setting to ensure effective config everywhere
-            if hasattr(dm, "dataloader") and dm.dataloader is not None:
-                new_loader = dm.dataloader.model_copy(
-                    update={"batch_size": training_overrides["batch_size"]}
-                )
-                dm_updates["dataloader"] = new_loader
-            new_dm = dm.model_copy(update=dm_updates)
-            current_settings = current_settings.model_copy(update={"DATAMODULE": new_dm})
+            current_settings.DATAMODULE.dataloader.batch_size = training_overrides["batch_size"]
 
         # Handle learning_rate override -> TRAINING.optimizer.lr
         if "learning_rate" in training_overrides and current_settings.TRAINING is not None:

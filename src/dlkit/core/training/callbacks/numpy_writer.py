@@ -1,6 +1,5 @@
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from urllib.parse import urlparse
 
 import numpy as np
 import torch
@@ -9,6 +8,7 @@ from loguru import logger
 from pydantic import DirectoryPath, validate_call
 
 from dlkit.interfaces.servers import create_mlflow_adapter
+from dlkit.tools.io.url_utils import get_url_path
 
 
 class NumpyWriter(Callback):
@@ -36,7 +36,7 @@ class NumpyWriter(Callback):
         if self.output_dir is None:
             artifact_uri = self._mlflow_adapter.get_artifact_uri()
             if artifact_uri:
-                self.output_dir = Path(urlparse(artifact_uri).path.lstrip("/"))
+                self.output_dir = Path(get_url_path(artifact_uri).lstrip("/"))
                 self._use_mlflow = True
             else:
                 # Fallback to current directory

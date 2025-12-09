@@ -14,7 +14,19 @@ import torch
 
 from dlkit.runtime.pipelines.interfaces import DataProvider
 from dlkit.runtime.pipelines.providers import FileDataProvider
-from dlkit.tools.config.data_entries import DataEntry, Feature, Target, Latent, Prediction
+from dlkit.tools.config.data_entries import (
+    DataEntry,
+    Feature,
+    Target,
+    Latent,
+    Prediction,
+    PathFeature,
+    PathTarget,
+    ValueFeature,
+    ValueTarget,
+    is_feature_entry,
+    is_target_entry,
+)
 
 
 # Test dataflow constants
@@ -187,9 +199,9 @@ def mock_provider() -> DataProvider:
             self.handles_targets = handles_targets
 
         def can_handle(self, entry: DataEntry) -> bool:
-            if isinstance(entry, Feature):
+            if is_feature_entry(entry):
                 return self.handles_features
-            elif isinstance(entry, Target):
+            elif is_target_entry(entry):
                 return self.handles_targets
             return False
 
@@ -212,7 +224,7 @@ def multi_provider_setup() -> list[DataProvider]:
 
     class FeatureProvider(DataProvider):
         def can_handle(self, entry: DataEntry) -> bool:
-            return isinstance(entry, Feature)
+            return is_feature_entry(entry)
 
         def load_data(self, entry: DataEntry, idx: int) -> torch.Tensor:
             return torch.ones(3, dtype=TEST_DTYPE)
@@ -222,7 +234,7 @@ def multi_provider_setup() -> list[DataProvider]:
 
     class TargetProvider(DataProvider):
         def can_handle(self, entry: DataEntry) -> bool:
-            return isinstance(entry, Target)
+            return is_target_entry(entry)
 
         def load_data(self, entry: DataEntry, idx: int) -> torch.Tensor:
             return torch.zeros(3, dtype=TEST_DTYPE)

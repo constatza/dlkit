@@ -79,7 +79,7 @@ def _make_data(
 
 
 def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule:
-    dataset = FlexibleDataset(features={"x": fx}, targets={"y": fy})
+    dataset = FlexibleDataset(features=[Feature(name="x", path=fx)], targets=[Target(name="y", path=fy)])
     n = len(dataset)
     # Edge case: zero validation/test to ensure transforms fit on the full dataset
     train = tuple(range(0, n))

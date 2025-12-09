@@ -12,6 +12,7 @@ from dlkit.interfaces.api.services import OptimizationService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig
 from .base import BaseCommand
 
 
@@ -54,13 +55,15 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
         self.optimization_service = OptimizationService()
 
     def validate_input(
-        self, input_data: OptimizationCommandInput, settings: BaseSettingsProtocol
+        self,
+        input_data: OptimizationCommandInput,
+        settings: OptimizationWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
     ) -> None:
         """Validate optimization command input.
 
         Args:
             input_data: Optimization parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new OptimizationWorkflowConfig or legacy GeneralSettings)
 
         Raises:
             WorkflowError: On validation failure
@@ -93,13 +96,16 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
             ) from e
 
     def execute(
-        self, input_data: OptimizationCommandInput, settings: BaseSettingsProtocol, **kwargs: Any
+        self,
+        input_data: OptimizationCommandInput,
+        settings: OptimizationWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        **kwargs: Any,
     ) -> OptimizationResult:
         """Execute optimization command.
 
         Args:
             input_data: Optimization parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new OptimizationWorkflowConfig or legacy GeneralSettings)
             **kwargs: Additional parameters
 
         Returns:

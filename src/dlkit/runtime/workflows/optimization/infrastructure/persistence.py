@@ -68,7 +68,11 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
                 settings_to_save = GeneralSettings.model_validate(configuration)
 
             # Write configuration to TOML
-            write_config(settings_to_save, config_path)
+            write_config(
+                settings_to_save,
+                config_path,
+                exclude_value_entries=True,
+            )
 
             logger.info(
                 "Best configuration saved to TOML",

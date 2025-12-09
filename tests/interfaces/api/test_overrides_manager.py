@@ -37,8 +37,7 @@ def test_apply_training_overrides_epochs_batchsize_lr(tmp_path: Path) -> None:
     assert new.TRAINING.epochs == 5
     assert new.TRAINING.trainer.max_epochs == 5
 
-    # batch size to DATAMODULE.batch_size and nested dataloader
-    assert new.DATAMODULE.batch_size == 128
+    # batch size to DATAMODULE.dataloader.batch_size
     assert new.DATAMODULE.dataloader.batch_size == 128
 
     # learning rate to TRAINING.optimizer.lr

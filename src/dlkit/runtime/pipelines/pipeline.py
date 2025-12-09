@@ -13,7 +13,7 @@ from loguru import logger
 
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.core.training.transforms.interfaces import IFittableTransform
-from dlkit.tools.config.data_entries import DataEntry, Feature, Target
+from dlkit.tools.config.data_entries import DataEntry, Feature, Target, is_feature_entry, is_target_entry
 from .context import ProcessingContext
 from .interfaces import ModelInvoker, OutputClassifier, OutputNamer
 
@@ -104,10 +104,10 @@ class DataExtractionStep(ProcessingStep):
 
         # Pre-compute name sets for efficient lookup
         self._feature_names = {
-            name for name, config in entry_configs.items() if isinstance(config, Feature)
+            name for name, config in entry_configs.items() if is_feature_entry(config)
         }
         self._target_names = {
-            name for name, config in entry_configs.items() if isinstance(config, Target)
+            name for name, config in entry_configs.items() if is_target_entry(config)
         }
 
     def process(self, context: ProcessingContext) -> ProcessingContext:

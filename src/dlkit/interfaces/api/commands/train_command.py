@@ -13,6 +13,7 @@ from dlkit.interfaces.api.services import TrainingService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
 from .base import BaseCommand
 
 
@@ -53,12 +54,16 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
         self.override_manager = basic_override_manager
         self.training_service = TrainingService()
 
-    def validate_input(self, input_data: TrainCommandInput, settings: BaseSettingsProtocol) -> None:
+    def validate_input(
+        self,
+        input_data: TrainCommandInput,
+        settings: TrainingWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+    ) -> None:
         """Validate train command input.
 
         Args:
             input_data: Training parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new TrainingWorkflowConfig or legacy GeneralSettings)
 
         Raises:
             WorkflowError: On validation failure
@@ -94,13 +99,16 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             raise WorkflowError(error_msg, {"command": "train", "error": str(e)}) from e
 
     def execute(
-        self, input_data: TrainCommandInput, settings: BaseSettingsProtocol, **kwargs: Any
+        self,
+        input_data: TrainCommandInput,
+        settings: TrainingWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        **kwargs: Any,
     ) -> TrainingResult:
         """Execute training command.
 
         Args:
             input_data: Training parameters and overrides
-            settings: DLKit configuration
+            settings: DLKit configuration (supports new TrainingWorkflowConfig or legacy GeneralSettings)
             **kwargs: Additional parameters
 
         Returns:

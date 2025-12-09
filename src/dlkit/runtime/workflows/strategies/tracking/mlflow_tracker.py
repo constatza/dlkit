@@ -284,7 +284,12 @@ class MLflowTracker(IExperimentTracker):
 
             # Create temporary TOML file with unset values excluded
             with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as temp_file:
-                write_config(settings, temp_file.name, exclude_unset=True)
+                write_config(
+                    settings,
+                    temp_file.name,
+                    exclude_unset=True,
+                    exclude_value_entries=True,
+                )
                 temp_path = Path(temp_file.name)
 
             try:
@@ -567,9 +572,11 @@ class MLflowTracker(IExperimentTracker):
 
     @staticmethod
     def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
-        from urllib.parse import urlparse
+        from dlkit.tools.io.url_utils import parse_url
+        from dlkit.tools.io import url_resolver
+        from dlkit.tools.io.path_normalizers import path_to_file_uri
 
-        parsed = urlparse(uri)
+        parsed = parse_url(uri)
         if parsed.scheme not in {"file", "sqlite"}:
             return uri
 
@@ -579,14 +586,15 @@ class MLflowTracker(IExperimentTracker):
 
         resolved = (root_dir / path).resolve()
         if parsed.scheme == "sqlite":
-            return f"sqlite:///{resolved.as_posix()}"
-        return resolved.as_uri()
+            return url_resolver.build_uri(resolved, scheme="sqlite")
+        return path_to_file_uri(resolved)
 
     @staticmethod
     def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:
-        from urllib.parse import urlparse
+        from dlkit.tools.io.url_utils import parse_url
+        from dlkit.tools.io.path_normalizers import path_to_file_uri
 
-        parsed = urlparse(destination)
+        parsed = parse_url(destination)
 
         if parsed.scheme in {"", None}:
             path = Path(destination)
@@ -599,7 +607,7 @@ class MLflowTracker(IExperimentTracker):
             if path.is_absolute():
                 return destination
             resolved = (root_dir / path).resolve()
-            return resolved.as_uri()
+            return path_to_file_uri(resolved)
 
         return destination
 

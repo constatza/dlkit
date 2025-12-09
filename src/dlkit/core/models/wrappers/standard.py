@@ -12,7 +12,7 @@ from torch.nn import ModuleDict
 from loguru import logger
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
-from dlkit.tools.config.data_entries import DataEntry, Target
+from dlkit.tools.config.data_entries import DataEntry, Target, is_target_entry
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.core.training.transforms.interfaces import IInvertibleTransform
@@ -286,10 +286,10 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
 
             # Persist to appropriate module dict based on data entry type
-            from dlkit.tools.config.data_entries import Feature, Target
-            if isinstance(cfg, Target):
+            from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
+            if is_target_entry(cfg):
                 self.fitted_target_transforms[name] = chain
-            elif isinstance(cfg, Feature):
+            elif is_feature_entry(cfg):
                 self.fitted_feature_transforms[name] = chain
 
         # Disable any further fitting during application for all phases
@@ -370,7 +370,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         fitted_target_transforms) checkpoint formats.
         """
         from dlkit.core.training.transforms.chain import TransformChain
-        from dlkit.tools.config.data_entries import Feature, Target
+        from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
 
         logger.info("Starting manual restoration of fitted transforms from checkpoint")
 
@@ -457,16 +457,16 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             # Restore based on checkpoint format
             if has_modern_format:
                 restore_transforms("fitted_feature_transforms", self.fitted_feature_transforms,
-                                 entry_filter_func=lambda cfg: isinstance(cfg, Feature))
+                                 entry_filter_func=is_feature_entry)
                 restore_transforms("fitted_target_transforms", self.fitted_target_transforms,
-                                 entry_filter_func=lambda cfg: isinstance(cfg, Target))
+                                 entry_filter_func=is_target_entry)
             elif has_legacy_format:
                 # Legacy format - separate based on entry_configs
                 logger.info("Loading legacy format, separating transforms by entry type")
                 restore_transforms("fitted_transforms", self.fitted_feature_transforms,
-                                 entry_filter_func=lambda cfg: isinstance(cfg, Feature))
+                                 entry_filter_func=is_feature_entry)
                 restore_transforms("fitted_transforms", self.fitted_target_transforms,
-                                 entry_filter_func=lambda cfg: isinstance(cfg, Target))
+                                 entry_filter_func=is_target_entry)
             else:
                 logger.debug("No fitted transforms found in checkpoint")
 
@@ -553,7 +553,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
     def _persist_single_chain(self, name: str, chain: Any) -> None:
         """Persist a single transform chain to appropriate ModuleDict."""
-        from dlkit.tools.config.data_entries import Feature, Target
+        from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
 
         try:
             entry_config = self._entry_configs.get(name)
@@ -561,10 +561,10 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                 return
 
             # Route to appropriate ModuleDict based on type
-            if isinstance(entry_config, Target):
+            if is_target_entry(entry_config):
                 if name not in self.fitted_target_transforms:
                     self.fitted_target_transforms[name] = chain
-            elif isinstance(entry_config, Feature):
+            elif is_feature_entry(entry_config):
                 if name not in self.fitted_feature_transforms:
                     self.fitted_feature_transforms[name] = chain
         except Exception:
@@ -594,8 +594,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         super().on_save_checkpoint(checkpoint)
 
         # Save inference metadata for inference
-        feature_names = [name for name, cfg in self._entry_configs.items() if not isinstance(cfg, Target)]
-        target_names = [name for name, cfg in self._entry_configs.items() if isinstance(cfg, Target)]
+        feature_names = [name for name, cfg in self._entry_configs.items() if not is_target_entry(cfg)]
+        target_names = [name for name, cfg in self._entry_configs.items() if is_target_entry(cfg)]
         feature_transform_names = list(self.fitted_feature_transforms.keys()) if self.fitted_feature_transforms else []
         target_transform_names = list(self.fitted_target_transforms.keys()) if self.fitted_target_transforms else []
 
@@ -699,7 +699,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         target_names = {
             name
             for name, cfg in self._entry_configs.items()  # type: ignore[attr-defined]
-            if isinstance(cfg, Target)
+            if is_target_entry(cfg)
         }
 
         # Use cached transform chains from predict transform step

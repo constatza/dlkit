@@ -62,7 +62,8 @@ class VanillaExecutor(ITrainingExecutor):
             ckpt_path = self._get_resume_checkpoint_path(settings)
 
             # Core training execution
-            trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path)
+            # Use weights_only=False for dlkit checkpoints which may contain custom classes
+            trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
             # Optional post-training steps (best effort)
             self._run_optional_steps(trainer, model, datamodule)

@@ -25,7 +25,7 @@ def sample_settings() -> GeneralSettings:
     return GeneralSettings(
         SESSION=SessionSettings(inference=False),
         TRAINING=TrainingSettings(epochs=50),
-        DATAMODULE=DataModuleSettings(batch_size=16, dataloader=DataloaderSettings(batch_size=16)),
+        DATAMODULE=DataModuleSettings(dataloader=DataloaderSettings(batch_size=16)),
     )
 
 
@@ -72,11 +72,11 @@ class TestOverrideIntegration:
 
         # Original values should be preserved
         assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # 50
-        assert result.DATAMODULE.batch_size == sample_settings.DATAMODULE.batch_size  # 16
+        assert result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size  # 16
 
         # This demonstrates that SETTINGS VALUES TAKE PRECEDENCE WHEN NO OVERRIDES
         print(
-            f"✓ Settings values preserved: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.batch_size}"
+            f"✓ Settings values preserved: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.dataloader.batch_size}"
         )
 
     def test_overrides_applied_when_values_provided(self, sample_settings: GeneralSettings) -> None:
@@ -109,12 +109,12 @@ class TestOverrideIntegration:
 
         # Overridden values should be updated
         assert result.TRAINING.epochs == 100  # Changed from 50
-        assert result.DATAMODULE.batch_size == 64  # Changed from 16
+        assert result.DATAMODULE.dataloader.batch_size == 64  # Changed from 16
         assert float(result.TRAINING.optimizer.lr) == pytest.approx(0.01)  # New value
 
         # This demonstrates that OVERRIDES WORK WHEN VALUES ARE PROVIDED
         print(
-            f"✓ Overrides applied: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.batch_size}, lr={float(result.TRAINING.optimizer.lr)}"
+            f"✓ Overrides applied: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.dataloader.batch_size}, lr={float(result.TRAINING.optimizer.lr)}"
         )
 
     def test_partial_overrides_preserve_non_overridden_values(
@@ -137,12 +137,12 @@ class TestOverrideIntegration:
         # Only epochs should be changed
         assert result.TRAINING.epochs == 200  # Changed
         assert (
-            result.DATAMODULE.batch_size == sample_settings.DATAMODULE.batch_size
+            result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size
         )  # Preserved (16)
 
         # This demonstrates PARTIAL OVERRIDES WORK CORRECTLY
         print(
-            f"✓ Partial override: epochs={result.TRAINING.epochs} (changed), batch_size={result.DATAMODULE.batch_size} (preserved)"
+            f"✓ Partial override: epochs={result.TRAINING.epochs} (changed), batch_size={result.DATAMODULE.dataloader.batch_size} (preserved)"
         )
 
     def test_none_values_explicitly_ignored(self, sample_settings: GeneralSettings) -> None:
@@ -166,7 +166,7 @@ class TestOverrideIntegration:
 
         # Only learning_rate should be changed, None values ignored
         assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # Preserved
-        assert result.DATAMODULE.batch_size == sample_settings.DATAMODULE.batch_size  # Preserved
+        assert result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size  # Preserved
         assert float(result.TRAINING.optimizer.lr) == pytest.approx(50)  # Changed
 
         # This demonstrates NONE VALUES ARE PROPERLY IGNORED

@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import (
+    TrainingWorkflowConfig,
+    InferenceWorkflowConfig,
+    OptimizationWorkflowConfig,
+)
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.tools.utils.error_handling import raise_error
 
@@ -23,7 +28,11 @@ class ExecutionSelector:
     def __init__(self, factory: ExecutionStrategyFactory | None = None):
         self._factory = factory or ExecutionStrategyFactory()
 
-    def select(self, settings: GeneralSettings, explicit: str | None = None):
+    def select(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig,
+        explicit: str | None = None,
+    ):
         """Create execution strategy using SOLID factory composition."""
         # Log what features are detected
         features = []
@@ -40,7 +49,9 @@ class ExecutionSelector:
         # Use factory to create composed executor based on settings
         return self._factory.create_executor(settings)
 
-    def select_optimization(self, settings: GeneralSettings):
+    def select_optimization(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+    ):
         """Create optimization strategy using SOLID factory composition."""
         # Log what features are detected
         features = []
@@ -69,7 +80,7 @@ class Orchestrator:
 
     def execute_training(
         self,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")
         try:
@@ -99,7 +110,7 @@ class Orchestrator:
 
     def execute_optimization(
         self,
-        settings: GeneralSettings,
+        settings: GeneralSettings | OptimizationWorkflowConfig,
     ) -> OptimizationResult:
         """Execute optimization workflow using factory pattern for proper composition.
 

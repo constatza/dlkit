@@ -51,21 +51,29 @@ class LRTuner:
             f"num_training={settings.num_training}, mode={settings.mode}"
         )
 
+        # Import torch.serialization for safe globals registration
+        import torch.serialization
+
+        # Collect all dlkit config classes that might be in checkpoints
+        safe_classes = self._get_safe_globals()
+
         tuner = Tuner(trainer)
 
-        # Run learning rate finder with configured parameters
-        lr_finder = tuner.lr_find(
-            model,
-            datamodule=datamodule,
-            min_lr=settings.min_lr,
-            max_lr=settings.max_lr,
-            num_training=settings.num_training,
-            mode=settings.mode,
-            early_stop_threshold=settings.early_stop_threshold,
-        )
+        # Run learning rate finder with safe globals context for PyTorch 2.6+
+        # This allows LR finder to save/restore checkpoints with dlkit config classes
+        with torch.serialization.safe_globals(safe_classes):
+            lr_finder = tuner.lr_find(
+                model,
+                datamodule=datamodule,
+                min_lr=settings.min_lr,
+                max_lr=settings.max_lr,
+                num_training=settings.num_training,
+                mode=settings.mode,
+                early_stop_threshold=settings.early_stop_threshold,
+            )
 
-        # Get suggested learning rate
-        suggested_lr = lr_finder.suggestion()
+            # Get suggested learning rate
+            suggested_lr = lr_finder.suggestion()
 
         if suggested_lr is None:
             raise RuntimeError(
@@ -78,3 +86,58 @@ class LRTuner:
         logger.info(f"Learning rate tuner suggested: {suggested_lr}")
 
         return suggested_lr
+
+    def _get_safe_globals(self) -> list[type]:
+        """Get list of dlkit classes to register as safe globals for checkpoint loading.
+
+        Returns:
+            list[type]: List of classes that should be allowed in checkpoint loading
+        """
+        from dlkit.tools.config.components.model_components import (
+            WrapperComponentSettings,
+            ModelComponentSettings,
+            MetricComponentSettings,
+            LossComponentSettings,
+        )
+        from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
+        from dlkit.tools.config.datamodule_settings import DataModuleSettings
+        from dlkit.tools.config.dataset_settings import DatasetSettings, IndexSplitSettings
+        from dlkit.tools.config.dataloader_settings import DataloaderSettings
+        from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
+        from dlkit.tools.config.mlflow_settings import (
+            MLflowSettings,
+            MLflowServerSettings,
+            MLflowClientSettings,
+        )
+        from dlkit.tools.config.core.base_settings import BasicSettings
+        from dlkit.tools.config.general_settings import GeneralSettings
+        from dlkit.tools.config.training_settings import TrainingSettings
+        from dlkit.tools.config.session_settings import SessionSettings
+        from dlkit.tools.config.paths_settings import PathsSettings
+
+        return [
+            # Base settings
+            BasicSettings,
+            GeneralSettings,
+            TrainingSettings,
+            SessionSettings,
+            PathsSettings,
+            # Model component settings
+            WrapperComponentSettings,
+            ModelComponentSettings,
+            MetricComponentSettings,
+            LossComponentSettings,
+            # Training settings
+            OptimizerSettings,
+            SchedulerSettings,
+            # Data settings
+            DataModuleSettings,
+            DatasetSettings,
+            IndexSplitSettings,
+            DataloaderSettings,
+            # Other settings
+            LRTunerSettings,
+            MLflowSettings,
+            MLflowServerSettings,
+            MLflowClientSettings,
+        ]
