@@ -28,21 +28,15 @@ Common Use Cases
    >>> from dlkit.tools.config.data_entries import Feature
    >>> config = load_settings("config.toml")
    >>> new_feature = Feature(name="z", path="data/z.npy")
-   >>> update_settings(config.DATASET, {
-   ...     "features": config.DATASET.features + (new_feature,)
-   ... })
+   >>> update_settings(config.DATASET, {"features": config.DATASET.features + (new_feature,)})
 
 2. Updating optimizer learning rate:
-   >>> update_settings(config, {
-   ...     "TRAINING": {"optimizer": {"lr": 0.001}}
-   ... })
+   >>> update_settings(config, {"TRAINING": {"optimizer": {"lr": 0.001}}})
 
 3. Injecting in-memory data:
    >>> import numpy as np
    >>> features = np.random.randn(1000, 20).astype(np.float32)
-   >>> update_settings(config.DATASET, {
-   ...     "features": (Feature(name="x", value=features),)
-   ... })
+   >>> update_settings(config.DATASET, {"features": (Feature(name="x", value=features),)})
 
 Technical Details
 -----------------
@@ -55,23 +49,22 @@ Technical Details
 
 from __future__ import annotations
 
-from typing import Any, TypeVar, Union, cast, get_args, get_origin
+from typing import Any, TypeVar, Union, get_args, get_origin
 from types import UnionType
 
 from pydantic import BaseModel
 
-from .base_settings import BasicSettings
 
 T = TypeVar("T", bound=BaseModel)
 
 _EMPTY = object()
 
 
-def update_settings(
-    settings: BasicSettings,
+def update_settings[T](
+    settings: T,
     updates: dict[str, Any],
     validate: bool = True,
-) -> BasicSettings:
+) -> T:
     """Update settings by direct mutation - NO serialization.
 
     This function mutates the settings in-place, preserving object identity.
@@ -92,18 +85,15 @@ def update_settings(
         The same settings instance (mutated in-place)
 
     Examples:
-        Update nested fields without losing other settings:
-        >>> update_settings(settings, {
-        ...     "DATASET": {
-        ...         "features": [Feature(name="x", path="data.npy")]
-        ...     }
-        ... })
 
         Update multiple sections at once:
-        >>> update_settings(settings, {
-        ...     "TRAINING": {"epochs": 100},
-        ...     "MLFLOW": {"server": {"host": "localhost"}},
-        ... })
+        >>> update_settings(
+        ...     settings,
+        ...     {
+        ...         "TRAINING": {"epochs": 100},
+        ...         "MLFLOW": {"server": {"host": "localhost"}},
+        ...     },
+        ... )
 
         Settings are mutated in-place (same object returned):
         >>> orig_id = id(settings)
@@ -115,9 +105,9 @@ def update_settings(
         # Guard clause: Check if field exists (or if model allows extras)
         has_field = hasattr(settings, key)
         allows_extras = False
-        if hasattr(settings, 'model_config'):
+        if hasattr(settings, "model_config"):
             config = settings.model_config
-            allows_extras = (isinstance(config, dict) and config.get('extra') == 'allow')
+            allows_extras = isinstance(config, dict) and config.get("extra") == "allow"
 
         if not has_field and not allows_extras:
             raise ValueError(f"Unknown setting: {key}")
@@ -265,7 +255,11 @@ def _construct_with_nested_models(
             field_type = next((arg for arg in args if arg is not type(None)), field_type)
 
         # Recursively construct nested Pydantic models
-        if isinstance(value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
+        if (
+            isinstance(value, dict)
+            and isinstance(field_type, type)
+            and issubclass(field_type, BaseModel)
+        ):
             processed_data[key] = _construct_with_nested_models(field_type, value)
         elif isinstance(value, (list, tuple)):
             # Handle lists/tuples of nested models
@@ -278,7 +272,11 @@ def _construct_with_nested_models(
                     item_type = item_args[0]
 
             for item in value:
-                if isinstance(item, dict) and isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                if (
+                    isinstance(item, dict)
+                    and isinstance(item_type, type)
+                    and issubclass(item_type, BaseModel)
+                ):
                     processed_items.append(_construct_with_nested_models(item_type, item))
                 else:
                     processed_items.append(item)

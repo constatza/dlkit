@@ -31,7 +31,8 @@ Capability Interfaces (ABC Mixins):
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, overload
+from typing import overload
+from collections.abc import Iterable
 
 import numpy as np
 import torch
@@ -109,14 +110,14 @@ class DataEntry(BasicSettings, ABC):
             if self.has_path():
                 source_type = "path"
                 try:
-                    path_val = getattr(self, 'path', None)
+                    path_val = getattr(self, "path", None)
                     source_value = str(path_val) if path_val else "unknown"
                 except Exception:
                     source_value = "unknown"
             else:
                 source_type = "value"
                 try:
-                    value_val = getattr(self, 'value', None)
+                    value_val = getattr(self, "value", None)
                     source_value = type(value_val).__name__ if value_val is not None else "unknown"
                 except Exception:
                     source_value = "unknown"
@@ -127,8 +128,8 @@ class DataEntry(BasicSettings, ABC):
                 f"\n"
                 f"Fix: Add 'name' field to your TOML config:\n"
                 f"  [[DATASET.features]]\n"
-                f"  name = \"your_feature_name\"\n"
-                f"  {source_type} = \"...\"\n"
+                f'  name = "your_feature_name"\n'
+                f'  {source_type} = "..."\n'
                 f"\n"
                 f"Or remove '{source_type}' field for placeholder mode (programmatic injection)."
             )
@@ -641,6 +642,8 @@ def Feature(
 ) -> PathFeature: ...
 
 
+# TODO: Remove these "factories" and use FeaturesValues and FeaturesPaths directly
+# TODO: the same for Targets
 def Feature(
     name: str | None = None,
     *,
@@ -906,10 +909,10 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
     feature_ref: str = Field(
         ..., description="Name of the Feature entry to reference for transform inversion"
     )
-    write: bool = Field(
-        default=False, description="Save the reconstruction data during inference"
+    write: bool = Field(default=False, description="Save the reconstruction data during inference")
+    required_in_loss: bool = Field(
+        default=True, description="Reconstructions typically used in loss"
     )
-    required_in_loss: bool = Field(default=True, description="Reconstructions typically used in loss")
 
     # Internal value storage for when feature_ref is resolved
     _resolved_value: torch.Tensor | np.ndarray | None = None
