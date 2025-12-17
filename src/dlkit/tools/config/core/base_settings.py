@@ -47,10 +47,10 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
-from collections.abc import Callable
+from typing import Any, Self
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dlkit.tools.config.core.updater import update_settings
 
 
 class BasicSettings(BaseSettings):
@@ -98,7 +98,7 @@ class BasicSettings(BaseSettings):
 
     # Deliberately no "to_dict_compatible_with": construction belongs in factories.
 
-    def update_with(self, updates: dict[str, Any], *, validate: bool = True) -> "BasicSettings":
+    def update_with(self, updates: dict[str, Any], *, validate: bool = True) -> Self:
         """Update this settings instance in-place via deep merge.
 
         This is a convenience wrapper around ``update_settings`` that performs
@@ -121,7 +121,6 @@ class BasicSettings(BaseSettings):
             >>> config.update_with({"TRAINING": {"epochs": 100}})
             >>> # config is mutated in-place
         """
-        from dlkit.tools.config.core.updater import update_settings
 
         return update_settings(self, updates, validate=validate)
 
