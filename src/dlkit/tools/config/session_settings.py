@@ -92,15 +92,6 @@ class SessionSettings(BasicSettings):
                 f"Invalid precision value in [SESSION] configuration: {e}"
             ) from e
 
-    @model_validator(mode="after")
-    def validate_mode_configuration(self):
-        """Ensure appropriate configuration is provided for the selected mode.
-
-        Note: The checkpoint requirement for inference is enforced in
-        GeneralSettings.validate_inference_checkpoint(), where MODEL is available.
-        This validator is intentionally minimal to avoid cross-model coupling.
-        """
-        return self
 
     @property
     def is_training_mode(self) -> bool:

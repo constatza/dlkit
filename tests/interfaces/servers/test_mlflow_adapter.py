@@ -252,18 +252,19 @@ class TestMLflowServerAdapterStopServer:
         mock_process_manager.stop_process.assert_called_once_with(mock_process)
 
     def test_stop_server_no_process_handle(self, mlflow_adapter: MLflowServerAdapter) -> None:
-        """Test stopping server without process handle."""
+        """Test stopping server without process handle (idempotent - already stopped)."""
         server_info = ServerInfo(
             process=None, url="http://localhost:5000", host="localhost", port=5000
         )
 
-        with pytest.raises(RuntimeError, match="Cannot stop server: no process handle available"):
-            mlflow_adapter.stop_server(server_info)
+        # Should return True (idempotent - server already stopped or externally managed)
+        result = mlflow_adapter.stop_server(server_info)
+        assert result is True
 
     def test_stop_server_process_stop_fails(
         self, mlflow_adapter: MLflowServerAdapter, mock_process_manager: Mock
     ) -> None:
-        """Test server stop failure when process stop fails."""
+        """Test server stop failure when process stop fails (operational failure)."""
         mock_process = Mock(pid=12345)
         server_info = ServerInfo(
             process=mock_process,
@@ -275,8 +276,9 @@ class TestMLflowServerAdapterStopServer:
 
         mock_process_manager.stop_process.return_value = False
 
-        with pytest.raises(RuntimeError, match="Failed to stop MLflow server process"):
-            mlflow_adapter.stop_server(server_info)
+        # Should return False (operational failure - process exists but won't stop)
+        result = mlflow_adapter.stop_server(server_info)
+        assert result is False
 
     def test_stop_server_exception_handling(
         self, mlflow_adapter: MLflowServerAdapter, mock_process_manager: Mock

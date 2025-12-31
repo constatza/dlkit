@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import Popen
 from typing import Annotated
 
 import typer
@@ -55,26 +56,30 @@ def _handle_server_mode(
 ) -> None:
     """Handle attached and detached server modes with graceful shutdown."""
 
-    if detach or not getattr(server_info, "process", None):
+    if detach or server_info.process is None:
         console.print("🔗 Server is running in the background")
         return
 
     console.print("\n💡 Press Ctrl+C to stop the server")
     try:
-        process = getattr(server_info.process, "process", None)
-        if process:
-            process.wait()
+        process = server_info.process
+        if isinstance(process, Popen):
+            # Poll with timeout instead of indefinite wait
+            while process.poll() is None:
+                try:
+                    process.wait(timeout=1.0)
+                except TimeoutError:
+                    continue  # Process still running, continue polling
         else:
             console.print("⚠️ Server started but process handle not available for monitoring")
     except KeyboardInterrupt:
         console.print("\n🛑 Stopping server...")
         try:
-            success, messages = app_service.stop_server(server_info.host, server_info.port)
+            success = app_service.stop_server(server_info.host, server_info.port)
             if success:
                 console.print("✅ Server stopped successfully")
             else:
-                for msg in messages:
-                    console.print(f"❌ {msg}")
+                console.print("❌ Failed to stop server - manual cleanup may be needed")
         except Exception as exc:  # pragma: no cover - defensive logging path
             console.print(f"❌ Error stopping server: {exc}")
 
@@ -224,17 +229,9 @@ def stop_server(
 
         # Use application service for business logic
         app_service = ServerApplicationService()
-        success, messages = app_service.stop_server(host, port, force)
-
-        # Display status messages (presentation logic)
-        for message in messages:
-            if message.startswith("🔍") or message.startswith("✓") or message.startswith("⚠️"):
-                console.print(f"  {message}")
-            else:
-                console.print(message)
+        success = app_service.stop_server(host, port, force)
 
         if success:
-            console.print("📝 Removed from tracking")
             console.print("✅ MLflow server stopped successfully")
         else:
             console.print("⚠️ Could not stop all server processes")

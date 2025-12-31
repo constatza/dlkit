@@ -335,9 +335,9 @@ class TestServerErrorRecovery:
             with patch.object(adapter._storage_ensurer, "ensure_storage"):
                 server_info = adapter.start_server(test_server_config)
 
-            # Stop should fail due to process cleanup failure
-            with pytest.raises(RuntimeError, match="Failed to stop MLflow server process"):
-                adapter.stop_server(server_info)
+            # Stop should return False due to process cleanup failure (operational failure)
+            result = adapter.stop_server(server_info)
+            assert result is False
 
     def test_server_health_check_intermittent_failures(self) -> None:
         """Test handling intermittent health check failures."""

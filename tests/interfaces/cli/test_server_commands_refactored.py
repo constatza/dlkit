@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import Popen
 from unittest.mock import Mock, patch
 
 import pytest
@@ -100,13 +101,7 @@ class TestRefactoredServerCommands:
     ) -> None:
         """Test that stop command handles failure from application service."""
         mock_app_service = Mock()
-        mock_app_service.stop_server.return_value = (
-            False,
-            [
-                "Scanning for MLflow server processes on localhost:5000...",
-                "❌ Could not stop 2 processes",
-            ],
-        )
+        mock_app_service.stop_server.return_value = False  # Operational failure
         mock_app_service_class.return_value = mock_app_service
 
         result = cli_runner.invoke(server_app, ["stop"])
@@ -300,9 +295,11 @@ class TestRefactoredServerCommands:
         mock_server_info.host = "localhost"
         mock_server_info.port = 5000
         mock_server_info.pid = 12345
-        mock_server_info.process = Mock()
-        mock_server_info.process.process = Mock()
-        mock_server_info.process.process.wait.side_effect = KeyboardInterrupt()
+        # Create a mock process that will raise KeyboardInterrupt on wait
+        mock_process = Mock(spec=Popen)
+        mock_process.poll.return_value = None  # Process is still running
+        mock_process.wait.side_effect = KeyboardInterrupt()
+        mock_server_info.process = mock_process
         mock_app_service.start_server.return_value = mock_server_info
         mock_app_service.stop_server.return_value = (True, ["Stopped gracefully"])
         mock_app_service_class.return_value = mock_app_service

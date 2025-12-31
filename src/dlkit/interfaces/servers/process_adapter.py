@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import psutil
 
+from dlkit.tools.utils.logging_config import get_logger
 from .domain_protocols import ProcessKiller, ServerTracker
 from .process_inspection import is_mlflow_process, matches_host_port
+
+logger = get_logger(__name__)
 
 
 class PsutilProcessKiller(ProcessKiller):
@@ -21,7 +24,7 @@ class PsutilProcessKiller(ProcessKiller):
 
     def stop_server_processes(
         self, host: str, port: int, force: bool = False
-    ) -> tuple[bool, list[str]]:
+    ) -> bool:
         """Stop server processes for given host:port.
 
         Args:
@@ -30,50 +33,48 @@ class PsutilProcessKiller(ProcessKiller):
             force: Whether to force kill processes
 
         Returns:
-            Tuple of (success, status_messages)
+            True if stopped successfully or no processes found (idempotent)
+            False if operational failure (processes exist but won't stop)
+
+        Raises:
+            RuntimeError: If exceptional failure
         """
-        if psutil is None:
-            return False, ["psutil package not available - cannot stop processes automatically"]
-
         try:
-            messages = []
-
             # First try tracked processes
             tracked_pids = self._server_tracker.get_tracked_pids(host, port)
             mlflow_processes = []
 
             if tracked_pids:
-                messages.append(f"Found {len(tracked_pids)} tracked server(s) for {host}:{port}")
-                mlflow_processes = self._validate_tracked_processes(tracked_pids, messages)
+                logger.info(f"Found {len(tracked_pids)} tracked server(s) for {host}:{port}")
+                mlflow_processes = self._validate_tracked_processes(tracked_pids)
 
             # If no valid tracked processes, scan for MLflow processes
             if not mlflow_processes:
-                messages.append(f"Scanning for MLflow server processes on {host}:{port}...")
+                logger.debug(f"Scanning for MLflow server processes on {host}:{port}")
                 mlflow_processes = self._scan_for_mlflow_processes(host, port)
 
             if not mlflow_processes:
-                messages.append(f"No MLflow server processes found for {host}:{port}")
-                return True, messages
+                logger.info(f"No MLflow server processes found for {host}:{port}")
+                return True  # Idempotent - already stopped
 
-            success = self._terminate_processes(mlflow_processes, force, messages)
-            return success, messages
+            success = self._terminate_processes(mlflow_processes, force)
+            return success
 
         except Exception as e:
-            return False, [f"Error stopping MLflow processes: {e}"]
+            logger.error(f"Error stopping MLflow processes: {e}", exc_info=True)
+            raise RuntimeError(f"Error stopping MLflow processes: {e}") from e
 
     def _validate_tracked_processes(
-        self, tracked_pids: list[int], messages: list[str]
+        self, tracked_pids: list[int]
     ) -> list[int]:
         """Validate that tracked PIDs are still MLflow servers.
 
         Args:
             tracked_pids: List of tracked process IDs
-            messages: List to append status messages to
 
         Returns:
             List of valid MLflow process IDs
         """
-
         valid_processes = []
 
         for pid in tracked_pids:
@@ -83,11 +84,11 @@ class PsutilProcessKiller(ProcessKiller):
 
                 if is_mlflow_process(cmdline):
                     valid_processes.append(pid)
-                    messages.append(f"  ✓ Verified tracked process {pid} is MLflow server")
+                    logger.debug(f"Verified tracked process {pid} is MLflow server")
                 else:
-                    messages.append(f"  Tracked process {pid} is no longer MLflow server")
+                    logger.debug(f"Tracked process {pid} is no longer MLflow server")
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                messages.append(f"  ⚠️ Tracked process {pid} no longer exists")
+                logger.debug(f"Tracked process {pid} no longer exists")
 
         return valid_processes
 
@@ -119,39 +120,37 @@ class PsutilProcessKiller(ProcessKiller):
 
         return mlflow_processes
 
-    def _terminate_processes(self, pids: list[int], force: bool, messages: list[str]) -> bool:
+    def _terminate_processes(self, pids: list[int], force: bool) -> bool:
         """Terminate the specified processes.
 
         Args:
             pids: List of process IDs to terminate
             force: Whether to force kill if graceful termination fails
-            messages: List to append status messages to
 
         Returns:
             True if all processes were terminated successfully
         """
-
-        messages.append(f"Found {len(pids)} MLflow server process(es) to stop")
+        logger.info(f"Stopping {len(pids)} MLflow server process(es)")
 
         # Try graceful shutdown first
         terminated_processes = []
         for pid in pids:
             try:
-                messages.append(f"  Stopping process {pid}...")
+                logger.debug(f"Stopping process {pid}")
                 proc = psutil.Process(pid)
                 proc.terminate()
                 terminated_processes.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                messages.append(f"  ⚠️ Could not terminate process {pid}: {e}")
+                logger.warning(f"Could not terminate process {pid}: {e}")
 
         # Wait for graceful termination
         if terminated_processes:
-            messages.append("⏳ Waiting for processes to terminate gracefully...")
+            logger.debug("Waiting for processes to terminate gracefully")
             gone, alive = psutil.wait_procs(terminated_processes, timeout=5)
 
             # Force kill if needed
             if alive:
-                messages.append(f"🔨 Force killing {len(alive)} remaining processes...")
+                logger.warning(f"Force killing {len(alive)} remaining processes")
                 for proc in alive:
                     try:
                         proc.kill()
@@ -161,7 +160,7 @@ class PsutilProcessKiller(ProcessKiller):
                 gone2, still_alive = psutil.wait_procs(alive, timeout=2)
 
                 if still_alive:
-                    messages.append(f"❌ Could not stop {len(still_alive)} processes")
+                    logger.error(f"Could not stop {len(still_alive)} processes")
                     return False
 
         # Final verification
@@ -174,7 +173,8 @@ class PsutilProcessKiller(ProcessKiller):
                 pass
 
         if remaining > 0:
-            messages.append(f"❌ {remaining} processes are still running")
+            logger.error(f"{remaining} processes are still running")
             return False
 
+        logger.info("All processes stopped successfully")
         return True
