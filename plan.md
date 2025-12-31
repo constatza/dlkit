@@ -65,8 +65,19 @@
   - Options: Delete or rewrite to use new simplified API
   - Recommendation: Delete during cleanup, functionality covered by new tests
 
+**Cleanup Actions Completed (Dec 31, 2025):**
+- [x] Removed 5 old test files coupled to deleted hexagonal architecture
+  - Deleted: test_dtype_mismatch_fix.py
+  - Deleted: test_float64_checkpoint_loading.py
+  - Deleted: test_precision_inference.py
+  - Deleted: test_state_dict_loading.py
+  - Deleted: test_transform_ambiguity.py
+- [x] Remaining inference tests: 2 files (24 tests, all passing)
+  - test_simplified_predictor.py (18 tests)
+  - test_checkpoint_utils.py (6 tests)
+
 **Next Steps:**
-- [ ] Remove or rewrite old architecture-coupled tests
+- [ ] Fix/update test_inference_integration.py (API integration tests need shape_spec updates)
 - [ ] Document API changes for users
 - [ ] Begin Phase 2 (Transform System simplification)
 
