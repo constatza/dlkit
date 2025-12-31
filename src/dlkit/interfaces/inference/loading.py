@@ -1,0 +1,306 @@
+"""Checkpoint and model loading utilities.
+
+Consolidated loading logic without hexagonal architecture overhead.
+Direct functions replacing use cases, adapters, and builders.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import torch
+from loguru import logger
+
+from dlkit.core.shape_specs import ShapeSpec
+from dlkit.interfaces.api.domain.errors import WorkflowError
+from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.core.context import BuildContext
+from dlkit.tools.config.core.factories import FactoryProvider
+
+from .shapes import infer_shape_specification
+
+
+def extract_state_dict(checkpoint: dict[str, Any]) -> dict[str, Any]:
+    """Extract state dict from checkpoint with automatic prefix stripping.
+
+    Args:
+        checkpoint: Loaded checkpoint dictionary
+
+    Returns:
+        State dict with 'model.' prefix stripped if present
+    """
+    # Extract raw state dict
+    if "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    elif "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    else:
+        state_dict = checkpoint
+
+    if not isinstance(state_dict, dict):
+        return state_dict
+
+    # Check if 'model.' prefix exists
+    has_prefix = any(k.startswith("model.") for k in state_dict.keys())
+
+    if has_prefix:
+        logger.info("Stripping 'model.' prefix from state dict keys")
+        return {
+            k.replace("model.", "", 1) if k.startswith("model.") else k: v
+            for k, v in state_dict.items()
+        }
+
+    return state_dict
+
+
+def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings:
+    """Extract model settings from checkpoint metadata.
+
+    Args:
+        checkpoint: Loaded checkpoint dictionary
+
+    Returns:
+        ModelComponentSettings reconstructed from checkpoint
+
+    Raises:
+        WorkflowError: If model settings cannot be extracted
+    """
+    # Try enhanced metadata first
+    if "dlkit_metadata" in checkpoint and "model_settings" in checkpoint["dlkit_metadata"]:
+        try:
+            settings_data = checkpoint["dlkit_metadata"]["model_settings"]
+            return ModelComponentSettings.model_validate(settings_data)
+        except Exception as e:
+            raise WorkflowError(
+                f"Failed to deserialize model settings from enhanced metadata: {e}",
+                {"has_dlkit_metadata": "true"}
+            ) from e
+
+    # Try legacy hyper_parameters
+    if "hyper_parameters" in checkpoint and "model_settings" in checkpoint["hyper_parameters"]:
+        try:
+            settings_data = checkpoint["hyper_parameters"]["model_settings"]
+            return ModelComponentSettings.model_validate(settings_data)
+        except Exception as e:
+            raise WorkflowError(
+                f"Failed to deserialize model settings from legacy checkpoint: {e}",
+                {"has_hyper_parameters": "true"}
+            ) from e
+
+    raise WorkflowError(
+        "Cannot extract model settings: Checkpoint missing both enhanced metadata and hyper_parameters",
+        {
+            "has_dlkit_metadata": str("dlkit_metadata" in checkpoint),
+            "has_hyper_parameters": str("hyper_parameters" in checkpoint),
+        }
+    )
+
+
+def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
+    """Detect dtype from checkpoint state dict.
+
+    Args:
+        state_dict: Model state dictionary
+
+    Returns:
+        torch.dtype detected from parameters (defaults to float32)
+    """
+    # Find first tensor parameter to detect dtype
+    for value in state_dict.values():
+        if isinstance(value, torch.Tensor) and value.dtype in (
+            torch.float16, torch.bfloat16, torch.float32, torch.float64
+        ):
+            logger.info(f"Detected checkpoint dtype: {value.dtype}")
+            return value.dtype
+
+    # Default to float32
+    logger.warning("Could not detect dtype from checkpoint, defaulting to float32")
+    return torch.float32
+
+
+def build_model_from_checkpoint(
+    checkpoint: dict[str, Any],
+    shape_spec: ShapeSpec
+) -> torch.nn.Module:
+    """Build and load model from checkpoint.
+
+    This function consolidates:
+    - Model settings extraction
+    - Model instantiation
+    - Dtype detection and conversion
+    - State dict loading
+
+    Args:
+        checkpoint: Loaded checkpoint dictionary
+        shape_spec: Shape specification for model construction
+
+    Returns:
+        Loaded PyTorch model in eval mode
+
+    Raises:
+        WorkflowError: If model building fails
+    """
+    # Extract model settings
+    model_settings = extract_model_settings(checkpoint)
+
+    # Extract and prepare state dict
+    state_dict = extract_state_dict(checkpoint)
+    checkpoint_dtype = detect_checkpoint_dtype(state_dict)
+
+    # Create model with shape spec
+    logger.info(f"Building model with shape spec: {shape_spec}")
+    build_context = BuildContext(mode="inference")
+    if shape_spec and not shape_spec.is_empty():
+        build_context = build_context.with_overrides(unified_shape=shape_spec)
+
+    model = FactoryProvider.create_component(model_settings, build_context)
+
+    # Convert model to checkpoint dtype BEFORE loading weights
+    # This prevents precision loss during state dict loading
+    logger.info(f"Converting model to checkpoint dtype: {checkpoint_dtype}")
+    model = model.to(dtype=checkpoint_dtype)
+
+    # Load state dict
+    try:
+        model.load_state_dict(state_dict, strict=False)
+        logger.info("Successfully loaded model weights from checkpoint")
+    except Exception as e:
+        raise WorkflowError(
+            f"Failed to load state dict into model: {e}",
+            {"model_type": type(model).__name__}
+        ) from e
+
+    # Set to eval mode
+    model.eval()
+
+    return model
+
+
+def load_checkpoint(checkpoint_path: Path | str) -> dict[str, Any]:
+    """Load checkpoint from disk.
+
+    Args:
+        checkpoint_path: Path to checkpoint file
+
+    Returns:
+        Loaded checkpoint dictionary
+
+    Raises:
+        FileNotFoundError: If checkpoint doesn't exist
+        WorkflowError: If loading fails
+    """
+    checkpoint_path = Path(checkpoint_path)
+
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    try:
+        logger.info(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False
+        )
+
+        if not isinstance(checkpoint, dict):
+            raise WorkflowError(
+                f"Invalid checkpoint format: expected dict, got {type(checkpoint)}"
+            )
+
+        return checkpoint
+
+    except Exception as e:
+        raise WorkflowError(
+            f"Failed to load checkpoint from {checkpoint_path}: {e}"
+        ) from e
+
+
+def validate_checkpoint(checkpoint_path: Path | str) -> dict[str, str]:
+    """Validate checkpoint and return metadata.
+
+    Args:
+        checkpoint_path: Path to checkpoint file
+
+    Returns:
+        Dictionary with validation results and metadata
+
+    Raises:
+        WorkflowError: If validation fails critically
+    """
+    checkpoint_path = Path(checkpoint_path)
+
+    results = {
+        "checkpoint_path": str(checkpoint_path),
+        "exists": "no",
+        "valid_format": "no",
+        "has_state_dict": "no",
+        "has_model_settings": "no",
+        "has_shape_metadata": "no",
+        "dtype": "unknown",
+    }
+
+    if not checkpoint_path.exists():
+        return results
+
+    results["exists"] = "yes"
+
+    try:
+        checkpoint = load_checkpoint(checkpoint_path)
+        results["valid_format"] = "yes"
+
+        # Check for state dict
+        state_dict = extract_state_dict(checkpoint)
+        if state_dict:
+            results["has_state_dict"] = "yes"
+            results["dtype"] = str(detect_checkpoint_dtype(state_dict))
+
+        # Check for model settings
+        try:
+            extract_model_settings(checkpoint)
+            results["has_model_settings"] = "yes"
+        except WorkflowError:
+            pass
+
+        # Check for shape metadata
+        if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
+            results["has_shape_metadata"] = "yes"
+
+    except Exception as e:
+        logger.error(f"Checkpoint validation failed: {e}")
+
+    return results
+
+
+def get_checkpoint_info(checkpoint_path: Path | str) -> dict[str, Any]:
+    """Extract metadata from checkpoint without loading model.
+
+    Args:
+        checkpoint_path: Path to checkpoint file
+
+    Returns:
+        Dictionary with checkpoint information
+    """
+    checkpoint = load_checkpoint(checkpoint_path)
+
+    info = {
+        "checkpoint_path": str(checkpoint_path),
+        "has_dlkit_metadata": "dlkit_metadata" in checkpoint,
+        "has_hyper_parameters": "hyper_parameters" in checkpoint,
+    }
+
+    # Extract dlkit metadata if present
+    if "dlkit_metadata" in checkpoint:
+        metadata = checkpoint["dlkit_metadata"]
+        info["version"] = metadata.get("version", "unknown")
+        info["model_family"] = metadata.get("model_family", "unknown")
+        info["wrapper_type"] = metadata.get("wrapper_type", "unknown")
+        info["has_shape_spec"] = "shape_spec" in metadata
+        info["has_model_settings"] = "model_settings" in metadata
+
+    # Extract dtype info
+    state_dict = extract_state_dict(checkpoint)
+    if state_dict:
+        info["dtype"] = str(detect_checkpoint_dtype(state_dict))
+
+    return info
