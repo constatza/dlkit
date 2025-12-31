@@ -84,6 +84,40 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         """
         return self.model(data)
 
+    def _forward_features(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
+        """Override to reconstruct PyG Data object from feature dict.
+
+        Graph models expect PyG Data objects, not raw tensors or dicts.
+        Always reconstruct Data fresh from dict/tensor for serialization.
+
+        Args:
+            features: Feature dict or tensor from batch extraction
+
+        Returns:
+            Model output
+        """
+        # Use match-case for clean type handling
+        match features:
+            case dict():
+                # Reconstruct Data object from feature dict
+                # Filter to only tensor values for serialization safety
+                data_kwargs = {
+                    key: value
+                    for key, value in features.items()
+                    if isinstance(value, Tensor)
+                }
+                data = Data(**data_kwargs)
+                return self.model(data)
+
+            case Tensor():
+                # Wrap bare tensor in Data object
+                data = Data(x=features)
+                return self.model(data)
+
+            case _:
+                # Fallback for unexpected types
+                raise TypeError(f"Unexpected feature type: {type(features)}")
+
     def _create_output_classifier(self):
         """Create name-based output classifier for graph models.
 

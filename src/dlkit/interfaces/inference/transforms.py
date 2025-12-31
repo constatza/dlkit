@@ -136,6 +136,67 @@ def _group_by_entry_name(prefix: str, state_dict: dict[str, Any]) -> dict[str, d
     return grouped
 
 
+def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str, Any]) -> None:
+    """Register a buffer in the transform chain.
+
+    Args:
+        chain: The transform chain
+        key: Dot-separated key path (e.g., 'transforms.0.min')
+        state: State dict containing the buffer value
+    """
+    from torch.nn import ModuleList
+
+    parts = key.split('.')
+    module = chain
+
+    # Navigate to the target module
+    for part in parts[:-1]:
+        if not part.isdigit():
+            module = getattr(module, part)
+            continue
+
+        # Handle numeric indices for ModuleList or TransformChain
+        idx = int(part)
+        if isinstance(module, ModuleList):
+            module = module[idx]
+        elif hasattr(module, 'transforms'):
+            # TransformChain has transforms attribute
+            module = module.transforms[idx]  # type: ignore[index]
+        else:
+            raise ValueError(f"Cannot index into {type(module)} at {part}")
+
+    # Register the buffer
+    buffer_name = parts[-1]
+    buffer_value = state[key]
+    if not hasattr(module, 'register_buffer'):
+        raise ValueError(f"Module {type(module)} does not have register_buffer method")
+    module.register_buffer(buffer_name, buffer_value)  # type: ignore[attr-defined]
+    logger.debug(f"Registered buffer: {key}")
+
+
+def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> list[Any]:
+    """Extract transform settings from entry config.
+
+    Args:
+        entry_name: Name of the data entry
+        entry_configs: Entry configurations
+
+    Returns:
+        List of transform settings, empty if none found
+    """
+    entry_config = entry_configs.get(entry_name)
+    if not entry_config:
+        return []
+
+    if hasattr(entry_config, 'transforms'):
+        return entry_config.transforms
+
+    if isinstance(entry_config, dict):
+        return entry_config.get('transforms', [])
+
+    return []
+
+
 def _reconstruct_transform_chain(
     entry_name: str,
     transform_state: dict[str, Any],
@@ -152,23 +213,22 @@ def _reconstruct_transform_chain(
         Reconstructed TransformChain or None if reconstruction fails
     """
     try:
-        # Get transform settings from entry config
-        entry_config = entry_configs.get(entry_name)
-        transform_settings = []
-
-        if entry_config:
-            if hasattr(entry_config, 'transforms'):
-                transform_settings = entry_config.transforms
-            elif isinstance(entry_config, dict):
-                transform_settings = entry_config.get('transforms', [])
-
+        # Get transform settings
+        transform_settings = _get_transform_settings(entry_name, entry_configs)
         if not transform_settings:
             logger.warning(f"No transform settings found for '{entry_name}'")
             return None
 
         # Create and load chain
         chain = TransformChain(transform_settings)
-        chain.load_state_dict(transform_state, strict=False)
+        result = chain.load_state_dict(transform_state, strict=False)
+
+        # Register unexpected keys as buffers (fitted parameters like min/max)
+        for key in result.unexpected_keys:
+            try:
+                _register_transform_buffer(chain, key, transform_state)
+            except Exception as e:
+                logger.warning(f"Could not register buffer {key}: {e}")
 
         logger.info(f"Loaded transform chain for '{entry_name}' with {len(chain.transforms)} transforms")
         return chain

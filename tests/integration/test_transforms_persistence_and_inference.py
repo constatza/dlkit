@@ -281,7 +281,6 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
 
     # Assert: Verify the result structure and content
     assert hasattr(result, 'predictions')
-    assert hasattr(result, 'model_state')
     assert isinstance(result.predictions, dict)
 
     # Check the actual structure - it might be nested

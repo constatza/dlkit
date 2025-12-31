@@ -18,7 +18,7 @@ from dlkit.interfaces.api.services.precision_service import get_precision_servic
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
-from .config import PredictorConfig, ModelState
+from .config import PredictorConfig, ModelState, InferenceResult
 from .loading import load_checkpoint, build_model_from_checkpoint
 from .shapes import infer_shape_specification
 from .transforms import (
@@ -53,7 +53,7 @@ class IPredictor(Protocol):
         self,
         inputs: dict[str, torch.Tensor] | torch.Tensor,
         batch_size: int | None = None
-    ) -> torch.Tensor | dict[str, torch.Tensor]:
+    ) -> InferenceResult:
         """Execute inference on loaded model."""
         ...
 
@@ -113,6 +113,58 @@ class CheckpointPredictor(IPredictor):
         # Auto-load if requested
         if config.auto_load:
             self.load()
+
+    def _name_predictions(self, predictions: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Name single tensor predictions based on target configuration.
+
+        Args:
+            predictions: Raw model output tensor
+
+        Returns:
+            Dict with properly named predictions (e.g., {"y": tensor})
+        """
+        # Guard clause: If model_state not available, use default name
+        if self._model_state is None:
+            return {"output": predictions}
+
+        # Get entry configs from checkpoint metadata
+        # Need type guard since metadata values can be various types
+        inference_metadata_raw = self._model_state.metadata.get("inference_metadata", {})
+        if not isinstance(inference_metadata_raw, dict):
+            return {"output": predictions}
+
+        entry_configs_raw = inference_metadata_raw.get("entry_configs", {})
+        if not isinstance(entry_configs_raw, dict):
+            return {"output": predictions}
+
+        entry_configs = entry_configs_raw
+
+        # Guard clause: No entry configs, use default name
+        if not entry_configs:
+            return {"output": predictions}
+
+        # Find target entries
+        target_names = [
+            name for name, config in entry_configs.items()
+            if config.get("type") == "target"
+        ]
+
+        # Use match-case for cleaner logic (avoiding nested ifs)
+        match len(target_names):
+            case 0:
+                # No targets found, use default
+                return {"output": predictions}
+            case 1:
+                # Single target - use its name
+                return {target_names[0]: predictions}
+            case _:
+                # Multiple targets - use first one
+                # (This is ambiguous but better than failing)
+                logger.warning(
+                    f"Multiple targets found: {target_names}. "
+                    f"Using first target '{target_names[0]}' for naming."
+                )
+                return {target_names[0]: predictions}
 
     def load(self) -> Self:
         """Load model from checkpoint (expensive - call once).
@@ -183,7 +235,7 @@ class CheckpointPredictor(IPredictor):
         self,
         inputs: dict[str, torch.Tensor] | torch.Tensor,
         batch_size: int | None = None
-    ) -> torch.Tensor | dict[str, torch.Tensor]:
+    ) -> InferenceResult:
         """Execute inference on loaded model.
 
         Args:
@@ -191,7 +243,7 @@ class CheckpointPredictor(IPredictor):
             batch_size: Optional batch size override
 
         Returns:
-            Predictions tensor or dict
+            InferenceResult with predictions and model state
 
         Raises:
             PredictorNotLoadedError: If predictor not loaded
@@ -239,8 +291,12 @@ class CheckpointPredictor(IPredictor):
                     self._model_state.target_transforms
                 )
 
-            # Return predictions directly (simpler than wrapping in InferenceResult)
-            return predictions
+            # Wrap single tensor predictions in dict with proper name
+            if isinstance(predictions, torch.Tensor):
+                predictions = self._name_predictions(predictions)
+
+            # Return wrapped in InferenceResult dataclass (better than bare tensor)
+            return InferenceResult(predictions=predictions)
 
     def predict_from_config(
         self,
@@ -276,6 +332,26 @@ class CheckpointPredictor(IPredictor):
             True if model is loaded
         """
         return self._loaded and self._model_state is not None
+
+    @property
+    def model(self) -> torch.nn.Module | None:
+        """Access the underlying PyTorch model.
+
+        Useful for:
+        - Custom analysis or inspection
+        - Extracting intermediate layer activations
+        - Fine-tuning or further training
+        - Direct model manipulation
+
+        Returns:
+            The loaded PyTorch model, or None if not loaded
+
+        Example:
+            >>> predictor = load_predictor(checkpoint_path)
+            >>> model = predictor.model
+            >>> # Access model layers, parameters, etc.
+        """
+        return self._model_state.model if self._model_state is not None else None
 
     def unload(self) -> None:
         """Unload model and free resources."""

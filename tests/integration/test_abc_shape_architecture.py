@@ -330,84 +330,9 @@ class TestShapeCheckpointPersistence:
         assert loaded_shape.get_input_shape() == (10,)
         assert loaded_shape.get_output_shape() == (5,)
 
-    def test_checkpoint_model_creation(self, tmp_path: Path):
-        """Test creating models from checkpoints with automatic shape loading."""
-        from dlkit.interfaces.inference.transforms.checkpoint_loader import CheckpointTransformLoader
-
-        # Create a simple checkpoint with shape metadata in V3 format and model settings
-        shape_spec = create_shape_spec({"x": (784,), "y": (10,)})
-
-        # Use V3 modern format (current standard) with full dlkit_metadata
-        checkpoint = {
-            "state_dict": {},
-            "dlkit_metadata": {
-                "version": "2.0",
-                "model_family": "dlkit_nn",
-                "wrapper_type": "StandardLightningWrapper",
-                "dlkit_version": "2.0",
-                "shape_spec": {
-                    "metadata": {
-                        "version": "v3",
-                        "format": "json",
-                        "created_at": "2025-09-30T00:00:00"
-                    },
-                    "data": {
-                        "entries": {
-                            "x": {
-                                "dimensions": [784],
-                                "metadata": {"name": "x"}
-                            },
-                            "y": {
-                                "dimensions": [10],
-                                "metadata": {"name": "y"}
-                            }
-                        },
-                        "model_family": "dlkit_nn",
-                        "source": "training_dataset",
-                        "default_input": "x",
-                        "default_output": "y",
-                        "schema_version": "3.0"
-                    }
-                },
-                "model_settings": {
-                    "name": "FeedForwardNN",
-                    "module_path": "dlkit.core.models.nn.ffnn.simple",
-                    "params": {
-                        "layers": [128, 64]
-                    },
-                    "class_name": "ModelComponentSettings"
-                },
-                "entry_configs": {
-                    "x": {"name": "x", "class_name": "Feature"},
-                    "y": {"name": "y", "class_name": "Target"}
-                }
-            }
-        }
-
-        checkpoint_path = tmp_path / "test_checkpoint.ckpt"
-        torch.save(checkpoint, checkpoint_path)
-
-        # Test checkpoint loader
-        loader = CheckpointTransformLoader()
-
-        # Should find shape spec
-        assert loader.has_shape_spec(checkpoint_path)
-
-        # Should load shape spec
-        loaded_shape = loader.load_shape_spec(checkpoint_path)
-        assert loaded_shape is not None
-        assert loaded_shape.get_shape("x") == (784,)
-        assert loaded_shape.get_shape("y") == (10,)
-
-        # Should create model with loaded shapes
-        model = loader.create_model_from_checkpoint(
-            checkpoint_path,
-            model_class=FeedForwardNN
-        )
-
-        if model is not None:  # May be None if creation failed
-            assert isinstance(model, FeedForwardNN)
-            assert isinstance(model, ShapeAwareModel)
+    # test_checkpoint_model_creation removed - tested old CheckpointTransformLoader
+    # which was removed in Phase 1 (hexagonal architecture simplification).
+    # Checkpoint loading is now handled by the simplified predictor API.
 
 
 class TestModelABCCompliance:

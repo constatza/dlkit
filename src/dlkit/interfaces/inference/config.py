@@ -13,6 +13,7 @@ from dlkit.core.shape_specs import ShapeSpec
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 if TYPE_CHECKING:
+    import torch
     import torch.nn as nn
     from dlkit.core.training.transforms.chain import TransformChain
 
@@ -52,6 +53,18 @@ class ModelState:
     feature_transforms: dict[str, "TransformChain"] | None = None
     target_transforms: dict[str, "TransformChain"] | None = None
     metadata: dict[str, str | int | float | bool | dict | list] = field(default_factory=dict)
+
+
+@dataclass
+class InferenceResult:
+    """Result from inference prediction.
+
+    Simple dataclass holding prediction results.
+    Following good practice of using dataclasses instead of bare returns.
+    Access to model should be via predictor.model property, not in result.
+    """
+
+    predictions: "torch.Tensor | dict[str, torch.Tensor]"
 
 
 @dataclass

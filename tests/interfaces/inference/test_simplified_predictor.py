@@ -284,9 +284,13 @@ class TestCheckpointPredictor:
 
         # Single tensor input
         inputs = torch.randn(32, 10)
-        predictions = predictor.predict(inputs)
+        result = predictor.predict(inputs)
 
-        # Verify predictions
+        # Verify result structure
+        assert hasattr(result, 'predictions')
+        assert isinstance(result.predictions, dict)
+        # Extract tensor from result
+        predictions = next(iter(result.predictions.values()))
         assert isinstance(predictions, torch.Tensor)
         assert predictions.shape == (32, 5)
 
@@ -302,9 +306,13 @@ class TestCheckpointPredictor:
 
         # Dict input
         inputs = {"x": torch.randn(32, 10)}
-        predictions = predictor.predict(inputs)
+        result = predictor.predict(inputs)
 
-        # Verify predictions
+        # Verify result structure
+        assert hasattr(result, 'predictions')
+        assert isinstance(result.predictions, dict)
+        # Extract tensor from result
+        predictions = next(iter(result.predictions.values()))
         assert isinstance(predictions, torch.Tensor)
         assert predictions.shape == (32, 5)
 
@@ -391,8 +399,11 @@ class TestLoadPredictorAPI:
 
         # Test prediction
         inputs = torch.randn(16, 10)
-        predictions = predictor.predict(inputs)
+        result = predictor.predict(inputs)
 
+        # Extract predictions from result
+        assert hasattr(result, 'predictions')
+        predictions = next(iter(result.predictions.values()))
         assert predictions.shape == (16, 5)
 
     def test_load_predictor_with_precision(self, simple_checkpoint: Path):
@@ -410,7 +421,9 @@ class TestLoadPredictorAPI:
         """Test load_predictor() with context manager."""
         with load_predictor(simple_checkpoint) as predictor:
             inputs = torch.randn(8, 10)
-            predictions = predictor.predict(inputs)
+            result = predictor.predict(inputs)
+            # Extract predictions from result
+            predictions = next(iter(result.predictions.values()))
             assert predictions.shape == (8, 5)
 
 

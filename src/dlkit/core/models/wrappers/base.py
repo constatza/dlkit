@@ -1,11 +1,13 @@
-"""Base Lightning wrapper with processing pipeline integration.
+"""Base Lightning wrapper with direct processing methods.
 
-This module defines the abstract base class for all Lightning wrappers that
-integrate with the dlkit.runtime.pipelines pipeline system.
+This module defines the abstract base class for all Lightning wrappers.
+Replaces the Chain of Responsibility pipeline pattern with direct helper methods
+for simpler, more maintainable code.
 """
 
 from abc import abstractmethod, ABC
 from typing import Any
+from loguru import logger
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
 # This must happen before any Lightning checkpoint operations
@@ -16,7 +18,6 @@ import torch
 from lightning import LightningModule
 from torch import Tensor
 from torchmetrics import MetricCollection
-from torch.nn import ModuleDict
 
 from dlkit.tools.config import (
     BuildContext,
@@ -24,40 +25,26 @@ from dlkit.tools.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import DataEntry, Target, is_feature_entry, is_target_entry
+from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
-from dlkit.runtime.pipelines.pipeline import (
-    ProcessingPipeline,
-    DataExtractionStep,
-    ModelInvocationStep,
-    OutputClassificationStep,
-    OutputNamingStep,
-    ValidationDataStep,
-)
-from dlkit.runtime.pipelines.model_invokers import ModelInvokerFactory
-from dlkit.runtime.pipelines.classifiers import NameBasedClassifier
-from dlkit.runtime.pipelines.context import ProcessingContext
 
 
 class ProcessingLightningWrapper(LightningModule, ABC):
-    """Abstract base Lightning wrapper with core processing pipeline integration.
+    """Abstract base Lightning wrapper with direct processing methods.
 
-    This wrapper provides the fundamental Lightning integration with basic processing
-    pipeline support (extraction → invocation → classification → loss pairing).
-    Transform functionality is provided by specialized subclasses.
+    Provides fundamental Lightning integration with streamlined processing:
+    extraction → invocation → loss pairing → metrics.
+
+    Transform functionality is provided by specialized subclasses (StandardLightningWrapper).
 
     Attributes:
         model (torch.nn.Module): Underlying PyTorch model.
         shape_spec (IShapeSpec | None): Shape specification associated with the model.
         val_metrics (torchmetrics.MetricCollection): Validation metrics.
         test_metrics (torchmetrics.MetricCollection): Test metrics.
-        loss_function (callable): Loss function operating on processed tensors.
-        train_pipeline (ProcessingPipeline): Training pipeline.
-        val_pipeline (ProcessingPipeline): Validation pipeline.
-        test_pipeline (ProcessingPipeline): Test pipeline.
-        predict_pipeline (ProcessingPipeline): Inference pipeline (no loss pairing).
+        loss_function (callable): Loss function operating on predictions and targets.
     """
 
     def __init__(
@@ -74,7 +61,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Args:
             settings (WrapperComponentSettings): Wrapper configuration settings.
             model_settings (ModelComponentSettings): Model configuration settings.
-            entry_configs (dict[str, DataEntry] | None): Data entry configurations for pipeline setup.
+            entry_configs (dict[str, DataEntry] | None): Data entry configurations.
             shape_spec (IShapeSpec | None): Shape specification for models.
             **kwargs: Additional arguments passed to LightningModule.
         """
@@ -110,6 +97,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             self._assign_shape_spec(self._derive_shape_spec_from_model())
         else:
             self._assign_shape_spec(self.shape_spec)
+
         self.val_metrics = MetricCollection([
             FactoryProvider.create_component(metric, BuildContext(mode="training"))
             for metric in settings.metrics
@@ -129,13 +117,13 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         self.optimizer = settings.optimizer
         self.scheduler = settings.scheduler
-        # Keep a direct reference to wrapper settings for pipeline decisions
+        # Keep a direct reference to wrapper settings for decisions
         self._wrapper_settings = settings
 
         # Ensure lr/learning_rate hyperparameters mirror optimizer settings
         self._sync_lr_hparam()
 
-        # Initialize processing pipelines
+        # Store entry configs for feature/target categorization
         self._entry_configs = entry_configs or {}
 
         # Register entry configs with global registry for end user access
@@ -143,15 +131,432 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             registry = DataEntryRegistry.get_instance()
             registry.register_entries(self._entry_configs)
 
-        # Initialize pipeline attributes to be set by subclass implementations
-        self.train_pipeline: ProcessingPipeline
-        self.val_pipeline: ProcessingPipeline
-        self.test_pipeline: ProcessingPipeline
-        self.predict_pipeline: ProcessingPipeline
+        # Pre-compute feature and target names for efficient lookup
+        self._feature_names = {
+            name for name, config in self._entry_configs.items()
+            if is_feature_entry(config)
+        }
+        self._target_names = {
+            name for name, config in self._entry_configs.items()
+            if is_target_entry(config)
+        }
 
-        # Set up pipelines via template methods
-        self._setup_processing_pipelines(self._entry_configs)
-        self._setup_predict_pipeline(self._entry_configs)
+    # =============================================================================
+    # Core Processing Helper Methods (Replace Pipeline Steps)
+    # =============================================================================
+
+    def _extract_features_targets(self, batch: dict[str, Tensor]) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        """Extract and categorize batch data into features and targets.
+
+        When no explicit entry configuration is provided, applies a simple
+        name-based heuristic:
+        - targets: keys like {"y", "target", "targets", "label", "labels"} (case-insensitive)
+        - features: all remaining keys
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+
+        Returns:
+            tuple[dict[str, Tensor], dict[str, Tensor]]: Features and targets.
+        """
+        if not self._feature_names and not self._target_names:
+            # Heuristic fallback when no configs are provided
+            target_like = {"y", "target", "targets", "label", "labels"}
+            features: dict[str, Tensor] = {}
+            targets: dict[str, Tensor] = {}
+            for name, tensor in batch.items():
+                n = str(name).lower()
+                if n in target_like:
+                    targets[name] = tensor
+                else:
+                    features[name] = tensor
+            return features, targets
+
+        # Extract based on explicit configuration
+        features = {
+            name: tensor
+            for name, tensor in batch.items()
+            if name in self._feature_names
+        }
+        targets = {
+            name: tensor
+            for name, tensor in batch.items()
+            if name in self._target_names
+        }
+        return features, targets
+
+    def _log_dtype_mismatches(self, features: dict[str, Tensor] | Tensor) -> None:
+        """Log dtype mismatches between features and model (debug only).
+
+        Uses guard clauses to avoid nested ifs.
+        Lightning's precision plugin handles actual dtype alignment.
+        """
+        import torch
+
+        # Guard: Skip if model doesn't have dtype
+        if not hasattr(self.model, "dtype"):
+            return
+
+        model_dtype = self.model.dtype
+
+        # Guard: Ensure dtype is actually a torch.dtype (type narrowing)
+        if not isinstance(model_dtype, torch.dtype):
+            return
+
+        # Use match-case for feature type handling
+        match features:
+            case dict():
+                self._log_dict_features_dtype(features, model_dtype)
+            case Tensor():
+                self._log_tensor_feature_dtype(features, model_dtype)
+
+    def _log_dict_features_dtype(self, features: dict[str, Tensor], model_dtype: torch.dtype) -> None:
+        """Log dtype mismatches for dict features."""
+        for name, value in features.items():
+            # Guard: Skip non-tensor values (e.g., int indices in graph data)
+            if not isinstance(value, Tensor):
+                continue
+
+            # Guard: Skip non-floating point tensors
+            if not value.is_floating_point():
+                continue
+
+            # Guard: Skip if dtypes match
+            if value.dtype == model_dtype:
+                continue
+
+            # Log the mismatch
+            logger.debug(
+                f"Feature '{name}' dtype {value.dtype} differs from model dtype {model_dtype}. "
+                f"Lightning's precision plugin will handle alignment."
+            )
+
+    def _log_tensor_feature_dtype(self, features: Tensor, model_dtype: torch.dtype) -> None:
+        """Log dtype mismatch for single tensor feature."""
+        # Guard: Skip non-floating point tensors
+        if not features.is_floating_point():
+            return
+
+        # Guard: Skip if dtypes match
+        if features.dtype == model_dtype:
+            return
+
+        # Log the mismatch
+        logger.debug(
+            f"Features dtype {features.dtype} differs from model dtype {model_dtype}. "
+            f"Lightning's precision plugin will handle alignment."
+        )
+
+    def _forward_features(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
+        """Forward features through model with match-case logic."""
+        match features:
+            case dict():
+                return self._forward_dict_features(features)
+            case _:
+                return self.model(features)
+
+    def _forward_dict_features(self, features: dict[str, Tensor]) -> dict[str, Tensor] | Tensor:
+        """Forward dict features - try **kwargs first, fallback to single tensor."""
+        try:
+            return self.model(**features)
+        except TypeError:
+            # Model doesn't accept **kwargs, try single tensor
+            return self.model(next(iter(features.values())))
+
+    def _invoke_model(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
+        """Invoke model forward pass with defensive dtype validation.
+
+        Data should already be loaded in the correct dtype via load_array(),
+        but this provides a safety check and automatic casting if needed.
+
+        Args:
+            features (dict[str, Tensor] | Tensor): Model inputs.
+
+        Returns:
+            dict[str, Tensor] | Tensor: Model outputs.
+
+        Raises:
+            RuntimeError: If model invocation fails or no features available.
+        """
+        if isinstance(features, dict) and not features:
+            raise RuntimeError("No features available for model invocation")
+
+        try:
+            # Debug-level dtype tracking (before Lightning precision kicks in)
+            self._log_dtype_mismatches(features)
+
+            # Model forward - use match-case for cleaner logic
+            return self._forward_features(features)
+
+        except Exception as e:
+            raise RuntimeError(f"Model invocation failed: {e}") from e
+
+    def _compute_loss(self, predictions: dict[str, Tensor] | Tensor, targets: dict[str, Tensor]) -> Tensor:
+        """Compute loss from predictions and targets with automatic pairing.
+
+        Pairing rules:
+        - Strict mapping: for each target there must be a corresponding prediction key
+        - Single-target fallback: if exactly one target and one prediction, pair them
+        - Autoencoder mode: handled by subclass (StandardLightningWrapper)
+
+        Args:
+            predictions (dict[str, Tensor] | Tensor): Model predictions.
+            targets (dict[str, Tensor]): Ground truth targets.
+
+        Returns:
+            torch.Tensor: Computed loss.
+
+        Raises:
+            RuntimeError: If pairing fails or required pairs are missing.
+        """
+        # Normalize predictions to dict format
+        if isinstance(predictions, Tensor):
+            # Single tensor output - check if we can pair with targets
+            if len(targets) == 1:
+                # Single target - pair with single prediction
+                pred = predictions
+                target = next(iter(targets.values()))
+
+                # Align target dtype with prediction dtype
+                if target.is_floating_point() and pred.is_floating_point():
+                    if target.dtype != pred.dtype:
+                        logger.debug(
+                            f"Target dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+                            f"Casting target to match prediction for loss computation."
+                        )
+                        target = target.to(dtype=pred.dtype)
+
+                return self.loss_function(pred, target)
+            else:
+                raise RuntimeError(
+                    f"Model returned single tensor but found {len(targets)} targets. "
+                    f"Cannot determine pairing. Target keys: {list(targets.keys())}"
+                )
+        elif isinstance(predictions, dict):
+            # Dict predictions - pair by name
+            pnames = list(predictions.keys())
+            tnames = list(targets.keys())
+
+            # Single-target fallback
+            if len(tnames) == 1 and len(pnames) == 1:
+                tname = tnames[0]
+                pred = predictions[pnames[0]]
+                target = targets[tname]
+
+                # Align target dtype with prediction dtype
+                if target.is_floating_point() and pred.is_floating_point():
+                    if target.dtype != pred.dtype:
+                        logger.debug(
+                            f"Target '{tname}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+                            f"Casting target to match prediction for loss computation."
+                        )
+                        target = target.to(dtype=pred.dtype)
+
+                return self.loss_function(pred, target)
+
+            # Strict matching by names
+            missing = [t for t in tnames if t not in predictions]
+            unexpected = [p for p in pnames if p not in targets]
+            if missing or unexpected:
+                msg_parts = []
+                if missing:
+                    msg_parts.append(f"missing predictions for targets: {missing}")
+                if unexpected:
+                    msg_parts.append(f"unexpected prediction keys: {unexpected}")
+                available = f"available targets={tnames}, predictions={pnames}"
+                raise RuntimeError(f"Loss pairing failed: {', '.join(msg_parts)}; {available}")
+
+            # Build pairs by matching keys with dtype alignment
+            total_loss = None
+            for name in tnames:
+                pred = predictions[name]
+                target = targets[name]
+
+                # Align target dtype with prediction dtype
+                if target.is_floating_point() and pred.is_floating_point():
+                    if target.dtype != pred.dtype:
+                        logger.debug(
+                            f"Target '{name}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+                            f"Casting target to match prediction for loss computation."
+                        )
+                        target = target.to(dtype=pred.dtype)
+
+                loss = self.loss_function(pred, target)
+                total_loss = loss if total_loss is None else total_loss + loss
+
+            if total_loss is None:
+                raise RuntimeError("No loss pairs available for computation")
+            return total_loss
+        else:
+            raise RuntimeError(f"Unsupported prediction type: {type(predictions)}")
+
+    def _update_metrics(
+        self,
+        predictions: dict[str, Tensor] | Tensor,
+        targets: dict[str, Tensor],
+        stage: str
+    ) -> dict[str, Any]:
+        """Compute metrics from predictions and targets.
+
+        Ensures predictions and targets use the model's dtype (user's configured precision)
+        for metric computation. This maintains precision consistency throughout the pipeline.
+
+        Args:
+            predictions (dict[str, Tensor] | Tensor): Model predictions.
+            targets (dict[str, Tensor]): Ground truth targets.
+            stage (str): Stage identifier ("train", "val", "test").
+
+        Returns:
+            dict[str, Any]: Dictionary of computed metrics.
+        """
+        # Select appropriate metric collection
+        metrics = {"val": self.val_metrics, "test": self.test_metrics}.get(stage)
+        if metrics is None:
+            return {}
+
+        # Extract first prediction and target for metrics
+        if isinstance(predictions, dict):
+            if not predictions or not targets:
+                return {}
+            pred = next(iter(predictions.values()))
+            target = next(iter(targets.values()))
+        else:
+            pred = predictions
+            if not targets:
+                return {}
+            target = next(iter(targets.values()))
+
+        # Ensure both use model's dtype (maintains user's precision choice)
+        if hasattr(self.model, "dtype"):
+            import torch
+
+            model_dtype = self.model.dtype
+
+            # Guard: Ensure dtype is torch.dtype (type narrowing)
+            if not isinstance(model_dtype, torch.dtype):
+                return metrics(pred, target)
+
+            # Cast if needed (defensive - should already match from pipeline)
+            if pred.is_floating_point() and pred.dtype != model_dtype:
+                pred = pred.to(dtype=model_dtype)
+            if target.is_floating_point() and target.dtype != model_dtype:
+                target = target.to(dtype=model_dtype)
+
+        return metrics(pred, target)
+
+    # =============================================================================
+    # Lightning Step Methods (Use Direct Helpers)
+    # =============================================================================
+
+    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Training step with direct processing (no pipeline).
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing the training loss.
+        """
+        # 1. Extract features and targets
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Model forward
+        predictions = self._invoke_model(features)
+
+        # 3. Compute loss
+        loss = self._compute_loss(predictions, targets)
+
+        # 4. Log metrics
+        self._log_stage_outputs("train", loss)
+
+        return {"loss": loss}
+
+    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Validation step with direct processing (no pipeline).
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing validation metrics.
+        """
+        # 1. Extract features and targets
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Model forward
+        predictions = self._invoke_model(features)
+
+        # 3. Compute loss
+        val_loss = self._compute_loss(predictions, targets)
+
+        # 4. Compute metrics
+        metrics = self._update_metrics(predictions, targets, stage="val")
+
+        # 5. Log metrics
+        self._log_stage_outputs("val", val_loss, metrics)
+
+        return {"val_loss": val_loss}
+
+    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Test step with direct processing (no pipeline).
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing test metrics.
+        """
+        # 1. Extract features and targets
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Model forward
+        predictions = self._invoke_model(features)
+
+        # 3. Compute loss
+        test_loss = self._compute_loss(predictions, targets)
+
+        # 4. Compute metrics
+        metrics = self._update_metrics(predictions, targets, stage="test")
+
+        # 5. Log metrics
+        self._log_stage_outputs("test", test_loss, metrics)
+
+        return {"test_loss": test_loss}
+
+    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
+        """Prediction step without loss computation.
+
+        Targets are optional during inference.
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict: Dictionary with ``predictions``, ``targets``, and ``latents``.
+        """
+        # 1. Extract features (targets are optional)
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Model forward
+        predictions = self._invoke_model(features)
+
+        # 3. Normalize predictions to dict format
+        if isinstance(predictions, Tensor):
+            predictions = {"output": predictions}
+
+        return {
+            "predictions": predictions,
+            "targets": targets if targets else {},
+            "latents": {}  # Subclasses can populate this
+        }
+
+    # =============================================================================
+    # Checkpoint and Metadata Management
+    # =============================================================================
 
     def configure_model(self) -> None:
         """Ensure precision is maintained after Lightning setup/checkpoint restore.
@@ -162,13 +567,11 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         - Strategy setup
 
         This ensures the nested model's dtype persists even after checkpoint operations
-        that might reconstruct the model. Critical for LR tuning which saves/restores
-        checkpoints.
+        that might reconstruct the model.
         """
         super().configure_model()
 
-        # Reapply precision to nested model
-        # This is idempotent and safe to call multiple times
+        # Reapply precision to nested model (idempotent and safe)
         from dlkit.interfaces.api.services.precision_service import get_precision_service
 
         precision_service = get_precision_service()
@@ -180,8 +583,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """Save enhanced metadata including complete shape information.
 
         Ensures comprehensive model reconstruction information persists across
-        checkpoint saves/loads, eliminating the need for manual shape parameters
-        during inference.
+        checkpoint saves/loads.
 
         This method is pure - it only reads state and writes to the checkpoint dict.
         No side effects (state mutations) are performed during checkpoint save.
@@ -204,12 +606,11 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         # Save model settings for reconstruction
         dlkit_metadata['model_settings'] = self._serialize_model_settings()
 
-        # Save entry configs for pipeline reconstruction
+        # Save entry configs for reconstruction
         dlkit_metadata['entry_configs'] = self._serialize_entry_configs()
 
         # Store in checkpoint
         checkpoint['dlkit_metadata'] = dlkit_metadata
-
 
     def _detect_model_family(self) -> str:
         """Detect model family for appropriate shape handling.
@@ -218,11 +619,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             Model family identifier ("dlkit_nn", "graph", "timeseries", "external")
         """
         try:
-            # Use existing detection logic from model detection module
             from dlkit.runtime.workflows.factories.model_detection import detect_model_type
-            from dlkit.tools.config import GeneralSettings
-            # We don't have full GeneralSettings here, but can pass None
-            # The detector will work with just model_settings
             model_type = detect_model_type(self.hparams.model_settings, None)  # type: ignore[arg-type]
             return model_type.value
         except Exception:
@@ -242,12 +639,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             module_path = getattr(settings, 'module_path', None)
             class_name = settings.__class__.__name__
 
-            # Extract hyperparameters (all extra fields allowed by Pydantic model_config)
-            # Exclude base fields and checkpoint
+            # Extract hyperparameters
             params = {}
             if hasattr(settings, 'model_dump'):
-                # Use exclude_none=False to keep None values (important for reconstruction)
-                # Don't use mode='json' as it can't serialize ABCMeta types that may be in settings
                 all_fields = settings.model_dump()
                 excluded = {'name', 'module_path', 'checkpoint'}
                 params = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
@@ -259,25 +653,21 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 'class_name': class_name
             }
         except Exception:
-            # Return empty dict on serialization failure - checkpoint will be valid
-            # but may not support automatic inference without explicit model_settings
             return {}
 
     def _serialize_entry_configs(self) -> dict[str, Any]:
-        """Serialize entry configurations for pipeline reconstruction.
+        """Serialize entry configurations for reconstruction.
 
         Returns:
             Serialized entry configurations
         """
         try:
             if hasattr(self, '_entry_configs') and self._entry_configs:
-                # Serialize DataEntry objects to dict format
                 serialized = {}
                 for name, entry in self._entry_configs.items():
                     serialized[name] = {
                         'name': entry.name,
                         'class_name': entry.__class__.__name__,
-                        # Add other relevant fields as needed
                     }
                 return serialized
         except Exception:
@@ -287,9 +677,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Restore enhanced metadata and shape information from checkpoint.
 
-        Reconstructs shape information when loading from checkpoint using the
-        modern shape specification metadata persisted alongside the weights.
-
         Raises:
             ValueError: If checkpoint version is unsupported or metadata format is invalid.
         """
@@ -297,7 +684,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         # Check for dlkit_metadata (required for v2.0+)
         if 'dlkit_metadata' not in checkpoint:
-            # Legacy checkpoint without dlkit_metadata
             raise ValueError(
                 "Checkpoint missing 'dlkit_metadata'. This checkpoint uses a legacy format "
                 "that is no longer supported. Please re-train your model with the current "
@@ -329,7 +715,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 loaded_spec = factory.create_shape_spec_from_serialized(metadata['shape_spec'])
                 self._assign_shape_spec(loaded_spec)
             except Exception as e:
-                # Log warning but don't fail the load - shape reconstruction is best-effort
                 import warnings
                 warnings.warn(
                     f"Could not restore shape specification from checkpoint: {e}",
@@ -373,74 +758,96 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         except Exception:
             pass
 
-
-    @abstractmethod
-    def _setup_processing_pipelines(self, entry_configs: dict[str, DataEntry]) -> None:
-        """Set up processing pipelines for training/validation/test.
-
-        Template method to be implemented by subclasses with their specific pipeline structure.
-
-        Args:
-            entry_configs (dict[str, DataEntry]): Mapping from entry name to configuration.
-        """
-        pass
-
-    @abstractmethod
-    def _setup_predict_pipeline(self, entry_configs: dict[str, DataEntry]) -> None:
-        """Set up inference-only processing pipeline.
-
-        Template method to be implemented by subclasses with their specific predict pipeline.
-        This pipeline should exclude LossPairingStep to make targets optional during inference.
-
-        Args:
-            entry_configs (dict[str, DataEntry]): Mapping from entry name to configuration.
-        """
-        pass
-
-
-    def _create_output_classifier(self):
-        """Create the output classifier for this wrapper.
-
-        Can be overridden by subclasses to use different classification strategies.
-
-        Returns:
-            OutputClassifier instance
-        """
-        return NameBasedClassifier()
-
-    def _create_output_namer(self):
-        """Create the output namer for this wrapper.
-
-        Default: map prediction keys to target names using exact shape matching.
-        Can be overridden by subclasses to customize naming behavior.
-        """
-        from dlkit.runtime.pipelines.naming import TargetNameByShapeNamer
-
-        return TargetNameByShapeNamer()
+    # =============================================================================
+    # Logging and Metrics
+    # =============================================================================
 
     def _safe_log(self, *args, **kwargs) -> None:
-        """Safe logging that only logs when trainer is available.
-
-        This prevents errors when running steps without a trainer attached.
-        """
+        """Safe logging that only logs when trainer is available."""
         try:
             if hasattr(self, "trainer") and self.trainer is not None:
                 self.log(*args, **kwargs)
         except Exception:
-            # Silently ignore logging errors in test scenarios
             pass
 
     def _safe_log_dict(self, *args, **kwargs) -> None:
-        """Safe dict logging that only logs when trainer is available.
-
-        This prevents errors when running steps without a trainer attached.
-        """
+        """Safe dict logging that only logs when trainer is available."""
         try:
             if hasattr(self, "trainer") and self.trainer is not None:
                 self.log_dict(*args, **kwargs)
         except Exception:
-            # Silently ignore logging errors in test scenarios
             pass
+
+    def _log_stage_outputs(
+        self,
+        stage: str,
+        loss: Tensor | None,
+        metrics: dict[str, Any] | None = None,
+    ) -> None:
+        """Centralized metric logging hook for training stages.
+
+        Args:
+            stage: Stage identifier ("train", "val", "test").
+            loss: Scalar loss tensor for the stage.
+            metrics: Optional dictionary of additional metrics to log.
+        """
+        if loss is not None:
+            loss_name = self._format_metric_name(stage, "loss")
+            self._safe_log(
+                loss_name,
+                loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+        if metrics:
+            formatted: dict[str, Any] = {}
+            for key, value in metrics.items():
+                metric_name = self._format_metric_name(stage, key)
+                formatted[metric_name] = value
+
+            self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
+
+    def _format_metric_name(self, stage: str, name: str) -> str:
+        """Normalize metric names according to stage-specific conventions."""
+        stage_lower = stage.lower()
+        name_lower = name.lower()
+
+        aliases = {
+            "train": ("train", "training"),
+            "val": ("val", "valid", "validation"),
+            "test": ("test", "testing"),
+        }
+
+        for alias in aliases.get(stage_lower, (stage_lower,)):
+            if name_lower.startswith(alias):
+                return name
+
+        if stage_lower == "test":
+            if name_lower.endswith(" test"):
+                return name
+            return f"{name} test"
+
+        # Default: prefix with stage for all stages (including val)
+        return f"{stage_lower}_{name}"
+
+    def on_train_epoch_end(self) -> None:
+        """Log the current learning rate at epoch end."""
+        if self.trainer and self.trainer.optimizers:
+            lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+            self._safe_log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
+
+    def on_validation_epoch_end(self) -> None:
+        """Reset validation metrics at the end of the epoch."""
+        self.val_metrics.reset()
+
+    def on_test_epoch_end(self) -> None:
+        """Reset test metrics at the end of the epoch."""
+        self.test_metrics.reset()
+
+    # =============================================================================
+    # Optimizer and LR Management
+    # =============================================================================
 
     def _get_attached_trainer(self) -> Any:
         """Return the attached trainer or fabric shim without triggering Lightning errors."""
@@ -454,7 +861,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 from lightning.pytorch.core.module import _TrainerFabricShim
 
                 return _TrainerFabricShim(fabric=fabric)
-            except Exception:  # pragma: no cover - fabric usage is rare in tests
+            except Exception:  # pragma: no cover
                 return None
 
         return None
@@ -508,243 +915,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     def learning_rate(self, value: float) -> None:
         self.lr = value
 
-    def _log_stage_outputs(
-        self,
-        stage: str,
-        loss: Tensor | None,
-        metrics: dict[str, Any] | None = None,
-    ) -> None:
-        """Centralized metric logging hook for training stages.
-
-        Args:
-            stage: Stage identifier ("train", "val", "test").
-            loss: Scalar loss tensor for the stage.
-            metrics: Optional dictionary of additional metrics to log.
-        """
-        if loss is not None:
-            loss_name = self._format_metric_name(stage, "loss")
-            self._safe_log(
-                loss_name,
-                loss,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=True,
-            )
-        if metrics:
-            formatted: dict[str, Any] = {}
-            for key, value in metrics.items():
-                metric_name = self._format_metric_name(stage, key)
-                formatted[metric_name] = value
-
-            self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
-
-    def _format_metric_name(self, stage: str, name: str) -> str:
-        """Normalize metric names according to stage-specific conventions."""
-
-        stage_lower = stage.lower()
-        name_lower = name.lower()
-
-        aliases = {
-            "train": ("train", "training"),
-            "val": ("val", "valid", "validation"),
-            "test": ("test", "testing"),
-        }
-
-        for alias in aliases.get(stage_lower, (stage_lower,)):
-            if name_lower.startswith(alias):
-                return name
-
-        if stage_lower == "test":
-            if name_lower.endswith(" test"):
-                return name
-            return f"{name} test"
-
-        # Default: prefix with stage for all stages (including val)
-        return f"{stage_lower}_{name}"
-
-    @abstractmethod
-    def forward(self, *args, **kwargs) -> Tensor:
-        """Forward pass through the model.
-
-        This method should be implemented by subclasses to handle
-        the specific input format for their model type.
-        """
-        pass
-
-    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Training step using processing pipeline.
-
-        Args:
-            batch (dict[str, Tensor]): Raw batch dataflow from the dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing the training loss.
-        """
-        # Process batch through training pipeline
-        context = self.train_pipeline.execute(batch)
-
-        # Compute loss using processed dataflow
-        loss = self._compute_loss(context)
-
-        # Log metrics centrally for orchestration
-        self._log_stage_outputs("train", loss)
-
-        return {"loss": loss}
-
-    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Validation step using processing pipeline.
-
-        Args:
-            batch (dict[str, Tensor]): Raw batch dataflow from the dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing validation metrics.
-        """
-        # Process batch through validation pipeline
-        context = self.val_pipeline.execute(batch)
-
-        # Compute loss and metrics
-        val_loss = self._compute_loss(context)
-        metrics = self._compute_metrics(context, self.val_metrics)
-
-        # Log metrics centrally for orchestration
-        self._log_stage_outputs("val", val_loss, metrics)
-
-        return {"val_loss": val_loss}
-
-    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Test step using processing pipeline.
-
-        Args:
-            batch (dict[str, Tensor]): Raw batch dataflow from the dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing test metrics.
-        """
-        # Process batch through test pipeline
-        context = self.test_pipeline.execute(batch)
-
-        # Compute loss and metrics
-        test_loss = self._compute_loss(context)
-        metrics = self._compute_metrics(context, self.test_metrics)
-
-        # Log metrics centrally for orchestration
-        self._log_stage_outputs("test", test_loss, metrics)
-
-        return {"test_loss": test_loss}
-
-    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
-        """Prediction step using dedicated inference pipeline.
-
-        Uses the predict_pipeline which excludes LossPairingStep, making targets
-        optional during inference.
-
-        Args:
-            batch (dict[str, Tensor]): Raw batch dataflow from the dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, dict[str, Tensor]]: Dictionary with ``predictions``, ``targets``, and ``latents``.
-        """
-        # Use dedicated predict pipeline - no loss pairing required
-        context = self.predict_pipeline.execute(batch)
-
-        return {"predictions": dict(context.predictions), "targets": dict(context.targets), "latents": context.latents}
-
-
-    def _compute_loss(self, context: ProcessingContext) -> Tensor:
-        """Compute loss from processing context.
-
-        Args:
-            context (ProcessingContext): Processing context with ``loss_data`` populated.
-
-        Returns:
-            torch.Tensor: Computed loss tensor.
-        """
-        # Strict: require LossPairingStep to have populated named (pred, target) pairs.
-        if not context.loss_data:
-            raise RuntimeError(
-                "Loss pairing missing: ensure LossPairingStep produced pairs or model outputs "
-                "match target keys."
-            )
-
-        first_val = next(iter(context.loss_data.values()))
-        if not (isinstance(first_val, tuple) and len(first_val) == 2):
-            raise RuntimeError(
-                "Invalid loss_data format: expected {name: (pred, target)} pairs generated by "
-                "LossPairingStep."
-            )
-
-        total = None
-        for name, pair in context.loss_data.items():
-            if not (isinstance(pair, tuple) and len(pair) == 2):
-                raise RuntimeError(
-                    f"Invalid loss_data entry for '{name}': expected (pred, target) tuple."
-                )
-            pred, target = pair
-            val = self.loss_function(pred, target)
-            total = val if total is None else total + val
-
-        if total is None:
-            raise RuntimeError("No loss pairs available for computation")
-        return total
-
-    def _compute_metrics(
-        self, context: ProcessingContext, metrics: MetricCollection
-    ) -> dict[str, Any]:
-        """Compute metrics from processing context.
-
-        Ensures predictions and targets use the model's dtype (user's configured precision)
-        for metric computation. This maintains precision consistency throughout the pipeline.
-
-        Args:
-            context (ProcessingContext): Processing context with predictions and targets.
-            metrics (MetricCollection): Metrics collection to compute.
-
-        Returns:
-            dict[str, Any]: Dictionary of computed metrics.
-        """
-        if not context.predictions or not context.targets:
-            return {}
-
-        # Use first prediction and target for metrics
-        pred = next(iter(context.predictions.values()))
-        target = next(iter(context.targets.values()))
-
-        # Ensure both use model's dtype (maintains user's precision choice)
-        # If model doesn't have dtype property, skip casting
-        if hasattr(self.model, "dtype"):
-            model_dtype = self.model.dtype
-
-            # Cast if needed (defensive - should already match from pipeline)
-            if pred.is_floating_point() and pred.dtype != model_dtype:
-                pred = pred.to(dtype=model_dtype)
-            if target.is_floating_point() and target.dtype != model_dtype:
-                target = target.to(dtype=model_dtype)
-
-        return metrics(pred, target)
-
-    def on_train_epoch_end(self) -> None:
-        """Log the current learning rate at epoch end."""
-        if self.trainer and self.trainer.optimizers:
-            lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-            self._safe_log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
-
-    def on_validation_epoch_end(self) -> None:
-        """Reset validation metrics at the end of the epoch."""
-        self.val_metrics.reset()
-
-    def on_test_epoch_end(self) -> None:
-        """Reset test metrics at the end of the epoch."""
-        self.test_metrics.reset()
-
     def configure_optimizers(self):  # type: ignore[override]
         """Configure optimizer and scheduler from settings."""
-        # Build optimizer and scheduler via factories with explicit overrides
-        # Note: lr override removed - settings already contain the resolved learning rate from overrides
         optimizer = FactoryProvider.create_component(
             self.optimizer,
             BuildContext(mode="training", overrides={"params": self.model.parameters()}),
@@ -765,6 +937,10 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 "monitor": "val_loss",
             },
         }
+
+    # =============================================================================
+    # Entry Config Access
+    # =============================================================================
 
     def get_entry_configs(self) -> dict[str, DataEntry]:
         """Get the data entry configurations used by this wrapper.
@@ -795,6 +971,10 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             name: config for name, config in self._entry_configs.items()
             if is_target_entry(config)
         }
+
+    # =============================================================================
+    # Model Creation (ABC-based)
+    # =============================================================================
 
     def _is_dlkit_model(self, model_settings) -> bool:
         """Check if model settings refer to a dlkit model that should receive shapes."""
@@ -866,7 +1046,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         model_kwargs = {}
 
         # Extract all non-None model parameters from the settings object
-        # Exclude meta attributes and only include model constructor parameters
         exclude_fields = {'name', 'module_path', 'checkpoint'}
         for field_name in model_settings.__class__.model_fields:
             if field_name not in exclude_fields:
@@ -891,3 +1070,16 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         # External model - create without shape
         return model_cls(**model_kwargs)
+
+    # =============================================================================
+    # Abstract Methods for Subclasses
+    # =============================================================================
+
+    @abstractmethod
+    def forward(self, *args, **kwargs) -> Tensor:
+        """Forward pass through the model.
+
+        This method should be implemented by subclasses to handle
+        the specific input format for their model type.
+        """
+        pass
