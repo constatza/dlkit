@@ -12,7 +12,7 @@ import torch
 from loguru import logger
 
 from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.interfaces import IFittableTransform
+from dlkit.core.training.transforms.base import FittableTransform
 from dlkit.tools.config.data_entries import DataEntry, Feature, Target, is_feature_entry, is_target_entry
 from .context import ProcessingContext
 from .interfaces import ModelInvoker, OutputClassifier, OutputNamer
@@ -379,7 +379,8 @@ class TransformApplicationStep(ProcessingStep):
             chain = self._get_or_build_transforms(name, entry, tensor)
             x = tensor
             try:
-                if self._enable_fit and isinstance(chain, IFittableTransform):
+                # Protocol check: isinstance() with FittableTransform
+                if self._enable_fit and isinstance(chain, FittableTransform):
                     chain.fit(x)
                 x = chain(x)
             except Exception as e:

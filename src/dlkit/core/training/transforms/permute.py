@@ -1,11 +1,10 @@
 import torch
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import IInvertibleTransform
 from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
 
-class Permutation(Transform, IInvertibleTransform):
+class Permutation(Transform):
     """Permute tensor dimensions (shape-agnostic transform).
 
     This transform reorders the dimensions of a tensor according to a specified

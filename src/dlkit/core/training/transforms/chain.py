@@ -8,8 +8,7 @@ from torch.nn import ModuleList
 
 from dlkit.tools.config.transform_settings import TransformSettings
 from dlkit.tools.config import BuildContext, FactoryProvider
-from .base import Transform
-from .interfaces import IFittableTransform, IInvertibleTransform, IShapeAwareTransform
+from .base import Transform, FittableTransform, InvertibleTransform, ShapeAwareTransform
 from .errors import TransformNotFittedError, TransformChainError
 from .shape_inference import infer_output_shape, SHAPE_INFERENCE_REGISTRY
 
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 # -------------------------------------------------------------------
 # Core decoupled pipeline
 # -------------------------------------------------------------------
-class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
+class TransformChain(Transform):
     """Pipeline for chaining multiple transformations for one tensor stream.
 
     This class manages a sequence of transforms (e.g., scalers, normalizers, PCA),
@@ -97,8 +96,10 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
     def fit(self, x: Tensor) -> None:
         """Fit the chain and propagate the intermediate output.
 
-        Each transform is fitted in sequence (if it implements IFittableTransform)
+        Each transform is fitted in sequence (if it implements FittableTransform Protocol)
         and then applied to produce the next input for the subsequent transform.
+
+        Uses FittableTransform Protocol for type-safe capability checking.
 
         Args:
             x: Input tensor to fit on (e.g., all training features).
@@ -108,8 +109,8 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
         """
         for i, transform in enumerate(self.transforms):
             try:
-                # If the transform is fittable, fit it
-                if isinstance(transform, IFittableTransform):
+                # Protocol check: isinstance() with FittableTransform
+                if isinstance(transform, FittableTransform):
                     transform.fit(x)
                 # Apply the transform to produce the next input
                 x = transform(x)
@@ -154,8 +155,8 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
     def inverse_transform(self, x: Tensor) -> Tensor:
         """Apply the inverse transform chain in reverse order.
 
-        Only transforms implementing IInvertibleTransform are inverted. Non-invertible
-        transforms in the chain will raise a TypeError.
+        Only transforms implementing InvertibleTransform Protocol are inverted.
+        Uses isinstance() check for type safety and early validation.
 
         Args:
             x: Tensor to invert (e.g., model output on transformed scale).
@@ -165,7 +166,7 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
 
         Raises:
             TransformNotFittedError: If fit() was not called before inverse.
-            TypeError: If any transform in chain doesn't implement IInvertibleTransform.
+            TypeError: If any transform doesn't implement InvertibleTransform.
             TransformChainError: If any inverse transform fails.
         """
         if not self.fitted:
@@ -174,11 +175,11 @@ class TransformChain(Transform, IFittableTransform, IInvertibleTransform):
         # Go through the transforms in reverse
         # NOTE: No inference mode, in case loss function is computed using inverse output
         for i, transform in enumerate(reversed(self.transforms)):
-            if not isinstance(transform, IInvertibleTransform):
+            if not isinstance(transform, InvertibleTransform):
                 raise TypeError(
                     f"Transform `{transform.__class__.__name__}` does not implement "
-                    f"IInvertibleTransform and cannot be inverted. All transforms in a "
-                    f"chain must be invertible to use inverse_transform()."
+                    f"InvertibleTransform Protocol and cannot be inverted. All transforms "
+                    f"in a chain must be invertible to use inverse_transform()."
                 )
             try:
                 x = transform.inverse_transform(x)
@@ -261,8 +262,8 @@ def build_transforms(
         # Instantiate transform
         module = FactoryProvider.create_component(transform_settings, context)
 
-        # Configure shape if transform is shape-aware
-        if isinstance(module, IShapeAwareTransform) and shape_spec and entry_name:
+        # Configure shape if transform implements ShapeAwareTransform Protocol
+        if isinstance(module, ShapeAwareTransform) and shape_spec and entry_name:
             module.configure_shape(shape_spec, entry_name)
 
         # Analytical shape inference (always computed for tracking)

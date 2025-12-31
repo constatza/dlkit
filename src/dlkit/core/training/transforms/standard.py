@@ -3,11 +3,6 @@ from typing import TYPE_CHECKING
 import torch
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import (
-    IFittableTransform,
-    IInvertibleTransform,
-    IShapeAwareTransform,
-)
 from dlkit.core.training.transforms.errors import TransformNotFittedError
 from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
@@ -15,7 +10,7 @@ if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
 
 
-class StandardScaler(Transform, IFittableTransform, IInvertibleTransform, IShapeAwareTransform):
+class StandardScaler(Transform):
     """Standard scaler that normalizes data to zero mean and unit variance.
 
     This transform computes mean and standard deviation along specified dimensions

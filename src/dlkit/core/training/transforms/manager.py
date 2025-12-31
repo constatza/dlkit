@@ -16,7 +16,7 @@ from torch import Tensor
 from torch.nn import ModuleDict
 
 from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.interfaces import IInvertibleTransform
+from dlkit.core.training.transforms.base import InvertibleTransform
 
 
 class TransformManager:
@@ -79,10 +79,10 @@ class TransformManager:
         data: dict[str, Tensor],
         transform_chains: dict[str, TransformChain],
     ) -> dict[str, Tensor]:
-        """Apply inverse transforms to data tensors using isinstance() check.
+        """Apply inverse transforms to data tensors using Protocol check.
 
-        Only applies inverse if the chain implements IInvertibleTransform.
-        This follows SOLID principles (DIP) by depending on abstractions.
+        Only applies inverse if the chain implements InvertibleTransform Protocol.
+        This provides type safety and clear interface contracts.
 
         Args:
             data: Dictionary mapping entry names to tensors.
@@ -100,7 +100,7 @@ class TransformManager:
         result = {}
         for name, tensor in data.items():
             chain = transform_chains.get(name)
-            if chain is not None and isinstance(chain, IInvertibleTransform):
+            if chain is not None and isinstance(chain, InvertibleTransform):
                 try:
                     result[name] = chain.inverse_transform(tensor)
                 except Exception:
