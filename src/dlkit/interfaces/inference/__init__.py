@@ -1,18 +1,7 @@
-"""Inference system for DLKit - NEW STATEFUL PREDICTOR ARCHITECTURE.
+"""Inference system for DLKit - Simplified Architecture.
 
-This module provides industry-standard inference with stateful predictors
-that can be loaded once and reused for multiple predictions.
-
-BREAKING CHANGES:
-- Removed: infer() function (loaded model on every call)
-- Removed: InferenceService class
-- Added: load_predictor() - new primary API
-
-Key Components:
-- CheckpointPredictor: Stateful predictor object (load once, predict many)
-- PredictorFactory: Factory for creating predictors
-- ModelLoadingUseCase: Load model from checkpoint (expensive, once)
-- InferenceExecutionUseCase: Execute inference (fast, many times)
+Stateful predictors without hexagonal architecture overhead.
+Direct functional API following industry standards.
 
 Example:
     >>> from dlkit import load_predictor
@@ -34,8 +23,8 @@ Example:
 """
 
 from .api import load_predictor, validate_checkpoint, get_checkpoint_info
-from .predictor import CheckpointPredictor, IPredictor, PredictorConfig
-from .factory import PredictorFactory
+from .predictor import CheckpointPredictor, IPredictor, PredictorError, PredictorNotLoadedError
+from .config import PredictorConfig
 
 __all__ = [
     # Main API
@@ -46,5 +35,7 @@ __all__ = [
     "CheckpointPredictor",
     "IPredictor",
     "PredictorConfig",
-    "PredictorFactory",
+    # Exceptions
+    "PredictorError",
+    "PredictorNotLoadedError",
 ]
