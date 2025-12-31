@@ -1,50 +1,37 @@
-"""Standard Lightning wrapper for tensor-based models.
+"""Standard Lightning wrapper for tensor-based models with transform support.
 
-This module provides a Lightning wrapper for standard neural networks that
-work with tensor inputs, integrating with the dlkit processing pipeline.
+This module provides a Lightning wrapper that extends the base wrapper with
+transform capabilities for data preprocessing and postprocessing.
 """
 
 from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import ModuleDict
+from torch.nn import ModuleDict, ModuleList
 from loguru import logger
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
-from dlkit.tools.config.data_entries import DataEntry, Target, is_target_entry
+from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.core.shape_specs import IShapeSpec
 from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.base import InvertibleTransform
-from dlkit.runtime.pipelines.pipeline import (
-    ProcessingPipeline,
-    DataExtractionStep,
-    TransformApplicationStep,
-    ModelInvocationStep,
-    OutputClassificationStep,
-    OutputNamingStep,
-    ValidationDataStep,
-)
-from dlkit.runtime.pipelines.model_invokers import ModelInvokerFactory
-from dlkit.runtime.pipelines.classifiers import NameBasedClassifier
-from dlkit.runtime.pipelines.context import ProcessingContext
+from dlkit.core.training.transforms.base import FittableTransform, InvertibleTransform
 from .base import ProcessingLightningWrapper
 
 
 class StandardLightningWrapper(ProcessingLightningWrapper):
     """Lightning wrapper for standard tensor-based neural networks with transforms.
 
-    This wrapper handles models that accept tensor inputs and provides
-    standard training, validation, and test steps using the processing pipeline
-    with full dlkit transform support.
-
-    Transforms are separated by data entry type (Feature vs Target) to maintain
-    clear separation of concerns and eliminate runtime filtering.
+    This wrapper extends the base wrapper with transform capabilities:
+    - Fitted transforms persisted as ModuleDicts (feature and target transforms separated)
+    - Forward transform application to features before model invocation
+    - Inverse transform application to predictions for denormalization
+    - Full checkpoint support for transform state
 
     Attributes:
         fitted_feature_transforms (torch.nn.ModuleDict): Persisted feature transform chains.
         fitted_target_transforms (torch.nn.ModuleDict): Persisted target transform chains.
-        apply_feature_transforms (bool): Toggle for feature transform application during inference.
+        apply_feature_transforms (bool): Toggle for feature transform application.
         apply_inverse_target_transforms (bool): Toggle for inverse target transform application.
 
     Example:
@@ -72,10 +59,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         Args:
             settings: Wrapper configuration settings
             model_settings: Model configuration settings
-            entry_configs: Data entry configurations for pipeline setup
+            entry_configs: Data entry configurations
             shape_spec: Shape specification for models
             **kwargs: Additional arguments passed to base class
         """
+        # Call base class initialization first
         super().__init__(
             settings=settings,
             model_settings=model_settings,
@@ -84,12 +72,15 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             **kwargs,
         )
 
-        # Initialize transform-specific attributes after super().__init__()
+        # Initialize transform-specific attributes
         # Separate Feature and Target transforms for clear separation of concerns
         self.fitted_feature_transforms: ModuleDict = ModuleDict()
         self.fitted_target_transforms: ModuleDict = ModuleDict()
         self.apply_feature_transforms: bool = True
         self.apply_inverse_target_transforms: bool = True
+
+        # Transform cache for runtime usage (entry name → TransformChain)
+        self._transform_cache: dict[str, TransformChain] = {}
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the model with tensor input.
@@ -102,137 +93,249 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         """
         return self.model(x)
 
-    def _setup_processing_pipelines(self, entry_configs: dict[str, DataEntry]) -> None:
-        """Set up processing pipelines for training/validation/test with transforms.
+    # =============================================================================
+    # Transform Application Helpers
+    # =============================================================================
+
+    def _apply_transforms(self, data: dict[str, Tensor], transforms: ModuleDict) -> dict[str, Tensor]:
+        """Apply forward transforms to data.
 
         Args:
-            entry_configs (dict[str, DataEntry]): Mapping from entry name to configuration.
+            data (dict[str, Tensor]): Input data (features or targets).
+            transforms (ModuleDict): Transform chains to apply.
+
+        Returns:
+            dict[str, Tensor]: Transformed data.
         """
-        # Create model invoker
-        model_invoker = ModelInvokerFactory.create_invoker(self.model, model_type="auto")
+        if not self.apply_feature_transforms:
+            return data
 
-        # Create output classifier (can be overridden by subclasses)
-        output_classifier = self._create_output_classifier()
-        # Create output namer (post-classification key mapping)
-        output_namer = self._create_output_namer()
+        transformed = {}
+        for name, tensor in data.items():
+            chain = self._transform_cache.get(name) or (transforms[name] if name in transforms else None)
+            if chain is not None and callable(chain):
+                try:
+                    transformed[name] = chain(tensor)
+                except Exception as e:
+                    logger.warning(f"Transform application failed for '{name}': {e}")
+                    transformed[name] = tensor
+            else:
+                transformed[name] = tensor
+        return transformed
 
-        # Shared transform cache across phases (entry name -> TransformChain)
-        self._shared_transform_cache = {}
-        shared_transform_cache = self._shared_transform_cache
-
-        # Build training steps
-        self._extraction_step_train = DataExtractionStep(entry_configs)
-        self._transform_step_train = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
-        )
-        from dlkit.runtime.pipelines.pipeline import LossPairingStep
-
-        invocation_train = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(
-                    output_namer,
-                    LossPairingStep(
-                        entry_configs,
-                        is_autoencoder=getattr(self._wrapper_settings, "is_autoencoder", False),
-                    ),
-                ),
-            ),
-        )
-        self._extraction_step_train.set_next(self._transform_step_train)
-        self._transform_step_train.set_next(invocation_train)
-        self.train_pipeline = ProcessingPipeline(self._extraction_step_train)
-
-        # Build validation steps (share cache; disable fitting later in on_fit_start if needed)
-        self._extraction_step_val = DataExtractionStep(entry_configs)
-        self._transform_step_val = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
-        )
-        invocation_val = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(
-                    output_namer,
-                    LossPairingStep(
-                        entry_configs,
-                        is_autoencoder=getattr(self._wrapper_settings, "is_autoencoder", False),
-                        next_step=ValidationDataStep(),
-                    ),
-                ),
-            ),
-        )
-        self._extraction_step_val.set_next(self._transform_step_val)
-        self._transform_step_val.set_next(invocation_val)
-        self.val_pipeline = ProcessingPipeline(self._extraction_step_val)
-
-        # Test pipeline mirrors validation
-        self._extraction_step_test = DataExtractionStep(entry_configs)
-        self._transform_step_test = TransformApplicationStep(
-            entry_configs, cache=shared_transform_cache, fit_during_apply=True, wrapper=self
-        )
-        invocation_test = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(
-                    output_namer,
-                    LossPairingStep(
-                        entry_configs,
-                        is_autoencoder=getattr(self._wrapper_settings, "is_autoencoder", False),
-                        next_step=ValidationDataStep(),
-                    ),
-                ),
-            ),
-        )
-        self._extraction_step_test.set_next(self._transform_step_test)
-        self._transform_step_test.set_next(invocation_test)
-        self.test_pipeline = ProcessingPipeline(self._extraction_step_test)
-
-    def _setup_predict_pipeline(self, entry_configs: dict[str, DataEntry]) -> None:
-        """Set up inference-only processing pipeline with transforms.
-
-        This pipeline includes TransformApplicationStep but excludes LossPairingStep
-        to make targets optional during inference.
+    def _apply_inverse_transforms(self, data: dict[str, Tensor], transforms: ModuleDict) -> dict[str, Tensor]:
+        """Apply inverse transforms to data (predictions or targets).
 
         Args:
-            entry_configs (dict[str, DataEntry]): Mapping from entry name to configuration.
+            data (dict[str, Tensor]): Predictions or targets to inverse transform.
+            transforms (ModuleDict): Transform chains with inverse_transform methods.
+
+        Returns:
+            dict[str, Tensor]: Inverse-transformed data.
         """
-        # Create model invoker (reuse same factory as other pipelines)
-        model_invoker = ModelInvokerFactory.create_invoker(self.model, model_type="auto")
+        if not self.apply_inverse_target_transforms:
+            return data
 
-        # Create output classifier and namer (consistent with other pipelines)
-        output_classifier = self._create_output_classifier()
-        output_namer = self._create_output_namer()
+        inverse_transformed = {}
+        for name, tensor in data.items():
+            chain = self._transform_cache.get(name) or (transforms[name] if name in transforms else None)
+            if chain is not None and isinstance(chain, InvertibleTransform):
+                try:
+                    inverse_transformed[name] = chain.inverse_transform(tensor)
+                except Exception as e:
+                    logger.warning(f"Inverse transform failed for '{name}': {e}")
+                    inverse_transformed[name] = tensor
+            else:
+                inverse_transformed[name] = tensor
+        return inverse_transformed
 
-        # Build predict steps
-        self._extraction_step_predict = DataExtractionStep(entry_configs)
-        self._transform_step_predict = TransformApplicationStep(
-            entry_configs, cache=self._shared_transform_cache, fit_during_apply=False, wrapper=self
-        )
+    # =============================================================================
+    # Overridden Step Methods (Add Transform Application)
+    # =============================================================================
 
-        # Chain: extraction → transform → invocation
-        next_step = ModelInvocationStep(
-            model_invoker,
-            OutputClassificationStep(
-                output_classifier,
-                OutputNamingStep(output_namer)  # Terminates here - no loss pairing
-            ),
-        )
-        self._extraction_step_predict.set_next(self._transform_step_predict)
-        self._transform_step_predict.set_next(next_step)
+    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Training step with transform application.
 
-        self.predict_pipeline = ProcessingPipeline(self._extraction_step_predict)
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing the training loss.
+        """
+        # 1. Extract features and targets (inherited from base)
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Apply forward transforms to features
+        if self.fitted_feature_transforms:
+            features = self._apply_transforms(features, self.fitted_feature_transforms)
+
+        # 3. Model forward (inherited from base)
+        predictions = self._invoke_model(features)
+
+        # 4. Apply inverse transforms to predictions (for loss in original space)
+        if self.fitted_target_transforms:
+            if isinstance(predictions, dict):
+                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
+            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
+                # Single prediction tensor with single target transform
+                name = next(iter(self.fitted_target_transforms.keys()))
+                chain = self.fitted_target_transforms[name]
+                if isinstance(chain, InvertibleTransform):
+                    try:
+                        predictions = chain.inverse_transform(predictions)
+                    except Exception as e:
+                        logger.warning(f"Inverse transform failed: {e}")
+
+        # 5. Compute loss (inherited from base)
+        loss = self._compute_loss(predictions, targets)
+
+        # 6. Log metrics (inherited from base)
+        self._log_stage_outputs("train", loss)
+
+        return {"loss": loss}
+
+    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Validation step with transform application.
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing validation metrics.
+        """
+        # 1. Extract features and targets
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Apply forward transforms to features
+        if self.fitted_feature_transforms:
+            features = self._apply_transforms(features, self.fitted_feature_transforms)
+
+        # 3. Model forward
+        predictions = self._invoke_model(features)
+
+        # 4. Apply inverse transforms to predictions
+        if self.fitted_target_transforms:
+            if isinstance(predictions, dict):
+                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
+            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
+                name = next(iter(self.fitted_target_transforms.keys()))
+                chain = self.fitted_target_transforms[name]
+                if isinstance(chain, InvertibleTransform):
+                    try:
+                        predictions = chain.inverse_transform(predictions)
+                    except Exception as e:
+                        logger.warning(f"Inverse transform failed: {e}")
+
+        # 5. Compute loss
+        val_loss = self._compute_loss(predictions, targets)
+
+        # 6. Compute metrics
+        metrics = self._update_metrics(predictions, targets, stage="val")
+
+        # 7. Log metrics
+        self._log_stage_outputs("val", val_loss, metrics)
+
+        return {"val_loss": val_loss}
+
+    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+        """Test step with transform application.
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict[str, Any]: Dictionary containing test metrics.
+        """
+        # 1. Extract features and targets
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Apply forward transforms to features
+        if self.fitted_feature_transforms:
+            features = self._apply_transforms(features, self.fitted_feature_transforms)
+
+        # 3. Model forward
+        predictions = self._invoke_model(features)
+
+        # 4. Apply inverse transforms to predictions
+        if self.fitted_target_transforms:
+            if isinstance(predictions, dict):
+                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
+            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
+                name = next(iter(self.fitted_target_transforms.keys()))
+                chain = self.fitted_target_transforms[name]
+                if isinstance(chain, InvertibleTransform):
+                    try:
+                        predictions = chain.inverse_transform(predictions)
+                    except Exception as e:
+                        logger.warning(f"Inverse transform failed: {e}")
+
+        # 5. Compute loss
+        test_loss = self._compute_loss(predictions, targets)
+
+        # 6. Compute metrics
+        metrics = self._update_metrics(predictions, targets, stage="test")
+
+        # 7. Log metrics
+        self._log_stage_outputs("test", test_loss, metrics)
+
+        return {"test_loss": test_loss}
+
+    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
+        """Prediction step with transform application.
+
+        Applies forward transforms to features and inverse transforms to both
+        predictions and targets (if present) so outputs are in original data space.
+
+        Args:
+            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict: Dictionary with ``predictions``, ``targets``, and ``latents``.
+        """
+        # 1. Extract features (targets are optional)
+        features, targets = self._extract_features_targets(batch)
+
+        # 2. Apply forward transforms to features
+        if self.fitted_feature_transforms and self.apply_feature_transforms:
+            features = self._apply_transforms(features, self.fitted_feature_transforms)
+
+        # 3. Model forward
+        predictions = self._invoke_model(features)
+
+        # 4. Normalize predictions to dict format
+        # Use target name for single-tensor predictions if available
+        if isinstance(predictions, Tensor):
+            target_configs = self.get_target_configs()
+            target_name = next(iter(target_configs.keys())) if len(target_configs) == 1 else None
+            predictions = {target_name: predictions} if target_name else {"output": predictions}
+
+        # 5. Apply inverse transforms to predictions to get back to original space
+        if self.fitted_target_transforms and self.apply_inverse_target_transforms:
+            predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
+
+        # 6. Targets from dataloader are already in original space (raw data)
+        # Do NOT apply inverse transforms to them
+
+        return {
+            "predictions": predictions,
+            "targets": targets if targets else {},
+            "latents": {}
+        }
+
+    # =============================================================================
+    # Transform Management (Fitting, Checkpoint Persistence)
+    # =============================================================================
 
     def on_fit_start(self) -> None:
         """Fit all entry-based transforms using the entire training dataloader.
 
-        - Aggregates full training dataflow per entry that has transforms and fits once with
-          the stacked tensor (supports global transforms like PCA).
-        - Populates the shared transform cache so train/val/test pipelines reuse the same
-          fitted transform instances.
-        - Disables any further in-apply fitting for all phases.
+        - Aggregates full training data per entry that has transforms and fits once
+        - Populates fitted_feature_transforms and fitted_target_transforms ModuleDicts
+        - Caches transforms for runtime usage
         """
         trainer = getattr(self, "trainer", None)
         if trainer is None or not hasattr(trainer, "datamodule"):
@@ -242,10 +345,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             return
 
         # Determine which entries have transforms configured
-        entry_cfgs = getattr(self, "_entry_configs", {})  # type: ignore[attr-defined]
+        entry_cfgs = getattr(self, "_entry_configs", {})
         names_with_transforms = [n for n, e in entry_cfgs.items() if getattr(e, "transforms", None)]
         if not names_with_transforms:
-            # Nothing to fit globally
             return
 
         try:
@@ -255,18 +357,15 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
         # Aggregate tensors per entry name across the whole training set
         from collections import defaultdict
-        import torch
 
         buffers: dict[str, list[torch.Tensor]] = defaultdict(list)
         for batch in loader:
-            # Expect dict[str, Tensor]
             for name in names_with_transforms:
                 tensor = batch.get(name)
                 if tensor is not None:
                     buffers[name].append(tensor)
 
         # Build and fit transforms globally per entry
-
         for name in names_with_transforms:
             seq = buffers.get(name)
             if not seq:
@@ -275,89 +374,89 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             cfg = entry_cfgs[name]
 
             # Build a single chain per entry and fit globally
-            # Shape will be inferred from stacked data during fit()
             chain = TransformChain(getattr(cfg, "transforms", ()))
-            if hasattr(chain, "fit"):
+            if isinstance(chain, FittableTransform):
                 chain.fit(stacked)
 
-            # Populate shared transform cache across phases
-            self._transform_step_train.cache[name] = chain  # type: ignore[attr-defined]
-            self._transform_step_val.cache[name] = chain  # type: ignore[attr-defined]
-            self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
+            # Populate cache for runtime
+            self._transform_cache[name] = chain
 
             # Persist to appropriate module dict based on data entry type
-            from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
             if is_target_entry(cfg):
                 self.fitted_target_transforms[name] = chain
             elif is_feature_entry(cfg):
                 self.fitted_feature_transforms[name] = chain
 
-        # Disable any further fitting during application for all phases
-        self._transform_step_train.set_fit_enabled(False)  # type: ignore[attr-defined]
-        self._transform_step_val.set_fit_enabled(False)  # type: ignore[attr-defined]
-        self._transform_step_test.set_fit_enabled(False)  # type: ignore[attr-defined]
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Prepare checkpoint for saving with transform and inference metadata.
 
-    # --- Public helpers for manual transform application ---
-    def feature_transforms(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply configured feature transforms to a features dict.
-
-        Uses available transform chains from runtime caches (train/val/test) or from
-        the persisted ``fitted_feature_transforms`` ModuleDict when caches are empty.
-        Entries without a chain are returned unchanged.
+        Ensures transform chains and inference configuration are persisted.
         """
-        out: dict[str, Tensor] = {}
-        cache = None
-        try:
-            cache = getattr(self, "_transform_step_val").cache  # type: ignore[attr-defined]
-        except Exception:
-            cache = {}
-        for name, tensor in features.items():
-            chain = None
-            try:
-                chain = cache.get(name)
-            except Exception:
-                chain = None
-            if chain is None and isinstance(self.fitted_feature_transforms, ModuleDict):
-                fitted_chain = self.fitted_feature_transforms.get(name)  # type: ignore[misc]
-                if fitted_chain is not None and callable(fitted_chain):
-                    chain = fitted_chain
-            if chain is not None and callable(chain):
-                out[name] = chain(tensor)  # type: ignore[misc]
-            else:
-                out[name] = tensor
-        return out
+        # Call parent to save enhanced dlkit_metadata
+        super().on_save_checkpoint(checkpoint)
 
-    def target_transforms_inverse(self, tensors: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply inverse transforms for targets/predictions by entry name.
+        # The fitted_transforms ModuleDicts are automatically saved by Lightning
+        # Add inference metadata for standalone inference
+        feature_names = [name for name, cfg in self._entry_configs.items() if is_feature_entry(cfg)]
+        target_names = [name for name, cfg in self._entry_configs.items() if is_target_entry(cfg)]
+        feature_transform_names = list(self.fitted_feature_transforms.keys())
+        target_transform_names = list(self.fitted_target_transforms.keys())
 
-        Looks up transform chains in caches or in ``fitted_target_transforms`` and applies
-        ``inverse_transform`` when available using InvertibleTransform Protocol check.
-        Entries without an invertible chain are returned unchanged.
+        checkpoint["inference_metadata"] = {
+            "entry_configs": self._entry_configs,
+            "wrapper_settings": self._wrapper_settings.model_dump() if hasattr(self._wrapper_settings, 'model_dump') else dict(self._wrapper_settings),
+            "feature_names": feature_names,
+            "target_names": target_names,
+            "feature_transform_names": feature_transform_names,
+            "target_transform_names": target_transform_names,
+            "model_shape": getattr(self, 'shape', None),
+        }
+
+    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Handle checkpoint loading with transform restoration.
+
+        Ensures transform chains are properly loaded and caches are hydrated.
+        Also validates checkpoint version via base class.
         """
-        out: dict[str, Tensor] = {}
-        cache = None
-        try:
-            cache = getattr(self, "_transform_step_val").cache  # type: ignore[attr-defined]
-        except Exception:
-            cache = {}
-        for name, tensor in tensors.items():
-            chain = None
-            try:
-                chain = cache.get(name)
-            except Exception:
-                chain = None
-            if chain is None and isinstance(self.fitted_target_transforms, ModuleDict):
-                fitted_chain = self.fitted_target_transforms.get(name)  # type: ignore[misc]
-                if fitted_chain is not None and isinstance(fitted_chain, InvertibleTransform):
-                    chain = fitted_chain
-            if chain is not None and isinstance(chain, InvertibleTransform):
-                try:
-                    out[name] = chain.inverse_transform(tensor)
-                except Exception:
-                    out[name] = tensor
-            else:
-                out[name] = tensor
-        return out
+        # Call base class to validate version and restore metadata
+        super().on_load_checkpoint(checkpoint)
+
+        # Manually restore fitted_transforms from checkpoint
+        # Lightning's load_state_dict with strict=False may skip these if ModuleDict is empty
+        self._restore_fitted_transforms_from_checkpoint(checkpoint)
+
+        # Hydrate runtime cache from restored transforms
+        self._hydrate_transform_cache()
+
+    def on_predict_start(self) -> None:
+        """Hydrate transform cache when loading from checkpoint for inference."""
+        self._hydrate_transform_cache()
+
+    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
+        """Override load_state_dict to ensure fitted_transforms are restored.
+
+        Handles both Lightning checkpoint loading and direct torch.load scenarios.
+        """
+        # First, let PyTorch/Lightning load what it can
+        result = super().load_state_dict(state_dict, strict=strict, assign=assign)
+
+        # Then manually restore fitted_transforms (which may have been skipped)
+        checkpoint = {
+            "state_dict": state_dict,
+            "inference_metadata": {
+                "entry_configs": self._entry_configs if hasattr(self, '_entry_configs') else {}
+            }
+        }
+        self._restore_fitted_transforms_from_checkpoint(checkpoint)
+
+        # Hydrate caches from the restored transforms
+        self._hydrate_transform_cache()
+
+        return result
+
+    # =============================================================================
+    # Transform Restoration and Cache Hydration
+    # =============================================================================
 
     def _restore_fitted_transforms_from_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Manually restore fitted transforms ModuleDicts from checkpoint.
@@ -369,9 +468,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         Supports both legacy (fitted_transforms) and modern (fitted_feature_transforms/
         fitted_target_transforms) checkpoint formats.
         """
-        from dlkit.core.training.transforms.chain import TransformChain
-        from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
-
         logger.info("Starting manual restoration of fitted transforms from checkpoint")
 
         try:
@@ -379,15 +475,19 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             inference_metadata = checkpoint.get("inference_metadata", {})
 
             # Check for modern format (separate feature/target transforms)
-            has_modern_format = any(k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.") for k in state_dict.keys())
+            has_modern_format = any(
+                k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.")
+                for k in state_dict.keys()
+            )
             has_legacy_format = any(k.startswith("fitted_transforms.") for k in state_dict.keys())
 
             logger.info(f"Checkpoint format: modern={has_modern_format}, legacy={has_legacy_format}")
 
-            # Get entry configs from metadata (contains original transform settings)
-            entry_configs_data = inference_metadata.get("entry_configs", {})
+            # Get entry configs: prefer instance's entry_configs over checkpoint metadata
+            # This ensures transforms are properly restored when loading with entry_configs parameter
+            entry_configs_data = self._entry_configs or inference_metadata.get("entry_configs", {})
 
-            # Helper function to process transform keys for a given prefix and target ModuleDict
+            # Helper function to process transform keys
             def restore_transforms(prefix: str, target_module_dict: ModuleDict, entry_filter_func=None):
                 """Restore transforms with a specific prefix into target ModuleDict."""
                 transform_keys = [k for k in state_dict.keys() if k.startswith(f"{prefix}.")]
@@ -439,13 +539,17 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
                                     module = chain
                                     for part in parts[:-1]:
                                         if part.isdigit():
-                                            module = module[int(part)]
+                                            # Handle ModuleList indexing
+                                            if isinstance(module, ModuleList):
+                                                module = module[int(part)]
+                                            else:
+                                                module = module.transforms[int(part)]
                                         else:
                                             module = getattr(module, part)
                                     buffer_name = parts[-1]
                                     buffer_value = entry_state[unexpected_key]
                                     module.register_buffer(buffer_name, buffer_value)
-                                    logger.debug(f"Manually registered buffer: {unexpected_key}")
+                                    logger.info(f"Manually registered buffer: {unexpected_key} = {buffer_value}")
                                 except Exception as e:
                                     logger.warning(f"Could not register unexpected key {unexpected_key}: {e}")
 
@@ -456,336 +560,81 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
             # Restore based on checkpoint format
             if has_modern_format:
-                restore_transforms("fitted_feature_transforms", self.fitted_feature_transforms,
-                                 entry_filter_func=is_feature_entry)
-                restore_transforms("fitted_target_transforms", self.fitted_target_transforms,
-                                 entry_filter_func=is_target_entry)
+                restore_transforms("fitted_feature_transforms", self.fitted_feature_transforms, is_feature_entry)
+                restore_transforms("fitted_target_transforms", self.fitted_target_transforms, is_target_entry)
             elif has_legacy_format:
                 # Legacy format - separate based on entry_configs
                 logger.info("Loading legacy format, separating transforms by entry type")
-                restore_transforms("fitted_transforms", self.fitted_feature_transforms,
-                                 entry_filter_func=is_feature_entry)
-                restore_transforms("fitted_transforms", self.fitted_target_transforms,
-                                 entry_filter_func=is_target_entry)
+                restore_transforms("fitted_transforms", self.fitted_feature_transforms, is_feature_entry)
+                restore_transforms("fitted_transforms", self.fitted_target_transforms, is_target_entry)
             else:
                 logger.debug("No fitted transforms found in checkpoint")
 
         except Exception as e:
             logger.warning(f"Failed to restore fitted_transforms from checkpoint: {e}")
 
-    def _hydrate_transforms_from_module_dict(self) -> None:
-        """Populate transform caches from persisted ModuleDicts and disable fitting.
+    def _hydrate_transform_cache(self) -> None:
+        """Populate transform cache from persisted ModuleDicts.
 
-        Enables inference-only runs with just a predict_dataloader by reusing transform
-        chains loaded from checkpoint. Hydrates both feature and target transforms.
+        Enables inference-only runs with just a predict_dataloader by reusing
+        transform chains loaded from checkpoint.
         """
         try:
-            has_feature_transforms = (
-                isinstance(self.fitted_feature_transforms, ModuleDict)
-                and len(self.fitted_feature_transforms) > 0
-            )
-            has_target_transforms = (
-                isinstance(self.fitted_target_transforms, ModuleDict)
-                and len(self.fitted_target_transforms) > 0
-            )
+            has_feature_transforms = isinstance(self.fitted_feature_transforms, ModuleDict) and len(self.fitted_feature_transforms) > 0
+            has_target_transforms = isinstance(self.fitted_target_transforms, ModuleDict) and len(self.fitted_target_transforms) > 0
 
             if not has_feature_transforms and not has_target_transforms:
                 return
         except Exception:
             return
 
-        # Helper to copy transforms into caches
-        def hydrate_cache(transforms_dict: ModuleDict):
-            for name, chain in transforms_dict.items():
-                if hasattr(self, '_transform_step_train'):
-                    self._transform_step_train.cache[name] = chain  # type: ignore[attr-defined]
-                if hasattr(self, '_transform_step_val'):
-                    self._transform_step_val.cache[name] = chain  # type: ignore[attr-defined]
-                if hasattr(self, '_transform_step_test'):
-                    self._transform_step_test.cache[name] = chain  # type: ignore[attr-defined]
-                # Include predict pipeline in transform chain hydration
-                if hasattr(self, '_transform_step_predict'):
-                    self._transform_step_predict.cache[name] = chain  # type: ignore[attr-defined]
+        # Hydrate cache from both feature and target transforms
+        for name, chain in self.fitted_feature_transforms.items():
+            self._transform_cache[name] = chain
 
-        # Hydrate both feature and target transforms
-        hydrate_cache(self.fitted_feature_transforms)
-        hydrate_cache(self.fitted_target_transforms)
+        for name, chain in self.fitted_target_transforms.items():
+            self._transform_cache[name] = chain
 
-        # Disable fitting during application for all phases
-        if hasattr(self, '_transform_step_train'):
-            self._transform_step_train.set_fit_enabled(False)  # type: ignore[attr-defined]
-        if hasattr(self, '_transform_step_val'):
-            self._transform_step_val.set_fit_enabled(False)  # type: ignore[attr-defined]
-        if hasattr(self, '_transform_step_test'):
-            self._transform_step_test.set_fit_enabled(False)  # type: ignore[attr-defined]
-        # Predict pipeline already has fit disabled by design
+    # =============================================================================
+    # Public Helper Methods
+    # =============================================================================
 
-    def _persist_transform_caches(self) -> None:
-        """Persist cached transform chains into ModuleDicts for checkpointing.
+    def feature_transforms(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Apply configured feature transforms to a features dict.
 
-        Collects chains from train/val/test caches and registers them in the
-        appropriate ModuleDict (feature vs target) based on entry_configs.
-        """
-        from dlkit.tools.config.data_entries import Feature, Target
-
-        # Guard: No entry configs, can't separate
-        if not self._entry_configs:
-            return
-
-        # Collect all caches
-        caches = self._collect_transform_caches()
-        if not caches:
-            return
-
-        # Persist each chain to appropriate ModuleDict
-        for cache in caches:
-            for name, chain in cache.items():
-                self._persist_single_chain(name, chain)
-
-    def _collect_transform_caches(self) -> list[dict]:
-        """Collect transform caches from all pipeline steps."""
-        caches = []
-        for attr in ("_transform_step_train", "_transform_step_val", "_transform_step_test", "_transform_step_predict"):
-            step = getattr(self, attr, None)
-            if step is not None and hasattr(step, "cache"):
-                caches.append(step.cache)
-        return caches
-
-    def _persist_single_chain(self, name: str, chain: Any) -> None:
-        """Persist a single transform chain to appropriate ModuleDict."""
-        from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
-
-        try:
-            entry_config = self._entry_configs.get(name)
-            if not entry_config:
-                return
-
-            # Route to appropriate ModuleDict based on type
-            if is_target_entry(entry_config):
-                if name not in self.fitted_target_transforms:
-                    self.fitted_target_transforms[name] = chain
-            elif is_feature_entry(entry_config):
-                if name not in self.fitted_feature_transforms:
-                    self.fitted_feature_transforms[name] = chain
-        except Exception:
-            # Be resilient; this is best-effort registration
-            pass
-
-    def on_predict_start(self) -> None:
-        """Hydrate caches when loading from checkpoint for inference.
-
-        Ensures transform chains are available before prediction starts.
-        """
-        # Persist any runtime-built chains first, then hydrate
-        self._persist_transform_caches()
-        self._hydrate_transforms_from_module_dict()
-
-    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Prepare checkpoint for saving with inference metadata.
-
-        Ensures transform chains and inference configuration are persisted for
-        standalone inference.
-        """
-        # Persist any cached transforms to module dict before saving
-        self._persist_transform_caches()
-        # The fitted_transforms ModuleDict will be automatically saved by Lightning
-
-        # Call parent to save enhanced dlkit_metadata
-        super().on_save_checkpoint(checkpoint)
-
-        # Save inference metadata for inference
-        feature_names = [name for name, cfg in self._entry_configs.items() if not is_target_entry(cfg)]
-        target_names = [name for name, cfg in self._entry_configs.items() if is_target_entry(cfg)]
-        feature_transform_names = list(self.fitted_feature_transforms.keys()) if self.fitted_feature_transforms else []
-        target_transform_names = list(self.fitted_target_transforms.keys()) if self.fitted_target_transforms else []
-
-        checkpoint["inference_metadata"] = {
-            "entry_configs": self._entry_configs,
-            "wrapper_settings": self._wrapper_settings.model_dump() if hasattr(self._wrapper_settings, 'model_dump') else dict(self._wrapper_settings),
-            "feature_names": feature_names,
-            "target_names": target_names,
-            "feature_transform_names": feature_transform_names,
-            "target_transform_names": target_transform_names,
-            "model_shape": getattr(self, 'shape', None),
-        }
-
-    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
-        """Override load_state_dict to ensure fitted_transforms are restored.
-
-        Handles both Lightning checkpoint loading and direct torch.load scenarios.
-        """
-        # First, let PyTorch/Lightning load what it can
-        result = super().load_state_dict(state_dict, strict=strict, assign=assign)
-
-        # Then manually restore fitted_transforms (which may have been skipped)
-        # Create a minimal checkpoint dict for restoration
-        # Use self._entry_configs if available (wrapper already has this from __init__)
-        checkpoint = {
-            "state_dict": state_dict,
-            "inference_metadata": {
-                "entry_configs": self._entry_configs if hasattr(self, '_entry_configs') else {}
-            }
-        }
-        self._restore_fitted_transforms_from_checkpoint(checkpoint)
-
-        # Hydrate caches from the restored transforms
-        self._hydrate_transforms_from_module_dict()
-
-        return result
-
-    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Handle checkpoint loading.
-
-        Ensures transform chains are properly loaded and caches are hydrated.
-        Also validates checkpoint version via base class.
-        """
-        # Call base class to validate version and restore metadata
-        super().on_load_checkpoint(checkpoint)
-
-        # Manually restore fitted_transforms from checkpoint
-        # Lightning's load_state_dict with strict=False skips these keys if ModuleDict is empty
-        self._restore_fitted_transforms_from_checkpoint(checkpoint)
-
-        # Then hydrate caches from it
-        self._hydrate_transforms_from_module_dict()
-
-    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
-        """Prediction step with transform support.
-
-        Uses the predict_pipeline which excludes LossPairingStep, making targets
-        optional during inference. Applies inverse transforms to predictions and
-        targets (if present) so the user receives values in the original dataflow space.
+        Uses transform cache or persisted fitted_feature_transforms.
+        Entries without a chain are returned unchanged.
 
         Args:
-            batch (dict[str, Tensor]): Raw batch dataflow from the dataset.
-            batch_idx (int): Index of the batch.
+            features (dict[str, Tensor]): Features to transform.
 
         Returns:
-            dict[str, dict[str, Tensor]]: Dictionary with ``predictions``, ``targets``, and ``latents``.
+            dict[str, Tensor]: Transformed features.
         """
-        # Respect runtime toggles for transform application
-        try:
-            if hasattr(self, "_transform_step_predict") and hasattr(
-                self._transform_step_predict, "set_enabled"
-            ):
-                self._transform_step_predict.set_enabled(bool(self.apply_feature_transforms))  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        return self._apply_transforms(features, self.fitted_feature_transforms)
 
-        # Use dedicated predict pipeline - no loss pairing required
-        context = self.predict_pipeline.execute(batch)
+    def target_transforms_inverse(self, tensors: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Apply inverse transforms for targets/predictions by entry name.
 
-        # Apply inverse transforms to predictions and optional targets
-        inv_predictions = self._apply_inverse_transforms_to_predictions(context)
-        inv_targets = self._apply_inverse_transforms_to_targets(context)
-
-        return {"predictions": inv_predictions, "targets": inv_targets, "latents": context.latents}
-
-    def _apply_inverse_transforms_to_predictions(self, context) -> dict[str, Tensor]:
-        """Apply inverse transforms to predictions using target transform chains.
+        Looks up transform chains in cache or fitted_target_transforms and applies
+        inverse_transform when available. Entries without an invertible chain are
+        returned unchanged.
 
         Args:
-            context: Processing context with predictions populated.
+            tensors (dict[str, Tensor]): Tensors to inverse transform.
 
         Returns:
-            dict[str, Tensor]: Inverse-transformed predictions.
+            dict[str, Tensor]: Inverse-transformed tensors.
         """
-        if not self.apply_inverse_target_transforms:
-            return dict(context.predictions)
-
-        inv_predictions: dict[str, Tensor] = {}
-
-        # Resolve target names from entry configs
-        target_names = {
-            name
-            for name, cfg in self._entry_configs.items()  # type: ignore[attr-defined]
-            if is_target_entry(cfg)
-        }
-
-        # Use cached transform chains from predict transform step
-        cache = getattr(self, "_transform_step_predict").cache  # type: ignore[attr-defined]
-
-        # Map predictions to targets: exact name match or single-target fallback
-        single_target = next(iter(target_names)) if len(target_names) == 1 else None
-
-        for pname, ptensor in context.predictions.items():
-            target_for_pred = pname if pname in target_names else single_target
-            chain = cache.get(target_for_pred) if target_for_pred is not None else None
-
-            if chain:
-                try:
-                    inv_predictions[pname] = self._inverse_with_chain(ptensor, chain)
-                except Exception:
-                    inv_predictions[pname] = ptensor
-            else:
-                inv_predictions[pname] = ptensor
-
-        return inv_predictions
-
-    def _apply_inverse_transforms_to_targets(self, context) -> dict[str, Tensor]:
-        """Apply inverse transforms to targets if they exist.
-
-        Args:
-            context: Processing context with optional targets populated.
-
-        Returns:
-            dict[str, Tensor]: Inverse-transformed targets (empty if no targets).
-        """
-        # Handle optional targets - they may not be present during inference
-        if not context.targets:
-            return {}
-
-        if not self.apply_inverse_target_transforms:
-            return dict(context.targets)
-
-        inv_targets: dict[str, Tensor] = {}
-
-        # Use cached transform chains from predict transform step
-        cache = getattr(self, "_transform_step_predict").cache  # type: ignore[attr-defined]
-
-        for tname, ttensor in context.targets.items():
-            chain = cache.get(tname)
-            if chain:
-                try:
-                    inv_targets[tname] = self._inverse_with_chain(ttensor, chain)
-                except Exception:
-                    inv_targets[tname] = ttensor
-            else:
-                inv_targets[tname] = ttensor
-
-        return inv_targets
-
-    def _inverse_with_chain(self, tensor: Tensor, chain) -> Tensor:
-        """Apply inverse transform with a transform chain, handling failures gracefully.
-
-        Args:
-            tensor (Tensor): Tensor to inverse transform.
-            chain: Transform chain with inverse_transform method.
-
-        Returns:
-            Tensor: Inverse-transformed tensor, or original if inverse fails.
-        """
-        try:
-            return chain.inverse_transform(tensor)
-        except Exception:
-            return tensor
-
-    def _create_output_classifier(self):
-        """Create output classifier for standard models.
-
-        Use a name-based classifier to robustly map outputs like "output"
-        to predictions by default in simple setups. This is more permissive
-        for quick-start scenarios while remaining compatible with entry configs.
-        """
-        return NameBasedClassifier()
+        return self._apply_inverse_transforms(tensors, self.fitted_target_transforms)
 
 
 class BareWrapper(StandardLightningWrapper):
     """Minimal Lightning wrapper with basic functionality.
 
     This is a simplified version of StandardLightningWrapper that provides
-    minimal functionality without the full processing pipeline integration.
-    Useful for simple models that don't need complex dataflow processing.
+    minimal functionality without the full transform integration.
+    Useful for simple models that don't need complex data processing.
     """
 
     def __init__(self, model_settings: ModelComponentSettings, **kwargs):
@@ -797,11 +646,10 @@ class BareWrapper(StandardLightningWrapper):
         """
         # Create minimal settings if not provided
         from dlkit.tools.config import WrapperComponentSettings
-        from dlkit.core.shape_specs import create_shape_spec
+        from dlkit.core.shape_specs import create_shape_spec, ModelFamily
 
         minimal_settings = WrapperComponentSettings()
         # Provide minimal shape spec for compatibility
-        from dlkit.core.shape_specs import ModelFamily
         minimal_shape_spec = create_shape_spec({"x": (1,), "y": (1,)}, model_family=ModelFamily.EXTERNAL)
 
         super().__init__(
@@ -812,10 +660,10 @@ class BareWrapper(StandardLightningWrapper):
         )
 
     def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified training step without full pipeline processing.
+        """Simplified training step without transform processing.
 
         Args:
-            batch: Raw batch dataflow
+            batch: Raw batch data
             batch_idx: Index of the batch
 
         Returns:
@@ -833,36 +681,30 @@ class BareWrapper(StandardLightningWrapper):
             target = batch_values[1]
             loss = self.loss_function(output, target)
         else:
-            # If no target, assume supervised learning isn't the goal
             loss = torch.tensor(0.0, requires_grad=True)
 
         self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
     def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified validation step without full pipeline processing.
+        """Simplified validation step without transform processing.
 
         Args:
-            batch: Raw batch dataflow
+            batch: Raw batch data
             batch_idx: Index of the batch
 
         Returns:
             Dictionary containing validation metrics
         """
-        # Extract input
         x = next(iter(batch.values()))
-
-        # Forward pass
         output = self.forward(x)
 
-        # Simple loss computation
         batch_values = list(batch.values())
         metrics = None
         if len(batch_values) >= 2:
             target = batch_values[1]
             val_loss = self.loss_function(output, target)
 
-            # Compute metrics if available
             if self.val_metrics:
                 metrics = self.val_metrics(output, target)
         else:
@@ -872,16 +714,15 @@ class BareWrapper(StandardLightningWrapper):
         return {"val_loss": val_loss}
 
     def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified test step without full pipeline processing.
+        """Simplified test step without transform processing.
 
         Args:
-            batch: Raw batch dataflow
+            batch: Raw batch data
             batch_idx: Index of the batch
 
         Returns:
             Dictionary containing test metrics
         """
-        # Same as validation step but with test metrics
         x = next(iter(batch.values()))
         output = self.forward(x)
 

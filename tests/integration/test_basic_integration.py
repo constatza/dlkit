@@ -53,15 +53,18 @@ class TestBasicIntegration:
             minimal_model_checkpoint: Pre-created model checkpoint for inference.
         """
         # Act - Run inference using the new stateful predictor API
-        # Convert settings to inputs
-        test_inputs = {"x": torch.randn(5, 4), "y": torch.randn(5, 1)}  # Basic test inputs
+        # Only pass input features, not targets
+        test_inputs = {"x": torch.randn(5, 4)}  # Only input features
 
         # Use the new predictor API
         predictor = dlkit.load_predictor(checkpoint_path=minimal_model_checkpoint, device="cpu")
         try:
-            predictions = predictor.predict(test_inputs)
+            result = predictor.predict(test_inputs)
 
             # Assert - Validate results
-            assert predictions is not None
+            assert result is not None
+            assert hasattr(result, 'predictions')
+            # Predictions should be a dict with named outputs
+            assert isinstance(result.predictions, dict)
         finally:
             predictor.unload()

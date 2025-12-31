@@ -24,7 +24,7 @@ Example:
 
 from .api import load_predictor, validate_checkpoint, get_checkpoint_info
 from .predictor import CheckpointPredictor, IPredictor, PredictorError, PredictorNotLoadedError
-from .config import PredictorConfig
+from .config import PredictorConfig, InferenceResult
 
 __all__ = [
     # Main API
@@ -35,6 +35,7 @@ __all__ = [
     "CheckpointPredictor",
     "IPredictor",
     "PredictorConfig",
+    "InferenceResult",
     # Exceptions
     "PredictorError",
     "PredictorNotLoadedError",
