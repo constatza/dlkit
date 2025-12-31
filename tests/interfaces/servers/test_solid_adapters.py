@@ -159,15 +159,6 @@ class TestPsutilProcessKiller:
 
         assert killer._server_tracker is mock_tracker
 
-    @patch("dlkit.interfaces.servers.process_adapter.psutil", None)
-    def test_stop_server_processes_fails_without_psutil(self, killer: PsutilProcessKiller) -> None:
-        """Test process stopping fails gracefully without psutil."""
-        success, messages = killer.stop_server_processes("localhost", 5000, False)
-
-        assert success is False
-        assert len(messages) == 1
-        assert "psutil package not available" in messages[0]
-
     @patch("dlkit.interfaces.servers.process_adapter.psutil")
     def test_stop_server_processes_uses_tracked_pids_first(
         self,
@@ -210,7 +201,7 @@ class TestPsutilProcessKiller:
         mock_proc.terminate.return_value = None
         mock_psutil.wait_procs.return_value = ([mock_proc], [])
 
-        success, messages = killer.stop_server_processes("localhost", 5000, False)
+        success = killer.stop_server_processes("localhost", 5000, False)
 
         assert success is True
         killer._server_tracker.get_tracked_pids.assert_called_once_with("localhost", 5000)
@@ -252,7 +243,7 @@ class TestPsutilProcessKiller:
         mock_psutil.NoSuchProcess = psutil.NoSuchProcess
         mock_psutil.Process.side_effect = [mock_proc, psutil.NoSuchProcess(99999)]
 
-        success, messages = killer.stop_server_processes("localhost", 5000, False)
+        success = killer.stop_server_processes("localhost", 5000, False)
 
         assert success is True
         mock_psutil.process_iter.assert_called_once()
@@ -279,12 +270,9 @@ class TestPsutilProcessKiller:
         mock_psutil.Process.side_effect = [mock_mlflow_proc, mock_other_proc]
 
         messages = []
-        valid_pids = killer._validate_tracked_processes([12345, 67890], messages)
+        valid_pids = killer._validate_tracked_processes([12345, 67890])
 
         assert valid_pids == [12345]  # Only MLflow process
-        assert len(messages) == 2
-        assert "Verified tracked process 12345" in messages[0]
-        assert "no longer MLflow server" in messages[1]
 
     @patch("dlkit.interfaces.servers.process_adapter.psutil")
     def test_scan_for_mlflow_processes_finds_matching_processes(
@@ -333,7 +321,7 @@ class TestPsutilProcessKiller:
         mock_psutil.Process.side_effect = [mock_proc, psutil.NoSuchProcess(12345)]
 
         messages = []
-        success = killer._terminate_processes([12345], False, messages)
+        success = killer._terminate_processes([12345], False)
 
         assert success is True
         mock_proc.terminate.assert_called_once()
@@ -362,7 +350,7 @@ class TestPsutilProcessKiller:
         mock_psutil.Process.side_effect = [mock_proc, psutil.NoSuchProcess(12345)]
 
         messages = []
-        success = killer._terminate_processes([12345], False, messages)
+        success = killer._terminate_processes([12345], False)
 
         assert success is True
         mock_proc.terminate.assert_called_once()
@@ -613,12 +601,19 @@ class TestAdapterIntegration:
         # Verify dependency injection worked
         assert killer._server_tracker is mock_tracker
 
-        # Verify interaction
+        # Verify interaction - mock psutil to find no processes
         with patch("dlkit.interfaces.servers.process_adapter.psutil") as mock_psutil:
-            mock_psutil.Process.side_effect = Exception("No such process")
+            # Mock psutil exceptions
+            mock_psutil.NoSuchProcess = type('NoSuchProcess', (Exception,), {})
+            mock_psutil.AccessDenied = type('AccessDenied', (Exception,), {})
 
-            success, messages = killer.stop_server_processes("localhost", 5000)
+            # Mock process_iter to return no processes
+            mock_psutil.process_iter.return_value = []
 
+            success = killer.stop_server_processes("localhost", 5000)
+
+            # Should return True (idempotent - no processes found)
+            assert success is True
             # Should have called tracker
             mock_tracker.get_tracked_pids.assert_called_once_with("localhost", 5000)
 

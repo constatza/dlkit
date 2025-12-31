@@ -83,11 +83,10 @@ class TestImportFromModuleProperties:
             module_name: Valid module name
             invalid_class: Generated invalid class name
         """
-        # Ensure the class doesn't actually exist in the module
-        assume(
-            invalid_class
-            not in ["defaultdict", "chain", "JSONEncoder", "Path", "getcwd", "modules"]
-        )
+        # Import the module and verify the attribute doesn't exist
+        import importlib
+        module = importlib.import_module(module_name)
+        assume(not hasattr(module, invalid_class))
 
         with pytest.raises(AttributeError):
             import_from_module(invalid_class, module_name)

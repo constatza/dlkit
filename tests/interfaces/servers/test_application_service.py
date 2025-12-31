@@ -140,9 +140,9 @@ class TestServerApplicationService:
         mock_status = Mock()
         mock_status.is_running = True
         mock_adapter.check_server.return_value = mock_status
-        mock_management_service.stop_server_processes.return_value = (True, ["Stopped"])
+        mock_management_service.stop_server_processes.return_value = True
 
-        success, messages = app_service.stop_server("localhost", 5000, False)
+        success = app_service.stop_server("localhost", 5000, False)
 
         assert success is True
         mock_adapter.check_server.assert_called_once_with("localhost", 5000)
@@ -158,9 +158,9 @@ class TestServerApplicationService:
         mock_management_service: Mock,
     ) -> None:
         """Test that stop_server skips status check when force=True."""
-        mock_management_service.stop_server_processes.return_value = (True, ["Force stopped"])
+        mock_management_service.stop_server_processes.return_value = True
 
-        success, messages = app_service.stop_server("localhost", 5000, True)
+        success = app_service.stop_server("localhost", 5000, True)
 
         assert success is True
         # Should not check status when force=True
@@ -180,10 +180,9 @@ class TestServerApplicationService:
         mock_status.is_running = False
         mock_adapter.check_server.return_value = mock_status
 
-        success, messages = app_service.stop_server("localhost", 5000, False)
+        success = app_service.stop_server("localhost", 5000, False)
 
         assert success is True
-        assert "No server found running" in messages[0]
         # Should not attempt to stop processes
         mock_management_service.stop_server_processes.assert_not_called()
 
@@ -195,11 +194,14 @@ class TestServerApplicationService:
     ) -> None:
         """Test that stop_server handles status check failure."""
         mock_adapter.check_server.side_effect = Exception("Connection failed")
+        mock_management_service.stop_server_processes.return_value = True
 
-        success, messages = app_service.stop_server("localhost", 5000, False)
+        success = app_service.stop_server("localhost", 5000, False)
 
-        assert success is False
-        assert "Could not check server status" in messages[0]
+        # Should continue to attempt stop even if check fails
+        # Verify it proceeded to stop_server_processes
+        mock_management_service.stop_server_processes.assert_called_once()
+        assert success is True
 
     def test_check_server_status_delegates_to_adapter(
         self,
@@ -393,11 +395,11 @@ class TestApplicationServiceIntegration:
                 mock_status = Mock()
                 mock_status.is_running = True
                 mock_adapter.check_server.return_value = mock_status
-                mock_management.stop_server_processes.return_value = (True, ["Stopped"])
+                mock_management.stop_server_processes.return_value = True
 
                 # Execute workflow
                 app_service = ServerApplicationService()
-                success, messages = app_service.stop_server("localhost", 5000)
+                success = app_service.stop_server("localhost", 5000)
 
                 # Verify complete workflow
                 assert success is True

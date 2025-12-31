@@ -77,7 +77,7 @@ class ServerManagementService:
 
     def stop_server_processes(
         self, host: str, port: int, force: bool = False
-    ) -> tuple[bool, list[str]]:
+    ) -> bool:
         """Stop server processes for given host:port.
 
         Args:
@@ -86,7 +86,11 @@ class ServerManagementService:
             force: Whether to force kill processes
 
         Returns:
-            Tuple of (success, status_messages)
+            True if stopped successfully or no processes found
+            False if operational failure
+
+        Raises:
+            RuntimeError: If exceptional failure
         """
         return self._process_killer.stop_server_processes(host, port, force)
 

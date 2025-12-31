@@ -151,13 +151,15 @@ class TestServerStopCommand:
         mock_workflow_error: Mock,
     ) -> None:
         """Test stopping server handles failure gracefully."""
-        mock_adapter = Mock()
-        mock_adapter.check_server.side_effect = mock_workflow_error
-        mock_create_adapter.return_value = mock_adapter
+        # Mock actual stop failure (not just check failure)
+        with patch("dlkit.interfaces.cli.commands.server.ServerApplicationService") as mock_service_class:
+            mock_service = Mock()
+            mock_service_class.return_value = mock_service
+            mock_service.stop_server.return_value = False  # Operational failure
 
-        result = cli_runner.invoke(server_app, ["stop"])
+            result = cli_runner.invoke(server_app, ["stop"])
 
-        assert result.exit_code == 1
+            assert result.exit_code == 1
 
 
 class TestServerStatusCommand:

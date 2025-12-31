@@ -88,7 +88,7 @@ class ServerApplicationService:
 
     def stop_server(
         self, host: str = "localhost", port: int = 5000, force: bool = False
-    ) -> tuple[bool, list[str]]:
+    ) -> bool:
         """Stop server at given host:port.
 
         Args:
@@ -97,25 +97,31 @@ class ServerApplicationService:
             force: Force stop even if server is not responding
 
         Returns:
-            Tuple of (success, status_messages)
+            True if server stopped successfully or already stopped
+            False if operational failure
         """
+        from dlkit.tools.utils.logging_config import get_logger
+        logger = get_logger(__name__)
+
         # Check if server is running first (unless force)
         if not force:
             try:
                 status = self._server_adapter.check_server(host, port)
                 if not status.is_running:
-                    return True, [f"No server found running at {host}:{port}"]
+                    logger.info(f"Server not running at {host}:{port}")
+                    return True  # Already stopped - success
             except Exception as e:
-                return False, [f"Could not check server status: {e}"]
+                logger.warning(f"Could not check server status: {e}")
+                # Continue to stop attempt anyway
 
-        # Stop processes
-        success, messages = self._server_management.stop_server_processes(host, port, force)
+        # Stop processes via management service
+        success = self._server_management.stop_server_processes(host, port, force)
 
         # Remove from tracking if successful
         if success:
             self._server_management.untrack_server(host, port)
 
-        return success, messages
+        return success
 
     def check_server_status(self, host: str = "localhost", port: int = 5000) -> ServerStatus:
         """Check server status.

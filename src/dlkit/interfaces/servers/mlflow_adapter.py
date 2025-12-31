@@ -282,22 +282,30 @@ class MLflowServerAdapter(ContextualServerAdapter):
             server_info: Information about the server to stop
 
         Returns:
-            True if server was stopped successfully
+            True if server stopped successfully OR already stopped (idempotent)
+            False if operational failure requiring manual intervention
+
+        Raises:
+            RuntimeError: Only for truly exceptional system failures
         """
         logger.debug("Starting MLflow server shutdown")
+
         try:
-            # Try to find server by handle ID (type-safe lookup)
+            # Try internal tracking first
             handle_id = f"{server_info.host}:{server_info.port}"
             if handle_id in self._handle_to_info and self._process_tracker.has_process(handle_id):
                 logger.debug(f"Stopping server using internal tracking: {handle_id}")
                 success = self._process_tracker.cleanup(handle_id)
                 if success:
-                    # Clean up mapping
                     self._handle_to_info.pop(handle_id, None)
                     logger.info("MLflow server stopped", url=server_info.url)
                     return True
+                else:
+                    # Operational failure - process exists but won't stop
+                    logger.error("Failed to stop tracked server process", handle_id=handle_id)
+                    return False
 
-            # Fallback to ServerInfo.process
+            # Try process handle fallback
             if server_info.process is not None:
                 logger.debug("Falling back to process handle")
                 success = self._process_manager.stop_process(server_info.process)
@@ -305,26 +313,20 @@ class MLflowServerAdapter(ContextualServerAdapter):
                     logger.info("MLflow server stopped", url=server_info.url)
                     return True
                 else:
-                    # Process exists but stopping failed
-                    raise RuntimeError("Failed to stop MLflow server process")
+                    logger.error("Failed to stop server via process handle")
+                    return False
 
-            # No process handle available
-            logger.warning(
-                "Cannot stop MLflow server - no process handle available",
+            # No process handle - server already stopped or externally managed
+            logger.debug(
+                "No process handle available - server already stopped or externally managed",
                 url=server_info.url,
-                pid=server_info.pid,
             )
-            raise RuntimeError("Cannot stop server: no process handle available")
+            return True  # Idempotent - not an error
 
         except Exception as e:
-            logger.error(
-                "Error stopping MLflow server",
-                error=str(e),
-                pid=server_info.pid,
-                url=server_info.url,
-                exc_info=True,
-            )
-            raise RuntimeError(f"Failed to stop MLflow server: {str(e)}")
+            # Only truly exceptional failures (permissions, system errors)
+            logger.error("Exceptional failure stopping server", error=str(e), exc_info=True)
+            raise RuntimeError(f"Failed to stop MLflow server: {str(e)}") from e
 
     def check_server(
         self,
@@ -383,10 +385,13 @@ class MLflowServerAdapter(ContextualServerAdapter):
         """Exit context and stop server."""
         if self._current_server_info is not None:
             try:
-                _ = self.stop_server(self._current_server_info)
+                success = self.stop_server(self._current_server_info)
+                if not success:
+                    logger.warning("Server stop failed - manual cleanup may be needed")
             except Exception as e:
-                logger.error(f"Failed to stop server in context: {e}")
-            self._current_server_info = None
+                logger.error(f"Exceptional failure stopping server: {e}")
+            finally:
+                self._current_server_info = None
 
     def _create_default_health_checker(self) -> HealthChecker:
         """Create a fresh health checker using current timeout configuration."""
@@ -454,8 +459,8 @@ class MLflowServerContext:
             try:
                 success = self._adapter.stop_server(self._server_info)
                 if not success:
-                    logger.warning("Server stop returned False, but continuing cleanup")
+                    logger.warning("Server stop failed - manual cleanup may be needed")
             except Exception as e:
-                logger.error(f"Failed to stop server: {e}")
+                logger.error(f"Exceptional failure stopping server: {e}")
             finally:
                 self._server_info = None

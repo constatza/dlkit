@@ -48,7 +48,7 @@ class ProcessKiller(Protocol):
     @abstractmethod
     def stop_server_processes(
         self, host: str, port: int, force: bool = False
-    ) -> tuple[bool, list[str]]:
+    ) -> bool:
         """Stop server processes for given host:port.
 
         Args:
@@ -57,6 +57,13 @@ class ProcessKiller(Protocol):
             force: Whether to force kill processes
 
         Returns:
+            True if stopped successfully or no processes found
+            False if operational failure
+
+        Raises:
+            RuntimeError: If exceptional failure
+
+        Original Returns:
             Tuple of (success, status_messages)
         """
 

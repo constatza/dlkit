@@ -201,6 +201,7 @@ mlartifacts/
 .dlkit/
 AGENTS.md
 CLAUDE.md
+GEMINI.md
 
 .codiumai.toml
 # Allow example dataflow under examples/minimal_e2e
