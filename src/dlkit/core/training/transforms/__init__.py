@@ -1,4 +1,10 @@
-from .base import BaseTransform
+from .base import (
+    BaseTransform,
+    Transform,
+    FittableTransform,
+    InvertibleTransform,
+    ShapeAwareTransform,
+)
 from .chain import TransformChain
 from .permute import Permutation
 from .minmax import MinMaxScaler
@@ -8,12 +14,6 @@ from .subset import TensorSubset
 from .spectral import SpectralRadiusNorm
 from .sample_norm import SampleNormL2
 from .manager import TransformManager
-from .interfaces import (
-    IInvertibleTransform,
-    IFittableTransform,
-    ISerializableTransform,
-    IShapeAwareTransform,
-)
 from .errors import (
     TransformError,
     TransformNotFittedError,
@@ -23,7 +23,13 @@ from .errors import (
     InvalidTransformConfigurationError,
 )
 
+# Backward compatibility: keep old interface names as aliases
+IFittableTransform = FittableTransform  # Deprecated: use FittableTransform Protocol
+IInvertibleTransform = InvertibleTransform  # Deprecated: use InvertibleTransform Protocol
+IShapeAwareTransform = ShapeAwareTransform  # Deprecated: use ShapeAwareTransform Protocol
+
 __all__ = [
+    "Transform",
     "TransformChain",
     "MinMaxScaler",
     "PCA",
@@ -34,10 +40,15 @@ __all__ = [
     "SpectralRadiusNorm",
     "SampleNormL2",
     "TransformManager",
-    "IInvertibleTransform",
+    # Protocols
+    "FittableTransform",
+    "InvertibleTransform",
+    "ShapeAwareTransform",
+    # Deprecated: backward compatibility
     "IFittableTransform",
-    "ISerializableTransform",
+    "IInvertibleTransform",
     "IShapeAwareTransform",
+    # Errors
     "TransformError",
     "TransformNotFittedError",
     "ShapeMismatchError",

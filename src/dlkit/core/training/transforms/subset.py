@@ -3,12 +3,11 @@ from collections.abc import Sequence
 from pydantic import validate_call, ConfigDict
 
 from .base import Transform
-from .interfaces import IInvertibleTransform, IFittableTransform
 from .shape_inference import register_shape_inference
 from dlkit.tools.utils.general import slice_to_list
 
 
-class TensorSubset(Transform, IFittableTransform, IInvertibleTransform):
+class TensorSubset(Transform):
     """Subsample a tensor along a given dimension (shape-agnostic transform).
 
     This transform selects specific indices along a dimension. While it can

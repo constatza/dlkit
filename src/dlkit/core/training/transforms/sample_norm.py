@@ -10,7 +10,6 @@ import torch
 from pydantic import validate_call, ConfigDict
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import IInvertibleTransform, IShapeAwareTransform
 from dlkit.core.training.transforms.errors import TransformApplicationError
 from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
 
 
-class SampleNormL2(Transform, IInvertibleTransform, IShapeAwareTransform):
+class SampleNormL2(Transform):
     """Normalize each sample by its L2 norm with mutable-attribute inverse pattern.
 
     This transform normalizes each sample (row) in the batch by its L2 norm,

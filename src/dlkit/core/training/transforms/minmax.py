@@ -5,11 +5,6 @@ import torch
 from pydantic import validate_call, ConfigDict
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.interfaces import (
-    IFittableTransform,
-    IInvertibleTransform,
-    IShapeAwareTransform,
-)
 from dlkit.core.training.transforms.errors import TransformNotFittedError, ShapeMismatchError
 from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
@@ -17,7 +12,7 @@ if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
 
 
-class MinMaxScaler(Transform, IFittableTransform, IInvertibleTransform, IShapeAwareTransform):
+class MinMaxScaler(Transform):
     """Minimum-Maximum Scaler that normalizes data to the range [-1, 1].
 
     This transform computes min and max statistics along specified dimensions
