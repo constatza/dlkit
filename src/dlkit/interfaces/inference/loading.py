@@ -6,6 +6,7 @@ Direct functions replacing use cases, adapters, and builders.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,56 @@ from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 
 from .shapes import infer_shape_specification
+
+
+@dataclass
+class CheckpointValidationResult:
+    """Result of checkpoint validation with type-safe fields.
+
+    Attributes:
+        checkpoint_path: Path to the checkpoint file.
+        exists: Whether the checkpoint file exists.
+        valid_format: Whether the checkpoint has valid format.
+        has_state_dict: Whether state dict is present.
+        has_model_settings: Whether model settings are present.
+        has_shape_metadata: Whether shape metadata is present.
+        dtype: Detected dtype from state dict (None if unknown).
+    """
+
+    checkpoint_path: Path
+    exists: bool
+    valid_format: bool
+    has_state_dict: bool
+    has_model_settings: bool
+    has_shape_metadata: bool
+    dtype: torch.dtype | None
+
+
+@dataclass
+class CheckpointInfo:
+    """Checkpoint metadata information with type-safe fields.
+
+    Attributes:
+        checkpoint_path: Path to the checkpoint file.
+        has_dlkit_metadata: Whether dlkit_metadata is present.
+        has_hyper_parameters: Whether hyper_parameters is present.
+        version: Version string from metadata (None if not present).
+        model_family: Model family from metadata (None if not present).
+        wrapper_type: Wrapper type from metadata (None if not present).
+        has_shape_spec: Whether shape_spec is present.
+        has_model_settings: Whether model_settings are present.
+        dtype: Detected dtype from state dict (None if unknown).
+    """
+
+    checkpoint_path: Path
+    has_dlkit_metadata: bool
+    has_hyper_parameters: bool
+    version: str | None = None
+    model_family: str | None = None
+    wrapper_type: str | None = None
+    has_shape_spec: bool = False
+    has_model_settings: bool = False
+    dtype: torch.dtype | None = None
 
 
 def extract_state_dict(checkpoint: dict[str, Any]) -> dict[str, Any]:
@@ -216,91 +267,93 @@ def load_checkpoint(checkpoint_path: Path | str) -> dict[str, Any]:
         ) from e
 
 
-def validate_checkpoint(checkpoint_path: Path | str) -> dict[str, str]:
+def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResult:
     """Validate checkpoint and return metadata.
 
     Args:
         checkpoint_path: Path to checkpoint file
 
     Returns:
-        Dictionary with validation results and metadata
+        Type-safe validation result with bool fields and proper dtype
 
     Raises:
         WorkflowError: If validation fails critically
     """
     checkpoint_path = Path(checkpoint_path)
 
-    results = {
-        "checkpoint_path": str(checkpoint_path),
-        "exists": "no",
-        "valid_format": "no",
-        "has_state_dict": "no",
-        "has_model_settings": "no",
-        "has_shape_metadata": "no",
-        "dtype": "unknown",
-    }
+    # Initialize with default values
+    result = CheckpointValidationResult(
+        checkpoint_path=checkpoint_path,
+        exists=checkpoint_path.exists(),
+        valid_format=False,
+        has_state_dict=False,
+        has_model_settings=False,
+        has_shape_metadata=False,
+        dtype=None,
+    )
 
-    if not checkpoint_path.exists():
-        return results
-
-    results["exists"] = "yes"
+    # Guard: Early return if file doesn't exist
+    if not result.exists:
+        return result
 
     try:
         checkpoint = load_checkpoint(checkpoint_path)
-        results["valid_format"] = "yes"
+        result.valid_format = True
 
         # Check for state dict
         state_dict = extract_state_dict(checkpoint)
         if state_dict:
-            results["has_state_dict"] = "yes"
-            results["dtype"] = str(detect_checkpoint_dtype(state_dict))
+            result.has_state_dict = True
+            result.dtype = detect_checkpoint_dtype(state_dict)
 
         # Check for model settings
         try:
             extract_model_settings(checkpoint)
-            results["has_model_settings"] = "yes"
+            result.has_model_settings = True
         except WorkflowError:
             pass
 
         # Check for shape metadata
         if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
-            results["has_shape_metadata"] = "yes"
+            result.has_shape_metadata = True
 
     except Exception as e:
         logger.error(f"Checkpoint validation failed: {e}")
 
-    return results
+    return result
 
 
-def get_checkpoint_info(checkpoint_path: Path | str) -> dict[str, Any]:
+def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
     """Extract metadata from checkpoint without loading model.
 
     Args:
         checkpoint_path: Path to checkpoint file
 
     Returns:
-        Dictionary with checkpoint information
+        Type-safe checkpoint information with proper types
     """
+    checkpoint_path = Path(checkpoint_path)
     checkpoint = load_checkpoint(checkpoint_path)
 
-    info = {
-        "checkpoint_path": str(checkpoint_path),
-        "has_dlkit_metadata": "dlkit_metadata" in checkpoint,
-        "has_hyper_parameters": "hyper_parameters" in checkpoint,
-    }
+    # Initialize with required fields
+    info = CheckpointInfo(
+        checkpoint_path=checkpoint_path,
+        has_dlkit_metadata="dlkit_metadata" in checkpoint,
+        has_hyper_parameters="hyper_parameters" in checkpoint,
+    )
 
     # Extract dlkit metadata if present
     if "dlkit_metadata" in checkpoint:
         metadata = checkpoint["dlkit_metadata"]
-        info["version"] = metadata.get("version", "unknown")
-        info["model_family"] = metadata.get("model_family", "unknown")
-        info["wrapper_type"] = metadata.get("wrapper_type", "unknown")
-        info["has_shape_spec"] = "shape_spec" in metadata
-        info["has_model_settings"] = "model_settings" in metadata
+        info.version = metadata.get("version")
+        info.model_family = metadata.get("model_family")
+        info.wrapper_type = metadata.get("wrapper_type")
+        info.has_shape_spec = "shape_spec" in metadata
+        info.has_model_settings = "model_settings" in metadata
 
     # Extract dtype info
     state_dict = extract_state_dict(checkpoint)
     if state_dict:
-        info["dtype"] = str(detect_checkpoint_dtype(state_dict))
+        info.dtype = detect_checkpoint_dtype(state_dict)
 
     return info

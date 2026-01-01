@@ -12,7 +12,12 @@ from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 from .config import PredictorConfig
 from .predictor import CheckpointPredictor
-from .loading import validate_checkpoint, get_checkpoint_info
+from .loading import (
+    validate_checkpoint,
+    get_checkpoint_info,
+    CheckpointValidationResult,
+    CheckpointInfo,
+)
 
 
 def load_predictor(
@@ -90,5 +95,11 @@ def load_predictor(
     return CheckpointPredictor(config)
 
 
-# Re-export validation functions
-__all__ = ["load_predictor", "validate_checkpoint", "get_checkpoint_info"]
+# Re-export functions and dataclasses
+__all__ = [
+    "load_predictor",
+    "validate_checkpoint",
+    "get_checkpoint_info",
+    "CheckpointValidationResult",
+    "CheckpointInfo",
+]

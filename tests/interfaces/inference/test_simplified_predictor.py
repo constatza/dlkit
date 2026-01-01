@@ -105,10 +105,11 @@ class TestCheckpointLoading:
 
         results = validate_checkpoint(checkpoint_path)
 
-        assert results["exists"] == "yes"
-        assert results["valid_format"] == "yes"
-        assert results["has_state_dict"] == "yes"
-        assert results["has_model_settings"] == "yes"
+        # Test dataclass attributes (not dict subscripting)
+        assert results.exists is True
+        assert results.valid_format is True
+        assert results.has_state_dict is True
+        assert results.has_model_settings is True
 
     def test_get_checkpoint_info(self, tmp_path: Path):
         """Test checkpoint info extraction."""
@@ -125,9 +126,10 @@ class TestCheckpointLoading:
 
         info = get_checkpoint_info(checkpoint_path)
 
-        assert info["has_dlkit_metadata"]
-        assert info["version"] == "2.0"
-        assert info["model_family"] == "ffnn"
+        # Test dataclass attributes (not dict subscripting)
+        assert info.has_dlkit_metadata is True
+        assert info.version == "2.0"
+        assert info.model_family == "ffnn"
 
 
 class TestBuildModelFromCheckpoint:

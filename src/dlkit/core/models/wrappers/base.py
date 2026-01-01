@@ -309,86 +309,154 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Raises:
             RuntimeError: If pairing fails or required pairs are missing.
         """
-        # Normalize predictions to dict format
-        if isinstance(predictions, Tensor):
-            # Single tensor output - check if we can pair with targets
-            if len(targets) == 1:
-                # Single target - pair with single prediction
-                pred = predictions
-                target = next(iter(targets.values()))
+        # Guard: Normalize predictions to dict format
+        predictions_dict = self._normalize_predictions_to_dict(predictions, targets)
 
-                # Align target dtype with prediction dtype
-                if target.is_floating_point() and pred.is_floating_point():
-                    if target.dtype != pred.dtype:
-                        logger.debug(
-                            f"Target dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
-                            f"Casting target to match prediction for loss computation."
-                        )
-                        target = target.to(dtype=pred.dtype)
+        # Pair predictions with targets (with validation)
+        pairs = self._pair_predictions_with_targets(predictions_dict, targets)
 
-                return self.loss_function(pred, target)
-            else:
-                raise RuntimeError(
-                    f"Model returned single tensor but found {len(targets)} targets. "
-                    f"Cannot determine pairing. Target keys: {list(targets.keys())}"
-                )
-        elif isinstance(predictions, dict):
-            # Dict predictions - pair by name
-            pnames = list(predictions.keys())
-            tnames = list(targets.keys())
+        # Compute loss from pairs
+        return self._compute_loss_from_pairs(pairs)
 
-            # Single-target fallback
-            if len(tnames) == 1 and len(pnames) == 1:
-                tname = tnames[0]
-                pred = predictions[pnames[0]]
-                target = targets[tname]
+    def _normalize_predictions_to_dict(
+        self, predictions: dict[str, Tensor] | Tensor, targets: dict[str, Tensor]
+    ) -> dict[str, Tensor]:
+        """Normalize predictions to dict format.
 
-                # Align target dtype with prediction dtype
-                if target.is_floating_point() and pred.is_floating_point():
-                    if target.dtype != pred.dtype:
-                        logger.debug(
-                            f"Target '{tname}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
-                            f"Casting target to match prediction for loss computation."
-                        )
-                        target = target.to(dtype=pred.dtype)
+        Args:
+            predictions: Model predictions (dict or single tensor).
+            targets: Ground truth targets.
 
-                return self.loss_function(pred, target)
+        Returns:
+            Predictions as dict.
 
-            # Strict matching by names
-            missing = [t for t in tnames if t not in predictions]
-            unexpected = [p for p in pnames if p not in targets]
-            if missing or unexpected:
-                msg_parts = []
-                if missing:
-                    msg_parts.append(f"missing predictions for targets: {missing}")
-                if unexpected:
-                    msg_parts.append(f"unexpected prediction keys: {unexpected}")
-                available = f"available targets={tnames}, predictions={pnames}"
-                raise RuntimeError(f"Loss pairing failed: {', '.join(msg_parts)}; {available}")
+        Raises:
+            RuntimeError: If single tensor cannot be paired with targets.
+        """
+        # Guard: If already dict, return as-is
+        if isinstance(predictions, dict):
+            return predictions
 
-            # Build pairs by matching keys with dtype alignment
-            total_loss = None
-            for name in tnames:
-                pred = predictions[name]
-                target = targets[name]
+        # Guard: Single tensor requires single target
+        if len(targets) != 1:
+            raise RuntimeError(
+                f"Model returned single tensor but found {len(targets)} targets. "
+                f"Cannot determine pairing. Target keys: {list(targets.keys())}"
+            )
 
-                # Align target dtype with prediction dtype
-                if target.is_floating_point() and pred.is_floating_point():
-                    if target.dtype != pred.dtype:
-                        logger.debug(
-                            f"Target '{name}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
-                            f"Casting target to match prediction for loss computation."
-                        )
-                        target = target.to(dtype=pred.dtype)
+        # Use target name for single tensor
+        target_name = next(iter(targets.keys()))
+        return {target_name: predictions}
 
-                loss = self.loss_function(pred, target)
-                total_loss = loss if total_loss is None else total_loss + loss
+    def _pair_predictions_with_targets(
+        self, predictions: dict[str, Tensor], targets: dict[str, Tensor]
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+        """Pair predictions with targets by name, with dtype alignment.
 
-            if total_loss is None:
-                raise RuntimeError("No loss pairs available for computation")
-            return total_loss
-        else:
-            raise RuntimeError(f"Unsupported prediction type: {type(predictions)}")
+        Args:
+            predictions: Predictions dict.
+            targets: Targets dict.
+
+        Returns:
+            Dict mapping names to (prediction, target) tuples with aligned dtypes.
+
+        Raises:
+            RuntimeError: If predictions and targets cannot be paired.
+        """
+        # Guard: Single-item case (simple pairing)
+        if len(predictions) == 1 and len(targets) == 1:
+            pred_name = next(iter(predictions.keys()))
+            target_name = next(iter(targets.keys()))
+            pred = predictions[pred_name]
+            target = self._align_target_dtype(targets[target_name], pred, target_name)
+            return {target_name: (pred, target)}
+
+        # Guard: Validate all targets have matching predictions
+        self._validate_prediction_target_alignment(predictions, targets)
+
+        # Build pairs with dtype alignment
+        return {
+            name: (predictions[name], self._align_target_dtype(targets[name], predictions[name], name))
+            for name in targets.keys()
+        }
+
+    def _align_target_dtype(self, target: Tensor, pred: Tensor, name: str) -> Tensor:
+        """Align target dtype with prediction dtype if needed.
+
+        Args:
+            target: Target tensor.
+            pred: Prediction tensor.
+            name: Name for logging.
+
+        Returns:
+            Target tensor with aligned dtype.
+        """
+        # Guard: Skip non-floating types
+        if not (target.is_floating_point() and pred.is_floating_point()):
+            return target
+
+        # Guard: Skip if dtypes match
+        if target.dtype == pred.dtype:
+            return target
+
+        # Cast and log
+        logger.debug(
+            f"Target '{name}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
+            f"Casting target to match prediction for loss computation."
+        )
+        return target.to(dtype=pred.dtype)
+
+    def _validate_prediction_target_alignment(
+        self, predictions: dict[str, Tensor], targets: dict[str, Tensor]
+    ) -> None:
+        """Validate predictions align with targets.
+
+        Args:
+            predictions: Predictions dict.
+            targets: Targets dict.
+
+        Raises:
+            RuntimeError: If predictions and targets are misaligned.
+        """
+        missing = [t for t in targets.keys() if t not in predictions]
+        unexpected = [p for p in predictions.keys() if p not in targets]
+
+        # Guard: Early return if valid
+        if not missing and not unexpected:
+            return
+
+        # Build error message
+        msg_parts = []
+        if missing:
+            msg_parts.append(f"missing predictions for targets: {missing}")
+        if unexpected:
+            msg_parts.append(f"unexpected prediction keys: {unexpected}")
+        available = f"available targets={list(targets.keys())}, predictions={list(predictions.keys())}"
+        raise RuntimeError(f"Loss pairing failed: {', '.join(msg_parts)}; {available}")
+
+    def _compute_loss_from_pairs(self, pairs: dict[str, tuple[Tensor, Tensor]]) -> Tensor:
+        """Compute total loss from prediction-target pairs.
+
+        Args:
+            pairs: Dict mapping names to (prediction, target) tuples.
+
+        Returns:
+            Total loss.
+
+        Raises:
+            RuntimeError: If no pairs available.
+        """
+        # Guard: Ensure we have pairs
+        if not pairs:
+            raise RuntimeError("No loss pairs available for computation")
+
+        # Accumulate losses
+        total_loss = None
+        for name, (pred, target) in pairs.items():
+            loss = self.loss_function(pred, target)
+            total_loss = loss if total_loss is None else total_loss + loss
+
+        return total_loss
 
     def _update_metrics(
         self,
