@@ -150,6 +150,79 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         return inverse_transformed
 
     # =============================================================================
+    # Transform Application Helpers
+    # =============================================================================
+
+    def _apply_forward_feature_transforms(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Apply forward feature transforms if available.
+
+        Args:
+            features: Feature tensors to transform.
+
+        Returns:
+            Transformed features.
+        """
+        # Guard: Early return if no transforms
+        if not self.fitted_feature_transforms:
+            return features
+
+        return self._apply_transforms(features, self.fitted_feature_transforms)
+
+    def _apply_inverse_target_transforms_to_predictions(
+        self, predictions: dict[str, Tensor] | Tensor
+    ) -> dict[str, Tensor] | Tensor:
+        """Apply inverse target transforms to predictions.
+
+        This handles both dict and single tensor predictions with proper error handling.
+
+        Args:
+            predictions: Model predictions (dict or single tensor).
+
+        Returns:
+            Predictions with inverse transforms applied.
+        """
+        # Guard: Early return if no transforms
+        if not self.fitted_target_transforms:
+            return predictions
+
+        # Use match-case for type dispatch
+        match predictions:
+            case dict():
+                return self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
+            case Tensor():
+                return self._apply_inverse_to_single_tensor(predictions)
+            case _:
+                return predictions
+
+    def _apply_inverse_to_single_tensor(self, prediction: Tensor) -> Tensor:
+        """Apply inverse transform to single tensor prediction.
+
+        Args:
+            prediction: Single tensor prediction.
+
+        Returns:
+            Prediction with inverse transform applied (or original if not applicable).
+        """
+        # Guard: Only works with single target transform
+        if len(self.fitted_target_transforms) != 1:
+            return prediction
+
+        # Get the single transform chain
+        name = next(iter(self.fitted_target_transforms.keys()))
+        chain = self.fitted_target_transforms[name]
+
+        # Guard: Chain must be invertible
+        if not isinstance(chain, InvertibleTransform):
+            return prediction
+
+        # Apply inverse with error handling
+        try:
+            return chain.inverse_transform(prediction)
+        except Exception as e:
+            logger.warning(f"Inverse transform failed: {e}")
+            return prediction
+
+    # =============================================================================
     # Overridden Step Methods (Add Transform Application)
     # =============================================================================
 
@@ -167,25 +240,13 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         features, targets = self._extract_features_targets(batch)
 
         # 2. Apply forward transforms to features
-        if self.fitted_feature_transforms:
-            features = self._apply_transforms(features, self.fitted_feature_transforms)
+        features = self._apply_forward_feature_transforms(features)
 
         # 3. Model forward (inherited from base)
         predictions = self._invoke_model(features)
 
         # 4. Apply inverse transforms to predictions (for loss in original space)
-        if self.fitted_target_transforms:
-            if isinstance(predictions, dict):
-                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
-            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
-                # Single prediction tensor with single target transform
-                name = next(iter(self.fitted_target_transforms.keys()))
-                chain = self.fitted_target_transforms[name]
-                if isinstance(chain, InvertibleTransform):
-                    try:
-                        predictions = chain.inverse_transform(predictions)
-                    except Exception as e:
-                        logger.warning(f"Inverse transform failed: {e}")
+        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
 
         # 5. Compute loss (inherited from base)
         loss = self._compute_loss(predictions, targets)
@@ -209,24 +270,13 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         features, targets = self._extract_features_targets(batch)
 
         # 2. Apply forward transforms to features
-        if self.fitted_feature_transforms:
-            features = self._apply_transforms(features, self.fitted_feature_transforms)
+        features = self._apply_forward_feature_transforms(features)
 
         # 3. Model forward
         predictions = self._invoke_model(features)
 
         # 4. Apply inverse transforms to predictions
-        if self.fitted_target_transforms:
-            if isinstance(predictions, dict):
-                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
-            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
-                name = next(iter(self.fitted_target_transforms.keys()))
-                chain = self.fitted_target_transforms[name]
-                if isinstance(chain, InvertibleTransform):
-                    try:
-                        predictions = chain.inverse_transform(predictions)
-                    except Exception as e:
-                        logger.warning(f"Inverse transform failed: {e}")
+        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
 
         # 5. Compute loss
         val_loss = self._compute_loss(predictions, targets)
@@ -253,24 +303,13 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         features, targets = self._extract_features_targets(batch)
 
         # 2. Apply forward transforms to features
-        if self.fitted_feature_transforms:
-            features = self._apply_transforms(features, self.fitted_feature_transforms)
+        features = self._apply_forward_feature_transforms(features)
 
         # 3. Model forward
         predictions = self._invoke_model(features)
 
         # 4. Apply inverse transforms to predictions
-        if self.fitted_target_transforms:
-            if isinstance(predictions, dict):
-                predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
-            elif isinstance(predictions, Tensor) and len(self.fitted_target_transforms) == 1:
-                name = next(iter(self.fitted_target_transforms.keys()))
-                chain = self.fitted_target_transforms[name]
-                if isinstance(chain, InvertibleTransform):
-                    try:
-                        predictions = chain.inverse_transform(predictions)
-                    except Exception as e:
-                        logger.warning(f"Inverse transform failed: {e}")
+        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
 
         # 5. Compute loss
         test_loss = self._compute_loss(predictions, targets)

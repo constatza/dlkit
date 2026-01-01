@@ -64,15 +64,26 @@ class StandardScaler(Transform):
         Args:
             data: Input tensor to compute statistics from.
         """
-        # Lazy buffer allocation if not configured
-        if not self._shape_configured:
-            self.register_buffer("mean", torch.zeros(data.shape, device=data.device))
-            self.register_buffer("std", torch.ones(data.shape, device=data.device))
-            self._shape_configured = True
+        # Guard clause: Ensure buffers allocated
+        self._ensure_buffers_allocated(data)
 
         self.mean = torch.mean(data, dim=self.dim, keepdim=True)
         self.std = torch.std(data, dim=self.dim, keepdim=True)
         self.fitted = True
+
+    def _ensure_buffers_allocated(self, data: torch.Tensor) -> None:
+        """Allocate mean/std buffers if not already configured.
+
+        Args:
+            data: Input data to infer shape from.
+        """
+        # Guard: Early return if already configured
+        if self._shape_configured:
+            return
+
+        self.register_buffer("mean", torch.zeros(data.shape, device=data.device))
+        self.register_buffer("std", torch.ones(data.shape, device=data.device))
+        self._shape_configured = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Standardize tensor to zero mean and unit variance.
