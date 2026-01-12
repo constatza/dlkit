@@ -496,22 +496,6 @@ def convert_to_tensor_entries(entries: Iterable[DataEntry]) -> tuple[TensorDataE
     """Convert a sequence of config entries to concrete tensor entries."""
     return tuple(to_tensor_entry(entry) for entry in entries)
 
-    def has_path(self) -> bool:
-        """ValueBasedEntry does not have a file path.
-
-        Returns:
-            Always False for value-based entries
-        """
-        return False
-
-    def is_placeholder(self) -> bool:
-        """Check if this entry is in placeholder mode.
-
-        Returns:
-            True if value is None (awaiting value injection), False otherwise
-        """
-        return self.value is None
-
 
 # =============================================================================
 # Path-Based Concrete Classes
@@ -642,8 +626,6 @@ def Feature(
 ) -> PathFeature: ...
 
 
-# TODO: Remove these "factories" and use FeaturesValues and FeaturesPaths directly
-# TODO: the same for Targets
 def Feature(
     name: str | None = None,
     *,

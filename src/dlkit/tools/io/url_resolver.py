@@ -8,11 +8,13 @@ canonicalization to the existing helpers in `path_normalizers`.
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
 
 from yarl import URL
 
+from dlkit.interfaces.api.domain.errors import ConfigurationError
 from dlkit.tools.io.path_normalizers import canonicalize_file_path
 
 LocalScheme = Literal["file", "sqlite"]
@@ -35,6 +37,10 @@ def resolve_local_uri(uri: str, root: Path) -> Path:
     url = _parse(uri)
     if url is None or not url.scheme:
         return _resolve_relative(uri, root)
+
+    # Early validation for file URLs
+    if url.scheme == "file":
+        _validate_file_url(url)
 
     match url.scheme:
         case "file":
@@ -87,6 +93,43 @@ def _parse(candidate: str) -> URL | None:
         return None
 
 
+def _validate_file_url(url: URL) -> None:
+    """Validate file URL conforms to RFC 8089.
+
+    RFC 8089 requires file URLs to have empty authority (host) component.
+    Common mistake: file://C:/path (2 slashes) instead of file:///C:/path (3 slashes).
+
+    Args:
+        url: Parsed yarl URL object
+
+    Raises:
+        ConfigurationError: If file URL is malformed
+    """
+    if url.scheme != "file":
+        return
+
+    # Check for non-empty host (should be empty per RFC 8089)
+    if url.host:
+        # Single-letter host indicates malformed Windows path
+        if len(url.host) == 1:
+            raise ConfigurationError(
+                f"Malformed file URL detected: '{url}'. "
+                f"Windows drive letter incorrectly parsed as host '{url.host}'. "
+                f"Expected RFC 8089 format with 3 slashes: file:///{url.host}:{url.path}. "
+                f"Got 2 slashes (incorrect): file://{url.host}:{url.path}",
+                context={"url": str(url), "detected_host": url.host, "path": url.path},
+            )
+
+        # Generic non-empty host
+        raise ConfigurationError(
+            f"File URL has non-empty host '{url.host}': '{url}'. "
+            f"RFC 8089 requires empty authority for local files. "
+            f"Use file:///{url.path} (3 slashes) instead of file://{url.host}{url.path} (2 slashes). "
+            f"If accessing network file, use UNC path format.",
+            context={"url": str(url), "host": url.host, "path": url.path},
+        )
+
+
 def _canonical_path(path_str: str) -> str:
     return canonicalize_file_path(path_str)
 
@@ -95,15 +138,41 @@ def _resolve_relative(path_str: str | Path, root: Path) -> Path:
     path = Path(path_str) if isinstance(path_str, str) else path_str
     canonical = _canonical_path(path.as_posix())
     candidate = Path(canonical)
-    if candidate.is_absolute():
-        # Disallow embedded parent/self segments in absolute paths
+
+    # Check Windows absolute paths (C:/..., D:/..., etc.)
+    if PureWindowsPath(canonical).is_absolute():
+        # Windows path on non-Windows platform → Configuration error
+        if os.name != "nt":
+            raise ValueError(
+                f"Windows absolute path '{canonical}' cannot be used on {os.name} platform. "
+                f"Use relative paths or platform-specific configuration."
+            )
+        # Valid Windows path on Windows
         if any(part in {"..", "."} for part in candidate.parts):
             raise ValueError(f"Invalid absolute path containing traversal segments: {candidate}")
         return candidate.resolve()
+
+    # Check Unix absolute paths (/..., /usr/..., etc.)
+    if PurePosixPath(canonical).is_absolute():
+        # Unix path on Windows platform → Configuration error
+        if os.name == "nt":
+            raise ValueError(
+                f"Unix absolute path '{canonical}' cannot be used on Windows. "
+                f"Use relative paths or platform-specific configuration."
+            )
+        # Valid Unix path on Unix
+        if any(part in {"..", "."} for part in candidate.parts):
+            raise ValueError(f"Invalid absolute path containing traversal segments: {candidate}")
+        return candidate.resolve()
+
+    # Treat as relative
     return (root / candidate).resolve()
 
 
 def _file_path_from_url(url: URL) -> str:
+    # Validate RFC 8089 compliance before processing
+    _validate_file_url(url)
+
     # RFC8089: file URLs may have empty host; yarl gives .path sans authority
     path = url.path or ""
     if path.startswith("//") and not path.startswith("///"):

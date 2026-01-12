@@ -30,9 +30,10 @@ class TestTildeExpansion:
         out = tilde_expand_strict("sqlite:///~/mlflow.db")
         assert out.startswith("sqlite:///") and "~" not in out
 
-    def test_mid_path_tilde_not_expanded(self):
-        with pytest.raises(ValueError):
-            tilde_expand_strict("/a/~/b")
+    def test_mid_path_tilde_passes_through(self):
+        """Mid-path tilde is not expanded - passes through unchanged."""
+        result = tilde_expand_strict("/a/~/b")
+        assert result == "/a/~/b"  # Pass through, will fail naturally when used
 
 
 class TestLocalPathSecurity:
@@ -94,9 +95,11 @@ class TestCompositeTypes:
         assert v.startswith("databricks://")
 
     def test_artifact_destination_local_and_url(self, tmp_path):
+        from pathlib import Path
+
         # Local path
         local = TypeAdapter(ArtifactDestination).validate_python("~/artifacts")
-        assert local.startswith("/") and "~" not in local
+        assert Path(local).is_absolute() and "~" not in local
 
         # URL
         url_val = TypeAdapter(ArtifactDestination).validate_python("file:///abs/dir")
@@ -108,10 +111,13 @@ class TestCompositeTypes:
         val = TypeAdapter(ArtifactDestination).validate_python(win_path)
         assert val == "C:/tmp/artifacts"
 
-    def test_artifact_destination_rejects_mid_tilde(self):
-        with pytest.raises(ValidationError):
-            TypeAdapter(ArtifactDestination).validate_python("data/~/backup/file.txt")
+    def test_artifact_destination_mid_tilde_passes_through(self):
+        """Mid-path tilde is not expanded - passes through, will fail when used."""
+        result = TypeAdapter(ArtifactDestination).validate_python("data/~/backup/file.txt")
+        assert result == "data/~/backup/file.txt"
 
     def test_local_path_type(self):
+        from pathlib import Path
+
         p = TypeAdapter(LocalPath).validate_python("~/docs")
-        assert p.startswith("/") and "~" not in p
+        assert Path(p).is_absolute() and "~" not in p

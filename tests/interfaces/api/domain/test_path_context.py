@@ -498,19 +498,6 @@ class TestPathContextIntegration:
         resolved = resolve_root_dir(path_context=None, env=None)
         assert resolved == Path.cwd().resolve()
 
-    def test_path_override_context_coerces_root_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Ensure override context repairs root_dir values missing a leading slash."""
-        fake_home = Path("/home/tester")
-        monkeypatch.setenv("HOME", str(fake_home))
-
-        import pathlib
-
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
-
-        with path_override_context({"root_dir": "home/tester/project"}):
-            resolved = resolve_with_context("output")
-            assert resolved == (fake_home / "project" / "output").resolve()
-
 
 # ============================================================================
 # Edge Cases and Error Handling

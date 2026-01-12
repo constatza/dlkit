@@ -41,14 +41,11 @@ class TestExpandTildeInValue:
         """
         with patch.object(Path, "home", return_value=Path("/mock/home/user")):
             for input_path in sample_paths.values():
-                if "~" in input_path:
-                    if input_path in expected_path_expansions:
-                        result = expand_tilde_in_value(input_path)
-                        expected = expected_path_expansions[input_path]
-                        assert result == expected, f"Failed to expand {input_path}"
-                    else:
-                        with pytest.raises(ValueError):
-                            expand_tilde_in_value(input_path)
+                if "~" in input_path and input_path in expected_path_expansions:
+                    result = expand_tilde_in_value(input_path)
+                    expected = expected_path_expansions[input_path]
+                    assert result == expected, f"Failed to expand {input_path}"
+                # Paths not in expected_path_expansions pass through unchanged
 
     def test_non_string_values_unchanged(self, non_string_inputs: list[Any]) -> None:
         """Test that non-string values pass through unchanged.
@@ -200,22 +197,22 @@ class TestExpandTildeInPath:
         assert result == expected
 
     def test_root_tilde_pattern(self) -> None:
-        """Test /~/path pattern (tilde with leading slash)."""
+        """Test /~/path pattern - NOT expanded (invalid), passes through."""
         path = "/~/documents/file.txt"
         result = _expand_tilde_in_path(path, HOME_PATH)
-        expected = f"{HOME_PATH}/documents/file.txt"
-        assert result == expected
+        assert result == path  # Pass through unchanged, will fail naturally
 
     def test_middle_tilde_pattern(self) -> None:
-        """Test prefix/~/path pattern (tilde in middle)."""
+        """Test prefix/~/path pattern - NOT expanded (invalid), passes through."""
         path = "data/~/backup/file.txt"
-        with pytest.raises(ValueError):
-            _expand_tilde_in_path(path, HOME_PATH)
+        result = _expand_tilde_in_path(path, HOME_PATH)
+        assert result == path  # Pass through unchanged, will fail naturally
 
     def test_multiple_tilde_pattern_is_invalid(self) -> None:
+        """Multiple tildes - NOT expanded (invalid), passes through."""
         path = "data/~/backup/~/file.txt"
-        with pytest.raises(ValueError):
-            _expand_tilde_in_path(path, HOME_PATH)
+        result = _expand_tilde_in_path(path, HOME_PATH)
+        assert result == path  # Pass through unchanged, will fail naturally
 
     def test_just_tilde(self) -> None:
         """Test lone tilde expansion."""
@@ -224,18 +221,20 @@ class TestExpandTildeInPath:
         assert result == HOME_PATH
 
     def test_just_root_tilde(self) -> None:
-        """Test /~ pattern."""
+        """Test /~ pattern - NOT expanded (invalid), passes through."""
         path = "/~"
         result = _expand_tilde_in_path(path, HOME_PATH)
-        expected = HOME_PATH
-        assert result == expected
+        assert result == path  # Pass through unchanged, will fail naturally
 
-    def test_multiple_tildes_raise(self) -> None:
-        with pytest.raises(ValueError):
-            _expand_tilde_in_path("~/data/~/backup/~/file.txt", HOME_PATH)
+    def test_multiple_tildes_pass_through(self) -> None:
+        """Multiple tildes - NOT expanded (invalid), passes through."""
+        result1 = _expand_tilde_in_path("~/data/~/backup/~/file.txt", HOME_PATH)
+        # Only first ~/ is expanded, rest passes through
+        assert result1 == f"{HOME_PATH}/data/~/backup/~/file.txt"
 
-        with pytest.raises(ValueError):
-            _expand_tilde_in_path("data/~/backup/~/file.txt", HOME_PATH)
+        result2 = _expand_tilde_in_path("data/~/backup/~/file.txt", HOME_PATH)
+        # No expansion, passes through
+        assert result2 == "data/~/backup/~/file.txt"
 
     def test_no_expansion_cases(self) -> None:
         """Test cases where no expansion should occur."""
@@ -250,9 +249,10 @@ class TestExpandTildeInPath:
             result = _expand_tilde_in_path(path, HOME_PATH)
             assert result == path, f"Path should remain unchanged: {path}"
 
-    def test_tilde_in_filename_is_invalid(self) -> None:
-        with pytest.raises(ValueError):
-            _expand_tilde_in_path("file~.txt", HOME_PATH)
+    def test_tilde_in_filename_passes_through(self) -> None:
+        """Tilde in middle of filename - passes through unchanged."""
+        result = _expand_tilde_in_path("file~.txt", HOME_PATH)
+        assert result == "file~.txt"  # Pass through, will fail naturally if path doesn't exist
 
 
 class TestCreateTildeExpandingValidator:
@@ -363,27 +363,27 @@ class TestTildeExpansionProperties:
             assert first_expansion == second_expansion
 
     @given(
-        st.sampled_from(["~/", "/~/", "~", "/~"]).flatmap(
+        st.sampled_from(["~/", "~"]).flatmap(
             lambda prefix: st.text(alphabet=st.characters(blacklist_characters="~")).map(
                 lambda suffix: prefix + suffix
             )
         )
     )
-    def test_tilde_patterns_always_expand(self, path_with_tilde: str) -> None:
-        """Test that recognized tilde patterns always get expanded.
+    def test_valid_tilde_patterns_expand(self, path_with_tilde: str) -> None:
+        """Test that VALID tilde patterns (~ and ~/) get expanded.
+
+        Invalid patterns like /~/ pass through unchanged.
 
         Args:
             path_with_tilde: Path with tilde pattern from Hypothesis
         """
         with patch.object(Path, "home", return_value=Path(HOME_PATH)):
             result = expand_tilde_in_value(path_with_tilde)
-            # After expansion, the specific tilde patterns should be gone
-            # (though tilde might remain in other positions)
-            # URLs with :// are not expanded
-            assert not result.startswith("~/") or "://" in path_with_tilde
-            assert "/~/" not in result or "://" in path_with_tilde  # URLs are handled differently
-            if path_with_tilde in ["~", "/~"]:
-                assert HOME_PATH in result
+            # Only ~ and ~/ are expanded
+            if path_with_tilde == "~":
+                assert result == HOME_PATH
+            elif path_with_tilde.startswith("~/"):
+                assert result.startswith(HOME_PATH) and not result.startswith("~/")
 
     @given(
         st.sampled_from([
@@ -475,3 +475,119 @@ class TestErrorHandling:
 
             # Validator should not be called if home resolution fails
             mock_validator_func.assert_not_called()
+
+
+class TestNormalizeUrlPath:
+    """Tests for URL path component normalization."""
+
+    def test_adds_leading_slash(self) -> None:
+        """URL paths always get leading slash."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("path/to/file") == "/path/to/file"
+
+    def test_preserves_leading_slash(self) -> None:
+        """Existing leading slash is preserved."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("/path/to/file") == "/path/to/file"
+
+    def test_converts_backslashes(self) -> None:
+        """Backslashes converted to forward slashes."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("\\path\\to\\file") == "/path/to/file"
+
+    def test_collapses_triple_slashes(self) -> None:
+        """Triple slashes collapsed to single."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("///path") == "/path"
+
+    def test_handles_mixed_slashes(self) -> None:
+        """Mixed forward and backslashes normalized."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("path\\to/file") == "/path/to/file"
+
+    def test_empty_path(self) -> None:
+        """Empty path gets leading slash."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("") == "/"
+
+    def test_relative_path_gets_slash(self) -> None:
+        """Relative paths get leading slash for URL usage."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+
+        assert _normalize_url_path("relative") == "/relative"
+
+
+class TestNormalizeFilePath:
+    """Tests for file system path normalization."""
+
+    def test_unix_absolute_path(self) -> None:
+        """Unix absolute paths preserved."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        assert _normalize_file_path("/home/user/file") == "/home/user/file"
+
+    def test_windows_absolute_path(self) -> None:
+        """Windows absolute paths preserved with drive letter."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("C:\\Users\\test\\file")
+        # pathlib normalizes to forward slashes but keeps drive letter
+        assert result == "C:/Users/test/file"
+
+    def test_windows_absolute_with_forward_slashes(self) -> None:
+        """Windows paths with forward slashes work correctly."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("C:/Users/test/file")
+        assert result == "C:/Users/test/file"
+
+    def test_converts_backslashes(self) -> None:
+        """Backslashes converted to forward slashes."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("path\\to\\file")
+        assert "\\" not in result
+        assert result == "path/to/file"
+
+    def test_relative_paths_unchanged(self) -> None:
+        """Relative paths remain relative."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("relative/path")
+        assert result == "relative/path"
+
+    def test_mixed_slashes(self) -> None:
+        """Mixed slashes normalized."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("path\\to/file")
+        assert result == "path/to/file"
+
+    def test_windows_unc_path(self) -> None:
+        """Windows UNC paths handled correctly."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("\\\\server\\share\\file")
+        # UNC paths start with //
+        assert result.startswith("//")
+
+    def test_dot_segments_normalized(self) -> None:
+        """Dot segments in paths partially normalized."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("path/./to/../file")
+        # pathlib normalizes away . but keeps .. (doesn't fully resolve)
+        assert result == "path/to/../file"
+
+    def test_empty_path(self) -> None:
+        """Empty path becomes current directory."""
+        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+
+        result = _normalize_file_path("")
+        assert result == "."

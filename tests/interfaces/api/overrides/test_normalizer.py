@@ -48,18 +48,6 @@ class TestNormalizePath:
         result = OverrideNormalizer.normalize_path("~/data")
         assert result.resolve() == (fake_home / "data").resolve()
 
-    def test_normalize_root_dir_requires_absolute(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Root dir normalization enforces absolute paths."""
-        fake_home = Path("/home/tester")
-        monkeypatch.setenv("HOME", str(fake_home))
-
-        import pathlib
-
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
-
-        result = OverrideNormalizer.normalize_path("home/tester/project", require_absolute=True)
-        assert result.resolve() == (fake_home / "project").resolve()
-
     def test_normalize_root_dir_invalid_relative(self) -> None:
         """Relative root_dir values that cannot be coerced are discarded."""
         result = OverrideNormalizer.normalize_path("relative/project", require_absolute=True)
@@ -129,18 +117,6 @@ class TestBuildOverridesDict:
         assert result["batch_size"] == 64
         assert result["experiment_name"] == "mixed_test"
         assert "root_dir" not in result
-
-    def test_build_overrides_root_dir_missing_slash(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Root dir values missing a leading slash should be coerced."""
-        fake_home = Path("/home/tester")
-        monkeypatch.setenv("HOME", str(fake_home))
-
-        import pathlib
-
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
-
-        result = OverrideNormalizer.build_overrides_dict(root_dir="home/tester/project")
-        assert result["root_dir"].resolve() == (fake_home / "project").resolve()
 
     def test_build_overrides_with_path_objects(self, tmp_path: Path) -> None:
         """Path objects should be preserved, not converted."""

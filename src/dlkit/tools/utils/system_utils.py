@@ -17,10 +17,11 @@ def mkdir_for_local(uri: Url | str, *, root: Path | None = None) -> None:
     root_path = root or Path.cwd()
     uri_str = str(uri)
 
-    # Ignore clearly remote schemes early
+    # Guard: Ignore remote URIs
     if "://" in uri_str and not url_resolver.is_local_uri(uri_str):
         return
 
+    # Try to resolve URI, fallback to plain path on error
     try:
         resolved = url_resolver.resolve_local_uri(uri_str, root_path)
     except ValueError:
@@ -28,71 +29,46 @@ def mkdir_for_local(uri: Url | str, *, root: Path | None = None) -> None:
         Path(uri_str).parent.mkdir(parents=True, exist_ok=True)
         return
 
+    # Determine target directory based on scheme
     current_scheme = url_resolver.scheme(uri_str)
-    if current_scheme == "sqlite":
-        target_dir = resolved.parent
-    else:
-        # Heuristic: create the path itself when it looks like a directory
-        target_dir = resolved if resolved.suffix == "" else resolved.parent
+    match current_scheme:
+        case "sqlite":
+            target_dir = resolved.parent
+        case _:
+            # Heuristic: create the path itself when it looks like a directory
+            target_dir = resolved if resolved.suffix == "" else resolved.parent
 
     target_dir.mkdir(parents=True, exist_ok=True)
-
-
-def _get_reference_home() -> Path:
-    """Return a stable reference for the user's home directory."""
-    env_home = os.environ.get("HOME") or os.environ.get("USERPROFILE")
-    if env_home:
-        try:
-            return Path(env_home).expanduser()
-        except Exception:
-            pass
-    return Path.home()
-
-
-def _maybe_fix_missing_leading_slash(path: Path) -> Path | None:
-    """Detect common absolute paths missing a leading slash and repair them."""
-    reference_home = _get_reference_home()
-    home_parts = tuple(part for part in reference_home.parts if part and part != reference_home.anchor)
-    path_parts = path.parts
-
-    if not home_parts:
-        return None
-
-    if len(path_parts) >= len(home_parts) and path_parts[: len(home_parts)] == home_parts:
-        anchor = reference_home.anchor or os.sep
-        return (Path(anchor) / Path(*path_parts)).resolve()
-
-    return None
 
 
 def normalize_user_path(value: str | Path | None, *, require_absolute: bool = False) -> Path | None:
     """Normalize user-supplied paths from CLI/config overrides.
 
-    - Expands ``~`` using shared tilde expansion rules
-    - Preserves ``Path`` instances when possible
-    - Resolves relative paths against the current working directory
-    - Optionally enforces absolute paths (returning ``None`` when not achievable)
-    - Repairs paths missing a leading slash but clearly pointing to HOME
+    - Expands ``~`` to home directory
+    - Resolves relative paths against current working directory
+    - Optionally enforces absolute paths (returns ``None`` if not achievable)
+    - Does NOT fix user mistakes - bad paths will fail naturally with clear errors
     """
+    # Guard: None input
     if value is None:
         return None
 
+    # Expand tilde
     if isinstance(value, Path):
         candidate = value.expanduser()
     else:
         normalized = tilde_expand_strict(fspath(value))
         candidate = Path(normalized).expanduser()
 
-    repaired = _maybe_fix_missing_leading_slash(candidate)
-    if repaired is not None:
-        candidate = repaired
-
+    # Guard: Already absolute
     if candidate.is_absolute():
         return candidate.resolve()
 
+    # Guard: Require absolute but not absolute
     if require_absolute:
         return None
 
+    # Make absolute relative to cwd
     return (Path.cwd() / candidate).resolve()
 
 
