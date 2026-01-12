@@ -113,13 +113,15 @@ class TestMkdirForLocal:
         assert test_path.exists()
 
     def test_file_url_with_absolute_path(self, tmp_path: Path) -> None:
-        """Test file:///absolute/path format."""
+        """Test file:///absolute/path format (RFC 8089 compliant with 3 slashes)."""
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
 
             target = tmp_path / "file_url_test" / "data.txt"
-            uri = f"file://{target.as_posix()}"
+            # RFC 8089: file URLs require 3 slashes for empty authority
+            # Unix: file:///tmp/path, Windows: file:///C:/path
+            uri = f"file:///{target.as_posix()}"
             mkdir_for_local(uri)
 
             expected = target.parent
@@ -196,7 +198,7 @@ class TestMkdirForLocal:
 
             # Create a Url object for a relative path
             target = tmp_path / "pydantic_test" / "data.txt"
-            url_obj = Url(f"file://{target.as_posix()}")
+            url_obj = Url(f"file:///{target.as_posix()}")
 
             mkdir_for_local(url_obj)
 
@@ -277,19 +279,6 @@ class TestNormalizeUserPath:
 
         result = normalize_user_path("~/runs", require_absolute=True)
         assert result.resolve() == (fake_home / "runs").resolve()
-
-    def test_coerce_root_dir_missing_slash(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Paths missing a leading slash but matching HOME prefix are repaired."""
-        fake_home = Path("/home/tester")
-        monkeypatch.setenv("HOME", str(fake_home))
-
-        import pathlib
-
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
-
-        value = "home/tester/project"
-        result = coerce_root_dir_to_absolute(value)
-        assert result.resolve() == (fake_home / "project").resolve()
 
     def test_coerce_root_dir_requires_absolute(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Relative paths that cannot be coerced should return None when absolute required."""

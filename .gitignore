@@ -199,6 +199,7 @@ mlartifacts/
 # Personal configuration and documentation
 .claude/
 .dlkit/
+plan.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md

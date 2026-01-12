@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import torch
-from torch import Tensor, Size
+from torch import Tensor
 from loguru import logger
 from torch.nn import ModuleList
 
@@ -45,7 +45,6 @@ class TransformChain(Transform):
     transformed_shape: tuple[int, ...] | None
     _shape_spec: "IShapeSpec | None"
     _entry_name: str | None
-    _inverse_mode: bool
 
     def __init__(
         self,
@@ -53,7 +52,6 @@ class TransformChain(Transform):
         shape_spec: "IShapeSpec | None" = None,
         entry_name: str | None = None,
         validate_execution: bool = False,
-        inverse_mode: bool = False,
     ) -> None:
         """Initialize the transform chain.
 

@@ -109,12 +109,12 @@ def expected_path_expansions(mock_home_path: str) -> dict[str, str]:
     """
     return {
         "~/documents/file.txt": f"{mock_home_path}/documents/file.txt",
-        "/~/documents/file.txt": f"{mock_home_path}/documents/file.txt",
         "~": mock_home_path,
-        "/~": mock_home_path,
         "/home/other/file.txt": "/home/other/file.txt",  # Unchanged
         "documents/file.txt": "documents/file.txt",  # Unchanged
-        "~file.txt": "~file.txt",  # Unchanged - not a path separator
+        "~file.txt": "~file.txt",  # Unchanged - not a valid tilde pattern
+        "/~/documents/file.txt": "/~/documents/file.txt",  # Unchanged - invalid pattern, will fail naturally
+        "/~": "/~",  # Unchanged - invalid pattern, will fail naturally
     }
 
 

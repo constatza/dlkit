@@ -45,6 +45,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "ruff>=0.13.1",
     "ty>=0.0.1a21",
+    "vulture>=2.14",
 ]
 
 
