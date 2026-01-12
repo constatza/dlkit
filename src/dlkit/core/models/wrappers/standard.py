@@ -168,6 +168,23 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
         return self._apply_transforms(features, self.fitted_feature_transforms)
 
+    def _apply_forward_target_transforms(self, targets: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Apply forward target transforms if available.
+
+        Transforms targets to normalized space for loss computation.
+
+        Args:
+            targets: Target tensors to transform.
+
+        Returns:
+            Transformed targets.
+        """
+        # Guard: Early return if no transforms
+        if not self.fitted_target_transforms:
+            return targets
+
+        return self._apply_transforms(targets, self.fitted_target_transforms)
+
     def _apply_inverse_target_transforms_to_predictions(
         self, predictions: dict[str, Tensor] | Tensor
     ) -> dict[str, Tensor] | Tensor:
@@ -229,6 +246,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
         """Training step with transform application.
 
+        Transforms both features and targets to normalized space before computing loss.
+        This ensures the model trains in normalized space for better convergence.
+
         Args:
             batch (dict[str, Tensor]): Raw batch from dataset.
             batch_idx (int): Index of the batch.
@@ -239,16 +259,16 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # 1. Extract features and targets (inherited from base)
         features, targets = self._extract_features_targets(batch)
 
-        # 2. Apply forward transforms to features
+        # 2. Apply forward transforms to features (raw → normalized)
         features = self._apply_forward_feature_transforms(features)
 
-        # 3. Model forward (inherited from base)
+        # 3. Apply forward transforms to targets (raw → normalized)
+        targets = self._apply_forward_target_transforms(targets)
+
+        # 4. Model forward (predicts in normalized space)
         predictions = self._invoke_model(features)
 
-        # 4. Apply inverse transforms to predictions (for loss in original space)
-        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
-
-        # 5. Compute loss (inherited from base)
+        # 5. Compute loss in normalized space (both predictions and targets normalized)
         loss = self._compute_loss(predictions, targets)
 
         # 6. Log metrics (inherited from base)
@@ -258,6 +278,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
     def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
         """Validation step with transform application.
+
+        Transforms both features and targets to normalized space before computing loss.
+        Metrics are also computed in normalized space for consistency.
 
         Args:
             batch (dict[str, Tensor]): Raw batch from dataset.
@@ -269,19 +292,19 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # 1. Extract features and targets
         features, targets = self._extract_features_targets(batch)
 
-        # 2. Apply forward transforms to features
+        # 2. Apply forward transforms to features (raw → normalized)
         features = self._apply_forward_feature_transforms(features)
 
-        # 3. Model forward
+        # 3. Apply forward transforms to targets (raw → normalized)
+        targets = self._apply_forward_target_transforms(targets)
+
+        # 4. Model forward (predicts in normalized space)
         predictions = self._invoke_model(features)
 
-        # 4. Apply inverse transforms to predictions
-        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
-
-        # 5. Compute loss
+        # 5. Compute loss in normalized space
         val_loss = self._compute_loss(predictions, targets)
 
-        # 6. Compute metrics
+        # 6. Compute metrics in normalized space
         metrics = self._update_metrics(predictions, targets, stage="val")
 
         # 7. Log metrics
@@ -291,6 +314,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
     def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
         """Test step with transform application.
+
+        Transforms both features and targets to normalized space before computing loss.
+        Metrics are also computed in normalized space for consistency.
 
         Args:
             batch (dict[str, Tensor]): Raw batch from dataset.
@@ -302,19 +328,19 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         # 1. Extract features and targets
         features, targets = self._extract_features_targets(batch)
 
-        # 2. Apply forward transforms to features
+        # 2. Apply forward transforms to features (raw → normalized)
         features = self._apply_forward_feature_transforms(features)
 
-        # 3. Model forward
+        # 3. Apply forward transforms to targets (raw → normalized)
+        targets = self._apply_forward_target_transforms(targets)
+
+        # 4. Model forward (predicts in normalized space)
         predictions = self._invoke_model(features)
 
-        # 4. Apply inverse transforms to predictions
-        predictions = self._apply_inverse_target_transforms_to_predictions(predictions)
-
-        # 5. Compute loss
+        # 5. Compute loss in normalized space
         test_loss = self._compute_loss(predictions, targets)
 
-        # 6. Compute metrics
+        # 6. Compute metrics in normalized space
         metrics = self._update_metrics(predictions, targets, stage="test")
 
         # 7. Log metrics

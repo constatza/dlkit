@@ -119,88 +119,119 @@ Examples:
 
 ## Inference
 
-DLKit provides an industry-standard inference system with **stateful predictors** that load models once and reuse them for multiple predictions. **No configuration files are required** - everything needed is extracted from the checkpoint using enhanced metadata.
+DLKit loads models from checkpoints with automatic transform handling and precision inference. **No configuration files are required** - everything needed is extracted from the checkpoint metadata.
 
-### Recommended Method: Stateful Predictors
-
-The **primary and most efficient approach** uses stateful predictor objects:
+### Load Model Once, Use Many Times
 
 ```python
 from dlkit import load_predictor
 
-# Load model ONCE
+# Load checkpoint ONCE (expensive operation)
 predictor = load_predictor(
     checkpoint_path="model.ckpt",
     device="cuda",              # "auto", "cpu", "cuda", "mps"
-    batch_size=32,
-    apply_transforms=True       # Automatically applies saved transforms
+    apply_transforms=True       # Apply saved transforms automatically
 )
 
-# Predict MANY times (no reloading!)
-result1 = predictor.predict({"x": torch.randn(32, 10)})
-result2 = predictor.predict({"x": torch.randn(32, 10)})
-result3 = predictor.predict({"x": torch.randn(32, 10)})
+# Option 1: Use the model directly (full PyTorch control)
+model = predictor.model         # Get the loaded PyTorch model
+predictions = model(inputs)     # Standard PyTorch forward pass
+
+# Option 2: Use predictor.predict() (handles transforms automatically)
+result = predictor.predict({"x": torch.randn(32, 10)})
 
 # Cleanup when done
 predictor.unload()
 ```
 
-**Why this is faster**: The model is loaded from disk once and cached in memory. Each `predict()` call performs only a fast forward pass without any checkpoint I/O.
+**Why this is faster**: The checkpoint is loaded from disk once. All subsequent operations use the cached model in memory - no redundant I/O.
+
+### Direct Model Access
+
+The loaded model is a standard PyTorch module - use it however you want:
+
+```python
+predictor = load_predictor("model.ckpt", device="cuda")
+model = predictor.model  # Standard nn.Module
+
+# Standard PyTorch usage
+with torch.no_grad():
+    output = model(inputs)
+
+# Access layers, parameters, state
+for name, param in model.named_parameters():
+    print(name, param.shape)
+
+# Extract intermediate activations
+features = model.encoder(inputs)
+
+# Fine-tune or train further
+optimizer = torch.optim.Adam(model.parameters())
+```
+
+### High-Level Predict API
+
+If you want automatic transform handling, use `predictor.predict()`:
+
+```python
+# Transforms applied automatically (if saved in checkpoint)
+result = predictor.predict({"x": torch.randn(32, 10)})
+predictions = result.predictions  # Already inverse-transformed
+
+# Without transforms (raw model output)
+predictor_raw = load_predictor("model.ckpt", apply_transforms=False)
+result = predictor_raw.predict({"x": normalized_inputs})
+```
 
 ### Context Manager (Automatic Cleanup)
 
-For one-shot or temporary inference, use the context manager:
+For temporary usage:
 
 ```python
 from dlkit import load_predictor
 
-# Model loads on entry, auto-cleans on exit
 with load_predictor("model.ckpt", device="cuda") as predictor:
-    result = predictor.predict({"x": torch.randn(32, 10)})
-# Automatic cleanup - no need to call unload()
-```
-
-### Config-Based Batch Inference
-
-For inference on full datasets defined in configuration files:
-
-```python
-from dlkit import load_predictor
-
-predictor = load_predictor("model.ckpt")
-
-# Predict on dataset/split from config (yields results per batch)
-for batch_result in predictor.predict_from_config("config.toml"):
-    predictions = batch_result.predictions
-    process_batch(predictions)
-
-predictor.unload()
+    model = predictor.model
+    output = model(inputs)
+# Automatic cleanup and GPU memory release
 ```
 
 ### Flexible Input Formats
 
-Predictors accept multiple input formats:
+The `predict()` method accepts multiple input formats:
 
 ```python
 # Tensors
 result = predictor.predict({"x": torch.randn(32, 10)})
 
-# NumPy arrays
+# NumPy arrays (auto-converted)
 result = predictor.predict({"x": np.random.randn(32, 10)})
 
-# File paths
-result = predictor.predict({"features": "data/test_features.csv"})
-
-# Mixed formats
-result = predictor.predict({
-    "x": torch.randn(32, 10),
-    "metadata": "data/metadata.npy"
-})
+# Single tensor (auto-wrapped)
+result = predictor.predict(torch.randn(32, 10))
 ```
 
 ## Transform Pipelines (Training → Inference)
 
 DLKit ships a unified transform system that fits data transforms during training, persists them in checkpoints, and reapplies them automatically during inference. This gives you scikit-learn style `fit ↔ transform ↔ inverse_transform` semantics without writing glue code.
+
+### Transform Workflow: Normalized Space Training
+
+**Key Principle**: The model trains and computes loss in **normalized space** for better convergence and gradient stability.
+
+**Training Flow:**
+```
+Raw Data → Forward Transform → Normalized Space → Model → Loss (in normalized space)
+           features:  [0, 100]  →  [-1, 1]
+           targets:   [0, 100]  →  [-1, 1]
+           predictions: model outputs in normalized space
+           loss: MSE(predictions_normalized, targets_normalized)
+```
+
+**Inference Flow:**
+```
+Raw Features → Forward Transform → Model → Inverse Transform → Original Space Predictions
+```
 
 ### Declaring Transforms in Configuration
 
@@ -240,7 +271,37 @@ n_components = 8
 - **TensorSubset** (`dlkit.core.training.transforms.subset`): Extract tensor subsets
 - **SpectralRadiusNorm** (`dlkit.core.training.transforms.spectral`): Spectral radius normalization for matrices
 
-During training the `StandardLightningWrapper` builds a `TransformChain` per entry, fits it once (across the entire training split), and stores the fitted chain inside `fitted_transforms.*` in the checkpoint.
+### How Transforms Are Fitted and Applied
+
+**Fitting Phase** (`on_fit_start()` - before first training step):
+1. Accumulates **entire training dataset** across all batches
+2. Builds `TransformChain` per entry (features and targets)
+3. Fits chains globally on raw training data
+4. Stores fitted chains in two separate `ModuleDict`s:
+   - `fitted_feature_transforms` - for input preprocessing
+   - `fitted_target_transforms` - for target normalization
+
+**During Training/Validation/Test:**
+```python
+# Step-by-step flow:
+features, targets = extract_from_batch(batch)           # Raw data
+
+features = feature_transforms.forward(features)         # Raw → normalized
+targets = target_transforms.forward(targets)            # Raw → normalized
+
+predictions = model(features)                           # Predicts in normalized space
+
+loss = compute_loss(predictions, targets)               # Both normalized - consistent scale!
+```
+
+**During Inference/Prediction:**
+```python
+features = feature_transforms.forward(features)         # Raw → normalized
+predictions = model(features)                           # Predicts in normalized space
+predictions = target_transforms.inverse(predictions)    # Normalized → raw (for user)
+```
+
+The `StandardLightningWrapper` handles all transform application automatically. Fitted transform state is persisted inside `fitted_feature_transforms.*` and `fitted_target_transforms.*` checkpoint keys.
 
 ### Persistence Guarantees
 
@@ -252,8 +313,14 @@ During training the `StandardLightningWrapper` builds a `TransformChain` per ent
 
 `load_predictor(..., apply_transforms=True)` (default) will:
 
-1. Apply feature transforms before forwarding through the model.
-2. Apply inverse target transforms on the outputs so predictions land back in the user’s original space.
+1. Apply **forward** feature transforms (raw data → normalized) before model forward pass
+2. Model predicts in normalized space (same space it was trained in)
+3. Apply **inverse** target transforms (normalized → raw) so predictions are in original units
+
+This ensures:
+- ✅ Model sees data in same normalized space as during training
+- ✅ User receives predictions in original, interpretable units
+- ✅ No manual transform handling required
 
 For advanced workflows:
 
@@ -366,24 +433,34 @@ for data in dataset:
     result = infer("model.ckpt", data)  # Reloaded 100+ times!
     process(result)
 
-# ✅ NEW (efficient)
+# ✅ NEW Option 1: Direct model access (standard PyTorch)
 from dlkit import load_predictor
 
-# Load model ONCE
 predictor = load_predictor("model.ckpt", device="cuda")
+model = predictor.model  # Get the PyTorch model
 
-# Predict many times (no reloading!)
-for data in dataset:
-    result = predictor.predict(data)  # Fast forward pass only
-    process(result)
+with torch.no_grad():
+    for data in dataset:
+        output = model(data)  # Standard forward pass
+        process(output)
 
 predictor.unload()
 
-# ✅ Or with context manager (automatic cleanup)
+# ✅ NEW Option 2: Use predictor.predict() (handles transforms)
+predictor = load_predictor("model.ckpt", device="cuda", apply_transforms=True)
+
+for data in dataset:
+    result = predictor.predict(data)  # Transforms applied automatically
+    process(result.predictions)
+
+predictor.unload()
+
+# ✅ Context manager (automatic cleanup)
 with load_predictor("model.ckpt") as predictor:
+    model = predictor.model
     for data in dataset:
-        result = predictor.predict(data)
-        process(result)
+        output = model(data)
+        process(output)
 ```
 
 ### Enhanced Checkpoint Format

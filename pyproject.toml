@@ -16,7 +16,7 @@ dependencies = [
     "lightning<3.0.0,>=2.3.2",
     "mlflow>=3.0,<4.0",
     "optuna<5,>=4",
-    "torch>=2.6.0, <2.9.0",
+    "torch>=2.8.0, <2.10.0",
     "dynaconf>=3.2.10",
     "loguru>=0.7.3",
     "polars>=1.4.1,<2.0.0",
@@ -50,7 +50,7 @@ dev = [
 
 [project.optional-dependencies]
 # Linux or Windows GPU build
-gpu = ["torch>=2.6.0, <2.9.0"]
+gpu = ["torch"]
 
 [project.scripts]
 dlkit = "dlkit.interfaces.cli:cli_main"
@@ -63,14 +63,12 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 torch = [
-  # GPU build only when explicitly requested via: uv sync --extra gpu
-  { index  = "pytorch-gpu", extra   = "gpu", marker  = "sys_platform == 'linux' or sys_platform == 'win32'" },
-
   # Default CPU build on Linux/Windows when no extras
   { index  = "pytorch-cpu", marker  = "extra == '' and sys_platform == 'linux'" },
-
   # macOS uses PyPI (Apple Silicon / CPU wheels are on PyPI)
-  { index  = "pypi",        marker  = "extra == '' and sys_platform == 'darwin'" }
+  { index  = "pypi",        marker  = "extra == '' and sys_platform == 'darwin'" },
+  # GPU build only when explicitly requested via: uv sync --extra gpu
+  { index  = "pytorch-gpu", extra   = "gpu", marker  = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [[tool.uv.index]]
