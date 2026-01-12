@@ -162,28 +162,32 @@ class OptunaSettingsSampler:
         if not isinstance(range_spec, dict):
             raise ValueError(f"Invalid range specification for {param_name}: {range_spec}")
 
+        low = range_spec.get("low", None)
+        high = range_spec.get("high", None)
+        choices = range_spec.get("choices", None)
+
+        if low and high and choices:
+            raise ValueError(
+                f"You have defined mutually exclusive hyperparameter choices for {param_name}: "
+                f"`low`, `high` are incompatible with `choices`"
+            )
+
         # Handle integer/float ranges
-        if "low" in range_spec and "high" in range_spec:
-            low = range_spec["low"]
-            high = range_spec["high"]
+        if low and high:
             step = range_spec.get("step", 1)
             log = range_spec.get("log", False)
-
             # Determine if this is an integer or float range
             if all(isinstance(val, int) for val in [low, high, step]):
                 return trial.suggest_int(param_name, low=low, high=high, step=step, log=log)
-            else:
-                return trial.suggest_float(param_name, low=low, high=high, step=step, log=log)
+            return trial.suggest_float(param_name, low=low, high=high, step=step, log=log)
 
         # Handle categorical choices
-        elif "choices" in range_spec:
-            choices = range_spec["choices"]
+        if choices:
             if not isinstance(choices, (list, tuple)):
                 raise ValueError(f"Choices must be list or tuple for {param_name}: {choices}")
             return trial.suggest_categorical(param_name, choices=list(choices))
 
-        else:
-            raise ValueError(f"Invalid hyperparameter specification for {param_name}: {range_spec}")
+        raise ValueError(f"Invalid hyperparameter specification for {param_name}: {range_spec}")
 
     def _validate_optuna_settings(self) -> None:
         """Validate that OPTUNA settings are properly configured.
