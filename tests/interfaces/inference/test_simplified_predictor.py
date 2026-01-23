@@ -13,17 +13,16 @@ import pytest
 import torch
 from pathlib import Path
 
-from dlkit.interfaces.inference import load_predictor, CheckpointPredictor, PredictorConfig
+from dlkit.interfaces.inference import load_model, CheckpointPredictor, PredictorConfig
 from dlkit.interfaces.inference.loading import (
     build_model_from_checkpoint,
     load_checkpoint,
     extract_state_dict,
     detect_checkpoint_dtype,
     validate_checkpoint,
-    get_checkpoint_info
+    get_checkpoint_info,
 )
 from dlkit.core.shape_specs import NullShapeSpec
-from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 
@@ -35,10 +34,7 @@ class TestCheckpointLoading:
         # Create simple checkpoint
         checkpoint_path = tmp_path / "model.ckpt"
         model = torch.nn.Linear(10, 5)
-        checkpoint = {
-            "state_dict": model.state_dict(),
-            "dlkit_metadata": {"version": "2.0"}
-        }
+        checkpoint = {"state_dict": model.state_dict(), "dlkit_metadata": {"version": "2.0"}}
         torch.save(checkpoint, checkpoint_path)
 
         # Load checkpoint
@@ -67,7 +63,7 @@ class TestCheckpointLoading:
         """Test dtype detection for float32 checkpoint."""
         state_dict = {
             "weight": torch.randn(10, 5, dtype=torch.float32),
-            "bias": torch.randn(5, dtype=torch.float32)
+            "bias": torch.randn(5, dtype=torch.float32),
         }
 
         dtype = detect_checkpoint_dtype(state_dict)
@@ -78,7 +74,7 @@ class TestCheckpointLoading:
         """Test dtype detection for float64 checkpoint."""
         state_dict = {
             "weight": torch.randn(10, 5, dtype=torch.float64),
-            "bias": torch.randn(5, dtype=torch.float64)
+            "bias": torch.randn(5, dtype=torch.float64),
         }
 
         dtype = detect_checkpoint_dtype(state_dict)
@@ -97,9 +93,9 @@ class TestCheckpointLoading:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "in_features": 10,
-                    "out_features": 5
-                }
-            }
+                    "out_features": 5,
+                },
+            },
         }
         torch.save(checkpoint, checkpoint_path)
 
@@ -117,10 +113,7 @@ class TestCheckpointLoading:
         model = torch.nn.Linear(10, 5)
         checkpoint = {
             "state_dict": model.state_dict(),
-            "dlkit_metadata": {
-                "version": "2.0",
-                "model_family": "ffnn"
-            }
+            "dlkit_metadata": {"version": "2.0", "model_family": "ffnn"},
         }
         torch.save(checkpoint, checkpoint_path)
 
@@ -148,9 +141,9 @@ class TestBuildModelFromCheckpoint:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "in_features": 10,
-                    "out_features": 5
-                }
-            }
+                    "out_features": 5,
+                },
+            },
         }
         torch.save(checkpoint, checkpoint_path)
 
@@ -178,9 +171,9 @@ class TestBuildModelFromCheckpoint:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "in_features": 10,
-                    "out_features": 5
-                }
-            }
+                    "out_features": 5,
+                },
+            },
         }
         torch.save(checkpoint, checkpoint_path)
 
@@ -210,7 +203,7 @@ class TestCheckpointPredictor:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "in_features": 10,
-                    "out_features": 5
+                    "out_features": 5,
                 },
                 "shape_spec": {
                     "metadata": {
@@ -218,7 +211,7 @@ class TestCheckpointPredictor:
                         "format": "json",
                         "dlkit_version": "2.0.0",
                         "checksum": None,
-                        "migration_history": []
+                        "migration_history": [],
                     },
                     "data": {
                         "entries": {},
@@ -226,20 +219,17 @@ class TestCheckpointPredictor:
                         "source": "default_fallback",
                         "default_input": None,
                         "default_output": None,
-                        "schema_version": "3.0"
-                    }
-                }
-            }
+                        "schema_version": "3.0",
+                    },
+                },
+            },
         }
         torch.save(checkpoint, checkpoint_path)
         return checkpoint_path
 
     def test_predictor_loads_model(self, simple_checkpoint: Path):
         """Test that predictor loads model successfully."""
-        config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=False
-        )
+        config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=False)
 
         predictor = CheckpointPredictor(config)
         assert not predictor.is_loaded()
@@ -252,10 +242,7 @@ class TestCheckpointPredictor:
 
     def test_predictor_auto_load(self, simple_checkpoint: Path):
         """Test predictor with auto_load=True."""
-        config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=True
-        )
+        config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=True)
 
         predictor = CheckpointPredictor(config)
 
@@ -264,10 +251,7 @@ class TestCheckpointPredictor:
 
     def test_predictor_infers_precision(self, simple_checkpoint: Path):
         """Test that predictor infers precision from model."""
-        config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=True
-        )
+        config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=True)
 
         predictor = CheckpointPredictor(config)
 
@@ -279,7 +263,7 @@ class TestCheckpointPredictor:
         config = PredictorConfig(
             checkpoint_path=simple_checkpoint,
             auto_load=True,
-            apply_transforms=False  # No transforms in simple checkpoint
+            apply_transforms=False,  # No transforms in simple checkpoint
         )
 
         predictor = CheckpointPredictor(config)
@@ -289,7 +273,7 @@ class TestCheckpointPredictor:
         result = predictor.predict(inputs)
 
         # Verify result structure
-        assert hasattr(result, 'predictions')
+        assert hasattr(result, "predictions")
         assert isinstance(result.predictions, dict)
         # Extract tensor from result
         predictions = next(iter(result.predictions.values()))
@@ -299,9 +283,7 @@ class TestCheckpointPredictor:
     def test_predictor_predict_dict_input(self, simple_checkpoint: Path):
         """Test prediction with dict input."""
         config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=True,
-            apply_transforms=False
+            checkpoint_path=simple_checkpoint, auto_load=True, apply_transforms=False
         )
 
         predictor = CheckpointPredictor(config)
@@ -311,7 +293,7 @@ class TestCheckpointPredictor:
         result = predictor.predict(inputs)
 
         # Verify result structure
-        assert hasattr(result, 'predictions')
+        assert hasattr(result, "predictions")
         assert isinstance(result.predictions, dict)
         # Extract tensor from result
         predictions = next(iter(result.predictions.values()))
@@ -320,10 +302,7 @@ class TestCheckpointPredictor:
 
     def test_predictor_context_manager(self, simple_checkpoint: Path):
         """Test predictor as context manager."""
-        config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=False
-        )
+        config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=False)
 
         with CheckpointPredictor(config) as predictor:
             assert predictor.is_loaded()
@@ -336,10 +315,7 @@ class TestCheckpointPredictor:
 
     def test_predictor_unload(self, simple_checkpoint: Path):
         """Test predictor unload."""
-        config = PredictorConfig(
-            checkpoint_path=simple_checkpoint,
-            auto_load=True
-        )
+        config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=True)
 
         predictor = CheckpointPredictor(config)
         assert predictor.is_loaded()
@@ -351,7 +327,7 @@ class TestCheckpointPredictor:
 
 
 class TestLoadPredictorAPI:
-    """Test the public load_predictor() API."""
+    """Test the public load_model() API."""
 
     @pytest.fixture
     def simple_checkpoint(self, tmp_path: Path) -> Path:
@@ -368,7 +344,7 @@ class TestLoadPredictorAPI:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "in_features": 10,
-                    "out_features": 5
+                    "out_features": 5,
                 },
                 "shape_spec": {
                     "metadata": {
@@ -376,7 +352,7 @@ class TestLoadPredictorAPI:
                         "format": "json",
                         "dlkit_version": "2.0.0",
                         "checksum": None,
-                        "migration_history": []
+                        "migration_history": [],
                     },
                     "data": {
                         "entries": {},
@@ -384,17 +360,17 @@ class TestLoadPredictorAPI:
                         "source": "default_fallback",
                         "default_input": None,
                         "default_output": None,
-                        "schema_version": "3.0"
-                    }
-                }
-            }
+                        "schema_version": "3.0",
+                    },
+                },
+            },
         }
         torch.save(checkpoint, checkpoint_path)
         return checkpoint_path
 
-    def test_load_predictor_simple(self, simple_checkpoint: Path):
-        """Test load_predictor() factory function."""
-        predictor = load_predictor(simple_checkpoint, device="cpu")
+    def test_load_model_simple(self, simple_checkpoint: Path):
+        """Test load_model() factory function."""
+        predictor = load_model(simple_checkpoint, device="cpu")
 
         assert isinstance(predictor, CheckpointPredictor)
         assert predictor.is_loaded()
@@ -404,24 +380,20 @@ class TestLoadPredictorAPI:
         result = predictor.predict(inputs)
 
         # Extract predictions from result
-        assert hasattr(result, 'predictions')
+        assert hasattr(result, "predictions")
         predictions = next(iter(result.predictions.values()))
         assert predictions.shape == (16, 5)
 
-    def test_load_predictor_with_precision(self, simple_checkpoint: Path):
-        """Test load_predictor() with precision parameter."""
-        predictor = load_predictor(
-            simple_checkpoint,
-            device="cpu",
-            precision=PrecisionStrategy.FULL_64
-        )
+    def test_load_model_with_precision(self, simple_checkpoint: Path):
+        """Test load_model() with precision parameter."""
+        predictor = load_model(simple_checkpoint, device="cpu", precision=PrecisionStrategy.FULL_64)
 
         # Config precision should override inferred precision
         assert predictor._config.precision == PrecisionStrategy.FULL_64
 
-    def test_load_predictor_context_manager(self, simple_checkpoint: Path):
-        """Test load_predictor() with context manager."""
-        with load_predictor(simple_checkpoint) as predictor:
+    def test_load_model_context_manager(self, simple_checkpoint: Path):
+        """Test load_model() with context manager."""
+        with load_model(simple_checkpoint) as predictor:
             inputs = torch.randn(8, 10)
             result = predictor.predict(inputs)
             # Extract predictions from result

@@ -7,7 +7,7 @@ Usage patterns:
 
 Notes:
 - This uses stateful predictor-based inference with training configurations and datasets
-- For direct inference without config files, use the Python API: dlkit.load_predictor()
+- For direct inference without config files, use the Python API: dlkit.load_model()
 - Today the CLI requires a `CHECKPOINT` argument; if your config contains
   `[MODEL].checkpoint`, the CLI argument will take precedence when provided.
   This keeps behavior explicit while remaining compatible with common practice.
@@ -21,7 +21,7 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.interfaces.inference.api import load_predictor
+from dlkit.interfaces.inference.api import load_model
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -119,12 +119,12 @@ def _run_inference_impl(
             effective_batch_size = batch_size if batch_size is not None else 32
 
             # Create predictor with context manager for automatic cleanup
-            predictor = load_predictor(
+            predictor = load_model(
                 checkpoint_path=effective_checkpoint,
                 device="auto",
                 batch_size=effective_batch_size,
                 apply_transforms=True,
-                auto_load=True
+                auto_load=True,
             )
             progress.remove_task(load_task)
 
@@ -146,6 +146,7 @@ def _run_inference_impl(
 
         # Combine predictions from all batches
         import torch
+
         if all_predictions:
             # Handle different prediction types
             if isinstance(all_predictions[0], dict):
@@ -171,10 +172,7 @@ def _run_inference_impl(
         from dlkit.interfaces.api.domain.models import InferenceResult
 
         result = InferenceResult(
-            model_state=None,
-            predictions=predictions,
-            metrics=None,
-            duration_seconds=total_duration
+            model_state=None, predictions=predictions, metrics=None, duration_seconds=total_duration
         )
 
         console.print("🎉 Inference completed successfully!")

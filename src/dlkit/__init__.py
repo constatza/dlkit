@@ -9,7 +9,7 @@ from pathlib import Path
 import tomllib
 
 # Surface primary application APIs
-from .interfaces.api import load_predictor, optimize, train, validate_config
+from .interfaces.api import load_model, optimize, train, validate_config
 
 # Provide convenient access to configuration helpers and registries
 from .tools.config.general_settings import GeneralSettings
@@ -35,6 +35,7 @@ from .tools.registry import (
 # Expose neural network modules for convenient access
 from .core.models import nn
 import sys
+
 sys.modules[f"{__name__}.nn"] = nn
 
 
@@ -56,7 +57,7 @@ def _resolve_version() -> str:
 __all__ = [
     "__version__",
     "train",
-    "load_predictor",  # NEW: Stateful predictor API
+    "load_model",  # NEW: Stateful predictor API
     "optimize",
     "validate_config",
     "GeneralSettings",

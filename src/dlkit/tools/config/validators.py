@@ -165,7 +165,7 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
         validate_inference_config_complete(config)
 
         # Safe to run inference
-        predictor = load_predictor(config.MODEL.checkpoint)
+        predictor = load_model(config.MODEL.checkpoint)
         ```
     """
     # Validate inference mode enabled
