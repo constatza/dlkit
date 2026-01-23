@@ -57,13 +57,13 @@ class TestBasicIntegration:
         test_inputs = {"x": torch.randn(5, 4)}  # Only input features
 
         # Use the new predictor API
-        predictor = dlkit.load_predictor(checkpoint_path=minimal_model_checkpoint, device="cpu")
+        predictor = dlkit.load_model(checkpoint_path=minimal_model_checkpoint, device="cpu")
         try:
             result = predictor.predict(test_inputs)
 
             # Assert - Validate results
             assert result is not None
-            assert hasattr(result, 'predictions')
+            assert hasattr(result, "predictions")
             # Predictions should be a dict with named outputs
             assert isinstance(result.predictions, dict)
         finally:
