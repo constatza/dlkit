@@ -1,0 +1,533 @@
+# =============================================================================
+# DLKit Full Configuration Example
+# =============================================================================
+# This file demonstrates all available configuration options with detailed
+# comments explaining each setting. Copy and modify for your use case.
+#
+# Configuration Hierarchy:
+#   - [SESSION]    : Session mode and global settings
+#   - [MODEL]      : Model architecture configuration
+#   - [TRAINING]   : Training parameters and nested library settings
+#   - [DATAMODULE] : Data loading configuration
+#   - [DATASET]    : Dataset and split configuration
+#   - [MLFLOW]     : Experiment tracking (optional)
+#   - [OPTUNA]     : Hyperparameter optimization (optional)
+#   - [PATHS]      : User-defined paths (optional)
+#   - [EXTRAS]     : Free-form user settings (optional)
+# =============================================================================
+
+
+# =============================================================================
+# SESSION - Session Mode and Global Settings
+# =============================================================================
+[SESSION]
+# Session name for identification in logs and tracking
+name = "dlkit-experiment"
+
+# Run in inference mode (true) or training mode (false)
+# Inference mode requires MODEL.checkpoint to be set
+inference = false
+
+# Random seed for reproducibility across runs
+# Affects: data splitting, weight initialization, dropout, etc.
+seed = 42
+
+# Precision strategy for computation
+# Options (case-insensitive):
+#   - Float64/Double: "double", "float64", "f64", "fp64"
+#   - Float32/Single: "single", "float32", "f32", "fp32" (default, safest)
+#   - Float16/Half:   "half", "float16", "f16", "fp16" (true half precision)
+#   - Mixed16:        "mixed16", "mixed_16" (autocast with float16)
+#   - BFloat16:       "bfloat16", "bf16" (true bfloat16)
+#   - BFloat16 Mixed: "bfloat16_mixed", "bf16_mixed" (autocast with bfloat16)
+#
+# Memory factor estimates:
+#   - double: 2.0x baseline (maximum accuracy)
+#   - single: 1.0x baseline (default)
+#   - mixed16/bf16_mixed: ~0.7x (30% savings)
+#   - half/bf16: ~0.5x (50% savings)
+precision = "float32"
+
+# Optional root directory for path resolution
+# Relative paths in config are resolved against this directory
+# Precedence: DLKIT_ROOT_DIR env var > root_dir > current working directory
+# root_dir = "/path/to/project"
+
+
+# =============================================================================
+# MODEL - Model Architecture Configuration
+# =============================================================================
+[MODEL]
+# Model class name - supports multiple formats:
+#   - Simple name: "ConstantWidthFFNN" (looked up in module_path)
+#   - Fully qualified: "dlkit.core.models.nn.ffnn.ConstantWidthFFNN"
+name = "ConstantWidthFFNN"
+
+# Module path where the model class is located
+# Default covers most DLKit models; change for custom models
+module_path = "dlkit.core.models.nn"
+
+# Checkpoint path for inference mode (model weights only)
+# Use this field for inference; use TRAINING.resume_from_checkpoint for
+# resuming training (which includes optimizer state, epoch, etc.)
+# checkpoint = "/path/to/model.ckpt"
+
+# =============================================================================
+# Model Architecture Hyperparameters
+# These vary by model type. Common parameters shown below.
+# For hyperparameter optimization, see [OPTUNA.model] section.
+# =============================================================================
+
+# Number of hidden layers (ConstantWidthFFNN, FeedForwardNN)
+num_layers = 4
+
+# Hidden dimension size (ConstantWidthFFNN)
+hidden_size = 256
+
+# Alternative: variable layer widths (FeedForwardNN)
+# layers = [512, 256, 128]
+
+# Latent dimension (autoencoders, VAEs)
+# latent_size = 64
+
+# Attention heads (transformers)
+# heads = 8
+# num_heads = 8
+
+# Convolutional parameters
+# kernel_size = 3
+# in_channels = 1
+# out_channels = 64
+
+
+# =============================================================================
+# TRAINING - Core Training Configuration
+# =============================================================================
+[TRAINING]
+# Number of training epochs
+epochs = 100
+
+# Early stopping patience (epochs without improvement)
+patience = 10
+
+# Metric to monitor for early stopping and checkpointing
+# Common choices: "val_loss", "train_loss", "val_mse", etc.
+monitor_metric = "val_loss"
+
+# Monitoring mode for the metric
+# "min" for loss-like metrics, "max" for accuracy-like metrics
+mode = "min"
+
+# Checkpoint to resume training from (full training state)
+# Includes: model weights, optimizer state, scheduler state, epoch, global step
+# This is used by Lightning's Trainer.fit(ckpt_path=...)
+# resume_from_checkpoint = "/path/to/checkpoint.ckpt"
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.trainer - PyTorch Lightning Trainer Settings
+# -----------------------------------------------------------------------------
+[TRAINING.trainer]
+# Maximum epochs (can override TRAINING.epochs)
+max_epochs = 100
+
+# Hardware accelerator
+# Options: "cpu", "gpu", "auto", "tpu"
+accelerator = "auto"
+
+# Gradient clipping value (None = no clipping)
+# gradient_clip_val = 1.0
+
+# Fast development run for debugging
+# Set to true for 1 batch, or integer for N batches
+fast_dev_run = false
+
+# Enable automatic checkpointing by Lightning
+enable_checkpointing = false
+
+# Override session precision (if needed)
+# Usually leave as null to use SESSION.precision
+# precision = "16-mixed"
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.trainer.callbacks - Lightning Callbacks
+# -----------------------------------------------------------------------------
+# Each callback is defined as [[TRAINING.trainer.callbacks]]
+# Common callbacks: EarlyStopping, ModelCheckpoint, LearningRateMonitor
+
+# Example: Model Checkpoint callback
+# [[TRAINING.trainer.callbacks]]
+# name = "ModelCheckpoint"
+# module_path = "lightning.pytorch.callbacks"
+# monitor = "val_loss"
+# mode = "min"
+# save_top_k = 3
+# dirpath = "checkpoints/"
+# filename = "model-{epoch:02d}-{val_loss:.4f}"
+
+# Example: Learning Rate Monitor
+# [[TRAINING.trainer.callbacks]]
+# name = "LearningRateMonitor"
+# module_path = "lightning.pytorch.callbacks"
+# logging_interval = "epoch"
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.trainer.logger - Logger Settings
+# -----------------------------------------------------------------------------
+[TRAINING.trainer.logger]
+# Logger class name (None = disable logging)
+# Options: "TensorBoardLogger", "CSVLogger", "WandbLogger", etc.
+# name = "TensorBoardLogger"
+# module_path = "lightning.pytorch.loggers"
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.optimizer - Optimizer Settings
+# -----------------------------------------------------------------------------
+[TRAINING.optimizer]
+# Optimizer name from torch.optim
+# Common choices: "Adam", "AdamW", "SGD", "RMSprop"
+name = "AdamW"
+module_path = "torch.optim"
+
+# Learning rate (alias: learning_rate)
+lr = 1e-3
+
+# Weight decay for regularization
+weight_decay = 0.01
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.scheduler - Learning Rate Scheduler (Optional)
+# -----------------------------------------------------------------------------
+[TRAINING.scheduler]
+# Scheduler name from torch.optim.lr_scheduler
+# Common choices: "ReduceLROnPlateau", "CosineAnnealingLR", "StepLR", "OneCycleLR"
+name = "ReduceLROnPlateau"
+module_path = "torch.optim.lr_scheduler"
+
+# ReduceLROnPlateau parameters
+factor = 0.5          # Multiply LR by this factor on plateau
+patience = 5          # Epochs without improvement before reducing
+min_lr = 1e-8         # Minimum learning rate
+
+# Alternative: CosineAnnealingLR parameters
+# name = "CosineAnnealingLR"
+# T_max = 100  # Maximum number of iterations
+# eta_min = 1e-8  # Minimum learning rate
+
+# Alternative: StepLR parameters
+# name = "StepLR"
+# step_size = 30  # Epochs between LR decay
+# gamma = 0.1  # Decay factor
+
+# Alternative: OneCycleLR parameters
+# name = "OneCycleLR"
+# max_lr = 1e-2  # Maximum learning rate
+# total_steps = 1000  # Total training steps
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.loss_function - Loss Function Settings
+# -----------------------------------------------------------------------------
+[TRAINING.loss_function]
+# Loss function name
+# DLKit provides: "mse", "mae", "huber_loss", "quantile_loss", etc.
+# TorchMetrics: "mean_squared_error", "mean_absolute_error", etc.
+name = "mse"
+
+# Module path to the loss function
+# Default: dlkit.core.training.functional (shared functional module)
+module_path = "dlkit.core.training.functional"
+
+
+# -----------------------------------------------------------------------------
+# TRAINING.metrics - Metrics to Compute (Optional)
+# -----------------------------------------------------------------------------
+# Each metric is defined as [[TRAINING.metrics]]
+
+# Example: Mean Squared Error metric
+# [[TRAINING.metrics]]
+# name = "MeanSquaredError"
+# module_path = "torchmetrics.regression"
+
+# Example: Mean Absolute Error metric
+# [[TRAINING.metrics]]
+# name = "MeanAbsoluteError"
+# module_path = "torchmetrics.regression"
+
+
+# =============================================================================
+# DATAMODULE - Data Loading Configuration
+# =============================================================================
+[DATAMODULE]
+# DataModule class name
+# Options: "InMemoryDataModule", "GraphDataModule", "TimeSeriesDataModule"
+name = "InMemoryDataModule"
+module_path = "dlkit.core.datamodules"
+
+
+# -----------------------------------------------------------------------------
+# DATAMODULE.dataloader - DataLoader Settings
+# -----------------------------------------------------------------------------
+[DATAMODULE.dataloader]
+# Batch size for training
+batch_size = 64
+
+# Number of worker processes for data loading
+# Default: CPU count - 1 (computed at runtime)
+# Set to 0 for debugging
+num_workers = 4
+
+# Shuffle training data each epoch
+shuffle = true
+
+# Keep worker processes alive between epochs
+persistent_workers = true
+
+# Pin memory for faster GPU transfer
+pin_memory = true
+
+# Graph neural networks: dimensions to follow in batching
+# follow_batch = ["x", "edge_index"]
+
+
+# =============================================================================
+# DATASET - Dataset Configuration
+# =============================================================================
+[DATASET]
+# Dataset class name
+# Options: "FlexibleDataset", "GraphDataset", "TimeSeriesDataset"
+name = "FlexibleDataset"
+module_path = "dlkit.core.datasets"
+
+# Optional dataset family hint for automatic strategy selection
+# type = "flexible"  # Options: "flexible", "graph", "timeseries"
+
+# Optional root directory for dataset files
+# Relative paths in features/targets are resolved against this
+# root = "/path/to/data"
+
+
+# -----------------------------------------------------------------------------
+# DATASET.features - Feature Entries
+# -----------------------------------------------------------------------------
+# Features are input data to the model. Define as [[DATASET.features]]
+# Each feature can have transforms applied before model input.
+
+[[DATASET.features]]
+name = "x"                          # Entry name (required)
+path = "data/features.npy"          # Path to data file
+# dtype = "float32"                 # Override data type (optional)
+# required_in_loss = false          # Include in loss computation (default: false)
+
+# Optional transforms applied to this feature
+# [[DATASET.features.transforms]]
+# name = "StandardScaler"
+# module_path = "dlkit.core.training.transforms"
+
+# [[DATASET.features.transforms]]
+# name = "PCA"
+# module_path = "dlkit.core.training.transforms"
+# n_components = 50
+
+
+# Example: Multiple features
+# [[DATASET.features]]
+# name = "auxiliary"
+# path = "data/auxiliary_features.npy"
+
+
+# -----------------------------------------------------------------------------
+# DATASET.targets - Target Entries
+# -----------------------------------------------------------------------------
+# Targets are ground truth data for loss computation. Define as [[DATASET.targets]]
+
+[[DATASET.targets]]
+name = "y"                          # Entry name (required)
+path = "data/targets.npy"           # Path to data file
+# dtype = "float32"                 # Override data type (optional)
+# required_in_loss = true           # Include in loss computation (default: true)
+# write = false                     # Save predictions during inference (default: false)
+
+# Optional transforms applied to targets
+# [[DATASET.targets.transforms]]
+# name = "MinMaxScaler"
+# module_path = "dlkit.core.training.transforms"
+
+
+# -----------------------------------------------------------------------------
+# DATASET.split - Train/Val/Test Split Configuration
+# -----------------------------------------------------------------------------
+[DATASET.split]
+# Option 1: Generate new split with ratios
+test_ratio = 0.15                   # Alias: test
+val_ratio = 0.15                    # Alias: val
+# train_ratio is computed as: 1.0 - test_ratio - val_ratio
+
+# Option 2: Use existing split file
+# filepath = "splits/my_split.json"  # Pre-computed split indices
+
+
+# =============================================================================
+# MLFLOW - Experiment Tracking (Optional)
+# =============================================================================
+[MLFLOW]
+# Enable/disable MLflow tracking
+enabled = false
+
+
+# -----------------------------------------------------------------------------
+# MLFLOW.server - MLflow Server Settings
+# -----------------------------------------------------------------------------
+[MLFLOW.server]
+# Server scheme (http or https only)
+scheme = "http"
+
+# Server host and port
+host = "127.0.0.1"
+port = 5000
+
+# Backend store URI for experiment metadata
+# Options: SQLite, PostgreSQL, MySQL
+# SQLite (local): "sqlite:///mlruns/mlflow.db"
+# PostgreSQL: "postgresql://user:pass@host:port/dbname"
+# backend_store_uri = "sqlite:///mlruns/mlflow.db"
+
+# Artifacts storage location
+# Local filesystem or S3-compatible storage
+# artifacts_destination = "mlartifacts/"
+
+# Number of server worker processes
+# Note: SQLite backends require num_workers = 1
+num_workers = 1
+
+# Keep-alive and timeout settings (seconds)
+keep_alive_interval = 5
+shutdown_timeout = 10
+health_timeout = 30.0
+
+
+# -----------------------------------------------------------------------------
+# MLFLOW.client - MLflow Client Settings
+# -----------------------------------------------------------------------------
+[MLFLOW.client]
+# Experiment name for grouping runs
+experiment_name = "MyExperiment"
+
+# Optional run name for this specific run
+# run_name = "experiment-v1"
+
+# Tracking URI (auto-computed from server settings if not specified)
+# tracking_uri = "http://127.0.0.1:5000"
+
+# Register trained models in MLflow Model Registry
+register_model = false
+
+# Maximum connection attempts to server
+max_trials = 3
+
+
+# =============================================================================
+# OPTUNA - Hyperparameter Optimization (Optional)
+# =============================================================================
+[OPTUNA]
+# Enable/disable Optuna optimization
+enabled = false
+
+# Number of optimization trials to run
+n_trials = 50
+
+# Optimization direction
+# "minimize" for loss, "maximize" for accuracy
+direction = "minimize"
+
+# Study name for persistence and resumption
+# study_name = "my-optimization-study"
+
+# Storage URL for study persistence
+# SQLite: "sqlite:///optuna.db"
+# PostgreSQL: "postgresql://user:pass@host:port/dbname"
+# storage = "sqlite:///optuna.db"
+
+
+# -----------------------------------------------------------------------------
+# OPTUNA.sampler - Hyperparameter Sampler
+# -----------------------------------------------------------------------------
+[OPTUNA.sampler]
+# Sampler algorithm
+# Options: "TPESampler" (default), "RandomSampler", "GridSampler", "CmaEsSampler"
+name = "TPESampler"
+module_path = "optuna.samplers"
+
+# Random seed for reproducibility
+seed = 42
+
+
+# -----------------------------------------------------------------------------
+# OPTUNA.pruner - Trial Pruner for Early Stopping
+# -----------------------------------------------------------------------------
+[OPTUNA.pruner]
+# Pruner algorithm
+# Options: "NopPruner" (no pruning), "MedianPruner", "SuccessiveHalvingPruner"
+name = "MedianPruner"
+module_path = "optuna.pruners"
+
+# Warmup steps before pruning starts
+n_warmup_steps = 5
+
+# Interval between pruning checks
+interval_steps = 1
+
+
+# -----------------------------------------------------------------------------
+# OPTUNA.model - Model Hyperparameter Ranges
+# -----------------------------------------------------------------------------
+# Define hyperparameter search spaces that mirror the MODEL structure.
+# Supports: fixed values, ranges [min, max], or categorical lists.
+
+[OPTUNA.model]
+# Integer range: [min, max]
+hidden_size = [64, 512]
+num_layers = [2, 8]
+
+# Float range with log scale: use explicit dict
+# lr = { low = 1e-5, high = 1e-2, log = true }
+
+# Categorical: list of options
+# activation = ["relu", "gelu", "silu"]
+
+# Fixed value (not optimized)
+# dropout = 0.1
+
+
+# =============================================================================
+# PATHS - User-Defined Paths (Optional)
+# =============================================================================
+# Standardized paths with automatic resolution relative to SESSION.root_dir.
+# All fields are optional; extras are allowed for custom paths.
+
+# [PATHS]
+# output_dir = "output/"
+# checkpoint_path = "checkpoints/best.ckpt"
+# data_dir = "datasets/"
+# weights_path = "weights/pretrained.pt"
+# config_path = "configs/extra.toml"
+
+# Custom user-defined paths (extras allowed)
+# my_custom_path = "custom/data.csv"
+
+
+# =============================================================================
+# EXTRAS - Free-Form User Settings (Optional)
+# =============================================================================
+# Container for arbitrary user-defined settings.
+# Not used by core DLKit; useful for custom scripts and tools.
+
+# [EXTRAS]
+# experiment_version = "v2.1"
+# custom_flag = true
+# preprocessing_config = "configs/preprocess.yaml"
+# notes = "Testing new architecture with dropout"
