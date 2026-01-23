@@ -197,7 +197,7 @@ print(f"Final metrics: {result.metrics}")
 ### Inference with NPZ Files
 
 ```python
-from dlkit import load_predictor
+from dlkit import load_model
 import numpy as np
 
 # Create NPZ file for inference
@@ -208,7 +208,7 @@ test_data = {
 np.savez("test_data.npz", **test_data)
 
 # Load predictor (trained on NPZ data)
-predictor = load_predictor("model.ckpt", device="cuda")
+predictor = load_model("model.ckpt", device="cuda")
 
 # Option 1: Load and pass arrays
 npz = np.load("test_data.npz")

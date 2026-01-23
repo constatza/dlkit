@@ -17,13 +17,15 @@ import dlkit
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.trainer_settings import TrainerSettings
 from dlkit.core.shape_specs import create_shape_spec, CheckpointShapeLoader, NullShapeSpec
-from dlkit.core.models.nn.base import ShapeAwareModel, ShapeAgnosticModel
+from dlkit.core.models.nn.base import ShapeAwareModel
 from dlkit.core.models.nn.ffnn.simple import FeedForwardNN
 from dlkit.runtime.workflows.factories.model_detection import detect_model_type, ModelType
 
 
 @pytest.fixture
-def training_settings_with_checkpointing(training_settings: GeneralSettings, tmp_path: Path) -> GeneralSettings:
+def training_settings_with_checkpointing(
+    training_settings: GeneralSettings, tmp_path: Path
+) -> GeneralSettings:
     """Training settings with checkpointing enabled and LR tuner for quality verification."""
     from dlkit.tools.config.trainer_settings import CallbackSettings
     from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
@@ -54,13 +56,13 @@ def training_settings_with_checkpointing(training_settings: GeneralSettings, tmp
         name="ConstantWidthFFNN",
         module_path="dlkit.core.models.nn.ffnn.simple",
         hidden_size=3,  # Ultra-minimal: just 3 hidden units
-        num_layers=1,   # Single hidden layer as requested
+        num_layers=1,  # Single hidden layer as requested
     )
 
     # Enable LR tuner with fast settings
     lr_tuner = LRTunerSettings(
         num_training=10,  # Fast: only 10 LR values to test
-        max_lr=0.1,       # Reasonable max for this tiny model
+        max_lr=0.1,  # Reasonable max for this tiny model
         min_lr=1e-6,
         mode="exponential",
     )
@@ -76,15 +78,19 @@ def training_settings_with_checkpointing(training_settings: GeneralSettings, tmp
         callbacks=(checkpoint_callback,),
     )
 
-    updated_training = training_settings.TRAINING.model_copy(update={
-        "trainer": updated_trainer,
-        "lr_tuner": lr_tuner,  # Enable LR tuner
-    })
+    updated_training = training_settings.TRAINING.model_copy(
+        update={
+            "trainer": updated_trainer,
+            "lr_tuner": lr_tuner,  # Enable LR tuner
+        }
+    )
 
-    return training_settings.model_copy(update={
-        "TRAINING": updated_training,
-        "MODEL": minimal_model,  # Use minimal model
-    })
+    return training_settings.model_copy(
+        update={
+            "TRAINING": updated_training,
+            "MODEL": minimal_model,  # Use minimal model
+        }
+    )
 
 
 class TestABCShapeArchitecture:
@@ -95,10 +101,7 @@ class TestABCShapeArchitecture:
         shape_spec = create_shape_spec({"x": (784,), "y": (10,)})
 
         # Should work with unified_shape
-        model = FeedForwardNN(
-            unified_shape=shape_spec,
-            layers=[128, 64]
-        )
+        model = FeedForwardNN(unified_shape=shape_spec, layers=[128, 64])
         assert isinstance(model, ShapeAwareModel)
         assert model.get_unified_shape() == shape_spec
 
@@ -113,9 +116,7 @@ class TestABCShapeArchitecture:
         assert model_type == ModelType.SHAPE_AWARE_DLKIT
 
     def test_shape_checkpoint_persistence(
-        self,
-        training_settings_with_checkpointing: GeneralSettings,
-        tmp_path: Path
+        self, training_settings_with_checkpointing: GeneralSettings, tmp_path: Path
     ):
         """Test that shapes are saved and loaded from checkpoints."""
         # Run training to create checkpoint with shapes
@@ -143,7 +144,7 @@ class TestABCShapeArchitecture:
         self,
         training_settings_with_checkpointing: GeneralSettings,
         inference_settings: GeneralSettings,
-        tmp_path: Path
+        tmp_path: Path,
     ):
         """Test seamless training->inference with quality and persistence verification.
 
@@ -213,16 +214,20 @@ class TestABCShapeArchitecture:
         # Extract a sample weight tensor for later comparison
         # Find the first weight parameter (could be model.layers.0.weight, model.model.weight, etc.)
         weight_keys = [k for k in state_dict.keys() if "weight" in k.lower()]
-        assert len(weight_keys) > 0, f"No weights found in state_dict. Keys: {list(state_dict.keys())[:5]}"
+        assert len(weight_keys) > 0, (
+            f"No weights found in state_dict. Keys: {list(state_dict.keys())[:5]}"
+        )
 
         sample_weight_key = weight_keys[0]
         trained_weights = state_dict[sample_weight_key].detach().clone()
 
         # Step 3: Create dummy input data for inference
-        inputs = {"X": torch.randn(10, 4)}  # Batch of 10 samples, 4 features (matching training data)
+        inputs = {
+            "X": torch.randn(10, 4)
+        }  # Batch of 10 samples, 4 features (matching training data)
 
         # Step 4: Run inference using new stateful predictor API (should load shapes automatically)
-        predictor = dlkit.load_predictor(checkpoint_path, device="cpu")
+        predictor = dlkit.load_model(checkpoint_path, device="cpu")
         try:
             predictions = predictor.predict(inputs)
             assert predictions is not None
@@ -236,19 +241,19 @@ class TestABCShapeArchitecture:
         loaded_weights = loaded_state_dict[sample_weight_key].detach()
 
         # Verify the weights match exactly
-        assert torch.allclose(trained_weights, loaded_weights, atol=1e-6), \
+        assert torch.allclose(trained_weights, loaded_weights, atol=1e-6), (
             "Loaded weights don't match trained weights - checkpoint may not have persisted correctly"
+        )
 
         # Additional sanity check: weights should not be all zeros or all ones
-        assert not torch.allclose(trained_weights, torch.zeros_like(trained_weights)), \
+        assert not torch.allclose(trained_weights, torch.zeros_like(trained_weights)), (
             "Weights are all zeros - training may not have updated them"
-        assert not torch.allclose(trained_weights, torch.ones_like(trained_weights)), \
+        )
+        assert not torch.allclose(trained_weights, torch.ones_like(trained_weights)), (
             "Weights are all ones - suspicious pattern"
+        )
 
-    def test_abc_based_factory_integration(
-        self,
-        training_settings: GeneralSettings
-    ):
+    def test_abc_based_factory_integration(self, training_settings: GeneralSettings):
         """Test that BuildFactory uses ABC-based detection."""
         from dlkit.runtime.workflows.factories.build_factory import BuildFactory
         from dlkit.runtime.workflows.factories.model_detection import requires_shape_spec
@@ -277,7 +282,7 @@ class TestABCShapeArchitecture:
         # Create settings for an external Lightning model
         external_model_settings = ModelComponentSettings(
             name="lightning.pytorch.LightningModule",  # Example external model
-            module_path=""
+            module_path="",
         )
 
         # Create minimal settings using model_copy
@@ -289,6 +294,7 @@ class TestABCShapeArchitecture:
 
         # Should not require shape spec
         from dlkit.runtime.workflows.factories.model_detection import requires_shape_spec
+
         assert not requires_shape_spec(model_type)
 
 
@@ -342,17 +348,14 @@ class TestModelABCCompliance:
         """Test ShapeAwareModel abstract contract."""
         shape_spec = create_shape_spec({"x": (784,), "y": (10,)})
 
-        model = FeedForwardNN(
-            unified_shape=shape_spec,
-            layers=[128, 64]
-        )
+        model = FeedForwardNN(unified_shape=shape_spec, layers=[128, 64])
 
         # Test ABC contract methods
         assert model.accepts_shape(shape_spec) is True
         assert model.get_unified_shape() == shape_spec
 
         # Test forward method exists (abstract method)
-        assert hasattr(model, 'forward')
+        assert hasattr(model, "forward")
         assert callable(model.forward)
 
     def test_shape_validation(self):
@@ -360,10 +363,7 @@ class TestModelABCCompliance:
         valid_shape = create_shape_spec({"x": (784,), "y": (10,)})
 
         # Should accept valid shape
-        model = FeedForwardNN(
-            unified_shape=valid_shape,
-            layers=[128, 64]
-        )
+        model = FeedForwardNN(unified_shape=valid_shape, layers=[128, 64])
         assert model.accepts_shape(valid_shape)
 
         # Should reject NullShapeSpec
@@ -372,7 +372,4 @@ class TestModelABCCompliance:
 
         # Should fail to create with NullShapeSpec
         with pytest.raises(ValueError, match="cannot accept"):
-            FeedForwardNN(
-                unified_shape=null_shape,
-                layers=[128, 64]
-            )
+            FeedForwardNN(unified_shape=null_shape, layers=[128, 64])
