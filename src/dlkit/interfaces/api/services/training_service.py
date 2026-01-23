@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
-from dlkit.tools.io import provisioning
-from dlkit.tools.io import locations
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.orchestrator import Orchestrator
@@ -54,23 +52,13 @@ class TrainingService:
             except Exception as e:
                 logger.debug(f"Failed to extract root_dir from settings (non-fatal): {e}")
 
-            # Establish path context and ensure directories within that context
-            # This prevents creating directories at CWD when SESSION.root_dir is configured
+            # Establish path context for the training run
+            # Directories are created lazily when files are actually written
             orchestrator = Orchestrator()
             if overrides:
                 with path_override_context(overrides):
-                    # Ensure standard run directories exist under the configured root
-                    try:
-                        provisioning.ensure_run_dirs()
-                    except Exception as e:
-                        logger.debug(f"Failed to ensure run directories (non-fatal): {e}")
                     exec_result = orchestrator.execute_training(settings)
             else:
-                # Ensure standard run directories exist under the default root
-                try:
-                    provisioning.ensure_run_dirs()
-                except Exception as e:
-                    logger.debug(f"Failed to ensure run directories (non-fatal): {e}")
                 exec_result = orchestrator.execute_training(settings)
             duration = time.time() - start_time
             value = exec_result
