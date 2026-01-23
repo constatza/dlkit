@@ -18,9 +18,9 @@ from dlkit.interfaces.api.domain import (
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_settings import TrainingWorkflowSettings
 
-# Inference API removed - use load_predictor() instead
-# from dlkit import load_predictor
-# predictor = load_predictor("model.ckpt")
+# Inference API removed - use load_model() instead
+# from dlkit import load_model
+# predictor = load_model("model.ckpt")
 # result = predictor.predict(inputs)
 
 # Get the global command dispatcher
@@ -76,8 +76,8 @@ def train(
 
     Example:
         >>> from dlkit.interfaces.api import train, validate_config
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("config.toml")  # Optimized for training workflows
+        >>> from dlkit.tools.io import load_settings
+        >>> settings = load_settings("config.toml")
         >>> validate_config(settings, dry_build=True)
         True
         >>> result = train(settings, mlflow=True, epochs=20, batch_size=64)
@@ -103,10 +103,10 @@ def train(
 
 
 # REMOVED: Old infer() and predict_with_config() functions
-# Use the new load_predictor() API instead:
+# Use the new load_model() API instead:
 #
-#   from dlkit import load_predictor
-#   predictor = load_predictor("model.ckpt", device="cuda")
+#   from dlkit import load_model
+#   predictor = load_model("model.ckpt", device="cuda")
 #   result = predictor.predict(inputs)
 #
 # See documentation for migration guide.
@@ -152,8 +152,8 @@ def optimize(
 
     Example:
         >>> from dlkit.interfaces.api import optimize
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("optuna_config.toml")  # Loads OPTUNA section
+        >>> from dlkit.tools.io import load_settings
+        >>> settings = load_settings("optuna_config.toml")
         >>> result = optimize(settings, trials=50, mlflow=True, study_name="study")
         >>> result.best_trial
     """

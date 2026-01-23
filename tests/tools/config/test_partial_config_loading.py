@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 
 from dlkit.tools.config import (
-    load_training_settings,
-    # load_inference_settings,  # REMOVED in breaking change
+    load_settings,
     load_sections,
 )
 from dlkit.tools.config.workflow_settings import (
@@ -70,7 +69,7 @@ class TestPartialConfigLoading:
 
     def test_training_settings_loads_all_sections(self, config_file):
         """Training settings should load all sections including TRAINING, MLFLOW, OPTUNA."""
-        settings = load_training_settings(config_file)
+        settings = load_settings(config_file)
 
         # Verify correct type
         assert isinstance(settings, TrainingWorkflowSettings)
@@ -140,7 +139,7 @@ class TestPartialConfigLoading:
 
     def test_training_settings_has_correct_interface(self, config_file):
         """Training settings should implement the training protocol."""
-        settings = load_training_settings(config_file)
+        settings = load_settings(config_file)
 
         # Verify training-specific properties
         assert hasattr(settings, 'mlflow_enabled')

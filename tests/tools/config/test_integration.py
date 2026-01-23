@@ -290,8 +290,8 @@ class TestGeneralSettingsEndToEndIntegration:
         Args:
             integration_config_file: Integration config file fixture
         """
-        from dlkit.tools.config import load_training_settings
-        settings = load_training_settings(integration_config_file)
+        from dlkit.tools.config import load_settings
+        settings = load_settings(integration_config_file)
 
         # Verify all components are properly loaded
         assert settings.SESSION.name == "integration_session"

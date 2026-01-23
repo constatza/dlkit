@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dlkit.interfaces.api.domain import ConfigurationError
-from dlkit.tools.config import load_training_settings, load_sections
+from dlkit.tools.config import load_settings, load_sections
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.interfaces.api.overrides.path_context import path_override_context
 
@@ -41,15 +41,8 @@ def load_config(
                 f"Configuration file not found: {config_path}", {"config_path": str(config_path)}
             )
 
-        # Load settings with workflow-specific partial loading for optimal performance
-        # Note: load_inference_settings was removed - inference now uses training settings
-        # which include all necessary sections for dataset/dataloader configuration
-        if workflow_type == "training" or workflow_type == "inference":
-            load_fn = load_training_settings
-        else:
-            # For general loading, default to training workflow since it has all sections
-            # This ensures compatibility with configs that have MLFLOW/OPTUNA sections
-            load_fn = load_training_settings
+        # Load settings - all workflows use the same loading function
+        load_fn = load_settings
 
         # Load settings from file. If CLI provides root_dir, apply as a temporary context.
         if root_dir is not None:

@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from dlkit.tools.io.config import load_config
-from dlkit.tools.config import load_training_settings
+from dlkit.tools.config import load_settings
 from dlkit.tools.config.environment import env as global_environment
 from dlkit.tools.io.locations import splits_dir, output
 
@@ -203,8 +203,8 @@ def test_output_path_respects_session_root_dir(test_config_with_session_root: Pa
         global_environment.root_dir = None
 
 
-def test_load_training_settings_propagates_session_root(test_config_with_session_root: Path, tmp_path: Path):
-    """Test that load_training_settings() also propagates SESSION.root_dir."""
+def test_load_settings_propagates_session_root(test_config_with_session_root: Path, tmp_path: Path):
+    """Test that load_settings() also propagates SESSION.root_dir."""
     # Clear any existing DLKIT_ROOT_DIR env var
     original_env = os.environ.pop("DLKIT_ROOT_DIR", None)
 
@@ -212,8 +212,8 @@ def test_load_training_settings_propagates_session_root(test_config_with_session
         # Reset global environment
         global_environment.root_dir = None
 
-        # Load config via load_training_settings
-        settings = load_training_settings(test_config_with_session_root)
+        # Load config via load_settings
+        settings = load_settings(test_config_with_session_root)
 
         # Verify SESSION.root_dir is set
         assert settings.SESSION.root_dir is not None

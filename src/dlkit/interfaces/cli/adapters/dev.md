@@ -43,7 +43,7 @@ Key architectural decisions:
 ### Internal Dependencies
 - `dlkit.interfaces.api.domain`: Domain models (`TrainingResult`, `InferenceResult`, `OptimizationResult`)
 - `dlkit.interfaces.api.domain.errors`: Error types (`ConfigurationError`)
-- `dlkit.tools.config`: Configuration loading (`load_training_settings`, `load_sections`)
+- `dlkit.tools.config`: Configuration loading (`load_settings`, `load_sections`)
 - `dlkit.tools.config.protocols`: Protocol interfaces (`BaseSettingsProtocol`)
 - `dlkit.interfaces.api.overrides.path_context`: Path override context manager
 - `dlkit.core.postprocessing`: Prediction summarization utilities

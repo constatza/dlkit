@@ -111,8 +111,8 @@ result = infer("model.ckpt", your_input_data)
 
 # OR for prediction mode with training config:
 from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.config import load_training_settings
-settings = load_training_settings("config.toml")
+from dlkit.tools.io import load_settings
+settings = load_settings("config.toml")
 result = predict_with_config(settings, "model.ckpt")
 ```
 
@@ -130,10 +130,10 @@ result = predict_with_config(settings, "model.ckpt")
 **Example**:
 ```python
 from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.config import load_training_settings
+from dlkit.tools.io import load_settings
 
-# Load training settings
-settings = load_training_settings("config.toml")
+# Load settings
+settings = load_settings("config.toml")
 
 # Execute prediction
 result = predict_with_config(

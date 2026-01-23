@@ -215,8 +215,8 @@ result = infer(checkpoint_path, input_data)
 
 # OR for prediction with config:
 from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.config import load_training_settings
-settings = load_training_settings("config.toml")
+from dlkit.tools.io import load_settings
+settings = load_settings("config.toml")
 result = predict_with_config(settings, checkpoint_path)
 ```
 
