@@ -44,7 +44,6 @@ from .session_settings import SessionSettings
 from .workflow_settings import (
     BaseWorkflowSettings,
     TrainingWorkflowSettings,
-    # BREAKING CHANGE: InferenceWorkflowSettings removed (inference uses InferenceConfig)
     BaseSettings,
     TrainingSettings as WorkflowTrainingSettings,
     InferenceSettings,
@@ -56,10 +55,7 @@ from .factories import (
     PartialSettingsLoader,
     default_settings_loader,
     load_settings,
-    load_training_settings,
-    # BREAKING CHANGE: load_inference_settings removed
     load_sections,
-    # REMOVED: load_custom_settings (use load_sections instead)
 )
 
 # Flattened functional settings
@@ -93,7 +89,6 @@ __all__ = [
     # Workflow-specific settings (SOLID-compliant)
     "BaseWorkflowSettings",
     "TrainingWorkflowSettings",
-    # BREAKING CHANGE: InferenceWorkflowSettings removed (inference uses InferenceConfig)
     "BaseSettings",
     "WorkflowTrainingSettings",
     "InferenceSettings",
@@ -101,10 +96,7 @@ __all__ = [
     "PartialSettingsLoader",
     "default_settings_loader",
     "load_settings",
-    "load_training_settings",
-    # BREAKING CHANGE: load_inference_settings removed
     "load_sections",
-    # REMOVED: load_custom_settings (use load_sections instead)
     # Core infrastructure
     "BasicSettings",
     "ComponentSettings",

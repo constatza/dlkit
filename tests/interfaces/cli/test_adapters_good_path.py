@@ -103,9 +103,9 @@ features = "not a list"  # Should be a list of dicts
     ) -> None:
         """Test load_config handles unexpected exceptions gracefully."""
         with patch(
-            "dlkit.interfaces.cli.adapters.config_adapter.load_training_settings"
-        ) as mock_load_training_settings:
-            mock_load_training_settings.side_effect = RuntimeError("Unexpected error")
+            "dlkit.interfaces.cli.adapters.config_adapter.load_settings"
+        ) as mock_load_settings:
+            mock_load_settings.side_effect = RuntimeError("Unexpected error")
 
             with pytest.raises(ConfigurationError) as exc_info:
                 load_config(sample_config_path)
@@ -375,7 +375,7 @@ class TestConfigAdapterIntegration:
 
         error = exc_info.value
         assert isinstance(error, ConfigurationError)
-        # The error will be about unknown sections since load_training_settings validates known sections
+        # The error will be about unknown sections since load_settings validates known sections
         assert "validation error" in error.message.lower() or "failed to load" in error.message.lower()
 
     def test_load_config_with_minimal_configuration(

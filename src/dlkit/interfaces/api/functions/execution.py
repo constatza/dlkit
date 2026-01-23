@@ -81,24 +81,22 @@ def execute(
 
     Examples:
         >>> from dlkit.interfaces.api import execute
-        >>> from dlkit.tools.config import GeneralSettings
+        >>> from dlkit.tools.io import load_settings
         >>>
         >>> # Training with MLflow (auto-detected from settings)
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("training_config.toml")  # Faster loading
+        >>> settings = load_settings("training_config.toml")
         >>> result = execute(settings, mlflow=True, epochs=50, batch_size=32)
         >>> print(f"Training loss: {result.metrics['train_loss']}")
         >>>
         >>> # Optimization with Optuna (auto-detected from settings)
-        >>> optuna_settings = load_training_settings("optuna_config.toml")  # Includes OPTUNA
+        >>> optuna_settings = load_settings("optuna_config.toml")
         >>> result = execute(optuna_settings, mlflow=True, trials=100, study_name="my_study")
         >>> print(f"Best trial: {result.best_trial}")
         >>>
-        >>> # Inference (auto-detected from settings.SESSION.inference=True)
-        >>> from dlkit.tools.config import load_inference_settings
-        >>> inference_settings = load_inference_settings("inference_config.toml")  # Much faster
-        >>> result = execute(inference_settings, checkpoint_path="best_model.ckpt")
-        >>> predictions = result.predictions
+        >>> # Inference - use load_model() instead
+        >>> from dlkit.interfaces.inference import load_model
+        >>> predictor = load_model("best_model.ckpt")
+        >>> predictions = predictor.predict(inputs)
     """
     execution_service = ExecutionService()
     return execution_service.execute(

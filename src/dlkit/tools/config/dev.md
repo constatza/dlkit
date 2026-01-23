@@ -28,9 +28,8 @@ Key architectural decisions:
 | `GeneralSettings` | Class | Top-level settings with flattened architecture | N/A |
 | `SessionSettings` | Class | Session mode control (training/inference) | N/A |
 | `TrainingWorkflowSettings` | Class | Training-specific workflow settings | N/A |
-| `load_settings()` | Function | Unified settings loading with multiple strategies | `BaseWorkflowSettings` |
-| `load_training_settings()` | Function | Load training-optimized settings | `TrainingWorkflowSettings` |
-| `load_sections()` | Function | Load arbitrary configuration sections | `BaseWorkflowSettings` |
+| `load_settings()` | Function | Load full training configuration | `TrainingWorkflowSettings` |
+| `load_sections()` | Function | Load specific configuration sections | `BaseWorkflowSettings` |
 | `PrecisionStrategy` | Enum | Precision modes with Lightning compatibility | N/A |
 | `ComponentFactory` | Abstract Class | Base factory for component construction | N/A |
 | `FactoryProvider` | Class | Global factory registry and access point | N/A |

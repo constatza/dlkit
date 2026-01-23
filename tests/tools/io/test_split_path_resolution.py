@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 import numpy as np
 
-from dlkit.tools.config import load_training_settings
+from dlkit.tools.config import load_settings
 from dlkit.tools.io.split_provider import get_or_create_split
 from dlkit.tools.io.locations import splits_dir
 from dlkit.tools.config.environment import env as global_environment
@@ -106,7 +106,7 @@ def test_splits_saved_to_session_root_dir(training_config_with_custom_root: tupl
         global_environment.root_dir = None
 
         # Load training settings
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Verify SESSION.root_dir is set
         assert settings.SESSION.root_dir is not None
@@ -179,7 +179,7 @@ def test_splits_respect_session_root_without_session_name(training_config_with_c
         global_environment.root_dir = None
 
         # Load training settings
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Use default session name
         session_name = "dlkit-session"  # Default value
@@ -229,7 +229,7 @@ def test_multiple_splits_with_different_sessions(training_config_with_custom_roo
         global_environment.root_dir = None
 
         # Load training settings
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Create splits with different session names
         session_names = ["session-a", "session-b", "session-c"]

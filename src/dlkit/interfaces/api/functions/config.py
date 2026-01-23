@@ -35,8 +35,8 @@ def validate_config(
 
     Example:
         >>> from dlkit.interfaces.api import validate_config
-        >>> from dlkit.tools.config import load_training_settings
-        >>> settings = load_training_settings("config.toml")
+        >>> from dlkit.tools.io import load_settings
+        >>> settings = load_settings("config.toml")
         >>> validate_config(settings, dry_build=True)
         True
     """

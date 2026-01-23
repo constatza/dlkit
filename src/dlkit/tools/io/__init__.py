@@ -4,8 +4,8 @@ from .index import load_split_indices
 from .config import (
     load_config,
     load_raw_config,
-    load_sections_config,
-    load_section_config,
+    load_sections_config,  # low-level, not in __all__
+    load_section_config,  # low-level, not in __all__
     check_section_exists,
     get_available_sections,
     reset_section_mappings,
@@ -15,16 +15,21 @@ from .config import (
     ConfigValidationError,
 )
 from . import locations  # centralized path policy
-from . import provisioning  # explicit directory creation
+
+# High-level config loading API (re-exported from tools.config)
+from dlkit.tools.config.factories import load_settings, load_sections
 
 __all__ = [
+    # High-level config loading API
+    "load_settings",
+    "load_sections",
+    # Data loading
     "load_array",
     "read_table",
     "load_split_indices",
+    # Low-level config utilities
     "load_config",
     "load_raw_config",
-    "load_sections_config",
-    "load_section_config",
     "check_section_exists",
     "get_available_sections",
     "reset_section_mappings",
@@ -32,6 +37,6 @@ __all__ = [
     "register_section_mapping",
     "ConfigSectionError",
     "ConfigValidationError",
+    # Path locations
     "locations",
-    "provisioning",
 ]

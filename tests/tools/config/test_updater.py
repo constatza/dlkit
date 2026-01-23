@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import ValidationError
 import numpy as np
 
-from dlkit.tools.config import update_settings, load_training_settings
+from dlkit.tools.config import update_settings, load_settings
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.training_settings import TrainingSettings
 from dlkit.tools.config.optimizer_settings import OptimizerSettings
@@ -46,7 +46,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Update SESSION.name
         new_settings = update_settings(settings, {
@@ -95,7 +95,7 @@ module_path = "torch.nn"
 max_epochs = 100
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Update TRAINING.trainer.max_epochs
         new_settings = update_settings(settings, {
@@ -148,7 +148,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Update multiple sections
         new_settings = update_settings(settings, {
@@ -202,7 +202,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Update only lr
         new_settings = update_settings(settings, {
@@ -268,7 +268,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Replace features list completely
         new_settings = update_settings(settings, {
@@ -317,7 +317,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         new_settings = update_settings(settings, {
             "SESSION": {"name": "updated"}
@@ -357,7 +357,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         new_settings = update_settings(settings, {
             "TRAINING": {"epochs": 999}
@@ -403,7 +403,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         new_settings = update_settings(settings, {
             "MODEL": {"checkpoint": ckpt2}
@@ -450,7 +450,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
         assert settings.TRAINING.optimizer.name == "Adam"
         assert settings.TRAINING.optimizer.lr == 0.005
         assert settings.TRAINING.optimizer.weight_decay == 0.1
@@ -494,7 +494,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
         assert settings.TRAINING.optimizer.name == "SGD"
         assert settings.TRAINING.optimizer.weight_decay == 0.2
 
@@ -546,7 +546,7 @@ custom_field1 = "value1"
 custom_field2 = "value2"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Add nested structure while keeping existing keys
         new_settings = update_settings(settings, {
@@ -603,7 +603,7 @@ custom_field1 = "value1"
 custom_field2 = "value2"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         new_settings = update_settings(settings, {
             "EXTRAS": {
@@ -650,7 +650,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Try to update with invalid path - should fail validation
         with pytest.raises(ValidationError):
@@ -694,7 +694,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Valid update should work (validation is on by default)
         new_settings = update_settings(settings, {
@@ -740,7 +740,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Capture original id
         original_id = id(settings)
@@ -798,7 +798,7 @@ module_path = "torch.nn"
 existing_field = "value"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Add new field to EXTRAS
         new_settings = update_settings(settings, {
@@ -844,7 +844,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         # Update with empty dict should not change anything
         new_settings = update_settings(settings, {})
@@ -874,7 +874,7 @@ name = "MSELoss"
 module_path = "torch.nn"
 """)
 
-        settings = load_training_settings(config_path)
+        settings = load_settings(config_path)
 
         via_method = settings.update_with({"SESSION": {"name": "updated_name"}})
 
