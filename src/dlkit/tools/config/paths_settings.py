@@ -36,8 +36,6 @@ class PathsSettings(BasicSettings):
     - Type safety for predefined common fields
 
     Args:
-        matrix_path: Path to matrix data file
-        rhs_path: Path to right-hand side vector file
         output_dir: Output directory for results
         checkpoint_path: Path to model checkpoint file
         data_dir: Directory containing datasets
@@ -56,16 +54,6 @@ class PathsSettings(BasicSettings):
     )
 
     # Common standardized path fields (all optional)
-    matrix_path: SecurePath | None = Field(
-        default=None,
-        description="Path to matrix data file"
-    )
-
-    rhs_path: SecurePath | None = Field(
-        default=None,
-        description="Path to right-hand side vector file"
-    )
-
     output_dir: SecurePath | None = Field(
         default=None,
         description="Output directory for results"
