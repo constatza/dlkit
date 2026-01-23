@@ -166,7 +166,7 @@ class InferenceWorkflowConfig(BasicSettings):
             raise ValueError("Checkpoint required for inference")
 
         # Use with predictor API
-        predictor = load_predictor(config.MODEL.checkpoint)
+        predictor = load_model(config.MODEL.checkpoint)
         ```
     """
 

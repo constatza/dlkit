@@ -347,7 +347,7 @@ class CheckpointPredictor(IPredictor):
             The loaded PyTorch model, or None if not loaded
 
         Example:
-            >>> predictor = load_predictor(checkpoint_path)
+            >>> predictor = load_model(checkpoint_path)
             >>> model = predictor.model
             >>> # Access model layers, parameters, etc.
         """

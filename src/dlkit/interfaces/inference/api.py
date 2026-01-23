@@ -20,13 +20,13 @@ from .loading import (
 )
 
 
-def load_predictor(
+def load_model(
     checkpoint_path: Path | str,
     device: str = "auto",
     batch_size: int = 32,
     apply_transforms: bool = True,
     auto_load: bool = True,
-    precision: PrecisionStrategy | None = None
+    precision: PrecisionStrategy | None = None,
 ) -> CheckpointPredictor:
     """Load a stateful predictor from checkpoint (PRIMARY API).
 
@@ -61,24 +61,24 @@ def load_predictor(
 
     Examples:
         >>> # Basic usage (one-shot inference)
-        >>> from dlkit import load_predictor
-        >>> with load_predictor("model.ckpt") as predictor:
+        >>> from dlkit import load_model
+        >>> with load_model("model.ckpt") as predictor:
         ...     result = predictor.predict({"x": torch.randn(32, 10)})
 
         >>> # Efficient multi-inference
-        >>> predictor = load_predictor("model.ckpt", device="cuda")
+        >>> predictor = load_model("model.ckpt", device="cuda")
         >>> for data in dataset:  # No reloading!
         ...     result = predictor.predict(data)
         ...     process(result)
         >>> predictor.unload()
 
         >>> # Config-based batch inference
-        >>> predictor = load_predictor("model.ckpt")
+        >>> predictor = load_model("model.ckpt")
         >>> for batch_result in predictor.predict_from_config("config.toml"):
         ...     process(batch_result)
 
         >>> # Lazy loading
-        >>> predictor = load_predictor("model.ckpt", auto_load=False)
+        >>> predictor = load_model("model.ckpt", auto_load=False)
         >>> # ... do other setup ...
         >>> predictor.load()  # Explicit load
         >>> result = predictor.predict(data)
@@ -89,7 +89,7 @@ def load_predictor(
         batch_size=batch_size,
         apply_transforms=apply_transforms,
         auto_load=auto_load,
-        precision=precision
+        precision=precision,
     )
 
     return CheckpointPredictor(config)
@@ -97,7 +97,7 @@ def load_predictor(
 
 # Re-export functions and dataclasses
 __all__ = [
-    "load_predictor",
+    "load_model",
     "validate_checkpoint",
     "get_checkpoint_info",
     "CheckpointValidationResult",

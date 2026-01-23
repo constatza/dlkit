@@ -47,7 +47,7 @@ from .functions import (
 
 # NEW INFERENCE API: Stateful predictors
 from dlkit.interfaces.inference import (
-    load_predictor,
+    load_model,
     validate_checkpoint,
     get_checkpoint_info,
 )
@@ -65,7 +65,7 @@ __all__ = [
     # Main workflow functions
     "execute",  # Unified intelligent workflow function
     "train",
-    "load_predictor",  # NEW: Primary inference API
+    "load_model",  # NEW: Primary inference API
     "optimize",
     "validate_config",
     # Inference utilities
@@ -88,4 +88,6 @@ __all__ = [
     "ValidateTemplateCommandInput",
     "ValidationCommandInput",
     "GeneralSettings",
+    "InferenceCommand",
+    "InferenceCommandInput",
 ]

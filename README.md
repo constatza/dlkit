@@ -112,9 +112,9 @@ Examples:
 - Python (mlflow):
   ```python
   from dlkit.interfaces.api import train
-  from dlkit.tools.config import load_settings
-  cfg = load_settings("config.toml", inference=False)
-  res = train(cfg, strategy="mlflow", epochs=20, batch_size=64)
+  from dlkit.tools.io import load_settings
+  cfg = load_settings("config.toml")
+  res = train(cfg, mlflow=True, epochs=20, batch_size=64)
   ```
 
 ## Inference
@@ -124,18 +124,18 @@ DLKit loads models from checkpoints with automatic transform handling and precis
 ### Load Model Once, Use Many Times
 
 ```python
-from dlkit import load_predictor
+from dlkit import load_model
 
 # Load checkpoint ONCE (expensive operation)
-predictor = load_predictor(
-    checkpoint_path="model.ckpt",
-    device="cuda",              # "auto", "cpu", "cuda", "mps"
-    apply_transforms=True       # Apply saved transforms automatically
+predictor = load_model(
+  checkpoint_path="model.ckpt",
+  device="cuda",  # "auto", "cpu", "cuda", "mps"
+  apply_transforms=True  # Apply saved transforms automatically
 )
 
 # Option 1: Use the model directly (full PyTorch control)
-model = predictor.model         # Get the loaded PyTorch model
-predictions = model(inputs)     # Standard PyTorch forward pass
+model = predictor.model  # Get the loaded PyTorch model
+predictions = model(inputs)  # Standard PyTorch forward pass
 
 # Option 2: Use predictor.predict() (handles transforms automatically)
 result = predictor.predict({"x": torch.randn(32, 10)})
@@ -151,7 +151,7 @@ predictor.unload()
 The loaded model is a standard PyTorch module - use it however you want:
 
 ```python
-predictor = load_predictor("model.ckpt", device="cuda")
+predictor = load_model("model.ckpt", device="cuda")
 model = predictor.model  # Standard nn.Module
 
 # Standard PyTorch usage
@@ -179,7 +179,7 @@ result = predictor.predict({"x": torch.randn(32, 10)})
 predictions = result.predictions  # Already inverse-transformed
 
 # Without transforms (raw model output)
-predictor_raw = load_predictor("model.ckpt", apply_transforms=False)
+predictor_raw = load_model("model.ckpt", apply_transforms=False)
 result = predictor_raw.predict({"x": normalized_inputs})
 ```
 
@@ -188,11 +188,11 @@ result = predictor_raw.predict({"x": normalized_inputs})
 For temporary usage:
 
 ```python
-from dlkit import load_predictor
+from dlkit import load_model
 
-with load_predictor("model.ckpt", device="cuda") as predictor:
-    model = predictor.model
-    output = model(inputs)
+with load_model("model.ckpt", device="cuda") as predictor:
+  model = predictor.model
+  output = model(inputs)
 # Automatic cleanup and GPU memory release
 ```
 
@@ -307,11 +307,11 @@ The `StandardLightningWrapper` handles all transform application automatically. 
 
 - Transforms are cached globally and written to the checkpoint alongside model weights.
 - Saving via Lightning (`Trainer.save_checkpoint`) or a raw `state_dict()` preserves the fitted chains.
-- Loading the wrapper or `load_predictor()` reconstructs the exact chain, including running stats (e.g., min/max, PCA components).
+- Loading the wrapper or `load_model()` reconstructs the exact chain, including running stats (e.g., min/max, PCA components).
 
 ### Inference Behavior
 
-`load_predictor(..., apply_transforms=True)` (default) will:
+`load_model(..., apply_transforms=True)` (default) will:
 
 1. Apply **forward** feature transforms (raw data → normalized) before model forward pass
 2. Model predicts in normalized space (same space it was trained in)
@@ -327,7 +327,7 @@ For advanced workflows:
 - **Raw inputs + default behavior** (recommended):
 
   ```python
-  with dlkit.load_predictor("model.ckpt", apply_transforms=True) as predictor:
+  with dlkit.load_model("model.ckpt", apply_transforms=True) as predictor:
       result = predictor.predict({"x": torch.from_numpy(raw_features)})
       predictions = result.predictions["y"]  # already inverse-transformed
   ```
@@ -336,7 +336,7 @@ For advanced workflows:
 
   ```python
   normalized = my_chain({"x": raw_features})["x"]
-  with dlkit.load_predictor("model.ckpt", apply_transforms=False) as predictor:
+  with dlkit.load_model("model.ckpt", apply_transforms=False) as predictor:
       logits = predictor.predict({"x": normalized})
   ```
 
@@ -403,14 +403,14 @@ scaler.configure_shape(shape_spec, "features")  # Eager allocation
 ### Inference API Changes (v2.0+)
 
 **Removed APIs**:
-- ❌ `infer()` function - replaced with `load_predictor()`
+- ❌ `infer()` function - replaced with `load_model()`
 - ❌ `predict_with_config()` function
 - ❌ `InferenceService` class
 - ❌ `InferenceWorkflowSettings`
 - ❌ `load_inference_settings()` function
 
 **New Stateful Predictor API**:
-- ✅ `load_predictor()` - primary inference API (loads once, predicts many)
+- ✅ `load_model()` - primary inference API (loads once, predicts many)
 - ✅ `CheckpointPredictor` - stateful predictor object
 - ✅ `validate_checkpoint()` - checkpoint validation utility
 - ✅ `get_checkpoint_info()` - checkpoint metadata extraction
@@ -429,38 +429,39 @@ The old `infer()` function loaded the model from checkpoint **on every call**, c
 ```python
 # ❌ OLD (removed)
 from dlkit import infer
+
 for data in dataset:
-    result = infer("model.ckpt", data)  # Reloaded 100+ times!
-    process(result)
+  result = infer("model.ckpt", data)  # Reloaded 100+ times!
+  process(result)
 
 # ✅ NEW Option 1: Direct model access (standard PyTorch)
-from dlkit import load_predictor
+from dlkit import load_model
 
-predictor = load_predictor("model.ckpt", device="cuda")
+predictor = load_model("model.ckpt", device="cuda")
 model = predictor.model  # Get the PyTorch model
 
 with torch.no_grad():
-    for data in dataset:
-        output = model(data)  # Standard forward pass
-        process(output)
+  for data in dataset:
+    output = model(data)  # Standard forward pass
+    process(output)
 
 predictor.unload()
 
 # ✅ NEW Option 2: Use predictor.predict() (handles transforms)
-predictor = load_predictor("model.ckpt", device="cuda", apply_transforms=True)
+predictor = load_model("model.ckpt", device="cuda", apply_transforms=True)
 
 for data in dataset:
-    result = predictor.predict(data)  # Transforms applied automatically
-    process(result.predictions)
+  result = predictor.predict(data)  # Transforms applied automatically
+  process(result.predictions)
 
 predictor.unload()
 
 # ✅ Context manager (automatic cleanup)
-with load_predictor("model.ckpt") as predictor:
-    model = predictor.model
-    for data in dataset:
-        output = model(data)
-        process(output)
+with load_model("model.ckpt") as predictor:
+  model = predictor.model
+  for data in dataset:
+    output = model(data)
+    process(output)
 ```
 
 ### Enhanced Checkpoint Format
@@ -489,9 +490,9 @@ Run with the Python API
 
 ```python
 from dlkit.interfaces.api import train
-from dlkit.tools.config import load_settings
+from dlkit.tools.io import load_settings
 
-cfg = load_settings("examples/minimal_e2e/config.toml")  # defaults to training
+cfg = load_settings("examples/minimal_e2e/config.toml")
 result = train(cfg, epochs=3)
 print(result.metrics)
 ```
@@ -599,14 +600,14 @@ targets = [
 Control transform application during inference:
 
 ```python
-from dlkit import load_predictor
+from dlkit import load_model
 
 # With transforms (default)
-predictor = load_predictor("model.ckpt", apply_transforms=True)
+predictor = load_model("model.ckpt", apply_transforms=True)
 result = predictor.predict({"x": raw_data})  # Transforms applied automatically
 
 # Without transforms (raw data)
-predictor = load_predictor("model.ckpt", apply_transforms=False)
+predictor = load_model("model.ckpt", apply_transforms=False)
 result = predictor.predict({"x": already_normalized_data})
 ```
 
@@ -689,22 +690,15 @@ Examples (Python):
 
 ```python
 from dlkit.interfaces.api import train
-from dlkit.tools.config import load_settings
+from dlkit.tools.io import load_settings
 
-# Recommended: boolean-based loading (consistent with SESSION.inference)
-cfg = load_settings("config.toml", inference=False)  # training mode
+# Load training config
+cfg = load_settings("config.toml")
 res = train(cfg, epochs=20, batch_size=64, learning_rate=1e-3)
 
-# Inference mode
-cfg = load_settings("config.toml", inference=True)   # inference mode
-
-# Default (training mode)
-cfg = load_settings("config.toml")  # defaults to training
-
-# Alternative: class-based loading
-from dlkit.tools.config import GeneralSettings
-cfg = GeneralSettings.from_toml_file("config.toml")
-res = train(cfg, epochs=20, batch_size=64, learning_rate=1e-3)
+# For inference, use load_model instead
+from dlkit import load_model
+predictor = load_model("model.ckpt")
 ```
 
 ## Configuration Architecture: Mutable Settings with Validation
@@ -1034,22 +1028,16 @@ for exp_name, feature_path, label_path in datasets:
 - Load specific configuration sections (partial loading)
   - Python:
     ```python
-    from dlkit.tools.config import load_settings, load_sections
+    from dlkit.tools.io import load_settings, load_sections
 
-    # Main API: boolean-based loading (consistent with SESSION.inference)
-    training_cfg = load_settings("config.toml", inference=False)  # or just load_settings("config.toml")
-    inference_cfg = load_settings("config.toml", inference=True)
+    # Load full training config
+    cfg = load_settings("config.toml")
 
     # Partial loading: only specific sections for custom workflows
     settings = load_sections("config.toml", ["MODEL", "DATASET"])
 
     # Partial loading with strict validation (all sections must exist)
     strict_cfg = load_sections("config.toml", ["MODEL", "DATASET"], strict=True)
-
-    # Efficient section-based loading (new IO system)
-    from dlkit.tools.io.config import load_sections_config, load_section_config
-    sections = load_sections_config("config.toml", ["MODEL", "DATASET"])
-    model_only = load_section_config("config.toml", "MODEL")
     ```
 
 - Write a config programmatically to TOML

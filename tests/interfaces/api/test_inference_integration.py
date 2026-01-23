@@ -12,18 +12,15 @@ from __future__ import annotations
 class TestPredictorAPIImports:
     """Test that predictor API can be imported correctly."""
 
-    def test_import_load_predictor(self):
-        """Test importing load_predictor from main package."""
-        from dlkit import load_predictor
-        assert callable(load_predictor)
+    def test_import_load_model(self):
+        """Test importing load_model from main package."""
+        from dlkit import load_model
+
+        assert callable(load_model)
 
     def test_import_predictor_classes(self):
         """Test importing predictor classes."""
-        from dlkit.interfaces.inference import (
-            CheckpointPredictor,
-            IPredictor,
-            PredictorConfig
-        )
+        from dlkit.interfaces.inference import CheckpointPredictor, IPredictor, PredictorConfig
 
         assert CheckpointPredictor is not None
         assert IPredictor is not None
