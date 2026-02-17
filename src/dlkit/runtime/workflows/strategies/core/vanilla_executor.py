@@ -66,7 +66,7 @@ class VanillaExecutor(ITrainingExecutor):
             trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
             # Optional post-training steps (best effort)
-            self._run_optional_steps(trainer, model, datamodule)
+            predictions = self._run_optional_steps(trainer, model, datamodule)
 
             # Collect metrics and artifacts
             metrics = self._collect_metrics(trainer)
@@ -77,6 +77,7 @@ class VanillaExecutor(ITrainingExecutor):
                 metrics=metrics,
                 artifacts=artifacts,
                 duration_seconds=0.0,
+                predictions=predictions,
             )
 
         except Exception as e:
@@ -154,16 +155,20 @@ class VanillaExecutor(ITrainingExecutor):
         trainer: Trainer,
         model: LightningModule,
         datamodule: LightningDataModule | None,
-    ) -> None:
-        """Run optional post-training steps (predict, test).
+    ) -> list[Any] | None:
+        """Run optional post-training steps (predict, test); return predictions.
 
         Args:
             trainer: PyTorch Lightning trainer
             model: Lightning module
             datamodule: Optional datamodule
+
+        Returns:
+            Prediction batches from trainer.predict(), or None if predict failed.
         """
+        predictions = None
         try:
-            trainer.predict(model, datamodule=datamodule)
+            predictions = trainer.predict(model, datamodule=datamodule)
         except Exception as e:
             logger.debug(f"Post-training predict step failed (non-fatal): {e}")
 
@@ -171,6 +176,8 @@ class VanillaExecutor(ITrainingExecutor):
             trainer.test(model, datamodule=datamodule)
         except Exception as e:
             logger.debug(f"Post-training test step failed (non-fatal): {e}")
+
+        return predictions
 
     def _collect_metrics(self, trainer: Trainer) -> dict[str, Any]:
         """Collect metrics from trainer after training.

@@ -70,6 +70,7 @@ class TrainingService:
                 duration_seconds=duration
                 if duration > 0
                 else getattr(value, "duration_seconds", 0.0),
+                predictions=getattr(value, "predictions", None),
             )
 
         except Exception as e:
