@@ -9,10 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 from torch import Tensor
-from torch_geometric.data import Batch, Data
+from torch_geometric.data import Batch as PyGBatch, Data
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
-from dlkit.tools.config.data_entries import DataEntry
+from dlkit.tools.config.data_entries import DataEntry, is_target_entry
 
 from .base import ProcessingLightningWrapper
 
@@ -20,11 +20,10 @@ from .base import ProcessingLightningWrapper
 class GraphLightningWrapper(ProcessingLightningWrapper):
     """Lightning wrapper for PyTorch Geometric graph neural networks.
 
-    This wrapper handles models that accept PyG Data objects and uses
-    direct processing methods from the base wrapper.
-
-    The key specialization is `_forward_features()` which reconstructs
-    PyTorch Geometric Data objects from feature dicts before model invocation.
+    Accepts PyG ``Data``/``Batch`` objects from a PyG DataLoader directly —
+    no dlkit positional Batch conversion needed. Target is extracted by the
+    first target-entry config name (default ``"y"``). Entry names appear only
+    at construction time; they never flow through the data path.
 
     Example:
         ```python
@@ -42,16 +41,16 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         *,
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        **kwargs,
-    ):
+        entry_configs: tuple[DataEntry, ...] | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialize the graph Lightning wrapper.
 
         Args:
-            settings: Wrapper configuration settings
-            model_settings: Model configuration settings
-            entry_configs: Data entry configurations
-            **kwargs: Additional arguments passed to base class
+            settings: Wrapper configuration settings.
+            model_settings: Model configuration settings.
+            entry_configs: Data entry configurations.
+            **kwargs: Additional arguments passed to base class.
         """
         super().__init__(
             settings=settings,
@@ -59,49 +58,140 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             entry_configs=entry_configs,
             **kwargs,
         )
+        # Resolved once at init from config; never referenced in the data hot path
+        self._graph_target_name: str = next(
+            (e.name for e in self._entry_configs if is_target_entry(e)),
+            "y",
+        )
 
-    def forward(self, data: Data | Batch) -> Tensor:
-        """Forward pass through the model with PyG Data input.
-
-        Args:
-            data: PyTorch Geometric Data or Batch object containing x, edge_index, etc.
-                  Batch objects are created by PyG DataLoader for batched graphs.
-
-        Returns:
-            Model output tensor
-        """
-        return self.model(data)
-
-    def _forward_features(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
-        """Override to reconstruct PyG Data object from feature dict.
-
-        Graph models expect PyG Data objects, not raw tensors or dicts.
-        Always reconstruct Data fresh from dict/tensor for serialization.
+    @staticmethod
+    def _decompose_pyg_batch(
+        batch: Data | PyGBatch,
+    ) -> tuple[Tensor, Tensor, Tensor | None]:
+        """Extract (x, edge_index, edge_attr) from a PyG Data/Batch.
 
         Args:
-            features: Feature dict or tensor from batch extraction
+            batch: PyG Data or Batch object to decompose.
 
         Returns:
-            Model output
+            Tuple of (x, edge_index, edge_attr) tensors.
         """
-        # Use match-case for clean type handling
-        match features:
-            case dict():
-                # Reconstruct Data object from feature dict
-                # Filter to only tensor values for serialization safety
-                data_kwargs = {
-                    key: value
-                    for key, value in features.items()
-                    if isinstance(value, Tensor)
-                }
-                data = Data(**data_kwargs)
-                return self.model(data)
+        x: Tensor = batch.x
+        edge_index: Tensor = batch.edge_index
+        edge_attr: Tensor | None = getattr(batch, "edge_attr", None)
+        if edge_attr is None:
+            edge_attr = getattr(batch, "edge_weight", None)
+        return x, edge_index, edge_attr
 
-            case Tensor():
-                # Wrap bare tensor in Data object
-                data = Data(x=features)
-                return self.model(data)
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_attr: Tensor | None = None,
+    ) -> Tensor:
+        """Forward pass through the model with decomposed graph tensors.
 
-            case _:
-                # Fallback for unexpected types
-                raise TypeError(f"Unexpected feature type: {type(features)}")
+        Args:
+            x: Node feature tensor.
+            edge_index: Edge connectivity tensor (2 × num_edges).
+            edge_attr: Optional edge attribute tensor.
+
+        Returns:
+            Model output tensor.
+        """
+        return self.model(x, edge_index, edge_attr)
+
+    # =========================================================================
+    # Step overrides: PyG Data/Batch → model directly
+    # =========================================================================
+
+    def training_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
+        """Training step for PyG Data/Batch.
+
+        Args:
+            batch: PyG Data or Batch from a PyG DataLoader.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing the training loss.
+        """
+        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
+        predictions = self.model(x, edge_index, edge_attr)
+        target = self._extract_pyg_target(batch, predictions)
+        loss = self.loss_function(predictions, target)
+        self._log_stage_outputs("train", loss)
+        return {"loss": loss}
+
+    def validation_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
+        """Validation step for PyG Data/Batch.
+
+        Args:
+            batch: PyG Data or Batch from a PyG DataLoader.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing the validation loss.
+        """
+        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
+        predictions = self.model(x, edge_index, edge_attr)
+        target = self._extract_pyg_target(batch, predictions)
+        val_loss = self.loss_function(predictions, target)
+        metrics = self._update_metrics(predictions, (target,), "val")
+        self._log_stage_outputs("val", val_loss, metrics)
+        return {"val_loss": val_loss}
+
+    def test_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
+        """Test step for PyG Data/Batch.
+
+        Args:
+            batch: PyG Data or Batch from a PyG DataLoader.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing the test loss.
+        """
+        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
+        predictions = self.model(x, edge_index, edge_attr)
+        target = self._extract_pyg_target(batch, predictions)
+        test_loss = self.loss_function(predictions, target)
+        metrics = self._update_metrics(predictions, (target,), "test")
+        self._log_stage_outputs("test", test_loss, metrics)
+        return {"test_loss": test_loss}
+
+    def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
+        """Predict step for PyG Data/Batch.
+
+        Args:
+            batch: PyG Data or Batch from a PyG DataLoader.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
+        """
+        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
+        predictions = self.model(x, edge_index, edge_attr)
+        raw_target = getattr(batch, self._graph_target_name, None)
+        targets: tuple[Tensor, ...] = (raw_target,) if raw_target is not None else ()
+        return {
+            "predictions": (predictions,),
+            "targets": targets,
+            "latents": (),
+        }
+
+    def _extract_pyg_target(self, batch: Data | PyGBatch, predictions: Tensor) -> Tensor:
+        """Extract target from PyG batch and align dtype to predictions.
+
+        Args:
+            batch: PyG Data or Batch with a target attribute.
+            predictions: Model predictions tensor (used for dtype alignment).
+
+        Returns:
+            Target tensor with dtype matching predictions.
+
+        Raises:
+            AttributeError: If the target attribute is not found on the batch.
+        """
+        target: Tensor = getattr(batch, self._graph_target_name)
+        if target.is_floating_point() and target.dtype != predictions.dtype:
+            target = target.to(dtype=predictions.dtype)
+        return target

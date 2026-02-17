@@ -26,13 +26,13 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
         *,
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
             settings=settings,
             model_settings=model_settings,
-            entry_configs=entry_configs or {},
+            entry_configs=entry_configs or (),
             **kwargs,
         )
 

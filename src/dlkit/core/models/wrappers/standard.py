@@ -1,38 +1,72 @@
-"""Standard Lightning wrapper for tensor-based models with transform support.
+"""Standard Lightning wrapper for tensor-based models with positional transform support.
 
 This module provides a Lightning wrapper that extends the base wrapper with
-transform capabilities for data preprocessing and postprocessing.
+transform capabilities using positional ModuleList chains rather than string-keyed
+ModuleDicts, eliminating string dispatch throughout the hot path.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
-from torch.nn import ModuleDict, ModuleList
-from loguru import logger
+from torch.nn import ModuleList, Identity
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
-from dlkit.core.shape_specs import IShapeSpec
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.core.training.transforms.base import FittableTransform, InvertibleTransform
+from dlkit.core.datatypes.batch import Batch
 from .base import ProcessingLightningWrapper
+from .functions import apply_chain, apply_inverse_chain
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs.simple_inference import ShapeSummary
+
+
+def _navigate_and_register(module: torch.nn.Module, key: str, value: Tensor) -> None:
+    """Navigate a module hierarchy and register a missing buffer at the leaf node.
+
+    Transforms like MinMaxScaler allocate ``min``/``max`` buffers lazily during
+    ``fit()``. This helper pre-registers them so ``load_state_dict`` can fill
+    the values correctly.
+
+    Args:
+        module: Root module to start navigation from.
+        key: Dot-separated path to the buffer (e.g. ``"transforms.0.min"``).
+        value: Tensor to register as buffer.
+    """
+    parts = key.split(".")
+    current = module
+    for part in parts[:-1]:
+        if part.isdigit():
+            idx = int(part)
+            if isinstance(current, ModuleList):
+                current = current[idx]
+            elif hasattr(current, "transforms"):
+                current = current.transforms[idx]  # type: ignore[index]
+            else:
+                return
+        else:
+            if not hasattr(current, part):
+                return
+            current = getattr(current, part)
+    buffer_name = parts[-1]
+    if not hasattr(current, buffer_name):
+        current.register_buffer(buffer_name, value)
 
 
 class StandardLightningWrapper(ProcessingLightningWrapper):
-    """Lightning wrapper for standard tensor-based neural networks with transforms.
+    """Lightning wrapper for standard tensor-based neural networks with positional transforms.
 
-    This wrapper extends the base wrapper with transform capabilities:
-    - Fitted transforms persisted as ModuleDicts (feature and target transforms separated)
-    - Forward transform application to features before model invocation
-    - Inverse transform application to predictions for denormalization
-    - Full checkpoint support for transform state
+    Transform chains are stored as positional ModuleLists aligned with entry_configs
+    insertion order. Index 0 = first Feature entry, etc. No string dispatch anywhere.
 
     Attributes:
-        fitted_feature_transforms (torch.nn.ModuleDict): Persisted feature transform chains.
-        fitted_target_transforms (torch.nn.ModuleDict): Persisted target transform chains.
-        apply_feature_transforms (bool): Toggle for feature transform application.
-        apply_inverse_target_transforms (bool): Toggle for inverse target transform application.
+        _feature_chains (torch.nn.ModuleList): Positional feature transform chains.
+        _target_chains (torch.nn.ModuleList): Positional target transform chains.
 
     Example:
         ```python
@@ -50,37 +84,51 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         *,
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        shape_spec: IShapeSpec | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
+        shape_summary: "ShapeSummary | None" = None,
         **kwargs,
     ):
         """Initialize the standard Lightning wrapper.
 
+        Pre-allocates positional transform chains from entry_configs so Lightning's
+        load_state_dict can restore fitted state directly without manual reconstruction.
+
         Args:
-            settings: Wrapper configuration settings
-            model_settings: Model configuration settings
-            entry_configs: Data entry configurations
-            shape_spec: Shape specification for models
-            **kwargs: Additional arguments passed to base class
+            settings: Wrapper configuration settings.
+            model_settings: Model configuration settings.
+            entry_configs: Data entry configurations (positional, insertion order = position).
+            shape_summary: Shape summary from dataset inference (preferred).
+            **kwargs: Additional arguments passed to base class.
         """
-        # Call base class initialization first
         super().__init__(
             settings=settings,
             model_settings=model_settings,
             entry_configs=entry_configs,
-            shape_spec=shape_spec,
+            shape_summary=shape_summary,
             **kwargs,
         )
 
-        # Initialize transform-specific attributes
-        # Separate Feature and Target transforms for clear separation of concerns
-        self.fitted_feature_transforms: ModuleDict = ModuleDict()
-        self.fitted_target_transforms: ModuleDict = ModuleDict()
-        self.apply_feature_transforms: bool = True
-        self.apply_inverse_target_transforms: bool = True
+        feature_entries = [e for e in self._entry_configs if is_feature_entry(e)]
+        target_entries = [e for e in self._entry_configs if is_target_entry(e)]
 
-        # Transform cache for runtime usage (entry name → TransformChain)
-        self._transform_cache: dict[str, TransformChain] = {}
+        self._feature_chains: ModuleList = ModuleList(
+            self._make_chain(e) for e in feature_entries
+        )
+        self._target_chains: ModuleList = ModuleList(
+            self._make_chain(e) for e in target_entries
+        )
+
+    def _make_chain(self, entry: DataEntry) -> torch.nn.Module:
+        """Create a TransformChain for an entry, or Identity if no transforms configured.
+
+        Args:
+            entry: Data entry configuration with optional transforms attribute.
+
+        Returns:
+            TransformChain if transforms configured, nn.Identity otherwise.
+        """
+        settings = getattr(entry, "transforms", None)
+        return TransformChain(settings) if settings else Identity()
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the model with tensor input.
@@ -94,314 +142,166 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         return self.model(x)
 
     # =============================================================================
-    # Transform Application Helpers
+    # Positional Transform Helpers
     # =============================================================================
 
-    def _apply_transforms(self, data: dict[str, Tensor], transforms: ModuleDict) -> dict[str, Tensor]:
-        """Apply forward transforms to data.
+    def _apply_feature_transforms(self, batch: Batch) -> Batch:
+        """Apply feature chains positionally. Returns new Batch with transformed features.
 
         Args:
-            data (dict[str, Tensor]): Input data (features or targets).
-            transforms (ModuleDict): Transform chains to apply.
+            batch: Input batch with raw feature tensors.
 
         Returns:
-            dict[str, Tensor]: Transformed data.
+            New Batch with transformed features.
         """
-        if not self.apply_feature_transforms:
-            return data
+        if not self._feature_chains:
+            return batch
+        transformed = tuple(
+            apply_chain(x, c) for x, c in zip(batch.features, self._feature_chains)
+        )
+        return replace(batch, features=transformed)
 
-        transformed = {}
-        for name, tensor in data.items():
-            chain = self._transform_cache.get(name) or (transforms[name] if name in transforms else None)
-            if chain is not None and callable(chain):
-                try:
-                    transformed[name] = chain(tensor)
-                except Exception as e:
-                    logger.warning(f"Transform application failed for '{name}': {e}")
-                    transformed[name] = tensor
-            else:
-                transformed[name] = tensor
-        return transformed
-
-    def _apply_inverse_transforms(self, data: dict[str, Tensor], transforms: ModuleDict) -> dict[str, Tensor]:
-        """Apply inverse transforms to data (predictions or targets).
+    def _apply_target_transforms(self, batch: Batch) -> Batch:
+        """Apply target chains positionally. Returns new Batch with transformed targets.
 
         Args:
-            data (dict[str, Tensor]): Predictions or targets to inverse transform.
-            transforms (ModuleDict): Transform chains with inverse_transform methods.
+            batch: Input batch with raw target tensors.
 
         Returns:
-            dict[str, Tensor]: Inverse-transformed data.
+            New Batch with transformed targets.
         """
-        if not self.apply_inverse_target_transforms:
-            return data
+        if not self._target_chains:
+            return batch
+        transformed = tuple(
+            apply_chain(x, c) for x, c in zip(batch.targets, self._target_chains)
+        )
+        return replace(batch, targets=transformed)
 
-        inverse_transformed = {}
-        for name, tensor in data.items():
-            chain = self._transform_cache.get(name) or (transforms[name] if name in transforms else None)
-            if chain is not None and isinstance(chain, InvertibleTransform):
-                try:
-                    inverse_transformed[name] = chain.inverse_transform(tensor)
-                except Exception as e:
-                    logger.warning(f"Inverse transform failed for '{name}': {e}")
-                    inverse_transformed[name] = tensor
-            else:
-                inverse_transformed[name] = tensor
-        return inverse_transformed
+    def _apply_inverse_target_transforms(self, batch: Batch) -> Batch:
+        """Apply inverse target chains positionally. Returns new Batch in original space.
+
+        Args:
+            batch: Input batch with normalized target tensors.
+
+        Returns:
+            New Batch with targets back in original space.
+        """
+        if not self._target_chains:
+            return batch
+        transformed = tuple(
+            apply_inverse_chain(x, c) for x, c in zip(batch.targets, self._target_chains)
+        )
+        return replace(batch, targets=transformed)
+
+    def _chains_are_fitted(self) -> bool:
+        """True if all non-Identity chains already have fitted state (from checkpoint).
+
+        Returns:
+            True when all FittableTransform chains are fitted, False otherwise.
+        """
+        for chain in [*self._feature_chains, *self._target_chains]:
+            if isinstance(chain, FittableTransform) and not chain.fitted:
+                return False
+        return True
 
     # =============================================================================
-    # Transform Application Helpers
+    # Overridden Step Methods (Positional Batch-First)
     # =============================================================================
 
-    def _apply_forward_feature_transforms(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply forward feature transforms if available.
+    def training_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
+        """Training step with positional transform application.
 
         Args:
-            features: Feature tensors to transform.
-
-        Returns:
-            Transformed features.
-        """
-        # Guard: Early return if no transforms
-        if not self.fitted_feature_transforms:
-            return features
-
-        return self._apply_transforms(features, self.fitted_feature_transforms)
-
-    def _apply_forward_target_transforms(self, targets: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply forward target transforms if available.
-
-        Transforms targets to normalized space for loss computation.
-
-        Args:
-            targets: Target tensors to transform.
-
-        Returns:
-            Transformed targets.
-        """
-        # Guard: Early return if no transforms
-        if not self.fitted_target_transforms:
-            return targets
-
-        return self._apply_transforms(targets, self.fitted_target_transforms)
-
-    def _apply_inverse_target_transforms_to_predictions(
-        self, predictions: dict[str, Tensor] | Tensor
-    ) -> dict[str, Tensor] | Tensor:
-        """Apply inverse target transforms to predictions.
-
-        This handles both dict and single tensor predictions with proper error handling.
-
-        Args:
-            predictions: Model predictions (dict or single tensor).
-
-        Returns:
-            Predictions with inverse transforms applied.
-        """
-        # Guard: Early return if no transforms
-        if not self.fitted_target_transforms:
-            return predictions
-
-        # Use match-case for type dispatch
-        match predictions:
-            case dict():
-                return self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
-            case Tensor():
-                return self._apply_inverse_to_single_tensor(predictions)
-            case _:
-                return predictions
-
-    def _apply_inverse_to_single_tensor(self, prediction: Tensor) -> Tensor:
-        """Apply inverse transform to single tensor prediction.
-
-        Args:
-            prediction: Single tensor prediction.
-
-        Returns:
-            Prediction with inverse transform applied (or original if not applicable).
-        """
-        # Guard: Only works with single target transform
-        if len(self.fitted_target_transforms) != 1:
-            return prediction
-
-        # Get the single transform chain
-        name = next(iter(self.fitted_target_transforms.keys()))
-        chain = self.fitted_target_transforms[name]
-
-        # Guard: Chain must be invertible
-        if not isinstance(chain, InvertibleTransform):
-            return prediction
-
-        # Apply inverse with error handling
-        try:
-            return chain.inverse_transform(prediction)
-        except Exception as e:
-            logger.warning(f"Inverse transform failed: {e}")
-            return prediction
-
-    # =============================================================================
-    # Overridden Step Methods (Add Transform Application)
-    # =============================================================================
-
-    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Training step with transform application.
-
-        Transforms both features and targets to normalized space before computing loss.
-        This ensures the model trains in normalized space for better convergence.
-
-        Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch (Batch): Positional batch from dataset.
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing the training loss.
         """
-        # 1. Extract features and targets (inherited from base)
-        features, targets = self._extract_features_targets(batch)
-
-        # 2. Apply forward transforms to features (raw → normalized)
-        features = self._apply_forward_feature_transforms(features)
-
-        # 3. Apply forward transforms to targets (raw → normalized)
-        targets = self._apply_forward_target_transforms(targets)
-
-        # 4. Model forward (predicts in normalized space)
-        predictions = self._invoke_model(features)
-
-        # 5. Compute loss in normalized space (both predictions and targets normalized)
-        loss = self._compute_loss(predictions, targets)
-
-        # 6. Log metrics (inherited from base)
+        batch = self._apply_feature_transforms(batch)
+        batch = self._apply_target_transforms(batch)
+        predictions = self._invoke_model(batch)
+        loss = self._compute_loss(predictions, batch.targets)
         self._log_stage_outputs("train", loss)
-
         return {"loss": loss}
 
-    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Validation step with transform application.
-
-        Transforms both features and targets to normalized space before computing loss.
-        Metrics are also computed in normalized space for consistency.
+    def validation_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
+        """Validation step with positional transform application.
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch (Batch): Positional batch from dataset.
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing validation metrics.
         """
-        # 1. Extract features and targets
-        features, targets = self._extract_features_targets(batch)
-
-        # 2. Apply forward transforms to features (raw → normalized)
-        features = self._apply_forward_feature_transforms(features)
-
-        # 3. Apply forward transforms to targets (raw → normalized)
-        targets = self._apply_forward_target_transforms(targets)
-
-        # 4. Model forward (predicts in normalized space)
-        predictions = self._invoke_model(features)
-
-        # 5. Compute loss in normalized space
-        val_loss = self._compute_loss(predictions, targets)
-
-        # 6. Compute metrics in normalized space
-        metrics = self._update_metrics(predictions, targets, stage="val")
-
-        # 7. Log metrics
+        batch = self._apply_feature_transforms(batch)
+        batch = self._apply_target_transforms(batch)
+        predictions = self._invoke_model(batch)
+        val_loss = self._compute_loss(predictions, batch.targets)
+        metrics = self._update_metrics(predictions, batch.targets, stage="val")
         self._log_stage_outputs("val", val_loss, metrics)
-
         return {"val_loss": val_loss}
 
-    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Test step with transform application.
-
-        Transforms both features and targets to normalized space before computing loss.
-        Metrics are also computed in normalized space for consistency.
+    def test_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
+        """Test step with positional transform application.
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch (Batch): Positional batch from dataset.
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing test metrics.
         """
-        # 1. Extract features and targets
-        features, targets = self._extract_features_targets(batch)
-
-        # 2. Apply forward transforms to features (raw → normalized)
-        features = self._apply_forward_feature_transforms(features)
-
-        # 3. Apply forward transforms to targets (raw → normalized)
-        targets = self._apply_forward_target_transforms(targets)
-
-        # 4. Model forward (predicts in normalized space)
-        predictions = self._invoke_model(features)
-
-        # 5. Compute loss in normalized space
-        test_loss = self._compute_loss(predictions, targets)
-
-        # 6. Compute metrics in normalized space
-        metrics = self._update_metrics(predictions, targets, stage="test")
-
-        # 7. Log metrics
+        batch = self._apply_feature_transforms(batch)
+        batch = self._apply_target_transforms(batch)
+        predictions = self._invoke_model(batch)
+        test_loss = self._compute_loss(predictions, batch.targets)
+        metrics = self._update_metrics(predictions, batch.targets, stage="test")
         self._log_stage_outputs("test", test_loss, metrics)
-
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
-        """Prediction step with transform application.
+    def predict_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
+        """Prediction step with positional transform application and inverse.
 
-        Applies forward transforms to features and inverse transforms to both
-        predictions and targets (if present) so outputs are in original data space.
+        Applies forward transforms to features, runs model, then applies inverse
+        target transform to predictions so outputs are in original data space.
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch (Batch): Positional batch from dataset.
             batch_idx (int): Index of the batch.
 
         Returns:
-            dict: Dictionary with ``predictions``, ``targets``, and ``latents``.
+            dict: Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
         """
-        # 1. Extract features (targets are optional)
-        features, targets = self._extract_features_targets(batch)
+        original_targets = batch.targets
+        batch = self._apply_feature_transforms(batch)
+        predictions = self._invoke_model(batch)
 
-        # 2. Apply forward transforms to features
-        if self.fitted_feature_transforms and self.apply_feature_transforms:
-            features = self._apply_transforms(features, self.fitted_feature_transforms)
-
-        # 3. Model forward
-        predictions = self._invoke_model(features)
-
-        # 4. Normalize predictions to dict format
-        # Use target name for single-tensor predictions if available
-        if isinstance(predictions, Tensor):
-            target_configs = self.get_target_configs()
-            target_name = next(iter(target_configs.keys())) if len(target_configs) == 1 else None
-            predictions = {target_name: predictions} if target_name else {"output": predictions}
-
-        # 5. Apply inverse transforms to predictions to get back to original space
-        if self.fitted_target_transforms and self.apply_inverse_target_transforms:
-            predictions = self._apply_inverse_transforms(predictions, self.fitted_target_transforms)
-
-        # 6. Targets from dataloader are already in original space (raw data)
-        # Do NOT apply inverse transforms to them
+        # Apply inverse target transform to predictions (model output → original space)
+        if isinstance(predictions, Tensor) and self._target_chains:
+            predictions = apply_inverse_chain(predictions, self._target_chains[0])
 
         return {
-            "predictions": predictions,
-            "targets": targets if targets else {},
-            "latents": {}
+            "predictions": (predictions,),
+            "targets": original_targets,
+            "latents": (),
         }
 
     # =============================================================================
-    # Transform Management (Fitting, Checkpoint Persistence)
+    # Transform Fitting (on_fit_start)
     # =============================================================================
 
     def on_fit_start(self) -> None:
-        """Fit all entry-based transforms using the entire training dataloader.
+        """Fit all entry-based transform chains using the entire training dataloader.
 
-        - Aggregates full training data per entry that has transforms and fits once
-        - Populates fitted_feature_transforms and fitted_target_transforms ModuleDicts
-        - Caches transforms for runtime usage
+        Guards: skips if chains are already fitted (loaded from checkpoint),
+        no trainer/datamodule is available, or no transforms are configured.
+        Aggregates full training data per entry position and fits once.
         """
+        if self._chains_are_fitted():
+            return
+
         trainer = getattr(self, "trainer", None)
         if trainer is None or not hasattr(trainer, "datamodule"):
             return
@@ -409,10 +309,10 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         if dm is None or not hasattr(dm, "train_dataloader"):
             return
 
-        # Determine which entries have transforms configured
-        entry_cfgs = getattr(self, "_entry_configs", {})
-        names_with_transforms = [n for n, e in entry_cfgs.items() if getattr(e, "transforms", None)]
-        if not names_with_transforms:
+        feature_entries = [e for e in self._entry_configs if is_feature_entry(e)]
+        target_entries = [e for e in self._entry_configs if is_target_entry(e)]
+
+        if not any(getattr(e, "transforms", None) for e in feature_entries + target_entries):
             return
 
         try:
@@ -420,278 +320,106 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         except Exception:
             return
 
-        # Aggregate tensors per entry name across the whole training set
-        from collections import defaultdict
+        feat_buffers: list[list[Tensor]] = [[] for _ in feature_entries]
+        tgt_buffers: list[list[Tensor]] = [[] for _ in target_entries]
 
-        buffers: dict[str, list[torch.Tensor]] = defaultdict(list)
         for batch in loader:
-            for name in names_with_transforms:
-                tensor = batch.get(name)
-                if tensor is not None:
-                    buffers[name].append(tensor)
+            for i, t in enumerate(batch.features):
+                feat_buffers[i].append(t)
+            for i, t in enumerate(batch.targets):
+                tgt_buffers[i].append(t)
 
-        # Build and fit transforms globally per entry
-        for name in names_with_transforms:
-            seq = buffers.get(name)
-            if not seq:
-                continue
-            stacked = torch.cat(seq, dim=0)
-            cfg = entry_cfgs[name]
+        for chain, entry, bufs in zip(self._feature_chains, feature_entries, feat_buffers):
+            if bufs and getattr(entry, "transforms", None) and isinstance(chain, FittableTransform):
+                chain.fit(torch.cat(bufs, dim=0))
 
-            # Build a single chain per entry and fit globally
-            chain = TransformChain(getattr(cfg, "transforms", ()))
-            if isinstance(chain, FittableTransform):
-                chain.fit(stacked)
+        for chain, entry, bufs in zip(self._target_chains, target_entries, tgt_buffers):
+            if bufs and getattr(entry, "transforms", None) and isinstance(chain, FittableTransform):
+                chain.fit(torch.cat(bufs, dim=0))
 
-            # Populate cache for runtime
-            self._transform_cache[name] = chain
-
-            # Persist to appropriate module dict based on data entry type
-            if is_target_entry(cfg):
-                self.fitted_target_transforms[name] = chain
-            elif is_feature_entry(cfg):
-                self.fitted_feature_transforms[name] = chain
+    # =============================================================================
+    # Checkpoint Hooks
+    # =============================================================================
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Prepare checkpoint for saving with transform and inference metadata.
+        """Save inference metadata to checkpoint.
 
-        Ensures transform chains and inference configuration are persisted.
+        The _feature_chains and _target_chains ModuleLists are persisted
+        automatically by Lightning's state_dict mechanism.
+
+        Args:
+            checkpoint: Checkpoint dict to augment.
         """
-        # Call parent to save enhanced dlkit_metadata
         super().on_save_checkpoint(checkpoint)
 
-        # The fitted_transforms ModuleDicts are automatically saved by Lightning
-        # Add inference metadata for standalone inference
-        feature_names = [name for name, cfg in self._entry_configs.items() if is_feature_entry(cfg)]
-        target_names = [name for name, cfg in self._entry_configs.items() if is_target_entry(cfg)]
-        feature_transform_names = list(self.fitted_feature_transforms.keys())
-        target_transform_names = list(self.fitted_target_transforms.keys())
+        feature_names = [e.name for e in self._entry_configs if is_feature_entry(e)]
+        target_names = [e.name for e in self._entry_configs if is_target_entry(e)]
 
         checkpoint["inference_metadata"] = {
             "entry_configs": self._entry_configs,
-            "wrapper_settings": self._wrapper_settings.model_dump() if hasattr(self._wrapper_settings, 'model_dump') else dict(self._wrapper_settings),
+            "wrapper_settings": (
+                self._wrapper_settings.model_dump()
+                if hasattr(self._wrapper_settings, "model_dump")
+                else dict(self._wrapper_settings)
+            ),
             "feature_names": feature_names,
             "target_names": target_names,
-            "feature_transform_names": feature_transform_names,
-            "target_transform_names": target_transform_names,
-            "model_shape": getattr(self, 'shape', None),
+            "model_shape": getattr(self, "shape", None),
         }
-
-    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Handle checkpoint loading with transform restoration.
-
-        Ensures transform chains are properly loaded and caches are hydrated.
-        Also validates checkpoint version via base class.
-        """
-        # Call base class to validate version and restore metadata
-        super().on_load_checkpoint(checkpoint)
-
-        # Manually restore fitted_transforms from checkpoint
-        # Lightning's load_state_dict with strict=False may skip these if ModuleDict is empty
-        self._restore_fitted_transforms_from_checkpoint(checkpoint)
-
-        # Hydrate runtime cache from restored transforms
-        self._hydrate_transform_cache()
-
-    def on_predict_start(self) -> None:
-        """Hydrate transform cache when loading from checkpoint for inference."""
-        self._hydrate_transform_cache()
 
     def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
-        """Override load_state_dict to ensure fitted_transforms are restored.
+        """Override to pre-register lazy-allocated buffers before the standard load.
 
-        Handles both Lightning checkpoint loading and direct torch.load scenarios.
-        """
-        # First, let PyTorch/Lightning load what it can
-        result = super().load_state_dict(state_dict, strict=strict, assign=assign)
-
-        # Then manually restore fitted_transforms (which may have been skipped)
-        checkpoint = {
-            "state_dict": state_dict,
-            "inference_metadata": {
-                "entry_configs": self._entry_configs if hasattr(self, '_entry_configs') else {}
-            }
-        }
-        self._restore_fitted_transforms_from_checkpoint(checkpoint)
-
-        # Hydrate caches from the restored transforms
-        self._hydrate_transform_cache()
-
-        return result
-
-    # =============================================================================
-    # Transform Restoration and Cache Hydration
-    # =============================================================================
-
-    def _restore_fitted_transforms_from_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Manually restore fitted transforms ModuleDicts from checkpoint.
-
-        Lightning's load_state_dict with strict=False skips transform keys
-        when ModuleDicts are empty. This method reconstructs chains from
-        checkpoint state_dict using the original transform configurations.
-
-        Supports both legacy (fitted_transforms) and modern (fitted_feature_transforms/
-        fitted_target_transforms) checkpoint formats.
-        """
-        logger.info("Starting manual restoration of fitted transforms from checkpoint")
-
-        try:
-            state_dict = checkpoint.get("state_dict", {})
-            inference_metadata = checkpoint.get("inference_metadata", {})
-
-            # Check for modern format (separate feature/target transforms)
-            has_modern_format = any(
-                k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.")
-                for k in state_dict.keys()
-            )
-            has_legacy_format = any(k.startswith("fitted_transforms.") for k in state_dict.keys())
-
-            logger.info(f"Checkpoint format: modern={has_modern_format}, legacy={has_legacy_format}")
-
-            # Get entry configs: prefer instance's entry_configs over checkpoint metadata
-            # This ensures transforms are properly restored when loading with entry_configs parameter
-            entry_configs_data = self._entry_configs or inference_metadata.get("entry_configs", {})
-
-            # Helper function to process transform keys
-            def restore_transforms(prefix: str, target_module_dict: ModuleDict, entry_filter_func=None):
-                """Restore transforms with a specific prefix into target ModuleDict."""
-                transform_keys = [k for k in state_dict.keys() if k.startswith(f"{prefix}.")]
-
-                if not transform_keys:
-                    logger.debug(f"No {prefix} found in checkpoint")
-                    return
-
-                # Group keys by entry name
-                entry_states: dict[str, dict[str, Any]] = {}
-                for key in transform_keys:
-                    parts = key.split(".", 2)  # ['prefix', 'entry_name', 'rest...']
-                    if len(parts) >= 2:
-                        entry_name = parts[1]
-                        state_key = parts[2] if len(parts) > 2 else ""
-
-                        # Apply filter if provided
-                        entry_config = entry_configs_data.get(entry_name)
-                        if entry_filter_func and not entry_filter_func(entry_config):
-                            continue
-
-                        if entry_name not in entry_states:
-                            entry_states[entry_name] = {}
-
-                        if state_key:
-                            entry_states[entry_name][state_key] = state_dict[key]
-
-                # Reconstruct each TransformChain
-                for entry_name, entry_state in entry_states.items():
-                    try:
-                        entry_config = entry_configs_data.get(entry_name)
-                        transform_settings = []
-                        if entry_config and hasattr(entry_config, 'transforms'):
-                            transform_settings = entry_config.transforms
-                        elif entry_config and isinstance(entry_config, dict):
-                            transform_settings = entry_config.get('transforms', [])
-
-                        logger.info(f"Reconstructing {prefix} chain for '{entry_name}' with {len(transform_settings)} transforms")
-
-                        # Create chain with original settings, then load fitted state
-                        chain = TransformChain(transform_settings)
-                        result = chain.load_state_dict(entry_state, strict=False)
-
-                        # Manually register any unexpected keys as buffers
-                        if result.unexpected_keys:
-                            for unexpected_key in result.unexpected_keys:
-                                try:
-                                    parts = unexpected_key.split('.')
-                                    module = chain
-                                    for part in parts[:-1]:
-                                        if part.isdigit():
-                                            # Handle ModuleList indexing
-                                            if isinstance(module, ModuleList):
-                                                module = module[int(part)]
-                                            else:
-                                                module = module.transforms[int(part)]
-                                        else:
-                                            module = getattr(module, part)
-                                    buffer_name = parts[-1]
-                                    buffer_value = entry_state[unexpected_key]
-                                    module.register_buffer(buffer_name, buffer_value)
-                                    logger.info(f"Manually registered buffer: {unexpected_key} = {buffer_value}")
-                                except Exception as e:
-                                    logger.warning(f"Could not register unexpected key {unexpected_key}: {e}")
-
-                        target_module_dict[entry_name] = chain
-                        logger.info(f"Successfully restored {prefix} chain for '{entry_name}'")
-                    except Exception as e:
-                        logger.error(f"Failed to restore {prefix} chain for '{entry_name}': {e}")
-
-            # Restore based on checkpoint format
-            if has_modern_format:
-                restore_transforms("fitted_feature_transforms", self.fitted_feature_transforms, is_feature_entry)
-                restore_transforms("fitted_target_transforms", self.fitted_target_transforms, is_target_entry)
-            elif has_legacy_format:
-                # Legacy format - separate based on entry_configs
-                logger.info("Loading legacy format, separating transforms by entry type")
-                restore_transforms("fitted_transforms", self.fitted_feature_transforms, is_feature_entry)
-                restore_transforms("fitted_transforms", self.fitted_target_transforms, is_target_entry)
-            else:
-                logger.debug("No fitted transforms found in checkpoint")
-
-        except Exception as e:
-            logger.warning(f"Failed to restore fitted_transforms from checkpoint: {e}")
-
-    def _hydrate_transform_cache(self) -> None:
-        """Populate transform cache from persisted ModuleDicts.
-
-        Enables inference-only runs with just a predict_dataloader by reusing
-        transform chains loaded from checkpoint.
-        """
-        try:
-            has_feature_transforms = isinstance(self.fitted_feature_transforms, ModuleDict) and len(self.fitted_feature_transforms) > 0
-            has_target_transforms = isinstance(self.fitted_target_transforms, ModuleDict) and len(self.fitted_target_transforms) > 0
-
-            if not has_feature_transforms and not has_target_transforms:
-                return
-        except Exception:
-            return
-
-        # Hydrate cache from both feature and target transforms
-        for name, chain in self.fitted_feature_transforms.items():
-            self._transform_cache[name] = chain
-
-        for name, chain in self.fitted_target_transforms.items():
-            self._transform_cache[name] = chain
-
-    # =============================================================================
-    # Public Helper Methods
-    # =============================================================================
-
-    def feature_transforms(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply configured feature transforms to a features dict.
-
-        Uses transform cache or persisted fitted_feature_transforms.
-        Entries without a chain are returned unchanged.
+        Transforms like MinMaxScaler register ``min``/``max`` buffers lazily during
+        ``fit()``. PyTorch's ``load_state_dict`` silently skips keys that aren't
+        already registered (when ``strict=False``). This override pre-registers any
+        missing buffers so the standard load can fill their values.
 
         Args:
-            features (dict[str, Tensor]): Features to transform.
+            state_dict: State dictionary to load.
+            strict: Whether to strictly enforce key matching.
+            assign: Whether to use assign semantics.
 
         Returns:
-            dict[str, Tensor]: Transformed features.
+            Result of the standard load_state_dict call.
         """
-        return self._apply_transforms(features, self.fitted_feature_transforms)
+        self._pre_register_lazy_buffers(state_dict)
+        return super().load_state_dict(state_dict, strict=strict, assign=assign)
 
-    def target_transforms_inverse(self, tensors: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Apply inverse transforms for targets/predictions by entry name.
+    def _pre_register_lazy_buffers(self, state_dict: dict[str, Any]) -> None:
+        """Pre-register lazy-allocated buffers found in state_dict.
 
-        Looks up transform chains in cache or fitted_target_transforms and applies
-        inverse_transform when available. Entries without an invertible chain are
-        returned unchanged.
+        Iterates positional chains and for each one extracts its sub-state-dict,
+        calls load_state_dict to see which keys are unexpected (i.e. not yet
+        registered), then navigates the module hierarchy to register them.
 
         Args:
-            tensors (dict[str, Tensor]): Tensors to inverse transform.
-
-        Returns:
-            dict[str, Tensor]: Inverse-transformed tensors.
+            state_dict: Full model state dictionary.
         """
-        return self._apply_inverse_transforms(tensors, self.fitted_target_transforms)
+        pairs = [("_feature_chains", self._feature_chains), ("_target_chains", self._target_chains)]
+        for prefix, chains in pairs:
+            for idx, chain in enumerate(chains):
+                chain_prefix = f"{prefix}.{idx}."
+                chain_state = {
+                    k[len(chain_prefix):]: v
+                    for k, v in state_dict.items()
+                    if k.startswith(chain_prefix)
+                }
+                if not chain_state:
+                    continue
+                result = chain.load_state_dict(chain_state, strict=False)
+                for key in result.unexpected_keys:
+                    if key in chain_state:
+                        _navigate_and_register(chain, key, chain_state[key])
+
+    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Restore checkpoint. Chains are pre-allocated in __init__ so load_state_dict
+        restores their fitted state automatically.
+
+        Args:
+            checkpoint: Checkpoint dict to restore from.
+        """
+        super().on_load_checkpoint(checkpoint)
 
 
 class BareWrapper(StandardLightningWrapper):
@@ -709,18 +437,13 @@ class BareWrapper(StandardLightningWrapper):
             model_settings: Model configuration settings
             **kwargs: Additional arguments (most will be ignored)
         """
-        # Create minimal settings if not provided
         from dlkit.tools.config import WrapperComponentSettings
-        from dlkit.core.shape_specs import create_shape_spec, ModelFamily
 
         minimal_settings = WrapperComponentSettings()
-        # Provide minimal shape spec for compatibility
-        minimal_shape_spec = create_shape_spec({"x": (1,), "y": (1,)}, model_family=ModelFamily.EXTERNAL)
 
         super().__init__(
             settings=minimal_settings,
             model_settings=model_settings,
-            shape_spec=minimal_shape_spec,
             **kwargs
         )
 
@@ -734,13 +457,9 @@ class BareWrapper(StandardLightningWrapper):
         Returns:
             Dictionary containing the training loss
         """
-        # Extract input (assume first tensor is input)
         x = next(iter(batch.values()))
-
-        # Forward pass
         output = self.forward(x)
 
-        # Simple loss computation (assumes second tensor is target if available)
         batch_values = list(batch.values())
         if len(batch_values) >= 2:
             target = batch_values[1]
