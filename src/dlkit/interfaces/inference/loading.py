@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 import torch
 from loguru import logger
 
-from dlkit.core.shape_specs import ShapeSpec
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.tools.config.components.model_components import ModelComponentSettings
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
 
 from .shapes import infer_shape_specification
 
@@ -172,19 +172,19 @@ def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
 
 def build_model_from_checkpoint(
     checkpoint: dict[str, Any],
-    shape_spec: ShapeSpec
+    shape_spec: "ShapeSummary | None" = None,
 ) -> torch.nn.Module:
     """Build and load model from checkpoint.
 
     This function consolidates:
     - Model settings extraction
-    - Model instantiation
+    - Model instantiation via build_model() pure factory
     - Dtype detection and conversion
     - State dict loading
 
     Args:
         checkpoint: Loaded checkpoint dictionary
-        shape_spec: Shape specification for model construction
+        shape_spec: Shape specification/summary for model construction (optional)
 
     Returns:
         Loaded PyTorch model in eval mode
@@ -192,6 +192,9 @@ def build_model_from_checkpoint(
     Raises:
         WorkflowError: If model building fails
     """
+    import importlib
+    from dlkit.core.models.factory import build_model as _build_model
+
     # Extract model settings
     model_settings = extract_model_settings(checkpoint)
 
@@ -199,13 +202,33 @@ def build_model_from_checkpoint(
     state_dict = extract_state_dict(checkpoint)
     checkpoint_dtype = detect_checkpoint_dtype(state_dict)
 
-    # Create model with shape spec
-    logger.info(f"Building model with shape spec: {shape_spec}")
-    build_context = BuildContext(mode="inference")
-    if shape_spec and not shape_spec.is_empty():
-        build_context = build_context.with_overrides(unified_shape=shape_spec)
+    # shape_spec may be a ShapeSummary (from new format) or None
+    shape_summary = shape_spec if shape_spec is not None else None
+    logger.info(f"Building model with shape summary: {shape_summary}")
 
-    model = FactoryProvider.create_component(model_settings, build_context)
+    # Resolve model class — use directly if already a type, else import
+    if isinstance(model_settings.name, type):
+        model_cls = model_settings.name
+    else:
+        try:
+            module = importlib.import_module(model_settings.module_path)
+            model_cls = getattr(module, model_settings.name)
+        except (ImportError, AttributeError) as e:
+            raise WorkflowError(
+                f"Failed to import model class {model_settings.module_path}.{model_settings.name}: {e}"
+            ) from e
+
+    # Build model using pure factory (tries in_features, in_channels, then kwargs-only)
+    # _serialize_model_settings nests hyperparams under 'params'; unpack them here.
+    if hasattr(model_settings, 'model_dump'):
+        all_fields = model_settings.model_dump()
+        excluded = {'name', 'module_path', 'checkpoint', 'class_name'}
+        params_nested = all_fields.pop('params', None) or {}
+        hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
+        hyperparams.update(params_nested)
+    else:
+        hyperparams = {}
+    model = _build_model(model_cls, shape_summary, hyperparams)
 
     # Convert model to checkpoint dtype BEFORE loading weights
     # This prevents precision loss during state dict loading
@@ -314,7 +337,7 @@ def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResu
             pass
 
         # Check for shape metadata
-        if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
+        if "dlkit_metadata" in checkpoint and "shape_summary" in checkpoint["dlkit_metadata"]:
             result.has_shape_metadata = True
 
     except Exception as e:
@@ -348,7 +371,7 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
         info.version = metadata.get("version")
         info.model_family = metadata.get("model_family")
         info.wrapper_type = metadata.get("wrapper_type")
-        info.has_shape_spec = "shape_spec" in metadata
+        info.has_shape_spec = "shape_summary" in metadata
         info.has_model_settings = "model_settings" in metadata
 
     # Extract dtype info

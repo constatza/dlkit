@@ -7,65 +7,65 @@ without hexagonal architecture overhead.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from dlkit.core.shape_specs import ShapeSpec
 from dlkit.interfaces.api.domain.errors import WorkflowError
+
+if TYPE_CHECKING:
+    from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 
 def infer_shape_specification(
     checkpoint: dict[str, Any],
     dataset: Any | None = None
-) -> ShapeSpec:
+) -> ShapeSummary | None:
     """Infer shape specification using fallback strategies.
 
     Strategy chain (in order):
     1. Try checkpoint metadata (fastest, most reliable)
     2. Fall back to dataset inference if provided
-    3. Raise error if all strategies fail
+    3. Return None for external models that construct from kwargs
 
     Args:
         checkpoint: Loaded checkpoint dictionary
         dataset: Optional dataset for shape inference fallback
 
     Returns:
-        ShapeSpec: Inferred shape specification
-
-    Raises:
-        WorkflowError: If all inference strategies fail
+        ShapeSummary with in_shapes and out_shapes, or None if unavailable
     """
+    from loguru import logger
+    from dlkit.core.shape_specs.simple_inference import ShapeSummary
+
     # Strategy 1: Try checkpoint metadata first
-    if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
-        try:
-            shape_data = checkpoint["dlkit_metadata"]["shape_spec"]
-            return ShapeSpec.from_dict(shape_data)
-        except Exception as e:
-            # Log but don't fail - try next strategy
-            from loguru import logger
-            logger.warning(f"Failed to load shape spec from checkpoint metadata: {e}")
+    if "dlkit_metadata" in checkpoint and "shape_summary" in checkpoint["dlkit_metadata"]:
+        shape_data = checkpoint["dlkit_metadata"]["shape_summary"]
+        in_shapes = shape_data.get("in_shapes")
+        out_shapes = shape_data.get("out_shapes")
+        if in_shapes and out_shapes:
+            try:
+                return ShapeSummary(
+                    in_shapes=tuple(tuple(d) for d in in_shapes),
+                    out_shapes=tuple(tuple(d) for d in out_shapes),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to reconstruct ShapeSummary from checkpoint metadata: {e}")
 
     # Strategy 2: Fallback to dataset inference if provided
     if dataset is not None:
-        from loguru import logger
         try:
-            # TODO: Implement dataset-based shape inference
-            # This requires importing from shape_specs which may have been refactored
-            logger.warning("Dataset-based shape inference not yet implemented")
+            from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+            return infer_shapes_from_dataset(dataset)
         except Exception as e:
             logger.error(f"Dataset shape inference failed: {e}")
 
-    # All strategies failed
-    raise WorkflowError(
-        "Cannot infer shape: No valid shape source available. "
-        "Checkpoint missing shape metadata and no dataset provided.",
-        {"checkpoint_has_metadata": str("dlkit_metadata" in checkpoint)}
-    )
+    # No shape info available — external models construct from kwargs only
+    return None
 
 
 def infer_shape_from_checkpoint_path(
     checkpoint_path: Path,
     dataset: Any | None = None
-) -> ShapeSpec:
+) -> Any:
     """Convenience function to infer shapes from checkpoint path.
 
     Args:
@@ -73,7 +73,7 @@ def infer_shape_from_checkpoint_path(
         dataset: Optional dataset for fallback inference
 
     Returns:
-        ShapeSpec: Inferred shape specification
+        ShapeSummary or similar shape data object
 
     Raises:
         WorkflowError: If loading or inference fails
