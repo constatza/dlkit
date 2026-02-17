@@ -1,13 +1,7 @@
-from typing import TYPE_CHECKING
-
 import torch
 
 from dlkit.core.training.transforms.base import Transform
 from dlkit.core.training.transforms.errors import TransformNotFittedError
-from dlkit.core.training.transforms.shape_inference import register_shape_inference
-
-if TYPE_CHECKING:
-    from dlkit.core.shape_specs import IShapeSpec
 
 
 class StandardScaler(Transform):
@@ -21,7 +15,6 @@ class StandardScaler(Transform):
     mean: torch.Tensor
     std: torch.Tensor
     dim: int | list[int]
-    _shape_configured: bool
 
     def __init__(self, dim: int | list[int] | None = None) -> None:
         """Initialize StandardScaler.
@@ -37,23 +30,6 @@ class StandardScaler(Transform):
         """
         super().__init__()
         self.dim = dim if dim is not None else 0
-        self._shape_configured = False
-
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
-        """Configure scaler with shape information for buffer pre-allocation.
-
-        Args:
-            shape_spec: Shape specification containing entry shapes.
-            entry_name: Name of the entry to get shape for.
-        """
-        shape = shape_spec.get_shape(entry_name)
-        if shape is None:
-            return
-
-        # Pre-allocate mean/std buffers
-        self.register_buffer("mean", torch.zeros(shape))
-        self.register_buffer("std", torch.ones(shape))
-        self._shape_configured = True
 
     def fit(self, data: torch.Tensor) -> None:
         """Compute mean and std along specified dimensions.
@@ -72,18 +48,17 @@ class StandardScaler(Transform):
         self.fitted = True
 
     def _ensure_buffers_allocated(self, data: torch.Tensor) -> None:
-        """Allocate mean/std buffers if not already configured.
+        """Allocate mean/std buffers if not already allocated.
 
         Args:
             data: Input data to infer shape from.
         """
-        # Guard: Early return if already configured
-        if self._shape_configured:
+        # Guard: Early return if already allocated
+        if hasattr(self, 'mean') and self.mean is not None:
             return
 
         self.register_buffer("mean", torch.zeros(data.shape, device=data.device))
         self.register_buffer("std", torch.ones(data.shape, device=data.device))
-        self._shape_configured = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Standardize tensor to zero mean and unit variance.
@@ -117,9 +92,13 @@ class StandardScaler(Transform):
             raise TransformNotFittedError("StandardScaler")
         return (x * self.std) + self.mean
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Infer output shape. StandardScaler preserves input shape.
 
-# Register shape inference function (StandardScaler preserves shape)
-@register_shape_inference(StandardScaler)
-def _infer_standard_output_shape(input_shape: tuple[int, ...], **kwargs) -> tuple[int, ...]:
-    """StandardScaler preserves input shape."""
-    return input_shape
+        Args:
+            in_shape: Input tensor shape.
+
+        Returns:
+            Same as input shape.
+        """
+        return in_shape

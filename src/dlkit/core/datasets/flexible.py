@@ -241,58 +241,43 @@ class FlexibleDataset(BaseDataset):
         if not feat_map and not targ_map:
             raise ValueError("At least one feature or target entry is required")
 
-        # Precision is automatically resolved from global precision service
-        # which checks precision context (set via precision_override())
-        # Handles both file paths (production) and in-memory values (testing)
-        # For .npz files, uses entry name as array_key
-        self.features: dict[str, Tensor] = {
-            k: _load_or_convert_tensor(source, array_key=name)
-            for k, (source, name) in feat_map.items()
-        }
-        self.targets: dict[str, Tensor] = {
-            k: _load_or_convert_tensor(source, array_key=name)
-            for k, (source, name) in targ_map.items()
-        }
+        # Load tensors positionally (insertion order = config order)
+        self._feature_tensors: tuple[Tensor, ...] = tuple(
+            _load_or_convert_tensor(source, array_key=name)
+            for name, (source, _) in feat_map.items()
+        )
+        self._target_tensors: tuple[Tensor, ...] = tuple(
+            _load_or_convert_tensor(source, array_key=name)
+            for name, (source, _) in targ_map.items()
+        )
 
-        # Ordered tuple views for positional Batch access (insertion order = config order)
-        self._feature_tensors: tuple[Tensor, ...] = tuple(self.features.values())
-        self._target_tensors: tuple[Tensor, ...] = tuple(self.targets.values())
-        self._feature_names: tuple[str, ...] = tuple(self.features.keys())
-        self._target_names: tuple[str, ...] = tuple(self.targets.keys())
+        # Validate lengths positionally (no names needed)
+        all_tensors = (*self._feature_tensors, *self._target_tensors)
+        if not all_tensors:
+            raise ValueError("At least one feature or target entry is required after validation")
 
-        # Track entry lengths (no broadcasting of unit-length/constants)
-        self._entry_lengths: dict[str, int] = {}
-        scalar_entries: set[str] = set()
+        scalar_count = 0
         non_scalar_lengths: set[int] = set()
-        for name, tensor in {**self.features, **self.targets}.items():
+        for tensor in all_tensors:
             if tensor.dim() == 0:
-                self._entry_lengths[name] = 1
-                scalar_entries.add(name)
+                scalar_count += 1
                 continue
-
             length = int(tensor.size(0))
             if length < 1:
                 raise ValueError("Feature/target tensors must have at least one sample")
-
-            self._entry_lengths[name] = length
             non_scalar_lengths.add(length)
 
         if non_scalar_lengths:
             if len(non_scalar_lengths) > 1:
                 raise ValueError("Feature/target arrays must share the same first dimension")
             self._length = non_scalar_lengths.pop()
-            if scalar_entries and self._length > 1:
+            if scalar_count and self._length > 1:
                 raise ValueError(
                     "Scalar feature/target entries cannot be broadcast; provide per-sample values "
                     "or remove scalars when dataset length exceeds one."
                 )
         else:
             self._length = 1
-
-        if len(self._entry_lengths) == 0:
-            raise ValueError(
-                "At least one feature or target entry is required after validation"
-            )
 
     def __len__(self) -> int:
         """Return number of samples in dataset.

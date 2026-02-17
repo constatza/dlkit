@@ -1,7 +1,6 @@
 import torch
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
 
 class Permutation(Transform):
@@ -75,11 +74,13 @@ class Permutation(Transform):
         """
         return y.permute(self._inverse_dims)
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Infer output shape. Permutation reorders dimensions according to dims.
 
-# Register shape inference function
-@register_shape_inference(Permutation)
-def _infer_permutation_output_shape(
-    input_shape: tuple[int, ...], dims: tuple[int, ...], **kwargs
-) -> tuple[int, ...]:
-    """Permutation reorders dimensions according to dims parameter."""
-    return tuple(input_shape[d] for d in dims)
+        Args:
+            in_shape: Input tensor shape.
+
+        Returns:
+            Output shape with reordered dimensions.
+        """
+        return tuple(in_shape[d] for d in self.dims)

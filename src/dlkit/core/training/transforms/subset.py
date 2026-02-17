@@ -3,7 +3,6 @@ from collections.abc import Sequence
 from pydantic import validate_call, ConfigDict
 
 from .base import Transform
-from .shape_inference import register_shape_inference
 from dlkit.tools.utils.general import slice_to_list
 
 
@@ -98,28 +97,27 @@ class TensorSubset(Transform):
         """
         return x
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Infer output shape. TensorSubset reduces the specified dimension.
 
-# Register shape inference function
-@register_shape_inference(TensorSubset)
-def _infer_tensor_subset_output_shape(
-    input_shape: tuple[int, ...],
-    keep: Sequence[int] | slice,
-    dim: int = 1,
-    **kwargs
-) -> tuple[int, ...]:
-    """TensorSubset reduces the specified dimension to len(keep)."""
-    output_shape = list(input_shape)
+        Args:
+            in_shape: Input tensor shape.
 
-    # Compute length from keep parameter
-    if isinstance(keep, slice):
-        # Handle slice objects
-        start = keep.start or 0
-        stop = keep.stop or input_shape[dim]
-        step = keep.step or 1
-        length = len(range(start, stop, step))
-    else:
-        # Handle lists/tuples
-        length = len(keep)
+        Returns:
+            Output shape with dimension dim = len(keep).
+        """
+        output_shape = list(in_shape)
 
-    output_shape[dim] = length
-    return tuple(output_shape)
+        # Compute length from keep parameter
+        if isinstance(self._keep, slice):
+            # Handle slice objects
+            start = self._keep.start or 0
+            stop = self._keep.stop or in_shape[self.dim]
+            step = self._keep.step or 1
+            length = len(range(start, stop, step))
+        else:
+            # Handle lists/tuples
+            length = len(self._keep)
+
+        output_shape[self.dim] = length
+        return tuple(output_shape)
