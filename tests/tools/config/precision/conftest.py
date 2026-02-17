@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Protocol, Any, Dict, Optional
 import pytest
 import torch
-from dlkit.core.models.nn.base import ShapeAwareModel
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.shape_specs import create_shape_spec, ModelFamily, ShapeSource
 from dlkit.tools.config.precision import PrecisionStrategy
 from dlkit.interfaces.api.services.precision_service import get_precision_service
@@ -74,10 +74,10 @@ class TestModelFactory:
             raise ValueError(f"Unsupported model_type: {model_type}")
 
 
-class ShapeAwareTestModel(ShapeAwareModel):
-    """Test model following new ShapeAware interface.
+class ShapeAwareTestModel(DLKitModel):
+    """Test model for shape-based model construction.
 
-    This model adapts the old BaseModel interface to the new ShapeAware architecture,
+    This model uses DLKitModel with shape specification for model configuration,
     following the Adapter Pattern to maintain compatibility with existing tests.
     """
 
@@ -90,13 +90,15 @@ class ShapeAwareTestModel(ShapeAwareModel):
         Args:
             shape_dict: Shape specification in old format
         """
+        super().__init__()
+
         # Convert old shape format to new IShapeSpec
         shape_spec = create_shape_spec(
             shapes=shape_dict,
             model_family=ModelFamily.DLKIT_NN,
             source=ShapeSource.TRAINING_DATASET
         )
-        super().__init__(unified_shape=shape_spec)
+        self._unified_shape = shape_spec
 
         # Build simple linear model architecture
         input_dim = shape_dict["x"][0]
@@ -108,10 +110,6 @@ class ShapeAwareTestModel(ShapeAwareModel):
         precision_strategy = service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.to(dtype)
-
-    def accepts_shape(self, shape_spec) -> bool:
-        """Validate shape specification."""
-        return shape_spec.has_shape("x") and shape_spec.has_shape("y")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the model."""

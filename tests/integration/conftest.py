@@ -167,11 +167,6 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
         Path to the created checkpoint file.
     """
     checkpoint_path = tmp_path / "model.ckpt"
-    shape_spec = create_shape_spec(
-        {"X": (FEATURE_SIZE,), "y": (TARGET_SIZE,)},
-        default_input="X",
-        default_output="y",
-    )
 
     checkpoint_payload = {
         "state_dict": {
@@ -182,7 +177,10 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
             "version": "2.0",
             "model_family": "dlkit_nn",
             "wrapper_type": "StandardLightningWrapper",
-            "shape_spec": shape_spec.to_dict(),
+            "shape_summary": {
+                "in_shapes": [[FEATURE_SIZE]],
+                "out_shapes": [[TARGET_SIZE]],
+            },
             "model_settings": {
                 "name": "ConstantWidthFFNN",
                 "module_path": "dlkit.core.models.nn.ffnn.simple",
@@ -192,10 +190,10 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                 },
                 "class_name": "ModelComponentSettings",
             },
-            "entry_configs": {
-                "X": {"name": "X", "class_name": "Feature"},
-                "y": {"name": "y", "class_name": "Target"},
-            },
+            "entry_configs": [
+                {"name": "X", "class_name": "Feature"},
+                {"name": "y", "class_name": "Target"},
+            ],
         },
     }
 

@@ -305,6 +305,8 @@ class TestImportRules:
             ("core/datamodules", "torch"),
             # torch is allowed in datasets (tensor creation)
             ("core/datasets", "torch"),
+            # torch is allowed in datatypes (tensor collation and Batch handling)
+            ("core/datatypes", "torch"),
             # torch is allowed in transforms (tensor transformations)
             ("core/training/transforms", "torch"),
             # lightning is allowed in domain models (Lightning integration)

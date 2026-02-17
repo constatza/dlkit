@@ -22,7 +22,6 @@ from dlkit.interfaces.inference.loading import (
     validate_checkpoint,
     get_checkpoint_info,
 )
-from dlkit.core.shape_specs import NullShapeSpec
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 
@@ -147,10 +146,9 @@ class TestBuildModelFromCheckpoint:
         }
         torch.save(checkpoint, checkpoint_path)
 
-        # Load and build model
+        # Load and build model — None shape means external model, uses kwargs only
         loaded_checkpoint = load_checkpoint(checkpoint_path)
-        shape_spec = NullShapeSpec()
-        built_model = build_model_from_checkpoint(loaded_checkpoint, shape_spec)
+        built_model = build_model_from_checkpoint(loaded_checkpoint, None)
 
         # Verify model
         assert isinstance(built_model, torch.nn.Linear)
@@ -177,9 +175,9 @@ class TestBuildModelFromCheckpoint:
         }
         torch.save(checkpoint, checkpoint_path)
 
-        # Build model
+        # Build model — None shape means external model, uses kwargs only
         loaded_checkpoint = load_checkpoint(checkpoint_path)
-        built_model = build_model_from_checkpoint(loaded_checkpoint, NullShapeSpec())
+        built_model = build_model_from_checkpoint(loaded_checkpoint, None)
 
         # Verify dtype matches checkpoint
         assert built_model.weight.dtype == torch.float64
@@ -204,23 +202,6 @@ class TestCheckpointPredictor:
                     "module_path": "torch.nn",
                     "in_features": 10,
                     "out_features": 5,
-                },
-                "shape_spec": {
-                    "metadata": {
-                        "version": "v3",
-                        "format": "json",
-                        "dlkit_version": "2.0.0",
-                        "checksum": None,
-                        "migration_history": [],
-                    },
-                    "data": {
-                        "entries": {},
-                        "model_family": "external",
-                        "source": "default_fallback",
-                        "default_input": None,
-                        "default_output": None,
-                        "schema_version": "3.0",
-                    },
                 },
             },
         }
@@ -345,23 +326,6 @@ class TestLoadPredictorAPI:
                     "module_path": "torch.nn",
                     "in_features": 10,
                     "out_features": 5,
-                },
-                "shape_spec": {
-                    "metadata": {
-                        "version": "v3",
-                        "format": "json",
-                        "dlkit_version": "2.0.0",
-                        "checksum": None,
-                        "migration_history": [],
-                    },
-                    "data": {
-                        "entries": {},
-                        "model_family": "external",
-                        "source": "default_fallback",
-                        "default_input": None,
-                        "default_output": None,
-                        "schema_version": "3.0",
-                    },
                 },
             },
         }

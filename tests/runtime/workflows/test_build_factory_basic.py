@@ -7,7 +7,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from dlkit.core.shape_specs import create_shape_spec
+from dlkit.core.datatypes.batch import Batch
+from dlkit.core.shape_specs.simple_inference import ShapeSummary
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 from dlkit.runtime.workflows.factories.model_detection import ModelType
 from dlkit.tools.config.general_settings import GeneralSettings
@@ -62,12 +63,14 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
 def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
-    # One-item dict sample with arrays; expect direct shapes and no trainer in inference mode
-    sample = {
-        "x": np.zeros((8, 3), dtype=float),
-        "y": np.ones((1,), dtype=float),
-    }
-    settings = _make_min_settings(sample, inference=True, ckpt=tmp_checkpoint)
+    # Batch-returning dataset so infer_shapes_from_dataset works
+    import torch
+    batch_sample = Batch(
+        features=(torch.zeros(8, 3),),
+        targets=(torch.ones(1,),),
+        latents=(),
+    )
+    settings = _make_min_settings(batch_sample, inference=True, ckpt=tmp_checkpoint)
 
     # Patch FactoryProvider.create_component to return our fakes
     def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
@@ -75,7 +78,6 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
             return _FakeDataset(settings.__dict__["_test_sample"])  # type: ignore[index]
         if s is settings.DATAMODULE:
             return _FakeDataModule()
-        # For model, FlexibleBuildStrategy uses WrapperFactory instead (patched below)
         return _FakeModel()
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
@@ -86,22 +88,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
         lambda *_: ModelType.SHAPE_AWARE_DLKIT,
     )
 
-    class _FakeInferenceEngine:
-        def __init__(self, *_, **__):  # noqa: ANN002
-            pass
-
-        def infer_from_dataset(self, dataset, model_settings=None, entry_configs=None):  # noqa: ANN001
-            return create_shape_spec({"x": (8, 3), "y": (1,)})
-
-    monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.ShapeInferenceEngine",
-        _FakeInferenceEngine,
-    )
-
-    captured_shape_spec = {}
+    captured_shape_summary: dict[str, Any] = {}
 
     def _capture_wrapper(*_, **kwargs):  # noqa: ANN001
-        captured_shape_spec["spec"] = kwargs.get("shape_spec")
+        captured_shape_summary["summary"] = kwargs.get("shape_summary")
         return _FakeModel()
 
     # Patch WrapperFactory used inside FlexibleBuildStrategy by targeting the source module
@@ -116,10 +106,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     assert isinstance(comps.model, _FakeModel)
     assert comps.trainer is None  # inference mode
     assert comps.meta.get("dataset_type") == "flexible"
-    assert comps.shape_spec is not None
-    assert comps.shape_spec.get_shape("x") == (8, 3)
-    assert comps.shape_spec.get_shape("y") == (1,)
-    assert captured_shape_spec["spec"] is comps.shape_spec
+    assert isinstance(comps.shape_spec, ShapeSummary)
+    assert comps.shape_spec.in_shapes == ((8, 3),)
+    assert comps.shape_spec.out_shapes == ((1,),)
+    assert captured_shape_summary["summary"] is comps.shape_spec
 
 
 def test_build_factory_selects_graph_strategy_and_passes_shape(
@@ -156,26 +146,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         lambda *_: ModelType.GRAPH,
     )
 
-    class _FakeGraphInferenceEngine:
-        def __init__(self, *_, **__):  # noqa: ANN002
-            pass
-
-        def infer_from_dataset(self, dataset, model_settings=None, entry_configs=None):  # noqa: ANN001
-            return create_shape_spec({
-                "x": (5, 4),
-                "edge_index": (2, 8),
-                "y": (5, 1),
-            })
-
-    monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.ShapeInferenceEngine",
-        _FakeGraphInferenceEngine,
-    )
-
-    captured_spec: dict[str, Any] = {}
-
     def _capture_graph_wrapper(*_, **kwargs):  # noqa: ANN001
-        captured_spec["value"] = kwargs.get("shape_spec")
         return _FakeModel()
 
     monkeypatch.setattr(
@@ -186,10 +157,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     comps = BuildFactory().build_components(settings)
 
     assert comps.meta.get("dataset_type") == "graph"
-    inferred_spec = captured_spec["value"]
-    assert inferred_spec is not None
-    assert inferred_spec.get_shape("x") == (5, 4)
-    assert inferred_spec.get_shape("edge_index") == (2, 8)
+    assert comps.shape_spec is None  # graph strategy returns None shape_spec
 
 
 def test_build_factory_selects_timeseries_strategy(
@@ -222,22 +190,10 @@ def test_build_factory_selects_timeseries_strategy(
         lambda *_: ModelType.TIMESERIES,
     )
 
-    class _FakeTimeseriesInferenceEngine:
-        def __init__(self, *_, **__):  # noqa: ANN002
-            pass
-
-        def infer_from_dataset(self, dataset, model_settings=None, entry_configs=None):  # noqa: ANN001
-            return create_shape_spec({"x": (12, 2), "y": (1,)})
-
-    monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.ShapeInferenceEngine",
-        _FakeTimeseriesInferenceEngine,
-    )
-
     captured_spec: dict[str, Any] = {}
 
     def _capture_timeseries_wrapper(*_, **kwargs):  # noqa: ANN001
-        captured_spec["value"] = kwargs.get("shape_spec")
+        captured_spec["summary"] = kwargs.get("shape_summary")
         return _FakeModel()
 
     monkeypatch.setattr(
@@ -247,8 +203,9 @@ def test_build_factory_selects_timeseries_strategy(
 
     comps = BuildFactory().build_components(settings)
     assert comps.meta.get("dataset_type") == "timeseries"
-    assert comps.shape_spec and comps.shape_spec.get_shape("x") == (12, 2)
-    assert captured_spec["value"] is comps.shape_spec
+    # Timeseries dataset returns dict sample (not Batch), so shape inference returns None
+    assert comps.shape_spec is None
+    assert captured_spec["summary"] is None
 
 
 def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(

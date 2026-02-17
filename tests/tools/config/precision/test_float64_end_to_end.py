@@ -22,8 +22,7 @@ from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.io.arrays import load_array
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.interfaces.api.domain.precision import precision_override, get_precision_context
-from dlkit.core.shape_specs import create_shape_spec
-from dlkit.core.models.nn.base import ShapeAwareModel
+from dlkit.core.models.nn.base import DLKitModel
 
 
 pytestmark = pytest.mark.skipif(
@@ -32,20 +31,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-class Float64TestModel(ShapeAwareModel):
+class Float64TestModel(DLKitModel):
     """Test model for float64 precision verification."""
 
-    def __init__(self, unified_shape, **kwargs):
-        super().__init__(unified_shape=unified_shape, **kwargs)
-
-        input_shape = unified_shape.get_input_shape()
-        output_shape = unified_shape.get_output_shape()
+    def __init__(self, in_features: int, out_features: int, **kwargs):
+        super().__init__()
 
         # Build model layers
-        self.layer1 = torch.nn.Linear(input_shape[0], 64)
+        self.layer1 = torch.nn.Linear(in_features, 64)
         self.activation = torch.nn.ReLU()
         self.layer2 = torch.nn.Linear(64, 32)
-        self.output_layer = torch.nn.Linear(32, output_shape[0])
+        self.output_layer = torch.nn.Linear(32, out_features)
 
         # Apply precision from context (simulating Lightning behavior)
         # In production, Lightning's Trainer handles this via precision plugin
@@ -53,13 +49,6 @@ class Float64TestModel(ShapeAwareModel):
         precision_strategy = service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.to(dtype)
-
-    def accepts_shape(self, shape_spec):
-        """Accept any valid shape specification."""
-        return (
-            shape_spec.get_input_shape() is not None
-            and shape_spec.get_output_shape() is not None
-        )
 
     def forward(self, x):
         """Forward pass through the model."""
@@ -90,8 +79,8 @@ class TestFloat64EndToEnd:
 
     @pytest.fixture
     def model_shape(self):
-        """Create shape specification for test model."""
-        return create_shape_spec({"x": (20,), "y": (10,)})
+        """Model dimensions for test model."""
+        return {"in_features": 20, "out_features": 10}
 
     def test_precision_enum_float64_exact(self):
         """Test float64 precision with exact enum value."""
@@ -149,7 +138,7 @@ class TestFloat64EndToEnd:
     def test_model_weights_float64(self, model_shape):
         """Test that model weights are initialized as float64."""
         with precision_override(PrecisionStrategy.FULL_64):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
 
         # Check all parameter dtypes
         for name, param in model.named_parameters():
@@ -160,7 +149,7 @@ class TestFloat64EndToEnd:
         session = SessionSettings(precision="double")
 
         with precision_override(session.get_precision_strategy()):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
 
         # All parameters should be float64
         for name, param in model.named_parameters():
@@ -169,7 +158,7 @@ class TestFloat64EndToEnd:
     def test_input_casting_float64(self, model_shape):
         """Test that inputs are cast to float64 by Lightning wrapper during training."""
         with precision_override(PrecisionStrategy.FULL_64):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
 
         # Create float32 input
         input_tensor = torch.randn(10, 20, dtype=torch.float32)
@@ -182,7 +171,7 @@ class TestFloat64EndToEnd:
     def test_forward_pass_float64(self, model_shape):
         """Test that forward pass maintains float64 precision."""
         with precision_override(PrecisionStrategy.FULL_64):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
 
         # Create float64 input (matching model precision)
         input_tensor = torch.randn(10, 20, dtype=torch.float64)
@@ -227,7 +216,7 @@ class TestFloat64EndToEnd:
 
         # 3. Create model with session precision
         with precision_override(session.get_precision_strategy()):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
 
         # Verify model weights are float64
         for name, param in model.named_parameters():
@@ -298,7 +287,7 @@ class TestFloat64EndToEnd:
 
         # Create model with default precision (float32)
         with precision_override(PrecisionStrategy.FULL_32):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
         assert next(model.parameters()).dtype == torch.float32
 
         # Apply float64 precision
@@ -310,7 +299,7 @@ class TestFloat64EndToEnd:
         session = SessionSettings(precision=PrecisionStrategy.FULL_64)
 
         with precision_override(session.get_precision_strategy()):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
             param_dtype = next(model.parameters()).dtype
 
         assert param_dtype == torch.float64
@@ -323,7 +312,7 @@ class TestFloat64EndToEnd:
         service = get_precision_service()
         session = SessionSettings(precision=PrecisionStrategy.FULL_64)
         with precision_override(PrecisionStrategy.FULL_32):
-            model = Float64TestModel(model_shape)
+            model = Float64TestModel(**model_shape)
         service.apply_precision_to_model(model, session)
 
         # Model parameters should now be float64
