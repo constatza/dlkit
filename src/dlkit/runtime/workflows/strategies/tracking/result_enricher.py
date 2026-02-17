@@ -76,12 +76,13 @@ class ResultEnricher:
             # Add server metadata
             self._add_server_metadata(enriched, server_url, server_status)
 
-            # Create new result with enriched metrics
+            # Create new result with enriched metrics (preserve predictions)
             return TrainingResult(
                 model_state=result.model_state,
                 metrics=enriched,
                 artifacts=result.artifacts,
                 duration_seconds=result.duration_seconds,
+                predictions=result.predictions,
             )
 
         except Exception as e:
