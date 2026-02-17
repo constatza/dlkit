@@ -19,21 +19,23 @@ from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.trainer_settings import TrainerSettings
 from dlkit.tools.io.arrays import load_array
-from dlkit.core.models.nn.base import ShapeAwareModel
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.shape_specs import create_shape_spec
 
 
-class ProductionTestModel(ShapeAwareModel):
+class ProductionTestModel(DLKitModel):
     """Realistic model for production testing."""
 
     def __init__(self, shape, **kwargs):
+        super().__init__()
+
         # Convert shape dict to unified_shape
         if isinstance(shape, dict):
             unified_shape = create_shape_spec(shape)
         else:
             # Assume it's already a shape spec
             unified_shape = shape
-        super().__init__(unified_shape=unified_shape, **kwargs)
+        self._unified_shape = unified_shape
 
         # Extract shapes from unified_shape for building layers
         input_shape = unified_shape.get_input_shape()
@@ -52,11 +54,6 @@ class ProductionTestModel(ShapeAwareModel):
         precision_strategy = service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.to(dtype)
-
-    def accepts_shape(self, shape_spec):
-        """Accept any valid shape specification."""
-        return (shape_spec.get_input_shape() is not None and
-                shape_spec.get_output_shape() is not None)
 
     def forward(self, x):
         encoded = self.encoder(x)

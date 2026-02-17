@@ -79,7 +79,7 @@ Key architectural decisions:
 **Key Methods**:
 - `build_components(settings: GeneralSettings) -> BuildComponents` - Build all runtime components
 
-**Returns**: `BuildComponents` with model, datamodule, trainer, shape_spec, and metadata
+**Returns**: `BuildComponents` with model, datamodule, trainer, shape_summary, and metadata
 
 **Example**:
 ```python
@@ -99,7 +99,7 @@ components = factory.build_components(settings)
 model = components.model  # LightningModule
 datamodule = components.datamodule  # LightningDataModule
 trainer = components.trainer  # Trainer or None
-shape_spec = components.shape_spec  # IShapeSpec or None
+shape_summary = components.shape_spec  # ShapeSummary or None
 meta = components.meta  # {"dataset_type": "flexible"}
 ```
 
@@ -119,7 +119,7 @@ meta = components.meta  # {"dataset_type": "flexible"}
 - `model: LightningModule` - Wrapped or unwrapped model
 - `datamodule: LightningDataModule` - Data module with dataset and split
 - `trainer: Trainer | None` - Trainer (None for inference mode)
-- `shape_spec: IShapeSpec | None` - Shape specification (None for shape-agnostic)
+- `shape_spec: ShapeSummary | None` - Shape summary from dataset inference (None for shape-agnostic)
 - `meta: dict[str, Any]` - Metadata (dataset_type, etc.)
 
 **Example**:
@@ -171,7 +171,7 @@ assert components.meta["dataset_type"] == "flexible"
 - Uses `FlexibleDataset` for entries-based datasets
 - Registers entry configs for transform-aware pipelines
 - Infers shapes for shape-aware models
-- Validates shape inference results (raises for NullShapeSpec)
+- Raises ValueError if shape inference fails (dataset must return Batch)
 - Uses `WrapperFactory.create_standard_wrapper()`
 - Sets trainer default_root_dir to standard location
 
@@ -273,9 +273,10 @@ model_type = detect_model_type(settings.MODEL, settings)
 
 # Check if shape spec required
 if requires_shape_spec(model_type):
-    shape_spec = inference_engine.infer_from_dataset(dataset, settings.MODEL)
+    from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+    shape_summary = infer_shapes_from_dataset(dataset)
 else:
-    shape_spec = None
+    shape_summary = None
 
 # Model type specific logic
 if model_type == ModelType.GRAPH:
@@ -342,10 +343,10 @@ components = factory.build_components(settings)
 trainer = components.trainer
 trainer.fit(components.model, datamodule=components.datamodule)
 
-# Access shape spec if needed
+# Access shape summary if needed
 if components.shape_spec:
-    print(f"Input shape: {components.shape_spec.input_shape}")
-    print(f"Output shape: {components.shape_spec.output_shape}")
+    print(f"Input shapes: {components.shape_spec.in_shapes}")
+    print(f"Output shapes: {components.shape_spec.out_shapes}")
 ```
 
 ### Common Use Case 2: Custom Build Strategy

@@ -198,15 +198,15 @@ def test_checkpoint_save_is_pure(
         shape_spec=dummy_shape_spec,
     )
 
-    # Capture initial shape_spec reference
-    initial_shape_spec = wrapper.shape_spec
+    # Capture initial entry_configs reference
+    initial_entry_configs = wrapper.get_entry_configs()
 
     # Save checkpoint
     checkpoint = {}
     wrapper.on_save_checkpoint(checkpoint)
 
-    # Verify shape_spec reference hasn't changed (no mutation)
-    assert wrapper.shape_spec is initial_shape_spec
+    # Verify entry_configs reference hasn't changed (no mutation)
+    assert wrapper.get_entry_configs() == initial_entry_configs
 
     # Verify checkpoint was populated
     assert "dlkit_metadata" in checkpoint

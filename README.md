@@ -376,15 +376,9 @@ scaler = MinMaxScaler(dim=0)  # Shape inferred during fit()
 pca = PCA(n_components=10)
 scaler.fit(train_data)  # Automatically allocates buffers from data.shape
 pca.fit(train_data)
-
-# ✅ NEW (with shape_spec - used internally by pipelines)
-from dlkit.core.shape_specs import create_shape_spec
-shape_spec = create_shape_spec({"features": (32, 64)})
-scaler = MinMaxScaler(dim=0)
-scaler.configure_shape(shape_spec, "features")  # Eager allocation
 ```
 
-**Configuration Files**: No changes needed - TOML configs remain the same. The `shape_spec` is handled automatically by the training system.
+**Configuration Files**: No changes needed - TOML configs remain the same. The shape summary is handled automatically by the training system.
 
 **Why the Change?**
 

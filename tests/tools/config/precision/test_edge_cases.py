@@ -16,36 +16,28 @@ from dlkit.interfaces.api.services.precision_service import get_precision_servic
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.data_entries import Feature
 from dlkit.tools.io.arrays import load_array
-from dlkit.core.models.nn.base import ShapeAwareModel
-from dlkit.core.shape_specs import create_shape_spec
+from dlkit.core.models.nn.base import DLKitModel
 
 
-class BrokenModel(ShapeAwareModel):
+class BrokenModel(DLKitModel):
     """Model that intentionally breaks during precision application."""
 
-    def __init__(self, shape, break_on_precision=False, **kwargs):
+    def __init__(self, in_features: int, out_features: int, break_on_precision=False, **kwargs):
+        super().__init__()
         self._break_on_precision = break_on_precision
 
-        # Convert shape dict to unified_shape
-        if isinstance(shape, dict):
-            unified_shape = create_shape_spec(shape)
-        else:
-            unified_shape = shape
-
-        super().__init__(unified_shape=unified_shape, **kwargs)
-
-        # Extract shapes for building layers
-        input_shape = unified_shape.get_input_shape()
-        output_shape = unified_shape.get_output_shape()
-
-        # Always create linear layer
-        self.linear = torch.nn.Linear(input_shape[0], output_shape[0])
+        # Create linear layer with the given dimensions
+        self.linear = torch.nn.Linear(in_features, out_features)
 
         # Apply precision from context (simulating Lightning behavior)
         service = get_precision_service()
         precision_strategy = service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.to(dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the linear layer."""
+        return self.linear(x)
 
     def accepts_shape(self, shape_spec):
         """Accept any valid shape specification."""
@@ -123,16 +115,16 @@ class TestPrecisionEdgeCases:
         """Test precision handling with models that fail during precision application."""
         print("\n=== Testing Precision with Broken Models ===")
 
-        shape = {"x": (10,), "y": (5,)}
+        in_features, out_features = 10, 5
 
         # Model that breaks during precision application
         with pytest.raises(RuntimeError, match="Model precision application failed"):
             with precision_override(PrecisionStrategy.MIXED_16):
-                BrokenModel(shape, break_on_precision=True)
+                BrokenModel(in_features, out_features, break_on_precision=True)
 
         # Normal model should work fine
         with precision_override(PrecisionStrategy.MIXED_16):
-            normal_model = BrokenModel(shape, break_on_precision=False)
+            normal_model = BrokenModel(in_features, out_features, break_on_precision=False)
         assert next(normal_model.parameters()).dtype == torch.float16
 
         print("✅ Broken model handling works correctly")

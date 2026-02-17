@@ -117,9 +117,10 @@ class TestGraphWorkflowIntegration:
         from dlkit.core.datatypes.networks import GraphInput
         import inspect
 
-        # Check forward signature
+        # Check forward signature (decomposed tensor API)
         forward_sig = inspect.signature(GraphLightningWrapper.forward)
-        assert "data" in forward_sig.parameters, "forward should have data parameter"
+        assert "x" in forward_sig.parameters, "forward should have x parameter"
+        assert "edge_index" in forward_sig.parameters, "forward should have edge_index parameter"
 
         # Check training_step signature
         training_step_sig = inspect.signature(GraphLightningWrapper.training_step)
