@@ -1,4 +1,4 @@
-from .base import ShapeAwareModel, ShapeAgnosticModel
+from .base import DLKitModel
 
 # Import commonly used models for convenience
 from .ffnn.linear import LinearNetwork
@@ -24,8 +24,7 @@ from . import graph
 from . import primitives
 
 __all__ = [
-    "ShapeAwareModel",
-    "ShapeAgnosticModel",
+    "DLKitModel",
     "LinearNetwork",
     "NormScaledFFNN",
     "NormScaledLinearFFNN",

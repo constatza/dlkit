@@ -197,13 +197,13 @@ class ClassBasedDetector(ModelFamilyDetector):
 
             # Import base classes for checking
             from dlkit.core.models.nn.graph.base import BaseGraphNetwork
-            from dlkit.core.models.nn.base import ShapeAwareModel, DLKitModel
+            from dlkit.core.models.nn.base import DLKitModel
 
             # Check inheritance (most specific first)
             if issubclass(model_class, BaseGraphNetwork):
                 return ModelFamily.GRAPH
 
-            if issubclass(model_class, (ShapeAwareModel, DLKitModel)):
+            if issubclass(model_class, DLKitModel):
                 return ModelFamily.DLKIT_NN
 
             # Everything else (including PyTorch Forecasting) is external

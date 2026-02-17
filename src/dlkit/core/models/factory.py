@@ -46,7 +46,7 @@ def build_model(
         )
 
     # Try Conv/CAE convention (in_channels / in_length)
-    with suppress(TypeError):
+    with suppress(TypeError, IndexError):
         return model_cls(
             in_channels=shape.in_channels,
             in_length=shape.in_length,
