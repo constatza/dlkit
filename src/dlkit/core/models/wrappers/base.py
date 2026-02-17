@@ -185,6 +185,32 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         }
         return features, targets
 
+    def _extract_from_batch(self, batch: "Batch") -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        """Extract features and targets from a Batch object.
+
+        Uses entry configs to map positional tensors to named dicts,
+        falling back to positional names (feature_0, target_0) if no config.
+
+        Args:
+            batch: Typed positional batch from FlexibleDataset.
+
+        Returns:
+            Tuple of (features dict, targets dict) with named keys.
+        """
+        feature_names = tuple(
+            name for name, config in self._entry_configs.items()
+            if is_feature_entry(config)
+        ) if self._entry_configs else tuple(f"feature_{i}" for i in range(len(batch.features)))
+
+        target_names = tuple(
+            name for name, config in self._entry_configs.items()
+            if is_target_entry(config)
+        ) if self._entry_configs else tuple(f"target_{i}" for i in range(len(batch.targets)))
+
+        features = dict(zip(feature_names, batch.features))
+        targets = dict(zip(target_names, batch.targets))
+        return features, targets
+
     def _log_dtype_mismatches(self, features: dict[str, Tensor] | Tensor) -> None:
         """Log dtype mismatches between features and model (debug only).
 
@@ -247,49 +273,81 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             f"Lightning's precision plugin will handle alignment."
         )
 
-    def _forward_features(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
-        """Forward features through model with match-case logic."""
+    def _invoke_model(self, features: "Batch | dict[str, Tensor] | Tensor") -> "dict[str, Tensor] | Tensor":
+        """Invoke model forward pass.
+
+        Dispatches positionally for Batch inputs (unambiguous, no heuristics),
+        and falls back to dict/tensor dispatch for legacy inputs.
+
+        Args:
+            features: Batch object, dict of tensors, or single tensor.
+
+        Returns:
+            Model output as tensor or dict of tensors.
+
+        Raises:
+            RuntimeError: If model invocation fails.
+            ValueError: If batch contains no features.
+        """
+        from dlkit.core.datatypes.batch import Batch as _Batch
+        try:
+            self._log_dtype_mismatches(features)
+            if isinstance(features, _Batch):
+                return self._invoke_batch(features)
+            return self._forward_features(features)
+        except Exception as e:
+            raise RuntimeError(f"Model invocation failed: {e}") from e
+
+    def _invoke_batch(self, batch: "Batch") -> "Tensor":
+        """Dispatch positional Batch to model (no heuristics).
+
+        Args:
+            batch: Typed batch with positional feature tensors.
+
+        Returns:
+            Model output tensor.
+
+        Raises:
+            ValueError: If batch contains no features.
+        """
+        match len(batch.features):
+            case 0:
+                raise ValueError("Batch contains no features")
+            case 1:
+                return self.model(batch.features[0])
+            case _:
+                return self.model(*batch.features)
+
+    def _forward_features(self, features: "dict[str, Tensor] | Tensor") -> "dict[str, Tensor] | Tensor":
+        """Forward features through model (legacy dict/tensor path).
+
+        Args:
+            features: Dict of tensors or single tensor.
+
+        Returns:
+            Model output.
+        """
         match features:
             case dict():
                 return self._forward_dict_features(features)
             case _:
                 return self.model(features)
 
-    def _forward_dict_features(self, features: dict[str, Tensor]) -> dict[str, Tensor] | Tensor:
-        """Forward dict features - try **kwargs first, fallback to single tensor."""
+    def _forward_dict_features(self, features: "dict[str, Tensor]") -> "dict[str, Tensor] | Tensor":
+        """Forward dict features - try **kwargs first, fallback to single tensor.
+
+        Args:
+            features: Dict mapping feature names to tensors.
+
+        Returns:
+            Model output.
+        """
+        if not features:
+            raise RuntimeError("No features available for model invocation")
         try:
             return self.model(**features)
         except TypeError:
-            # Model doesn't accept **kwargs, try single tensor
             return self.model(next(iter(features.values())))
-
-    def _invoke_model(self, features: dict[str, Tensor] | Tensor) -> dict[str, Tensor] | Tensor:
-        """Invoke model forward pass with defensive dtype validation.
-
-        Data should already be loaded in the correct dtype via load_array(),
-        but this provides a safety check and automatic casting if needed.
-
-        Args:
-            features (dict[str, Tensor] | Tensor): Model inputs.
-
-        Returns:
-            dict[str, Tensor] | Tensor: Model outputs.
-
-        Raises:
-            RuntimeError: If model invocation fails or no features available.
-        """
-        if isinstance(features, dict) and not features:
-            raise RuntimeError("No features available for model invocation")
-
-        try:
-            # Debug-level dtype tracking (before Lightning precision kicks in)
-            self._log_dtype_mismatches(features)
-
-            # Model forward - use match-case for cleaner logic
-            return self._forward_features(features)
-
-        except Exception as e:
-            raise RuntimeError(f"Model invocation failed: {e}") from e
 
     def _compute_loss(self, predictions: dict[str, Tensor] | Tensor, targets: dict[str, Tensor]) -> Tensor:
         """Compute loss from predictions and targets with automatic pairing.
@@ -516,18 +574,22 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     # Lightning Step Methods (Use Direct Helpers)
     # =============================================================================
 
-    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+    def training_step(self, batch, batch_idx: int) -> dict[str, Any]:
         """Training step with direct processing (no pipeline).
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing the training loss.
         """
+        from dlkit.core.datatypes.batch import Batch as _Batch
         # 1. Extract features and targets
-        features, targets = self._extract_features_targets(batch)
+        if isinstance(batch, _Batch):
+            features, targets = self._extract_from_batch(batch)
+        else:
+            features, targets = self._extract_features_targets(batch)
 
         # 2. Model forward
         predictions = self._invoke_model(features)
@@ -540,18 +602,22 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         return {"loss": loss}
 
-    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+    def validation_step(self, batch, batch_idx: int) -> dict[str, Any]:
         """Validation step with direct processing (no pipeline).
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing validation metrics.
         """
+        from dlkit.core.datatypes.batch import Batch as _Batch
         # 1. Extract features and targets
-        features, targets = self._extract_features_targets(batch)
+        if isinstance(batch, _Batch):
+            features, targets = self._extract_from_batch(batch)
+        else:
+            features, targets = self._extract_features_targets(batch)
 
         # 2. Model forward
         predictions = self._invoke_model(features)
@@ -567,18 +633,22 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         return {"val_loss": val_loss}
 
-    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
+    def test_step(self, batch, batch_idx: int) -> dict[str, Any]:
         """Test step with direct processing (no pipeline).
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
             batch_idx (int): Index of the batch.
 
         Returns:
             dict[str, Any]: Dictionary containing test metrics.
         """
+        from dlkit.core.datatypes.batch import Batch as _Batch
         # 1. Extract features and targets
-        features, targets = self._extract_features_targets(batch)
+        if isinstance(batch, _Batch):
+            features, targets = self._extract_from_batch(batch)
+        else:
+            features, targets = self._extract_features_targets(batch)
 
         # 2. Model forward
         predictions = self._invoke_model(features)
