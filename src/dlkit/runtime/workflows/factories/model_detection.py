@@ -59,33 +59,30 @@ class ABCModelTypeDetector(IModelTypeDetector):
         return True
 
     def detect_type(self, model_settings: Any, settings: GeneralSettings) -> ModelType:
-        """Detect model type using ABC inheritance.
+        """Detect model type using class inheritance.
 
         Args:
             model_settings: Model configuration settings
             settings: General settings for context
 
         Returns:
-            Model type based on ABC inheritance
+            Model type based on class inheritance
         """
         model_cls = self._get_model_class(model_settings)
 
         if model_cls is None:
             return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
-        # Check ABC inheritance
+        # Check inheritance
         try:
-            from dlkit.core.models.nn.base import ShapeAwareModel, ShapeAgnosticModel
             from dlkit.core.models.nn.graph.base import BaseGraphNetwork
+            from dlkit.core.models.nn.base import DLKitModel
 
             if issubclass(model_cls, BaseGraphNetwork):
                 return ModelType.GRAPH
 
-            if issubclass(model_cls, ShapeAwareModel):
+            if issubclass(model_cls, DLKitModel):
                 return ModelType.SHAPE_AWARE_DLKIT
-
-            if issubclass(model_cls, ShapeAgnosticModel):
-                return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
             # Check for external Lightning modules (PyTorch Forecasting, etc.)
             from lightning.pytorch import LightningModule

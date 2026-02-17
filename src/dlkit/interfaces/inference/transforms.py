@@ -20,6 +20,10 @@ def load_transforms_from_checkpoint(
 ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
     """Load fitted transforms from checkpoint, separated by type.
 
+    Supports two checkpoint formats:
+    - Positional (new): ``_feature_chains.0.*`` / ``_target_chains.0.*``
+    - String-keyed (legacy): ``fitted_feature_transforms.<name>.*``
+
     Args:
         checkpoint: Loaded checkpoint dictionary
 
@@ -28,28 +32,40 @@ def load_transforms_from_checkpoint(
     """
     from dlkit.tools.config.data_entries import is_feature_entry, is_target_entry
 
-    feature_transforms = {}
-    target_transforms = {}
+    feature_transforms: dict[str, TransformChain] = {}
+    target_transforms: dict[str, TransformChain] = {}
 
     state_dict = checkpoint.get("state_dict", {})
     inference_metadata = checkpoint.get("inference_metadata", {})
     entry_configs = inference_metadata.get("entry_configs", {})
 
-    # Guard: No entry configs means we can't load transforms properly
-    if not entry_configs:
-        logger.warning("No entry_configs found in checkpoint - cannot load transforms")
-        return feature_transforms, target_transforms
-
-    # Check for modern format (separate feature/target) or legacy format
+    # Detect checkpoint format
+    has_positional = any(
+        k.startswith("_feature_chains.") or k.startswith("_target_chains.")
+        for k in state_dict.keys()
+    )
     has_modern = any(
         k.startswith("fitted_feature_transforms.") or k.startswith("fitted_target_transforms.")
         for k in state_dict.keys()
     )
     has_legacy = any(k.startswith("fitted_transforms.") for k in state_dict.keys())
 
-    # Load based on format
-    if has_modern:
-        logger.info("Loading transforms from modern format (separated)")
+    if has_positional:
+        logger.info("Loading transforms from positional format (_feature_chains / _target_chains)")
+        feature_names: list[str] = inference_metadata.get("feature_names", [])
+        target_names: list[str] = inference_metadata.get("target_names", [])
+        feature_transforms = _load_positional_transforms(
+            "_feature_chains", state_dict, entry_configs, feature_names
+        )
+        target_transforms = _load_positional_transforms(
+            "_target_chains", state_dict, entry_configs, target_names
+        )
+    elif has_modern:
+        # Guard: No entry configs means we can't load transforms properly
+        if not entry_configs:
+            logger.warning("No entry_configs found in checkpoint - cannot load transforms")
+            return feature_transforms, target_transforms
+        logger.info("Loading transforms from modern string-keyed format")
         feature_transforms = _load_transforms_by_prefix(
             "fitted_feature_transforms", state_dict, entry_configs
         )
@@ -57,11 +73,13 @@ def load_transforms_from_checkpoint(
             "fitted_target_transforms", state_dict, entry_configs
         )
     elif has_legacy:
+        if not entry_configs:
+            logger.warning("No entry_configs found in checkpoint - cannot load transforms")
+            return feature_transforms, target_transforms
         logger.info("Loading transforms from legacy format (will separate)")
         all_transforms = _load_transforms_by_prefix(
             "fitted_transforms", state_dict, entry_configs
         )
-        # Separate by type using entry_configs
         for name, transform in all_transforms.items():
             if name in entry_configs:
                 if is_feature_entry(entry_configs[name]):
@@ -72,6 +90,53 @@ def load_transforms_from_checkpoint(
         logger.info("No fitted transforms found in checkpoint")
 
     return feature_transforms, target_transforms
+
+
+def _load_positional_transforms(
+    prefix: str,
+    state_dict: dict[str, Any],
+    entry_configs: dict[str, Any],
+    entry_names: list[str],
+) -> dict[str, TransformChain]:
+    """Load transforms from positional ModuleList format (_feature_chains / _target_chains).
+
+    Args:
+        prefix: State dict prefix (``_feature_chains`` or ``_target_chains``).
+        state_dict: Full model state dictionary.
+        entry_configs: Entry configurations keyed by name.
+        entry_names: Ordered entry names matching positional indices.
+
+    Returns:
+        Dictionary mapping entry names to reconstructed TransformChain objects.
+    """
+    transforms: dict[str, TransformChain] = {}
+
+    # Group state dict entries by positional index
+    grouped: dict[int, dict[str, Any]] = {}
+    for key, value in state_dict.items():
+        if not key.startswith(f"{prefix}."):
+            continue
+        # key format: "_feature_chains.0.transforms.0._fitted"
+        parts = key.split(".", 2)
+        if len(parts) < 2 or not parts[1].isdigit():
+            continue
+        idx = int(parts[1])
+        sub_key = parts[2] if len(parts) > 2 else ""
+        if idx not in grouped:
+            grouped[idx] = {}
+        if sub_key:
+            grouped[idx][sub_key] = value
+
+    for idx, chain_state in sorted(grouped.items()):
+        if idx >= len(entry_names):
+            logger.warning(f"Positional index {idx} exceeds entry_names length {len(entry_names)}")
+            continue
+        entry_name = entry_names[idx]
+        chain = _reconstruct_transform_chain(entry_name, chain_state, entry_configs)
+        if chain is not None:
+            transforms[entry_name] = chain
+
+    return transforms
 
 
 def _load_transforms_by_prefix(

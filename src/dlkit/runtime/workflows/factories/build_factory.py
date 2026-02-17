@@ -22,10 +22,11 @@ from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.core.datatypes.split import IndexSplit
 from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
-from dlkit.core.shape_specs import IShapeSpec, ShapeInferenceEngine, ShapeSystemFactory, InferenceContext
+from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset, ShapeSummary
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 from dlkit.tools.config.components.model_components import WrapperComponentSettings
 from dlkit.tools.config.data_entries import (
+    DataEntry,
     Feature,
     Target,
     convert_to_tensor_entries,
@@ -46,7 +47,7 @@ class BuildComponents:
     model: LightningModule
     datamodule: LightningDataModule
     trainer: Trainer | None
-    shape_spec: IShapeSpec | None
+    shape_spec: ShapeSummary | None
     meta: dict[str, Any]
 
 
@@ -192,45 +193,34 @@ class FlexibleBuildStrategy(IBuildStrategy):
             settings.DATAMODULE, dm_context
         )
 
-        # Build entry_configs (features + targets) if available in settings for transform-aware pipeline
-        entry_configs: dict[str, Any] | None = None
+        # Build entry_configs (features + targets) as tuple for wrapper, dict for registry
+        entry_configs: tuple[DataEntry, ...] = ()
         try:
             feats = getattr(settings.DATASET, "features", ()) or ()
             targs = getattr(settings.DATASET, "targets", ()) or ()
             if feats or targs:
-                # Always provide entry configs so downstream steps know which entries
-                # participate in loss/metrics, even without transforms.
-                entry_configs = {**{e.name: e for e in feats}, **{e.name: e for e in targs}}
+                entry_configs = tuple([*feats, *targs])
         except Exception:
-            entry_configs = None
+            entry_configs = ()
 
-        # Register entry configs for user access
+        # Register entry configs for user access (registry still uses dict)
         if entry_configs:
             registry = DataEntryRegistry.get_instance()
-            registry.register_entries(entry_configs)
+            registry.register_entries({e.name: e for e in entry_configs})
 
         # Detect model type using ABC-based detection
         model_type = detect_model_type(settings.MODEL, settings)
 
         # Get appropriate shape specification if required
-        shape_spec: IShapeSpec | None = None
+        shape_summary: ShapeSummary | None = None
         if requires_shape_spec(model_type):
-            shape_factory = ShapeSystemFactory.create_production_system()
-            inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
-            shape_spec = inference_engine.infer_from_dataset(
-                dataset=dataset,
-                model_settings=settings.MODEL,
-                entry_configs=entry_configs
-            )
-
-            # Validate shape inference for shape-aware models
-            from dlkit.core.shape_specs import NullShapeSpec
-            if isinstance(shape_spec, NullShapeSpec):
+            try:
+                shape_summary = infer_shapes_from_dataset(dataset)
+            except (ValueError, IndexError) as exc:
                 raise ValueError(
-                    f"Shape inference failed for shape-aware model '{settings.MODEL.name}'. "
-                    f"Shape-aware models require shape information but shape inference returned no results. "
-                    f"Please ensure your dataset provides shape information or configure shapes manually."
-                )
+                    f"Shape inference failed for '{settings.MODEL.name}'. "
+                    "Ensure dataset.__getitem__ returns a Batch with features and targets."
+                ) from exc
 
         # Build wrapper settings with training optimizer/scheduler/loss/metrics configuration
         wrapper_kwargs = {
@@ -246,7 +236,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model: LightningModule = WrapperFactory.create_standard_wrapper(
             model_settings=settings.MODEL,
             settings=wrapper_settings,
-            shape_spec=shape_spec,
+            shape_summary=shape_summary,
             entry_configs=entry_configs,
         )
 
@@ -274,7 +264,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=trainer,
-            shape_spec=shape_spec,
+            shape_spec=shape_summary,
             meta={"dataset_type": "flexible"},
         )
 
@@ -433,25 +423,10 @@ class GraphBuildStrategy(IBuildStrategy):
             pass
         datamodule: LightningDataModule = FactoryProvider.create_component(dm_settings, dm_context)
 
-        # Register entry configs for user access (graphs use heuristic-based extraction)
-        # Pass empty dict to trigger heuristic fallback in DataExtractionStep:
-        # - Keys like 'y', 'target', 'label' → targets
-        # - All other keys ('x', 'edge_index', etc.) → features
-        entry_configs = {}  # Empty dict triggers heuristic-based extraction
-        registry = DataEntryRegistry.get_instance()
-        if entry_configs:
-            registry.register_entries(entry_configs)
+        # Graph strategy doesn't use flexible entry_configs — heuristics handle extraction
+        entry_configs: tuple[DataEntry, ...] = ()
 
-        # Use graph shape inference
-        shape_factory = ShapeSystemFactory.create_production_system()
-        inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
-        shape_spec = inference_engine.infer_from_dataset(
-            dataset=dataset,
-            model_settings=settings.MODEL,
-            entry_configs=entry_configs
-        )
-
-        # Build wrapper with shape hints and training optimizer/scheduler/loss/metrics configuration
+        # Build wrapper with training optimizer/scheduler/loss/metrics configuration
         wrapper_kwargs = {
             "optimizer": settings.TRAINING.optimizer,
             "loss_function": settings.TRAINING.loss_function,
@@ -464,7 +439,6 @@ class GraphBuildStrategy(IBuildStrategy):
         model: LightningModule = WrapperFactory.create_graph_wrapper(
             model_settings=settings.MODEL,
             settings=wrapper_settings,
-            shape_spec=shape_spec,
             entry_configs=entry_configs,
         )
 
@@ -490,7 +464,7 @@ class GraphBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=trainer,
-            shape_spec=shape_spec,
+            shape_spec=None,
             meta={"dataset_type": "graph"},
         )
 
@@ -575,25 +549,19 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             pass
         datamodule: LightningDataModule = FactoryProvider.create_component(dm_settings, dm_context)
 
-        # Register entry configs for user access (timeseries may not have explicit entry configs)
-        entry_configs = None  # Timeseries strategy doesn't use flexible entry configs by default
-        registry = DataEntryRegistry.get_instance()
-        if entry_configs:
-            registry.register_entries(entry_configs)
+        # Timeseries strategy doesn't use flexible entry configs by default
+        entry_configs: tuple[DataEntry, ...] = ()
 
         # Detect model type using ABC-based detection
         model_type = detect_model_type(settings.MODEL, settings)
 
         # Get appropriate shape specification if required
-        shape_spec: IShapeSpec | None = None
+        shape_summary: ShapeSummary | None = None
         if requires_shape_spec(model_type):
-            shape_factory = ShapeSystemFactory.create_production_system()
-            inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
-            shape_spec = inference_engine.infer_from_dataset(
-                dataset=dataset,
-                model_settings=settings.MODEL,
-                entry_configs=entry_configs
-            )
+            try:
+                shape_summary = infer_shapes_from_dataset(dataset)
+            except (ValueError, IndexError):
+                pass  # Timeseries models may not require strict shape inference
 
         # Decide whether to skip wrapper for PF-style datasets/models
         skip_wrapper = False
@@ -640,7 +608,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model = WrapperFactory.create_timeseries_wrapper(
                 model_settings=settings.MODEL,
                 settings=wrapper_settings,
-                shape_spec=shape_spec,
+                shape_summary=shape_summary,
                 entry_configs=entry_configs,
             )
 
@@ -656,7 +624,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=trainer,
-            shape_spec=shape_spec,
+            shape_spec=shape_summary,
             meta={"dataset_type": "timeseries"},
         )
 
