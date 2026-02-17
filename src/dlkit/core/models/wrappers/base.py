@@ -27,8 +27,6 @@ from dlkit.tools.config import (
 )
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.tools.config.core.updater import update_settings
-from dlkit.core.shape_specs import IShapeSpec
-from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 
 
 class ProcessingLightningWrapper(LightningModule, ABC):
@@ -41,7 +39,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
     Attributes:
         model (torch.nn.Module): Underlying PyTorch model.
-        shape_spec (IShapeSpec | None): Shape specification associated with the model.
         val_metrics (torchmetrics.MetricCollection): Validation metrics.
         test_metrics (torchmetrics.MetricCollection): Test metrics.
         loss_function (callable): Loss function operating on predictions and targets.
@@ -52,8 +49,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         *,
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        shape_spec: IShapeSpec | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
+        shape_summary: "ShapeSummary | None" = None,
         **kwargs,
     ):
         """Initialize the processing Lightning wrapper.
@@ -61,8 +58,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Args:
             settings (WrapperComponentSettings): Wrapper configuration settings.
             model_settings (ModelComponentSettings): Model configuration settings.
-            entry_configs (dict[str, DataEntry] | None): Data entry configurations.
-            shape_spec (IShapeSpec | None): Shape specification for models.
+            entry_configs (tuple[DataEntry, ...] | None): Data entry configurations.
+            shape_summary: Shape summary from dataset inference (preferred).
             **kwargs: Additional arguments passed to LightningModule.
         """
         super().__init__()
@@ -73,14 +70,34 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 "settings": settings,
                 "model_settings": model_settings,
             },
-            ignore=["settings", "model_settings", "entry_configs"],
+            ignore=["settings", "model_settings", "entry_configs", "shape_summary"],
         )
 
-        # Store shape information for checkpointing
-        self.shape_spec = shape_spec
+        # Initialize model using build_model from core/models/factory.py
+        from dlkit.core.models.factory import build_model
+        from dlkit.core.shape_specs.simple_inference import ShapeSummary as _ShapeSummary
+        import importlib
 
-        # Initialize model with ABC-based factory
-        self.model = self._create_abc_model(model_settings, shape_spec)
+        # Extract model class
+        if isinstance(model_settings.name, type):
+            model_cls = model_settings.name
+        else:
+            module_path = getattr(model_settings, 'module_path', 'dlkit.core.models.nn')
+            module = importlib.import_module(module_path)
+            model_cls = getattr(module, model_settings.name)
+
+        # Extract hyperparameters from model settings
+        hyperparams = {}
+        if hasattr(model_settings, 'model_dump'):
+            all_fields = model_settings.model_dump()
+            excluded = {'name', 'module_path', 'checkpoint'}
+            hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
+
+        # Use shape_summary directly
+        resolved_summary: _ShapeSummary | None = shape_summary
+
+        self.model = build_model(model_cls, resolved_summary, hyperparams)
+        self._shape_summary: _ShapeSummary | None = resolved_summary
 
         # Apply precision to model immediately after creation
         # Lightning's precision plugin will convert the wrapper, but we need to ensure
@@ -91,12 +108,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.model = self.model.to(dtype=dtype)
-
-        # Ensure wrapper keeps a canonical reference to model-provided shape specs
-        if self.shape_spec is None:
-            self._assign_shape_spec(self._derive_shape_spec_from_model())
-        else:
-            self._assign_shape_spec(self.shape_spec)
 
         self.val_metrics = MetricCollection([
             FactoryProvider.create_component(metric, BuildContext(mode="training"))
@@ -124,182 +135,61 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._sync_lr_hparam()
 
         # Store entry configs for feature/target categorization
-        self._entry_configs = entry_configs or {}
-
-        # Register entry configs with global registry for end user access
-        if self._entry_configs:
-            registry = DataEntryRegistry.get_instance()
-            registry.register_entries(self._entry_configs)
-
-        # Pre-compute feature and target names for efficient lookup
-        self._feature_names = {
-            name for name, config in self._entry_configs.items()
-            if is_feature_entry(config)
-        }
-        self._target_names = {
-            name for name, config in self._entry_configs.items()
-            if is_target_entry(config)
-        }
+        self._entry_configs: tuple[DataEntry, ...] = entry_configs or ()
 
     # =============================================================================
-    # Core Processing Helper Methods (Replace Pipeline Steps)
+    # Lightning Hooks
     # =============================================================================
 
-    def _extract_features_targets(self, batch: dict[str, Tensor]) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
-        """Extract and categorize batch data into features and targets.
+    def transfer_batch_to_device(self, batch: Any, device: torch.device, dataloader_idx: int) -> Any:
+        """Move batch tensors to device. Handles frozen Batch dataclass.
 
-        When no explicit entry configuration is provided, applies a simple
-        name-based heuristic:
-        - targets: keys like {"y", "target", "targets", "label", "labels"} (case-insensitive)
-        - features: all remaining keys
+        Lightning's default implementation uses apply_to_collection which does not
+        support frozen dataclasses. This override handles Batch explicitly.
 
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
+            batch: Incoming batch (Batch dataclass or other type).
+            device: Target device.
+            dataloader_idx: DataLoader index.
 
         Returns:
-            tuple[dict[str, Tensor], dict[str, Tensor]]: Features and targets.
+            Batch with all tensors moved to device.
         """
-        if not self._feature_names and not self._target_names:
-            # Heuristic fallback when no configs are provided
-            target_like = {"y", "target", "targets", "label", "labels"}
-            features: dict[str, Tensor] = {}
-            targets: dict[str, Tensor] = {}
-            for name, tensor in batch.items():
-                n = str(name).lower()
-                if n in target_like:
-                    targets[name] = tensor
-                else:
-                    features[name] = tensor
-            return features, targets
+        from dataclasses import replace
+        from dlkit.core.datatypes.batch import Batch as _Batch
+        if isinstance(batch, _Batch):
+            return replace(
+                batch,
+                features=tuple(f.to(device) for f in batch.features),
+                targets=tuple(t.to(device) for t in batch.targets),
+                latents=tuple(l.to(device) for l in batch.latents),
+            )
+        return super().transfer_batch_to_device(batch, device, dataloader_idx)
 
-        # Extract based on explicit configuration
-        features = {
-            name: tensor
-            for name, tensor in batch.items()
-            if name in self._feature_names
-        }
-        targets = {
-            name: tensor
-            for name, tensor in batch.items()
-            if name in self._target_names
-        }
-        return features, targets
+    # =============================================================================
+    # Core Processing Helper Methods
+    # =============================================================================
 
-    def _extract_from_batch(self, batch: "Batch") -> tuple[dict[str, Tensor], dict[str, Tensor]]:
-        """Extract features and targets from a Batch object.
-
-        Uses entry configs to map positional tensors to named dicts,
-        falling back to positional names (feature_0, target_0) if no config.
+    def _log_dtype_mismatches(self, batch: "Batch") -> None:
+        """Log dtype mismatches between first feature and model (debug only).
 
         Args:
-            batch: Typed positional batch from FlexibleDataset.
-
-        Returns:
-            Tuple of (features dict, targets dict) with named keys.
+            batch: Input batch with positional feature tensors.
         """
-        feature_names = tuple(
-            name for name, config in self._entry_configs.items()
-            if is_feature_entry(config)
-        ) if self._entry_configs else tuple(f"feature_{i}" for i in range(len(batch.features)))
-
-        target_names = tuple(
-            name for name, config in self._entry_configs.items()
-            if is_target_entry(config)
-        ) if self._entry_configs else tuple(f"target_{i}" for i in range(len(batch.targets)))
-
-        features = dict(zip(feature_names, batch.features))
-        targets = dict(zip(target_names, batch.targets))
-        return features, targets
-
-    def _log_dtype_mismatches(self, features: dict[str, Tensor] | Tensor) -> None:
-        """Log dtype mismatches between features and model (debug only).
-
-        Uses guard clauses to avoid nested ifs.
-        Lightning's precision plugin handles actual dtype alignment.
-        """
-        import torch
-
-        # Guard: Skip if model doesn't have dtype
-        if not hasattr(self.model, "dtype"):
+        if not batch.features or not hasattr(self.model, "dtype"):
             return
-
         model_dtype = self.model.dtype
-
-        # Guard: Ensure dtype is actually a torch.dtype (type narrowing)
         if not isinstance(model_dtype, torch.dtype):
             return
-
-        # Use match-case for feature type handling
-        match features:
-            case dict():
-                self._log_dict_features_dtype(features, model_dtype)
-            case Tensor():
-                self._log_tensor_feature_dtype(features, model_dtype)
-
-    def _log_dict_features_dtype(self, features: dict[str, Tensor], model_dtype: torch.dtype) -> None:
-        """Log dtype mismatches for dict features."""
-        for name, value in features.items():
-            # Guard: Skip non-tensor values (e.g., int indices in graph data)
-            if not isinstance(value, Tensor):
-                continue
-
-            # Guard: Skip non-floating point tensors
-            if not value.is_floating_point():
-                continue
-
-            # Guard: Skip if dtypes match
-            if value.dtype == model_dtype:
-                continue
-
-            # Log the mismatch
+        feat = batch.features[0]
+        if feat.is_floating_point() and feat.dtype != model_dtype:
             logger.debug(
-                f"Feature '{name}' dtype {value.dtype} differs from model dtype {model_dtype}. "
+                f"Feature dtype {feat.dtype} differs from model dtype {model_dtype}. "
                 f"Lightning's precision plugin will handle alignment."
             )
 
-    def _log_tensor_feature_dtype(self, features: Tensor, model_dtype: torch.dtype) -> None:
-        """Log dtype mismatch for single tensor feature."""
-        # Guard: Skip non-floating point tensors
-        if not features.is_floating_point():
-            return
-
-        # Guard: Skip if dtypes match
-        if features.dtype == model_dtype:
-            return
-
-        # Log the mismatch
-        logger.debug(
-            f"Features dtype {features.dtype} differs from model dtype {model_dtype}. "
-            f"Lightning's precision plugin will handle alignment."
-        )
-
-    def _invoke_model(self, features: "Batch | dict[str, Tensor] | Tensor") -> "dict[str, Tensor] | Tensor":
-        """Invoke model forward pass.
-
-        Dispatches positionally for Batch inputs (unambiguous, no heuristics),
-        and falls back to dict/tensor dispatch for legacy inputs.
-
-        Args:
-            features: Batch object, dict of tensors, or single tensor.
-
-        Returns:
-            Model output as tensor or dict of tensors.
-
-        Raises:
-            RuntimeError: If model invocation fails.
-            ValueError: If batch contains no features.
-        """
-        from dlkit.core.datatypes.batch import Batch as _Batch
-        try:
-            self._log_dtype_mismatches(features)
-            if isinstance(features, _Batch):
-                return self._invoke_batch(features)
-            return self._forward_features(features)
-        except Exception as e:
-            raise RuntimeError(f"Model invocation failed: {e}") from e
-
-    def _invoke_batch(self, batch: "Batch") -> "Tensor":
-        """Dispatch positional Batch to model (no heuristics).
+    def _invoke_model(self, batch: "Batch") -> Tensor:
+        """Dispatch positional Batch to model.
 
         Args:
             batch: Typed batch with positional feature tensors.
@@ -308,388 +198,129 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             Model output tensor.
 
         Raises:
-            ValueError: If batch contains no features.
+            ValueError: If batch has no features.
         """
         match len(batch.features):
             case 0:
-                raise ValueError("Batch contains no features")
+                raise ValueError("Batch has no features")
             case 1:
                 return self.model(batch.features[0])
             case _:
                 return self.model(*batch.features)
 
-    def _forward_features(self, features: "dict[str, Tensor] | Tensor") -> "dict[str, Tensor] | Tensor":
-        """Forward features through model (legacy dict/tensor path).
+    def _compute_loss(self, predictions: Tensor, targets: tuple[Tensor, ...]) -> Tensor:
+        """Compute loss positionally: pair predictions with targets[0], align dtype.
 
         Args:
-            features: Dict of tensors or single tensor.
+            predictions: Model output tensor.
+            targets: Tuple of target tensors (uses targets[0]).
 
         Returns:
-            Model output.
-        """
-        match features:
-            case dict():
-                return self._forward_dict_features(features)
-            case _:
-                return self.model(features)
-
-    def _forward_dict_features(self, features: "dict[str, Tensor]") -> "dict[str, Tensor] | Tensor":
-        """Forward dict features - try **kwargs first, fallback to single tensor.
-
-        Args:
-            features: Dict mapping feature names to tensors.
-
-        Returns:
-            Model output.
-        """
-        if not features:
-            raise RuntimeError("No features available for model invocation")
-        try:
-            return self.model(**features)
-        except TypeError:
-            return self.model(next(iter(features.values())))
-
-    def _compute_loss(self, predictions: dict[str, Tensor] | Tensor, targets: dict[str, Tensor]) -> Tensor:
-        """Compute loss from predictions and targets with automatic pairing.
-
-        Pairing rules:
-        - Strict mapping: for each target there must be a corresponding prediction key
-        - Single-target fallback: if exactly one target and one prediction, pair them
-        - Autoencoder mode: handled by subclass (StandardLightningWrapper)
-
-        Args:
-            predictions (dict[str, Tensor] | Tensor): Model predictions.
-            targets (dict[str, Tensor]): Ground truth targets.
-
-        Returns:
-            torch.Tensor: Computed loss.
+            Scalar loss tensor.
 
         Raises:
-            RuntimeError: If pairing fails or required pairs are missing.
+            RuntimeError: If targets is empty.
         """
-        # Guard: Normalize predictions to dict format
-        predictions_dict = self._normalize_predictions_to_dict(predictions, targets)
-
-        # Pair predictions with targets (with validation)
-        pairs = self._pair_predictions_with_targets(predictions_dict, targets)
-
-        # Compute loss from pairs
-        return self._compute_loss_from_pairs(pairs)
-
-    def _normalize_predictions_to_dict(
-        self, predictions: dict[str, Tensor] | Tensor, targets: dict[str, Tensor]
-    ) -> dict[str, Tensor]:
-        """Normalize predictions to dict format.
-
-        Args:
-            predictions: Model predictions (dict or single tensor).
-            targets: Ground truth targets.
-
-        Returns:
-            Predictions as dict.
-
-        Raises:
-            RuntimeError: If single tensor cannot be paired with targets.
-        """
-        # Guard: If already dict, return as-is
-        if isinstance(predictions, dict):
-            return predictions
-
-        # Guard: Single tensor requires single target
-        if len(targets) != 1:
-            raise RuntimeError(
-                f"Model returned single tensor but found {len(targets)} targets. "
-                f"Cannot determine pairing. Target keys: {list(targets.keys())}"
-            )
-
-        # Use target name for single tensor
-        target_name = next(iter(targets.keys()))
-        return {target_name: predictions}
-
-    def _pair_predictions_with_targets(
-        self, predictions: dict[str, Tensor], targets: dict[str, Tensor]
-    ) -> dict[str, tuple[Tensor, Tensor]]:
-        """Pair predictions with targets by name, with dtype alignment.
-
-        Args:
-            predictions: Predictions dict.
-            targets: Targets dict.
-
-        Returns:
-            Dict mapping names to (prediction, target) tuples with aligned dtypes.
-
-        Raises:
-            RuntimeError: If predictions and targets cannot be paired.
-        """
-        # Guard: Single-item case (simple pairing)
-        if len(predictions) == 1 and len(targets) == 1:
-            pred_name = next(iter(predictions.keys()))
-            target_name = next(iter(targets.keys()))
-            pred = predictions[pred_name]
-            target = self._align_target_dtype(targets[target_name], pred, target_name)
-            return {target_name: (pred, target)}
-
-        # Guard: Validate all targets have matching predictions
-        self._validate_prediction_target_alignment(predictions, targets)
-
-        # Build pairs with dtype alignment
-        return {
-            name: (predictions[name], self._align_target_dtype(targets[name], predictions[name], name))
-            for name in targets.keys()
-        }
-
-    def _align_target_dtype(self, target: Tensor, pred: Tensor, name: str) -> Tensor:
-        """Align target dtype with prediction dtype if needed.
-
-        Args:
-            target: Target tensor.
-            pred: Prediction tensor.
-            name: Name for logging.
-
-        Returns:
-            Target tensor with aligned dtype.
-        """
-        # Guard: Skip non-floating types
-        if not (target.is_floating_point() and pred.is_floating_point()):
-            return target
-
-        # Guard: Skip if dtypes match
-        if target.dtype == pred.dtype:
-            return target
-
-        # Cast and log
-        logger.debug(
-            f"Target '{name}' dtype ({target.dtype}) differs from prediction ({pred.dtype}). "
-            f"Casting target to match prediction for loss computation."
-        )
-        return target.to(dtype=pred.dtype)
-
-    def _validate_prediction_target_alignment(
-        self, predictions: dict[str, Tensor], targets: dict[str, Tensor]
-    ) -> None:
-        """Validate predictions align with targets.
-
-        Args:
-            predictions: Predictions dict.
-            targets: Targets dict.
-
-        Raises:
-            RuntimeError: If predictions and targets are misaligned.
-        """
-        missing = [t for t in targets.keys() if t not in predictions]
-        unexpected = [p for p in predictions.keys() if p not in targets]
-
-        # Guard: Early return if valid
-        if not missing and not unexpected:
-            return
-
-        # Build error message
-        msg_parts = []
-        if missing:
-            msg_parts.append(f"missing predictions for targets: {missing}")
-        if unexpected:
-            msg_parts.append(f"unexpected prediction keys: {unexpected}")
-        available = f"available targets={list(targets.keys())}, predictions={list(predictions.keys())}"
-        raise RuntimeError(f"Loss pairing failed: {', '.join(msg_parts)}; {available}")
-
-    def _compute_loss_from_pairs(self, pairs: dict[str, tuple[Tensor, Tensor]]) -> Tensor:
-        """Compute total loss from prediction-target pairs.
-
-        Args:
-            pairs: Dict mapping names to (prediction, target) tuples.
-
-        Returns:
-            Total loss.
-
-        Raises:
-            RuntimeError: If no pairs available.
-        """
-        # Guard: Ensure we have pairs
-        if not pairs:
-            raise RuntimeError("No loss pairs available for computation")
-
-        # Accumulate losses
-        total_loss = None
-        for name, (pred, target) in pairs.items():
-            loss = self.loss_function(pred, target)
-            total_loss = loss if total_loss is None else total_loss + loss
-
-        return total_loss
+        if not targets:
+            raise RuntimeError("Cannot compute loss: targets tuple is empty")
+        target = targets[0]
+        if target.is_floating_point() and target.dtype != predictions.dtype:
+            target = target.to(dtype=predictions.dtype)
+        return self.loss_function(predictions, target)
 
     def _update_metrics(
         self,
-        predictions: dict[str, Tensor] | Tensor,
-        targets: dict[str, Tensor],
-        stage: str
+        predictions: Tensor,
+        targets: tuple[Tensor, ...],
+        stage: str,
     ) -> dict[str, Any]:
-        """Compute metrics from predictions and targets.
-
-        Ensures predictions and targets use the model's dtype (user's configured precision)
-        for metric computation. This maintains precision consistency throughout the pipeline.
+        """Compute metrics from predictions and first target.
 
         Args:
-            predictions (dict[str, Tensor] | Tensor): Model predictions.
-            targets (dict[str, Tensor]): Ground truth targets.
-            stage (str): Stage identifier ("train", "val", "test").
+            predictions: Model output tensor.
+            targets: Tuple of target tensors (uses targets[0]).
+            stage: Stage identifier ("val" or "test").
 
         Returns:
-            dict[str, Any]: Dictionary of computed metrics.
+            Dictionary of computed metric values, empty if no metrics or targets.
         """
-        # Select appropriate metric collection
         metrics = {"val": self.val_metrics, "test": self.test_metrics}.get(stage)
-        if metrics is None:
+        if metrics is None or not targets:
             return {}
-
-        # Extract first prediction and target for metrics
-        if isinstance(predictions, dict):
-            if not predictions or not targets:
-                return {}
-            pred = next(iter(predictions.values()))
-            target = next(iter(targets.values()))
-        else:
-            pred = predictions
-            if not targets:
-                return {}
-            target = next(iter(targets.values()))
-
-        # Ensure both use model's dtype (maintains user's precision choice)
-        if hasattr(self.model, "dtype"):
-            import torch
-
-            model_dtype = self.model.dtype
-
-            # Guard: Ensure dtype is torch.dtype (type narrowing)
-            if not isinstance(model_dtype, torch.dtype):
-                return metrics(pred, target)
-
-            # Cast if needed (defensive - should already match from pipeline)
-            if pred.is_floating_point() and pred.dtype != model_dtype:
-                pred = pred.to(dtype=model_dtype)
-            if target.is_floating_point() and target.dtype != model_dtype:
-                target = target.to(dtype=model_dtype)
-
-        return metrics(pred, target)
+        target = targets[0]
+        if target.is_floating_point() and target.dtype != predictions.dtype:
+            target = target.to(dtype=predictions.dtype)
+        return metrics(predictions, target)
 
     # =============================================================================
-    # Lightning Step Methods (Use Direct Helpers)
+    # Lightning Step Methods
     # =============================================================================
 
-    def training_step(self, batch, batch_idx: int) -> dict[str, Any]:
-        """Training step with direct processing (no pipeline).
+    def training_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
+        """Training step with direct positional processing.
 
         Args:
-            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
-            batch_idx (int): Index of the batch.
+            batch: Positional batch from dataset.
+            batch_idx: Index of the batch.
 
         Returns:
-            dict[str, Any]: Dictionary containing the training loss.
+            Dictionary containing the training loss.
         """
-        from dlkit.core.datatypes.batch import Batch as _Batch
-        # 1. Extract features and targets
-        if isinstance(batch, _Batch):
-            features, targets = self._extract_from_batch(batch)
-        else:
-            features, targets = self._extract_features_targets(batch)
-
-        # 2. Model forward
-        predictions = self._invoke_model(features)
-
-        # 3. Compute loss
-        loss = self._compute_loss(predictions, targets)
-
-        # 4. Log metrics
+        self._log_dtype_mismatches(batch)
+        predictions = self._invoke_model(batch)
+        loss = self._compute_loss(predictions, batch.targets)
         self._log_stage_outputs("train", loss)
-
         return {"loss": loss}
 
-    def validation_step(self, batch, batch_idx: int) -> dict[str, Any]:
-        """Validation step with direct processing (no pipeline).
+    def validation_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
+        """Validation step with direct positional processing.
 
         Args:
-            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
-            batch_idx (int): Index of the batch.
+            batch: Positional batch from dataset.
+            batch_idx: Index of the batch.
 
         Returns:
-            dict[str, Any]: Dictionary containing validation metrics.
+            Dictionary containing validation metrics.
         """
-        from dlkit.core.datatypes.batch import Batch as _Batch
-        # 1. Extract features and targets
-        if isinstance(batch, _Batch):
-            features, targets = self._extract_from_batch(batch)
-        else:
-            features, targets = self._extract_features_targets(batch)
-
-        # 2. Model forward
-        predictions = self._invoke_model(features)
-
-        # 3. Compute loss
-        val_loss = self._compute_loss(predictions, targets)
-
-        # 4. Compute metrics
-        metrics = self._update_metrics(predictions, targets, stage="val")
-
-        # 5. Log metrics
+        self._log_dtype_mismatches(batch)
+        predictions = self._invoke_model(batch)
+        val_loss = self._compute_loss(predictions, batch.targets)
+        metrics = self._update_metrics(predictions, batch.targets, "val")
         self._log_stage_outputs("val", val_loss, metrics)
-
         return {"val_loss": val_loss}
 
-    def test_step(self, batch, batch_idx: int) -> dict[str, Any]:
-        """Test step with direct processing (no pipeline).
+    def test_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
+        """Test step with direct positional processing.
 
         Args:
-            batch: Raw batch from dataset (dict[str, Tensor] or Batch).
-            batch_idx (int): Index of the batch.
+            batch: Positional batch from dataset.
+            batch_idx: Index of the batch.
 
         Returns:
-            dict[str, Any]: Dictionary containing test metrics.
+            Dictionary containing test metrics.
         """
-        from dlkit.core.datatypes.batch import Batch as _Batch
-        # 1. Extract features and targets
-        if isinstance(batch, _Batch):
-            features, targets = self._extract_from_batch(batch)
-        else:
-            features, targets = self._extract_features_targets(batch)
-
-        # 2. Model forward
-        predictions = self._invoke_model(features)
-
-        # 3. Compute loss
-        test_loss = self._compute_loss(predictions, targets)
-
-        # 4. Compute metrics
-        metrics = self._update_metrics(predictions, targets, stage="test")
-
-        # 5. Log metrics
+        self._log_dtype_mismatches(batch)
+        predictions = self._invoke_model(batch)
+        test_loss = self._compute_loss(predictions, batch.targets)
+        metrics = self._update_metrics(predictions, batch.targets, "test")
         self._log_stage_outputs("test", test_loss, metrics)
-
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, dict[str, Tensor]]:
+    def predict_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
         """Prediction step without loss computation.
 
-        Targets are optional during inference.
-
         Args:
-            batch (dict[str, Tensor]): Raw batch from dataset.
-            batch_idx (int): Index of the batch.
+            batch: Positional batch from dataset.
+            batch_idx: Index of the batch.
 
         Returns:
-            dict: Dictionary with ``predictions``, ``targets``, and ``latents``.
+            Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
         """
-        # 1. Extract features (targets are optional)
-        features, targets = self._extract_features_targets(batch)
-
-        # 2. Model forward
-        predictions = self._invoke_model(features)
-
-        # 3. Normalize predictions to dict format
-        if isinstance(predictions, Tensor):
-            predictions = {"output": predictions}
-
+        predictions = self._invoke_model(batch)
         return {
-            "predictions": predictions,
-            "targets": targets if targets else {},
-            "latents": {}  # Subclasses can populate this
+            "predictions": (predictions,) if isinstance(predictions, Tensor) else predictions,
+            "targets": batch.targets,
+            "latents": batch.latents,
         }
 
     # =============================================================================
@@ -735,17 +366,14 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             'wrapper_type': self.__class__.__name__,
         }
 
-        # Save enhanced shape information using ShapeSpec
-        active_shape_spec = self.shape_spec or self._derive_shape_spec_from_model()
-        if active_shape_spec is not None and not active_shape_spec.is_empty():
-            canonical_spec = active_shape_spec.with_canonical_aliases()
-            dlkit_metadata['shape_spec'] = canonical_spec.to_dict()
-
         # Save model settings for reconstruction
         dlkit_metadata['model_settings'] = self._serialize_model_settings()
 
         # Save entry configs for reconstruction
         dlkit_metadata['entry_configs'] = self._serialize_entry_configs()
+
+        # Save shape summary for model input/output documentation
+        dlkit_metadata['shape_summary'] = self._compute_shape_summary()
 
         # Store in checkpoint
         checkpoint['dlkit_metadata'] = dlkit_metadata
@@ -793,24 +421,34 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         except Exception:
             return {}
 
-    def _serialize_entry_configs(self) -> dict[str, Any]:
+    def _serialize_entry_configs(self) -> list[dict[str, Any]]:
         """Serialize entry configurations for reconstruction.
 
         Returns:
-            Serialized entry configurations
+            List of serialized entry configurations
         """
         try:
             if hasattr(self, '_entry_configs') and self._entry_configs:
-                serialized = {}
-                for name, entry in self._entry_configs.items():
-                    serialized[name] = {
-                        'name': entry.name,
-                        'class_name': entry.__class__.__name__,
-                    }
-                return serialized
+                return [
+                    {"name": e.name, "class_name": e.__class__.__name__}
+                    for e in self._entry_configs
+                ]
         except Exception:
             pass
-        return {}
+        return []
+
+    def _compute_shape_summary(self) -> dict[str, Any]:
+        """Serialize stored ShapeSummary for checkpoint persistence.
+
+        Returns:
+            Dict with in_shapes and out_shapes lists, or empty dict if unavailable.
+        """
+        if not hasattr(self, '_shape_summary') or self._shape_summary is None:
+            return {}
+        return {
+            'in_shapes': [list(s) for s in self._shape_summary.in_shapes],
+            'out_shapes': [list(s) for s in self._shape_summary.out_shapes],
+        }
 
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Restore enhanced metadata and shape information from checkpoint.
@@ -844,57 +482,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 f"your model with the current version."
             )
 
-        # Restore shape from ShapeSpec if available
-        if 'shape_spec' in metadata:
-            try:
-                from dlkit.core.shape_specs import ShapeSystemFactory
-
-                factory = ShapeSystemFactory.create_production_system()
-                loaded_spec = factory.create_shape_spec_from_serialized(metadata['shape_spec'])
-                self._assign_shape_spec(loaded_spec)
-            except Exception as e:
-                import warnings
-                warnings.warn(
-                    f"Could not restore shape specification from checkpoint: {e}",
-                    RuntimeWarning,
-                    stacklevel=2
-                )
-
-    def _derive_shape_spec_from_model(self) -> IShapeSpec | None:
-        """Extract shape specification from the instantiated model when possible."""
-        try:
-            from dlkit.core.models.nn.base import ShapeAwareModel
-
-            if isinstance(self.model, ShapeAwareModel):
-                return self.model.get_unified_shape()
-        except Exception:
-            pass
-
-        if hasattr(self.model, "get_shape_spec"):
-            try:
-                candidate = self.model.get_shape_spec()
-                if isinstance(candidate, IShapeSpec):
-                    return candidate
-            except Exception:
-                pass
-
-        return None
-
-    def _assign_shape_spec(self, shape_spec: IShapeSpec | None) -> None:
-        """Update wrapper and underlying model with the provided shape spec."""
-        self.shape_spec = shape_spec
-
-        if shape_spec is None:
-            return
-
-        try:
-            from dlkit.core.models.nn.base import ShapeAwareModel
-
-            if isinstance(self.model, ShapeAwareModel):
-                # Update the cached unified shape used by shape-aware models
-                self.model._unified_shape = shape_spec  # noqa: SLF001 - internal cache update
-        except Exception:
-            pass
 
     # =============================================================================
     # Logging and Metrics
@@ -1080,134 +667,30 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     # Entry Config Access
     # =============================================================================
 
-    def get_entry_configs(self) -> dict[str, DataEntry]:
+    def get_entry_configs(self) -> tuple[DataEntry, ...]:
         """Get the data entry configurations used by this wrapper.
 
         Returns:
-            Dictionary mapping entry names to DataEntry configurations
+            Tuple of DataEntry configurations
         """
-        return self._entry_configs.copy()
+        return self._entry_configs
 
-    def get_feature_configs(self) -> dict[str, DataEntry]:
+    def get_feature_configs(self) -> tuple[DataEntry, ...]:
         """Get feature entry configurations.
 
         Returns:
-            Dictionary mapping feature names to Feature configurations
+            Tuple of Feature configurations
         """
-        return {
-            name: config for name, config in self._entry_configs.items()
-            if is_feature_entry(config)
-        }
+        return tuple(e for e in self._entry_configs if is_feature_entry(e))
 
-    def get_target_configs(self) -> dict[str, DataEntry]:
+    def get_target_configs(self) -> tuple[DataEntry, ...]:
         """Get target entry configurations.
 
         Returns:
-            Dictionary mapping target names to Target configurations
+            Tuple of Target configurations
         """
-        return {
-            name: config for name, config in self._entry_configs.items()
-            if is_target_entry(config)
-        }
+        return tuple(e for e in self._entry_configs if is_target_entry(e))
 
-    # =============================================================================
-    # Model Creation (ABC-based)
-    # =============================================================================
-
-    def _is_dlkit_model(self, model_settings) -> bool:
-        """Check if model settings refer to a dlkit model that should receive shapes."""
-        try:
-            model_name = getattr(model_settings, "name", None)
-            if model_name is None:
-                return False
-
-            # Check module path for dlkit indicators
-            module_path_str = str(getattr(model_settings, "module_path", "")).lower()
-            if "dlkit.core.models.nn" in module_path_str:
-                return True
-
-            # For testing: treat generic module paths as dlkit models
-            if module_path_str in ("", "x", "test", "dummy", "tests.helpers"):
-                return True
-
-            # Try to import and check inheritance
-            if isinstance(model_name, str):
-                try:
-                    from dlkit.tools.utils.general import import_object as _import
-                    model_cls = _import(model_name, fallback_module=getattr(model_settings, "module_path", ""))
-                    from dlkit.core.models.nn.base import ShapeAwareModel, ShapeAgnosticModel
-                    return issubclass(model_cls, (ShapeAwareModel, ShapeAgnosticModel))
-                except Exception:
-                    pass
-            elif isinstance(model_name, type):
-                try:
-                    from dlkit.core.models.nn.base import ShapeAwareModel, ShapeAgnosticModel
-                    return issubclass(model_name, (ShapeAwareModel, ShapeAgnosticModel))
-                except Exception:
-                    pass
-
-            return False
-        except Exception:
-            return False
-
-    def _create_abc_model(self, model_settings: ModelComponentSettings, shape_spec: IShapeSpec | None) -> torch.nn.Module:
-        """Create model using ABC-based approach.
-
-        Args:
-            model_settings: Model configuration settings
-            shape_spec: Shape specification for the model
-
-        Returns:
-            Created model instance
-        """
-        from dlkit.runtime.workflows.factories.model_detection import detect_model_type, ModelType
-        from dlkit.tools.config import GeneralSettings
-        from dlkit.core.models.nn.base import ShapeAwareModel, ShapeAgnosticModel
-
-        # Create minimal settings for model detection
-        settings = GeneralSettings(MODEL=model_settings)
-
-        # Import model class
-        model_name = getattr(model_settings, "name", None)
-        if isinstance(model_name, str):
-            from dlkit.tools.utils.general import import_object
-            model_cls = import_object(
-                model_name,
-                fallback_module=getattr(model_settings, "module_path", "")
-            )
-        elif isinstance(model_name, type):
-            model_cls = model_name
-        else:
-            raise ValueError(f"Invalid model name: {model_name}")
-
-        # Get model parameters from settings attributes
-        model_kwargs = {}
-
-        # Extract all non-None model parameters from the settings object
-        exclude_fields = {'name', 'module_path', 'checkpoint'}
-        for field_name in model_settings.__class__.model_fields:
-            if field_name not in exclude_fields:
-                field_value = getattr(model_settings, field_name, None)
-                if field_value is not None:
-                    model_kwargs[field_name] = field_value
-
-        # Also support legacy params attribute if present
-        if hasattr(model_settings, 'params') and model_settings.params:
-            model_kwargs.update(model_settings.params)
-
-        # Create model based on ABC type
-        try:
-            if issubclass(model_cls, ShapeAwareModel):
-                if shape_spec is None:
-                    raise ValueError(f"ShapeAwareModel {model_cls.__name__} requires shape specification")
-                return model_cls(unified_shape=shape_spec, **model_kwargs)
-            elif issubclass(model_cls, ShapeAgnosticModel):
-                return model_cls(**model_kwargs)
-        except TypeError:
-            pass
-
-        # External model - create without shape
-        return model_cls(**model_kwargs)
 
     # =============================================================================
     # Abstract Methods for Subclasses

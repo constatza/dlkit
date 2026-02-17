@@ -15,7 +15,6 @@ from dlkit.tools.config import (
     WrapperComponentSettings,
 )
 from dlkit.tools.config.data_entries import DataEntry
-from dlkit.core.shape_specs import IShapeSpec
 from .base import ProcessingLightningWrapper
 from .standard import StandardLightningWrapper, BareWrapper
 from .graph import GraphLightningWrapper
@@ -51,7 +50,7 @@ class WrapperFactory:
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
         wrapper_type: str = "auto",
-        entry_configs: dict[str, DataEntry] | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
         **kwargs
     ):
         """Create an appropriate Lightning wrapper for the given configuration.
@@ -101,9 +100,7 @@ class WrapperFactory:
     def create_standard_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        shape_spec: IShapeSpec | None = None,
-        unified_shape: IShapeSpec | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
         **kwargs
     ) -> StandardLightningWrapper:
         """Create a standard Lightning wrapper for tensor-based models.
@@ -112,21 +109,15 @@ class WrapperFactory:
             model_settings: Model configuration settings
             settings: Wrapper configuration settings
             entry_configs: Data entry configurations for pipeline setup
-            shape_spec: Shape specification inferred upstream
-            unified_shape: Explicit shape specification for ABC models
             **kwargs: Additional arguments passed to wrapper
 
         Returns:
             StandardLightningWrapper instance
         """
-        # Prefer unified_shape over legacy shape_spec
-        final_shape_spec = unified_shape or shape_spec
-
         return StandardLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            shape_spec=final_shape_spec,
             **kwargs
         )
     
@@ -134,8 +125,7 @@ class WrapperFactory:
     def create_graph_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        shape_spec: IShapeSpec | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
         **kwargs
     ) -> GraphLightningWrapper:
         """Create a graph Lightning wrapper for PyTorch Geometric models.
@@ -144,7 +134,6 @@ class WrapperFactory:
             model_settings: Model configuration settings
             settings: Wrapper configuration settings
             entry_configs: Data entry configurations for pipeline setup
-            shape_spec: Shape specification for graph models
             **kwargs: Additional arguments passed to wrapper
 
         Returns:
@@ -154,7 +143,6 @@ class WrapperFactory:
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            shape_spec=shape_spec,
             **kwargs
         )
     
@@ -181,8 +169,7 @@ class WrapperFactory:
     def create_timeseries_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
-        entry_configs: dict[str, DataEntry] | None = None,
-        shape_spec: IShapeSpec | None = None,
+        entry_configs: tuple[DataEntry, ...] | None = None,
         **kwargs
     ) -> TimeSeriesLightningWrapper:
         """Create a timeseries Lightning wrapper.
@@ -191,14 +178,12 @@ class WrapperFactory:
             model_settings: Model configuration settings
             settings: Wrapper configuration settings
             entry_configs: Data entry configurations for pipeline setup
-            shape_spec: Shape specification for timeseries models
             **kwargs: Additional arguments passed to wrapper
         """
         return TimeSeriesLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            shape_spec=shape_spec,
             **kwargs
         )
     
