@@ -40,30 +40,38 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
         return self.model(x)
 
     # Override steps to handle PyTorch Forecasting style tuple batches (x, y)
-    # For dict batches, delegates to base class direct processing methods
+    # For dict/Batch batches, delegates to base class direct processing methods
 
-    def training_step(self, batch, batch_idx: int):  # type: ignore[override]
-        """Training step with special handling for PF-style tuple batches."""
-        # If PF-style tuple/list batch, compute trivial differentiable loss
+    def training_step(self, batch, batch_idx: int):
+        """Training step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
-            loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
+            # PyTorch Forecasting format: (x, (y, weight))
+            x, y_tuple = batch
+            y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
+            predictions = self.model(x)
+            loss = self.loss_function(predictions, y.to(predictions.dtype))
             self._log_stage_outputs("train", loss)
             return {"loss": loss}
-        # Otherwise, use base class direct processing
         return super().training_step(batch, batch_idx)
 
-    def validation_step(self, batch, batch_idx: int):  # type: ignore[override]
-        """Validation step with special handling for PF-style tuple batches."""
+    def validation_step(self, batch, batch_idx: int):
+        """Validation step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
-            val_loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
+            x, y_tuple = batch
+            y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
+            predictions = self.model(x)
+            val_loss = self.loss_function(predictions, y.to(predictions.dtype))
             self._log_stage_outputs("val", val_loss)
             return {"val_loss": val_loss}
         return super().validation_step(batch, batch_idx)
 
-    def test_step(self, batch, batch_idx: int):  # type: ignore[override]
-        """Test step with special handling for PF-style tuple batches."""
+    def test_step(self, batch, batch_idx: int):
+        """Test step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
-            test_loss = next(self.model.parameters()).sum() * 0  # type: ignore[attr-defined]
+            x, y_tuple = batch
+            y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
+            predictions = self.model(x)
+            test_loss = self.loss_function(predictions, y.to(predictions.dtype))
             self._log_stage_outputs("test", test_loss)
             return {"test_loss": test_loss}
         return super().test_step(batch, batch_idx)
