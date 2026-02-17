@@ -30,8 +30,8 @@ def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
 
     assert len(ds) == 5
     sample0 = ds[0]
-    assert set(sample0.keys()) == {"x1", "x2", "y"}
-    assert isinstance(sample0["x1"], torch.Tensor)
-    assert tuple(sample0["x1"].shape) == (2,)
-    assert tuple(sample0["x2"].shape) == (3,)
-    assert tuple(sample0["y"].shape) == (1,)
+    assert len(sample0.features) == 2 and len(sample0.targets) == 1
+    assert isinstance(sample0.features[0], torch.Tensor)
+    assert tuple(sample0.features[0].shape) == (2,)
+    assert tuple(sample0.features[1].shape) == (3,)
+    assert tuple(sample0.targets[0].shape) == (1,)

@@ -91,14 +91,14 @@ class TestFlexibleDatasetWithNpz:
 
         # Get first sample
         sample = dataset[0]
-        assert "features" in sample
-        assert "targets" in sample
-        assert sample["features"].shape == (5,)
-        assert sample["targets"].shape == (1,)
+        assert len(sample.features) == 1
+        assert len(sample.targets) == 1
+        assert sample.features[0].shape == (5,)
+        assert sample.targets[0].shape == (1,)
 
         # Verify data matches original
         np.testing.assert_allclose(
-            sample["features"].numpy(),
+            sample.features[0].numpy(),
             npz_multi_array["features"][0],
             rtol=1e-5,
             atol=1e-7,

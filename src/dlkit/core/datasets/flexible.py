@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from dlkit.core.datatypes.batch import Batch
 from dlkit.tools.io import load_array
 from dlkit.tools.config.data_entries import (
     DataEntry,
@@ -253,6 +254,12 @@ class FlexibleDataset(BaseDataset):
             for k, (source, name) in targ_map.items()
         }
 
+        # Ordered tuple views for positional Batch access (insertion order = config order)
+        self._feature_tensors: tuple[Tensor, ...] = tuple(self.features.values())
+        self._target_tensors: tuple[Tensor, ...] = tuple(self.targets.values())
+        self._feature_names: tuple[str, ...] = tuple(self.features.keys())
+        self._target_names: tuple[str, ...] = tuple(self.targets.keys())
+
         # Track entry lengths (no broadcasting of unit-length/constants)
         self._entry_lengths: dict[str, int] = {}
         scalar_entries: set[str] = set()
@@ -295,24 +302,21 @@ class FlexibleDataset(BaseDataset):
         """
         return self._length
 
-    def __getitem__(self, idx: int) -> dict[str, Tensor]:
+    def __getitem__(self, idx: int) -> Batch:
         """Get sample at index.
 
         Args:
             idx: Sample index
 
         Returns:
-            Dictionary mapping entry names to tensor slices
+            Batch with feature and target tensors in config-entry order
         """
-        out: dict[str, Tensor] = {}
-        for k, t in self.features.items():
-            if t.dim() == 0:
-                out[k] = t  # scalar constant
-            else:
-                out[k] = t[idx]
-        for k, t in self.targets.items():
-            if t.dim() == 0:
-                out[k] = t  # scalar constant
-            else:
-                out[k] = t[idx]
-        return out
+        feature_tensors = tuple(
+            t if t.dim() == 0 else t[idx]
+            for t in self._feature_tensors
+        )
+        target_tensors = tuple(
+            t if t.dim() == 0 else t[idx]
+            for t in self._target_tensors
+        )
+        return Batch(features=feature_tensors, targets=target_tensors)

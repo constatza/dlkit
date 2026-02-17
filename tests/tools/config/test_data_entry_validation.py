@@ -608,7 +608,7 @@ class TestDatasetSettingsValuePreservation:
         # Verify dataset works
         assert len(dataset) == 10
         sample = dataset[0]
-        assert "x" in sample
-        assert "y" in sample
-        assert sample["x"].shape == torch.Size([5])
-        assert sample["y"].shape == torch.Size([1])
+        assert len(sample.features) == 1
+        assert len(sample.targets) == 1
+        assert sample.features[0].shape == torch.Size([5])
+        assert sample.targets[0].shape == torch.Size([1])

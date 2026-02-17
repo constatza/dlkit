@@ -42,6 +42,7 @@ from .serialization import (
     SerializedShape, ShapeFormatMigrator
 )
 from .checkpoint_loader import CheckpointShapeLoader
+from .simple_inference import ShapeSummary, infer_shapes_from_dataset
 
 __all__ = [
     # Core interfaces and implementations
@@ -106,4 +107,8 @@ __all__ = [
 
     # Checkpoint utilities
     "CheckpointShapeLoader",
+
+    # Simple inference system
+    "ShapeSummary",
+    "infer_shapes_from_dataset",
 ]

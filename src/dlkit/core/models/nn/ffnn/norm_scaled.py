@@ -6,12 +6,11 @@ from collections.abc import Callable
 import torch
 from torch import Tensor, nn
 
-from dlkit.core.models.nn.base import ShapeAwareModel
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.core.shape_specs import IShapeSpec, NullShapeSpec
 
 
-class NormScaledFFNN(ShapeAwareModel):
+class NormScaledFFNN(DLKitModel):
     """Wrap a base FFNN with input/output norm scaling.
 
     This module enforces homogeneous scaling consistency for Ax = b by:
@@ -23,10 +22,9 @@ class NormScaledFFNN(ShapeAwareModel):
 
     Args:
         base_model: Underlying module that operates on normalized inputs.
-        unified_shape: Shape specification describing (b, x) dimensions.
-        norm: Which vector norm to use for scaling; one of {"l2", "l1", "linf"}.
+        norm: Which vector norm to use; one of {"l2", "l1", "linf"}.
         eps_gain: Multiplier for machine epsilon used to avoid division by zero.
-        keep_stats: When True, :meth:`forward` returns ``(x, {"norm": norms})``.
+        keep_stats: When True, forward returns (x, {"norm": norms}).
     """
 
     SUPPORTED_NORMS = {"l2", "l1", "linf"}
@@ -36,60 +34,47 @@ class NormScaledFFNN(ShapeAwareModel):
     def __init__(
         self,
         *,
-        base_model: nn.Module | None = None,
-        unified_shape: IShapeSpec,
+        base_model: nn.Module,
         norm: str = DEFAULT_NORM,
         eps_gain: float = DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
     ) -> None:
-        if base_model is None:
-            msg = (
-                "NormScaledFFNN cannot be used directly. "
-                "Choose a concrete wrapper such as NormScaledLinearFFNN or NormScaledConstantWidthFFNN."
-            )
-            raise ValueError(msg)
         if not isinstance(base_model, nn.Module):
-            msg = "base_model must be an instance of torch.nn.Module"
-            raise TypeError(msg)
+            raise TypeError("base_model must be an instance of torch.nn.Module")
         if norm not in self.SUPPORTED_NORMS:
             raise ValueError(f"norm must be one of {self.SUPPORTED_NORMS}, got {norm!r}.")
         if eps_gain <= 0:
             raise ValueError("eps_gain must be > 0.")
 
+        super().__init__()
+        self.base_model = base_model
         self.norm = norm
         self.eps_gain = float(eps_gain)
         self.keep_stats = keep_stats
 
-        pending_base_model = base_model
-
-        super().__init__(unified_shape=unified_shape)
-
-        # Register the base model once the nn.Module initialization completed
-        self.base_model = pending_base_model
-
-    def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
-        if isinstance(shape_spec, NullShapeSpec):
-            return False
-        input_shape = shape_spec.get_input_shape()
-        output_shape = shape_spec.get_output_shape()
-
-        if input_shape is None or output_shape is None:
-            return False
-
-        if len(input_shape) != 1 or len(output_shape) != 1:
-            return False
-
-        if input_shape[0] <= 0 or output_shape[0] <= 0:
-            return False
-
-        return True
-
     @staticmethod
     def _compute_eps(x: Tensor, gain: float) -> float:
+        """Compute epsilon scaled by gain.
+
+        Args:
+            x: Input tensor (used for dtype info).
+            gain: Gain multiplier for machine epsilon.
+
+        Returns:
+            Scaled epsilon value.
+        """
         finfo = torch.finfo(x.dtype)
         return float(gain * finfo.eps)
 
     def _vector_norm(self, x: Tensor) -> Tensor:
+        """Compute per-sample vector norm.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Vector norms with keepdim=True.
+        """
         if self.norm == "l2":
             return torch.linalg.vector_norm(x, ord=2, dim=-1, keepdim=True)
         if self.norm == "l1":
@@ -97,54 +82,54 @@ class NormScaledFFNN(ShapeAwareModel):
         return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
 
     def forward(self, x: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
-        # Input casting is now handled by Lightning's precision plugin
-        b = x
-        if not torch.is_floating_point(b):
-            raise TypeError(f"Expected floating point tensor, received dtype={b.dtype}.")
-        if b.ndim < 1:
-            raise ValueError(
-                f"Expected b to have at least 1 dimension, got shape {tuple(b.shape)}."
-            )
+        """Forward pass with norm scaling.
 
-        norms = self._vector_norm(b)
-        eps = self._compute_eps(b, self.eps_gain)
+        Args:
+            x: Input tensor (floating point).
+
+        Returns:
+            Scaled output, or tuple of (output, {"norm": norms}) if keep_stats=True.
+        """
+        if not torch.is_floating_point(x):
+            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
+        if x.ndim < 1:
+            raise ValueError(f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}.")
+
+        norms = self._vector_norm(x)
+        eps = self._compute_eps(x, self.eps_gain)
         safe_div = norms.clamp_min(eps)
 
-        b_scaled = b / safe_div
-        x_scaled = self.base_model(b_scaled)
-        x = x_scaled * norms
+        x_scaled = self.base_model(x / safe_div) * norms
 
         if self.keep_stats:
-            return x, {"norm": norms}
-        return x
+            return x_scaled, {"norm": norms}
+        return x_scaled
 
 
 class NormScaledLinearFFNN(NormScaledFFNN):
     """NormScaledFFNN with a single Linear layer as the base network.
 
-    Precision is managed by PyTorch Lightning's precision plugins via the Trainer.
+    Args:
+        in_features: Number of input features.
+        out_features: Number of output features.
+        bias: Whether to include bias in the linear layer.
+        norm: Vector norm type to use.
+        eps_gain: Epsilon gain multiplier.
+        keep_stats: Whether to return norm statistics.
     """
 
     def __init__(
         self,
         *,
-        unified_shape: IShapeSpec,
+        in_features: int,
+        out_features: int,
         bias: bool = True,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
         eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
     ) -> None:
-        input_shape = unified_shape.get_input_shape()
-        output_shape = unified_shape.get_output_shape()
-        if input_shape is None or output_shape is None:
-            raise ValueError("NormScaledLinearFFNN requires both input and output shapes.")
-        if len(input_shape) != 1 or len(output_shape) != 1:
-            raise ValueError("NormScaledLinearFFNN only supports 1D feature shapes.")
-
-        base_model = nn.Linear(input_shape[0], output_shape[0], bias=bias)
         super().__init__(
-            base_model=base_model,
-            unified_shape=unified_shape,
+            base_model=nn.Linear(in_features, out_features, bias=bias),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
@@ -154,13 +139,24 @@ class NormScaledLinearFFNN(NormScaledFFNN):
 class NormScaledConstantWidthFFNN(NormScaledFFNN):
     """NormScaledFFNN backed by ConstantWidthFFNN.
 
-    Precision is managed by PyTorch Lightning's precision plugins via the Trainer.
+    Args:
+        in_features: Number of input features.
+        out_features: Number of output features.
+        hidden_size: Size of hidden layers.
+        num_layers: Number of hidden layers.
+        norm: Vector norm type to use.
+        eps_gain: Epsilon gain multiplier.
+        keep_stats: Whether to return norm statistics.
+        activation: Activation function.
+        normalize: Type of normalization.
+        dropout: Dropout probability.
     """
 
     def __init__(
         self,
         *,
-        unified_shape: IShapeSpec,
+        in_features: int,
+        out_features: int,
         hidden_size: int,
         num_layers: int,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
@@ -170,18 +166,17 @@ class NormScaledConstantWidthFFNN(NormScaledFFNN):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        activation_fn = activation if activation is not None else nn.functional.gelu
         base_model = ConstantWidthFFNN(
-            unified_shape=unified_shape,
+            in_features=in_features,
+            out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation_fn,
-            normalize=normalize,  # type: ignore[arg-type]
+            activation=activation if activation is not None else nn.functional.gelu,
+            normalize=normalize,
             dropout=dropout,
         )
         super().__init__(
             base_model=base_model,
-            unified_shape=unified_shape,
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,

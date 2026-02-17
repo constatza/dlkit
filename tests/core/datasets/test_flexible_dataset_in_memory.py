@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import torch
 
+from dlkit.core.datatypes.batch import Batch
 from dlkit.core.datasets.flexible import (
     FlexibleDataset,
     PlaceholderNotResolvedError,
@@ -257,11 +258,13 @@ class TestFlexibleDatasetNewHierarchy:
         assert len(ds) == 5
         sample = ds[0]
 
-        assert set(sample.keys()) == {"feat1", "target1"}
-        assert isinstance(sample["feat1"], torch.Tensor)
-        assert isinstance(sample["target1"], torch.Tensor)
-        assert sample["feat1"].shape == (2,)
-        assert sample["target1"].shape == (3,)
+        assert isinstance(sample, Batch)
+        assert len(sample.features) == 1
+        assert len(sample.targets) == 1
+        assert isinstance(sample.features[0], torch.Tensor)
+        assert isinstance(sample.targets[0], torch.Tensor)
+        assert sample.features[0].shape == (2,)
+        assert sample.targets[0].shape == (3,)
 
     def test_dataset_with_path_entries_only(
         self, path_feature: PathFeature, path_target: PathTarget
@@ -272,8 +275,9 @@ class TestFlexibleDatasetNewHierarchy:
         assert len(ds) == 5
         sample = ds[0]
 
-        assert "feat_file" in sample
-        assert "target_file" in sample
+        assert isinstance(sample, Batch)
+        assert len(sample.features) >= 1
+        assert len(sample.targets) >= 1
 
     def test_dataset_with_mixed_entries(
         self, value_feature: ValueFeature, path_target: PathTarget
@@ -284,10 +288,11 @@ class TestFlexibleDatasetNewHierarchy:
         assert len(ds) == 5
         sample = ds[0]
 
-        assert "feat1" in sample
-        assert "target_file" in sample
-        assert isinstance(sample["feat1"], torch.Tensor)
-        assert isinstance(sample["target_file"], torch.Tensor)
+        assert isinstance(sample, Batch)
+        assert len(sample.features) >= 1
+        assert len(sample.targets) >= 1
+        assert isinstance(sample.features[0], torch.Tensor)
+        assert isinstance(sample.targets[0], torch.Tensor)
 
     def test_dataset_with_placeholder_raises(self, placeholder_feature: PathFeature):
         """Test FlexibleDataset raises error for placeholder entries."""
@@ -311,7 +316,8 @@ class TestFlexibleDatasetFactoryEntries:
         ds = FlexibleDataset(features=[feat], targets=[targ])
 
         assert len(ds) == 5
-        assert set(ds[0].keys()) == {"X", "Y"}
+        assert isinstance(ds[0], Batch)
+        assert len(ds[0].features) == 1 and len(ds[0].targets) == 1
 
     def test_dataset_with_factory_value_entries(self):
         """Test FlexibleDataset with Feature/Target factory value entries."""
@@ -326,8 +332,9 @@ class TestFlexibleDatasetFactoryEntries:
         assert len(ds) == 10
         sample = ds[5]
 
-        assert torch.allclose(sample["X"], torch.tensor([10.0, 11.0], dtype=torch.float32))
-        assert torch.allclose(sample["Y"], torch.tensor([1.0], dtype=torch.float32))
+        assert isinstance(sample, Batch)
+        assert torch.allclose(sample.features[0], torch.tensor([10.0, 11.0], dtype=torch.float32))
+        assert torch.allclose(sample.targets[0], torch.tensor([1.0], dtype=torch.float32))
 
     def test_dataset_with_factory_placeholder_raises(self):
         """Test FlexibleDataset raises error for factory placeholder entries."""
@@ -364,7 +371,8 @@ class TestFlexibleDatasetValidation:
         ds = FlexibleDataset(features=[feat], targets=None)
 
         assert len(ds) == 5
-        assert "X" in ds[0]
+        assert isinstance(ds[0], Batch)
+        assert len(ds[0].features) >= 1
 
     def test_only_targets_valid(self):
         """Test FlexibleDataset with only targets."""
@@ -374,7 +382,8 @@ class TestFlexibleDatasetValidation:
         ds = FlexibleDataset(features=[], targets=[targ])
 
         assert len(ds) == 5
-        assert "Y" in ds[0]
+        assert isinstance(ds[0], Batch)
+        assert len(ds[0].targets) >= 1
 
 
 # ============================================================================
@@ -409,10 +418,11 @@ class TestIntegration:
         assert len(ds) == 5
         sample = ds[0]
 
-        assert set(sample.keys()) == {"feat1", "feat2", "feat3"}
-        assert sample["feat1"].shape == (2,)
-        assert sample["feat2"].shape == (3,)
-        assert sample["feat3"].shape == (4,)
+        assert isinstance(sample, Batch)
+        assert len(sample.features) == 3
+        assert sample.features[0].shape == (2,)
+        assert sample.features[1].shape == (3,)
+        assert sample.features[2].shape == (4,)
 
     def test_torch_tensor_values(self):
         """Test FlexibleDataset with torch.Tensor values."""
@@ -427,8 +437,9 @@ class TestIntegration:
         assert len(ds) == 10
         sample = ds[0]
 
-        assert torch.equal(sample["X"], torch.tensor([0.0, 1.0], dtype=torch.float32))
-        assert torch.equal(sample["Y"], torch.tensor([0.0], dtype=torch.float32))
+        assert isinstance(sample, Batch)
+        assert torch.equal(sample.features[0], torch.tensor([0.0, 1.0], dtype=torch.float32))
+        assert torch.equal(sample.targets[0], torch.tensor([0.0], dtype=torch.float32))
 
     def test_flexible_dataset_with_value_factory_entries(self):
         """Test FlexibleDataset with Feature/Target factory value entries."""
@@ -440,12 +451,13 @@ class TestIntegration:
         assert len(dataset) == 10
 
         batch = dataset[0]
-        assert "x" in batch
-        assert "y" in batch
-        assert batch["x"].shape == (5,)
-        assert batch["y"].shape == (1,)
-        assert torch.allclose(batch["x"], torch.ones(5, dtype=torch.float32))
-        assert torch.allclose(batch["y"], torch.zeros(1, dtype=torch.float32))
+        assert isinstance(batch, Batch)
+        assert len(batch.features) >= 1
+        assert len(batch.targets) >= 1
+        assert batch.features[0].shape == (5,)
+        assert batch.targets[0].shape == (1,)
+        assert torch.allclose(batch.features[0], torch.ones(5, dtype=torch.float32))
+        assert torch.allclose(batch.targets[0], torch.zeros(1, dtype=torch.float32))
 
     def test_flexible_dataset_mixed_factory_types(self, tmp_path: Path):
         """Test FlexibleDataset with mixed factory entries (path and value)."""
@@ -464,8 +476,9 @@ class TestIntegration:
         assert len(dataset) == 10
 
         batch = dataset[5]
-        assert torch.allclose(batch["x"], torch.full((3,), 2.0, dtype=torch.float32))
-        assert torch.allclose(batch["y"], torch.full((1,), 5.0, dtype=torch.float32))
+        assert isinstance(batch, Batch)
+        assert torch.allclose(batch.features[0], torch.full((3,), 2.0, dtype=torch.float32))
+        assert torch.allclose(batch.targets[0], torch.full((1,), 5.0, dtype=torch.float32))
 
     def test_flexible_dataset_all_entry_formats_factory_based(self, tmp_path: Path):
         """Test FlexibleDataset with all supported entry formats using factories."""
@@ -494,9 +507,10 @@ class TestIntegration:
         assert len(dataset) == 8
         sample = dataset[0]
 
-        assert set(sample.keys()) == {"x1", "x2", "x3", "y"}
-        assert sample["x1"].shape == (2,)
-        assert sample["x2"].shape == (3,)
-        assert sample["x3"].shape == (4,)
-        assert sample["y"].shape == (1,)
-        assert torch.allclose(sample["y"], torch.tensor([10.0], dtype=torch.float32))
+        assert isinstance(sample, Batch)
+        assert len(sample.features) == 3 and len(sample.targets) == 1
+        assert sample.features[0].shape == (2,)
+        assert sample.features[1].shape == (3,)
+        assert sample.features[2].shape == (4,)
+        assert sample.targets[0].shape == (1,)
+        assert torch.allclose(sample.targets[0], torch.tensor([10.0], dtype=torch.float32))

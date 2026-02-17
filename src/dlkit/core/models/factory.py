@@ -5,11 +5,11 @@ Replaces the _create_abc_model method in ProcessingLightningWrapper.
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch.nn as nn
-
-from dlkit.core.shape_specs.simple_inference import ShapeSummary
+if TYPE_CHECKING:
+    import torch.nn as nn
+    from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 
 def build_model(

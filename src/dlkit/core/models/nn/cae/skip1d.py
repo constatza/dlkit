@@ -1,11 +1,7 @@
 import torch
 from collections.abc import Callable
-from pydantic import ConfigDict, validate_call
 from torch import nn
 
-# from dlkit.core.datatypes.dataset import Shape  # Removed - using IShapeSpec
-from dlkit.core.shape_specs import IShapeSpec
-from typing import Any
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.cae.base import CAE
 from dlkit.core.models.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
@@ -16,18 +12,28 @@ from dlkit.core.models.nn.encoder.latent import (
 
 
 class SkipCAE1d(CAE):
-    latent_channels: int
-    latent_width: int
-    latent_size: int
-    num_layers: int
-    kernel_size: int
-    shape_spec: Any  # IShapeSpec | None
+    """1D Skip Connection Convolutional Autoencoder.
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    Args:
+        in_channels: Number of input channels.
+        in_length: Length of input sequence.
+        latent_channels: Number of latent channels.
+        latent_size: Size of latent vector.
+        latent_width: Width of latent feature (default: 1).
+        num_layers: Number of encoder/decoder layers (default: 3).
+        kernel_size: Convolution kernel size (default: 3).
+        activation: Activation function (default: gelu).
+        normalize: Normalization type (default: None).
+        dropout: Dropout probability (default: 0.0).
+        transpose: Whether to transpose dimensions in latent encoding (default: False).
+        dilation: Dilation for convolutions (default: 1).
+    """
+
     def __init__(
         self,
         *,
-        shape_spec: Any = None,  # IShapeSpec | None
+        in_channels: int,
+        in_length: int,
         latent_channels: int,
         latent_size: int,
         latent_width: int = 1,
@@ -38,11 +44,9 @@ class SkipCAE1d(CAE):
         dropout: float = 0.0,
         transpose: bool = False,
         dilation: int = 1,
-    ):
-        if shape_spec is None:
-            raise ValueError("SkipCAE1d requires a shape_spec parameter")
-        super().__init__(unified_shape=shape_spec)
-        self.shape_spec = shape_spec
+    ) -> None:
+        super().__init__()
+
         self.latent_channels = latent_channels
         self.latent_width = latent_width
         self.latent_size = latent_size
@@ -54,18 +58,8 @@ class SkipCAE1d(CAE):
         self.transpose = transpose
         self.dilation = dilation
 
-        # Get input shape using the shape spec protocol
-        input_shape = shape_spec.get_input_shape()
-        if input_shape is None or len(input_shape) < 2:
-            raise ValueError("SkipCAE1d expects at least two feature dimensions")
-
-        initial_channels = int(input_shape[0])
-        initial_width = int(input_shape[1])
-
-        channels = torch.linspace(initial_channels, latent_channels, num_layers + 1).int().tolist()
-        timesteps = torch.linspace(initial_width, latent_width, num_layers + 1).int().tolist()
-
-        # Instantiate feature extractor and latent encoder
+        channels = torch.linspace(in_channels, latent_channels, num_layers + 1).int().tolist()
+        timesteps = torch.linspace(in_length, latent_width, num_layers + 1).int().tolist()
 
         self.encoder = SkipEncoder1d(
             channels,
@@ -76,13 +70,9 @@ class SkipCAE1d(CAE):
             dropout=dropout,
             dilation=dilation,
         )
-        if transpose:
-            reduce_dim = timesteps[-1]
-        else:
-            reduce_dim = channels[-1]
-        self.feature_to_latent = TensorToVectorBlock(reduce_dim, latent_size, transpose=transpose)
 
-        # Instantiate latent decoder and feature decoder
+        reduce_dim = timesteps[-1] if transpose else channels[-1]
+        self.feature_to_latent = TensorToVectorBlock(reduce_dim, latent_size, transpose=transpose)
         self.latent_to_feature = VectorToTensorBlock(latent_size, (channels[-1], timesteps[-1]))
         self.decoder = SkipDecoder1d(
             channels[::-1],
@@ -94,11 +84,26 @@ class SkipCAE1d(CAE):
             dilation=dilation,
         )
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode input to latent space.
+
+        Args:
+            x: Input tensor of shape (batch, in_channels, in_length).
+
+        Returns:
+            Latent representation tensor.
+        """
         x = self.encoder(x)
         return self.feature_to_latent(x)
 
-    def decode(self, x):
+    def decode(self, x: torch.Tensor) -> torch.Tensor:
+        """Decode latent representation to output space.
+
+        Args:
+            x: Latent tensor.
+
+        Returns:
+            Decoded output tensor.
+        """
         x = self.latent_to_feature(x)
-        x = self.decoder(x)
-        return x
+        return self.decoder(x)

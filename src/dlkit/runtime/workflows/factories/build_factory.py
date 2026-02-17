@@ -51,14 +51,47 @@ class BuildComponents:
 
 
 class IBuildStrategy:
-    """Interface for build strategies (dataset/wrapper families)."""
+    """Interface for build strategies (dataset/wrapper families).
+
+    Implements Template Method pattern: shared build() sets up precision and
+    path contexts, then delegates to _build_core() in each subclass.
+    """
 
     def can_handle(
         self, settings: WorkflowSettings
     ) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def build(
+    def build(self, settings: WorkflowSettings) -> BuildComponents:
+        """Template method: set up precision + path contexts, then delegate.
+
+        Shared across all build strategies — eliminates triplication.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            Constructed runtime components.
+        """
+        from dlkit.interfaces.api.domain.precision import precision_override
+        from dlkit.interfaces.api.overrides.path_context import (
+            get_current_path_context,
+            path_override_context,
+        )
+
+        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+        ctx = get_current_path_context()
+        raw_root = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
+        session_root_dir = coerce_root_dir_to_absolute(raw_root)
+        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
+
+        with precision_override(precision_strategy):
+            if needs_path_context:
+                with path_override_context({"root_dir": session_root_dir}):
+                    return self._build_core(settings)
+            return self._build_core(settings)
+
+    def _build_core(
         self, settings: WorkflowSettings
     ) -> BuildComponents:  # pragma: no cover - interface
         raise NotImplementedError
@@ -81,34 +114,15 @@ class FlexibleBuildStrategy(IBuildStrategy):
         except Exception:
             return True
 
-    def build(
-        self, settings: WorkflowSettings
-    ) -> BuildComponents:
-        # Use precision context for entire build process
-        # This ensures all components (dataset, model) use consistent precision
-        from dlkit.interfaces.api.domain.precision import precision_override
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+    def _build_core(self, settings: WorkflowSettings) -> BuildComponents:
+        """Build flexible array dataset components.
 
-        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+        Args:
+            settings: Workflow configuration settings.
 
-        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
-        ctx = get_current_path_context()
-        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
-        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
-        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
-
-        with precision_override(precision_strategy):
-            if needs_path_context:
-                # Set up defensive path context from SESSION.root_dir
-                with path_override_context({"root_dir": session_root_dir}):
-                    return self._build_with_precision(settings)
-            else:
-                # Path context already active or SESSION.root_dir not set
-                return self._build_with_precision(settings)
-
-    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
-        """Internal build method that executes within precision context."""
-        # Determine mode
+        Returns:
+            Constructed runtime components.
+        """
         mode = (
             "inference"
             if (settings.SESSION and getattr(settings.SESSION, "inference", False))
@@ -354,32 +368,15 @@ class GraphBuildStrategy(IBuildStrategy):
         except Exception:
             return False
 
-    def build(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
-    ) -> BuildComponents:
-        # Use precision context for entire build process
-        from dlkit.interfaces.api.domain.precision import precision_override
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+    def _build_core(self, settings: WorkflowSettings) -> BuildComponents:
+        """Build graph dataset components.
 
-        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+        Args:
+            settings: Workflow configuration settings.
 
-        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
-        ctx = get_current_path_context()
-        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
-        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
-        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
-
-        with precision_override(precision_strategy):
-            if needs_path_context:
-                # Set up defensive path context from SESSION.root_dir
-                with path_override_context({"root_dir": session_root_dir}):
-                    return self._build_with_precision(settings)
-            else:
-                # Path context already active or SESSION.root_dir not set
-                return self._build_with_precision(settings)
-
-    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
-        """Internal build method that executes within precision context."""
+        Returns:
+            Constructed runtime components.
+        """
         mode = (
             "inference"
             if (settings.SESSION and getattr(settings.SESSION, "inference", False))
@@ -515,32 +512,15 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         except Exception:
             return False
 
-    def build(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
-    ) -> BuildComponents:
-        # Use precision context for entire build process
-        from dlkit.interfaces.api.domain.precision import precision_override
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context, path_override_context
+    def _build_core(self, settings: WorkflowSettings) -> BuildComponents:
+        """Build time-series dataset components.
 
-        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+        Args:
+            settings: Workflow configuration settings.
 
-        # Defensive path context: ensure SESSION.root_dir is active even when parent context is missing
-        ctx = get_current_path_context()
-        raw_session_root_dir = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
-        session_root_dir = coerce_root_dir_to_absolute(raw_session_root_dir)
-        needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
-
-        with precision_override(precision_strategy):
-            if needs_path_context:
-                # Set up defensive path context from SESSION.root_dir
-                with path_override_context({"root_dir": session_root_dir}):
-                    return self._build_with_precision(settings)
-            else:
-                # Path context already active or SESSION.root_dir not set
-                return self._build_with_precision(settings)
-
-    def _build_with_precision(self, settings: WorkflowSettings) -> BuildComponents:
-        """Internal build method that executes within precision context."""
+        Returns:
+            Constructed runtime components.
+        """
         mode = (
             "inference"
             if (settings.SESSION and getattr(settings.SESSION, "inference", False))

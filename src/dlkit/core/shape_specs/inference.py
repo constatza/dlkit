@@ -317,6 +317,17 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
 
         shapes: Dict[str, tuple[int, ...]] = {}
 
+        # Handle Batch dataclass (new positional format)
+        from dlkit.core.datatypes.batch import Batch as DLKitBatch
+        if isinstance(sample, DLKitBatch):
+            for i, t in enumerate(sample.features):
+                if hasattr(t, "shape"):
+                    shapes[f"x{i}" if i > 0 else "x"] = tuple(int(d) for d in t.shape)
+            for i, t in enumerate(sample.targets):
+                if hasattr(t, "shape"):
+                    shapes[f"y{i}" if i > 0 else "y"] = tuple(int(d) for d in t.shape)
+            return shapes if shapes else None
+
         if isinstance(sample, dict):
             # Dict-based dataset: extract shapes for each key
             for name, tensor in sample.items():
