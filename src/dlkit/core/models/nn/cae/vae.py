@@ -3,7 +3,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 from pydantic import ConfigDict, validate_call
-# from dlkit.core.datatypes.dataset import Shape  # Removed - using IShapeSpec
 from typing import Any
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.cae.base import CAE
@@ -18,13 +17,15 @@ class VAE1d(CAE):
     latent_size: int
     num_layers: int
     kernel_size: int
-    shape_spec: Any  # IShapeSpec | None
+    in_channels: int
+    in_length: int
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         *,
-        shape_spec: Any = None,  # IShapeSpec | None
+        in_channels: int,
+        in_length: int,
         latent_channels: int,
         latent_size: int,
         latent_width: int = 1,
@@ -37,21 +38,15 @@ class VAE1d(CAE):
         alpha: float = 1.0,
         beta: float = 0.1,
     ):
-        if shape_spec is None:
-            raise ValueError("VAE1d requires a shape_spec parameter")
         super().__init__()
 
         self.alpha = alpha
         self.beta = beta
-        self.shape_spec = shape_spec
+        self.in_channels = in_channels
+        self.in_length = in_length
 
-        # Get input shape using the shape spec protocol
-        input_shape = shape_spec.get_input_shape()
-        if input_shape is None or len(input_shape) < 2:
-            raise ValueError("VAE1d expects at least two feature dimensions")
-
-        initial_channels = int(input_shape[0])
-        initial_width = int(input_shape[1])
+        initial_channels = in_channels
+        initial_width = in_length
 
         channels = torch.linspace(initial_channels, latent_channels, num_layers + 1).int().tolist()
         timesteps = torch.linspace(initial_width, latent_width, num_layers + 1).int().tolist()

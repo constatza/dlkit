@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 import torch
 from torch import nn
-from torch_geometric.data import Data
 from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
@@ -38,10 +37,15 @@ class ScaledGProjection(_ProjectionNetwork):
             output_projection=output_projection,
         )
 
-    def forward(self, data: Data) -> Tensor:
-        x, scale = self._normalize_inputs(data.x)
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_attr: Tensor | None = None,
+    ) -> Tensor:
+        x, scale = self._normalize_inputs(x)
         x = self._in_proj(x)
-        x = self._apply_message_module(x, data)
+        x = self._apply_message_module(x, edge_index, edge_attr)
         out = self._out_proj(x)
 
         if scale is not None and out.size(-1) == scale.size(-1):

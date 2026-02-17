@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import torch
+
 if TYPE_CHECKING:
     from torch import Tensor
 
@@ -33,3 +35,37 @@ class Batch:
     features: tuple[Tensor, ...]
     targets: tuple[Tensor, ...]
     latents: tuple[Tensor, ...] = field(default_factory=tuple)
+
+
+def _collate_batch(batch: list[Batch], *, collate_fn_map=None) -> Batch:
+    """Collate a list of Batch samples into a single batched Batch.
+
+    Registered with PyTorch's default_collate_fn_map so DataLoader can
+    handle Batch objects natively.
+
+    Args:
+        batch: List of per-sample Batch objects from Dataset.__getitem__.
+        collate_fn_map: PyTorch collate function map (passed by DataLoader).
+
+    Returns:
+        Single Batch with tensors stacked along the batch dimension.
+    """
+    return Batch(
+        features=tuple(
+            torch.stack([b.features[i] for b in batch])
+            for i in range(len(batch[0].features))
+        ),
+        targets=tuple(
+            torch.stack([b.targets[i] for b in batch])
+            for i in range(len(batch[0].targets))
+        ),
+        latents=tuple(
+            torch.stack([b.latents[i] for b in batch])
+            for i in range(len(batch[0].latents))
+        ) if batch[0].latents else (),
+    )
+
+
+# Register with PyTorch's collation system so DataLoader handles Batch automatically
+from torch.utils.data._utils.collate import default_collate_fn_map  # noqa: E402
+default_collate_fn_map[Batch] = _collate_batch

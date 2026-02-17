@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from torch import nn
-from torch_geometric.data import Data
 from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
@@ -58,23 +57,25 @@ class _ProjectionNetwork(BaseGraphNetwork):
 
         self._message_module = message_module
 
-    def forward(self, data: Data) -> Tensor:
-        x = self._in_proj(data.x)
-        x = self._apply_message_module(x, data)
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_attr: Tensor | None = None,
+    ) -> Tensor:
+        x = self._in_proj(x)
+        x = self._apply_message_module(x, edge_index, edge_attr)
         return self._out_proj(x)
 
-    def _apply_message_module(self, features: Tensor, data: Data) -> Tensor:
+    def _apply_message_module(
+        self,
+        features: Tensor,
+        edge_index: Tensor,
+        edge_attr: Tensor | None = None,
+    ) -> Tensor:
         if self._message_module is None:
             return features
-
-        edge_weight = getattr(data, "edge_weight", None)
-        edge_attr = edge_weight if edge_weight is not None else getattr(data, "edge_attr", None)
-
-        return self._message_module(
-            features,
-            data.edge_index,
-            edge_attr=edge_attr,
-        )
+        return self._message_module(features, edge_index, edge_attr=edge_attr)
 
 
 class GProjection(_ProjectionNetwork):
