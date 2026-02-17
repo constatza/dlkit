@@ -42,7 +42,7 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
     # Override steps to handle PyTorch Forecasting style tuple batches (x, y)
     # For dict/Batch batches, delegates to base class direct processing methods
 
-    def training_step(self, batch, batch_idx: int):
+    def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Training step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
             # PyTorch Forecasting format: (x, (y, weight))
@@ -54,7 +54,7 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
             return {"loss": loss}
         return super().training_step(batch, batch_idx)
 
-    def validation_step(self, batch, batch_idx: int):
+    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Validation step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
             x, y_tuple = batch
@@ -65,7 +65,7 @@ class TimeSeriesLightningWrapper(ProcessingLightningWrapper):
             return {"val_loss": val_loss}
         return super().validation_step(batch, batch_idx)
 
-    def test_step(self, batch, batch_idx: int):
+    def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Test step handling PF-style tuple batches and dict/Batch batches."""
         if isinstance(batch, (tuple, list)):
             x, y_tuple = batch

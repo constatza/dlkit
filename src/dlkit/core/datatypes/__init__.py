@@ -7,6 +7,7 @@ from .base import (
     StrHyperparameter,
     Hyperparameter,
 )
+from .batch import Batch
 
 # Lightweight, Pydantic v2-first URL/path types (security-light)
 from .tilde_expansion import expand_tilde_in_value
@@ -36,6 +37,7 @@ __all__ = [
     "FloatHyperparameter",
     "StrHyperparameter",
     "Hyperparameter",
+    "Batch",
     # Simple shortcuts (security-light)
     "SimpleTildePath",
     "SimpleMLflowURI",

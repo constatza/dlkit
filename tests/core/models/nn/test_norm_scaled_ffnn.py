@@ -7,21 +7,10 @@ from dlkit.nn.ffnn import (
     NormScaledConstantWidthFFNN,
     NormScaledLinearFFNN,
 )
-from dlkit.core.shape_specs import create_shape_spec
-
-
-def _make_vector_shape(dim: int, *, output_dim: int | None = None):
-    target_dim = output_dim if output_dim is not None else dim
-    return create_shape_spec(
-        {"rhs": (dim,), "solution": (target_dim,)},
-        default_input="rhs",
-        default_output="solution",
-    )
 
 
 def test_norm_scaled_linear_ffnn_behaves_like_identity():
-    shape = _make_vector_shape(4)
-    module = NormScaledLinearFFNN(unified_shape=shape, bias=False)
+    module = NormScaledLinearFFNN(in_features=4, out_features=4, bias=False)
 
     with torch.no_grad():
         module.base_model.weight.copy_(torch.eye(4))
@@ -32,8 +21,7 @@ def test_norm_scaled_linear_ffnn_behaves_like_identity():
 
 
 def test_norm_scaled_linear_ffnn_reports_norm_stats_for_zero_rhs():
-    shape = _make_vector_shape(3)
-    module = NormScaledLinearFFNN(unified_shape=shape, bias=False, keep_stats=True)
+    module = NormScaledLinearFFNN(in_features=3, out_features=3, bias=False, keep_stats=True)
 
     with torch.no_grad():
         module.base_model.weight.copy_(torch.eye(3))
@@ -48,9 +36,9 @@ def test_norm_scaled_linear_ffnn_reports_norm_stats_for_zero_rhs():
 
 
 def test_norm_scaled_constant_width_ffnn_is_scale_equivariant_for_positive_scalars():
-    shape = _make_vector_shape(6, output_dim=2)
     module = NormScaledConstantWidthFFNN(
-        unified_shape=shape,
+        in_features=6,
+        out_features=2,
         hidden_size=8,
         num_layers=2,
     )
@@ -66,8 +54,7 @@ def test_norm_scaled_constant_width_ffnn_is_scale_equivariant_for_positive_scala
 
 def test_norm_scaled_linear_ffnn_rejects_integer_inputs():
     """Model should raise TypeError for integer inputs (Lightning handles casting)."""
-    shape = _make_vector_shape(2)
-    module = NormScaledLinearFFNN(unified_shape=shape, bias=False)
+    module = NormScaledLinearFFNN(in_features=2, out_features=2, bias=False)
 
     with torch.no_grad():
         module.base_model.weight.copy_(torch.eye(2))

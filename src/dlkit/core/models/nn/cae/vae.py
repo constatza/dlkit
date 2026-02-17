@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from pydantic import ConfigDict, validate_call
 # from dlkit.core.datatypes.dataset import Shape  # Removed - using IShapeSpec
-from dlkit.core.shape_specs import IShapeSpec
 from typing import Any
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.cae.base import CAE
@@ -40,7 +39,7 @@ class VAE1d(CAE):
     ):
         if shape_spec is None:
             raise ValueError("VAE1d requires a shape_spec parameter")
-        super().__init__(unified_shape=shape_spec)
+        super().__init__()
 
         self.alpha = alpha
         self.beta = beta

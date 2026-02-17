@@ -3,96 +3,50 @@ from typing import Literal
 import torch.nn as nn
 from torch import Tensor
 
-from dlkit.core.models.nn.base import ShapeAwareModel
-from dlkit.core.shape_specs import IShapeSpec
+from dlkit.core.models.nn.base import DLKitModel
 
 
-class LinearNetwork(ShapeAwareModel):
+class LinearNetwork(DLKitModel):
     """A simple linear network with a single layer and optional normalization.
 
     This network consists of a single linear transformation with optional
     batch normalization or layer normalization.
 
-    This model is ideal for testing scenarios where a simple, minimal model
-    is needed without the complexity of deeper architectures.
-
     Args:
-        shape_spec: Shape specification containing input and output shape information
-        normalize: Type of normalization to apply ('batch', 'layer', or None)
-        bias: Whether to include bias in the linear layer
-        shape: Dictionary containing input and output shapes (deprecated, use shape_spec)
-        input_size: Size of the input features (deprecated, use shape_spec)
-        output_size: Size of the output features (deprecated, use shape_spec)
+        in_features: Size of the input features.
+        out_features: Size of the output features.
+        normalize: Type of normalization to apply ('batch', 'layer', or None).
+        bias: Whether to include bias in the linear layer.
     """
 
     def __init__(
         self,
         *,
-        unified_shape: IShapeSpec,
+        in_features: int,
+        out_features: int,
         normalize: Literal["batch", "layer"] | None = None,
         bias: bool = True,
-        **kwargs,
     ):
-        # Call ShapeAwareModel constructor
-        super().__init__(unified_shape=unified_shape, **kwargs)
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features, bias=bias)
 
-        # Build layers based on shape
-        self._build_layers(normalize, bias)
-
-    def _build_layers(self, normalize: Literal["batch", "layer"] | None, bias: bool) -> None:
-        """Build the network layers based on shape configuration."""
-        shape_spec = self.get_unified_shape()
-
-        input_shape = shape_spec.get_input_shape()
-        output_shape = shape_spec.get_output_shape()
-
-        if input_shape is None or output_shape is None:
-            raise ValueError("LinearNetwork requires both input and output shape information")
-
-        input_size = input_shape[0]
-        output_size = output_shape[0]
-
-        self.linear = nn.Linear(input_size, output_size, bias=bias)
-
-        # Add normalization if specified
         if normalize == "batch":
-            self.norm = nn.BatchNorm1d(output_size)
+            self.norm: nn.Module | None = nn.BatchNorm1d(out_features)
         elif normalize == "layer":
-            self.norm = nn.LayerNorm(output_size)
+            self.norm = nn.LayerNorm(out_features)
         else:
             self.norm = None
-
-    def accepts_shape(self, shape_spec: IShapeSpec) -> bool:
-        """Check if this LinearNetwork can accept the given shape specification."""
-        # Additional validation: check for required dimensions
-        input_shape = shape_spec.get_input_shape()
-        output_shape = shape_spec.get_output_shape()
-
-        if input_shape is None or output_shape is None:
-            return False
-
-        # Validate that shapes are 1D (feature vectors)
-        if len(input_shape) != 1 or len(output_shape) != 1:
-            return False
-
-        # Validate positive dimensions
-        if input_shape[0] <= 0 or output_shape[0] <= 0:
-            return False
-
-        return True
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the linear network.
 
         Args:
-            x: Input tensor of shape (batch_size, input_size)
+            x: Input tensor of shape (batch_size, in_features).
 
         Returns:
-            Output tensor of shape (batch_size, output_size)
+            Output tensor of shape (batch_size, out_features).
         """
         x = self.linear(x)
-
         if self.norm is not None:
             x = self.norm(x)
-
         return x
