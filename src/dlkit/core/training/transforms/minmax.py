@@ -1,15 +1,10 @@
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 import torch
 from pydantic import validate_call, ConfigDict
 
 from dlkit.core.training.transforms.base import Transform
 from dlkit.core.training.transforms.errors import TransformNotFittedError, ShapeMismatchError
-from dlkit.core.training.transforms.shape_inference import register_shape_inference
-
-if TYPE_CHECKING:
-    from dlkit.core.shape_specs import IShapeSpec
 
 
 class MinMaxScaler(Transform):
@@ -26,7 +21,6 @@ class MinMaxScaler(Transform):
     min: torch.Tensor
     max: torch.Tensor
     dim: tuple[int, ...]
-    _shape_configured: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, *, dim: int | Sequence[int] = 0) -> None:
@@ -40,40 +34,11 @@ class MinMaxScaler(Transform):
             >>> # Create scaler for normalizing along batch dimension
             >>> scaler = MinMaxScaler(dim=0)
             >>>
-            >>> # Optionally configure with shape_spec
-            >>> scaler.configure_shape(shape_spec, "features")
-            >>>
-            >>> # Or just fit directly (lazy allocation)
+            >>> # Fit directly (lazy allocation)
             >>> scaler.fit(train_data)
         """
         super().__init__()
         self.dim = dim if isinstance(dim, Sequence) else (dim,)
-        self._shape_configured = False
-
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
-        """Configure scaler with shape information for buffer pre-allocation.
-
-        Args:
-            shape_spec: Shape specification containing entry shapes.
-            entry_name: Name of the entry to get shape for.
-
-        Raises:
-            ShapeMismatchError: If shape has incompatible dimensions.
-        """
-        shape = shape_spec.get_shape(entry_name)
-        if shape is None:
-            return  # Skip configuration if shape not available
-
-        # Normalize dim indices to be positive
-        self.dim = tuple([idx % len(shape) for idx in self.dim])
-
-        # Compute moments shape (1 along reduction dims, original size elsewhere)
-        moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(shape)])
-
-        # Pre-allocate min/max buffers
-        self.register_buffer("min", torch.zeros(moments_shape))
-        self.register_buffer("max", torch.ones(moments_shape))
-        self._shape_configured = True
 
     def fit(self, data: torch.Tensor) -> None:
         """Compute (and accumulate) the min/max along specified dimensions.
@@ -110,13 +75,13 @@ class MinMaxScaler(Transform):
         self.max = torch.maximum(self.max, current_max)
 
     def _ensure_buffers_allocated(self, data: torch.Tensor) -> None:
-        """Allocate min/max buffers if not already configured.
+        """Allocate min/max buffers if not already allocated.
 
         Args:
             data: Input data to infer shape from.
         """
-        # Guard: Early return if already configured
-        if self._shape_configured:
+        # Guard: Early return if already allocated
+        if hasattr(self, 'min') and self.min is not None:
             return
 
         # Normalize dim indices
@@ -126,7 +91,6 @@ class MinMaxScaler(Transform):
         moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(data.shape)])
         self.register_buffer("min", torch.zeros(moments_shape, device=data.device))
         self.register_buffer("max", torch.ones(moments_shape, device=data.device))
-        self._shape_configured = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Scale tensor to interval [-1, 1].
@@ -160,9 +124,13 @@ class MinMaxScaler(Transform):
             raise TransformNotFittedError("MinMaxScaler")
         return (x + 1) / 2 * (self.max - self.min) + self.min
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Infer output shape. MinMaxScaler preserves input shape.
 
-# Register shape inference function (MinMaxScaler preserves shape)
-@register_shape_inference(MinMaxScaler)
-def _infer_minmax_output_shape(input_shape: tuple[int, ...], **kwargs) -> tuple[int, ...]:
-    """MinMaxScaler preserves input shape."""
-    return input_shape
+        Args:
+            in_shape: Input tensor shape.
+
+        Returns:
+            Same as input shape.
+        """
+        return in_shape

@@ -1,15 +1,10 @@
 from functools import wraps
-from typing import TYPE_CHECKING
 
 import torch
 from loguru import logger
 
 from .base import Transform
 from .errors import TransformNotFittedError, InvalidTransformConfigurationError, ShapeMismatchError
-from .shape_inference import register_shape_inference
-
-if TYPE_CHECKING:
-    from dlkit.core.shape_specs import IShapeSpec
 
 
 def reshaper2d(func):
@@ -52,7 +47,6 @@ class PCA(Transform):
     total_explained_variance: float | None
     n_components: int
     n_power_iterations: int
-    _shape_configured: bool
 
     def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
@@ -82,31 +76,6 @@ class PCA(Transform):
         self.explained_variance = None
         self.explained_variance_ratio = None
         self.total_explained_variance = None
-        self._shape_configured = False
-
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
-        """Configure PCA with shape information for validation.
-
-        Args:
-            shape_spec: Shape specification containing entry shapes.
-            entry_name: Name of the entry to get shape for.
-
-        Raises:
-            ShapeMismatchError: If n_components > input features.
-        """
-        shape = shape_spec.get_shape(entry_name)
-        if shape is None:
-            return
-
-        n_features = shape[-1]  # Last dimension is features
-        if self.n_components > n_features:
-            raise ShapeMismatchError(
-                expected=(n_features,),
-                actual=(self.n_components,),
-                context=f"n_components ({self.n_components}) must be <= n_features ({n_features})",
-            )
-
-        self._shape_configured = True
 
     def fit(self, data: torch.Tensor, dim: int = -1) -> None:
         """Fit the PCA transformer on the input
@@ -208,11 +177,13 @@ class PCA(Transform):
 
         return reconstructed
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Infer output shape. PCA reduces the last dimension to n_components.
 
-# Register shape inference function (PCA reduces last dimension)
-@register_shape_inference(PCA)
-def _infer_pca_output_shape(
-    input_shape: tuple[int, ...], n_components: int, **kwargs
-) -> tuple[int, ...]:
-    """PCA reduces the last dimension to n_components."""
-    return input_shape[:-1] + (n_components,)
+        Args:
+            in_shape: Input tensor shape.
+
+        Returns:
+            Output shape with last dimension = n_components.
+        """
+        return in_shape[:-1] + (self.n_components,)
