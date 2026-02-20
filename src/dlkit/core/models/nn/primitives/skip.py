@@ -19,6 +19,22 @@ aggregation_functions = {
 }
 
 
+def _detect_channels(module: nn.Module) -> tuple[int | None, int | None]:
+    """Detect input and output channels from a module using guard clauses.
+
+    Args:
+        module (nn.Module): The module to detect channels from.
+
+    Returns:
+        tuple[int | None, int | None]: (in_channels, out_channels) or (None, None) if not found.
+    """
+    if hasattr(module, "in_channels") and hasattr(module, "out_channels"):
+        return int(module.in_channels), int(module.out_channels)  # type: ignore[attr-defined]
+    if hasattr(module, "in_features") and hasattr(module, "out_features"):
+        return int(module.in_features), int(module.out_features)  # type: ignore[attr-defined]
+    return None, None
+
+
 class SkipConnection(nn.Module):
     def __init__(
         self,
@@ -32,25 +48,23 @@ class SkipConnection(nn.Module):
         stride: int = 1,
         bias: bool = True,
     ):
-        """Initializes the ResidualBlock.
+        """Initializes the SkipConnection.
 
         Args:
             module (nn.Module): The module to apply to the input.
-            how (str): Aggregation method to combine input and module output.
-                             Options: 'sum', 'concat', 'mean', 'max', 'min', 'weighted_sum'. Defaults to 'sum'.
-            layer_type (str): Type of layer to use for aggregation. Options: 'conv1d', 'conv2d', 'linear'.
-            activation
+            how (Literal["sum", "concat"], optional): Aggregation method. Defaults to "sum".
+            layer_type (Literal["conv1d", "conv2d", "linear"], optional): Type of layer for adaptation. Defaults to "conv1d".
+            activation (Callable, optional): Activation function. Defaults to nn.Identity().
+            in_channels (int | None, optional): Input channels. Auto-detected if not provided. Defaults to None.
+            out_channels (int | None, optional): Output channels. Auto-detected if not provided. Defaults to None.
+            kernel_size (int, optional): Kernel size. Defaults to 1.
+            stride (int, optional): Stride. Defaults to 1.
+            bias (bool, optional): Whether to use bias. Defaults to True.
         """
         super().__init__()
-        if hasattr(module, "in_channels") and hasattr(module, "out_channels"):
-            self.in_channels = module.in_channels
-            self.out_channels = module.out_channels
-        elif hasattr(module, "in_features") and hasattr(module, "out_features"):
-            self.in_channels = module.in_features
-            self.out_channels = module.out_features
-        else:
-            self.in_channels = in_channels
-            self.out_channels = out_channels
+        detected_in, detected_out = _detect_channels(module)
+        self.in_channels = detected_in if detected_in is not None else in_channels
+        self.out_channels = detected_out if detected_out is not None else out_channels
 
         if hasattr(module, "dilation"):
             self.dilation = module.dilation
@@ -81,14 +95,36 @@ class SkipConnection(nn.Module):
         return self.activation(agg_out)
 
 
-def select_skip_layers(layer_type, in_channels, out_channels, stride, bias=True):
+def select_skip_layers(
+    layer_type: Literal["conv1d", "conv2d", "linear"],
+    in_channels: int,
+    out_channels: int,
+    stride: int,
+    bias: bool = True,
+) -> nn.Module:
+    """Select and instantiate a skip adaptation layer.
+
+    Args:
+        layer_type (Literal["conv1d", "conv2d", "linear"]): Type of adaptation layer.
+        in_channels (int): Input channel count.
+        out_channels (int): Output channel count.
+        stride (int): Stride for the adaptation layer.
+        bias (bool, optional): Whether to use bias. Defaults to True.
+
+    Returns:
+        nn.Module: The selected skip adaptation layer.
+
+    Raises:
+        ValueError: If layer_type is not recognized.
+    """
     if in_channels == out_channels:
         return nn.Identity()
-    if layer_type == "conv1d":
-        return nn.Conv1d(in_channels, out_channels, 1, stride=stride, bias=bias)
-    if layer_type == "conv2d":
-        return nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
-    if layer_type == "linear":
-        return nn.Linear(in_channels, out_channels, bias=False)
-
-    raise ValueError(f"Unsupported layer type: {layer_type}")
+    match layer_type:
+        case "conv1d":
+            return nn.Conv1d(in_channels, out_channels, 1, stride=stride, bias=bias)
+        case "conv2d":
+            return nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
+        case "linear":
+            return nn.Linear(in_channels, out_channels, bias=False)
+        case _:
+            raise ValueError(f"Unsupported layer type: {layer_type!r}")

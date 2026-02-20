@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from dlkit.core.models.nn.base import DLKitModel
+from dlkit.core.models.nn.utils import make_norm_layer
 
 
 class LinearNetwork(DLKitModel):
@@ -29,13 +30,7 @@ class LinearNetwork(DLKitModel):
     ):
         super().__init__()
         self.linear = nn.Linear(in_features, out_features, bias=bias)
-
-        if normalize == "batch":
-            self.norm: nn.Module | None = nn.BatchNorm1d(out_features)
-        elif normalize == "layer":
-            self.norm = nn.LayerNorm(out_features)
-        else:
-            self.norm = None
+        self.norm: nn.Module = make_norm_layer(normalize, out_features)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the linear network.
@@ -47,6 +42,5 @@ class LinearNetwork(DLKitModel):
             Output tensor of shape (batch_size, out_features).
         """
         x = self.linear(x)
-        if self.norm is not None:
-            x = self.norm(x)
+        x = self.norm(x)
         return x

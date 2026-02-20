@@ -30,27 +30,6 @@ class FeedForwardNN(DLKitModel):
         dropout: float = 0.0,
     ):
         super().__init__()
-        self._build_layers(in_features, out_features, layers, activation, normalize, dropout)
-
-    def _build_layers(
-        self,
-        in_features: int,
-        out_features: int,
-        layers: Sequence[int],
-        activation: Callable[[Tensor], Tensor],
-        normalize: Literal["batch", "layer"] | None,
-        dropout: float,
-    ) -> None:
-        """Build the network layers.
-
-        Args:
-            in_features: Number of input features.
-            out_features: Number of output features.
-            layers: Sequence of hidden layer sizes.
-            activation: Activation function.
-            normalize: Normalization type.
-            dropout: Dropout probability.
-        """
         self.num_layers = len(layers)
         self.activation = activation
 

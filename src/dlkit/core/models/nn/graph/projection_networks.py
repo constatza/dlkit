@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from torch import nn
 from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
 from .base import BaseGraphNetwork
-from .gat import GATv2Message
 from .projections import SkipProjection
 
 __all__ = [
+    "ProjectionNetwork",
     "GProjection",
-    "GATv2Projection",
 ]
 
 
-class _ProjectionNetwork(BaseGraphNetwork):
+class ProjectionNetwork(BaseGraphNetwork):
     """Common projection network foundation without normalization."""
 
     def __init__(
@@ -78,7 +75,7 @@ class _ProjectionNetwork(BaseGraphNetwork):
         return self._message_module(features, edge_index, edge_attr=edge_attr)
 
 
-class GProjection(_ProjectionNetwork):
+class GProjection(ProjectionNetwork):
     """Projection network without feature scaling."""
 
     def __init__(
@@ -96,36 +93,4 @@ class GProjection(_ProjectionNetwork):
             message_module=message_module,
             input_projection=input_projection,
             output_projection=output_projection,
-        )
-
-
-class GATv2Projection(GProjection):
-    """GATv2-based projection network without scaling."""
-
-    def __init__(
-        self,
-        *,
-        unified_shape: IShapeSpec,
-        hidden_size: int,
-        num_layers: int,
-        heads: int = 1,
-        residual: bool = True,
-        edge_dim: int = 1,
-        concat: bool = True,
-        dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
-    ):
-        super().__init__(
-            unified_shape=unified_shape,
-            hidden_size=hidden_size,
-            message_module=GATv2Message(
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                heads=heads,
-                residual=residual,
-                edge_dim=edge_dim,
-                concat=concat,
-                activation=activation,
-                dropout=dropout,
-            ),
         )

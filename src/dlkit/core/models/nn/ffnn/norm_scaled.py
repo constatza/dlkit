@@ -75,11 +75,13 @@ class NormScaledFFNN(DLKitModel):
         Returns:
             Vector norms with keepdim=True.
         """
-        if self.norm == "l2":
-            return torch.linalg.vector_norm(x, ord=2, dim=-1, keepdim=True)
-        if self.norm == "l1":
-            return torch.linalg.vector_norm(x, ord=1, dim=-1, keepdim=True)
-        return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
+        match self.norm:
+            case "l2":
+                return torch.linalg.vector_norm(x, ord=2, dim=-1, keepdim=True)
+            case "l1":
+                return torch.linalg.vector_norm(x, ord=1, dim=-1, keepdim=True)
+            case _:
+                return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
 
     def forward(self, x: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
         """Forward pass with norm scaling.

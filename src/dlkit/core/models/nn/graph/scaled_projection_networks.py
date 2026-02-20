@@ -10,14 +10,18 @@ from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
 from .gat import GATv2Message
-from .projection_networks import _ProjectionNetwork
+from .projection_networks import GProjection, ProjectionNetwork
 
 EPSILON = 1e-14
 
-__all__ = ["ScaledGProjection", "ScaledGATv2Projection"]
+__all__ = [
+    "ScaledGProjection",
+    "ScaledGATv2Projection",
+    "GATv2Projection",
+]
 
 
-class ScaledGProjection(_ProjectionNetwork):
+class ScaledGProjection(ProjectionNetwork):
     """Projection network with column-wise input scaling."""
 
     def __init__(
@@ -70,33 +74,89 @@ class ScaledGProjection(_ProjectionNetwork):
         return normalized, scale
 
 
-class ScaledGATv2Projection(ScaledGProjection):
-    """GATv2-based projection network with scaling."""
+def GATv2Projection(
+    *,
+    unified_shape: IShapeSpec,
+    hidden_size: int,
+    num_layers: int,
+    heads: int = 1,
+    residual: bool = True,
+    edge_dim: int = 1,
+    concat: bool = True,
+    dropout: float = 0.0,
+    activation: Callable = nn.functional.relu,
+) -> GProjection:
+    """Factory: GProjection with a GATv2Message module pre-wired.
 
-    def __init__(
-        self,
-        *,
-        unified_shape: IShapeSpec,
-        hidden_size: int,
-        num_layers: int,
-        heads: int = 1,
-        residual: bool = True,
-        edge_dim: int = 1,
-        concat: bool = True,
-        dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
-    ):
-        super().__init__(
-            unified_shape=unified_shape,
+    Args:
+        unified_shape: Shape specification for graph inputs/outputs.
+        hidden_size: Dimension of node feature embeddings.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads.
+        residual: Whether to use residual connections in GAT layers.
+        edge_dim: Edge feature dimension.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function for GAT layers.
+
+    Returns:
+        GProjection with a GATv2Message as message_module.
+    """
+    return GProjection(
+        unified_shape=unified_shape,
+        hidden_size=hidden_size,
+        message_module=GATv2Message(
             hidden_size=hidden_size,
-            message_module=GATv2Message(
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                heads=heads,
-                residual=residual,
-                edge_dim=edge_dim,
-                concat=concat,
-                activation=activation,
-                dropout=dropout,
-            ),
-        )
+            num_layers=num_layers,
+            heads=heads,
+            residual=residual,
+            edge_dim=edge_dim,
+            concat=concat,
+            activation=activation,
+            dropout=dropout,
+        ),
+    )
+
+
+def ScaledGATv2Projection(
+    *,
+    unified_shape: IShapeSpec,
+    hidden_size: int,
+    num_layers: int,
+    heads: int = 1,
+    residual: bool = True,
+    edge_dim: int = 1,
+    concat: bool = True,
+    dropout: float = 0.0,
+    activation: Callable = nn.functional.relu,
+) -> ScaledGProjection:
+    """Factory: ScaledGProjection with a GATv2Message module pre-wired.
+
+    Args:
+        unified_shape: Shape specification for graph inputs/outputs.
+        hidden_size: Dimension of node feature embeddings.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads.
+        residual: Whether to use residual connections in GAT layers.
+        edge_dim: Edge feature dimension.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function for GAT layers.
+
+    Returns:
+        ScaledGProjection with a GATv2Message as message_module.
+    """
+    return ScaledGProjection(
+        unified_shape=unified_shape,
+        hidden_size=hidden_size,
+        message_module=GATv2Message(
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            heads=heads,
+            residual=residual,
+            edge_dim=edge_dim,
+            concat=concat,
+            activation=activation,
+            dropout=dropout,
+        ),
+    )
