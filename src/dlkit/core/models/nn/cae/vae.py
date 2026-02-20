@@ -1,26 +1,84 @@
+"""Variational Autoencoder for 1D convolutional data."""
+
 from collections.abc import Callable
 
 import torch
 from torch import nn
-from pydantic import ConfigDict, validate_call
-from typing import Any
+
 from dlkit.core.datatypes.networks import NormalizerName
-from dlkit.core.models.nn.cae.base import CAE
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.models.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
 from dlkit.core.models.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
+from dlkit.core.models.nn.utils import build_channel_schedule
 from torch.distributions.normal import Normal
 
 
-class VAE1d(CAE):
-    latent_channels: int
-    latent_width: int
-    latent_size: int
-    num_layers: int
-    kernel_size: int
-    in_channels: int
-    in_length: int
+def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    """Sample from the latent distribution using the reparameterization trick.
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    Args:
+        mu: Mean of the latent distribution.
+        logvar: Log-variance of the latent distribution.
+
+    Returns:
+        Sampled latent vector ``z = mu + eps * std``.
+    """
+    std = torch.exp(0.5 * logvar)
+    eps = Normal(torch.zeros_like(std), torch.ones_like(std)).sample()
+    return mu + eps * std
+
+
+def vae_loss(
+    predictions: torch.Tensor,
+    targets: torch.Tensor,
+    mu: torch.Tensor,
+    logvar: torch.Tensor,
+    *,
+    alpha: float = 1.0,
+    beta: float = 0.1,
+) -> torch.Tensor:
+    """Compute the VAE loss: reconstruction loss + KL divergence.
+
+    Args:
+        predictions: Reconstructed output tensor.
+        targets: Ground-truth input tensor.
+        mu: Latent mean from the encoder.
+        logvar: Latent log-variance from the encoder.
+        alpha: Weight for the reconstruction (MSE) term. Defaults to 1.0.
+        beta: Weight for the KL divergence term. Defaults to 0.1.
+
+    Returns:
+        Scalar loss tensor.
+    """
+    mse = nn.functional.mse_loss(predictions, targets) * alpha
+    kld = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0) * beta
+    return mse + kld
+
+
+class VAE1d(DLKitModel):
+    """Variational Autoencoder for 1D convolutional data.
+
+    Encodes input to a (mu, logvar) latent distribution, samples via
+    reparameterization, and decodes back to the original shape.
+
+    Use :func:`vae_loss` to compute the combined reconstruction + KL loss.
+
+    Args:
+        in_channels: Number of input channels.
+        in_length: Length of the input sequence.
+        latent_channels: Number of channels in the bottleneck feature map.
+        latent_size: Dimension of the latent vector (mu / logvar).
+        latent_width: Spatial width of the bottleneck feature map. Defaults to 1.
+        num_layers: Number of encoder/decoder layers. Defaults to 3.
+        kernel_size: Convolution kernel size. Defaults to 3.
+        activation: Activation function. Defaults to gelu.
+        normalize: Normalizer identifier. Defaults to None.
+        dropout: Dropout probability. Defaults to 0.0.
+        scale_of_latent: Multiplier for the intermediate projection size. Defaults to 4.
+        alpha: Reconstruction loss weight (stored for convenience). Defaults to 1.0.
+        beta: KL divergence loss weight (stored for convenience). Defaults to 0.1.
+    """
+
     def __init__(
         self,
         *,
@@ -37,19 +95,17 @@ class VAE1d(CAE):
         scale_of_latent: int = 4,
         alpha: float = 1.0,
         beta: float = 0.1,
-    ):
+    ) -> None:
         super().__init__()
-
         self.alpha = alpha
         self.beta = beta
         self.in_channels = in_channels
         self.in_length = in_length
+        self.latent_size = latent_size
 
-        initial_channels = in_channels
-        initial_width = in_length
+        channels = build_channel_schedule(in_channels, latent_channels, num_layers + 1)
+        timesteps = build_channel_schedule(in_length, latent_width, num_layers + 1)
 
-        channels = torch.linspace(initial_channels, latent_channels, num_layers + 1).int().tolist()
-        timesteps = torch.linspace(initial_width, latent_width, num_layers + 1).int().tolist()
         self.encoder = SkipEncoder1d(
             channels=channels,
             timesteps=timesteps,
@@ -74,45 +130,43 @@ class VAE1d(CAE):
             normalize=normalize,
             dropout=dropout,
         )
+        self.mu_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
+        self.logvar_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
 
-        self.latent_size = latent_size
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode input to latent distribution parameters.
 
-        self.mu_layer = nn.Linear(scale_of_latent * self.latent_size, self.latent_size)
-        self.logvar_layer = nn.Linear(scale_of_latent * self.latent_size, self.latent_size)
+        Args:
+            x: Input tensor of shape ``(batch, in_channels, in_length)``.
 
-    def encode(self, x):
-        x = self.encoder(x)
-        x = self.vectorize(x)
-        mu = self.mu_layer(x)
-        logvar = self.logvar_layer(x)
-        return mu, logvar
+        Returns:
+            Tuple ``(mu, logvar)`` each of shape ``(batch, latent_size)``.
+        """
+        h = self.vectorize(self.encoder(x))
+        return self.mu_layer(h), self.logvar_layer(h)
 
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        y, mu, logvar = self.decode(mu, logvar)
-        return y, mu, logvar
+    def decode(self, mu: torch.Tensor, logvar: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Sample from latent and decode to output space.
 
-    def decode(self, mu, logvar):
+        Args:
+            mu: Latent mean of shape ``(batch, latent_size)``.
+            logvar: Latent log-variance of shape ``(batch, latent_size)``.
+
+        Returns:
+            Tuple ``(reconstruction, mu, logvar)``.
+        """
         z = reparameterize(mu, logvar)
-        y = self.tensorize(z)
-        y = self.decoder(y)
+        y = self.decoder(self.tensorize(z))
         return y, mu, logvar
 
-    def predict_step(self, batch, batch_idx):
-        x = batch[0]
-        x, mu, logvar = self.forward(x)
-        return {"predictions": x.detach(), "latent": mu.detach()}
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Full VAE forward pass: encode → reparameterize → decode.
 
-    def loss_function(self, predictions, targets, mu, logvar):
-        mse_loss = nn.functional.mse_loss(predictions, targets) * self.alpha
-        kld_loss = (
-            torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0)
-            * self.beta
-        )
-        return mse_loss + kld_loss
+        Args:
+            x: Input tensor of shape ``(batch, in_channels, in_length)``.
 
-
-def reparameterize(mu, logvar):
-    std = torch.exp(0.5 * logvar)
-    eps = Normal(torch.zeros_like(std), torch.ones_like(std)).sample()
-    return mu + eps * std
+        Returns:
+            Tuple ``(reconstruction, mu, logvar)``.
+        """
+        mu, logvar = self.encode(x)
+        return self.decode(mu, logvar)

@@ -5,6 +5,7 @@ from collections.abc import Callable
 import torch.nn as nn
 
 from dlkit.core.datatypes.networks import NormalizerName
+from dlkit.core.models.nn.utils import make_norm_layer
 
 
 class ConvolutionBlock1d(nn.Module):
@@ -43,23 +44,11 @@ class ConvolutionBlock1d(nn.Module):
             groups=groups,
         )
         self.dropout = nn.Dropout1d(dropout) if dropout > 0.0 else nn.Identity()
-        self.norm = nn.Identity()
-
-        norm_choice: NormalizerName | None = normalize
-        if norm_choice == "none":
-            norm_choice = None
-
-        if norm_choice == "layer":
-            self.norm = nn.LayerNorm([in_channels, in_timesteps])
-        elif norm_choice == "batch":
-            self.norm = nn.BatchNorm1d(in_channels)
-        elif norm_choice == "instance":
-            self.norm = nn.InstanceNorm1d(in_channels)
+        self.norm = make_norm_layer(normalize, in_channels, in_timesteps)
 
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.in_timesteps = in_timesteps
-        self.out_timesteps = output_size(in_timesteps, kernel_size, stride, padding)
 
     def forward(self, x):
         x = self.norm(x)
@@ -81,17 +70,24 @@ class DeconvolutionBlock1d(nn.Module):
         padding: str | int = "same",
         output_padding: int = 0,
         groups: int = 1,
+        activation: Callable | nn.Module = nn.GELU(),
     ):
         """A residual transposed convolutional block with upsampling.
 
         Parameters:
-        - in_channels (int): Number of input channels.
-        - out_channels (int): Number of output channels.
-        - kernel_size (int): Kernel size for transposed convolutions.
-        - batch_norm (bool): Whether to use batch normalization.
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            in_timesteps (int): Number of input timesteps.
+            kernel_size (int, optional): Kernel size for transposed convolutions. Defaults to 3.
+            dilation (int, optional): Dilation rate. Defaults to 1.
+            stride (int, optional): Stride of the convolution. Defaults to 1.
+            padding (str | int, optional): Padding mode. Defaults to "same".
+            output_padding (int, optional): Additional size added to output. Defaults to 0.
+            groups (int, optional): Number of groups for grouped convolutions. Defaults to 1.
+            activation (Callable | nn.Module, optional): Activation function. Defaults to nn.GELU().
         """
         super().__init__()
-        self.activation = nn.GELU()
+        self.activation = activation
         self.conv1 = nn.ConvTranspose1d(
             in_channels,
             out_channels,
@@ -103,13 +99,11 @@ class DeconvolutionBlock1d(nn.Module):
             output_padding=output_padding,
         )
 
-        self.layer_norm = nn.LayerNorm([in_channels, in_timesteps])
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.in_timesteps = in_timesteps
 
     def forward(self, x):
-        # x = self.layer_norm(x)
         x = self.activation(x)
         x = self.conv1(x)
         return x
@@ -128,16 +122,17 @@ def output_size(
         input_size (int): The size (height or width) of the input.
         kernel_size (int): The size of the convolution kernel.
         stride (int): The stride of the convolution.
-        padding (int): The amount of zero-padding applied.
+        padding (int | str): The amount of zero-padding applied or padding mode.
         dilation (int, optional): The dilation rate. Defaults to 1.
 
     Returns:
         int: The computed output size.
     """
-    if padding == "same":
-        return input_size
-    if isinstance(padding, str):
-        msg = f"Unsupported padding string '{padding}' for output size calculation"
-        raise ValueError(msg)
-    raw = math.floor((input_size + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
-    return int(raw)
+    match padding:
+        case "same":
+            return input_size
+        case str():
+            raise ValueError(f"Unsupported padding string {padding!r} for output size calculation")
+        case _:
+            raw = math.floor((input_size + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
+            return int(raw)

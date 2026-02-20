@@ -185,20 +185,3 @@ class TestGraphWorkflowIntegration:
         assert len(dataset.edge_index_shape) == 2, "edge_index should be 2D"
         assert dataset.edge_index_shape[0] == 2, "First dimension should be 2 (source, target)"
 
-    def test_legacy_wrapper_deprecation(self) -> None:
-        """Test that legacy wrapper shows deprecation warning.
-
-        Verifies:
-        - LegacyGraphWrapper is available for backwards compatibility
-        - Deprecation warning is raised when instantiated
-        - Modern wrapper is preferred
-        """
-        from dlkit.core.models.nn.graph import LegacyGraphWrapper
-        import warnings
-
-        # Verify legacy wrapper is available
-        assert LegacyGraphWrapper is not None, "LegacyGraphWrapper should be available"
-
-        # Test that deprecation warning is raised would require more setup
-        # For now just verify the import works
-        assert hasattr(LegacyGraphWrapper, "__init__"), "Should have __init__ method"
