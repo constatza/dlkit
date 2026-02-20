@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .core.base_settings import BasicSettings
 from dlkit.tools.utils.system_utils import recommended_uvicorn_workers
@@ -133,10 +133,22 @@ class MLflowClientSettings(BasicSettings):
 
     experiment_name: str = Field(default="Experiment", description="MLflow experiment name")
     run_name: str | None = Field(default=None, description="Name of the MLflow run")
+    registered_model_name: str | None = Field(
+        default=None,
+        description="Optional override for registered model name",
+    )
+    registered_model_aliases: tuple[str, ...] | None = Field(
+        default=None,
+        description="Optional aliases to attach after registration",
+    )
+    registered_model_version_tags: dict[str, str] | None = Field(
+        default=None,
+        description="Optional tags to attach to each registered model version",
+    )
     tracking_uri: SecureMLflowTrackingUri | None = Field(
         default=None, description="Tracking URI for MLflow"
     )
-    register_model: bool = Field(default=False, description="Whether to register the model")
+    register_model: bool = Field(default=True, description="Whether to register the model")
     max_trials: int = Field(
         default=3, description="Maximum number of trials for reaching mlflow server"
     )
@@ -163,34 +175,15 @@ class MLflowSettings(BasicSettings):
         default_factory=MLflowClientSettings, description="MLflow client settings"
     )
 
-    @field_validator("client", mode="after", check_fields=True)
-    @classmethod
-    def default_tracking_uri(cls, value: MLflowClientSettings, info: ValidationInfo):
-        """Set default tracking URI from server settings if not provided.
-
-        Args:
-            value: Client settings to validate
-            info: Validation context
-
-        Returns:
-            MLflowClientSettings: Validated client settings with tracking URI
-        """
-        if value.tracking_uri is None:
-            server = info.data.get("server", MLflowServerSettings())
-            tracking_uri_str = f"{server.scheme}://{server.host}:{server.port}"
-            # Validate using secure tracking URI adapter
-            from pydantic import TypeAdapter
-
-            tracking_uri = TypeAdapter(SecureMLflowTrackingUri).validate_python(tracking_uri_str)
-            return value.model_copy(update={"tracking_uri": tracking_uri})
-        return value
-
     @model_validator(mode="after")
     def validate_mlflow_config(self):
-        """Validate MLflow configuration when enabled."""
-        if self.enabled:
-            if self.client.tracking_uri is None:
-                raise ValueError("tracking_uri is required when MLflow is enabled")
+        """Validate MLflow configuration when enabled.
+
+        The tracking URI may be None at config time — it is resolved at runtime to
+        the SQLite filesystem default (``locations.mlruns_backend_uri()``) when not
+        explicitly set.  This deferred resolution allows path-context-aware defaults
+        without requiring a URI in every config file.
+        """
         return self
 
     @field_validator("server", mode="after")
@@ -226,10 +219,14 @@ class MLflowSettings(BasicSettings):
         return self.client.run_name
 
     @property
-    def tracking_uri(self) -> str:
-        """Get the MLflow tracking URI.
+    def tracking_uri(self) -> str | None:
+        """Get the MLflow tracking URI, or None if not explicitly configured.
+
+        When None, the runtime resolver will default to the local SQLite store
+        (``locations.mlruns_backend_uri()``).
 
         Returns:
-            str: The tracking URI
+            str | None: The tracking URI, or None for deferred resolution.
         """
-        return str(self.client.tracking_uri)
+        uri = self.client.tracking_uri
+        return str(uri) if uri is not None else None
