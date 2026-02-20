@@ -135,6 +135,8 @@ class TrackingDecorator(ITrainingExecutor):
 
             # Execute training within tracking context
             logger.debug(f"Creating MLflow run with config: {run_config}")
+            pending_registration = None
+            enriched_result = None
             with self._tracker.create_run(**run_config) as run_context:
                 logger.debug("MLflow run created successfully")
 
@@ -152,13 +154,22 @@ class TrackingDecorator(ITrainingExecutor):
                 self._metric_logger.log_summary_metrics(result, run_context)
 
                 # Log training artifacts (delegate to ArtifactLogger)
-                self._artifact_logger.log_training_artifacts(components, settings, run_context)
+                pending_registration = self._artifact_logger.log_training_artifacts(
+                    components, settings, run_context
+                )
 
                 # Log user-defined custom artifacts and params (delegate to ArtifactLogger)
                 self._artifact_logger.log_user_artifacts(settings, run_context, result)
 
                 # Enrich result with tracking metadata (delegate to ResultEnricher)
-                return self._result_enricher.enrich_result(result, settings, server_url, server_status)
+                enriched_result = self._result_enricher.enrich_result(
+                    result, settings, server_url, server_status
+                )
+
+            self._artifact_logger.finalize_model_registration(pending_registration, run_context)
+            if enriched_result is None:
+                raise RuntimeError("Tracking result enrichment failed unexpectedly")
+            return enriched_result
 
         except Exception as e:
             logger.error(f"TrackingDecorator: Exception caught: {type(e).__name__}: {e}")
