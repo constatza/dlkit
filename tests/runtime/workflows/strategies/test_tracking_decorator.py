@@ -55,6 +55,48 @@ class MockRunContext(IRunContext):
             self.logged_datasets = []
         self.logged_datasets.append({"dataset": dataset, "context": context, "tags": tags})
 
+    def log_model(
+        self,
+        model: Any,
+        artifact_path: str,
+        *,
+        registered_model_name: str | None = None,
+        signature: Any | None = None,
+        input_example: Any | None = None,
+    ) -> str | None:
+        if not hasattr(self, "logged_models"):
+            self.logged_models = []
+        self.logged_models.append({
+            "artifact_path": artifact_path,
+            "registered_model_name": registered_model_name,
+        })
+        return f"runs:/{self._run_id}/{artifact_path}"
+
+    def get_latest_model_version(
+        self,
+        model_name: str,
+        *,
+        run_id: str | None = None,
+        artifact_path: str | None = None,
+    ) -> int | None:
+        return 1
+
+    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
+        if not hasattr(self, "model_aliases"):
+            self.model_aliases = []
+        self.model_aliases.append((model_name, alias, version))
+
+    def set_model_version_tag(
+        self,
+        model_name: str,
+        version: int,
+        key: str,
+        value: str,
+    ) -> None:
+        if not hasattr(self, "model_version_tags"):
+            self.model_version_tags = []
+        self.model_version_tags.append((model_name, version, key, value))
+
 
 class MockExperimentTracker(IExperimentTracker):
     """Mock implementation of IExperimentTracker for testing."""
