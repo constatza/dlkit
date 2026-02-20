@@ -261,7 +261,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
+    def predict_step(self, batch: Batch, batch_idx: int) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...], tuple[Tensor, ...]]:
         """Prediction step with positional transform application and inverse.
 
         Applies forward transforms to features, runs model, then applies inverse
@@ -272,7 +272,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             batch_idx (int): Index of the batch.
 
         Returns:
-            dict: Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
+            Tuple of (predictions, targets, latents), each containing a tuple of tensors.
         """
         original_targets = batch.targets
         batch = self._apply_feature_transforms(batch)
@@ -282,11 +282,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         if isinstance(predictions, Tensor) and self._target_chains:
             predictions = apply_inverse_chain(predictions, self._target_chains[0])
 
-        return {
-            "predictions": (predictions,),
-            "targets": original_targets,
-            "latents": (),
-        }
+        return (
+            (predictions,) if isinstance(predictions, Tensor) else predictions,
+            original_targets,
+            (),
+        )
 
     # =============================================================================
     # Transform Fitting (on_fit_start)
@@ -355,17 +355,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         feature_names = [e.name for e in self._entry_configs if is_feature_entry(e)]
         target_names = [e.name for e in self._entry_configs if is_target_entry(e)]
 
-        checkpoint["inference_metadata"] = {
-            "entry_configs": self._entry_configs,
-            "wrapper_settings": (
-                self._wrapper_settings.model_dump()
-                if hasattr(self._wrapper_settings, "model_dump")
-                else dict(self._wrapper_settings)
-            ),
-            "feature_names": feature_names,
-            "target_names": target_names,
-            "model_shape": getattr(self, "shape", None),
-        }
+        # Augment base metadata with positional info
+        if "dlkit_metadata" in checkpoint:
+            checkpoint["dlkit_metadata"]["feature_names"] = feature_names
+            checkpoint["dlkit_metadata"]["target_names"] = target_names
+            checkpoint["dlkit_metadata"]["model_shape"] = getattr(self, "shape", None)
 
     def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
         """Override to pre-register lazy-allocated buffers before the standard load.

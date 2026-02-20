@@ -65,6 +65,10 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         super().__init__()
 
         # Store configuration
+        self._wrapper_settings = settings
+        self._model_settings = model_settings
+        self._entry_configs: tuple[DataEntry, ...] = entry_configs or ()
+
         self.save_hyperparameters(
             {
                 "settings": settings,
@@ -128,14 +132,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         self.optimizer = settings.optimizer
         self.scheduler = settings.scheduler
-        # Keep a direct reference to wrapper settings for decisions
-        self._wrapper_settings = settings
 
         # Ensure lr/learning_rate hyperparameters mirror optimizer settings
         self._sync_lr_hparam()
-
-        # Store entry configs for feature/target categorization
-        self._entry_configs: tuple[DataEntry, ...] = entry_configs or ()
 
     # =============================================================================
     # Lightning Hooks
@@ -306,7 +305,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
+    def predict_step(self, batch: "Batch", batch_idx: int) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...], tuple[Tensor, ...]]:
         """Prediction step without loss computation.
 
         Args:
@@ -314,14 +313,14 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             batch_idx: Index of the batch.
 
         Returns:
-            Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
+            Tuple of (predictions, targets, latents), each containing a tuple of tensors.
         """
         predictions = self._invoke_model(batch)
-        return {
-            "predictions": (predictions,) if isinstance(predictions, Tensor) else predictions,
-            "targets": batch.targets,
-            "latents": batch.latents,
-        }
+        return (
+            (predictions,) if isinstance(predictions, Tensor) else predictions,
+            batch.targets,
+            batch.latents,
+        )
 
     # =============================================================================
     # Checkpoint and Metadata Management
@@ -386,7 +385,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         try:
             from dlkit.runtime.workflows.factories.model_detection import detect_model_type
-            model_type = detect_model_type(self.hparams.model_settings, None)  # type: ignore[arg-type]
+            model_type = detect_model_type(self._model_settings, None)  # type: ignore[arg-type]
             return model_type.value
         except Exception:
             return "external"
@@ -398,7 +397,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             Serialized model configuration
         """
         try:
-            settings = self.hparams.model_settings
+            settings = self._model_settings
 
             # Extract base fields
             name = getattr(settings, 'name', None)
@@ -430,7 +429,14 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         try:
             if hasattr(self, '_entry_configs') and self._entry_configs:
                 return [
-                    {"name": e.name, "class_name": e.__class__.__name__}
+                    {
+                        "name": e.name,
+                        "class_name": e.__class__.__name__,
+                        "transforms": [
+                            t.model_dump() if hasattr(t, "model_dump") else t
+                            for t in getattr(e, "transforms", [])
+                        ]
+                    }
                     for e in self._entry_configs
                 ]
         except Exception:

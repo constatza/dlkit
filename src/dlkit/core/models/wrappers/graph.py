@@ -158,7 +158,7 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
+    def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...], tuple[Tensor, ...]]:
         """Predict step for PyG Data/Batch.
 
         Args:
@@ -166,17 +166,17 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             batch_idx: Index of the batch.
 
         Returns:
-            Dictionary with ``predictions``, ``targets``, and ``latents`` as tuples.
+            Tuple of (predictions, targets, latents), each containing a tuple of tensors.
         """
         x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
         predictions = self.model(x, edge_index, edge_attr)
         raw_target = getattr(batch, self._graph_target_name, None)
         targets: tuple[Tensor, ...] = (raw_target,) if raw_target is not None else ()
-        return {
-            "predictions": (predictions,),
-            "targets": targets,
-            "latents": (),
-        }
+        return (
+            (predictions,) if isinstance(predictions, Tensor) else predictions,
+            targets,
+            (),
+        )
 
     def _extract_pyg_target(self, batch: Data | PyGBatch, predictions: Tensor) -> Tensor:
         """Extract target from PyG batch and align dtype to predictions.

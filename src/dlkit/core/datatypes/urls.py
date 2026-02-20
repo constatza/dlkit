@@ -355,6 +355,7 @@ def _validate_mlflow_tracking(value: Any) -> Any:
 
     # Try each supported adapter
     for adapter in (
+        _ADAPTER_SQLITE,  # sqlite:/// for serverless direct-DB tracking (no server needed)
         _ADAPTER_HTTP,
         _ADAPTER_FILE,
         _ADAPTER_DATABRICKS,
@@ -364,7 +365,9 @@ def _validate_mlflow_tracking(value: Any) -> Any:
             return out
 
     # Guard: no adapter matched - raise error
-    raise ValueError("Invalid MLflow tracking URL. Expected http(s)://, file://, or databricks://")
+    raise ValueError(
+        "Invalid MLflow tracking URL. Expected sqlite:///, http(s)://, file://, or databricks://"
+    )
 
 
 MLflowTrackingUrl = Annotated[

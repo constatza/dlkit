@@ -8,7 +8,7 @@ from typing import Any
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from loguru import logger
 
-from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.tools.utils.metrics import collect_metrics
@@ -73,7 +73,12 @@ class VanillaExecutor(ITrainingExecutor):
             artifacts = self._collect_artifacts(trainer)
 
             return TrainingResult(
-                model_state=None,
+                model_state=ModelState(
+                    model=model,
+                    datamodule=datamodule,
+                    trainer=trainer,
+                    settings=settings,
+                ),
                 metrics=metrics,
                 artifacts=artifacts,
                 duration_seconds=0.0,

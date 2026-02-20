@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class Batch:
     """Typed, positional batch container.
 
