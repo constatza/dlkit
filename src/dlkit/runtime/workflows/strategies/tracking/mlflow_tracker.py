@@ -4,7 +4,6 @@ from contextlib import contextmanager, ExitStack, AbstractContextManager
 from pathlib import Path
 from typing import Any
 
-import mlflow
 
 from dlkit.interfaces.api.overrides.path_context import (
     get_current_path_context,
@@ -14,8 +13,8 @@ from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import IExperimentTracker, IRunContext
+from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
 from .mlflow_resource_manager import MLflowResourceManager
-from .mlflow_run_context import ClientBasedRunContext
 
 logger = get_logger(__name__)
 
@@ -353,98 +352,121 @@ class MLflowTracker(IExperimentTracker):
     def log_dataset_to_run(
         self, datamodule: Any, run_context: IRunContext, settings: GeneralSettings
     ) -> None:
-        """Log dataset to MLflow run.
+        """Log dataset lineage to MLflow with structured and artifact fallbacks."""
+        dataset = getattr(datamodule, "dataset", None)
+        tags = self._build_dataset_tags(settings, dataset)
+        sources = self._collect_dataset_sources(settings, dataset)
 
-        Converts DLKit datasets to MLflow dataset format and logs them for reproducibility.
-        Currently supports FlexibleDataset with NumPy conversion. Other dataset types
-        are logged as warnings.
+        structured_logged = self._log_structured_dataset(dataset, run_context, settings, tags, sources)
+        self._log_dataset_manifest_artifact(
+            run_context=run_context,
+            settings=settings,
+            dataset=dataset,
+            sources=sources,
+            tags=tags,
+            structured_logged=structured_logged,
+        )
 
-        Args:
-            datamodule: Lightning DataModule containing the dataset
-            run_context: Active run context to log to
-            settings: Settings containing dataset configuration
+    def _log_structured_dataset(
+        self,
+        dataset: Any,
+        run_context: IRunContext,
+        settings: GeneralSettings,
+        tags: dict[str, str],
+        sources: list[str],
+    ) -> bool:
+        if dataset is None:
+            logger.debug("No dataset found in datamodule, continuing with settings-driven lineage logging")
 
-        Example:
-            ```python
-            with tracker.create_run("training") as run:
-                tracker.log_dataset_to_run(datamodule, run, settings)
-                # Logs dataset with features and targets to MLflow
-            ```
-        """
+        dataset_name = self._resolve_dataset_name(settings)
+        structured_logger = StructuredDatasetLogger()
+        if structured_logger.log(
+            dataset=dataset,
+            run_context=run_context,
+            settings=settings,
+            dataset_name=dataset_name,
+            sources=sources,
+            tags=tags,
+        ):
+            return True
+
+        logger.warning(
+            "Structured MLflow dataset logging unavailable for dataset class '{}' "
+            "and current config payload; manifest artifact fallback will be used.",
+            type(dataset).__name__ if dataset is not None else "None",
+        )
+        return False
+
+    def _resolve_dataset_name(self, settings: GeneralSettings) -> str:
+        configured_name = getattr(settings.DATASET, "name", None) if settings.DATASET else None
+        if configured_name:
+            return str(configured_name)
+        return "training_data"
+
+    def _build_dataset_tags(self, settings: GeneralSettings, dataset: Any) -> dict[str, str]:
+        tags: dict[str, str] = {}
+        if settings.DATASET:
+            try:
+                split_cfg = settings.DATASET.split
+                tags["split_test_ratio"] = str(split_cfg.test_ratio)
+                tags["split_val_ratio"] = str(split_cfg.val_ratio)
+            except Exception:
+                pass
+
+            dataset_type = getattr(settings.DATASET, "type", None)
+            if dataset_type:
+                tags["dataset_type"] = str(dataset_type)
+
+        tags["dataset_class"] = type(dataset).__name__ if dataset is not None else "None"
+        return tags
+
+    def _collect_dataset_sources(self, settings: GeneralSettings, dataset: Any) -> list[str]:
+        del dataset
+        return DatasetSourceCollector().collect(settings)
+
+    def _log_dataset_manifest_artifact(
+        self,
+        run_context: IRunContext,
+        settings: GeneralSettings,
+        dataset: Any,
+        sources: list[str],
+        tags: dict[str, str],
+        structured_logged: bool,
+    ) -> None:
         try:
-            # Extract dataset from datamodule
-            dataset = getattr(datamodule, "dataset", None)
-            if dataset is None:
-                logger.debug("No dataset found in datamodule, skipping dataset logging")
-                return
+            import json
+            import hashlib
+            import os
+            import tempfile
 
-            # Import here to avoid circular dependencies
-            from dlkit.core.datasets.flexible import FlexibleDataset
-            import mlflow.data
+            fingerprint_payload = json.dumps(sorted(sources), separators=(",", ":"))
+            fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
 
-            # Type-based mapping: currently only NumPy (FlexibleDataset)
-            if isinstance(dataset, FlexibleDataset):
-                # Convert torch tensors to numpy
-                features_np = {k: v.cpu().numpy() for k, v in dataset.features.items()}
-                targets_np = {k: v.cpu().numpy() for k, v in dataset.targets.items()} if dataset.targets else None
+            manifest = {
+                "dataset_name": self._resolve_dataset_name(settings),
+                "dataset_class": type(dataset).__name__ if dataset is not None else None,
+                "sources": sources,
+                "source_count": len(sources),
+                "fingerprint": fingerprint,
+                "tags": tags,
+                "structured_mlflow_dataset_logged": structured_logged,
+            }
 
-                # Extract dataset name and source
-                dataset_name = getattr(settings.DATASET, "name", None) or "training_data"
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
+                json.dump(manifest, temp_file, indent=2, sort_keys=True)
+                temp_path = Path(temp_file.name)
 
-                # Try to extract source path from dataset features (first feature path if available)
-                dataset_source = None
-                try:
-                    ds_settings = settings.DATASET
-                    if hasattr(ds_settings, "features") and ds_settings.features:
-                        # Get first feature's path
-                        first_feature = next(iter(ds_settings.features), None)
-                        if first_feature and hasattr(first_feature, "path"):
-                            dataset_source = str(first_feature.path)
-                except Exception:
-                    pass
+            try:
+                run_context.log_artifact(temp_path, artifact_dir="lineage")
+            finally:
+                if temp_path.exists():
+                    os.unlink(temp_path)
 
-                # Create MLflow NumpyDataset
-                mlflow_dataset = mlflow.data.from_numpy(
-                    features=features_np,
-                    targets=targets_np,
-                    name=dataset_name,
-                    source=dataset_source
-                )
-
-                # Prepare tags with dataset metadata
-                tags = {}
-                try:
-                    split_cfg = settings.DATASET.split
-                    tags["split_test_ratio"] = str(split_cfg.test_ratio)
-                    tags["split_val_ratio"] = str(split_cfg.val_ratio)
-                except Exception:
-                    pass
-
-                # Add dataset type from meta if available
-                try:
-                    # Access from BuildComponents.meta would require passing it
-                    # For now, infer from settings
-                    dataset_type = getattr(settings.DATASET, "type", None)
-                    if dataset_type:
-                        tags["dataset_type"] = str(dataset_type)
-                except Exception:
-                    pass
-
-                # Log the dataset
-                run_context.log_dataset(mlflow_dataset, context="training", tags=tags if tags else None)
-                logger.info(f"Logged dataset '{dataset_name}' to MLflow")
-
-            else:
-                # Other dataset types not yet supported
-                dataset_class_name = type(dataset).__name__
-                logger.warning(
-                    f"Dataset type '{dataset_class_name}' not yet supported for MLflow logging. "
-                    f"Only FlexibleDataset (NumPy) is currently supported."
-                )
-
+            run_context.set_tag("dataset_manifest_artifact", "lineage")
+            run_context.set_tag("dataset_source_count", str(len(sources)))
+            run_context.set_tag("dataset_fingerprint", fingerprint)
         except Exception as e:
-            # Don't fail the run if dataset logging fails
-            logger.warning(f"Failed to log dataset to MLflow: {e}")
+            logger.warning(f"Failed to log dataset manifest artifact: {e}")
 
     def setup_mlflow_config(
         self,

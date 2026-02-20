@@ -71,6 +71,32 @@ class ConfigAccessor:
         client = self.get_mlflow_client_config()
         return getattr(client, "run_name", None) if client else None
 
+    def get_registered_model_name(self) -> str | None:
+        """Get optional registered model name override."""
+        client = self.get_mlflow_client_config()
+        return getattr(client, "registered_model_name", None) if client else None
+
+    def get_registered_model_aliases(self) -> tuple[str, ...] | None:
+        """Get optional registered model aliases override."""
+        client = self.get_mlflow_client_config()
+        aliases = getattr(client, "registered_model_aliases", None) if client else None
+        if not aliases:
+            return None
+        normalized = tuple(str(alias).strip() for alias in aliases if str(alias).strip())
+        return normalized if normalized else None
+
+    def get_registered_model_version_tags(self) -> dict[str, str]:
+        """Get optional registered model version tag overrides."""
+        client = self.get_mlflow_client_config()
+        tags = getattr(client, "registered_model_version_tags", None) if client else None
+        if not isinstance(tags, dict):
+            return {}
+        return {
+            str(key).strip(): str(value)
+            for key, value in tags.items()
+            if str(key).strip()
+        }
+
     def should_register_model(self) -> bool:
         """Check if model registration is enabled.
 

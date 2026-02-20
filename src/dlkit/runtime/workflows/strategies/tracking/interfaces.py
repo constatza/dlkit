@@ -173,6 +173,72 @@ class IRunContext(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def log_model(
+        self,
+        model: Any,
+        artifact_path: str,
+        *,
+        registered_model_name: str | None = None,
+        signature: Any | None = None,
+        input_example: Any | None = None,
+    ) -> str | None:
+        """Log a model artifact to the active run.
+
+        Args:
+            model: Model object to log.
+            artifact_path: Artifact subpath under the run.
+            registered_model_name: Optional registered model target name.
+            signature: Optional model signature.
+            input_example: Optional model input example.
+
+        Returns:
+            Model URI for the logged artifact if available, otherwise None.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_latest_model_version(
+        self,
+        model_name: str,
+        *,
+        run_id: str | None = None,
+        artifact_path: str | None = None,
+    ) -> int | None:
+        """Get the latest numeric version for a registered model.
+
+        Args:
+            model_name: Registered model name.
+            run_id: Optional run identifier to constrain the version lookup.
+            artifact_path: Optional artifact path hint for additional filtering.
+
+        Returns:
+            Latest version number, or None when unavailable.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
+        """Set a registered model alias.
+
+        Args:
+            model_name: Registered model name.
+            alias: Alias value (e.g. "latest", "candidate").
+            version: Target version.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_model_version_tag(
+        self,
+        model_name: str,
+        version: int,
+        key: str,
+        value: str,
+    ) -> None:
+        """Set a tag on a registered model version."""
+        raise NotImplementedError
+
 
 class IExperimentTracker(ABC):
     """Abstract experiment tracker following Dependency Inversion Principle.
@@ -366,6 +432,42 @@ class NullRunContext(IRunContext):
         """
         pass
 
+    def log_model(
+        self,
+        model: Any,
+        artifact_path: str,
+        *,
+        registered_model_name: str | None = None,
+        signature: Any | None = None,
+        input_example: Any | None = None,
+    ) -> str | None:
+        """No-op model logging."""
+        return None
+
+    def get_latest_model_version(
+        self,
+        model_name: str,
+        *,
+        run_id: str | None = None,
+        artifact_path: str | None = None,
+    ) -> int | None:
+        """No-op latest model version lookup."""
+        return None
+
+    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
+        """No-op model alias update."""
+        pass
+
+    def set_model_version_tag(
+        self,
+        model_name: str,
+        version: int,
+        key: str,
+        value: str,
+    ) -> None:
+        """No-op model version tag update."""
+        pass
+
 
 class NullTracker(IExperimentTracker):
     """Null object implementation of IExperimentTracker for when tracking is disabled.
@@ -393,7 +495,7 @@ class NullTracker(IExperimentTracker):
         ```
     """
 
-    def __enter__(self) -> "NullTracker":
+    def __enter__(self) -> NullTracker:
         """Context manager entry for null tracker.
 
         Returns:

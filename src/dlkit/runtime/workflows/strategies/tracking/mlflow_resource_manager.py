@@ -33,6 +33,24 @@ MLflowServerAdapter = _USE_MODULE_ADAPTER  # type: ignore[assignment]
 logger = get_logger(__name__)
 
 
+def _is_localhost_uri(uri: str) -> bool:
+    """Return True if the URI's host resolves to a loopback address.
+
+    Args:
+        uri: Tracking URI to inspect.
+
+    Returns:
+        bool: True when the host is localhost, 127.0.0.1, ::1, or 0.0.0.0.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        host = urlparse(uri).hostname or ""
+        return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    except Exception:
+        return False
+
+
 def _normalize_tracking_uri(uri: str | None) -> str | None:
     """Normalize tracking URI for consistent comparison.
 
@@ -140,8 +158,34 @@ class MLflowResourceManager:
         self._cleanup_all_resources()
         self._is_initialized = False
 
+    def _resolve_tracking_uri(self, client_config: Any) -> str:
+        """Resolve the effective tracking URI.
+
+        Returns the explicitly configured URI when present.  When none is set,
+        falls back to a local SQLite database so no server is required.
+
+        Args:
+            client_config: MLflow client configuration object.
+
+        Returns:
+            str: Resolved tracking URI (always non-None).
+        """
+        from dlkit.tools.io import locations
+
+        raw = getattr(client_config, "tracking_uri", None)
+        if raw is None:
+            default_uri = locations.mlruns_backend_uri()
+            logger.debug(f"No tracking_uri configured — defaulting to SQLite: {default_uri}")
+            return default_uri
+        return str(raw)
+
     def _initialize_resources(self) -> None:
         """Initialize MLflow resources based on configuration.
+
+        Server startup decision:
+        - ``file://`` / ``sqlite:///`` / None → no server (filesystem or SQLite direct)
+        - ``http(s)://localhost:*``            → start / reuse local server
+        - ``http(s)://remote:*``              → connect directly, no local server
 
         Raises:
             RuntimeError: If conflicting tracking URIs are detected between
@@ -156,52 +200,46 @@ class MLflowResourceManager:
         server_config = getattr(self._config, "server", None)
         client_config = getattr(self._config, "client", None)
 
-        # Only start server if tracking URI is HTTP-based (not file://)
-        should_start_server = False
-        if server_config and client_config:
-            tracking_uri = getattr(client_config, "tracking_uri", None)
-            if tracking_uri:
-                tracking_uri_str = str(tracking_uri)
-                # Only start server for HTTP(S) URIs, not file:// URIs
-                should_start_server = tracking_uri_str.startswith(("http://", "https://"))
+        # Resolve the effective tracking URI (may be the SQLite default)
+        tracking_uri_str = self._resolve_tracking_uri(client_config)
+
+        # Start a local server only for HTTP(S) URIs pointing at localhost
+        is_http = tracking_uri_str.startswith(("http://", "https://"))
+        should_start_server = is_http and _is_localhost_uri(tracking_uri_str)
+
+        if not should_start_server and is_http:
+            logger.debug(
+                f"Remote HTTP tracking URI detected ({tracking_uri_str}); "
+                "skipping local server startup — connecting directly."
+            )
 
         if should_start_server:
             self._initialize_server(server_config)
 
         # Detect and validate potential dual tracking URI sources
         server_uri = None
-        client_uri = None
 
         if self._state.server_info and hasattr(self._state.server_info, "url"):
             server_uri = str(self._state.server_info.url)
 
-        if client_config and hasattr(client_config, "tracking_uri") and client_config.tracking_uri:
-            client_uri = str(client_config.tracking_uri)
+        # tracking_uri_str is already fully resolved (server info takes precedence for HTTP)
+        effective_uri = server_uri if server_uri else tracking_uri_str
 
-        # Normalize URIs for comparison (strip trailing slashes)
-        # This ensures 'http://host:port' and 'http://host:port/' are treated as equivalent
+        # Normalize for comparison (strip trailing slashes)
         normalized_server_uri = _normalize_tracking_uri(server_uri)
-        normalized_client_uri = _normalize_tracking_uri(client_uri)
+        normalized_effective_uri = _normalize_tracking_uri(tracking_uri_str)
 
-        # Conflict detection: both sources exist but URIs differ
-        if normalized_server_uri and normalized_client_uri and normalized_server_uri != normalized_client_uri:
+        # Conflict detection: server started at a different URI than what was configured
+        if normalized_server_uri and normalized_effective_uri and normalized_server_uri != normalized_effective_uri:
             msg = (
                 f"Conflicting tracking URIs detected:\n"
                 f"  Server URI: {server_uri}\n"
-                f"  Client URI: {client_uri}\n"
-                f"Both server_info and client_config specify tracking URIs but they differ. "
+                f"  Configured URI: {tracking_uri_str}\n"
+                f"Server started at a different URI than configured. "
                 f"Please ensure consistent configuration."
             )
             logger.error(msg)
             raise RuntimeError(msg)
-
-        # Redundancy warning: both sources exist with same URI (after normalization)
-        if normalized_server_uri and normalized_client_uri and normalized_server_uri == normalized_client_uri:
-            logger.warning(
-                f"Redundant tracking URI configuration detected: {server_uri}. "
-                f"Both server_info and client_config specify the same URI. "
-                f"Consider removing one source for clarity."
-            )
 
         # Initialize client
         if self._state.server_info:
@@ -209,28 +247,29 @@ class MLflowResourceManager:
             self._state.client = MLflowClientFactory.create_client_from_server_info(
                 self._state.server_info, client_config
             )
-            tracking_uri = getattr(self._state.client, "tracking_uri", "unknown")
-            logger.debug(f"Client created with tracking URI: {tracking_uri}")
+            log_uri = getattr(self._state.client, "tracking_uri", "unknown")
+            logger.debug(f"Client created with tracking URI: {log_uri}")
 
-            # Set global tracking URI for consistency with Lightning and artifact logging
-            if server_uri:
-                self._set_global_tracking_uri(server_uri)
+            # Set global tracking URI for Lightning / artifact logging compatibility
+            self._set_global_tracking_uri(effective_uri)
         else:
-            logger.debug(f"Creating client from config: {client_config}")
-            self._state.client = MLflowClientFactory.create_client(client_config)
-            tracking_uri = getattr(self._state.client, "tracking_uri", "unknown")
-            logger.debug(f"Client created with tracking URI: {tracking_uri}")
+            # Direct client: file://, sqlite:///, remote HTTP — no local server
+            logger.debug(f"Creating direct client with tracking URI: {effective_uri}")
+            self._state.client = MLflowClientFactory.create_client(
+                client_config, tracking_uri=effective_uri
+            )
+            log_uri = getattr(self._state.client, "tracking_uri", "unknown")
+            logger.debug(f"Client created with tracking URI: {log_uri}")
 
-            # Set global tracking URI for consistency with Lightning and artifact logging
-            if client_uri:
-                self._set_global_tracking_uri(client_uri)
+            # Propagate resolved URI to MLflow global state for Lightning compatibility
+            self._set_global_tracking_uri(effective_uri)
 
         # Skip client validation if we just started our own server
         # (server may still be initializing, validation will happen on first use)
         if self._state.server_info:
             logger.debug("Skipping client validation for newly started server")
         else:
-            # Only validate connectivity for external servers or file-based tracking
+            # Validate connectivity for file-based, SQLite, or remote HTTP tracking
             if not MLflowClientFactory.validate_client_connectivity(self._state.client):
                 logger.warning("MLflow client connectivity validation failed")
 
@@ -441,73 +480,48 @@ class MLflowResourceManager:
         self._validate_stack_consistency()
 
         client = self.get_client()
-        run_id = None
+        exp_name = experiment_name or "DLKit"
+        logger.debug(f"Getting or creating experiment '{exp_name}'")
+        experiment_id = MLflowClientFactory.get_or_create_experiment(client, exp_name)
+        logger.debug(f"Experiment created/found with ID: {experiment_id}")
+        self._state.experiment_id = experiment_id
 
-        try:
-            # Get or create experiment
-            exp_name = experiment_name or "DLKit"
-            logger.debug(f"Getting or creating experiment '{exp_name}'")
-            experiment_id = MLflowClientFactory.get_or_create_experiment(client, exp_name)
-            logger.debug(f"Experiment created/found with ID: {experiment_id}")
-            self._state.experiment_id = experiment_id
+        parent_run_id = None
+        with self._state.stack_lock:
+            if nested and self._state.active_run_stack:
+                parent_run_id = self._state.active_run_stack[-1]
+                logger.debug(f"Creating nested run under parent: {parent_run_id}")
 
-            # Thread-safe stack access to determine parent run
-            parent_run_id = None
-            with self._state.stack_lock:
-                if nested and self._state.active_run_stack:
-                    # Use the top of the stack as the parent run
-                    parent_run_id = self._state.active_run_stack[-1]
-                    logger.debug(f"Creating nested run under parent: {parent_run_id}")
+        start_run_kwargs: dict[str, Any] = {
+            "experiment_id": experiment_id,
+            "run_name": run_name,
+            "nested": nested,
+        }
+        if parent_run_id:
+            start_run_kwargs["parent_run_id"] = parent_run_id
 
-            # Create run using client with correct parameters
-            # Note: MlflowClient.create_run uses different parameter names than mlflow.start_run
-            run_kwargs: dict[str, Any] = {
-                "experiment_id": experiment_id,
-            }
-            if run_name:
-                # MLflow client expects 'tags' parameter with a special tag for run name
-                run_kwargs["tags"] = {"mlflow.runName": run_name}
-            if parent_run_id:
-                # MLflow client expects 'tags' parameter with parent run tag
-                if "tags" not in run_kwargs:
-                    run_kwargs["tags"] = {}
-                run_kwargs["tags"]["mlflow.parentRunId"] = parent_run_id
-
-            run = client.create_run(**run_kwargs)
-            run_id = run.info.run_id
-
-            # Thread-safe stack push
+        # Fluent API owns run lifecycle. This avoids split lifecycle management
+        # between client.create_run() and mlflow.start_run().
+        with mlflow.start_run(**start_run_kwargs) as active_run:
+            run_id = active_run.info.run_id
             with self._state.stack_lock:
                 self._state.active_run_stack.append(run_id)
-                logger.debug(f"Created MLflow run: {run_id}, stack depth: {len(self._state.active_run_stack)}")
+                logger.debug(
+                    f"Created MLflow run: {run_id}, stack depth: {len(self._state.active_run_stack)}"
+                )
 
-            # Yield run context for operations
-            from .mlflow_run_context import ClientBasedRunContext
-            yield ClientBasedRunContext(client, run_id)
+            try:
+                from .mlflow_run_context import ClientBasedRunContext
 
-        finally:
-            # Clean up run
-            if run_id:
-                try:
-                    client.set_terminated(run_id, status="FINISHED")
-                    logger.debug(f"Terminated MLflow run: {run_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to terminate run {run_id}: {e}")
-                finally:
-                    # Thread-safe stack pop
-                    with self._state.stack_lock:
-                        if self._state.active_run_stack and self._state.active_run_stack[-1] == run_id:
-                            self._state.active_run_stack.pop()
-                            logger.debug(f"Popped run {run_id} from stack, stack size: {len(self._state.active_run_stack)}")
-
-                    # Clear active run from MLflow's global state
-                    try:
-                        mlflow.end_run()
-                    except Exception:
-                        pass
-
-                    # Validate stack consistency after run cleanup
-                    self._validate_stack_consistency()
+                yield ClientBasedRunContext(client, run_id)
+            finally:
+                with self._state.stack_lock:
+                    if self._state.active_run_stack and self._state.active_run_stack[-1] == run_id:
+                        self._state.active_run_stack.pop()
+                        logger.debug(
+                            f"Popped run {run_id} from stack, stack size: {len(self._state.active_run_stack)}"
+                        )
+        self._validate_stack_consistency()
 
     def add_cleanup_callback(self, callback: Any) -> None:
         """Add cleanup callback to be executed during resource cleanup.

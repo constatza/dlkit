@@ -78,38 +78,135 @@ class ClientBasedRunContext(IRunContext):
             tags: Optional dictionary of tags to associate with the dataset
         """
         try:
-            # Convert mlflow.data.Dataset to mlflow.entities.Dataset for client API
             from mlflow.entities import DatasetInput, InputTag
 
-            # Extract dataset metadata
-            dataset_name = getattr(dataset, "name", None)
-            dataset_digest = getattr(dataset, "digest", None)
-            dataset_source = getattr(dataset, "source", None)
-            dataset_source_type = None
-
-            if dataset_source:
-                dataset_source_type = getattr(dataset_source, "_source_type", None)
-                if not dataset_source_type:
-                    # Try to get from source string representation
-                    source_str = str(dataset_source)
-                    if source_str.startswith("http"):
-                        dataset_source_type = "http"
-                    elif source_str.startswith("s3://"):
-                        dataset_source_type = "s3"
-                    else:
-                        dataset_source_type = "local"
-
-            # Create DatasetInput entity with proper InputTag objects
-            dataset_input = DatasetInput(
-                dataset=dataset,
-                tags=[InputTag(key=k, value=v) for k, v in (tags or {}).items()]
+            # Client API expects mlflow.entities.Dataset (not mlflow.data.Dataset wrapper).
+            dataset_entity = (
+                dataset._to_mlflow_entity()  # noqa: SLF001
+                if hasattr(dataset, "_to_mlflow_entity")
+                else dataset
             )
 
-            # Log using client's log_inputs method (takes list of datasets)
-            self._client.log_inputs(self._run_id, [dataset_input])
+            input_tags = [InputTag(key=k, value=v) for k, v in (tags or {}).items()]
+            if context:
+                input_tags.append(InputTag(key="mlflow.data.context", value=context))
+
+            dataset_input = DatasetInput(
+                dataset=dataset_entity,
+                tags=input_tags,
+            )
+
+            self._client.log_inputs(self._run_id, datasets=[dataset_input])
 
         except Exception as e:
             logger.warning(f"Failed to log dataset: {e}")
+
+    def log_model(
+        self,
+        model: Any,
+        artifact_path: str,
+        *,
+        registered_model_name: str | None = None,
+        signature: Any | None = None,
+        input_example: Any | None = None,
+    ) -> str | None:
+        """Log model artifact with automatic MLflow flavor dispatch."""
+        try:
+            import mlflow
+
+            kwargs = {
+                "name": artifact_path,
+                "registered_model_name": registered_model_name,
+                "signature": signature,
+                "input_example": input_example,
+            }
+
+            logged_model = None
+            match _resolve_model_flavor(model):
+                case "sklearn":
+                    logged_model = mlflow.sklearn.log_model(  # type: ignore[attr-defined]
+                        sk_model=model,
+                        **kwargs,
+                    )
+                case "pytorch":
+                    logged_model = mlflow.pytorch.log_model(  # type: ignore[attr-defined]
+                        pytorch_model=model,
+                        **kwargs,
+                    )
+                case _:
+                    raise TypeError(
+                        f"Unsupported model type for MLflow logging: {type(model).__name__}"
+                    )
+
+            return _resolve_logged_model_uri(
+                logged_model=logged_model,
+                fallback_uri=f"runs:/{self._run_id}/{artifact_path}",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log model: {e}")
+            return None
+
+    def get_latest_model_version(
+        self,
+        model_name: str,
+        *,
+        run_id: str | None = None,
+        artifact_path: str | None = None,
+    ) -> int | None:
+        """Get latest registered model version by numeric max.
+
+        When ``run_id`` is provided, only versions produced by that run are
+        considered. This prevents cross-run races when multiple runs register
+        new versions around the same time.
+        """
+        try:
+            versions = self._client.search_model_versions(f"name='{model_name}'")
+            numeric_versions = [
+                int(getattr(version, "version"))
+                for version in versions
+                if _is_matching_version(
+                    version=version,
+                    run_id=run_id,
+                    artifact_path=artifact_path,
+                )
+            ]
+            return max(numeric_versions) if numeric_versions else None
+        except Exception as e:
+            logger.warning(f"Failed to get latest model version for {model_name}: {e}")
+            return None
+
+    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
+        """Set alias for a registered model version."""
+        try:
+            self._client.set_registered_model_alias(
+                name=model_name,
+                alias=alias,
+                version=str(version),
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to set alias '{alias}' for model '{model_name}' v{version}: {e}"
+            )
+
+    def set_model_version_tag(
+        self,
+        model_name: str,
+        version: int,
+        key: str,
+        value: str,
+    ) -> None:
+        """Set a registered model version tag."""
+        try:
+            self._client.set_model_version_tag(
+                name=model_name,
+                version=str(version),
+                key=key,
+                value=value,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to set model version tag '{key}' for model '{model_name}' v{version}: {e}"
+            )
 
     def log_batch(
         self,
@@ -163,3 +260,64 @@ class ClientBasedRunContext(IRunContext):
     def client(self) -> MlflowClient:
         """Get MLflow client instance."""
         return self._client
+
+
+def _is_sklearn_estimator(model: Any) -> bool:
+    """Check sklearn estimator support without hard dependency at import time."""
+    try:
+        from sklearn.base import BaseEstimator
+
+        return isinstance(model, BaseEstimator)
+    except Exception:
+        return False
+
+
+def _resolve_model_flavor(model: Any) -> str:
+    if _is_sklearn_estimator(model):
+        return "sklearn"
+
+    try:
+        import torch
+
+        if isinstance(model, torch.nn.Module):
+            return "pytorch"
+    except Exception:
+        return "unknown"
+
+    return "unknown"
+
+
+def _resolve_logged_model_uri(logged_model: Any, fallback_uri: str) -> str:
+    """Resolve best available MLflow model URI from flavor logging result."""
+    model_uri = getattr(logged_model, "model_uri", None)
+    if isinstance(model_uri, str) and model_uri:
+        return model_uri
+
+    if isinstance(logged_model, str) and logged_model:
+        return logged_model
+
+    return fallback_uri
+
+
+def _is_matching_version(
+    *,
+    version: Any,
+    run_id: str | None,
+    artifact_path: str | None,
+) -> bool:
+    version_value = getattr(version, "version", None)
+    if version_value is None:
+        return False
+
+    if run_id is not None:
+        version_run_id = getattr(version, "run_id", None)
+        if version_run_id not in (None, "", run_id):
+            return False
+
+    if artifact_path:
+        source = str(getattr(version, "source", "") or "")
+        normalized_path = f"/{artifact_path.strip('/')}"
+        if normalized_path not in source:
+            return False
+
+    return True
