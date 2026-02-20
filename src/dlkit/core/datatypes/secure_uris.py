@@ -23,7 +23,8 @@ SecureMLflowBackendStoreUri = Annotated[
 ]
 
 SecureMLflowTrackingUri = Annotated[
-    MLflowTrackingUrl, Field(description="MLflow tracking server URL (http/https/file/databricks)")
+    MLflowTrackingUrl,
+    Field(description="MLflow tracking URI (sqlite:///, http/https, file://, or databricks://)"),
 ]
 
 SecureArtifactStoreUri = Annotated[

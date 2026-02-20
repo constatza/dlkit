@@ -36,8 +36,13 @@ def load_transforms_from_checkpoint(
     target_transforms: dict[str, TransformChain] = {}
 
     state_dict = checkpoint.get("state_dict", {})
-    inference_metadata = checkpoint.get("inference_metadata", {})
-    entry_configs = inference_metadata.get("entry_configs", {})
+    dlkit_metadata = checkpoint.get("dlkit_metadata", {})
+    entry_configs = dlkit_metadata.get("entry_configs", [])
+
+    # Convert list of configs to dict for easier lookup by name
+    entry_configs_dict = {
+        e["name"]: e for e in entry_configs if isinstance(e, dict) and "name" in e
+    }
 
     # Detect checkpoint format
     has_positional = any(
@@ -52,39 +57,42 @@ def load_transforms_from_checkpoint(
 
     if has_positional:
         logger.info("Loading transforms from positional format (_feature_chains / _target_chains)")
-        feature_names: list[str] = inference_metadata.get("feature_names", [])
-        target_names: list[str] = inference_metadata.get("target_names", [])
+        feature_names: list[str] = dlkit_metadata.get("feature_names", [])
+        target_names: list[str] = dlkit_metadata.get("target_names", [])
         feature_transforms = _load_positional_transforms(
-            "_feature_chains", state_dict, entry_configs, feature_names
+            "_feature_chains", state_dict, entry_configs_dict, feature_names
         )
         target_transforms = _load_positional_transforms(
-            "_target_chains", state_dict, entry_configs, target_names
+            "_target_chains", state_dict, entry_configs_dict, target_names
         )
     elif has_modern:
         # Guard: No entry configs means we can't load transforms properly
-        if not entry_configs:
+        if not entry_configs_dict:
             logger.warning("No entry_configs found in checkpoint - cannot load transforms")
             return feature_transforms, target_transforms
         logger.info("Loading transforms from modern string-keyed format")
         feature_transforms = _load_transforms_by_prefix(
-            "fitted_feature_transforms", state_dict, entry_configs
+            "fitted_feature_transforms", state_dict, entry_configs_dict
         )
         target_transforms = _load_transforms_by_prefix(
-            "fitted_target_transforms", state_dict, entry_configs
+            "fitted_target_transforms", state_dict, entry_configs_dict
         )
     elif has_legacy:
-        if not entry_configs:
+        if not entry_configs_dict:
             logger.warning("No entry_configs found in checkpoint - cannot load transforms")
             return feature_transforms, target_transforms
         logger.info("Loading transforms from legacy format (will separate)")
         all_transforms = _load_transforms_by_prefix(
-            "fitted_transforms", state_dict, entry_configs
+            "fitted_transforms", state_dict, entry_configs_dict
         )
         for name, transform in all_transforms.items():
-            if name in entry_configs:
-                if is_feature_entry(entry_configs[name]):
+            if name in entry_configs_dict:
+                # We need to check entry type from serialized info
+                config = entry_configs_dict[name]
+                cls_name = config.get("class_name", "")
+                if "Feature" in cls_name:
                     feature_transforms[name] = transform
-                elif is_target_entry(entry_configs[name]):
+                elif "Target" in cls_name:
                     target_transforms[name] = transform
     else:
         logger.info("No fitted transforms found in checkpoint")
