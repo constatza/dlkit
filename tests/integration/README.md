@@ -18,9 +18,13 @@ tests/integration/
 ├── README.md                                    # This file
 ├── conftest.py                                  # Shared fixtures and test data
 ├── test_basic_integration.py                    # Simple, working integration tests
+├── test_custom_metrics_integration.py           # Custom metrics end-to-end tests
+├── test_graph_components.py                     # Graph neural network integration tests
+├── test_graph_precision_lr_tuning.py            # Graph precision and LR tuning tests
+├── test_mlflow_server_behavior.py               # MLflow server lifecycle tests
 ├── test_mlflow_training_integration.py          # MLflow workflow tests
-├── test_optuna_optimization_integration.py      # Optuna optimization tests
-└── test_inference_workflow_integration.py       # Inference workflow tests
+├── test_optuna_mlflow_integration.py            # Optuna + MLflow integration tests
+└── test_transforms_persistence_and_inference.py # Transform save/load and inference tests
 ```
 
 ## Key Design Principles
@@ -109,29 +113,46 @@ Simple, robust tests that manually create all test data and configurations. Thes
 ### `test_mlflow_training_integration.py`
 Comprehensive MLflow training integration tests including:
 - Complete MLflow training pipeline
-- Model registration (optional)
+- Model registration and registry lookup by model name
+- Alias resolution (`candidate` and MLflow built-in `latest`)
+- Loading registered models by alias and explicit version
+- Run-artifact lookup/loading when registration is disabled (`runs:/...`)
+- Artifact URI validation under pytest `tmp_path`
+- Dataset lineage artifact verification (`lineage/`)
 - Fallback behavior when MLflow unavailable
 - Server health checking
 - Auto-detection from settings
 - Training metrics preservation
 - Invalid configuration handling
 
-### `test_optuna_optimization_integration.py` 
+### `test_optuna_mlflow_integration.py`
 Optuna hyperparameter optimization tests including:
 - Complete optimization pipeline with study creation
-- Custom sampler/pruner configuration  
+- Custom sampler/pruner configuration
 - Study persistence with storage backends
 - MLflow + Optuna integration (nested runs)
 - Objective direction handling
 - Model hyperparameter sampling
 
-### `test_inference_workflow_integration.py`
-End-to-end inference workflow tests including:
-- Inference from pre-trained checkpoints
-- Train-then-infer workflows
-- Error handling (missing/corrupted checkpoints)
-- Batch prediction generation
-- Performance with larger datasets
+### `test_transforms_persistence_and_inference.py`
+Transform checkpoint persistence and inference workflow tests including:
+- Fitting transforms during training and persisting them in checkpoints
+- Loading transforms from checkpoints for inference
+- Feature and target transform application during predict
+- Inverse transform application to predictions
+- End-to-end train → save → load → predict validation
+
+### `test_custom_metrics_integration.py`
+Custom metrics integration tests covering registration and computation of user-defined metrics.
+
+### `test_graph_components.py`
+Graph neural network integration tests including PyG data handling, graph wrappers, and GAT/GCN forward pass validation.
+
+### `test_graph_precision_lr_tuning.py`
+Precision and learning-rate tuning tests for graph models.
+
+### `test_mlflow_server_behavior.py`
+MLflow server lifecycle integration tests covering startup, health checks, and graceful shutdown.
 
 ## Fixtures Reference
 
@@ -180,6 +201,12 @@ uv run pytest tests/integration/test_basic_integration.py -v
 # Only MLflow tests
 uv run pytest tests/integration/test_mlflow_training_integration.py -v
 
+# Only registry/load integration test
+uv run pytest tests/integration/test_mlflow_training_integration.py -k registers_model_and_supports_registry_lookup -v
+
+# Only logged-model (register=false) integration test
+uv run pytest tests/integration/test_mlflow_training_integration.py -k logs_model_without_registration_and_supports_logged_lookup -v
+
 # Only slow tests
 uv run pytest tests/integration/ -m slow -v
 ```
@@ -206,16 +233,16 @@ uv run pytest tests/integration/test_basic_integration.py::TestBasicIntegration:
 - Basic integration tests that avoid complex fixture dependencies
 
 ### ⚠️ Known Issues
-- Some tests may fail due to Python type union operators (`str | None` syntax)
 - Complex fixture dependencies in the comprehensive test files need debugging
 - MLflow and Optuna tests depend on external package availability
+- MLflow integration tests may be skipped in restricted sandboxes that disallow local socket usage
 
 ### 🔄 Recommended Next Steps
-1. **Fix type union issues** - Update code to use `Union[str, None]` for Python < 3.10 compatibility
-2. **Debug fixture dependencies** - Resolve path resolution and dependency chain issues
-3. **Add more error scenarios** - Test network failures, corrupted configs, etc.
-4. **Performance benchmarks** - Add timing assertions for performance regression detection
-5. **CI/CD integration** - Configure these tests to run in continuous integration
+1. **Debug fixture dependencies** - Resolve path resolution and dependency chain issues
+2. **Add more error scenarios** - Test network failures, corrupted configs, etc.
+3. **Performance benchmarks** - Add timing assertions for performance regression detection
+4. **CI/CD integration** - Configure these tests to run in continuous integration
+5. **Sandbox-aware MLflow jobs** - Ensure CI runners allow local socket usage for MLflow integration tests
 
 ## Test Design Philosophy
 
@@ -225,7 +252,7 @@ These integration tests follow several key principles:
 - **Fast by default**: Use minimal data and quick configurations unless marked `@pytest.mark.slow`
 - **Functional separation**: Separate data creation (fixtures) from test logic (test functions)
 - **SOLID principles**: Single responsibility per test, dependency inversion via fixtures
-- **No external dependencies**: Tests create all necessary data and don't rely on external services
+- **No remote services required**: Tests create all necessary data locally; MLflow/Optuna tests still require installed packages, and MLflow tests may need local socket permission in sandboxed environments
 - **Clear assertions**: Test outcomes, not internal implementation details
 
 The integration tests complement the unit tests by verifying that all components work together correctly in realistic usage scenarios.

@@ -117,6 +117,138 @@ Examples:
   res = train(cfg, mlflow=True, epochs=20, batch_size=64)
   ```
 
+### MLflow Registry and Model Loading
+
+`[MLFLOW.client].register_model` is `true` by default.
+
+- Registered model name defaults to the trained model class name.
+- DLKit does **not** add default aliases or model-version tags.
+- Aliases/tags are attached only when explicitly configured or set via API.
+- Dataset lineage is logged as a JSON artifact under `lineage/` plus run tags (`dataset_manifest_artifact`, `dataset_source_count`, `dataset_fingerprint`).
+
+```python
+from dlkit import (
+    search_registered_models,
+    list_model_versions,
+    load_registered_model,
+)
+
+tracking_uri = "file:///tmp/mlruns"
+model_name = "ConstantWidthFFNN"
+
+registered = search_registered_models(model_name, tracking_uri=tracking_uri)
+versions = list_model_versions(model_name, tracking_uri=tracking_uri)
+
+# Alias-based loading (defaults to MLflow latest resolution)
+latest = load_registered_model(model_name, alias="latest", tracking_uri=tracking_uri)
+
+# Version-pinned loading
+pinned = load_registered_model(model_name, version=versions[-1], tracking_uri=tracking_uri)
+```
+
+#### From TrainingResult to Register / Alias / Tag / Load
+
+Use the training output to register and annotate models programmatically:
+
+```python
+import dlkit
+
+settings = ...  # your GeneralSettings
+result = dlkit.train(settings)
+
+run_id = (result.metrics or {}).get("mlflow_run_id")
+if run_id is None:
+    raise RuntimeError("MLflow run id missing from training result metrics")
+
+model_name = (
+    getattr(settings.MLFLOW.client, "registered_model_name", None)
+    or type(result.model_state.model).__name__
+)
+
+# Register from the run artifact (useful when register_model=false)
+version_entity = dlkit.register_logged_model(
+    model_name,
+    run_id=run_id,
+    artifact_path="model",
+    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+)
+version = int(version_entity.version)
+
+# Attach aliases and tags explicitly
+dlkit.set_registered_model_alias(
+    model_name,
+    alias="dataset_A_latest",
+    version=version,
+    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+)
+dlkit.set_registered_model_version_tags(
+    model_name,
+    version=version,
+    tags={"dataset": "dataset_A", "benchmark": "high_precision"},
+    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+)
+
+# Load by alias (PyTorch flavor preferred, sklearn/pyfunc fallback in auto mode)
+model = dlkit.load_registered_model(
+    model_name,
+    alias="dataset_A_latest",
+    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+    flavor="auto",  # "pytorch" | "sklearn" | "pyfunc"
+)
+```
+
+You can also set aliases/tags declaratively in TOML:
+
+```toml
+[MLFLOW.client]
+register_model = true
+registered_model_name = "FFNN"
+registered_model_aliases = ["dataset_A_latest", "benchmark_high_precision"]
+registered_model_version_tags = { dataset = "dataset_A", benchmark = "high_precision" }
+```
+
+When you set `[MLFLOW.client].register_model = false`, DLKit still logs the model artifact under the run (`runs:/...`) and you can locate/load it with logged-model helpers:
+
+```python
+from dlkit import search_logged_models, load_logged_model
+
+tracking_uri = "file:///tmp/mlruns"
+results = search_logged_models(
+    model_name="ConstantWidthFFNN",
+    experiment_name="my_experiment",
+    tracking_uri=tracking_uri,
+)
+
+latest = results[0]
+model = load_logged_model(model_uri=latest.model_uri, tracking_uri=tracking_uri)
+```
+
+### Accessing Stacked Predictions from TrainingResult
+
+`TrainingResult.stacked` gives you concatenated predictions, targets, and latents across all prediction batches as a lazily-computed `StackedResults` object:
+
+```python
+result = dlkit.train(settings, epochs=10)
+
+# Lazily concatenated across all batches - computed once and cached
+stacked = result.stacked
+
+# Single-output model: stacked.predictions is np.ndarray
+predictions = stacked.predictions  # shape (N, out_dim)
+targets = stacked.targets          # shape (N, target_dim)
+latents = stacked.latents          # shape (N, latent_dim) or None
+
+# Multi-output model: stacked.predictions is tuple[np.ndarray, ...]
+p0, p1 = stacked.predictions
+```
+
+`StackedResults` fields:
+- `predictions` - Model predictions concatenated along axis 0
+- `targets` - Ground-truth targets concatenated along axis 0
+- `latents` - Encoder latent outputs (e.g. for autoencoders); `None` if not produced
+
+For irregular shapes (e.g. graph data with varying node counts), each field falls back to a list of raw batch items.
+
 ## Inference
 
 DLKit loads models from checkpoints with automatic transform handling and precision inference. **No configuration files are required** - everything needed is extracted from the checkpoint metadata.
@@ -652,7 +784,7 @@ Model outputs
 - `[MLFLOW]`: experiment tracking
   - `enabled`: bool; when true, MLflow is configured/used
   - `[MLFLOW.server]`: `scheme`, `host`, `port`, optional storage URIs
-  - `[MLFLOW.client]`: `tracking_uri` (auto from server), `experiment_name`, `run_name`, `register_model`
+  - `[MLFLOW.client]`: `tracking_uri` (auto from server), `experiment_name`, `run_name`, `register_model`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
 - `[OPTUNA]`: hyperparameter optimization
   - `enabled`: bool; when true and selected, optimization runs
   - `n_trials`, `study_name`; optional `sampler`, `pruner`, `storage`

@@ -222,8 +222,11 @@ MLflow experiment tracking configuration.
 |-------|------|---------|-------------|
 | `experiment_name` | `str` | `"Experiment"` | Experiment name |
 | `run_name` | `str \| None` | `None` | Run name |
+| `registered_model_name` | `str \| None` | `None` | Optional registered model name override |
+| `registered_model_aliases` | `tuple[str, ...] \| None` | `None` | Optional aliases applied to each registered version |
+| `registered_model_version_tags` | `dict[str, str] \| None` | `None` | Optional model-version tags applied after registration |
 | `tracking_uri` | `str \| None` | auto-computed | Tracking server URI |
-| `register_model` | `bool` | `False` | Register trained models |
+| `register_model` | `bool` | `True` | Register trained models |
 | `max_trials` | `int` | `3` | Max connection attempts |
 
 ---
