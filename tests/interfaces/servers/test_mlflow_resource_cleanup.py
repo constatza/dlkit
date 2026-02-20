@@ -101,7 +101,7 @@ class TestMLflowResourceManagerCleanup:
     def test_resource_manager_cleans_up_run_on_exit(
         self, mlflow_config: MLflowSettings, mock_mlflow_client: Mock
     ) -> None:
-        """Ensure active run is terminated on resource manager exit."""
+        """Ensure active run context is cleaned up on resource manager exit."""
         from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
             MLflowResourceManager,
         )
@@ -131,8 +131,9 @@ class TestMLflowResourceManagerCleanup:
                     # Run is active (check stack has run)
                     assert len(manager._state.active_run_stack) > 0
 
-            # After exit, run should be terminated
-            mock_mlflow_client.set_terminated.assert_called()
+            # Fluent run lifecycle should have been entered and stack must be clean.
+            mock_mlflow.start_run.assert_called()
+            assert len(manager._state.active_run_stack) == 0
             mock_server_context.stop_server.assert_called_once()
 
     def test_resource_manager_handles_cleanup_errors_gracefully(

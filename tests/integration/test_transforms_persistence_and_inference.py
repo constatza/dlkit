@@ -132,15 +132,26 @@ def _basic_trainer() -> Trainer:
 
 
 def _extract_prediction_tensor(result: Any) -> torch.Tensor:
-    """Retrieve the first tensor prediction from nested inference outputs."""
-    queue: list[Any] = [result.predictions]
-    while queue:
-        current = queue.pop(0)
-        if torch.is_tensor(current):
-            return current
-        if isinstance(current, dict):
-            queue.extend(current.values())
-    raise AssertionError("Inference result did not contain tensor predictions")
+    """Retrieve the first tensor prediction from nested inference outputs.
+    
+    Handles both CheckpointPredictor (which returns a dict for single-output models)
+    and trainer.predict (which returns nested tuples).
+    """
+    preds = result.predictions
+    
+    # Handle dict (CheckpointPredictor single-output)
+    if isinstance(preds, dict):
+        if not preds:
+            raise AssertionError("Inference result dictionary is empty")
+        return next(iter(preds.values()))
+    
+    # Handle tuple (Standard format: predictions_tuple, targets_tuple, latents_tuple)
+    if isinstance(preds, (tuple, list)):
+        preds_tuple = preds[0]
+        if preds_tuple and torch.is_tensor(preds_tuple[0]):
+            return preds_tuple[0]
+            
+    raise AssertionError(f"Inference result did not contain tensor predictions in a recognized format: {type(preds)}")
 
 
 @pytest.fixture(scope="module")
@@ -200,10 +211,10 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     preds = trainer.predict(loaded, datamodule=dm)
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
-    assert isinstance(batch_out, dict)
-    # predictions and targets are positional tuples
-    inv_pred = batch_out.get("predictions", (None,))[0]
-    inv_targ = batch_out.get("targets", (None,))[0]
+    # Standard format: (predictions_tuple, targets_tuple, latents_tuple)
+    assert isinstance(batch_out, (tuple, list))
+    inv_pred = batch_out[0][0]  # First tensor of predictions tuple
+    inv_targ = batch_out[1][0]  # First tensor of targets tuple
     assert inv_pred is not None and inv_targ is not None
 
     # Assert: inverse-transformed predictions and targets are in original space (strict)
@@ -394,9 +405,10 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     preds = trainer.predict(rewrapped, datamodule=dm)
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
-    # predictions and targets are positional tuples
-    inv_pred = batch_out.get("predictions", (None,))[0]
-    inv_targ = batch_out.get("targets", (None,))[0]
+    # Standard format: (predictions_tuple, targets_tuple, latents_tuple)
+    assert isinstance(batch_out, (tuple, list))
+    inv_pred = batch_out[0][0]  # First tensor of predictions tuple
+    inv_targ = batch_out[1][0]  # First tensor of targets tuple
     assert inv_pred is not None and inv_targ is not None
 
     raw_batch = next(iter(dm.predict_dataloader()))

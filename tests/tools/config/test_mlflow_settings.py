@@ -52,6 +52,8 @@ def mlflow_client_data() -> dict[str, Any]:
         "run_name": "test_run_001",
         "tracking_uri": "http://localhost:5000",
         "register_model": True,
+        "registered_model_aliases": ("dataset_A_latest",),
+        "registered_model_version_tags": {"team": "platform"},
         "max_trials": 5,
     }
 
@@ -167,7 +169,9 @@ class TestMLflowClientSettings:
         assert settings.experiment_name == "Experiment"
         assert settings.run_name is None
         assert settings.tracking_uri is None
-        assert settings.register_model is False
+        assert settings.register_model is True
+        assert settings.registered_model_aliases is None
+        assert settings.registered_model_version_tags is None
         assert settings.max_trials == 3
 
     def test_initialization_with_custom_data(self, mlflow_client_data: dict[str, Any]) -> None:
@@ -182,6 +186,8 @@ class TestMLflowClientSettings:
         assert settings.run_name == "test_run_001"
         assert str(settings.tracking_uri) == "http://localhost:5000/"
         assert settings.register_model is True
+        assert settings.registered_model_aliases == ("dataset_A_latest",)
+        assert settings.registered_model_version_tags == {"team": "platform"}
         assert settings.max_trials == 5
 
     @given(st.text(min_size=1, max_size=100), st.integers(min_value=1, max_value=10), st.booleans())
@@ -227,8 +233,12 @@ class TestMLflowSettings:
         assert settings.server.scheme == "https"
         assert settings.client.experiment_name == "TestExperiment"
 
-    def test_default_tracking_uri_validation(self) -> None:
-        """Test default tracking URI is set from server settings."""
+    def test_default_tracking_uri_deferred_when_not_set(self) -> None:
+        """Test tracking URI stays None at config time for deferred runtime resolution.
+
+        When no tracking_uri is configured, the system defers resolution to runtime
+        where it defaults to a local SQLite store (locations.mlruns_backend_uri()).
+        """
         server_config = {"scheme": "https", "host": "custom.mlflow.com", "port": 8080}
         settings = MLflowSettings(
             enabled=True,
@@ -236,8 +246,9 @@ class TestMLflowSettings:
             client={},  # No tracking_uri specified
         )
 
-        expected_uri = "https://custom.mlflow.com:8080/"
-        assert str(settings.client.tracking_uri) == expected_uri
+        # URI is None at config time — resolved to SQLite default at runtime
+        assert settings.client.tracking_uri is None
+        assert settings.tracking_uri is None
 
     def test_tracking_uri_override_preserved(self) -> None:
         """Test explicit tracking URI is preserved over server default."""
