@@ -594,6 +594,8 @@ class MLflowTracker(IExperimentTracker):
 
     @staticmethod
     def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
+        from urllib.request import url2pathname
+
         from dlkit.tools.io.url_utils import parse_url
         from dlkit.tools.io import url_resolver
         from dlkit.tools.io.path_normalizers import path_to_file_uri
@@ -602,7 +604,7 @@ class MLflowTracker(IExperimentTracker):
         if parsed.scheme not in {"file", "sqlite"}:
             return uri
 
-        path = Path(parsed.path)
+        path = Path(url2pathname(parsed.path))
         if path.is_absolute():
             return uri
 
@@ -613,6 +615,8 @@ class MLflowTracker(IExperimentTracker):
 
     @staticmethod
     def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:
+        from urllib.request import url2pathname
+
         from dlkit.tools.io.url_utils import parse_url
         from dlkit.tools.io.path_normalizers import path_to_file_uri
 
@@ -625,7 +629,7 @@ class MLflowTracker(IExperimentTracker):
             return str((root_dir / path).resolve())
 
         if parsed.scheme == "file":
-            path = Path(parsed.path)
+            path = Path(url2pathname(parsed.path))
             if path.is_absolute():
                 return destination
             resolved = (root_dir / path).resolve()
