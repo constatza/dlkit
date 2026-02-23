@@ -161,7 +161,13 @@ class BasicOverrideManager:
 
         # Handle batch_size override -> DATAMODULE.dataloader.batch_size
         if "batch_size" in training_overrides and current_settings.DATAMODULE is not None:
-            current_settings.DATAMODULE.dataloader.batch_size = training_overrides["batch_size"]
+            new_dataloader = current_settings.DATAMODULE.dataloader.model_copy(
+                update={"batch_size": training_overrides["batch_size"]}
+            )
+            new_datamodule = current_settings.DATAMODULE.model_copy(
+                update={"dataloader": new_dataloader}
+            )
+            current_settings = current_settings.model_copy(update={"DATAMODULE": new_datamodule})
 
         # Handle learning_rate override -> TRAINING.optimizer.lr
         if "learning_rate" in training_overrides and current_settings.TRAINING is not None:

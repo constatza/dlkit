@@ -455,7 +455,7 @@ module_path = "torch.nn"
         assert settings.TRAINING.optimizer.lr == 0.005
         assert settings.TRAINING.optimizer.weight_decay == 0.1
 
-        updated = update_settings(settings, {"TRAINING": TrainingSettings(epochs=50)})
+        updated = update_settings(settings, {"TRAINING": {"epochs": 50}})
 
         assert updated.TRAINING.optimizer.name == "Adam"
         assert updated.TRAINING.optimizer.lr == pytest.approx(0.005)
@@ -500,7 +500,7 @@ module_path = "torch.nn"
 
         updated = update_settings(
             settings,
-            {"TRAINING": {"optimizer": OptimizerSettings(lr=0.123)}},
+            {"TRAINING": {"optimizer": {"lr": 0.123}}},
         )
 
         assert updated.TRAINING.optimizer.name == "SGD"
@@ -705,61 +705,6 @@ module_path = "torch.nn"
         assert new_settings.SESSION.name == "updated"
 
 
-class TestMutability:
-    """Test that settings are mutated in-place (no longer immutable)."""
-
-    def test_original_settings_mutated(self, tmp_path):
-        """Test that update mutates the same instance (not a copy)."""
-        config_path = tmp_path / "config.toml"
-        config_path.write_text("""
-[SESSION]
-name = "original"
-
-[DATAMODULE]
-name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
-
-[DATAMODULE.dataloader]
-batch_size = 32
-
-[DATASET]
-
-[MODEL]
-name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
-
-[TRAINING]
-epochs = 10
-
-[TRAINING.optimizer]
-name = "Adam"
-lr = 0.001
-
-[TRAINING.loss_function]
-name = "MSELoss"
-module_path = "torch.nn"
-""")
-
-        settings = load_settings(config_path)
-
-        # Capture original id
-        original_id = id(settings)
-
-        # Update settings
-        new_settings = update_settings(settings, {
-            "SESSION": {"name": "modified"},
-            "TRAINING": {"epochs": 999}
-        })
-
-        # Should be the same instance (mutated in-place)
-        assert id(new_settings) == original_id
-        assert new_settings is settings
-
-        # Original IS modified (mutation, not copy)
-        assert settings.SESSION.name == "modified"
-        assert settings.TRAINING.epochs == 999
-
-
 class TestEdgeCases:
     """Test edge cases and special scenarios."""
 
@@ -879,7 +824,7 @@ module_path = "torch.nn"
         via_method = settings.update_with({"SESSION": {"name": "updated_name"}})
 
         assert via_method.SESSION.name == "updated_name"
-        # update_with returns the same instance (mutation)
-        assert via_method is settings
-        # Original instance IS changed (mutation, not immutability)
-        assert settings.SESSION.name == "updated_name"
+        # update_with returns a NEW instance (immutable semantics)
+        assert via_method is not settings
+        # Original is unchanged
+        assert settings.SESSION.name == "instance_helper"

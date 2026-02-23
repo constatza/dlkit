@@ -283,9 +283,8 @@ class TestVanillaExecutorLRTuning:
     ) -> None:
         """Test that optimizer update uses mutable update_settings.
 
-        With frozen=False, update_settings now mutates in-place rather than
-        creating new objects. This is intentional to avoid serialization issues
-        with excluded fields like ValueFeature.value.
+        With frozen=True, update_settings returns a new OptimizerSettings instance
+        which is assigned back to model.optimizer.
         """
         executor = VanillaExecutor()
 
@@ -306,11 +305,8 @@ class TestVanillaExecutorLRTuning:
                 settings_with_lr_tuner,
             )
 
-        # Verify optimizer object is mutated in-place (same object)
-        assert mock_components.model.optimizer is original_optimizer
-
-        # Verify new LR is set
+        # Verify new LR is set on the (new) optimizer instance
         assert mock_components.model.optimizer.lr == 0.009
 
-        # Verify original_lr was updated (since it's the same object)
-        assert original_optimizer.lr == 0.009
+        # Original optimizer object is unchanged (immutable semantics)
+        assert original_optimizer.lr == original_lr

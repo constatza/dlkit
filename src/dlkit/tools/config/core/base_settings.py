@@ -1,55 +1,33 @@
 """Core settings base classes with SOLID principles.
 
-Architecture: Mutable Settings with Validation
------------------------------------------------
-DLKit uses a mutable settings architecture (frozen=False) with validate_assignment=True
-to prevent data loss while maintaining type safety. This design choice solves critical
-issues with excluded fields in value-based data entries.
+Architecture: Immutable Settings with Functional Patching
+---------------------------------------------------------
+DLKit uses frozen Pydantic settings (``frozen=True``) for all config classes.
+Updates produce new instances via :func:`~dlkit.tools.config.core.patching.patch_model`
+rather than mutating existing ones.  This gives:
 
-Key Configuration:
-- frozen=False: Allows direct mutation (no serialization overhead)
-- validate_assignment=True: Type-checks every attribute assignment
-- extra='forbid': Strict validation for most settings
-- extra='allow': Permissive for ComponentSettings (user-defined fields)
+- Referential transparency: passed-around config objects cannot be silently changed.
+- Explicit dataflow: callers must capture the returned new instance.
+- Full type safety: patch values are validated against field annotations before use.
 
-Why Not Immutable (frozen=True)?
----------------------------------
-Immutable settings would require model_copy() for updates, which involves:
-1. Serialization (model_dump)
-2. Deserialization (model_validate)
+To update a config::
 
-Problem: Fields marked with exclude=True (like ValueFeature.value) are NOT serialized,
-so they get LOST during the serialize → deserialize cycle.
+    from dlkit.tools.config.core.patching import patch_model
+    new_cfg = patch_model(cfg, {"TRAINING": {"epochs": 100}})
+    new_cfg = cfg.patch({"TRAINING.optimizer.lr": 0.001})   # dotted-key shorthand
 
-Example of the problem:
->>> feature = ValueFeature(name="x", value=np.array([1, 2, 3]))
->>> dataset = DatasetSettings(features=[feature])
->>> updated = dataset.model_copy(update={"some_field": "value"})
-# feature.value is LOST because it was excluded from serialization!
-
-Mutable Solution:
->>> feature = ValueFeature(name="x", value=np.array([1, 2, 3]))
->>> dataset = DatasetSettings(features=[feature])
->>> update_settings(dataset, {"some_field": "value"})
-# feature.value is PRESERVED (no serialization, same object identity)
-
-Type Safety:
-- validate_assignment=True ensures every setattr() is type-checked
-- Same safety guarantees as frozen=True, but without serialization overhead
-- Pydantic validates types on assignment, preventing invalid mutations
-
-Usage:
->>> from dlkit.tools.config.core.updater import update_settings
->>> config = load_settings("config.toml")
->>> update_settings(config, {"TRAINING": {"epochs": 100}})
-# Returns same object (mutated in-place)
+Note: ``exclude=True`` fields (e.g. ``ValueBasedEntry.value``) are preserved by
+``model_copy()`` because it copies ``__dict__`` directly — no serialisation round-trip.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Self
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.core.updater import update_settings
 
 
@@ -58,18 +36,15 @@ class BasicSettings(BaseSettings):
 
     This is the foundation for all settings classes in DLKit.
     It provides consistent validation, serialization, and compatibility checking.
+    All instances are immutable (``frozen=True``); use :meth:`patch` to derive
+    new instances with changed fields.
     """
 
     model_config = SettingsConfigDict(
-        frozen=False,
+        frozen=True,
         validate_default=True,
         validate_by_alias=True,
         validate_by_name=True,
-        validate_assignment=True,
-        # NOTE: frozen=False allows direct mutation to avoid serialization
-        # This prevents serialize→deserialize cycles that lose excluded fields
-        # (e.g., ValueFeature.value marked with exclude=True).
-        # validate_assignment=True still ensures type safety on mutation.
         case_sensitive=True,
         extra="forbid",
         # Fix pydantic-settings bug where model_validate is protected
@@ -92,37 +67,51 @@ class BasicSettings(BaseSettings):
             A clean dictionary representation of the settings
         """
         extra = set(exclude or set())
-        # Exclude None values, include defaults/unset so downstream receives
-        # the full, explicit configuration. Extras are preserved.
         return self.model_dump(exclude_none=True, exclude=extra)
 
-    # Deliberately no "to_dict_compatible_with": construction belongs in factories.
-
     def update_with(self, updates: dict[str, Any], *, validate: bool = True) -> Self:
-        """Update this settings instance in-place via deep merge.
+        """Return a new settings instance with *updates* applied (deep merge).
 
-        This is a convenience wrapper around ``update_settings`` that performs
-        in-place mutation while preserving the concrete settings type.
-
-        Architecture Note:
-            With frozen=False, this method mutates the instance in-place rather
-            than creating a new copy. This prevents data loss with excluded fields
-            (e.g., ValueFeature.value). The method returns self for chaining.
+        Convenience wrapper around :func:`~dlkit.tools.config.core.patching.patch_model`.
+        The current instance is **not** mutated.
 
         Args:
-            updates: Nested mapping of fields to update
-            validate: Ignored (validation happens automatically via validate_assignment)
+            updates: Nested mapping of fields to update.  Dotted keys are
+                expanded (e.g. ``"a.b"`` → ``{"a": {"b": ...}}``).
+            validate: Passed to ``patch_model`` as ``revalidate``.
 
         Returns:
-            The same settings instance (mutated in-place) for method chaining.
-
-        Example:
-            >>> config = load_settings("config.toml")
-            >>> config.update_with({"TRAINING": {"epochs": 100}})
-            >>> # config is mutated in-place
+            New settings instance of the same concrete type.
         """
-
         return update_settings(self, updates, validate=validate)
+
+    def patch(
+        self,
+        overrides: Mapping[str, Any],
+        *,
+        sep: str = ".",
+        revalidate: bool = True,
+    ) -> Self:
+        """Return a new instance with *overrides* applied.
+
+        Supports dotted keys (``"a.b.c"``) and plain nested dicts.
+        Collisions in the override set raise ``ValueError`` (strict merge).
+
+        Args:
+            overrides: Mixed overrides mapping.
+            sep: Dotted-path separator (default ``"."``).
+            revalidate: If ``True``, performs a full validation pass on the
+                result model (recommended; default ``True``).
+
+        Returns:
+            New settings instance of the same concrete type.
+
+        Raises:
+            ValueError: On key conflicts in overrides.
+            KeyError: Unknown field name.
+            pydantic.ValidationError: On type mismatches.
+        """
+        return patch_model(self, overrides, sep=sep, revalidate=revalidate)
 
 
 class ComponentSettings[T](BasicSettings):
