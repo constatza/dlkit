@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pytest
 
@@ -276,7 +277,7 @@ class TestMLflowTrainingIntegration:
 
         artifact_uri = run_info.artifact_uri
         parsed_uri = urlparse(artifact_uri)
-        artifact_path = Path(parsed_uri.path)
+        artifact_path = Path(url2pathname(parsed_uri.path))
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
         assert str(tmp_path) in str(artifact_path)
 
@@ -351,7 +352,7 @@ class TestMLflowTrainingIntegration:
 
         artifact_uri = run_info.artifact_uri
         parsed_uri = urlparse(artifact_uri)
-        artifact_path = Path(parsed_uri.path)
+        artifact_path = Path(url2pathname(parsed_uri.path))
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
         assert str(tmp_path) in str(artifact_path)
 
