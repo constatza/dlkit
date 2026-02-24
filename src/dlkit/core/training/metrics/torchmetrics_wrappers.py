@@ -18,6 +18,12 @@ from torchmetrics import Metric
 from .functional import (
     _normalized_vector_norm_update,
     _normalized_vector_norm_compute,
+    _absolute_vector_norm_update,
+    _absolute_vector_norm_compute,
+    _energy_norm_update,
+    _energy_norm_compute,
+    _relative_energy_norm_update,
+    _relative_energy_norm_compute,
     _temporal_derivative_update,
     _temporal_derivative_compute,
 )
@@ -237,7 +243,158 @@ class TemporalDerivativeError(Metric):
         return _temporal_derivative_compute(self.sum_squared_errors, self.total)
 
 
+class AbsoluteVectorNormError(Metric):
+    """TorchMetrics wrapper for absolute vector norm error metric.
+
+    Computes: mean(||pred - target||_ord) across batches.
+
+    Absolute counterpart to NormalizedVectorNormError (relative). Accumulates
+    state across batches for distributed training support.
+
+    Shape Contract:
+        Input: (B, ..., D) where D is vector_dim
+
+    Attributes:
+        sum_norms: Accumulated sum of per-sample norm errors
+        total: Total number of samples processed
+
+    Args:
+        vector_dim: Dimension along which vectors are defined (default: -1)
+        norm_ord: Order of norm (1=L1, 2=L2, float('inf')=Linf) (default: 2)
+        **kwargs: Additional arguments passed to torchmetrics.Metric
+    """
+
+    def __init__(self, vector_dim: int = -1, norm_ord: int = 2, **kwargs):
+        """Initialize absolute vector norm error metric."""
+        super().__init__(**kwargs)
+        self.vector_dim = vector_dim
+        self.norm_ord = norm_ord
+        self.add_state("sum_norms", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        """Update metric state with batch of predictions and targets.
+
+        Args:
+            preds: Predicted vectors with shape (B, ..., D)
+            target: Ground truth vectors with shape (B, ..., D)
+        """
+        per_sample = _absolute_vector_norm_update(
+            preds, target, self.norm_ord, self.vector_dim
+        )
+        self.sum_norms += per_sample.sum()
+        self.total += per_sample.numel()
+
+    def compute(self) -> Tensor:
+        """Compute final metric value from accumulated state.
+
+        Returns:
+            Scalar tensor with mean absolute vector norm error across all batches
+        """
+        return _absolute_vector_norm_compute(self.sum_norms, self.total)
+
+
+class EnergyNormError(Metric):
+    """TorchMetrics wrapper for absolute energy norm (A-norm) error.
+
+    Computes: mean(||pred - target||_A) across batches, where
+    ||u||_A = sqrt(u^T A u) for a positive (semi-)definite matrix A.
+
+    When A = I this reduces to AbsoluteVectorNormError with ord=2.
+
+    Shape Contract:
+        preds/target: (B, D)
+        matrix: (B, D, D) per-sample, or (D, D) shared
+
+    Attributes:
+        sum_norms: Accumulated sum of per-sample A-norm errors
+        total: Total number of samples processed
+
+    Args:
+        **kwargs: Additional arguments passed to torchmetrics.Metric
+    """
+
+    def __init__(self, **kwargs):
+        """Initialize energy norm error metric."""
+        super().__init__(**kwargs)
+        self.add_state("sum_norms", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: Tensor, target: Tensor, matrix: Tensor) -> None:
+        """Update metric state with batch of predictions, targets and matrix.
+
+        Args:
+            preds: Predicted vectors with shape (B, D)
+            target: Ground truth vectors with shape (B, D)
+            matrix: Positive (semi-)definite matrix with shape (B, D, D) or (D, D)
+        """
+        per_sample = _energy_norm_update(preds, target, matrix)
+        self.sum_norms += per_sample.sum()
+        self.total += per_sample.numel()
+
+    def compute(self) -> Tensor:
+        """Compute final metric value from accumulated state.
+
+        Returns:
+            Scalar tensor with mean absolute energy norm error across all batches
+        """
+        return _energy_norm_compute(self.sum_norms, self.total)
+
+
+class RelativeEnergyNormError(Metric):
+    """TorchMetrics wrapper for relative energy norm (A-norm) error.
+
+    Computes: mean(||pred - target||_A / ||target||_A) across batches.
+
+    Provides a dimensionless relative error in the energy norm metric.
+    Analogous to the loss used in preconditioner learning (Notay loss)
+    without PCG-specific semantics.
+
+    Shape Contract:
+        preds/target: (B, D)
+        matrix: (B, D, D) per-sample, or (D, D) shared
+
+    Attributes:
+        sum_norms: Accumulated sum of per-sample relative energy norm errors
+        total: Total number of samples processed
+
+    Args:
+        eps: Numerical stability epsilon for division (default: 1e-8)
+        **kwargs: Additional arguments passed to torchmetrics.Metric
+    """
+
+    def __init__(self, eps: float = 1e-8, **kwargs):
+        """Initialize relative energy norm error metric."""
+        super().__init__(**kwargs)
+        self.eps = eps
+        self.add_state("sum_norms", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: Tensor, target: Tensor, matrix: Tensor) -> None:
+        """Update metric state with batch of predictions, targets and matrix.
+
+        Args:
+            preds: Predicted vectors with shape (B, D)
+            target: Ground truth vectors with shape (B, D)
+            matrix: Positive (semi-)definite matrix with shape (B, D, D) or (D, D)
+        """
+        per_sample = _relative_energy_norm_update(preds, target, matrix, eps=self.eps)
+        self.sum_norms += per_sample.sum()
+        self.total += per_sample.numel()
+
+    def compute(self) -> Tensor:
+        """Compute final metric value from accumulated state.
+
+        Returns:
+            Scalar tensor with mean relative energy norm error across all batches
+        """
+        return _relative_energy_norm_compute(self.sum_norms, self.total)
+
+
 __all__ = [
     "NormalizedVectorNormError",
     "TemporalDerivativeError",
+    "AbsoluteVectorNormError",
+    "EnergyNormError",
+    "RelativeEnergyNormError",
 ]

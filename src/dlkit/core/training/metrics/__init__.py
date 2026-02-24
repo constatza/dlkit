@@ -70,6 +70,9 @@ from .compat import (
 from .torchmetrics_wrappers import (
     NormalizedVectorNormError,
     TemporalDerivativeError,
+    AbsoluteVectorNormError,
+    EnergyNormError,
+    RelativeEnergyNormError,
 )
 
 # ============================================================================
@@ -77,6 +80,8 @@ from .torchmetrics_wrappers import (
 # ============================================================================
 
 from .functional import (
+    # Type aliases
+    AggregatorFn,
     # Composable primitives
     compute_error_vectors,
     compute_vector_norm,
@@ -87,6 +92,9 @@ from .functional import (
     normalized_l1_error,
     normalized_l2_error,
     normalized_linf_error,
+    # Energy norm primitives
+    compute_quadratic_form,
+    compute_energy_norm,
     # Temporal metrics
     compute_temporal_derivative,
     temporal_derivative_error,
@@ -100,6 +108,8 @@ from .functional import (
 # ============================================================================
 
 __all__ = [
+    # Type aliases
+    "AggregatorFn",
     # Standard metrics (from torchmetrics)
     "MeanSquaredError",
     "MeanAbsoluteError",
@@ -109,6 +119,9 @@ __all__ = [
     # Custom torchmetrics wrappers
     "NormalizedVectorNormError",
     "TemporalDerivativeError",
+    "AbsoluteVectorNormError",
+    "EnergyNormError",
+    "RelativeEnergyNormError",
     # Functional interface
     "compute_error_vectors",
     "compute_vector_norm",
@@ -118,6 +131,8 @@ __all__ = [
     "normalized_l1_error",
     "normalized_l2_error",
     "normalized_linf_error",
+    "compute_quadratic_form",
+    "compute_energy_norm",
     "compute_temporal_derivative",
     "temporal_derivative_error",
     "first_derivative_error",
