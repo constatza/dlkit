@@ -14,8 +14,9 @@ Design Principles:
 Structure:
     1. Composable Building Blocks - Pure primitives
     2. Vector Metrics - Metrics for multi-dimensional vectors
-    3. Temporal Metrics - Metrics with temporal/sequence dimensions (3D inputs)
-    4. Update/Compute Split - For torchmetrics wrappers
+    3. Energy Norm Primitives - A-norm / quadratic form building blocks
+    4. Temporal Metrics - Metrics with temporal/sequence dimensions (3D inputs)
+    5. Update/Compute Split - For torchmetrics wrappers
 
 Shape Notation:
     B = Batch size
@@ -25,10 +26,21 @@ Shape Notation:
 """
 
 from functools import partial
-from typing import Callable
+from typing import Callable, TypeAlias
 
 import torch
 from torch import Tensor
+
+# ============================================================================
+# TYPE ALIASES
+# ============================================================================
+
+AggregatorFn: TypeAlias = Callable[[Tensor], Tensor]
+"""Reduction function that maps a tensor of per-sample values to a scalar.
+
+Examples:
+    torch.mean, torch.sum, partial(torch.mean, dim=0)
+"""
 
 
 # ============================================================================
@@ -210,7 +222,72 @@ normalized_linf_error = partial(normalized_vector_norm_error, ord=float("inf"))
 
 
 # ============================================================================
-# 3. TEMPORAL METRICS
+# 3. ENERGY NORM PRIMITIVES
+# ============================================================================
+# Building blocks for the A-norm (energy norm) ||u||_A = sqrt(u^T A u).
+# These primitives operate per-sample with no reduction.
+#
+# SHAPE ASSUMPTIONS:
+#   - vector: (B, D) — one D-dimensional vector per sample
+#   - matrix: (B, D, D) per-sample SPD matrix, OR (D, D) shared matrix
+#   - output: (B,) — one scalar per sample (pre-aggregation)
+# ============================================================================
+
+
+def compute_quadratic_form(vector: Tensor, matrix: Tensor) -> Tensor:
+    """Compute per-sample quadratic form v^T A v.
+
+    Supports both per-sample and shared matrices via broadcasting.
+
+    Shape Contract:
+        vector: (B, D)
+        matrix: (B, D, D) per-sample, or (D, D) shared (broadcast over B)
+        output: (B,) — one scalar per sample
+
+    Args:
+        vector: Batch of vectors.
+        matrix: Positive (semi-)definite matrix per sample or shared.
+
+    Returns:
+        Per-sample quadratic form values.
+
+    Examples:
+        >>> v = torch.tensor([[1.0, 0.0], [0.0, 1.0]])  # (2, 2)
+        >>> A = torch.eye(2)  # (2, 2) — identity (shared)
+        >>> compute_quadratic_form(v, A)  # tensor([1., 1.])
+    """
+    # Av: (B, D) — handles both (B, D, D) and (D, D) via matmul broadcasting
+    Av = torch.matmul(matrix, vector.unsqueeze(-1)).squeeze(-1)
+    return (vector * Av).sum(dim=-1)
+
+
+def compute_energy_norm(vector: Tensor, matrix: Tensor) -> Tensor:
+    """Compute per-sample A-norm sqrt(v^T A v).
+
+    Uses clamp(min=0) before sqrt for numerical safety when A is near-singular.
+
+    Shape Contract:
+        vector: (B, D)
+        matrix: (B, D, D) per-sample, or (D, D) shared (broadcast over B)
+        output: (B,) — one norm value per sample
+
+    Args:
+        vector: Batch of vectors.
+        matrix: Positive (semi-)definite matrix per sample or shared.
+
+    Returns:
+        Per-sample A-norm values.
+
+    Examples:
+        >>> v = torch.tensor([[3.0, 4.0]])  # (1, 2)
+        >>> A = torch.eye(2)               # identity → ||v||_I = ||v||_2 = 5.0
+        >>> compute_energy_norm(v, A)      # tensor([5.])
+    """
+    return torch.sqrt(compute_quadratic_form(vector, matrix).clamp(min=0))
+
+
+# ============================================================================
+# 4. TEMPORAL METRICS
 # ============================================================================
 # Metrics that operate on sequences/time series with a temporal dimension.
 # These metrics compute derivatives or differences along time axis.
@@ -346,7 +423,7 @@ second_derivative_error = partial(temporal_derivative_error, n=2)
 
 
 # ============================================================================
-# 4. UPDATE/COMPUTE SPLIT FOR TORCHMETRICS WRAPPERS
+# 5. UPDATE/COMPUTE SPLIT FOR TORCHMETRICS WRAPPERS
 # ============================================================================
 # These functions support the torchmetrics update()/compute() pattern
 # by separating state accumulation from final metric computation.
@@ -451,11 +528,149 @@ def _temporal_derivative_compute(sum_squared_errors: Tensor, total: int) -> Tens
     return sum_squared_errors / total
 
 
+def _absolute_vector_norm_update(
+    preds: Tensor, target: Tensor, ord: int, dim: int
+) -> Tensor:
+    """Compute per-sample absolute vector norm errors without aggregation.
+
+    Used by torchmetrics wrapper to accumulate state across batches.
+
+    Shape:
+        preds:  (B, ..., D)
+        target: (B, ..., D)
+        output: (B, ...) — one norm value per vector
+
+    Args:
+        preds: Predicted vectors
+        target: Ground truth vectors
+        ord: Norm order (1=L1, 2=L2, float('inf')=Linf)
+        dim: Vector dimension
+
+    Returns:
+        Per-sample absolute vector norm errors (not aggregated)
+    """
+    if preds.dim() < 2:
+        raise ValueError(
+            f"Expected at least 2D tensors for vector operations, got {preds.dim()}D"
+        )
+    error_vecs = compute_error_vectors(preds, target)
+    return compute_vector_norm(error_vecs, ord=ord, dim=dim)
+
+
+def _absolute_vector_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+    """Compute final mean absolute vector norm error from accumulated state.
+
+    Shape:
+        sum_norms: (,) - scalar sum of norms
+        total:     int
+        output:    (,) - scalar mean
+
+    Args:
+        sum_norms: Accumulated sum of per-sample norm errors
+        total: Total number of samples
+
+    Returns:
+        Mean absolute vector norm error
+    """
+    return sum_norms / total
+
+
+def _energy_norm_update(
+    preds: Tensor, target: Tensor, matrix: Tensor
+) -> Tensor:
+    """Compute per-sample absolute energy norm errors without aggregation.
+
+    Used by torchmetrics wrapper to accumulate state across batches.
+
+    Shape:
+        preds:  (B, D)
+        target: (B, D)
+        matrix: (B, D, D) or (D, D) shared
+        output: (B,) — one A-norm value per sample
+
+    Args:
+        preds: Predicted vectors
+        target: Ground truth vectors
+        matrix: Positive (semi-)definite matrix per sample or shared
+
+    Returns:
+        Per-sample absolute energy norm errors (not aggregated)
+    """
+    error_vecs = compute_error_vectors(preds, target)
+    return compute_energy_norm(error_vecs, matrix)
+
+
+def _energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+    """Compute final mean energy norm error from accumulated state.
+
+    Shape:
+        sum_norms: (,) - scalar sum
+        total:     int
+        output:    (,) - scalar mean
+
+    Args:
+        sum_norms: Accumulated sum of per-sample energy norm errors
+        total: Total number of samples
+
+    Returns:
+        Mean absolute energy norm error
+    """
+    return sum_norms / total
+
+
+def _relative_energy_norm_update(
+    preds: Tensor, target: Tensor, matrix: Tensor, eps: float = 1e-8
+) -> Tensor:
+    """Compute per-sample relative energy norm errors without aggregation.
+
+    Used by torchmetrics wrapper to accumulate state across batches.
+
+    Shape:
+        preds:  (B, D)
+        target: (B, D)
+        matrix: (B, D, D) or (D, D) shared
+        output: (B,) — one relative error per sample
+
+    Args:
+        preds: Predicted vectors
+        target: Ground truth vectors
+        matrix: Positive (semi-)definite matrix per sample or shared
+        eps: Numerical stability epsilon for division
+
+    Returns:
+        Per-sample relative energy norm errors (not aggregated)
+    """
+    error_vecs = compute_error_vectors(preds, target)
+    error_norms = compute_energy_norm(error_vecs, matrix)
+    target_norms = compute_energy_norm(target, matrix)
+    return safe_divide(error_norms, target_norms, eps=eps)
+
+
+def _relative_energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+    """Compute final mean relative energy norm error from accumulated state.
+
+    Shape:
+        sum_norms: (,) - scalar sum
+        total:     int
+        output:    (,) - scalar mean
+
+    Args:
+        sum_norms: Accumulated sum of per-sample relative energy norm errors
+        total: Total number of samples
+
+    Returns:
+        Mean relative energy norm error
+    """
+    return sum_norms / total
+
+
 # ============================================================================
 # PUBLIC API
 # ============================================================================
 
 __all__ = [
+    # Type aliases
+    "AggregatorFn",
     # Composable primitives
     "compute_error_vectors",
     "compute_vector_norm",
@@ -466,6 +681,9 @@ __all__ = [
     "normalized_l1_error",
     "normalized_l2_error",
     "normalized_linf_error",
+    # Energy norm primitives
+    "compute_quadratic_form",
+    "compute_energy_norm",
     # Temporal metrics
     "compute_temporal_derivative",
     "temporal_derivative_error",
@@ -474,6 +692,12 @@ __all__ = [
     # Update/compute split (for torchmetrics)
     "_normalized_vector_norm_update",
     "_normalized_vector_norm_compute",
+    "_absolute_vector_norm_update",
+    "_absolute_vector_norm_compute",
+    "_energy_norm_update",
+    "_energy_norm_compute",
+    "_relative_energy_norm_update",
+    "_relative_energy_norm_compute",
     "_temporal_derivative_update",
     "_temporal_derivative_compute",
 ]

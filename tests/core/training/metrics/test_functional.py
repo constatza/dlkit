@@ -24,6 +24,9 @@ from dlkit.core.training.metrics.functional import (
     normalized_l1_error,
     normalized_l2_error,
     normalized_linf_error,
+    # Energy norm primitives
+    compute_quadratic_form,
+    compute_energy_norm,
     # Temporal metrics
     compute_temporal_derivative,
     temporal_derivative_error,
@@ -32,6 +35,12 @@ from dlkit.core.training.metrics.functional import (
     # Update/compute split
     _normalized_vector_norm_update,
     _normalized_vector_norm_compute,
+    _absolute_vector_norm_update,
+    _absolute_vector_norm_compute,
+    _energy_norm_update,
+    _energy_norm_compute,
+    _relative_energy_norm_update,
+    _relative_energy_norm_compute,
     _temporal_derivative_update,
     _temporal_derivative_compute,
 )
