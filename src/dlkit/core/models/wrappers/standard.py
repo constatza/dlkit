@@ -221,7 +221,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         batch = self._apply_feature_transforms(batch)
         batch = self._apply_target_transforms(batch)
         predictions = self._invoke_model(batch)
-        loss = self._compute_loss(predictions, batch.targets)
+        loss = self._compute_loss(predictions, batch)
         self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
@@ -238,7 +238,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         batch = self._apply_feature_transforms(batch)
         batch = self._apply_target_transforms(batch)
         predictions = self._invoke_model(batch)
-        val_loss = self._compute_loss(predictions, batch.targets)
+        val_loss = self._compute_loss(predictions, batch)
         metrics = self._update_metrics(predictions, batch.targets, stage="val")
         self._log_stage_outputs("val", val_loss, metrics)
         return {"val_loss": val_loss}
@@ -256,7 +256,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         batch = self._apply_feature_transforms(batch)
         batch = self._apply_target_transforms(batch)
         predictions = self._invoke_model(batch)
-        test_loss = self._compute_loss(predictions, batch.targets)
+        test_loss = self._compute_loss(predictions, batch)
         metrics = self._update_metrics(predictions, batch.targets, stage="test")
         self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}

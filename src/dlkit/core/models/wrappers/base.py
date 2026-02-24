@@ -207,22 +207,26 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             case _:
                 return self.model(*batch.features)
 
-    def _compute_loss(self, predictions: Tensor, targets: tuple[Tensor, ...]) -> Tensor:
-        """Compute loss positionally: pair predictions with targets[0], align dtype.
+    def _compute_loss(self, predictions: Tensor, batch: "Batch") -> Tensor:
+        """Compute loss from predictions and the full batch.
+
+        Default implementation pairs predictions with batch.targets[0] and
+        aligns dtypes. Override to access additional batch data such as
+        features (e.g. a per-sample matrix for energy norm losses).
 
         Args:
             predictions: Model output tensor.
-            targets: Tuple of target tensors (uses targets[0]).
+            batch: Full typed batch providing targets, features, and latents.
 
         Returns:
             Scalar loss tensor.
 
         Raises:
-            RuntimeError: If targets is empty.
+            RuntimeError: If batch.targets is empty.
         """
-        if not targets:
+        if not batch.targets:
             raise RuntimeError("Cannot compute loss: targets tuple is empty")
-        target = targets[0]
+        target = batch.targets[0]
         if target.is_floating_point() and target.dtype != predictions.dtype:
             target = target.to(dtype=predictions.dtype)
         return self.loss_function(predictions, target)
@@ -267,7 +271,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         self._log_dtype_mismatches(batch)
         predictions = self._invoke_model(batch)
-        loss = self._compute_loss(predictions, batch.targets)
+        loss = self._compute_loss(predictions, batch)
         self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
@@ -283,7 +287,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         self._log_dtype_mismatches(batch)
         predictions = self._invoke_model(batch)
-        val_loss = self._compute_loss(predictions, batch.targets)
+        val_loss = self._compute_loss(predictions, batch)
         metrics = self._update_metrics(predictions, batch.targets, "val")
         self._log_stage_outputs("val", val_loss, metrics)
         return {"val_loss": val_loss}
@@ -300,7 +304,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         self._log_dtype_mismatches(batch)
         predictions = self._invoke_model(batch)
-        test_loss = self._compute_loss(predictions, batch.targets)
+        test_loss = self._compute_loss(predictions, batch)
         metrics = self._update_metrics(predictions, batch.targets, "test")
         self._log_stage_outputs("test", test_loss, metrics)
         return {"test_loss": test_loss}
