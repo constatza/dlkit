@@ -25,6 +25,7 @@ dependencies = [
     "torchmetrics>=1.7.1",
     "pydantic-settings>=2.10.1",
     "torch-geometric>=2.6.1",
+    "tensordict>=0.6.0",
     "typer>=0.16.1",
     "returns>=0.22.0",
     "rich>=13.0.0",
