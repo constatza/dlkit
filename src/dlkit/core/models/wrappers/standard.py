@@ -1,80 +1,208 @@
-"""Standard Lightning wrapper for tensor-based models with positional transform support.
+"""Standard Lightning wrapper for tensor/TensorDict-based models.
 
-This module provides a Lightning wrapper that extends the base wrapper with
-transform capabilities using positional ModuleList chains rather than string-keyed
-ModuleDicts, eliminating string dispatch throughout the hot path.
+Translates the settings-based API (settings, model_settings, entry_configs) into
+protocol objects and delegates to ProcessingLightningWrapper. This keeps the
+external constructor API stable while the base class uses pure protocol injection.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-import torch
 from torch import Tensor
-from torch.nn import ModuleList, Identity
+from torch.nn import Identity
 
-from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
+from dlkit.tools.config import BuildContext, FactoryProvider, ModelComponentSettings, WrapperComponentSettings
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.tools.config.components.model_components import LossInputRef
 from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.base import FittableTransform, InvertibleTransform
-from dlkit.core.datatypes.batch import Batch
-from .base import ProcessingLightningWrapper
-from .functions import apply_chain, apply_inverse_chain
+from dlkit.core.models.wrappers.components import (
+    NamedBatchTransformer,
+    RoutedLossComputer,
+    RoutedMetricsUpdater,
+    MetricRoute,
+    StandardModelInvoker,
+    WrapperCheckpointMetadata,
+)
+from .base import ProcessingLightningWrapper, _build_model_from_settings
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 
-def _navigate_and_register(module: torch.nn.Module, key: str, value: Tensor) -> None:
-    """Navigate a module hierarchy and register a missing buffer at the leaf node.
-
-    Transforms like MinMaxScaler allocate ``min``/``max`` buffers lazily during
-    ``fit()``. This helper pre-registers them so ``load_state_dict`` can fill
-    the values correctly.
+def _make_chain(entry: DataEntry) -> Any:
+    """Create a TransformChain for an entry, or Identity if no transforms configured.
 
     Args:
-        module: Root module to start navigation from.
-        key: Dot-separated path to the buffer (e.g. ``"transforms.0.min"``).
-        value: Tensor to register as buffer.
+        entry: Data entry configuration with optional transforms attribute.
+
+    Returns:
+        TransformChain if transforms configured, nn.Identity otherwise.
     """
-    parts = key.split(".")
-    current = module
-    for part in parts[:-1]:
-        if part.isdigit():
-            idx = int(part)
-            if isinstance(current, ModuleList):
-                current = current[idx]
-            elif hasattr(current, "transforms"):
-                current = current.transforms[idx]  # type: ignore[index]
-            else:
-                return
+    settings = getattr(entry, "transforms", None)
+    return TransformChain(settings) if settings else Identity()
+
+
+def _make_routes(
+    metric_specs: tuple,
+    default_target_key: str,
+) -> list[MetricRoute]:
+    """Build MetricRoute list from metric settings.
+
+    Args:
+        metric_specs: Tuple of MetricComponentSettings.
+        default_target_key: Target name used when spec.target_key is None.
+
+    Returns:
+        List of MetricRoute value objects.
+    """
+    routes = []
+    for spec in metric_specs:
+        metric = FactoryProvider.create_component(spec, BuildContext(mode="training"))
+        target_key_str = getattr(spec, "target_key", None)
+        if target_key_str:
+            target_name = target_key_str.split(".", 1)[1]
         else:
-            if not hasattr(current, part):
-                return
-            current = getattr(current, part)
-    buffer_name = parts[-1]
-    if not hasattr(current, buffer_name):
-        current.register_buffer(buffer_name, value)
+            target_name = default_target_key
+        extra_inputs = getattr(spec, "extra_inputs", ()) or ()
+        routes.append(
+            MetricRoute(
+                metric=metric,
+                target_ns="targets",
+                target_name=target_name,
+                extra_inputs=tuple(extra_inputs),
+            )
+        )
+    return routes
+
+
+def _validate_extra_inputs_against_signature(
+    loss_fn: Any,
+    extra_inputs: tuple[LossInputRef, ...],
+) -> None:
+    """Best-effort build-time check that extra_inputs kwargs exist in the loss function.
+
+    Inspects the loss function signature and raises ValueError if a routed kwarg name
+    is not present and the function does not accept **kwargs. Skips validation for
+    uninspectable callables (e.g. C extensions, lambdas with *args).
+
+    Args:
+        loss_fn: The loss function to validate against.
+        extra_inputs: Merged extra input refs to validate.
+
+    Raises:
+        ValueError: If a kwarg name is not accepted by the loss function.
+    """
+    if not extra_inputs:
+        return
+    import inspect
+    try:
+        sig = inspect.signature(loss_fn)
+    except (ValueError, TypeError):
+        return  # Uninspectable — skip validation
+    params = sig.parameters
+    accepts_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+    )
+    if accepts_var_keyword:
+        return  # **kwargs — all kwarg names are valid
+    positional_only = {
+        name for name, p in params.items()
+        if p.kind == inspect.Parameter.POSITIONAL_ONLY
+    }
+    for ref in extra_inputs:
+        if ref.arg not in params:
+            available = [n for n in params if n not in positional_only]
+            raise ValueError(
+                f"Loss function has no parameter named '{ref.arg}'. "
+                f"Available non-positional-only parameters: {available}. "
+                f"Check DataEntry.loss_input or LossComponentSettings.extra_inputs."
+            )
+        if ref.arg in positional_only:
+            raise ValueError(
+                f"Loss function parameter '{ref.arg}' is positional-only (declared with '/') "
+                f"and cannot be passed as a keyword argument. "
+                f"Rename the parameter or adjust loss routing."
+            )
+
+
+def _build_auto_extra_inputs(
+    entry_configs: tuple[DataEntry, ...],
+) -> dict[str, LossInputRef]:
+    """Derive LossInputRef entries from DataEntry objects that declare loss_input.
+
+    Each entry with a non-None loss_input value is auto-routed as a loss function
+    kwarg. The kwarg name is the loss_input string; the batch key is derived from
+    the entry's namespace and name.
+
+    Args:
+        entry_configs: Tuple of DataEntry objects in config-insertion order.
+
+    Returns:
+        Dict mapping kwarg name to LossInputRef, ready to merge with explicit routes.
+
+    Raises:
+        ValueError: If two entries declare the same loss_input kwarg name.
+    """
+    result: dict[str, LossInputRef] = {}
+    for e in entry_configs:
+        kwarg = getattr(e, "loss_input", None)
+        if kwarg is None or e.name is None:
+            continue
+        if kwarg in result:
+            raise ValueError(
+                f"Duplicate loss_input kwarg '{kwarg}' declared on multiple entries. "
+                f"Each kwarg name must appear on exactly one entry."
+            )
+        namespace = "features" if is_feature_entry(e) else "targets"
+        result[kwarg] = LossInputRef(arg=kwarg, key=f"{namespace}.{e.name}")
+    return result
+
+
+def _merge_extra_inputs(
+    auto: dict[str, LossInputRef],
+    explicit: tuple[LossInputRef, ...],
+) -> tuple[LossInputRef, ...]:
+    """Merge auto-derived and explicit LossInputRef collections.
+
+    Any overlap between auto-derived (from DataEntry.loss_input) and explicit
+    (from LossComponentSettings.extra_inputs) routes is a configuration error —
+    no silent overrides.
+
+    Args:
+        auto: Auto-derived routes keyed by kwarg name.
+        explicit: Explicitly configured routes from LossComponentSettings.
+
+    Returns:
+        Merged tuple of LossInputRef with no duplicate arg names.
+
+    Raises:
+        ValueError: If the same kwarg name appears in both auto and explicit routes.
+    """
+    explicit_by_arg = {r.arg: r for r in explicit}
+    overlap = set(auto) & set(explicit_by_arg)
+    if overlap:
+        raise ValueError(
+            f"Loss kwarg(s) {sorted(overlap)} declared on both DataEntry.loss_input and "
+            f"LossComponentSettings.extra_inputs. Remove one declaration — no silent overrides."
+        )
+    return tuple({**auto, **explicit_by_arg}.values())
 
 
 class StandardLightningWrapper(ProcessingLightningWrapper):
-    """Lightning wrapper for standard tensor-based neural networks with positional transforms.
+    """Concrete wrapper for tensor/TensorDict-based models.
 
-    Transform chains are stored as positional ModuleLists aligned with entry_configs
-    insertion order. Index 0 = first Feature entry, etc. No string dispatch anywhere.
-
-    Attributes:
-        _feature_chains (torch.nn.ModuleList): Positional feature transform chains.
-        _target_chains (torch.nn.ModuleList): Positional target transform chains.
+    Translates settings-based constructor arguments into protocol objects and
+    passes them to the base class. Supports named transform chains via
+    NamedBatchTransformer.
 
     Example:
         ```python
         wrapper = StandardLightningWrapper(
             settings=wrapper_settings,
             model_settings=model_settings,
-            shape_spec=shape_spec,
             entry_configs=data_configs,
+            shape_summary=shape_summary,
         )
         ```
     """
@@ -86,434 +214,121 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         shape_summary: "ShapeSummary | None" = None,
-        **kwargs,
-    ):
-        """Initialize the standard Lightning wrapper.
-
-        Pre-allocates positional transform chains from entry_configs so Lightning's
-        load_state_dict can restore fitted state directly without manual reconstruction.
+        **kwargs: Any,
+    ) -> None:
+        """Build protocols from settings and initialise the base wrapper.
 
         Args:
-            settings: Wrapper configuration settings.
-            model_settings: Model configuration settings.
-            entry_configs: Data entry configurations (positional, insertion order = position).
-            shape_summary: Shape summary from dataset inference (preferred).
-            **kwargs: Additional arguments passed to base class.
+            settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
+            model_settings: Model configuration for building the nn.Module.
+            entry_configs: Data entry configurations in config-insertion order.
+            shape_summary: Shape summary from dataset inference (for shape-aware models).
+            **kwargs: Forwarded to LightningModule (ignored otherwise).
         """
-        super().__init__(
-            settings=settings,
+        entry_configs = entry_configs or ()
+
+        # --- Build model ---
+        model = _build_model_from_settings(model_settings, shape_summary)
+
+        # --- Partition entries ---
+        feature_entries = [e for e in entry_configs if is_feature_entry(e)]
+        target_entries = [e for e in entry_configs if is_target_entry(e)]
+
+        model_input_keys: tuple[str, ...] = tuple(
+            e.name for e in feature_entries
+            if getattr(e, "model_input", True) and e.name is not None
+        )
+        all_target_keys: tuple[str, ...] = tuple(
+            e.name for e in target_entries if e.name is not None
+        )
+        default_target_key: str = all_target_keys[0] if all_target_keys else ""
+
+        # --- Build transform chains ---
+        feature_chains: dict[str, Any] = {
+            e.name: _make_chain(e) for e in feature_entries if e.name is not None
+        }
+        target_chains: dict[str, Any] = {
+            e.name: _make_chain(e) for e in target_entries if e.name is not None
+        }
+        batch_transformer = NamedBatchTransformer(feature_chains, target_chains)
+
+        # --- Build model invoker ---
+        model_invoker = StandardModelInvoker(model_input_keys)
+
+        # --- Build loss computer ---
+        loss_fn = FactoryProvider.create_component(
+            settings.loss_function, BuildContext(mode="training")
+        )
+        loss_spec = settings.loss_function
+        auto_extra = _build_auto_extra_inputs(entry_configs)
+        explicit_extra = tuple(getattr(loss_spec, "extra_inputs", ()) or ())
+        merged_extra = _merge_extra_inputs(auto_extra, explicit_extra)
+        _validate_extra_inputs_against_signature(loss_fn, merged_extra)
+        loss_computer = RoutedLossComputer(
+            loss_fn=loss_fn,
+            target_key=getattr(loss_spec, "target_key", None),
+            default_target_key=default_target_key,
+            extra_inputs=merged_extra,
+        )
+
+        # --- Derive predict target key ---
+        loss_target_key: str | None = getattr(loss_spec, "target_key", None)
+        predict_target_key: str = (
+            loss_target_key.split(".", 1)[1] if loss_target_key else default_target_key
+        )
+
+        # --- Build metrics updater ---
+        metric_specs = tuple(getattr(settings, "metrics", ()) or ())
+        metrics_updater = RoutedMetricsUpdater(
+            val_routes=_make_routes(metric_specs, default_target_key),
+            test_routes=_make_routes(metric_specs, default_target_key),
+        )
+
+        # --- Build checkpoint metadata ---
+        checkpoint_metadata = WrapperCheckpointMetadata(
             model_settings=model_settings,
+            wrapper_settings=settings,
             entry_configs=entry_configs,
+            feature_names=tuple(e.name for e in feature_entries if e.name is not None),
+            predict_target_key=predict_target_key,
             shape_summary=shape_summary,
-            **kwargs,
         )
 
-        feature_entries = [e for e in self._entry_configs if is_feature_entry(e)]
-        target_entries = [e for e in self._entry_configs if is_target_entry(e)]
-
-        self._feature_chains: ModuleList = ModuleList(
-            self._make_chain(e) for e in feature_entries
+        super().__init__(
+            model=model,
+            model_invoker=model_invoker,
+            loss_computer=loss_computer,
+            metrics_updater=metrics_updater,
+            batch_transformer=batch_transformer,
+            optimizer_settings=settings.optimizer,
+            scheduler_settings=getattr(settings, "scheduler", None),
+            predict_target_key=predict_target_key,
+            checkpoint_metadata=checkpoint_metadata,
         )
-        self._target_chains: ModuleList = ModuleList(
-            self._make_chain(e) for e in target_entries
-        )
-
-    def _make_chain(self, entry: DataEntry) -> torch.nn.Module:
-        """Create a TransformChain for an entry, or Identity if no transforms configured.
-
-        Args:
-            entry: Data entry configuration with optional transforms attribute.
-
-        Returns:
-            TransformChain if transforms configured, nn.Identity otherwise.
-        """
-        settings = getattr(entry, "transforms", None)
-        return TransformChain(settings) if settings else Identity()
 
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass through the model with tensor input.
+        """Forward pass through the model.
 
         Args:
-            x (torch.Tensor): Input tensor.
+            x: Input tensor.
 
         Returns:
-            torch.Tensor: Model output tensor.
+            Model output tensor.
         """
         return self.model(x)
 
-    # =============================================================================
-    # Positional Transform Helpers
-    # =============================================================================
-
-    def _apply_feature_transforms(self, batch: Batch) -> Batch:
-        """Apply feature chains positionally. Returns new Batch with transformed features.
-
-        Args:
-            batch: Input batch with raw feature tensors.
-
-        Returns:
-            New Batch with transformed features.
-        """
-        if not self._feature_chains:
-            return batch
-        transformed = tuple(
-            apply_chain(x, c) for x, c in zip(batch.features, self._feature_chains)
-        )
-        return replace(batch, features=transformed)
-
-    def _apply_target_transforms(self, batch: Batch) -> Batch:
-        """Apply target chains positionally. Returns new Batch with transformed targets.
-
-        Args:
-            batch: Input batch with raw target tensors.
-
-        Returns:
-            New Batch with transformed targets.
-        """
-        if not self._target_chains:
-            return batch
-        transformed = tuple(
-            apply_chain(x, c) for x, c in zip(batch.targets, self._target_chains)
-        )
-        return replace(batch, targets=transformed)
-
-    def _apply_inverse_target_transforms(self, batch: Batch) -> Batch:
-        """Apply inverse target chains positionally. Returns new Batch in original space.
-
-        Args:
-            batch: Input batch with normalized target tensors.
-
-        Returns:
-            New Batch with targets back in original space.
-        """
-        if not self._target_chains:
-            return batch
-        transformed = tuple(
-            apply_inverse_chain(x, c) for x, c in zip(batch.targets, self._target_chains)
-        )
-        return replace(batch, targets=transformed)
-
-    def _chains_are_fitted(self) -> bool:
-        """True if all non-Identity chains already have fitted state (from checkpoint).
-
-        Returns:
-            True when all FittableTransform chains are fitted, False otherwise.
-        """
-        for chain in [*self._feature_chains, *self._target_chains]:
-            if isinstance(chain, FittableTransform) and not chain.fitted:
-                return False
-        return True
-
-    # =============================================================================
-    # Overridden Step Methods (Positional Batch-First)
-    # =============================================================================
-
-    def training_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
-        """Training step with positional transform application.
-
-        Args:
-            batch (Batch): Positional batch from dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing the training loss.
-        """
-        batch = self._apply_feature_transforms(batch)
-        batch = self._apply_target_transforms(batch)
-        predictions = self._invoke_model(batch)
-        loss = self._compute_loss(predictions, batch)
-        self._log_stage_outputs("train", loss)
-        return {"loss": loss}
-
-    def validation_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
-        """Validation step with positional transform application.
-
-        Args:
-            batch (Batch): Positional batch from dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing validation metrics.
-        """
-        batch = self._apply_feature_transforms(batch)
-        batch = self._apply_target_transforms(batch)
-        predictions = self._invoke_model(batch)
-        val_loss = self._compute_loss(predictions, batch)
-        metrics = self._update_metrics(predictions, batch.targets, stage="val")
-        self._log_stage_outputs("val", val_loss, metrics)
-        return {"val_loss": val_loss}
-
-    def test_step(self, batch: Batch, batch_idx: int) -> dict[str, Any]:
-        """Test step with positional transform application.
-
-        Args:
-            batch (Batch): Positional batch from dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            dict[str, Any]: Dictionary containing test metrics.
-        """
-        batch = self._apply_feature_transforms(batch)
-        batch = self._apply_target_transforms(batch)
-        predictions = self._invoke_model(batch)
-        test_loss = self._compute_loss(predictions, batch)
-        metrics = self._update_metrics(predictions, batch.targets, stage="test")
-        self._log_stage_outputs("test", test_loss, metrics)
-        return {"test_loss": test_loss}
-
-    def predict_step(self, batch: Batch, batch_idx: int) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...], tuple[Tensor, ...]]:
-        """Prediction step with positional transform application and inverse.
-
-        Applies forward transforms to features, runs model, then applies inverse
-        target transform to predictions so outputs are in original data space.
-
-        Args:
-            batch (Batch): Positional batch from dataset.
-            batch_idx (int): Index of the batch.
-
-        Returns:
-            Tuple of (predictions, targets, latents), each containing a tuple of tensors.
-        """
-        original_targets = batch.targets
-        batch = self._apply_feature_transforms(batch)
-        predictions = self._invoke_model(batch)
-
-        # Apply inverse target transform to predictions (model output → original space)
-        if isinstance(predictions, Tensor) and self._target_chains:
-            predictions = apply_inverse_chain(predictions, self._target_chains[0])
-
-        return (
-            (predictions,) if isinstance(predictions, Tensor) else predictions,
-            original_targets,
-            (),
-        )
-
-    # =============================================================================
-    # Transform Fitting (on_fit_start)
-    # =============================================================================
-
-    def on_fit_start(self) -> None:
-        """Fit all entry-based transform chains using the entire training dataloader.
-
-        Guards: skips if chains are already fitted (loaded from checkpoint),
-        no trainer/datamodule is available, or no transforms are configured.
-        Aggregates full training data per entry position and fits once.
-        """
-        if self._chains_are_fitted():
-            return
-
-        trainer = getattr(self, "trainer", None)
-        if trainer is None or not hasattr(trainer, "datamodule"):
-            return
-        dm = trainer.datamodule
-        if dm is None or not hasattr(dm, "train_dataloader"):
-            return
-
-        feature_entries = [e for e in self._entry_configs if is_feature_entry(e)]
-        target_entries = [e for e in self._entry_configs if is_target_entry(e)]
-
-        if not any(getattr(e, "transforms", None) for e in feature_entries + target_entries):
-            return
-
-        try:
-            loader = dm.train_dataloader()
-        except Exception:
-            return
-
-        feat_buffers: list[list[Tensor]] = [[] for _ in feature_entries]
-        tgt_buffers: list[list[Tensor]] = [[] for _ in target_entries]
-
-        for batch in loader:
-            for i, t in enumerate(batch.features):
-                feat_buffers[i].append(t)
-            for i, t in enumerate(batch.targets):
-                tgt_buffers[i].append(t)
-
-        for chain, entry, bufs in zip(self._feature_chains, feature_entries, feat_buffers):
-            if bufs and getattr(entry, "transforms", None) and isinstance(chain, FittableTransform):
-                chain.fit(torch.cat(bufs, dim=0))
-
-        for chain, entry, bufs in zip(self._target_chains, target_entries, tgt_buffers):
-            if bufs and getattr(entry, "transforms", None) and isinstance(chain, FittableTransform):
-                chain.fit(torch.cat(bufs, dim=0))
-
-    # =============================================================================
-    # Checkpoint Hooks
-    # =============================================================================
-
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Save inference metadata to checkpoint.
-
-        The _feature_chains and _target_chains ModuleLists are persisted
-        automatically by Lightning's state_dict mechanism.
+        """Augment checkpoint with target_names metadata.
 
         Args:
             checkpoint: Checkpoint dict to augment.
         """
         super().on_save_checkpoint(checkpoint)
-
-        feature_names = [e.name for e in self._entry_configs if is_feature_entry(e)]
-        target_names = [e.name for e in self._entry_configs if is_target_entry(e)]
-
-        # Augment base metadata with positional info
         if "dlkit_metadata" in checkpoint:
-            checkpoint["dlkit_metadata"]["feature_names"] = feature_names
-            checkpoint["dlkit_metadata"]["target_names"] = target_names
-            checkpoint["dlkit_metadata"]["model_shape"] = getattr(self, "shape", None)
-
-    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False) -> Any:
-        """Override to pre-register lazy-allocated buffers before the standard load.
-
-        Transforms like MinMaxScaler register ``min``/``max`` buffers lazily during
-        ``fit()``. PyTorch's ``load_state_dict`` silently skips keys that aren't
-        already registered (when ``strict=False``). This override pre-registers any
-        missing buffers so the standard load can fill their values.
-
-        Args:
-            state_dict: State dictionary to load.
-            strict: Whether to strictly enforce key matching.
-            assign: Whether to use assign semantics.
-
-        Returns:
-            Result of the standard load_state_dict call.
-        """
-        self._pre_register_lazy_buffers(state_dict)
-        return super().load_state_dict(state_dict, strict=strict, assign=assign)
-
-    def _pre_register_lazy_buffers(self, state_dict: dict[str, Any]) -> None:
-        """Pre-register lazy-allocated buffers found in state_dict.
-
-        Iterates positional chains and for each one extracts its sub-state-dict,
-        calls load_state_dict to see which keys are unexpected (i.e. not yet
-        registered), then navigates the module hierarchy to register them.
-
-        Args:
-            state_dict: Full model state dictionary.
-        """
-        pairs = [("_feature_chains", self._feature_chains), ("_target_chains", self._target_chains)]
-        for prefix, chains in pairs:
-            for idx, chain in enumerate(chains):
-                chain_prefix = f"{prefix}.{idx}."
-                chain_state = {
-                    k[len(chain_prefix):]: v
-                    for k, v in state_dict.items()
-                    if k.startswith(chain_prefix)
-                }
-                if not chain_state:
-                    continue
-                result = chain.load_state_dict(chain_state, strict=False)
-                for key in result.unexpected_keys:
-                    if key in chain_state:
-                        _navigate_and_register(chain, key, chain_state[key])
-
-    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Restore checkpoint. Chains are pre-allocated in __init__ so load_state_dict
-        restores their fitted state automatically.
-
-        Args:
-            checkpoint: Checkpoint dict to restore from.
-        """
-        super().on_load_checkpoint(checkpoint)
-
-
-class BareWrapper(StandardLightningWrapper):
-    """Minimal Lightning wrapper with basic functionality.
-
-    This is a simplified version of StandardLightningWrapper that provides
-    minimal functionality without the full transform integration.
-    Useful for simple models that don't need complex data processing.
-    """
-
-    def __init__(self, model_settings: ModelComponentSettings, **kwargs):
-        """Initialize the bare wrapper.
-
-        Args:
-            model_settings: Model configuration settings
-            **kwargs: Additional arguments (most will be ignored)
-        """
-        from dlkit.tools.config import WrapperComponentSettings
-
-        minimal_settings = WrapperComponentSettings()
-
-        super().__init__(
-            settings=minimal_settings,
-            model_settings=model_settings,
-            **kwargs
-        )
-
-    def training_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified training step without transform processing.
-
-        Args:
-            batch: Raw batch data
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing the training loss
-        """
-        x = next(iter(batch.values()))
-        output = self.forward(x)
-
-        batch_values = list(batch.values())
-        if len(batch_values) >= 2:
-            target = batch_values[1]
-            loss = self.loss_function(output, target)
-        else:
-            loss = torch.tensor(0.0, requires_grad=True)
-
-        self._log_stage_outputs("train", loss)
-        return {"loss": loss}
-
-    def validation_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified validation step without transform processing.
-
-        Args:
-            batch: Raw batch data
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing validation metrics
-        """
-        x = next(iter(batch.values()))
-        output = self.forward(x)
-
-        batch_values = list(batch.values())
-        metrics = None
-        if len(batch_values) >= 2:
-            target = batch_values[1]
-            val_loss = self.loss_function(output, target)
-
-            if self.val_metrics:
-                metrics = self.val_metrics(output, target)
-        else:
-            val_loss = torch.tensor(0.0)
-
-        self._log_stage_outputs("val", val_loss, metrics)
-        return {"val_loss": val_loss}
-
-    def test_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
-        """Simplified test step without transform processing.
-
-        Args:
-            batch: Raw batch data
-            batch_idx: Index of the batch
-
-        Returns:
-            Dictionary containing test metrics
-        """
-        x = next(iter(batch.values()))
-        output = self.forward(x)
-
-        batch_values = list(batch.values())
-        metrics = None
-        if len(batch_values) >= 2:
-            target = batch_values[1]
-            test_loss = self.loss_function(output, target)
-
-            if self.test_metrics:
-                metrics = self.test_metrics(output, target)
-        else:
-            test_loss = torch.tensor(0.0)
-
-        self._log_stage_outputs("test", test_loss, metrics)
-        return {"test_loss": test_loss}
+            meta = self._checkpoint_metadata
+            if meta is not None:
+                target_names = [
+                    e.name for e in meta.entry_configs
+                    if is_target_entry(e) and e.name is not None
+                ]
+                checkpoint["dlkit_metadata"]["target_names"] = target_names

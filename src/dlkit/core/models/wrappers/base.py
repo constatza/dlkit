@@ -1,504 +1,475 @@
-"""Base Lightning wrapper with direct processing methods.
+"""Base Lightning wrapper with protocol-based composition.
 
 This module defines the abstract base class for all Lightning wrappers.
-Replaces the Chain of Responsibility pipeline pattern with direct helper methods
-for simpler, more maintainable code.
+All computation is delegated to injected SOLID protocol objects; the wrapper
+is a pure Lightning coordinator.
 """
 
-from abc import abstractmethod, ABC
-from typing import Any
+from abc import abstractmethod
+from typing import Any, cast
+
 from loguru import logger
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
-# This must happen before any Lightning checkpoint operations
 from dlkit.tools.utils.checkpoint_security import configure_checkpoint_loading
 configure_checkpoint_loading()
 
 import torch
+import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
-from torchmetrics import MetricCollection
 
-from dlkit.tools.config import (
-    BuildContext,
-    FactoryProvider,
-    ModelComponentSettings,
-    WrapperComponentSettings,
-)
-from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.tools.config import BuildContext, FactoryProvider
 from dlkit.tools.config.core.updater import update_settings
+from dlkit.core.models.wrappers.protocols import (
+    IModelInvoker,
+    ILossComputer,
+    IMetricsUpdater,
+    IBatchTransformer,
+    IFittableBatchTransformer,
+)
+from dlkit.core.models.wrappers.components import WrapperCheckpointMetadata
 
 
-class ProcessingLightningWrapper(LightningModule, ABC):
-    """Abstract base Lightning wrapper with direct processing methods.
+def _unpack_model_output(raw_output: Any) -> tuple[Tensor, Tensor | None]:
+    """Split model output into (predictions, latents | None).
 
-    Provides fundamental Lightning integration with streamlined processing:
-    extraction → invocation → loss pairing → metrics.
+    Models returning a 2-tuple are assumed to emit (predictions, latents).
+    All other outputs are treated as predictions-only.
 
-    Transform functionality is provided by specialized subclasses (StandardLightningWrapper).
+    Args:
+        raw_output: Raw output from the model forward pass.
+
+    Returns:
+        Tuple of (predictions tensor, latents tensor or None).
+    """
+    if isinstance(raw_output, tuple) and len(raw_output) == 2:
+        return cast(Tensor, raw_output[0]), cast(Tensor | None, raw_output[1])
+    return cast(Tensor, raw_output), None
+
+
+def _build_predict_tensordict(
+    predictions: Tensor,
+    targets: Any,
+    latents: Tensor | None = None,
+) -> Any:
+    """Assemble the predict_step TensorDict from its components.
+
+    Args:
+        predictions: Inverse-transformed prediction tensor.
+        targets: Raw (untransformed) targets from the batch.
+        latents: Optional latent tensor from the model.
+
+    Returns:
+        TensorDict with keys 'predictions', 'targets', and optionally 'latents'.
+    """
+    from tensordict import TensorDict
+    contents: dict[str, Any] = {"predictions": predictions, "targets": targets}
+    if latents is not None:
+        contents["latents"] = latents
+    return TensorDict(contents, batch_size=predictions.shape[:1])
+
+
+def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -> nn.Module:
+    """Build a PyTorch model from configuration settings.
+
+    Args:
+        model_settings: Model configuration (ModelComponentSettings).
+        shape_summary: Optional ShapeSummary for shape-aware models.
+
+    Returns:
+        Instantiated and precision-cast nn.Module.
+    """
+    import importlib
+    from dlkit.core.models.factory import build_model
+
+    if isinstance(model_settings.name, type):
+        model_cls = model_settings.name
+    else:
+        module_path = getattr(model_settings, "module_path", "dlkit.core.models.nn")
+        module = importlib.import_module(module_path)
+        model_cls = getattr(module, model_settings.name)
+
+    hyperparams: dict[str, Any] = {}
+    if hasattr(model_settings, "model_dump"):
+        all_fields = model_settings.model_dump()
+        excluded = {"name", "module_path", "checkpoint"}
+        hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
+
+    return build_model(model_cls, shape_summary, hyperparams)
+
+
+class ProcessingLightningWrapper(LightningModule):
+    """Pure Lightning coordinator. All computation delegated to injected protocols.
+
+    Accepts pre-built model and protocol objects; delegates every computation
+    step to them. No model building, no direct transform application, no
+    positional batch assumptions live here.
 
     Attributes:
-        model (torch.nn.Module): Underlying PyTorch model.
-        val_metrics (torchmetrics.MetricCollection): Validation metrics.
-        test_metrics (torchmetrics.MetricCollection): Test metrics.
-        loss_function (callable): Loss function operating on predictions and targets.
+        model: Underlying PyTorch model.
+        optimizer: Optimizer settings (OptimizerSettings).
+        scheduler: Scheduler settings (SchedulerSettings | None).
     """
 
     def __init__(
         self,
         *,
-        settings: WrapperComponentSettings,
-        model_settings: ModelComponentSettings,
-        entry_configs: tuple[DataEntry, ...] | None = None,
-        shape_summary: "ShapeSummary | None" = None,
-        **kwargs,
-    ):
-        """Initialize the processing Lightning wrapper.
+        model: nn.Module,
+        model_invoker: IModelInvoker,
+        loss_computer: ILossComputer,
+        metrics_updater: IMetricsUpdater,
+        batch_transformer: IBatchTransformer,
+        optimizer_settings: Any,
+        scheduler_settings: Any = None,
+        predict_target_key: str,
+        checkpoint_metadata: WrapperCheckpointMetadata | None = None,
+    ) -> None:
+        """Initialize the wrapper with injected protocol objects.
 
         Args:
-            settings (WrapperComponentSettings): Wrapper configuration settings.
-            model_settings (ModelComponentSettings): Model configuration settings.
-            entry_configs (tuple[DataEntry, ...] | None): Data entry configurations.
-            shape_summary: Shape summary from dataset inference (preferred).
-            **kwargs: Additional arguments passed to LightningModule.
+            model: Pre-built PyTorch nn.Module.
+            model_invoker: Extracts features and invokes model.
+            loss_computer: Computes scalar loss from predictions + batch.
+            metrics_updater: Accumulates and exposes metric state.
+            batch_transformer: Applies transforms to batches (nn.Module for state persistence).
+            optimizer_settings: Optimizer configuration settings.
+            scheduler_settings: Scheduler configuration settings (optional).
+            predict_target_key: Target entry name whose chain is inverted at predict time.
+            checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
         """
         super().__init__()
 
-        # Store configuration
-        self._wrapper_settings = settings
-        self._model_settings = model_settings
-        self._entry_configs: tuple[DataEntry, ...] = entry_configs or ()
+        self.model = model
+        self._model_invoker = model_invoker
+        self._loss_computer = loss_computer
+        self._metrics_updater = metrics_updater
+        self._batch_transformer = batch_transformer
+        self.optimizer = optimizer_settings
+        self.scheduler = scheduler_settings
+        self._predict_target_key = predict_target_key
+        self._checkpoint_metadata = checkpoint_metadata
 
-        self.save_hyperparameters(
-            {
-                "settings": settings,
-                "model_settings": model_settings,
-            },
-            ignore=["settings", "model_settings", "entry_configs", "shape_summary"],
+        # Entry configs for subclass access (e.g. graph wrapper target name)
+        self._entry_configs: tuple[Any, ...] = (
+            checkpoint_metadata.entry_configs if checkpoint_metadata is not None else ()
         )
 
-        # Initialize model using build_model from core/models/factory.py
-        from dlkit.core.models.factory import build_model
-        from dlkit.core.shape_specs.simple_inference import ShapeSummary as _ShapeSummary
-        import importlib
-
-        # Extract model class
-        if isinstance(model_settings.name, type):
-            model_cls = model_settings.name
-        else:
-            module_path = getattr(model_settings, 'module_path', 'dlkit.core.models.nn')
-            module = importlib.import_module(module_path)
-            model_cls = getattr(module, model_settings.name)
-
-        # Extract hyperparameters from model settings
-        hyperparams = {}
-        if hasattr(model_settings, 'model_dump'):
-            all_fields = model_settings.model_dump()
-            excluded = {'name', 'module_path', 'checkpoint'}
-            hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
-
-        # Use shape_summary directly
-        resolved_summary: _ShapeSummary | None = shape_summary
-
-        self.model = build_model(model_cls, resolved_summary, hyperparams)
-        self._shape_summary: _ShapeSummary | None = resolved_summary
-
         # Apply precision to model immediately after creation
-        # Lightning's precision plugin will convert the wrapper, but we need to ensure
-        # the nested model is also converted. This matches the pattern in test models.
         from dlkit.interfaces.api.services.precision_service import get_precision_service
-
         precision_service = get_precision_service()
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.model = self.model.to(dtype=dtype)
 
-        self.val_metrics = MetricCollection([
-            FactoryProvider.create_component(metric, BuildContext(mode="training"))
-            for metric in settings.metrics
-        ])
-        self.test_metrics = MetricCollection([
-            FactoryProvider.create_component(metric, BuildContext(mode="training"))
-            for metric in settings.metrics
-        ])
-
-        # Loss function from model or settings
-        self.loss_function = getattr(
-            self.model, "loss_function", None
-        ) or FactoryProvider.create_component(
-            settings.loss_function,
-            BuildContext(mode="training"),
-        )
-
-        self.optimizer = settings.optimizer
-        self.scheduler = settings.scheduler
-
-        # Ensure lr/learning_rate hyperparameters mirror optimizer settings
         self._sync_lr_hparam()
 
-    # =============================================================================
+    # =========================================================================
     # Lightning Hooks
-    # =============================================================================
+    # =========================================================================
 
-    def transfer_batch_to_device(self, batch: Any, device: torch.device, dataloader_idx: int) -> Any:
-        """Move batch tensors to device. Handles frozen Batch dataclass.
+    def configure_model(self) -> None:
+        """Reapply precision after Lightning setup/checkpoint restore."""
+        super().configure_model()
+        from dlkit.interfaces.api.services.precision_service import get_precision_service
+        precision_service = get_precision_service()
+        precision_strategy = precision_service.resolve_precision()
+        dtype = precision_strategy.to_torch_dtype()
+        self.model = self.model.to(dtype=dtype)
 
-        Lightning's default implementation uses apply_to_collection which does not
-        support frozen dataclasses. This override handles Batch explicitly.
-
-        Args:
-            batch: Incoming batch (Batch dataclass or other type).
-            device: Target device.
-            dataloader_idx: DataLoader index.
-
-        Returns:
-            Batch with all tensors moved to device.
-        """
-        from dataclasses import replace
-        from dlkit.core.datatypes.batch import Batch as _Batch
-        if isinstance(batch, _Batch):
-            return replace(
-                batch,
-                features=tuple(f.to(device) for f in batch.features),
-                targets=tuple(t.to(device) for t in batch.targets),
-                latents=tuple(l.to(device) for l in batch.latents),
-            )
-        return super().transfer_batch_to_device(batch, device, dataloader_idx)
-
-    # =============================================================================
-    # Core Processing Helper Methods
-    # =============================================================================
-
-    def _log_dtype_mismatches(self, batch: "Batch") -> None:
-        """Log dtype mismatches between first feature and model (debug only).
-
-        Args:
-            batch: Input batch with positional feature tensors.
-        """
-        if not batch.features or not hasattr(self.model, "dtype"):
+    def on_fit_start(self) -> None:
+        """Fit the batch transformer if it implements IFittableBatchTransformer."""
+        if not isinstance(self._batch_transformer, IFittableBatchTransformer):
             return
-        model_dtype = self.model.dtype
-        if not isinstance(model_dtype, torch.dtype):
+        if self._batch_transformer.is_fitted():
             return
-        feat = batch.features[0]
-        if feat.is_floating_point() and feat.dtype != model_dtype:
-            logger.debug(
-                f"Feature dtype {feat.dtype} differs from model dtype {model_dtype}. "
-                f"Lightning's precision plugin will handle alignment."
-            )
+        trainer = getattr(self, "trainer", None)
+        if trainer is None or not hasattr(trainer, "datamodule"):
+            return
+        dm = trainer.datamodule
+        if dm is None or not hasattr(dm, "train_dataloader"):
+            return
+        try:
+            loader = dm.train_dataloader()
+            self._batch_transformer.fit(loader)
+        except Exception:
+            pass
 
-    def _invoke_model(self, batch: "Batch") -> Tensor:
-        """Dispatch positional Batch to model.
+    # =========================================================================
+    # Lightning Step Methods (delegate to protocols)
+    # =========================================================================
 
-        Args:
-            batch: Typed batch with positional feature tensors.
-
-        Returns:
-            Model output tensor.
-
-        Raises:
-            ValueError: If batch has no features.
-        """
-        match len(batch.features):
-            case 0:
-                raise ValueError("Batch has no features")
-            case 1:
-                return self.model(batch.features[0])
-            case _:
-                return self.model(*batch.features)
-
-    def _compute_loss(self, predictions: Tensor, batch: "Batch") -> Tensor:
-        """Compute loss from predictions and the full batch.
-
-        Default implementation pairs predictions with batch.targets[0] and
-        aligns dtypes. Override to access additional batch data such as
-        features (e.g. a per-sample matrix for energy norm losses).
+    def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Training step: transform → invoke → loss → log.
 
         Args:
-            predictions: Model output tensor.
-            batch: Full typed batch providing targets, features, and latents.
-
-        Returns:
-            Scalar loss tensor.
-
-        Raises:
-            RuntimeError: If batch.targets is empty.
-        """
-        if not batch.targets:
-            raise RuntimeError("Cannot compute loss: targets tuple is empty")
-        target = batch.targets[0]
-        if target.is_floating_point() and target.dtype != predictions.dtype:
-            target = target.to(dtype=predictions.dtype)
-        return self.loss_function(predictions, target)
-
-    def _update_metrics(
-        self,
-        predictions: Tensor,
-        targets: tuple[Tensor, ...],
-        stage: str,
-    ) -> dict[str, Any]:
-        """Compute metrics from predictions and first target.
-
-        Args:
-            predictions: Model output tensor.
-            targets: Tuple of target tensors (uses targets[0]).
-            stage: Stage identifier ("val" or "test").
-
-        Returns:
-            Dictionary of computed metric values, empty if no metrics or targets.
-        """
-        metrics = {"val": self.val_metrics, "test": self.test_metrics}.get(stage)
-        if metrics is None or not targets:
-            return {}
-        target = targets[0]
-        if target.is_floating_point() and target.dtype != predictions.dtype:
-            target = target.to(dtype=predictions.dtype)
-        return metrics(predictions, target)
-
-    # =============================================================================
-    # Lightning Step Methods
-    # =============================================================================
-
-    def training_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
-        """Training step with direct positional processing.
-
-        Args:
-            batch: Positional batch from dataset.
+            batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
 
         Returns:
             Dictionary containing the training loss.
         """
-        self._log_dtype_mismatches(batch)
-        predictions = self._invoke_model(batch)
-        loss = self._compute_loss(predictions, batch)
+        batch = self._batch_transformer.transform(batch)
+        predictions = self._model_invoker.invoke(self.model, batch)
+        loss = self._loss_computer.compute(predictions, batch)
         self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
-    def validation_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
-        """Validation step with direct positional processing.
+    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Validation step: transform → invoke → loss → metrics → log.
 
         Args:
-            batch: Positional batch from dataset.
+            batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
 
         Returns:
-            Dictionary containing validation metrics.
+            Dictionary containing validation loss.
         """
-        self._log_dtype_mismatches(batch)
-        predictions = self._invoke_model(batch)
-        val_loss = self._compute_loss(predictions, batch)
-        metrics = self._update_metrics(predictions, batch.targets, "val")
-        self._log_stage_outputs("val", val_loss, metrics)
+        batch = self._batch_transformer.transform(batch)
+        predictions = self._model_invoker.invoke(self.model, batch)
+        val_loss = self._loss_computer.compute(predictions, batch)
+        self._metrics_updater.update(predictions, batch, stage="val")
+        self._log_stage_outputs("val", val_loss)
         return {"val_loss": val_loss}
 
-    def test_step(self, batch: "Batch", batch_idx: int) -> dict[str, Any]:
-        """Test step with direct positional processing.
+    def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Test step: transform → invoke → loss → metrics → log.
 
         Args:
-            batch: Positional batch from dataset.
+            batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
 
         Returns:
-            Dictionary containing test metrics.
+            Dictionary containing test loss.
         """
-        self._log_dtype_mismatches(batch)
-        predictions = self._invoke_model(batch)
-        test_loss = self._compute_loss(predictions, batch)
-        metrics = self._update_metrics(predictions, batch.targets, "test")
-        self._log_stage_outputs("test", test_loss, metrics)
+        batch = self._batch_transformer.transform(batch)
+        predictions = self._model_invoker.invoke(self.model, batch)
+        test_loss = self._loss_computer.compute(predictions, batch)
+        self._metrics_updater.update(predictions, batch, stage="test")
+        self._log_stage_outputs("test", test_loss)
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: "Batch", batch_idx: int) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...], tuple[Tensor, ...]]:
-        """Prediction step without loss computation.
+    def predict_step(self, batch: Any, batch_idx: int) -> Any:
+        """Prediction step returning a TensorDict with predictions and targets.
+
+        Captures original (untransformed) targets before applying the batch
+        transform, so predictions and targets are guaranteed to be aligned.
+        If the model returns a 2-tuple ``(predictions, latents)``, the latents
+        are included in the output under the ``"latents"`` key.
 
         Args:
-            batch: Positional batch from dataset.
+            batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
 
         Returns:
-            Tuple of (predictions, targets, latents), each containing a tuple of tensors.
+            TensorDict with keys ``"predictions"``, ``"targets"``, and
+            optionally ``"latents"``.
         """
-        predictions = self._invoke_model(batch)
-        return (
-            (predictions,) if isinstance(predictions, Tensor) else predictions,
-            batch.targets,
-            batch.latents,
+        original_targets = batch["targets"]
+        batch = self._batch_transformer.transform(batch)
+        raw_output = self._model_invoker.invoke(self.model, batch)
+        predictions, latents = _unpack_model_output(raw_output)
+        predictions = self._batch_transformer.inverse_transform_predictions(
+            predictions, self._predict_target_key
         )
+        return _build_predict_tensordict(predictions, original_targets, latents)
 
-    # =============================================================================
-    # Checkpoint and Metadata Management
-    # =============================================================================
+    @staticmethod
+    def collect_targets(predict_outputs: list[Any]) -> list[Any]:
+        """Extract targets from ``trainer.predict()`` outputs.
 
-    def configure_model(self) -> None:
-        """Ensure precision is maintained after Lightning setup/checkpoint restore.
+        Since ``predict_step`` embeds targets inside each output TensorDict,
+        targets are always aligned with predictions — no second dataloader pass
+        needed.
 
-        Lightning calls this hook after:
-        - Initial model creation
-        - Checkpoint restoration (e.g., during LR tuning)
-        - Strategy setup
+        Args:
+            predict_outputs: List returned by ``trainer.predict()``, where each
+                element is a TensorDict produced by ``predict_step``.
 
-        This ensures the nested model's dtype persists even after checkpoint operations
-        that might reconstruct the model.
+        Returns:
+            List of per-batch target TensorDicts (one entry per batch).
         """
-        super().configure_model()
+        return [batch["targets"] for batch in predict_outputs]
 
-        # Reapply precision to nested model (idempotent and safe)
-        from dlkit.interfaces.api.services.precision_service import get_precision_service
+    def on_validation_epoch_end(self) -> None:
+        """Compute and log epoch-level validation metrics, then reset."""
+        metrics = self._metrics_updater.compute("val")
+        if metrics:
+            self._log_stage_outputs("val_epoch", None, metrics)
+        self._metrics_updater.reset("val")
 
-        precision_service = get_precision_service()
-        precision_strategy = precision_service.resolve_precision()
-        dtype = precision_strategy.to_torch_dtype()
-        self.model = self.model.to(dtype=dtype)
+    def on_test_epoch_end(self) -> None:
+        """Compute and log epoch-level test metrics, then reset."""
+        metrics = self._metrics_updater.compute("test")
+        if metrics:
+            self._log_stage_outputs("test_epoch", None, metrics)
+        self._metrics_updater.reset("test")
+
+    # =========================================================================
+    # Checkpoint and Metadata Management
+    # =========================================================================
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Save enhanced metadata including complete shape information.
+        """Save DLKit metadata to checkpoint.
 
-        Ensures comprehensive model reconstruction information persists across
-        checkpoint saves/loads.
-
-        This method is pure - it only reads state and writes to the checkpoint dict.
-        No side effects (state mutations) are performed during checkpoint save.
+        Args:
+            checkpoint: Checkpoint dict to augment.
         """
         super().on_save_checkpoint(checkpoint)
 
-        # Create comprehensive DLKit metadata section
         dlkit_metadata: dict[str, Any] = {
-            'version': '2.0',
-            'model_family': self._detect_model_family(),
-            'wrapper_type': self.__class__.__name__,
+            "version": "2.0",
+            "wrapper_type": self.__class__.__name__,
         }
 
-        # Save model settings for reconstruction
-        dlkit_metadata['model_settings'] = self._serialize_model_settings()
+        if self._checkpoint_metadata is not None:
+            meta = self._checkpoint_metadata
+            dlkit_metadata["model_settings"] = self._serialize_model_settings(
+                meta.model_settings
+            )
+            dlkit_metadata["entry_configs"] = self._serialize_entry_configs(
+                meta.entry_configs
+            )
+            dlkit_metadata["shape_summary"] = self._compute_shape_summary(
+                meta.shape_summary
+            )
+            dlkit_metadata["feature_names"] = list(meta.feature_names)
+            dlkit_metadata["predict_target_key"] = meta.predict_target_key
+            dlkit_metadata["model_family"] = self._detect_model_family()
+        else:
+            dlkit_metadata["model_settings"] = {}
+            dlkit_metadata["entry_configs"] = []
+            dlkit_metadata["shape_summary"] = {}
+            dlkit_metadata["model_family"] = "external"
 
-        # Save entry configs for reconstruction
-        dlkit_metadata['entry_configs'] = self._serialize_entry_configs()
-
-        # Save shape summary for model input/output documentation
-        dlkit_metadata['shape_summary'] = self._compute_shape_summary()
-
-        # Store in checkpoint
-        checkpoint['dlkit_metadata'] = dlkit_metadata
+        checkpoint["dlkit_metadata"] = dlkit_metadata
 
     def _detect_model_family(self) -> str:
-        """Detect model family for appropriate shape handling.
+        """Detect model family identifier.
 
         Returns:
-            Model family identifier ("dlkit_nn", "graph", "timeseries", "external")
+            Model family string (e.g., 'dlkit_nn', 'graph', 'external').
         """
         try:
             from dlkit.runtime.workflows.factories.model_detection import detect_model_type
-            model_type = detect_model_type(self._model_settings, None)  # type: ignore[arg-type]
-            return model_type.value
+            if self._checkpoint_metadata is not None:
+                model_type = detect_model_type(
+                    self._checkpoint_metadata.model_settings, None  # type: ignore[arg-type]
+                )
+                return model_type.value
         except Exception:
-            return "external"
+            pass
+        return "external"
 
-    def _serialize_model_settings(self) -> dict[str, Any]:
-        """Serialize model settings for reconstruction.
+    def _serialize_model_settings(self, model_settings: Any) -> dict[str, Any]:
+        """Serialize model settings for checkpoint reconstruction.
+
+        Args:
+            model_settings: Model configuration settings.
 
         Returns:
-            Serialized model configuration
+            Serialized model configuration dict.
         """
         try:
-            settings = self._model_settings
-
-            # Extract base fields
-            name = getattr(settings, 'name', None)
-            module_path = getattr(settings, 'module_path', None)
-            class_name = settings.__class__.__name__
-
-            # Extract hyperparameters
-            params = {}
-            if hasattr(settings, 'model_dump'):
-                all_fields = settings.model_dump()
-                excluded = {'name', 'module_path', 'checkpoint'}
-                params = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
-
+            name = getattr(model_settings, "name", None)
+            module_path = getattr(model_settings, "module_path", None)
+            class_name = model_settings.__class__.__name__
+            params: dict[str, Any] = {}
+            if hasattr(model_settings, "model_dump"):
+                all_fields = model_settings.model_dump()
+                excluded = {"name", "module_path", "checkpoint"}
+                params = {
+                    k: v
+                    for k, v in all_fields.items()
+                    if k not in excluded and v is not None
+                }
             return {
-                'name': name,
-                'module_path': module_path,
-                'params': params,
-                'class_name': class_name
+                "name": name,
+                "module_path": module_path,
+                "params": params,
+                "class_name": class_name,
             }
         except Exception:
             return {}
 
-    def _serialize_entry_configs(self) -> list[dict[str, Any]]:
-        """Serialize entry configurations for reconstruction.
+    def _serialize_entry_configs(self, entry_configs: tuple) -> list[dict[str, Any]]:
+        """Serialize entry configurations.
+
+        Args:
+            entry_configs: Tuple of DataEntry objects.
 
         Returns:
-            List of serialized entry configurations
+            List of serialized entry config dicts.
         """
         try:
-            if hasattr(self, '_entry_configs') and self._entry_configs:
-                return [
-                    {
-                        "name": e.name,
-                        "class_name": e.__class__.__name__,
-                        "transforms": [
-                            t.model_dump() if hasattr(t, "model_dump") else t
-                            for t in getattr(e, "transforms", [])
-                        ]
-                    }
-                    for e in self._entry_configs
-                ]
+            return [
+                {
+                    "name": e.name,
+                    "class_name": e.__class__.__name__,
+                    "transforms": [
+                        t.model_dump() if hasattr(t, "model_dump") else t
+                        for t in getattr(e, "transforms", [])
+                    ],
+                }
+                for e in entry_configs
+            ]
         except Exception:
-            pass
-        return []
+            return []
 
-    def _compute_shape_summary(self) -> dict[str, Any]:
-        """Serialize stored ShapeSummary for checkpoint persistence.
+    def _compute_shape_summary(self, shape_summary: Any) -> dict[str, Any]:
+        """Serialize ShapeSummary for checkpoint persistence.
+
+        Args:
+            shape_summary: ShapeSummary instance or None.
 
         Returns:
-            Dict with in_shapes and out_shapes lists, or empty dict if unavailable.
+            Dict with in_shapes/out_shapes or empty dict.
         """
-        if not hasattr(self, '_shape_summary') or self._shape_summary is None:
+        if shape_summary is None:
             return {}
-        return {
-            'in_shapes': [list(s) for s in self._shape_summary.in_shapes],
-            'out_shapes': [list(s) for s in self._shape_summary.out_shapes],
-        }
+        try:
+            return {
+                "in_shapes": [list(s) for s in shape_summary.in_shapes],
+                "out_shapes": [list(s) for s in shape_summary.out_shapes],
+            }
+        except Exception:
+            return {}
 
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Restore enhanced metadata and shape information from checkpoint.
+        """Restore and validate checkpoint metadata.
+
+        Args:
+            checkpoint: Checkpoint dict to restore from.
 
         Raises:
-            ValueError: If checkpoint version is unsupported or metadata format is invalid.
+            ValueError: If checkpoint version is unsupported or metadata is missing.
         """
         super().on_load_checkpoint(checkpoint)
 
-        # Check for dlkit_metadata (required for v2.0+)
-        if 'dlkit_metadata' not in checkpoint:
+        if "dlkit_metadata" not in checkpoint:
             raise ValueError(
                 "Checkpoint missing 'dlkit_metadata'. This checkpoint uses a legacy format "
                 "that is no longer supported. Please re-train your model with the current "
                 "version of dlkit to generate a compatible checkpoint."
             )
 
-        metadata = checkpoint['dlkit_metadata']
-
-        # Validate version (BREAKING: only support v2.0+)
-        version = metadata.get('version')
+        metadata = checkpoint["dlkit_metadata"]
+        version = metadata.get("version")
         if version is None:
             raise ValueError(
                 "Checkpoint metadata missing 'version' field. Cannot verify compatibility."
             )
-
-        if version != '2.0':
+        if version != "2.0":
             raise ValueError(
-                f"Unsupported checkpoint version '{version}'. This version of dlkit only "
-                f"supports version '2.0'. If you have an older checkpoint, please re-train "
-                f"your model with the current version."
+                f"Unsupported checkpoint version '{version}'. Only version '2.0' is supported."
             )
 
-
-    # =============================================================================
-    # Logging and Metrics
-    # =============================================================================
+    # =========================================================================
+    # Logging Helpers
+    # =========================================================================
 
     def _safe_log(self, *args, **kwargs) -> None:
-        """Safe logging that only logs when trainer is available."""
+        """Log safely when trainer is available."""
         try:
             if hasattr(self, "trainer") and self.trainer is not None:
                 self.log(*args, **kwargs)
@@ -506,7 +477,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             pass
 
     def _safe_log_dict(self, *args, **kwargs) -> None:
-        """Safe dict logging that only logs when trainer is available."""
+        """Log dict safely when trainer is available."""
         try:
             if hasattr(self, "trainer") and self.trainer is not None:
                 self.log_dict(*args, **kwargs)
@@ -519,32 +490,33 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         loss: Tensor | None,
         metrics: dict[str, Any] | None = None,
     ) -> None:
-        """Centralized metric logging hook for training stages.
+        """Centralized metric logging for training stages.
 
         Args:
-            stage: Stage identifier ("train", "val", "test").
-            loss: Scalar loss tensor for the stage.
-            metrics: Optional dictionary of additional metrics to log.
+            stage: Stage identifier ('train', 'val', 'test', 'val_epoch', 'test_epoch').
+            loss: Scalar loss tensor (optional).
+            metrics: Additional metrics dict (optional).
         """
         if loss is not None:
             loss_name = self._format_metric_name(stage, "loss")
-            self._safe_log(
-                loss_name,
-                loss,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=True,
-            )
+            self._safe_log(loss_name, loss, on_step=False, on_epoch=True, prog_bar=True)
         if metrics:
-            formatted: dict[str, Any] = {}
-            for key, value in metrics.items():
-                metric_name = self._format_metric_name(stage, key)
-                formatted[metric_name] = value
-
+            formatted = {
+                self._format_metric_name(stage, key): value
+                for key, value in metrics.items()
+            }
             self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
 
     def _format_metric_name(self, stage: str, name: str) -> str:
-        """Normalize metric names according to stage-specific conventions."""
+        """Normalize metric names per stage conventions.
+
+        Args:
+            stage: Stage identifier.
+            name: Raw metric name.
+
+        Returns:
+            Normalized metric name string.
+        """
         stage_lower = stage.lower()
         name_lower = name.lower()
 
@@ -563,65 +535,54 @@ class ProcessingLightningWrapper(LightningModule, ABC):
                 return name
             return f"{name} test"
 
-        # Default: prefix with stage for all stages (including val)
         return f"{stage_lower}_{name}"
 
     def on_train_epoch_end(self) -> None:
-        """Log the current learning rate at epoch end."""
+        """Log current learning rate at epoch end."""
         if self.trainer and self.trainer.optimizers:
             lr = self.trainer.optimizers[0].param_groups[0]["lr"]
             self._safe_log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
 
-    def on_validation_epoch_end(self) -> None:
-        """Reset validation metrics at the end of the epoch."""
-        self.val_metrics.reset()
-
-    def on_test_epoch_end(self) -> None:
-        """Reset test metrics at the end of the epoch."""
-        self.test_metrics.reset()
-
-    # =============================================================================
+    # =========================================================================
     # Optimizer and LR Management
-    # =============================================================================
+    # =========================================================================
 
     def _get_attached_trainer(self) -> Any:
-        """Return the attached trainer or fabric shim without triggering Lightning errors."""
+        """Return attached trainer without triggering Lightning errors."""
         trainer = getattr(self, "_trainer", None)
         if trainer is not None:
             return trainer
-
         fabric = getattr(self, "_fabric", None)
         if fabric is not None:
             try:
                 from lightning.pytorch.core.module import _TrainerFabricShim
-
                 return _TrainerFabricShim(fabric=fabric)
-            except Exception:  # pragma: no cover
+            except Exception:
                 return None
-
         return None
 
     def _get_optimizer_lr(self) -> float | None:
-        """Resolve the effective learning rate from optimizer settings or trainer state."""
+        """Resolve effective learning rate from optimizer settings or trainer.
+
+        Returns:
+            Current learning rate as float, or None if unavailable.
+        """
         raw_lr = getattr(self.optimizer, "lr", None)
         if isinstance(raw_lr, (float, int)):
             return float(raw_lr)
-
         trainer = self._get_attached_trainer()
         if trainer and getattr(trainer, "optimizers", None):
             try:
                 return float(trainer.optimizers[0].param_groups[0]["lr"])
             except (KeyError, IndexError, TypeError, ValueError):
                 return None
-
         return None
 
     def _sync_lr_hparam(self) -> None:
-        """Synchronise stored hyperparameters with the current learning rate value."""
+        """Synchronise stored hyperparameters with the current learning rate."""
         lr_value = self._get_optimizer_lr()
         if not hasattr(self, "hparams"):
             return
-
         self.hparams["lr"] = lr_value
         self.hparams["learning_rate"] = lr_value
 
@@ -643,7 +604,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
     @property
     def learning_rate(self) -> float | None:
-        """Alias maintained for frameworks expecting learning_rate attribute."""
+        """Alias for lr, expected by some Lightning utilities."""
         return self.lr
 
     @learning_rate.setter
@@ -651,7 +612,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self.lr = value
 
     def configure_optimizers(self):  # type: ignore[override]
-        """Configure optimizer and scheduler from settings."""
+        """Configure optimizer and scheduler from stored settings."""
         optimizer = FactoryProvider.create_component(
             self.optimizer,
             BuildContext(mode="training", overrides={"params": self.model.parameters()}),
@@ -660,10 +621,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             self.scheduler,
             BuildContext(mode="training", overrides={"optimizer": optimizer}),
         )
-
         if scheduler is None:
             return {"optimizer": optimizer}  # type: ignore[return-value]
-
         return {  # type: ignore[return-value]
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -673,44 +632,43 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             },
         }
 
-    # =============================================================================
+    # =========================================================================
     # Entry Config Access
-    # =============================================================================
+    # =========================================================================
 
-    def get_entry_configs(self) -> tuple[DataEntry, ...]:
+    def get_entry_configs(self) -> tuple[Any, ...]:
         """Get the data entry configurations used by this wrapper.
 
         Returns:
-            Tuple of DataEntry configurations
+            Tuple of DataEntry configurations.
         """
         return self._entry_configs
 
-    def get_feature_configs(self) -> tuple[DataEntry, ...]:
+    def get_feature_configs(self) -> tuple[Any, ...]:
         """Get feature entry configurations.
 
         Returns:
-            Tuple of Feature configurations
+            Tuple of Feature configurations.
         """
+        from dlkit.tools.config.data_entries import is_feature_entry
         return tuple(e for e in self._entry_configs if is_feature_entry(e))
 
-    def get_target_configs(self) -> tuple[DataEntry, ...]:
+    def get_target_configs(self) -> tuple[Any, ...]:
         """Get target entry configurations.
 
         Returns:
-            Tuple of Target configurations
+            Tuple of Target configurations.
         """
+        from dlkit.tools.config.data_entries import is_target_entry
         return tuple(e for e in self._entry_configs if is_target_entry(e))
 
-
-    # =============================================================================
-    # Abstract Methods for Subclasses
-    # =============================================================================
+    # =========================================================================
+    # Abstract Methods
+    # =========================================================================
 
     @abstractmethod
     def forward(self, *args, **kwargs) -> Tensor:
         """Forward pass through the model.
 
-        This method should be implemented by subclasses to handle
-        the specific input format for their model type.
+        Subclasses implement the specific input format for their model type.
         """
-        pass

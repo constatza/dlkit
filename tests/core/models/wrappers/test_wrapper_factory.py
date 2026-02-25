@@ -48,16 +48,12 @@ def test_wrapper_factory_create_standard_wrapper(monkeypatch):  # noqa: ANN001
     assert wrapper is not None
 
 
-def test_wrapper_factory_auto_and_bare(monkeypatch):  # noqa: ANN001
+def test_wrapper_factory_auto_creates_standard(monkeypatch):  # noqa: ANN001
     # Detection returns standard; auto path should create standard
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
     mdl = ModelComponentSettings(name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory")
     wset = WrapperComponentSettings()
     w = WrapperFactory.create_wrapper(
-        model_settings=mdl, settings=wset, shape=None, wrapper_type="auto"
+        model_settings=mdl, settings=wset, wrapper_type="auto"
     )
     assert w.__class__.__name__.lower().startswith("standard")
-
-    # Bare wrapper creation path
-    b = WrapperFactory.create_bare_wrapper(model_settings=mdl)
-    assert b is not None

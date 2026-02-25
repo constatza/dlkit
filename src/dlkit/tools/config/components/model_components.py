@@ -5,17 +5,71 @@ from collections.abc import Callable
 from pathlib import Path
 
 from lightning import LightningModule
-from pydantic import Field, FilePath
+from pydantic import Field, FilePath, field_validator
 from pydantic_settings import SettingsConfigDict
 from torchmetrics import Metric
 import torch.nn as nn
 
 from dlkit.core.datatypes.base import IntHyperparameter
-from ..core.base_settings import ComponentSettings, HyperParameterSettings
+from ..core.base_settings import ComponentSettings, HyperParameterSettings, BasicSettings
 from ..optimizer_settings import OptimizerSettings, SchedulerSettings
 
 if TYPE_CHECKING:
     pass
+
+
+def _validate_batch_key(v: str) -> str:
+    """Validate 'namespace.entry_name' key strings.
+
+    Args:
+        v: Key string to validate.
+
+    Returns:
+        Validated key string.
+
+    Raises:
+        ValueError: If key format is invalid.
+    """
+    parts = v.split(".", 1)
+    if len(parts) != 2 or parts[0] not in ("features", "targets"):
+        raise ValueError(
+            f"key must be 'features.<entry_name>' or 'targets.<entry_name>', got '{v}'"
+        )
+    return v
+
+
+class LossInputRef(BasicSettings, frozen=True):
+    """Maps a loss function kwarg to a TensorDict key in the batch.
+
+    Attributes:
+        arg: Kwarg name in the loss function, e.g. "matrix"
+        key: Batch key in "namespace.entry_name" format, e.g. "features.A"
+    """
+
+    arg: str = Field(..., description="Kwarg name in the loss function")
+    key: str = Field(..., description="Batch key in 'namespace.entry_name' format")
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key(cls, v: str) -> str:
+        return _validate_batch_key(v)
+
+
+class MetricInputRef(BasicSettings, frozen=True):
+    """Maps a metric function kwarg to a TensorDict key in the batch.
+
+    Attributes:
+        arg: Kwarg name in the metric function
+        key: Batch key in "namespace.entry_name" format
+    """
+
+    arg: str = Field(..., description="Kwarg name in the metric function")
+    key: str = Field(..., description="Batch key in 'namespace.entry_name' format")
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key(cls, v: str) -> str:
+        return _validate_batch_key(v)
 
 
 class MetricComponentSettings(ComponentSettings[Metric]):
@@ -26,12 +80,29 @@ class MetricComponentSettings(ComponentSettings[Metric]):
     Args:
         component_name: Name/class of the metric
         module_path: Module path to the metric
+        target_key: Batch key for metric target in 'namespace.entry_name' format
+        extra_inputs: Extra kwargs passed to the metric, routed from batch
     """
 
     name: str = Field(default="MeanSquaredError", description="Name of the metric")
     module_path: str = Field(
         default="torchmetrics.regression", description="Module path to the metric"
     )
+    target_key: str | None = Field(
+        default=None,
+        description="Batch key for metric target in 'namespace.entry_name' format. None = first targets/ entry in config.",
+    )
+    extra_inputs: tuple[MetricInputRef, ...] = Field(
+        default=(),
+        description="Extra kwargs passed to the metric, routed from batch.",
+    )
+
+    @field_validator("target_key")
+    @classmethod
+    def _validate_target_key(cls, v: str | None) -> str | None:
+        if v is not None:
+            _validate_batch_key(v)
+        return v
 
 
 class LossComponentSettings(ComponentSettings[Callable]):
@@ -47,6 +118,8 @@ class LossComponentSettings(ComponentSettings[Callable]):
     Args:
         component_name: Name/class of the loss function
         module_path: Module path to the loss function
+        target_key: Batch key for loss target in 'namespace.entry_name' format
+        extra_inputs: Extra kwargs passed to the loss function, routed from batch
 
     Examples:
         >>> # Standard MSE loss (default)
@@ -69,6 +142,21 @@ class LossComponentSettings(ComponentSettings[Callable]):
         default="dlkit.core.training.functional",
         description="Module path to the loss function (default: shared functional module)",
     )
+    target_key: str | None = Field(
+        default=None,
+        description="Batch key for loss target in 'namespace.entry_name' format. None = first targets/ entry in config.",
+    )
+    extra_inputs: tuple[LossInputRef, ...] = Field(
+        default=(),
+        description="Extra kwargs passed to the loss function, routed from batch.",
+    )
+
+    @field_validator("target_key")
+    @classmethod
+    def _validate_target_key(cls, v: str | None) -> str | None:
+        if v is not None:
+            _validate_batch_key(v)
+        return v
 
 
 class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterSettings):

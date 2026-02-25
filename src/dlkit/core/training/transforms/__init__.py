@@ -13,7 +13,6 @@ from .standard import StandardScaler
 from .subset import TensorSubset
 from .spectral import SpectralRadiusNorm
 from .sample_norm import SampleNormL2
-from .manager import TransformManager
 from .errors import (
     TransformError,
     TransformNotFittedError,
@@ -39,7 +38,6 @@ __all__ = [
     "BaseTransform",
     "SpectralRadiusNorm",
     "SampleNormL2",
-    "TransformManager",
     # Protocols
     "FittableTransform",
     "InvertibleTransform",
