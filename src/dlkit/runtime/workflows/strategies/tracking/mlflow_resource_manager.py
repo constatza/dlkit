@@ -482,7 +482,15 @@ class MLflowResourceManager:
         client = self.get_client()
         exp_name = experiment_name or "DLKit"
         logger.debug(f"Getting or creating experiment '{exp_name}'")
-        experiment_id = MLflowClientFactory.get_or_create_experiment(client, exp_name)
+        artifact_location: str | None = None
+        server = getattr(self._config, "server", None) if self._config else None
+        if server:
+            dest = getattr(server, "artifacts_destination", None)
+            if dest:
+                artifact_location = str(dest)
+        experiment_id = MLflowClientFactory.get_or_create_experiment(
+            client, exp_name, artifact_location
+        )
         logger.debug(f"Experiment created/found with ID: {experiment_id}")
         self._state.experiment_id = experiment_id
 

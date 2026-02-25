@@ -110,6 +110,7 @@ class MLflowClientFactory:
     def get_or_create_experiment(
         client: MlflowClient,
         experiment_name: str,
+        artifact_location: str | None = None,
     ) -> str:
         """Get experiment ID or create if it doesn't exist."""
 
@@ -127,7 +128,7 @@ class MLflowClientFactory:
 
         # Create new experiment if not found
         logger.debug(f"Creating new MLflow experiment: {experiment_name}")
-        result = client.create_experiment(experiment_name)
+        result = client.create_experiment(experiment_name, artifact_location=artifact_location)
         logger.debug(f"Experiment created with ID: {result}")
         return result
 

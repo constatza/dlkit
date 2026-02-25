@@ -1,6 +1,8 @@
 """Pytest fixtures for MLflow resource management and test isolation."""
 
+import mlflow
 import pytest
+from pathlib import Path
 from typing import Generator
 from unittest.mock import Mock
 
@@ -10,18 +12,28 @@ from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSetti
 
 
 @pytest.fixture(autouse=True)
-def mlflow_global_state_isolation():
+def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None, None, None]:
     """Automatically isolate MLflow global state between tests.
 
     This fixture runs before and after each test to ensure clean state.
+    MLflow 3.x changed the default tracking URI to ``sqlite:///mlflow.db``
+    (relative to CWD).  Without an explicit override, any test that touches
+    the tracking store without a URI would create that file in the project
+    root.  We redirect the default to an isolated per-test path in
+    ``tmp_path`` so all artifacts stay inside pytest's temporary tree.
     """
-    # Reset state before test
+    isolation_uri = f"sqlite:///{(tmp_path / 'mlflow_isolation.db').as_posix()}"
+
+    # Reset state before test, then pin the default to tmp_path
     MLflowResourceManager.reset_global_state()
+    mlflow.set_tracking_uri(isolation_uri)
 
     yield
 
-    # Reset state after test
+    # Reset state after test, then pin again so teardown doesn't leave a
+    # CWD-relative URI behind for the next test's setup phase
     MLflowResourceManager.reset_global_state()
+    mlflow.set_tracking_uri(isolation_uri)
 
 
 @pytest.fixture

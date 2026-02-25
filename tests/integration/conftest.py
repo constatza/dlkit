@@ -404,16 +404,24 @@ def mlflow_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> General
         epochs=EPOCHS,
     )
 
-    # Enable MLflow using overrides
+    # Enable MLflow using overrides.
+    # Use a SQLite tracking URI (absolute path in tmp_path) instead of file://.
+    # MLflow 3.x deprecated the file-based model registry backend; when using
+    # file:// URIs with model registration it falls back to sqlite:///mlflow.db
+    # in CWD.  A SQLite URI keeps both tracking store and model registry inside
+    # tmp_path so nothing leaks into the project root.
     manager = BasicOverrideManager()
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
-    # Use a local file-based tracking URI to avoid requiring an HTTP server
+    tracking_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
+    mlartifacts_dir = tmp_path / "mlartifacts"
+    mlartifacts_dir.mkdir(parents=True, exist_ok=True)
     mlflow_settings = manager.apply_overrides(
         base_settings,
         enable_mlflow=True,
         experiment_name="test_experiment",
-        tracking_uri=str(mlruns_dir.as_uri()),
+        tracking_uri=tracking_uri,
+        artifacts_destination=str(mlartifacts_dir),
     )
 
     return mlflow_settings
