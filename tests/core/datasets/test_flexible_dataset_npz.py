@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.core.datasets.flexible import FlexibleDataset
+from dlkit.core.datasets.flexible import BatchComplianceError, FlexibleDataset
 from dlkit.interfaces.api.domain.precision import precision_override, PrecisionStrategy
 from dlkit.tools.config.data_entries import Feature, Target
 
@@ -29,8 +29,8 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features)
 
         assert len(dataset) == 10
-        assert len(dataset._feature_tensors) == 1
-        assert dataset._feature_tensors[0].shape == (10, 5)
+        assert len(dataset._feature_names) == 1
+        assert dataset._dataset_td["features", "data"].shape == (10, 5)
 
     def test_load_multiple_arrays_from_multi_npz(self, npz_multi_array: dict) -> None:
         """Test loading features and targets from same multi-array NPZ."""
@@ -40,10 +40,10 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features, targets=targets)
 
         assert len(dataset) == 10
-        assert len(dataset._feature_tensors) == 1
-        assert len(dataset._target_tensors) == 1
-        assert dataset._feature_tensors[0].shape == (10, 5)
-        assert dataset._target_tensors[0].shape == (10, 1)
+        assert len(dataset._feature_names) == 1
+        assert len(dataset._target_names) == 1
+        assert dataset._dataset_td["features", "features"].shape == (10, 5)
+        assert dataset._dataset_td["targets", "targets"].shape == (10, 1)
 
     def test_load_multiple_features_from_same_npz(
         self, npz_multi_array: dict
@@ -57,9 +57,9 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features)
 
         assert len(dataset) == 10
-        assert len(dataset._feature_tensors) == 2
-        assert dataset._feature_tensors[0].shape == (10, 5)
-        assert dataset._feature_tensors[1].shape == (10, 3)
+        assert len(dataset._feature_names) == 2
+        assert dataset._dataset_td["features", "features"].shape == (10, 5)
+        assert dataset._dataset_td["features", "latent"].shape == (10, 3)
 
     def test_mixed_npy_and_npz_files(self, npz_multi_array: dict, tmp_path) -> None:
         """Test dataset with mix of NPY and NPZ files."""
@@ -76,12 +76,14 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features)
 
         assert len(dataset) == 10
-        assert len(dataset._feature_tensors) == 2
-        assert dataset._feature_tensors[0].shape == (10, 5)
-        assert dataset._feature_tensors[1].shape == (10, 4)
+        assert len(dataset._feature_names) == 2
+        assert dataset._dataset_td["features", "features"].shape == (10, 5)
+        assert dataset._dataset_td["features", "extra"].shape == (10, 4)
 
     def test_getitem_returns_correct_data(self, npz_multi_array: dict) -> None:
         """Test that __getitem__ returns correct slices from NPZ data."""
+        from tensordict import TensorDict
+
         features = [Feature(name="features", path=npz_multi_array["path"])]
         targets = [Target(name="targets", path=npz_multi_array["path"])]
 
@@ -89,14 +91,15 @@ class TestFlexibleDatasetWithNpz:
 
         # Get first sample
         sample = dataset[0]
-        assert len(sample.features) == 1
-        assert len(sample.targets) == 1
-        assert sample.features[0].shape == (5,)
-        assert sample.targets[0].shape == (1,)
+        assert isinstance(sample, TensorDict)
+        assert len(sample["features"].keys()) == 1
+        assert len(sample["targets"].keys()) == 1
+        assert sample["features", "features"].shape == (5,)
+        assert sample["targets", "targets"].shape == (1,)
 
         # Verify data matches original
         np.testing.assert_allclose(
-            sample.features[0].numpy(),
+            sample["features", "features"].numpy(),
             npz_multi_array["features"][0],
             rtol=1e-5,
             atol=1e-7,
@@ -109,12 +112,12 @@ class TestFlexibleDatasetWithNpz:
         # Load with float64 precision
         with precision_override(PrecisionStrategy.FULL_64):
             dataset = FlexibleDataset(features=features)
-            assert dataset._feature_tensors[0].dtype == torch.float64
+            assert dataset._dataset_td["features", "data"].dtype == torch.float64
 
         # Load with float32 precision
         with precision_override(PrecisionStrategy.FULL_32):
             dataset = FlexibleDataset(features=features)
-            assert dataset._feature_tensors[0].dtype == torch.float32
+            assert dataset._dataset_td["features", "data"].dtype == torch.float32
 
     def test_npz_data_integrity(self, npz_multi_array: dict) -> None:
         """Test that data is preserved correctly through dataset loading."""
@@ -122,7 +125,7 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features)
 
         # Compare with original data
-        loaded_data = dataset._feature_tensors[0].numpy()
+        loaded_data = dataset._dataset_td["features", "features"].numpy()
         original_data = npz_multi_array["features"]
 
         np.testing.assert_allclose(loaded_data, original_data, rtol=1e-5, atol=1e-7)
@@ -133,9 +136,9 @@ class TestFlexibleDatasetWithNpz:
         features = [Feature(name="features", path=npz_multi_array["path"])]
         dataset = FlexibleDataset(features=features)
 
-        assert dataset._feature_tensors[0].shape == (10, 5)
+        assert dataset._dataset_td["features", "features"].shape == (10, 5)
         np.testing.assert_allclose(
-            dataset._feature_tensors[0].numpy(),
+            dataset._dataset_td["features", "features"].numpy(),
             npz_multi_array["features"],
             rtol=1e-5,
             atol=1e-7,
@@ -145,9 +148,9 @@ class TestFlexibleDatasetWithNpz:
         features2 = [Feature(name="latent", path=npz_multi_array["path"])]
         dataset2 = FlexibleDataset(features=features2)
 
-        assert dataset2._feature_tensors[0].shape == (10, 3)
+        assert dataset2._dataset_td["features", "latent"].shape == (10, 3)
         np.testing.assert_allclose(
-            dataset2._feature_tensors[0].numpy(),
+            dataset2._dataset_td["features", "latent"].numpy(),
             npz_multi_array["latent"],
             rtol=1e-5,
             atol=1e-7,
@@ -175,7 +178,7 @@ class TestFlexibleDatasetNpzErrors:
 
         # Should work when name matches
         assert len(dataset) == 10
-        assert dataset._feature_tensors[0].shape == (10, 5)
+        assert dataset._dataset_td["features", "data"].shape == (10, 5)
 
     def test_single_array_npz_with_wrong_name_raises(
         self, npz_single_array: dict
@@ -200,7 +203,7 @@ class TestFlexibleDatasetNpzErrors:
         targets = [Target(name="targets", path=path)]
 
         with pytest.raises(
-            ValueError, match="must share the same first dimension"
+            BatchComplianceError, match="same first dimension N"
         ):
             FlexibleDataset(features=features, targets=targets)
 
@@ -220,11 +223,11 @@ class TestFlexibleDatasetNpzPerformance:
 
         dataset = FlexibleDataset(features=features, targets=targets)
 
-        assert len(dataset._feature_tensors) == 2
-        assert len(dataset._target_tensors) == 1
-        assert dataset._feature_tensors[0].shape == (10, 5)
-        assert dataset._feature_tensors[1].shape == (10, 3)
-        assert dataset._target_tensors[0].shape == (10, 1)
+        assert len(dataset._feature_names) == 2
+        assert len(dataset._target_names) == 1
+        assert dataset._dataset_td["features", "features"].shape == (10, 5)
+        assert dataset._dataset_td["features", "latent"].shape == (10, 3)
+        assert dataset._dataset_td["targets", "targets"].shape == (10, 1)
 
     def test_lazy_loading_behavior(self, npz_multi_array: dict) -> None:
         """Test that only requested arrays are loaded from NPZ."""
@@ -233,5 +236,5 @@ class TestFlexibleDatasetNpzPerformance:
         dataset = FlexibleDataset(features=features)
 
         # Only features should be loaded, not other arrays in the NPZ
-        assert len(dataset._feature_tensors) == 1
-        assert len(dataset._target_tensors) == 0
+        assert len(dataset._feature_names) == 1
+        assert len(dataset._target_names) == 0

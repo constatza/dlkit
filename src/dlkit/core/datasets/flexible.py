@@ -28,6 +28,14 @@ from dlkit.tools.config.data_entries import (
 from .base import BaseDataset, register_dataset
 
 
+class BatchComplianceError(ValueError):
+    """Raised when dataset entries violate batch-shape invariants.
+
+    Enforces the contract that every entry must carry an explicit sample
+    dimension N as its first axis, and all entries must agree on N.
+    """
+
+
 class PlaceholderNotResolvedError(ValueError):
     """Raised when a placeholder entry is used without value injection."""
 
@@ -231,53 +239,70 @@ class FlexibleDataset(BaseDataset):
             targets: Target entries (PathTarget or ValueTarget from Target() factory)
 
         Raises:
+            BatchComplianceError: If any entry is scalar (0-D) or N sizes do not agree
             ValueError: If no features or targets are provided
             PlaceholderNotResolvedError: If placeholder entry without value
             TypeError: If raw dicts are passed (use Feature()/Target() instead)
         """
+        from tensordict import TensorDict
+
         feat_map = _normalize_entries(features)
         targ_map = _normalize_entries(targets)
 
         if not feat_map and not targ_map:
             raise ValueError("At least one feature or target entry is required")
 
-        # Load tensors positionally (insertion order = config order)
-        self._feature_tensors: tuple[Tensor, ...] = tuple(
+        # Store entry names
+        self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
+        self._target_names: tuple[str, ...] = tuple(targ_map.keys())
+
+        # Load tensors
+        feature_tensors: tuple[Tensor, ...] = tuple(
             _load_or_convert_tensor(source, array_key=name)
             for name, (source, _) in feat_map.items()
         )
-        self._target_tensors: tuple[Tensor, ...] = tuple(
+        target_tensors: tuple[Tensor, ...] = tuple(
             _load_or_convert_tensor(source, array_key=name)
             for name, (source, _) in targ_map.items()
         )
 
-        # Validate lengths positionally (no names needed)
-        all_tensors = (*self._feature_tensors, *self._target_tensors)
-        if not all_tensors:
-            raise ValueError("At least one feature or target entry is required after validation")
-
-        scalar_count = 0
-        non_scalar_lengths: set[int] = set()
+        # Validate batch compliance — explicit checks give clearer errors than TensorDict
+        all_tensors = (*feature_tensors, *target_tensors)
         for tensor in all_tensors:
             if tensor.dim() == 0:
-                scalar_count += 1
-                continue
-            length = int(tensor.size(0))
-            if length < 1:
-                raise ValueError("Feature/target tensors must have at least one sample")
-            non_scalar_lengths.add(length)
-
-        if non_scalar_lengths:
-            if len(non_scalar_lengths) > 1:
-                raise ValueError("Feature/target arrays must share the same first dimension")
-            self._length = non_scalar_lengths.pop()
-            if scalar_count and self._length > 1:
-                raise ValueError(
-                    "Scalar feature/target entries cannot be broadcast; provide per-sample values "
-                    "or remove scalars when dataset length exceeds one."
+                raise BatchComplianceError(
+                    "Scalar (0-D) tensor entries are not allowed. "
+                    "Every entry must include the sample dimension N as its first axis. "
+                    "Reshape scalars to (N, 1) tensors before use."
                 )
-        else:
-            self._length = 1
+
+        lengths = {int(t.size(0)) for t in all_tensors}
+        if len(lengths) > 1:
+            raise BatchComplianceError(
+                f"All entries must share the same first dimension N, "
+                f"but found differing sizes: {sorted(lengths)}."
+            )
+        if not lengths:
+            raise ValueError("At least one feature or target entry is required after validation")
+
+        n = next(iter(lengths))
+        if n < 1:
+            raise BatchComplianceError("Entries must contain at least one sample (N >= 1).")
+
+        self._length = n
+
+        # Build batched TensorDict — structurally enforces shape compliance after explicit checks
+        self._dataset_td = TensorDict(
+            {
+                "features": TensorDict(
+                    dict(zip(self._feature_names, feature_tensors)), batch_size=[n]
+                ),
+                "targets": TensorDict(
+                    dict(zip(self._target_names, target_tensors)), batch_size=[n]
+                ),
+            },
+            batch_size=[n],
+        )
 
     def __len__(self) -> int:
         """Return number of samples in dataset.
@@ -287,21 +312,37 @@ class FlexibleDataset(BaseDataset):
         """
         return self._length
 
-    def __getitem__(self, idx: int) -> Batch:
+    def __getitem__(self, idx: int) -> "TensorDict":
         """Get sample at index.
 
         Args:
             idx: Sample index
 
         Returns:
-            Batch with feature and target tensors in config-entry order
+            TensorDict with feature and target nested TensorDicts (batch_size=[])
         """
-        feature_tensors = tuple(
-            t if t.dim() == 0 else t[idx]
-            for t in self._feature_tensors
+        return self._dataset_td[idx]
+
+
+def collate_tensordict(batch: list) -> "TensorDict":
+    """Collate a list of TensorDict samples into a batched TensorDict.
+
+    Used as the collate_fn for DataLoaders with FlexibleDataset.
+
+    Args:
+        batch: List of TensorDict samples from __getitem__.
+
+    Returns:
+        Lazily stacked TensorDict with batch dimension.
+
+    Raises:
+        BatchComplianceError: If stacked batch size does not match expected count.
+    """
+    from tensordict import lazy_stack
+
+    result = lazy_stack(batch, dim=0)
+    if result.batch_size[0] != len(batch):
+        raise BatchComplianceError(
+            f"Collated batch size {result.batch_size[0]} does not match expected {len(batch)}."
         )
-        target_tensors = tuple(
-            t if t.dim() == 0 else t[idx]
-            for t in self._target_tensors
-        )
-        return Batch(features=feature_tensors, targets=target_tensors)
+    return result

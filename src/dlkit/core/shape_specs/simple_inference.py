@@ -58,26 +58,48 @@ class ShapeSummary:
 
 
 def infer_shapes_from_dataset(dataset: object) -> ShapeSummary:
-    """Sample index 0 from dataset and extract shapes from the returned Batch.
+    """Sample index 0 from dataset and extract shapes from the returned Batch or TensorDict.
 
     Args:
-        dataset: Any dataset object whose __getitem__ returns a Batch.
+        dataset: Any dataset object whose __getitem__ returns a Batch or TensorDict.
 
     Returns:
         ShapeSummary with in_shapes and out_shapes extracted from the sample.
 
     Raises:
-        ValueError: If dataset[0] does not return a Batch instance.
+        ValueError: If dataset[0] does not return a Batch or TensorDict instance.
     """
     from dlkit.core.datatypes.batch import Batch
 
     sample = dataset[0]
-    if not isinstance(sample, Batch):
-        raise ValueError(
-            f"Expected dataset[0] to return a Batch instance, got {type(sample).__name__}. "
-            "Update your dataset's __getitem__ to return Batch."
+
+    # Handle TensorDict format (new)
+    try:
+        from tensordict import TensorDict
+
+        if isinstance(sample, TensorDict):
+            feat_td = sample["features"]
+            targ_td = sample["targets"]
+            in_shapes = tuple(
+                tuple(int(d) for d in feat_td[k].shape)
+                for k in feat_td.keys()
+            )
+            out_shapes = tuple(
+                tuple(int(d) for d in targ_td[k].shape)
+                for k in targ_td.keys()
+            )
+            return ShapeSummary(in_shapes=in_shapes, out_shapes=out_shapes)
+    except ImportError:
+        pass
+
+    # Handle legacy Batch format (backward compat)
+    if isinstance(sample, Batch):
+        return ShapeSummary(
+            in_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.features),
+            out_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.targets),
         )
-    return ShapeSummary(
-        in_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.features),
-        out_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.targets),
+
+    raise ValueError(
+        f"Expected dataset[0] to return a Batch or TensorDict instance, got {type(sample).__name__}. "
+        "Update your dataset's __getitem__ to return Batch or TensorDict."
     )
