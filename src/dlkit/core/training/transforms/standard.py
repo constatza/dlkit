@@ -12,10 +12,6 @@ class StandardScaler(Transform):
     (via configure_shape()) and lazy allocation (during fit()).
     """
 
-    mean: torch.Tensor
-    std: torch.Tensor
-    dim: int | list[int]
-
     def __init__(self, dim: int | list[int] | None = None) -> None:
         """Initialize StandardScaler.
 
@@ -30,35 +26,51 @@ class StandardScaler(Transform):
         """
         super().__init__()
         self.dim = dim if dim is not None else 0
+        # Register empty placeholder buffers so state_dict() always contains these keys
+        # and load_state_dict() can fill them without pre-registration hacks
+        self.register_buffer("mean", torch.tensor([]))
+        self.register_buffer("std", torch.tensor([]))
 
     def fit(self, data: torch.Tensor) -> None:
         """Compute mean and std along specified dimensions.
 
-        If buffers haven't been pre-allocated via configure_shape(), they are
-        allocated lazily from the data shape.
-
         Args:
             data: Input tensor to compute statistics from.
         """
-        # Guard clause: Ensure buffers allocated
-        self._ensure_buffers_allocated(data)
-
-        self.mean = torch.mean(data, dim=self.dim, keepdim=True)
-        self.std = torch.std(data, dim=self.dim, keepdim=True)
+        mean = torch.mean(data, dim=self.dim, keepdim=True)
+        std = torch.std(data, dim=self.dim, keepdim=True)
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
         self.fitted = True
 
-    def _ensure_buffers_allocated(self, data: torch.Tensor) -> None:
-        """Allocate mean/std buffers if not already allocated.
+    def _load_from_state_dict(
+        self,
+        state_dict: dict,
+        prefix: str,
+        local_metadata: dict,
+        strict: bool,
+        missing_keys: list,
+        unexpected_keys: list,
+        error_msgs: list,
+    ) -> None:
+        """Pre-allocate buffers with correct shape from checkpoint before loading.
 
         Args:
-            data: Input data to infer shape from.
+            state_dict: Full state dictionary.
+            prefix: Module prefix for this module's keys.
+            local_metadata: Local metadata dict.
+            strict: Whether to enforce strict key matching.
+            missing_keys: List to accumulate missing key names.
+            unexpected_keys: List to accumulate unexpected key names.
+            error_msgs: List to accumulate error messages.
         """
-        # Guard: Early return if already allocated
-        if hasattr(self, 'mean') and self.mean is not None:
-            return
-
-        self.register_buffer("mean", torch.zeros(data.shape, device=data.device))
-        self.register_buffer("std", torch.ones(data.shape, device=data.device))
+        for name in ("mean", "std"):
+            key = f"{prefix}{name}"
+            if key in state_dict:
+                self.register_buffer(name, torch.empty_like(state_dict[key]))
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Standardize tensor to zero mean and unit variance.

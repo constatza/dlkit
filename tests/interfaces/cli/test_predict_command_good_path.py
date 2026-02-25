@@ -5,34 +5,69 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
+import torch
 from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.commands.predict import app as predict_app
 from dlkit.interfaces.api.domain import ConfigurationError
 from dlkit.tools.config import GeneralSettings
+from dlkit.interfaces.inference.config import InferenceResult as InferenceResultInference
+
+
+def _make_mock_predictor(feature_names: list[str] | None = None) -> MagicMock:
+    """Create a mock predictor that returns a single-tensor inference result."""
+    mock_predictor = MagicMock()
+    mock_predictor.is_loaded.return_value = True
+    mock_state = MagicMock()
+    mock_state.metadata = {"feature_names": feature_names or ["x"]}
+    mock_predictor._model_state = mock_state
+    mock_predictor.predict.return_value = InferenceResultInference(
+        predictions={"y": torch.tensor([[0.1, 0.9]])}
+    )
+    return mock_predictor
+
+
+def _make_mock_build_factory(feature_names: list[str] | None = None) -> MagicMock:
+    """Create a mock BuildFactory with a datamodule that yields one batch."""
+    mock_batch = MagicMock()
+    mock_batch.features = (torch.zeros(1, 4),)
+
+    mock_loader = [mock_batch]
+    mock_datamodule = MagicMock()
+    mock_datamodule.predict_dataloader.return_value = mock_loader
+
+    mock_components = MagicMock()
+    mock_components.datamodule = mock_datamodule
+
+    mock_factory_instance = MagicMock()
+    mock_factory_instance.build_components.return_value = mock_components
+
+    mock_factory_cls = MagicMock(return_value=mock_factory_instance)
+    return mock_factory_cls
 
 
 class TestPredictCommand:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
     @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.BuildFactory")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_predict_with_valid_inputs_succeeds(
         self,
         mock_present_result: Mock,
+        mock_build_factory_cls: Mock,
         mock_load_model: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
         sample_settings: GeneralSettings,
-        mock_successful_inference_result,
     ) -> None:
         mock_load_config.return_value = sample_settings
 
-        # Create a mock predictor that returns batch results
-        mock_predictor = MagicMock()
-        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_predictor = _make_mock_predictor()
         mock_load_model.return_value = mock_predictor
+
+        mock_build_factory_cls.side_effect = _make_mock_build_factory()
 
         result = cli_runner.invoke(
             predict_app, [str(sample_config_path), str(sample_checkpoint_path)]
@@ -42,7 +77,7 @@ class TestPredictCommand:
 
         mock_load_config.assert_called_once()
         mock_load_model.assert_called_once()
-        mock_predictor.predict_from_config.assert_called_once()
+        mock_predictor.predict.assert_called()
         mock_predictor.unload.assert_called_once()
         mock_present_result.assert_called_once()
 
@@ -78,23 +113,25 @@ class TestPredictCommand:
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
     @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.BuildFactory")
+    @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_infer_with_parameter_overrides(
         self,
+        mock_present_result: Mock,
+        mock_build_factory_cls: Mock,
         mock_load_model: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
         sample_settings: GeneralSettings,
-        mock_successful_inference_result,
         tmp_path: Path,
     ) -> None:
         mock_load_config.return_value = sample_settings
 
-        # Create a mock predictor that returns batch results
-        mock_predictor = MagicMock()
-        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_predictor = _make_mock_predictor()
         mock_load_model.return_value = mock_predictor
+        mock_build_factory_cls.side_effect = _make_mock_build_factory()
 
         output_dir = tmp_path / "custom_output"
         data_dir = tmp_path / "custom_data"
@@ -190,25 +227,25 @@ class TestPredictMainCallback:
 class TestPredictHelperFunctions:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
     @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.BuildFactory")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_saves_predictions_by_default(
         self,
         mock_present_result: Mock,
+        mock_build_factory_cls: Mock,
         mock_load_model: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
         sample_settings: GeneralSettings,
-        mock_successful_inference_result,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
         mock_load_config.return_value = sample_settings
 
-        # Create a mock predictor that returns batch results
-        mock_predictor = MagicMock()
-        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_predictor = _make_mock_predictor()
         mock_load_model.return_value = mock_predictor
+        mock_build_factory_cls.side_effect = _make_mock_build_factory()
 
         _run_inference_impl(config_path=sample_config_path, checkpoint=sample_checkpoint_path)
 
@@ -218,25 +255,25 @@ class TestPredictHelperFunctions:
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
     @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.BuildFactory")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_can_disable_prediction_saving(
         self,
         mock_present_result: Mock,
+        mock_build_factory_cls: Mock,
         mock_load_model: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
         sample_settings: GeneralSettings,
-        mock_successful_inference_result,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
         mock_load_config.return_value = sample_settings
 
-        # Create a mock predictor that returns batch results
-        mock_predictor = MagicMock()
-        mock_predictor.predict_from_config.return_value = iter([mock_successful_inference_result])
+        mock_predictor = _make_mock_predictor()
         mock_load_model.return_value = mock_predictor
+        mock_build_factory_cls.side_effect = _make_mock_build_factory()
 
         _run_inference_impl(
             config_path=sample_config_path,

@@ -7,7 +7,7 @@ All loading logic integrated directly - no use case objects.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator, Protocol, Self
+from typing import Protocol, Self
 
 import torch
 from loguru import logger
@@ -15,7 +15,6 @@ from loguru import logger
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.precision import precision_override
 from dlkit.interfaces.api.services.precision_service import get_precision_service
-from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 from .config import PredictorConfig, ModelState, InferenceResult
@@ -55,13 +54,6 @@ class IPredictor(Protocol):
         batch_size: int | None = None
     ) -> InferenceResult:
         """Execute inference on loaded model."""
-        ...
-
-    def predict_from_config(
-        self,
-        config: GeneralSettings | Path | str
-    ) -> Iterator[torch.Tensor | dict[str, torch.Tensor]]:
-        """Execute batch inference using dataset from config."""
         ...
 
     def is_loaded(self) -> bool:
@@ -274,14 +266,21 @@ class CheckpointPredictor(IPredictor):
                 inputs = apply_transforms(inputs, self._model_state.feature_transforms)
 
             # Model forward pass with no_grad
-            with torch.no_grad():
-                # Extract first value if single-entry dict
-                if len(inputs) == 1:
-                    model_input = next(iter(inputs.values()))
-                else:
-                    model_input = inputs
+            metadata = self._model_state.metadata
+            _feature_names_raw = metadata.get("feature_names", [])
+            feature_names: list[str] = (
+                _feature_names_raw if isinstance(_feature_names_raw, list) else []
+            )
 
-                predictions = self._model_state.model(model_input)
+            with torch.no_grad():
+                if len(inputs) == 1:
+                    predictions = self._model_state.model(next(iter(inputs.values())))
+                elif feature_names:
+                    tensors = tuple(inputs[k] for k in feature_names if k in inputs)
+                    predictions = self._model_state.model(*tensors)
+                else:
+                    # Fallback: insertion order (Python 3.7+ dict ordering guarantee)
+                    predictions = self._model_state.model(*inputs.values())
 
             # Apply inverse target transforms if requested
             if self._config.apply_transforms and self._model_state.target_transforms:
@@ -297,33 +296,6 @@ class CheckpointPredictor(IPredictor):
 
             # Return wrapped in InferenceResult dataclass (better than bare tensor)
             return InferenceResult(predictions=predictions)
-
-    def predict_from_config(
-        self,
-        config: GeneralSettings | Path | str
-    ) -> Iterator[torch.Tensor | dict[str, torch.Tensor]]:
-        """Execute batch inference using dataset from config.
-
-        Args:
-            config: Configuration with dataset settings
-
-        Yields:
-            Predictions for each batch
-
-        Raises:
-            PredictorNotLoadedError: If predictor not loaded
-            WorkflowError: If config loading fails
-        """
-        if not self._loaded:
-            raise PredictorNotLoadedError()
-
-        # TODO: Implement config-based batch inference
-        # This requires proper datamodule loading which is complex
-        # For now, raise NotImplementedError
-        raise NotImplementedError(
-            "predict_from_config not yet implemented in simplified architecture. "
-            "Use predict() directly with a dataloader."
-        )
 
     def is_loaded(self) -> bool:
         """Check if predictor is loaded and ready.

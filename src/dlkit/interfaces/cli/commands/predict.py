@@ -22,6 +22,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.inference.api import load_model
+from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -46,6 +47,26 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+def _build_feature_dict(
+    features: tuple,
+    feature_names: list[str],
+) -> dict:
+    """Map a positional features tuple to a named dict for the predictor.
+
+    Args:
+        features: Positional feature tensors from the dataloader batch.
+        feature_names: Ordered feature names from checkpoint metadata.
+
+    Returns:
+        Dict mapping name -> tensor, using indices as fallback names.
+    """
+    if feature_names and len(features) == len(feature_names):
+        return dict(zip(feature_names, features))
+    if len(features) == 1:
+        return {"x": features[0]}
+    return {str(i): t for i, t in enumerate(features)}
 
 
 def _run_inference_impl(
@@ -115,10 +136,8 @@ def _run_inference_impl(
             # Load predictor once
             load_task = progress.add_task("Loading predictor...", total=None)
 
-            # Determine effective batch size
             effective_batch_size = batch_size if batch_size is not None else 32
 
-            # Create predictor with context manager for automatic cleanup
             predictor = load_model(
                 checkpoint_path=effective_checkpoint,
                 device="auto",
@@ -128,16 +147,27 @@ def _run_inference_impl(
             )
             progress.remove_task(load_task)
 
-            # Run inference on dataset from config
+            # Build datamodule from settings, iterate batches, call predict()
             inference_task = progress.add_task("Running inference...", total=None)
 
-            # Collect all batch results
-            all_predictions = []
-            total_duration = 0.0
+            # Get feature names from checkpoint metadata for ordered dict construction
+            feature_names: list[str] = []
+            if predictor.is_loaded() and predictor._model_state is not None:
+                raw = predictor._model_state.metadata.get("feature_names", [])
+                if isinstance(raw, list):
+                    feature_names = raw
 
-            for batch_result in predictor.predict_from_config(settings):
-                all_predictions.append(batch_result.predictions)
-                total_duration += batch_result.duration_seconds
+            factory = BuildFactory()
+            components = factory.build_components(settings)
+            datamodule = components.datamodule
+            datamodule.setup("predict")
+            loader = datamodule.predict_dataloader()
+
+            all_predictions = []
+            for batch in loader:
+                feature_dict = _build_feature_dict(batch.features, feature_names)
+                result = predictor.predict(feature_dict)
+                all_predictions.append(result.predictions)
 
             progress.remove_task(inference_task)
 
@@ -148,10 +178,8 @@ def _run_inference_impl(
         import torch
 
         if all_predictions:
-            # Handle different prediction types
             if isinstance(all_predictions[0], dict):
-                # Combine dict predictions by concatenating each key
-                combined_predictions = {}
+                combined_predictions: dict = {}
                 for key in all_predictions[0].keys():
                     values = [pred[key] for pred in all_predictions if key in pred]
                     if values and torch.is_tensor(values[0]):
@@ -160,10 +188,8 @@ def _run_inference_impl(
                         combined_predictions[key] = values
                 predictions = combined_predictions
             elif torch.is_tensor(all_predictions[0]):
-                # Concatenate tensor predictions
                 predictions = torch.cat(all_predictions, dim=0)
             else:
-                # Keep as list for other types
                 predictions = all_predictions
         else:
             predictions = None
@@ -172,7 +198,7 @@ def _run_inference_impl(
         from dlkit.interfaces.api.domain.models import InferenceResult
 
         result = InferenceResult(
-            model_state=None, predictions=predictions, metrics=None, duration_seconds=total_duration
+            model_state=None, predictions=predictions, metrics=None, duration_seconds=0.0
         )
 
         console.print("🎉 Inference completed successfully!")

@@ -72,11 +72,6 @@ def load_model(
         ...     process(result)
         >>> predictor.unload()
 
-        >>> # Config-based batch inference
-        >>> predictor = load_model("model.ckpt")
-        >>> for batch_result in predictor.predict_from_config("config.toml"):
-        ...     process(batch_result)
-
         >>> # Lazy loading
         >>> predictor = load_model("model.ckpt", auto_load=False)
         >>> # ... do other setup ...
