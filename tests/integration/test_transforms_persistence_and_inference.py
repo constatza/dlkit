@@ -170,7 +170,7 @@ def predictor_transform_setup(tmp_path_factory: pytest.TempPathFactory) -> dict[
 
     raw_features = torch.from_numpy(X).float()
     raw_targets = torch.from_numpy(Y).float()
-    normalized_features = wrapper._feature_chains[0](raw_features)
+    normalized_features = wrapper._batch_transformer._feature_chains["x"](raw_features)
 
     return {
         "checkpoint": ckpt_path,
@@ -211,24 +211,24 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     preds = trainer.predict(loaded, datamodule=dm)
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
-    # Standard format: (predictions_tuple, targets_tuple, latents_tuple)
-    assert isinstance(batch_out, (tuple, list))
-    inv_pred = batch_out[0][0]  # First tensor of predictions tuple
-    inv_targ = batch_out[1][0]  # First tensor of targets tuple
+    # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
+    from tensordict import TensorDict as _TensorDict
+    assert isinstance(batch_out, _TensorDict)
+    inv_pred = batch_out["predictions"]
+    inv_targ = batch_out["targets"]["y"]
     assert inv_pred is not None and inv_targ is not None
 
     # Assert: inverse-transformed predictions and targets are in original space (strict)
-    # Compare first batch predictions to raw target batch
     raw_batch = next(iter(dm.predict_dataloader()))
-    raw_y = raw_batch.targets[0]
+    raw_y = raw_batch["targets", "y"]
     assert torch.allclose(inv_targ, raw_y, atol=1e-6)
     assert torch.allclose(inv_pred, raw_y, atol=1e-6)
 
-    # Assert: direct transforms applied exactly via wrapper's chain
+    # Assert: direct transforms applied exactly via wrapper's named chain
     assert loaded.model.last_x is not None
     x_in = loaded.model.last_x
-    raw_x = next(iter(dm.predict_dataloader())).features[0]
-    expected_x_in = loaded._feature_chains[0](raw_x)
+    raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
+    expected_x_in = loaded._batch_transformer._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
 
 
@@ -377,7 +377,7 @@ def test_manual_inverse_matches_default_path(predictor_transform_setup: dict[str
         manual_result = predictor_manual.predict({"x": normalized_batch})
 
     manual_predictions = _extract_prediction_tensor(manual_result)
-    manual_predictions_raw = apply_inverse_chain(manual_predictions, wrapper._target_chains[0])
+    manual_predictions_raw = apply_inverse_chain(manual_predictions, wrapper._batch_transformer._target_chains["y"])
 
     assert torch.allclose(manual_predictions_raw, default_predictions, atol=1e-6)
 
@@ -405,20 +405,21 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     preds = trainer.predict(rewrapped, datamodule=dm)
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
-    # Standard format: (predictions_tuple, targets_tuple, latents_tuple)
-    assert isinstance(batch_out, (tuple, list))
-    inv_pred = batch_out[0][0]  # First tensor of predictions tuple
-    inv_targ = batch_out[1][0]  # First tensor of targets tuple
+    # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
+    from tensordict import TensorDict as _TensorDict
+    assert isinstance(batch_out, _TensorDict)
+    inv_pred = batch_out["predictions"]
+    inv_targ = batch_out["targets"]["y"]
     assert inv_pred is not None and inv_targ is not None
 
     raw_batch = next(iter(dm.predict_dataloader()))
-    raw_y = raw_batch.targets[0]
+    raw_y = raw_batch["targets", "y"]
     assert torch.allclose(inv_targ, raw_y, atol=1e-6)
     assert torch.allclose(inv_pred, raw_y, atol=1e-6)
 
-    # Verify direct transform applied exactly via wrapper’s chain
+    # Verify direct transform applied exactly via wrapper’s named chain
     assert rewrapped.model.last_x is not None
     x_in = rewrapped.model.last_x
-    raw_x = next(iter(dm.predict_dataloader())).features[0]
-    expected_x_in = rewrapped._feature_chains[0](raw_x)
+    raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
+    expected_x_in = rewrapped._batch_transformer._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)

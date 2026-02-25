@@ -18,10 +18,6 @@ class MinMaxScaler(Transform):
     making it suitable for batch-wise fitting on large datasets.
     """
 
-    min: torch.Tensor
-    max: torch.Tensor
-    dim: tuple[int, ...]
-
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, *, dim: int | Sequence[int] = 0) -> None:
         """Initialize MinMaxScaler.
@@ -39,13 +35,15 @@ class MinMaxScaler(Transform):
         """
         super().__init__()
         self.dim = dim if isinstance(dim, Sequence) else (dim,)
+        # Register empty placeholder buffers so state_dict() always contains these keys
+        # and load_state_dict() can fill them without pre-registration hacks
+        self.register_buffer("min", torch.tensor([]))
+        self.register_buffer("max", torch.tensor([]))
 
     def fit(self, data: torch.Tensor) -> None:
         """Compute (and accumulate) the min/max along specified dimensions.
 
-        If buffers haven't been pre-allocated via configure_shape(), they are
-        allocated lazily from the data shape. When called multiple times,
-        accumulates global min/max values.
+        When called multiple times, accumulates global min/max values.
 
         Args:
             data: Input tensor to compute min/max statistics from.
@@ -56,41 +54,51 @@ class MinMaxScaler(Transform):
             >>> scaler.fit(batch1)  # Computes min/max
             >>> scaler.fit(batch2)  # Accumulates global min/max
         """
-        # Guard clause: Ensure buffers allocated
-        self._ensure_buffers_allocated(data)
+        # Normalize dim indices
+        dim = tuple(idx % len(data.shape) for idx in self.dim)
+        self.dim = dim
 
         # Compute current batch statistics
-        current_min = torch.amin(input=data, dim=self.dim, keepdim=True)
-        current_max = torch.amax(input=data, dim=self.dim, keepdim=True)
+        current_min = torch.amin(input=data, dim=list(dim), keepdim=True)
+        current_max = torch.amax(input=data, dim=list(dim), keepdim=True)
 
-        # Guard clause: First fit - initialize and return
+        # First fit or accumulate
         if not self.fitted:
-            self.min = current_min
-            self.max = current_max
+            self.register_buffer("min", current_min)
+            self.register_buffer("max", current_max)
             self.fitted = True
-            return
+        else:
+            self.register_buffer("min", torch.minimum(self.min, current_min))
+            self.register_buffer("max", torch.maximum(self.max, current_max))
 
-        # Accumulate global min/max across multiple fit() calls
-        self.min = torch.minimum(self.min, current_min)
-        self.max = torch.maximum(self.max, current_max)
-
-    def _ensure_buffers_allocated(self, data: torch.Tensor) -> None:
-        """Allocate min/max buffers if not already allocated.
+    def _load_from_state_dict(
+        self,
+        state_dict: dict,
+        prefix: str,
+        local_metadata: dict,
+        strict: bool,
+        missing_keys: list,
+        unexpected_keys: list,
+        error_msgs: list,
+    ) -> None:
+        """Pre-allocate buffers with correct shape from checkpoint before loading.
 
         Args:
-            data: Input data to infer shape from.
+            state_dict: Full state dictionary.
+            prefix: Module prefix for this module's keys.
+            local_metadata: Local metadata dict.
+            strict: Whether to enforce strict key matching.
+            missing_keys: List to accumulate missing key names.
+            unexpected_keys: List to accumulate unexpected key names.
+            error_msgs: List to accumulate error messages.
         """
-        # Guard: Early return if already allocated
-        if hasattr(self, 'min') and self.min is not None:
-            return
-
-        # Normalize dim indices
-        self.dim = tuple([idx % len(data.shape) for idx in self.dim])
-
-        # Compute moments shape from data
-        moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(data.shape)])
-        self.register_buffer("min", torch.zeros(moments_shape, device=data.device))
-        self.register_buffer("max", torch.ones(moments_shape, device=data.device))
+        for name in ("min", "max"):
+            key = f"{prefix}{name}"
+            if key in state_dict:
+                self.register_buffer(name, torch.empty_like(state_dict[key]))
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Scale tensor to interval [-1, 1].

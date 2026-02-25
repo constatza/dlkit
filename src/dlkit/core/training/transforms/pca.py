@@ -40,14 +40,6 @@ class PCA(Transform):
     or determined dynamically during fit().
     """
 
-    mean: torch.Tensor | None
-    components: torch.Tensor | None
-    explained_variance: torch.Tensor | None
-    explained_variance_ratio: torch.Tensor | None
-    total_explained_variance: float | None
-    n_components: int
-    n_power_iterations: int
-
     def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
 
@@ -71,11 +63,12 @@ class PCA(Transform):
         super().__init__()
         self.n_components = n_components
         self.n_power_iterations = n_power_iterations
-        self.mean = None
-        self.components = None
-        self.explained_variance = None
-        self.explained_variance_ratio = None
-        self.total_explained_variance = None
+        # Register empty placeholder buffers for checkpoint support
+        self.register_buffer("mean", torch.tensor([]))
+        self.register_buffer("components", torch.tensor([]))
+        self.register_buffer("explained_variance", torch.tensor([]))
+        self.register_buffer("explained_variance_ratio", torch.tensor([]))
+        self.register_buffer("total_explained_variance", torch.tensor(0.0))
 
     def fit(self, data: torch.Tensor, dim: int = -1) -> None:
         """Fit the PCA transformer on the input
@@ -99,8 +92,8 @@ class PCA(Transform):
         n_samples, _ = data.shape
 
         # Compute the mean manually for later use in forward and inverse transformations.
-        self.mean = torch.mean(data, dim=0, keepdim=True)
-        data_centered = data - self.mean
+        mean = torch.mean(data, dim=0, keepdim=True)
+        data_centered = data - mean
 
         # Compute total variance: sum of squared deviations divided by (n_samples - 1).
         total_variance = torch.sum(data_centered.pow(2)) / (n_samples - 1)
@@ -114,17 +107,53 @@ class PCA(Transform):
         )
         # Principal components are the right singular vectors.
         # V has shape (n_features, n_components); we transpose to (n_components, n_features)
-        self.components = V.T
+        components = V.T
 
         # Compute the explained variance from singular values using Bessel's correction.
-        self.explained_variance = S**2 / (n_samples - 1)
+        explained_variance = S**2 / (n_samples - 1)
 
         # Compute the explained variance ratio with respect to the total variance.
-        self.explained_variance_ratio = self.explained_variance / total_variance
-        self.total_explained_variance = torch.sum(self.explained_variance_ratio).item()
+        explained_variance_ratio = explained_variance / total_variance
+        total_explained_variance = torch.sum(explained_variance_ratio).item()
+
+        # Register buffers for checkpoint support
+        self.register_buffer("mean", mean)
+        self.register_buffer("components", components)
+        self.register_buffer("explained_variance", explained_variance)
+        self.register_buffer("explained_variance_ratio", explained_variance_ratio)
+        self.register_buffer("total_explained_variance", torch.tensor(total_explained_variance))
 
         self.fitted = True
-        logger.info(f"PCA total explained variance ratio: {self.total_explained_variance:.4e}")
+        logger.info(f"PCA total explained variance ratio: {self.total_explained_variance.item():.4e}")
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict,
+        prefix: str,
+        local_metadata: dict,
+        strict: bool,
+        missing_keys: list,
+        unexpected_keys: list,
+        error_msgs: list,
+    ) -> None:
+        """Pre-allocate buffers with correct shape from checkpoint before loading.
+
+        Args:
+            state_dict: Full state dictionary.
+            prefix: Module prefix for this module's keys.
+            local_metadata: Local metadata dict.
+            strict: Whether to enforce strict key matching.
+            missing_keys: List to accumulate missing key names.
+            unexpected_keys: List to accumulate unexpected key names.
+            error_msgs: List to accumulate error messages.
+        """
+        for name in ("mean", "components", "explained_variance", "explained_variance_ratio", "total_explained_variance"):
+            key = f"{prefix}{name}"
+            if key in state_dict:
+                self.register_buffer(name, torch.empty_like(state_dict[key]))
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
 
     @reshaper2d
     def forward(self, data: torch.Tensor) -> torch.Tensor:
@@ -139,7 +168,7 @@ class PCA(Transform):
         Raises:
             TransformNotFittedError: If fit() hasn't been called yet.
         """
-        if not self.fitted or self.mean is None or self.components is None:
+        if not self.fitted:
             raise TransformNotFittedError("PCA")
 
         # Center the data using the stored mean
@@ -165,7 +194,7 @@ class PCA(Transform):
         Raises:
             TransformNotFittedError: If fit() hasn't been called yet.
         """
-        if not self.fitted or self.mean is None or self.components is None:
+        if not self.fitted:
             raise TransformNotFittedError("PCA")
 
         device = projected.device
