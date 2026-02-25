@@ -51,6 +51,16 @@ See `src/dlkit/core/datasets/README.md` for detailed documentation and examples.
 
 ## Quick Start (CLI)
 
+```bash
+# Train a model
+uv run dlkit train config.toml
+
+# Run predictions on a dataset
+uv run dlkit predict config.toml model.ckpt
+
+# Hyperparameter optimization
+uv run dlkit optimize config.toml --trials 50
+```
 
 ## Example Configuration (auto-generated)
 
@@ -370,27 +380,18 @@ Raw Features → Forward Transform → Model → Inverse Transform → Original 
 Attach transforms to features/targets in your TOML config via `TransformSettings`:
 
 ```toml
-[DATASET.entries.x]
-path = "data/features.npy"
-dtype = "float32"
-[[DATASET.entries.x.transforms]]
-name = "MinMaxScaler"
-module_path = "dlkit.core.training.transforms.minmax"
-dim = 0
-
-# Per-sample L2 normalization (no fitting required)
-[[DATASET.entries.x.transforms]]
-name = "SampleNormL2"
-module_path = "dlkit.core.training.transforms.sample_norm"
-eps = 1e-8
-
-[DATASET.entries.y]
-path = "data/targets.npy"
-dtype = "float32"
-[[DATASET.entries.y.transforms]]
-name = "PCA"
-module_path = "dlkit.core.training.transforms.pca"
-n_components = 8
+[DATASET]
+features = [
+  { name = "x", path = "data/features.npy", dtype = "float32", transforms = [
+    { name = "MinMaxScaler", module_path = "dlkit.core.training.transforms.minmax", dim = 0 },
+    { name = "SampleNormL2", module_path = "dlkit.core.training.transforms.sample_norm", eps = 1e-8 },
+  ] }
+]
+targets = [
+  { name = "y", path = "data/targets.npy", dtype = "float32", transforms = [
+    { name = "PCA", module_path = "dlkit.core.training.transforms.pca", n_components = 8 },
+  ] }
+]
 ```
 
 **Available Transforms:**
@@ -407,11 +408,11 @@ n_components = 8
 
 **Fitting Phase** (`on_fit_start()` - before first training step):
 1. Accumulates **entire training dataset** across all batches
-2. Builds `TransformChain` per entry (features and targets)
+2. Builds `TransformChain` per named entry (features and targets)
 3. Fits chains globally on raw training data
-4. Stores fitted chains in two separate `ModuleDict`s:
-   - `fitted_feature_transforms` - for input preprocessing
-   - `fitted_target_transforms` - for target normalization
+4. Stores fitted chains inside a `NamedBatchTransformer` with two `ModuleDict`s:
+   - `_batch_transformer._feature_chains.<name>` - for input preprocessing
+   - `_batch_transformer._target_chains.<name>` - for target normalization
 
 **During Training/Validation/Test:**
 ```python
@@ -433,13 +434,15 @@ predictions = model(features)                           # Predicts in normalized
 predictions = target_transforms.inverse(predictions)    # Normalized → raw (for user)
 ```
 
-The `StandardLightningWrapper` handles all transform application automatically. Fitted transform state is persisted inside `fitted_feature_transforms.*` and `fitted_target_transforms.*` checkpoint keys.
+The `StandardLightningWrapper` handles all transform application automatically. Fitted transform state is persisted inside `_batch_transformer._feature_chains.<entry_name>.*` and `_batch_transformer._target_chains.<entry_name>.*` checkpoint keys.
 
 ### Persistence Guarantees
 
 - Transforms are cached globally and written to the checkpoint alongside model weights.
 - Saving via Lightning (`Trainer.save_checkpoint`) or a raw `state_dict()` preserves the fitted chains.
 - Loading the wrapper or `load_model()` reconstructs the exact chain, including running stats (e.g., min/max, PCA components).
+
+For checkpoint structure and state dict key patterns, see [`src/dlkit/core/models/wrappers/README.md`](src/dlkit/core/models/wrappers/README.md).
 
 ### Inference Behavior
 
@@ -472,7 +475,7 @@ For advanced workflows:
       logits = predictor.predict({"x": normalized})
   ```
 
-- **Manual control**: Use `TransformChainExecutor.from_checkpoint("model.ckpt")` to pull out the fitted chains for custom serving stacks (e.g., streaming inference, Spark jobs). Apply `apply_feature_transforms()` or `apply_inverse_target_transforms()` against your own tensors whenever needed.
+- **Manual control**: Use `load_transforms_from_checkpoint()` from `dlkit.interfaces.inference.transforms` to extract the fitted chains for custom serving stacks (e.g., streaming inference, Spark jobs).
 
 These guarantees are covered by the integration tests in `tests/integration/test_transforms_persistence_and_inference.py`.
 
@@ -761,6 +764,20 @@ result = predictor.predict({"x": already_normalized_data})
 Model outputs
 - For multi-target setups your model forward should return a dict with keys matching target names.
 - For single-target setups returning a single tensor is fine (paired automatically).
+
+## Advanced Loss Keyword Arguments
+
+Losses and metrics can receive additional tensors from the batch, beyond the default
+`(predictions, target)` pair.
+
+- Mark context tensors with `model_input = false` so they are not passed to `model.forward()`.
+- Use `loss_input` on `Feature`/`Target` entries for automatic loss-kwarg routing.
+- Use `WRAPPER.loss_function.target_key` and `WRAPPER.loss_function.extra_inputs` for explicit routing.
+- Metrics support the same pattern via `WRAPPER.metrics[*].target_key` and `extra_inputs`.
+
+Detailed guide and edge-case behavior:
+- [`src/dlkit/core/training/README.md`](src/dlkit/core/training/README.md)
+- [`src/dlkit/core/models/wrappers/README.md`](src/dlkit/core/models/wrappers/README.md)
 
 ## Config Anatomy
 
