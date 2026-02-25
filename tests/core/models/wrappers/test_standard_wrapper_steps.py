@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import pytest
 import torch
 from torch import nn
+from tensordict import TensorDict
 
-from dlkit.core.datatypes.batch import Batch
 from dlkit.core.models.wrappers.standard import StandardLightningWrapper
 from dlkit.tools.config.components.model_components import (
+    LossComponentSettings,
+    LossInputRef,
     ModelComponentSettings,
     WrapperComponentSettings,
 )
@@ -16,16 +19,26 @@ from dlkit.tools.config.data_entries import Feature, Target
 
 class _Id(nn.Module):
     def forward(self, x):  # noqa: ANN001
-        # Identity: return the input tensor
         return x
 
 
+def _make_batch(batch_size: int = 2, feat_dim: int = 3) -> TensorDict:
+    """Create a minimal TensorDict batch for wrapper step tests."""
+    return TensorDict(
+        {
+            "features": TensorDict({"x": torch.ones(batch_size, feat_dim)}, batch_size=[batch_size]),
+            "targets": TensorDict({"y": torch.zeros(batch_size, feat_dim)}, batch_size=[batch_size]),
+        },
+        batch_size=[batch_size],
+    )
+
+
 def test_standard_wrapper_basic_steps(monkeypatch):  # noqa: ANN001
-    # Make FactoryProvider.create_component return our simple model and loss/metric dummies
+    # Monkeypatch FactoryProvider to return our simple loss/metric dummies.
+    # Model building goes through _build_model_from_settings (not FactoryProvider).
     def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
         if isinstance(settings, ModelComponentSettings):
             return _Id()
-        # For metrics/loss/optimizer/scheduler, return callables/objects as needed
         return lambda a, b: torch.nn.functional.mse_loss(a, b)
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
@@ -34,13 +47,13 @@ def test_standard_wrapper_basic_steps(monkeypatch):  # noqa: ANN001
         name="_Id", module_path="tests.core.models.wrappers.test_standard_wrapper_steps"
     )
     wset = WrapperComponentSettings()
-    # Create entry configs for feature and target
     entry_configs = (Feature(name="x"), Target(name="y"))
     wrapper = StandardLightningWrapper(
         model_settings=mdl, settings=wset, entry_configs=entry_configs
     )
 
-    batch = Batch(features=(torch.ones(2, 3),), targets=(torch.zeros(2, 3),))
+    batch = _make_batch()
+
     out = wrapper.training_step(batch, 0)
     assert "loss" in out
 
@@ -49,3 +62,251 @@ def test_standard_wrapper_basic_steps(monkeypatch):  # noqa: ANN001
 
     tst = wrapper.test_step(batch, 0)
     assert "test_loss" in tst
+
+
+# ============================================================================
+# loss_input routing tests
+# ============================================================================
+
+_MODULE = "tests.core.models.wrappers.test_standard_wrapper_steps"
+
+
+@pytest.fixture
+def mdl_settings() -> ModelComponentSettings:
+    """Minimal model settings pointing to the identity model in this module."""
+    return ModelComponentSettings(name="_Id", module_path=_MODULE)
+
+
+def _make_wrapper_with_loss(
+    monkeypatch: pytest.MonkeyPatch,
+    captured: dict,
+    entry_configs: tuple,
+    wrapper_settings: WrapperComponentSettings | None = None,
+) -> StandardLightningWrapper:
+    """Build a wrapper whose loss function captures kwargs into `captured`."""
+
+    def _kwarg_loss(preds: torch.Tensor, target: torch.Tensor, **kwargs: object) -> torch.Tensor:
+        captured.update(kwargs)
+        return torch.nn.functional.mse_loss(preds, target)
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+        return _kwarg_loss
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    wset = wrapper_settings or WrapperComponentSettings()
+    return StandardLightningWrapper(
+        model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+        settings=wset,
+        entry_configs=entry_configs,
+    )
+
+
+def test_loss_input_str_routes_entry_as_named_kwarg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """loss_input='K' on a feature routes the tensor as kwarg K= to the loss function."""
+    captured: dict = {}
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="stiffness", model_input=False, loss_input="K"),
+        Target(name="y"),
+    )
+    wrapper = _make_wrapper_with_loss(monkeypatch, captured, entry_configs)
+    K_val = torch.eye(3).unsqueeze(0).expand(2, 3, 3)
+    batch = TensorDict(
+        {
+            "features": TensorDict(
+                {"x": torch.ones(2, 3), "stiffness": K_val}, batch_size=[2]
+            ),
+            "targets": TensorDict({"y": torch.zeros(2, 3)}, batch_size=[2]),
+        },
+        batch_size=[2],
+    )
+
+    wrapper.training_step(batch, 0)
+
+    assert "K" in captured
+    assert captured["K"].shape == (2, 3, 3)
+
+
+def test_loss_input_context_feature_excluded_from_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """model_input=False, loss_input='K' entry is not passed to model but is in loss kwargs."""
+    captured: dict = {}
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+
+        def _loss(preds: torch.Tensor, target: torch.Tensor, **kwargs: object) -> torch.Tensor:
+            captured.update(kwargs)
+            return torch.nn.functional.mse_loss(preds, target)
+
+        return _loss
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="K", model_input=False, loss_input="K"),
+        Target(name="y"),
+    )
+    wrapper = StandardLightningWrapper(
+        model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+        settings=WrapperComponentSettings(),
+        entry_configs=entry_configs,
+    )
+
+    # "K" must not appear in the model invoker's feature keys
+    assert "K" not in wrapper._model_invoker._feature_keys
+    assert "x" in wrapper._model_invoker._feature_keys
+
+    batch = TensorDict(
+        {
+            "features": TensorDict(
+                {"x": torch.ones(2, 3), "K": torch.eye(3).expand(2, 3, 3)}, batch_size=[2]
+            ),
+            "targets": TensorDict({"y": torch.zeros(2, 3)}, batch_size=[2]),
+        },
+        batch_size=[2],
+    )
+
+    wrapper.training_step(batch, 0)
+
+    # Loss received K as kwarg
+    assert "K" in captured
+
+
+def test_duplicate_loss_input_across_entries_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two entries with the same loss_input value raise ValueError at construction."""
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+        return lambda a, b, **kw: torch.nn.functional.mse_loss(a, b)
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="K1", model_input=False, loss_input="K"),
+        Feature(name="K2", model_input=False, loss_input="K"),  # duplicate
+        Target(name="y"),
+    )
+
+    with pytest.raises(ValueError, match="Duplicate loss_input kwarg 'K'"):
+        StandardLightningWrapper(
+            model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+            settings=WrapperComponentSettings(),
+            entry_configs=entry_configs,
+        )
+
+
+def test_loss_input_and_extra_inputs_overlap_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same kwarg in both DataEntry.loss_input and extra_inputs raises ValueError."""
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+        return lambda a, b, **kw: torch.nn.functional.mse_loss(a, b)
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="stiffness", model_input=False, loss_input="K"),
+        Target(name="y"),
+    )
+    wset = WrapperComponentSettings(
+        loss_function=LossComponentSettings(
+            extra_inputs=(LossInputRef(arg="K", key="features.stiffness"),),
+        )
+    )
+
+    with pytest.raises(ValueError, match="'K'"):
+        StandardLightningWrapper(
+            model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+            settings=wset,
+            entry_configs=entry_configs,
+        )
+
+
+def test_loss_input_and_extra_inputs_non_overlap_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-overlapping loss_input and extra_inputs both appear in the loss call."""
+    captured: dict = {}
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+
+        def _loss(preds: torch.Tensor, target: torch.Tensor, **kwargs: object) -> torch.Tensor:
+            captured.update(kwargs)
+            return torch.nn.functional.mse_loss(preds, target)
+
+        return _loss
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="K1", model_input=False, loss_input="kwarg1"),
+        Feature(name="K2", model_input=False),  # routed only via explicit extra_inputs
+        Target(name="y"),
+    )
+    wset = WrapperComponentSettings(
+        loss_function=LossComponentSettings(
+            extra_inputs=(LossInputRef(arg="kwarg2", key="features.K2"),),
+        )
+    )
+    wrapper = StandardLightningWrapper(
+        model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+        settings=wset,
+        entry_configs=entry_configs,
+    )
+    batch = TensorDict(
+        {
+            "features": TensorDict(
+                {
+                    "x": torch.ones(2, 3),
+                    "K1": torch.ones(2, 2),
+                    "K2": torch.zeros(2, 2),
+                },
+                batch_size=[2],
+            ),
+            "targets": TensorDict({"y": torch.zeros(2, 3)}, batch_size=[2]),
+        },
+        batch_size=[2],
+    )
+
+    wrapper.training_step(batch, 0)
+
+    assert "kwarg1" in captured
+    assert "kwarg2" in captured
+
+
+def test_signature_validation_catches_missing_kwarg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Build-time signature check raises ValueError when loss function lacks the kwarg."""
+
+    def _strict_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Loss with no extra kwargs accepted."""
+        return torch.nn.functional.mse_loss(preds, target)
+
+    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+        if isinstance(settings, ModelComponentSettings):
+            return _Id()
+        return _strict_loss
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    entry_configs = (
+        Feature(name="x"),
+        Feature(name="K", model_input=False, loss_input="K"),
+        Target(name="y"),
+    )
+
+    with pytest.raises(ValueError, match="no parameter named 'K'"):
+        StandardLightningWrapper(
+            model_settings=ModelComponentSettings(name="_Id", module_path=_MODULE),
+            settings=WrapperComponentSettings(),
+            entry_configs=entry_configs,
+        )

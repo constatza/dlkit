@@ -1,10 +1,11 @@
-"""Factory classes for creating Lightning wrappers.
+"""Factory for creating Lightning wrappers.
 
-This module provides factory classes that automatically detect the appropriate
-wrapper type based on model characteristics and provide convenient creation methods.
+Provides convenient factory methods for creating the appropriate wrapper type
+based on model characteristics and explicit type requests.
 """
 
 import warnings
+from typing import Any
 
 from torch import nn
 
@@ -16,153 +17,121 @@ from dlkit.tools.config import (
 )
 from dlkit.tools.config.data_entries import DataEntry
 from .base import ProcessingLightningWrapper
-from .standard import StandardLightningWrapper, BareWrapper
+from .standard import StandardLightningWrapper
 from .graph import GraphLightningWrapper
 from .timeseries import TimeSeriesLightningWrapper
 
 
 class WrapperFactory:
     """Factory for creating appropriate Lightning wrappers.
-    
-    This factory uses heuristics to determine the best wrapper type for a given
-    model and provides convenient methods for wrapper creation.
-    
+
+    Uses heuristics to determine the best wrapper type for a given model and
+    provides convenient methods for explicit wrapper creation.
+
     Example:
         ```python
-        # Automatic wrapper detection
-        wrapper = WrapperFactory.create_wrapper(
-            model_settings=model_settings,
-            settings=wrapper_settings,
-            shape_spec=shape_spec
-        )
-        
-        # Explicit wrapper type
         wrapper = WrapperFactory.create_standard_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
-            shape_spec=shape_spec
+            entry_configs=data_configs,
         )
         ```
     """
-    
+
     @staticmethod
     def create_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
         wrapper_type: str = "auto",
         entry_configs: tuple[DataEntry, ...] | None = None,
-        **kwargs
-    ):
+        **kwargs: Any,
+    ) -> ProcessingLightningWrapper:
         """Create an appropriate Lightning wrapper for the given configuration.
-        
+
         Args:
-            model_settings: Model configuration settings
-            settings: Wrapper configuration settings
-            wrapper_type: Type of wrapper ("auto", "standard", "graph", "bare")
-            entry_configs: Data entry configurations for pipeline setup
-            **kwargs: Additional arguments passed to wrapper
-            
+            model_settings: Model configuration settings.
+            settings: Wrapper configuration settings.
+            wrapper_type: Type of wrapper ('auto', 'standard', 'graph').
+            entry_configs: Data entry configurations for pipeline setup.
+            **kwargs: Additional arguments passed to wrapper.
+
         Returns:
-            Appropriate ProcessingLightningWrapper instance
+            Appropriate ProcessingLightningWrapper instance.
         """
         if wrapper_type == "auto":
             wrapper_type = WrapperFactory._detect_wrapper_type(model_settings)
-        
-        # Create wrapper based on detected/specified type
-        if wrapper_type == "graph":
-            return WrapperFactory.create_graph_wrapper(
-                model_settings=model_settings,
-                settings=settings,
-                entry_configs=entry_configs,
-                **kwargs
-            )
-        elif wrapper_type == "timeseries":
-            return WrapperFactory.create_timeseries_wrapper(
-                model_settings=model_settings,
-                settings=settings,
-                entry_configs=entry_configs,
-                **kwargs
-            )
-        elif wrapper_type == "bare":
-            return WrapperFactory.create_bare_wrapper(
-                model_settings=model_settings,
-                **kwargs
-            )
-        else:  # "standard"
-            return WrapperFactory.create_standard_wrapper(
-                model_settings=model_settings,
-                settings=settings,
-                entry_configs=entry_configs,
-                **kwargs
-            )
-    
+
+        match wrapper_type:
+            case "graph":
+                return WrapperFactory.create_graph_wrapper(
+                    model_settings=model_settings,
+                    settings=settings,
+                    entry_configs=entry_configs,
+                    **kwargs,
+                )
+            case "timeseries":
+                return WrapperFactory.create_timeseries_wrapper(
+                    model_settings=model_settings,
+                    settings=settings,
+                    entry_configs=entry_configs,
+                    **kwargs,
+                )
+            case _:
+                return WrapperFactory.create_standard_wrapper(
+                    model_settings=model_settings,
+                    settings=settings,
+                    entry_configs=entry_configs,
+                    **kwargs,
+                )
+
     @staticmethod
     def create_standard_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> StandardLightningWrapper:
-        """Create a standard Lightning wrapper for tensor-based models.
+        """Create a standard Lightning wrapper for tensor/TensorDict-based models.
 
         Args:
-            model_settings: Model configuration settings
-            settings: Wrapper configuration settings
-            entry_configs: Data entry configurations for pipeline setup
-            **kwargs: Additional arguments passed to wrapper
+            model_settings: Model configuration settings.
+            settings: Wrapper configuration settings.
+            entry_configs: Data entry configurations.
+            **kwargs: Additional arguments passed to wrapper.
 
         Returns:
-            StandardLightningWrapper instance
+            StandardLightningWrapper instance.
         """
         return StandardLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            **kwargs
+            **kwargs,
         )
-    
+
     @staticmethod
     def create_graph_wrapper(
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> GraphLightningWrapper:
         """Create a graph Lightning wrapper for PyTorch Geometric models.
 
         Args:
-            model_settings: Model configuration settings
-            settings: Wrapper configuration settings
-            entry_configs: Data entry configurations for pipeline setup
-            **kwargs: Additional arguments passed to wrapper
+            model_settings: Model configuration settings.
+            settings: Wrapper configuration settings.
+            entry_configs: Data entry configurations.
+            **kwargs: Additional arguments passed to wrapper.
 
         Returns:
-            GraphLightningWrapper instance
+            GraphLightningWrapper instance.
         """
         return GraphLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            **kwargs
-        )
-    
-    @staticmethod
-    def create_bare_wrapper(
-        model_settings: ModelComponentSettings,
-        **kwargs
-    ) -> BareWrapper:
-        """Create a bare Lightning wrapper with minimal functionality.
-        
-        Args:
-            model_settings: Model configuration settings
-            **kwargs: Additional arguments passed to wrapper
-            
-        Returns:
-            BareWrapper instance
-        """
-        return BareWrapper(
-            model_settings=model_settings,
-            **kwargs
+            **kwargs,
         )
 
     @staticmethod
@@ -170,133 +139,119 @@ class WrapperFactory:
         model_settings: ModelComponentSettings,
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> TimeSeriesLightningWrapper:
         """Create a timeseries Lightning wrapper.
 
         Args:
-            model_settings: Model configuration settings
-            settings: Wrapper configuration settings
-            entry_configs: Data entry configurations for pipeline setup
-            **kwargs: Additional arguments passed to wrapper
+            model_settings: Model configuration settings.
+            settings: Wrapper configuration settings.
+            entry_configs: Data entry configurations.
+            **kwargs: Additional arguments passed to wrapper.
+
+        Returns:
+            TimeSeriesLightningWrapper instance.
         """
         return TimeSeriesLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
-            **kwargs
+            **kwargs,
         )
-    
+
     @staticmethod
     def _detect_wrapper_type(model_settings: ModelComponentSettings) -> str:
         """Detect the appropriate wrapper type based on model characteristics.
-        
+
         Args:
-            model_settings: Model configuration settings to analyze
-            
+            model_settings: Model configuration settings to analyze.
+
         Returns:
-            Detected wrapper type string ("standard", "graph")
+            Detected wrapper type string ('standard', 'graph').
         """
-        # Build model to inspect its characteristics
         try:
-            model = FactoryProvider.create_component(model_settings, BuildContext(mode="inspection"))
+            model = FactoryProvider.create_component(
+                model_settings, BuildContext(mode="inspection")
+            )
             model_name = model.__class__.__name__.lower()
             model_module = model.__class__.__module__.lower()
-            
-            # Check for graph models
-            graph_indicators = [
-                'graph', 'gnn', 'gcn', 'gat', 'sage', 'gin', 'pgnn'
-            ]
-            
+
+            graph_indicators = ["graph", "gnn", "gcn", "gat", "sage", "gin", "pgnn"]
             if any(indicator in model_name for indicator in graph_indicators):
                 return "graph"
-            
-            if 'torch_geometric' in model_module or 'pyg' in model_module:
+            if "torch_geometric" in model_module or "pyg" in model_module:
                 return "graph"
-            
-            # Check for graph-related methods
-            if hasattr(model, 'forward') and hasattr(model.forward, '__annotations__'):
-                annotations = model.forward.__annotations__
-                for param_type in annotations.values():
-                    if hasattr(param_type, '__name__'):
-                        type_name = param_type.__name__.lower()
-                        if 'dataflow' in type_name and 'graph' in type_name:
+
+            if hasattr(model, "forward") and hasattr(model.forward, "__annotations__"):
+                for param_type in model.forward.__annotations__.values():
+                    if hasattr(param_type, "__name__"):
+                        if "dataflow" in param_type.__name__.lower():
                             return "graph"
-            
-            # Default to standard for regular neural networks
+
             return "standard"
-            
+
         except Exception:
-            # If model building fails, default to standard
             warnings.warn(
                 "Could not build model for wrapper type detection, defaulting to 'standard'",
-                UserWarning
+                UserWarning,
             )
             return "standard"
-    
+
     @staticmethod
     def create_wrapper_from_checkpoint(
         checkpoint_path: str,
         wrapper_type: str = "auto",
-        **kwargs
-    ):
+        **kwargs: Any,
+    ) -> ProcessingLightningWrapper:
         """Create a wrapper and load it from a checkpoint.
-        
+
         Args:
-            checkpoint_path: Path to the Lightning checkpoint
-            wrapper_type: Type of wrapper to create
-            **kwargs: Additional arguments for wrapper creation
-            
+            checkpoint_path: Path to the Lightning checkpoint.
+            wrapper_type: Type of wrapper to create.
+            **kwargs: Additional arguments for wrapper creation.
+
         Returns:
-            Loaded ProcessingLightningWrapper instance
+            Loaded ProcessingLightningWrapper instance.
         """
-        # Determine wrapper class
-        if wrapper_type == "standard":
-            wrapper_class = StandardLightningWrapper
-        elif wrapper_type == "graph":
-            wrapper_class = GraphLightningWrapper
-        elif wrapper_type == "bare":
-            wrapper_class = BareWrapper
-        else:
-            # Auto-detect from checkpoint if possible
-            wrapper_class = StandardLightningWrapper
-        
-        # Load from checkpoint
+        match wrapper_type:
+            case "standard":
+                wrapper_class = StandardLightningWrapper
+            case "graph":
+                wrapper_class = GraphLightningWrapper
+            case _:
+                wrapper_class = StandardLightningWrapper
+
         return wrapper_class.load_from_checkpoint(checkpoint_path, **kwargs)
-    
+
     @staticmethod
-    def get_available_wrapper_types():
+    def get_available_wrapper_types() -> dict[str, type]:
         """Get a mapping of available wrapper types to their classes.
-        
+
         Returns:
-            Dictionary mapping type names to wrapper classes
+            Dictionary mapping type names to wrapper classes.
         """
         return {
             "standard": StandardLightningWrapper,
             "graph": GraphLightningWrapper,
             "timeseries": TimeSeriesLightningWrapper,
-            "bare": BareWrapper,
         }
-    
+
     @staticmethod
     def create_wrapper_with_defaults(
         model: nn.Module,
         wrapper_type: str = "auto",
-        **kwargs
-    ):
+        **kwargs: Any,
+    ) -> ProcessingLightningWrapper:
         """Create a wrapper with sensible defaults for quick experimentation.
-        
+
         Args:
-            model: PyTorch model to wrap
-            wrapper_type: Type of wrapper to create
-            **kwargs: Additional arguments to override defaults
-            
+            model: PyTorch model to wrap.
+            wrapper_type: Type of wrapper to create.
+            **kwargs: Additional arguments to override defaults.
+
         Returns:
-            ProcessingLightningWrapper instance with defaults
+            ProcessingLightningWrapper instance with defaults.
         """
-        from dlkit.tools.config import WrapperComponentSettings
-        
-        # Create default settings
         if "settings" not in kwargs:
             kwargs["settings"] = WrapperComponentSettings()
 
@@ -305,7 +260,9 @@ class WrapperFactory:
                 name=model.__class__, module_path=model.__class__.__module__
             )
 
-        extra_kwargs = {k: v for k, v in kwargs.items() if k not in {"model_settings", "settings"}}
+        extra_kwargs = {
+            k: v for k, v in kwargs.items() if k not in {"model_settings", "settings"}
+        }
         return WrapperFactory.create_wrapper(
             model_settings=kwargs["model_settings"],
             settings=kwargs["settings"],

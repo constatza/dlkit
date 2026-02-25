@@ -183,11 +183,11 @@ class TestPathFeature:
         assert not feat.has_path()
         assert not feat.has_value()
 
-    def test_path_feature_required_in_loss_default(self, tmp_path: Path):
-        """Test PathFeature defaults required_in_loss to False."""
+    def test_path_feature_loss_input_default(self, tmp_path: Path):
+        """Test PathFeature defaults loss_input to None."""
         feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
 
-        assert feat.required_in_loss is False
+        assert feat.loss_input is None
 
 
 class TestPathTarget:
@@ -209,11 +209,11 @@ class TestPathTarget:
         assert not targ.has_path()
         assert not targ.has_value()
 
-    def test_path_target_required_in_loss_default(self, tmp_path: Path):
-        """Test PathTarget defaults required_in_loss to True."""
+    def test_path_target_loss_input_default(self, tmp_path: Path):
+        """Test PathTarget defaults loss_input to None."""
         targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
 
-        assert targ.required_in_loss is True
+        assert targ.loss_input is None
 
     def test_path_target_write_attribute(self, tmp_path: Path):
         """Test PathTarget has write attribute."""
@@ -246,11 +246,11 @@ class TestValueFeature:
         assert feat.has_value()
         assert isinstance(feat.value, torch.Tensor)
 
-    def test_value_feature_required_in_loss_default(self, sample_numpy_array: np.ndarray):
-        """Test ValueFeature defaults required_in_loss to False."""
+    def test_value_feature_loss_input_default(self, sample_numpy_array: np.ndarray):
+        """Test ValueFeature defaults loss_input to None."""
         feat = ValueFeature(name="test", value=sample_numpy_array)
 
-        assert feat.required_in_loss is False
+        assert feat.loss_input is None
 
 
 class TestValueTarget:
@@ -272,11 +272,11 @@ class TestValueTarget:
         assert targ.has_value()
         assert isinstance(targ.value, torch.Tensor)
 
-    def test_value_target_required_in_loss_default(self, sample_numpy_array: np.ndarray):
-        """Test ValueTarget defaults required_in_loss to True."""
+    def test_value_target_loss_input_default(self, sample_numpy_array: np.ndarray):
+        """Test ValueTarget defaults loss_input to None."""
         targ = ValueTarget(name="test", value=sample_numpy_array)
 
-        assert targ.required_in_loss is True
+        assert targ.loss_input is None
 
     def test_value_target_write_attribute(self, sample_numpy_array: np.ndarray):
         """Test ValueTarget has write attribute."""
@@ -608,7 +608,7 @@ class TestDatasetSettingsValuePreservation:
         # Verify dataset works
         assert len(dataset) == 10
         sample = dataset[0]
-        assert len(sample.features) == 1
-        assert len(sample.targets) == 1
-        assert sample.features[0].shape == torch.Size([5])
-        assert sample.targets[0].shape == torch.Size([1])
+        assert len(list(sample["features"].keys())) == 1
+        assert len(list(sample["targets"].keys())) == 1
+        assert sample["features", "x"].shape == torch.Size([5])
+        assert sample["targets", "y"].shape == torch.Size([1])

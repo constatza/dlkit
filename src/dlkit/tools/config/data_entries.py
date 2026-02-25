@@ -5,7 +5,7 @@ flexible datasets. These are pure configuration objects with no
 processing logic, following the single responsibility principle.
 
 Architecture:
-    DataEntry (ABC) - base with name, dtype, transforms, required_in_loss
+    DataEntry (ABC) - base with name, dtype, transforms, model_input, loss_input
         ├── PathBasedEntry (ABC) - file-based entries with path validation
         │   ├── PathFeature - feature loaded from file
         │   └── PathTarget - target loaded from file
@@ -36,7 +36,7 @@ from collections.abc import Iterable
 
 import numpy as np
 import torch
-from pydantic import Field, model_validator, ValidationInfo
+from pydantic import Field, model_validator, field_validator, ValidationInfo
 from pydantic_settings import SettingsConfigDict
 
 from .core.base_settings import BasicSettings
@@ -58,8 +58,9 @@ class DataEntry(BasicSettings, ABC):
     Attributes:
         name: Entry name (optional - defaults to dict key when stored in dict)
         dtype: PyTorch dataflow type for the tensor dataflow
-        required_in_loss: Whether this dataflow should be included in loss computation
         transforms: List of transforms to apply to this dataflow entry
+        model_input: Whether this entry is passed to the model forward()
+        loss_input: If set, route this entry as a loss function kwarg with this name
     """
 
     model_config = SettingsConfigDict(arbitrary_types_allowed=True)
@@ -68,10 +69,47 @@ class DataEntry(BasicSettings, ABC):
     dtype: torch.dtype | None = Field(
         default=None, description="PyTorch dataflow type. If None, uses session precision strategy."
     )
-    required_in_loss: bool = Field(default=False, description="Include in loss computation")
     transforms: list[TransformSettings] = Field(
         default_factory=list, description="Transform chain for this dataflow entry"
     )
+    model_input: bool = Field(
+        default=True,
+        description=(
+            "If False, tensor is loaded into the batch and available for loss/metric, but is NOT "
+            "passed as an argument to the model forward(). Use for context tensors "
+            "(e.g. stiffness matrix for energy norm loss)."
+        ),
+    )
+    loss_input: str | None = Field(
+        default=None,
+        description=(
+            "If set, this entry is automatically routed to the loss function as a keyword "
+            "argument with the given name. E.g. loss_input='K' passes the tensor as "
+            "loss_fn(..., K=tensor). Entry name and kwarg name are explicitly decoupled. "
+            "Use model_input=False together with loss_input to create context tensors "
+            "that feed custom loss functions but are not passed to the model forward()."
+        ),
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _no_dots_in_name(cls, v: str | None) -> str | None:
+        """Validate that entry names do not contain dots.
+
+        Dots are reserved as separators in batch key format (namespace.entry_name).
+
+        Args:
+            v: The name to validate
+
+        Returns:
+            The validated name
+
+        Raises:
+            ValueError: If name contains a dot
+        """
+        if v and "." in v:
+            raise ValueError(f"Entry name must not contain '.', got '{v}'")
+        return v
 
     @model_validator(mode="after")
     def validate_name_when_data_present(self) -> "DataEntry":
@@ -443,7 +481,6 @@ class TensorDataEntry:
 
     name: str
     tensor: torch.Tensor
-    required_in_loss: bool = True
     write: bool = False
     transforms: tuple[TransformSettings, ...] = ()
 
@@ -459,7 +496,6 @@ def to_tensor_entry(entry: DataEntry) -> TensorDataEntry:
     """Convert a config entry (path or value) into a concrete tensor entry."""
     name = entry.name or "anonymous"
     dtype = getattr(entry, "dtype", None)
-    required_in_loss = getattr(entry, "required_in_loss", True)
     write = getattr(entry, "write", False)
     transforms = tuple(getattr(entry, "transforms", ()) or ())
 
@@ -469,25 +505,13 @@ def to_tensor_entry(entry: DataEntry) -> TensorDataEntry:
         from dlkit.tools.io.arrays import load_array  # Local import to avoid import cycles
 
         tensor = load_array(entry.path, dtype=dtype)
-        return TensorDataEntry(
-            name=name,
-            tensor=tensor,
-            required_in_loss=required_in_loss,
-            write=write,
-            transforms=transforms,
-        )
+        return TensorDataEntry(name=name, tensor=tensor, write=write, transforms=transforms)
 
     if isinstance(entry, ValueBasedEntry):
         if not entry.has_value() or entry.value is None:
             raise ValueError(f"Entry '{name}' is a placeholder without a value")
         tensor = _coerce_tensor(entry.value, dtype=dtype)
-        return TensorDataEntry(
-            name=name,
-            tensor=tensor,
-            required_in_loss=required_in_loss,
-            write=write,
-            transforms=transforms,
-        )
+        return TensorDataEntry(name=name, tensor=tensor, write=write, transforms=transforms)
 
     raise TypeError(f"Unsupported entry type for tensor conversion: {type(entry)}")
 
@@ -511,7 +535,6 @@ class PathFeature(PathBasedEntry):
 
     Attributes:
         path: File path to the feature data (None for placeholder mode)
-        required_in_loss: Defaults to False (features rarely used in loss)
 
     Notes:
         Autoencoder behaviour:
@@ -519,8 +542,6 @@ class PathFeature(PathBasedEntry):
           targets are provided in the dataset configuration, the processing pipeline
           (LossPairingStep) will automatically treat the feature entries as targets.
     """
-
-    required_in_loss: bool = Field(default=False, description="Features rarely used in loss")
 
 
 class PathTarget(PathBasedEntry, IWritable):
@@ -533,7 +554,6 @@ class PathTarget(PathBasedEntry, IWritable):
     Attributes:
         path: File path to the target data (None for placeholder mode)
         write: Whether to save predictions for this target during inference
-        required_in_loss: Defaults to True (targets typically used in loss)
 
     Notes:
         Strict pairing:
@@ -544,7 +564,6 @@ class PathTarget(PathBasedEntry, IWritable):
     write: bool = Field(
         default=False, description="Save the prediction related to this data during inference"
     )
-    required_in_loss: bool = Field(default=True, description="Targets typically used in loss")
 
 
 # =============================================================================
@@ -560,7 +579,6 @@ class ValueFeature(ValueBasedEntry):
 
     Attributes:
         value: In-memory tensor/array for the feature data
-        required_in_loss: Defaults to False (features rarely used in loss)
 
     Notes:
         Autoencoder behaviour:
@@ -568,8 +586,6 @@ class ValueFeature(ValueBasedEntry):
           targets are provided in the dataset configuration, the processing pipeline
           (LossPairingStep) will automatically treat the feature entries as targets.
     """
-
-    required_in_loss: bool = Field(default=False, description="Features rarely used in loss")
 
 
 class ValueTarget(ValueBasedEntry, IWritable):
@@ -581,7 +597,6 @@ class ValueTarget(ValueBasedEntry, IWritable):
     Attributes:
         value: In-memory tensor/array for the target data
         write: Whether to save predictions for this target during inference
-        required_in_loss: Defaults to True (targets typically used in loss)
 
     Notes:
         Strict pairing:
@@ -592,7 +607,6 @@ class ValueTarget(ValueBasedEntry, IWritable):
     write: bool = Field(
         default=False, description="Save the prediction related to this data during inference"
     )
-    required_in_loss: bool = Field(default=True, description="Targets typically used in loss")
 
 
 # =============================================================================
@@ -610,7 +624,8 @@ def Feature(
     *,
     value: torch.Tensor | np.ndarray,
     dtype: torch.dtype | None = None,
-    required_in_loss: bool = False,
+    model_input: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> ValueFeature: ...
 
@@ -621,7 +636,8 @@ def Feature(
     *,
     path: Path | str | None = None,
     dtype: torch.dtype | None = None,
-    required_in_loss: bool = False,
+    model_input: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> PathFeature: ...
 
@@ -632,20 +648,21 @@ def Feature(
     path: Path | str | None = None,
     value: torch.Tensor | np.ndarray | None = None,
     dtype: torch.dtype | None = None,
-    required_in_loss: bool = False,
+    model_input: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> FeatureType:
     """Factory function to create the appropriate Feature type.
 
     Creates a PathFeature or ValueFeature based on provided arguments.
-    Maintains backwards compatibility with existing code that uses Feature().
 
     Args:
         name: Entry name (optional - defaults to dict key when stored in dict)
         path: File path to feature data (creates PathFeature)
         value: In-memory tensor/array (creates ValueFeature)
         dtype: PyTorch dtype override
-        required_in_loss: Include in loss computation (default False)
+        model_input: If False, tensor is in batch but not passed to model forward()
+        loss_input: If set, route as loss function kwarg with this name
         transforms: Transform chain for this entry
 
     Returns:
@@ -665,10 +682,10 @@ def Feature(
         >>> isinstance(f2, ValueFeature)
         True
 
-        >>> # Placeholder feature (config without path, value injected later)
-        >>> f3 = Feature(name="x")
-        >>> f3.is_placeholder()
-        True
+        >>> # Context feature for loss (not passed to model)
+        >>> f3 = Feature(name="K", value=K_matrix, model_input=False, loss_input="K")
+        >>> f3.model_input
+        False
     """
     if value is not None and path is not None:
         name_str = name or "unknown"
@@ -683,7 +700,8 @@ def Feature(
             name=name,
             value=value,
             dtype=dtype,
-            required_in_loss=required_in_loss,
+            model_input=model_input,
+            loss_input=loss_input,
             transforms=transform_list,
         )
 
@@ -693,7 +711,8 @@ def Feature(
         name=name,
         path=resolved_path,
         dtype=dtype,
-        required_in_loss=required_in_loss,
+        model_input=model_input,
+        loss_input=loss_input,
         transforms=transform_list,
     )
 
@@ -705,7 +724,7 @@ def Target(
     value: torch.Tensor | np.ndarray,
     dtype: torch.dtype | None = None,
     write: bool = False,
-    required_in_loss: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> ValueTarget: ...
 
@@ -717,7 +736,7 @@ def Target(
     path: Path | str | None = None,
     dtype: torch.dtype | None = None,
     write: bool = False,
-    required_in_loss: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> PathTarget: ...
 
@@ -729,13 +748,12 @@ def Target(
     value: torch.Tensor | np.ndarray | None = None,
     dtype: torch.dtype | None = None,
     write: bool = False,
-    required_in_loss: bool = True,
+    loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> TargetType:
     """Factory function to create the appropriate Target type.
 
     Creates a PathTarget or ValueTarget based on provided arguments.
-    Maintains backwards compatibility with existing code that uses Target().
 
     Args:
         name: Entry name (optional - defaults to dict key when stored in dict)
@@ -743,7 +761,7 @@ def Target(
         value: In-memory tensor/array (creates ValueTarget)
         dtype: PyTorch dtype override
         write: Save predictions during inference (default False)
-        required_in_loss: Include in loss computation (default True)
+        loss_input: If set, route as loss function kwarg with this name
         transforms: Transform chain for this entry
 
     Returns:
@@ -762,11 +780,6 @@ def Target(
         >>> t2 = Target(name="y", value=np.zeros((100, 1)))
         >>> isinstance(t2, ValueTarget)
         True
-
-        >>> # Placeholder target (config without path, value injected later)
-        >>> t3 = Target(name="y")
-        >>> t3.is_placeholder()
-        True
     """
     if value is not None and path is not None:
         name_str = name or "unknown"
@@ -782,7 +795,7 @@ def Target(
             value=value,
             dtype=dtype,
             write=write,
-            required_in_loss=required_in_loss,
+            loss_input=loss_input,
             transforms=transform_list,
         )
 
@@ -793,7 +806,61 @@ def Target(
         path=resolved_path,
         dtype=dtype,
         write=write,
-        required_in_loss=required_in_loss,
+        loss_input=loss_input,
+        transforms=transform_list,
+    )
+
+
+def ContextFeature(
+    name: str | None = None,
+    *,
+    path: Path | str | None = None,
+    value: torch.Tensor | np.ndarray | None = None,
+    dtype: torch.dtype | None = None,
+    transforms: list[TransformSettings] | None = None,
+) -> FeatureType:
+    """Factory function to create a context feature (not passed to model).
+
+    Context features are loaded into the batch and available for loss/metric
+    computation, but are NOT passed as arguments to model.forward().
+    Use for tensors like stiffness matrices needed only by custom loss functions.
+
+    Args:
+        name: Entry name
+        path: File path to feature data
+        value: In-memory tensor/array
+        dtype: PyTorch dtype override
+        transforms: Transform chain for this entry
+
+    Returns:
+        PathFeature or ValueFeature with model_input=False
+
+    Raises:
+        ValueError: If both path and value are specified
+    """
+    if value is not None and path is not None:
+        name_str = name or "unknown"
+        raise ValueError(
+            f"ContextFeature '{name_str}' cannot have both 'path' and 'value' specified"
+        )
+
+    transform_list = transforms or []
+
+    if value is not None:
+        return ValueFeature(
+            name=name,
+            value=value,
+            dtype=dtype,
+            model_input=False,
+            transforms=transform_list,
+        )
+
+    resolved_path = Path(path) if path is not None else None
+    return PathFeature(
+        name=name,
+        path=resolved_path,
+        dtype=dtype,
+        model_input=False,
         transforms=transform_list,
     )
 
@@ -814,11 +881,9 @@ class Latent(DataEntry, IRuntimeGenerated, IWritable):
 
     Attributes:
         write: Whether to save this latent dataflow during inference
-        required_in_loss: Whether this latent should be included in loss
     """
 
     write: bool = Field(default=False, description="Save this latent during inference")
-    required_in_loss: bool = Field(default=False, description="Latents rarely used in loss")
 
     def has_value(self) -> bool:
         """Latent does not have an in-memory value.
@@ -859,7 +924,6 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
         feature_ref: Name of the Feature entry to reference
         path: Copied from referenced feature at runtime (do not specify manually)
         write: Whether to save reconstruction data during inference
-        required_in_loss: Defaults to True (reconstructions used in loss)
 
     Validation:
         - feature_ref must be specified
@@ -892,9 +956,6 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
         ..., description="Name of the Feature entry to reference for transform inversion"
     )
     write: bool = Field(default=False, description="Save the reconstruction data during inference")
-    required_in_loss: bool = Field(
-        default=True, description="Reconstructions typically used in loss"
-    )
 
     # Internal value storage for when feature_ref is resolved
     _resolved_value: torch.Tensor | np.ndarray | None = None
@@ -952,12 +1013,10 @@ class Prediction(DataEntry, IRuntimeGenerated, IWritable):
     Attributes:
         target_name: Name of the target this prediction corresponds to
         write: Whether to save prediction dataflow during inference
-        required_in_loss: Defaults to True (predictions typically used in loss)
     """
 
     target_name: str = Field(..., description="Corresponding target name")
     write: bool = Field(default=True, description="Save predictions during inference")
-    required_in_loss: bool = Field(default=True, description="Predictions typically used in loss")
 
     def has_value(self) -> bool:
         """Prediction does not have an in-memory value.
