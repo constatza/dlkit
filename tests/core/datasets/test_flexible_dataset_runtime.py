@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from tensordict import TensorDict
 
 from dlkit.core.datasets.flexible import FlexibleDataset
 from dlkit.tools.config.data_entries import Feature, Target
@@ -30,8 +31,9 @@ def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
 
     assert len(ds) == 5
     sample0 = ds[0]
-    assert len(sample0.features) == 2 and len(sample0.targets) == 1
-    assert isinstance(sample0.features[0], torch.Tensor)
-    assert tuple(sample0.features[0].shape) == (2,)
-    assert tuple(sample0.features[1].shape) == (3,)
-    assert tuple(sample0.targets[0].shape) == (1,)
+    assert isinstance(sample0, TensorDict)
+    assert len(sample0["features"].keys()) == 2 and len(sample0["targets"].keys()) == 1
+    assert isinstance(sample0["features", "x1"], torch.Tensor)
+    assert tuple(sample0["features", "x1"].shape) == (2,)
+    assert tuple(sample0["features", "x2"].shape) == (3,)
+    assert tuple(sample0["targets", "y"].shape) == (1,)
