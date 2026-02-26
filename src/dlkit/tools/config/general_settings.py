@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from dynaconf import LazySettings
 from typing import Self
-from pydantic import Field, model_validator, validate_call, ConfigDict, FilePath
+from pydantic import Field, model_validator, validate_call, FilePath
 
 from .core.base_settings import BasicSettings
 from .session_settings import SessionSettings
@@ -133,48 +132,6 @@ class GeneralSettings(BasicSettings):
         except Exception as e:
             raise ValueError(f"Failed to load configuration from {filepath}: {e}") from e
 
-
-    @classmethod
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def dynaconf_to_settings(cls, config: LazySettings) -> Self:
-        """Convert a LazySettings object to a GeneralSettings object.
-
-        Args:
-            config: Dynaconf LazySettings object
-
-        Returns:
-            Self: Converted settings object
-
-        Raises:
-            ValueError: If configuration is invalid
-        """
-        try:
-            # Convert Dynaconf to dict safely first
-            as_dict = dict(config)
-
-            # Handle Optuna model settings if present
-            if as_dict.get("optuna", {}).get("model") and as_dict.get("optuna", {}).get("enable"):
-                optuna_model = as_dict["optuna"]["model"]
-                for key, value in optuna_model.items():
-                    as_dict[f"model.{key}"] = value
-        except ValueError as e:
-            raise ValueError(f"Configuration file is not valid - {e}")
-
-        # Filter out Dynaconf metadata that shouldn't be passed to Pydantic
-        # Use pattern matching to catch all Dynaconf metadata keys
-        filtered_dict = {
-            k: v
-            for k, v in as_dict.items()
-            if not (
-                k.endswith("_FOR_DYNACONF")
-                or k.startswith("DYNACONF_")
-                or k in {"LOAD_DOTENV", "SETTINGS_MODULE", "PROJECT_ROOT", "RENAMED_VARS"}
-            )
-        }
-
-        # Instantiate using cls to correctly support subclassing
-        return cls(**filtered_dict)
-
     @property
     def is_training(self) -> bool:
         """True if running training (not inference)."""
@@ -265,6 +222,4 @@ class GeneralSettings(BasicSettings):
         if not self.DATASET:
             raise ValueError("No dataset configuration available")
         return self.DATASET
-
-
 

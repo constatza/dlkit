@@ -16,8 +16,7 @@ The configuration module provides a comprehensive SOLID-compliant settings syste
 Key architectural decisions:
 - Flattened configuration hierarchy reduces nesting complexity
 - Pydantic v2 for validation and serialization with frozen models
-- Dynaconf compatibility for migration paths
-- Top-level CAPITALS follow dynaconf convention for easy migration
+- Top-level CAPITALS preserve compatibility with existing TOML section conventions
 - Settings are immutable (frozen=True) ensuring thread safety
 
 ## Module Structure
@@ -73,7 +72,6 @@ Key architectural decisions:
 ### External Dependencies
 - `pydantic`: V2 settings and validation (`BaseModel`, `BaseSettings`, `Field`)
 - `pydantic_settings`: Environment variable management
-- `dynaconf`: Legacy configuration support (`LazySettings`)
 - `torch`: PyTorch dtypes for precision strategies
 - `pathlib`: Path manipulation
 
@@ -123,7 +121,6 @@ if settings.is_training:
 - Inherits from `BasicSettings` which provides immutable frozen models
 - Validates inference mode requires checkpoint path
 - Provides convenience properties (`mlflow_enabled`, `optuna_enabled`, `has_training_config`)
-- Supports Dynaconf migration via `dynaconf_to_settings()` classmethod
 - All settings sections are optional except SESSION (has defaults)
 - Top-level MODEL preferred over nested model configurations
 
