@@ -79,7 +79,7 @@ tests/settings/
 - Mode detection and validation
 - Feature flag properties
 - Configuration access methods
-- Dynaconf integration
+- Parser-backed TOML integration
 
 #### `test_session_settings.py`
 - Session mode management (training/inference/testing)
@@ -164,7 +164,6 @@ python tests/settings/test_standalone_core.py
 - `sample_model_config_data()`: Model configuration
 - `sample_hyperparameter_data()`: Hyperparameter specifications
 - `config_file_content()`: TOML configuration content
-- `dynaconf_config()`: Dynaconf configuration object
 
 #### Utility Fixtures  
 - `config_file(tmp_path)`: Temporary configuration file
@@ -292,7 +291,6 @@ When adding new settings classes or features:
 - `pytest`: Test framework
 - `hypothesis`: Property-based testing
 - `pydantic`: Settings validation
-- `dynaconf`: Configuration management
 - `pathlib`: File path handling (no tempfile!)
 
 ## Notes

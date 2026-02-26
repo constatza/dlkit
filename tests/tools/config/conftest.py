@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 import pytest
-from dynaconf import Dynaconf
 
 
 class MockTrial:
@@ -285,29 +284,3 @@ n_trials = 10
 # OPTUNA model_params would be configured differently in the new architecture
 # This test may need to be updated for the new hyperparameter handling
 """
-
-
-@pytest.fixture
-def dynaconf_config() -> Dynaconf:
-    """Dynaconf configuration object for testing.
-
-    Returns:
-        Dynaconf: Mock Dynaconf configuration with sample dataflow
-    """
-    config_data = {
-        "SESSION": {"name": "test_session", "inference": False, "seed": 42, "precision": "medium"},
-        "MODEL": {
-            "name": "DynaconfModel",
-            "module_path": "test.models",
-            "heads": 4,
-            "latent_size": 128,
-        },
-        "MLFLOW": {
-            "enabled": True,
-            "server": {"host": "localhost", "port": 5000},
-            "client": {"experiment_name": "dynaconf_experiment"},
-        },
-    }
-
-    # Create Dynaconf with sample dataflow
-    return Dynaconf(**config_data)

@@ -80,7 +80,7 @@ Key architectural decisions:
 - `dlkit.interfaces.api.services.precision_service`: Precision management
 
 ### External Dependencies
-- `dynaconf`: Configuration management (`Dynaconf`, `LazySettings`)
+- `dynaconf`: Configuration management (`Dynaconf`)
 - `pydantic`: Validation and serialization (`BaseModel`, `FilePath`, `validate_call`)
 - `tomlkit`: TOML writing (`document`, `table`, `dumps`)
 - `polars`: Tabular data reading (`pl.read_csv`, `pl.read_parquet`)
