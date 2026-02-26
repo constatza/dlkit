@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 import threading
 
 import mlflow
@@ -72,6 +73,39 @@ def _normalize_tracking_uri(uri: str | None) -> str | None:
         return canonicalize_file_uri(stripped)
 
     return stripped
+
+
+def _normalize_experiment_artifact_location(
+    artifact_location: str | None,
+    root_dir: Path,
+) -> str | None:
+    """Normalize local experiment artifact locations into canonical URIs.
+
+    Args:
+        artifact_location: Candidate artifact location from configuration.
+        root_dir: Root directory used to resolve relative local paths.
+
+    Returns:
+        Canonical local URI, pass-through remote URI, or None when empty.
+    """
+    if artifact_location is None:
+        return None
+
+    candidate = artifact_location.strip()
+    if not candidate:
+        return None
+
+    from dlkit.tools.io import url_resolver
+
+    try:
+        if "://" not in candidate or url_resolver.is_local_uri(candidate):
+            return url_resolver.normalize_uri(candidate, root_dir)
+        return candidate
+    except Exception as e:
+        logger.warning(
+            f"Failed to normalize MLflow experiment artifact location '{candidate}': {e}"
+        )
+        return candidate
 
 
 def _resolve_server_context_cls():
@@ -487,7 +521,16 @@ class MLflowResourceManager:
         if server:
             dest = getattr(server, "artifacts_destination", None)
             if dest:
-                artifact_location = str(dest)
+                from dlkit.tools.io import locations
+
+                try:
+                    root_dir = locations.root()
+                except Exception:
+                    root_dir = Path.cwd()
+
+                artifact_location = _normalize_experiment_artifact_location(
+                    str(dest), root_dir
+                )
         experiment_id = MLflowClientFactory.get_or_create_experiment(
             client, exp_name, artifact_location
         )

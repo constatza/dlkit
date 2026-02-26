@@ -14,7 +14,12 @@ from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import (
 from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import (
+    MLflowSettings,
+    MLflowClientSettings,
+    MLflowServerSettings,
+)
+from dlkit.tools.io import url_resolver
 
 
 def test_manager_raises_when_server_cannot_start(
@@ -93,3 +98,155 @@ def test_create_run_uses_fluent_start_run_with_nested_flag(
         nested=True,
     )
     assert manager._state.active_run_stack == []
+
+
+def test_create_run_normalizes_plain_local_artifact_destination_for_experiment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Ensure plain local artifact paths are normalized before experiment creation."""
+    artifacts_dir = tmp_path / "mlartifacts"
+    settings = MLflowSettings(
+        enabled=True,
+        client=MLflowClientSettings(
+            tracking_uri=(tmp_path / "mlruns").as_uri(),
+            experiment_name="test_exp",
+            run_name="test_run",
+        ),
+        server=MLflowServerSettings(artifacts_destination=str(artifacts_dir)),
+    )
+
+    manager = MLflowResourceManager(settings)
+    mock_client = Mock()
+    mock_start_run = MagicMock()
+    mock_start_run.return_value.__enter__.return_value = SimpleNamespace(
+        info=SimpleNamespace(run_id="run-123")
+    )
+    mock_start_run.return_value.__exit__.return_value = None
+
+    captured: dict[str, str | None] = {}
+
+    def _capture_experiment(
+        _client: Mock,
+        _experiment_name: str,
+        artifact_location: str | None = None,
+    ) -> str:
+        captured["artifact_location"] = artifact_location
+        return "exp-123"
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda *_args, **_kwargs: mock_client)
+    monkeypatch.setattr(
+        MLflowClientFactory,
+        "get_or_create_experiment",
+        _capture_experiment,
+    )
+    monkeypatch.setattr(resource_module.mlflow, "start_run", mock_start_run, raising=True)
+
+    with manager:
+        with manager.create_run(experiment_name="exp", run_name="my-run"):
+            pass
+
+    expected = url_resolver.normalize_uri(str(artifacts_dir), Path.cwd())
+    assert captured["artifact_location"] == expected
+    assert captured["artifact_location"] is not None
+    assert captured["artifact_location"].startswith("file://")
+
+
+def test_create_run_preserves_cloud_artifact_destination_for_experiment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Ensure cloud artifact URIs pass through unchanged."""
+    cloud_uri = "s3://bucket/path/to/artifacts"
+    settings = MLflowSettings(
+        enabled=True,
+        client=MLflowClientSettings(
+            tracking_uri=(tmp_path / "mlruns").as_uri(),
+            experiment_name="test_exp",
+            run_name="test_run",
+        ),
+        server=MLflowServerSettings(artifacts_destination=cloud_uri),
+    )
+
+    manager = MLflowResourceManager(settings)
+    mock_client = Mock()
+    mock_start_run = MagicMock()
+    mock_start_run.return_value.__enter__.return_value = SimpleNamespace(
+        info=SimpleNamespace(run_id="run-123")
+    )
+    mock_start_run.return_value.__exit__.return_value = None
+
+    captured: dict[str, str | None] = {}
+
+    def _capture_experiment(
+        _client: Mock,
+        _experiment_name: str,
+        artifact_location: str | None = None,
+    ) -> str:
+        captured["artifact_location"] = artifact_location
+        return "exp-123"
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda *_args, **_kwargs: mock_client)
+    monkeypatch.setattr(
+        MLflowClientFactory,
+        "get_or_create_experiment",
+        _capture_experiment,
+    )
+    monkeypatch.setattr(resource_module.mlflow, "start_run", mock_start_run, raising=True)
+
+    with manager:
+        with manager.create_run(experiment_name="exp", run_name="my-run"):
+            pass
+
+    assert captured["artifact_location"] == cloud_uri
+
+
+def test_create_run_normalizes_windows_drive_artifact_destination_for_experiment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Ensure Windows drive paths are normalized to file:// URIs for MLflow."""
+    windows_path = r"C:\Users\runneradmin\AppData\Local\Temp\pytest-1\mlartifacts"
+    settings = MLflowSettings(
+        enabled=True,
+        client=MLflowClientSettings(
+            tracking_uri=(tmp_path / "mlruns").as_uri(),
+            experiment_name="test_exp",
+            run_name="test_run",
+        ),
+        server=MLflowServerSettings(artifacts_destination=windows_path),
+    )
+
+    manager = MLflowResourceManager(settings)
+    mock_client = Mock()
+    mock_start_run = MagicMock()
+    mock_start_run.return_value.__enter__.return_value = SimpleNamespace(
+        info=SimpleNamespace(run_id="run-123")
+    )
+    mock_start_run.return_value.__exit__.return_value = None
+
+    captured: dict[str, str | None] = {}
+
+    def _capture_experiment(
+        _client: Mock,
+        _experiment_name: str,
+        artifact_location: str | None = None,
+    ) -> str:
+        captured["artifact_location"] = artifact_location
+        return "exp-123"
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda *_args, **_kwargs: mock_client)
+    monkeypatch.setattr(
+        MLflowClientFactory,
+        "get_or_create_experiment",
+        _capture_experiment,
+    )
+    monkeypatch.setattr(resource_module.mlflow, "start_run", mock_start_run, raising=True)
+
+    with manager:
+        with manager.create_run(experiment_name="exp", run_name="my-run"):
+            pass
+
+    assert captured["artifact_location"] is not None
+    expected = url_resolver.normalize_uri(windows_path, Path.cwd())
+    assert captured["artifact_location"] == expected

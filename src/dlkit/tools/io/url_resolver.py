@@ -22,6 +22,9 @@ LocalScheme = Literal["file", "sqlite"]
 
 def scheme(uri: str) -> str:
     """Return lower-cased scheme or empty string for plain paths."""
+    if _is_plain_windows_drive_path(uri):
+        return ""
+
     url = _parse(uri)
     return url.scheme if url is not None else ""
 
@@ -34,6 +37,9 @@ def is_local_uri(uri: str) -> bool:
 
 def resolve_local_uri(uri: str, root: Path) -> Path:
     """Resolve file/sqlite/plain path to an absolute Path using root for relatives."""
+    if _is_plain_windows_drive_path(uri):
+        return _resolve_relative(uri, root)
+
     url = _parse(uri)
     if url is None or not url.scheme:
         return _resolve_relative(uri, root)
@@ -55,6 +61,9 @@ def resolve_local_uri(uri: str, root: Path) -> Path:
 
 def normalize_uri(uri: str, root: Path) -> str:
     """Normalize a URI string (file/sqlite/plain path) to a canonical string form."""
+    if _is_plain_windows_drive_path(uri):
+        return _file_uri_from_windows_path(uri)
+
     url = _parse(uri)
     if url is None or not url.scheme:
         # Plain path -> normalized file:// absolute URI
@@ -216,3 +225,14 @@ def _strip_leading_dot_segments(path_str: str) -> str:
     while path_str.startswith("../"):
         path_str = path_str[3:]
     return path_str
+
+
+def _is_plain_windows_drive_path(value: str) -> bool:
+    if "://" in value:
+        return False
+    return PureWindowsPath(value).is_absolute()
+
+
+def _file_uri_from_windows_path(path_str: str) -> str:
+    canonical = _canonical_path(path_str)
+    return f"file:///{canonical}"

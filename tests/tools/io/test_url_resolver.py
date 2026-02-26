@@ -78,6 +78,23 @@ def test_normalize_uri_matrix(root: Path, tmp_path: Path) -> None:
     assert norm_plain.startswith("file://")
 
 
+def test_normalize_uri_windows_drive_paths_as_file_uri(root: Path) -> None:
+    windows_backslash = r"C:\Users\runneradmin\AppData\Local\Temp\mlartifacts"
+    windows_forward = "C:/Users/runneradmin/AppData/Local/Temp/mlartifacts"
+
+    norm_backslash = url_resolver.normalize_uri(windows_backslash, root)
+    norm_forward = url_resolver.normalize_uri(windows_forward, root)
+
+    assert norm_backslash == "file:///C:/Users/runneradmin/AppData/Local/Temp/mlartifacts"
+    assert norm_forward == "file:///C:/Users/runneradmin/AppData/Local/Temp/mlartifacts"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Off-Windows strictness only applies on non-Windows")
+def test_resolve_local_uri_windows_drive_path_remains_strict_off_windows(root: Path) -> None:
+    with pytest.raises(ValueError, match="Windows absolute path"):
+        url_resolver.resolve_local_uri("C:/Users/runneradmin/file.txt", root)
+
+
 def test_build_uri(root: Path) -> None:
     path = root / "a" / "b"
 
