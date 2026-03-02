@@ -7,35 +7,36 @@ All loading logic integrated directly - no use case objects.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, Self
+from typing import Any, Protocol, Self
 
 import torch
 from loguru import logger
+from tensordict import TensorDict
 
+from dlkit.core.models.wrappers.base import _unpack_model_output
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.precision import precision_override
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
-from .config import PredictorConfig, ModelState, InferenceResult
+from .config import PredictorConfig, ModelState
 from .loading import load_checkpoint, build_model_from_checkpoint
 from .shapes import infer_shape_specification
-from .transforms import (
-    load_transforms_from_checkpoint,
-    apply_transforms,
-    apply_inverse_transforms
-)
+from .transforms import load_transforms_from_checkpoint
 
 
 class PredictorError(WorkflowError):
     """Base exception for predictor-related errors."""
+
     pass
 
 
 class PredictorNotLoadedError(PredictorError):
     """Raised when attempting operations on unloaded predictor."""
 
-    def __init__(self, message: str = "Predictor not loaded. Call load() first or use context manager."):
+    def __init__(
+        self, message: str = "Predictor not loaded. Call load() first or use context manager."
+    ):
         super().__init__(message, {"error_type": "PredictorNotLoadedError"})
 
 
@@ -50,10 +51,10 @@ class IPredictor(Protocol):
 
     def predict(
         self,
-        inputs: dict[str, torch.Tensor] | torch.Tensor,
-        batch_size: int | None = None
-    ) -> InferenceResult:
-        """Execute inference on loaded model."""
+        *args: torch.Tensor,
+        **kwargs: torch.Tensor,
+    ) -> torch.Tensor | TensorDict | tuple[Any, ...]:
+        """Execute inference, mirroring model.forward() signature."""
         ...
 
     def is_loaded(self) -> bool:
@@ -77,15 +78,15 @@ class CheckpointPredictor(IPredictor):
         >>> predictor.load()
         >>>
         >>> # Predict many times (no reloading!)
-        >>> result1 = predictor.predict(input1)
-        >>> result2 = predictor.predict(input2)
+        >>> result1 = predictor.predict(x_tensor)
+        >>> result2 = predictor.predict(x=x_tensor, edge_attr=ea_tensor)
         >>>
         >>> # Clean up
         >>> predictor.unload()
 
         >>> # Or with context manager
         >>> with CheckpointPredictor(config, auto_load=True) as predictor:
-        ...     result = predictor.predict(inputs)
+        ...     result = predictor.predict(x=inputs)
     """
 
     def __init__(self, config: PredictorConfig):
@@ -105,58 +106,6 @@ class CheckpointPredictor(IPredictor):
         # Auto-load if requested
         if config.auto_load:
             self.load()
-
-    def _name_predictions(self, predictions: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Name single tensor predictions based on target configuration.
-
-        Args:
-            predictions: Raw model output tensor
-
-        Returns:
-            Dict with properly named predictions (e.g., {"y": tensor})
-        """
-        # Guard clause: If model_state not available, use default name
-        if self._model_state is None:
-            return {"output": predictions}
-
-        # Get entry configs from checkpoint metadata
-        # Need type guard since metadata values can be various types
-        inference_metadata_raw = self._model_state.metadata.get("inference_metadata", {})
-        if not isinstance(inference_metadata_raw, dict):
-            return {"output": predictions}
-
-        entry_configs_raw = inference_metadata_raw.get("entry_configs", {})
-        if not isinstance(entry_configs_raw, dict):
-            return {"output": predictions}
-
-        entry_configs = entry_configs_raw
-
-        # Guard clause: No entry configs, use default name
-        if not entry_configs:
-            return {"output": predictions}
-
-        # Find target entries
-        target_names = [
-            name for name, config in entry_configs.items()
-            if config.get("type") == "target"
-        ]
-
-        # Use match-case for cleaner logic (avoiding nested ifs)
-        match len(target_names):
-            case 0:
-                # No targets found, use default
-                return {"output": predictions}
-            case 1:
-                # Single target - use its name
-                return {target_names[0]: predictions}
-            case _:
-                # Multiple targets - use first one
-                # (This is ambiguous but better than failing)
-                logger.warning(
-                    f"Multiple targets found: {target_names}. "
-                    f"Using first target '{target_names[0]}' for naming."
-                )
-                return {target_names[0]: predictions}
 
     def load(self) -> Self:
         """Load model from checkpoint (expensive - call once).
@@ -204,6 +153,12 @@ class CheckpointPredictor(IPredictor):
         # Ensure eval mode
         model.eval()
 
+        # Extract feature_names and predict_target_key from checkpoint metadata
+        meta = checkpoint.get("dlkit_metadata", {})
+        raw_fn = meta.get("feature_names", ())
+        feature_names: tuple[str, ...] = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
+        predict_target_key: str = str(meta.get("predict_target_key", ""))
+
         # Create model state
         self._model_state = ModelState(
             model=model,
@@ -211,7 +166,9 @@ class CheckpointPredictor(IPredictor):
             shape_spec=shape_spec,
             feature_transforms=feature_transforms if feature_transforms else None,
             target_transforms=target_transforms if target_transforms else None,
-            metadata=checkpoint.get("dlkit_metadata", {})
+            metadata=meta,
+            feature_names=feature_names,
+            predict_target_key=predict_target_key,
         )
 
         # Infer precision from model
@@ -225,21 +182,28 @@ class CheckpointPredictor(IPredictor):
 
     def predict(
         self,
-        inputs: dict[str, torch.Tensor] | torch.Tensor,
-        batch_size: int | None = None
-    ) -> InferenceResult:
-        """Execute inference on loaded model.
+        *args: torch.Tensor,
+        **kwargs: torch.Tensor,
+    ) -> torch.Tensor | TensorDict | tuple[Any, ...]:
+        """Execute inference, mirroring model.forward() signature.
+
+        Applies feature transforms to inputs (by position for args, by name for
+        kwargs), calls model.forward(*args, **kwargs), then applies inverse target
+        transform to the first output element.
 
         Args:
-            inputs: Input data (dict or tensor)
-            batch_size: Optional batch size override
+            *args: Positional feature tensors. Each args[i] is transformed using
+                the transform for ``feature_names[i]`` (from checkpoint metadata).
+            **kwargs: Named feature tensors. Each kwarg is transformed using the
+                transform registered under the same key name.
 
         Returns:
-            InferenceResult with predictions and model state
+            Single Tensor or TensorDict for single-output models.
+            tuple for multi-output (first element is the prediction after
+            inverse transform; remaining are latents/auxiliary — returned as-is).
 
         Raises:
-            PredictorNotLoadedError: If predictor not loaded
-            WorkflowError: If inference fails
+            PredictorNotLoadedError: If predictor not loaded.
         """
         if not self._loaded or self._model_state is None:
             raise PredictorNotLoadedError()
@@ -247,55 +211,101 @@ class CheckpointPredictor(IPredictor):
         # Establish precision context (inferred from model)
         precision_to_use = self._config.precision or self._inferred_precision
 
-        # Only use precision override if we have a precision value
         if precision_to_use is not None:
             ctx = precision_override(precision_to_use)
         else:
-            # No-op context manager
             from contextlib import nullcontext
+
             ctx = nullcontext()
 
         with ctx:
-            # Convert inputs to dict format if needed
-            if not isinstance(inputs, dict):
-                inputs = {"x": inputs}
-
-            # Apply feature transforms if requested
-            if self._config.apply_transforms and self._model_state.feature_transforms:
-                logger.debug("Applying feature transforms")
-                inputs = apply_transforms(inputs, self._model_state.feature_transforms)
-
-            # Model forward pass with no_grad
-            metadata = self._model_state.metadata
-            _feature_names_raw = metadata.get("feature_names", [])
-            feature_names: list[str] = (
-                _feature_names_raw if isinstance(_feature_names_raw, list) else []
-            )
+            if self._config.apply_transforms:
+                args, kwargs = self._apply_input_transforms(args, kwargs)
 
             with torch.no_grad():
-                if len(inputs) == 1:
-                    predictions = self._model_state.model(next(iter(inputs.values())))
-                elif feature_names:
-                    tensors = tuple(inputs[k] for k in feature_names if k in inputs)
-                    predictions = self._model_state.model(*tensors)
-                else:
-                    # Fallback: insertion order (Python 3.7+ dict ordering guarantee)
-                    predictions = self._model_state.model(*inputs.values())
+                raw_output = self._model_state.model(*args, **kwargs)
 
-            # Apply inverse target transforms if requested
-            if self._config.apply_transforms and self._model_state.target_transforms:
-                logger.debug("Applying inverse target transforms")
-                predictions = apply_inverse_transforms(
-                    predictions,
-                    self._model_state.target_transforms
-                )
+            predictions_raw, latents_raw = _unpack_model_output(raw_output)
 
-            # Wrap single tensor predictions in dict with proper name
-            if isinstance(predictions, torch.Tensor):
-                predictions = self._name_predictions(predictions)
+            if self._config.apply_transforms:
+                predictions_raw = self._apply_output_inverse_transform(predictions_raw)
 
-            # Return wrapped in InferenceResult dataclass (better than bare tensor)
-            return InferenceResult(predictions=predictions)
+            if latents_raw is None:
+                return predictions_raw
+
+            # Unpack latents tuple for clean API: (pred, lat0, lat1, ...)
+            if isinstance(latents_raw, tuple):
+                return (predictions_raw, *latents_raw)
+            return (predictions_raw, latents_raw)
+
+    def _apply_input_transforms(
+        self,
+        args: tuple[torch.Tensor, ...],
+        kwargs: dict[str, torch.Tensor],
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, torch.Tensor]]:
+        """Apply forward transforms to positional and keyword inputs.
+
+        Positional arg ``i`` is transformed using the chain registered under
+        ``feature_names[i]``.  Keyword arg ``k`` is transformed using the
+        chain registered under ``k``.
+
+        Args:
+            args: Positional input tensors.
+            kwargs: Named input tensors.
+
+        Returns:
+            Transformed (args, kwargs) tuple.
+        """
+        ft = self._model_state.feature_transforms  # type: ignore[union-attr]
+        if not ft:
+            return args, kwargs
+
+        fn = self._model_state.feature_names  # type: ignore[union-attr]
+        transformed_args = tuple(
+            ft[fn[i]](t) if i < len(fn) and fn[i] in ft else t for i, t in enumerate(args)
+        )
+        transformed_kwargs: dict[str, torch.Tensor] = {
+            k: ft[k](t) if k in ft else t for k, t in kwargs.items()
+        }
+        return transformed_args, transformed_kwargs
+
+    def _apply_output_inverse_transform(
+        self,
+        predictions: torch.Tensor | TensorDict,
+    ) -> torch.Tensor | TensorDict:
+        """Apply inverse target transform to the primary model output.
+
+        Uses ``predict_target_key`` to select the transform chain from
+        ``target_transforms``.  Skips gracefully when no key is configured,
+        the key is absent, or the chain is not invertible.
+
+        Args:
+            predictions: Primary model output (Tensor or TensorDict).
+
+        Returns:
+            Inverse-transformed predictions (same type as input).
+        """
+        tt = self._model_state.target_transforms  # type: ignore[union-attr]
+        target_key = self._model_state.predict_target_key  # type: ignore[union-attr]
+        if not tt or not target_key or target_key not in tt:
+            return predictions
+
+        from dlkit.core.training.transforms.base import InvertibleTransform
+
+        chain = tt[target_key]
+        if not isinstance(chain, InvertibleTransform):
+            return predictions
+
+        if isinstance(predictions, torch.Tensor):
+            return chain.inverse_transform(predictions)
+
+        # TensorDict: apply inverse to its "predictions" leaf if present
+        if isinstance(predictions, TensorDict) and "predictions" in predictions.keys():
+            return predictions.apply(
+                lambda t: chain.inverse_transform(t), batch_size=predictions.batch_size
+            )  # type: ignore[return-value]
+
+        return predictions
 
     def is_loaded(self) -> bool:
         """Check if predictor is loaded and ready.
@@ -340,6 +350,7 @@ class CheckpointPredictor(IPredictor):
 
         # Force garbage collection
         import gc
+
         gc.collect()
 
         if torch.cuda.is_available():

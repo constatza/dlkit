@@ -22,9 +22,9 @@ Example:
     ...     result = predictor.predict(inputs)
 """
 
-from .api import load_model, validate_checkpoint, get_checkpoint_info
+from .api import get_checkpoint_info, load_model, validate_checkpoint
+from .config import PredictorConfig
 from .predictor import CheckpointPredictor, IPredictor, PredictorError, PredictorNotLoadedError
-from .config import PredictorConfig, InferenceResult
 
 __all__ = [
     # Main API
@@ -35,7 +35,6 @@ __all__ = [
     "CheckpointPredictor",
     "IPredictor",
     "PredictorConfig",
-    "InferenceResult",
     # Exceptions
     "PredictorError",
     "PredictorNotLoadedError",

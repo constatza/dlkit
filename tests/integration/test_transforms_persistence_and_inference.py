@@ -132,26 +132,16 @@ def _basic_trainer() -> Trainer:
 
 
 def _extract_prediction_tensor(result: Any) -> torch.Tensor:
-    """Retrieve the first tensor prediction from nested inference outputs.
-    
-    Handles both CheckpointPredictor (which returns a dict for single-output models)
-    and trainer.predict (which returns nested tuples).
+    """Retrieve the first tensor prediction from inference output.
+
+    Handles the new predict() API: returns Tensor (single output) or
+    tuple[Tensor, ...] (multi-output, first element is the prediction).
     """
-    preds = result.predictions
-    
-    # Handle dict (CheckpointPredictor single-output)
-    if isinstance(preds, dict):
-        if not preds:
-            raise AssertionError("Inference result dictionary is empty")
-        return next(iter(preds.values()))
-    
-    # Handle tuple (Standard format: predictions_tuple, targets_tuple, latents_tuple)
-    if isinstance(preds, (tuple, list)):
-        preds_tuple = preds[0]
-        if preds_tuple and torch.is_tensor(preds_tuple[0]):
-            return preds_tuple[0]
-            
-    raise AssertionError(f"Inference result did not contain tensor predictions in a recognized format: {type(preds)}")
+    if isinstance(result, torch.Tensor):
+        return result
+    if isinstance(result, tuple) and result and isinstance(result[0], torch.Tensor):
+        return result[0]
+    raise AssertionError(f"Expected Tensor or tuple[Tensor,...] but got {type(result)}: {result}")
 
 
 @pytest.fixture(scope="module")
@@ -213,6 +203,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     batch_out = preds[0]
     # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
     from tensordict import TensorDict as _TensorDict
+
     assert isinstance(batch_out, _TensorDict)
     inv_pred = batch_out["predictions"]
     inv_targ = batch_out["targets"]["y"]
@@ -233,7 +224,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
 
 
 def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
-    """Test the high-level dlkit.infer() API using a real trained checkpoint."""
+    """Test the high-level dlkit.load_model() API using a real trained checkpoint."""
     import dlkit
 
     # Arrange: Set up and train a model (same as previous test)
@@ -249,70 +240,39 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     trainer.save_checkpoint(ckpt_path)
     assert ckpt_path.exists()
 
-    # Prepare input data for direct inference
-    # Use raw data (before transforms) as the new API should handle transforms internally
-    test_inputs = {"x": torch.from_numpy(X[:8]).float()}  # First 8 samples
+    # predict() mirrors model.forward() — pass tensors as keyword args
+    x_tensor = torch.from_numpy(X[:8]).float()
 
     # Act: Test the high-level dlkit.load_model() API
     with dlkit.load_model(
         checkpoint_path=ckpt_path, batch_size=4, device="cpu", apply_transforms=True
     ) as predictor:
-        result = predictor.predict(test_inputs)
+        predictions = predictor.predict(x=x_tensor)
 
-    # Assert: Verify the result structure and content
-    assert hasattr(result, "predictions")
-    assert isinstance(result.predictions, dict)
-
-    # Check the actual structure - it might be nested
-    if "predictions" in result.predictions:
-        predictions = result.predictions["predictions"]
-    elif "y" in result.predictions:
-        predictions = result.predictions["y"]
-    else:
-        # Get the first available prediction
-        predictions = next(iter(result.predictions.values()))
-
+    # predict() returns Tensor for single-output models
+    predictions = _extract_prediction_tensor(predictions)
     assert isinstance(predictions, torch.Tensor)
     assert predictions.shape[0] == 8  # Same number of samples as input
-    assert predictions.shape[1] == 4  # Output dimension
+    assert predictions.shape[1] == 4  # Output dimension (identity model: in == out)
 
     # Verify predictions are reasonable (not NaN, not all zeros)
     assert not torch.isnan(predictions).any()
     assert not torch.allclose(predictions, torch.zeros_like(predictions))
 
-    # Test with different batch size
+    # Test with different batch size — should get same predictions
     with dlkit.load_model(
-        checkpoint_path=ckpt_path,
-        batch_size=16,  # Larger than input size
-        device="cpu",
+        checkpoint_path=ckpt_path, batch_size=16, device="cpu", apply_transforms=True
     ) as predictor:
-        result_batch16 = predictor.predict(test_inputs)
+        predictions_b16 = predictor.predict(x=x_tensor)
 
-    # Should get same predictions regardless of batch size
-    if "predictions" in result.predictions:
-        pred1 = result.predictions["predictions"]
-    elif "y" in result.predictions:
-        pred1 = result.predictions["y"]
-    else:
-        pred1 = next(iter(result.predictions.values()))
-
-    if "predictions" in result_batch16.predictions:
-        pred2 = result_batch16.predictions["predictions"]
-    elif "y" in result_batch16.predictions:
-        pred2 = result_batch16.predictions["y"]
-    else:
-        pred2 = next(iter(result_batch16.predictions.values()))
-
-    assert torch.allclose(pred1, pred2, atol=1e-6)
+    predictions_b16 = _extract_prediction_tensor(predictions_b16)
+    assert torch.allclose(predictions, predictions_b16, atol=1e-6)
 
     # Test with transforms disabled
     with dlkit.load_model(checkpoint_path=ckpt_path, apply_transforms=False) as predictor:
-        result_no_transforms = predictor.predict(test_inputs)
+        result_no_transforms = predictor.predict(x=x_tensor)
 
-    # Test with transforms disabled should succeed
-    # Note: The actual difference may be minimal with identity transforms in this test
     assert result_no_transforms is not None
-    assert result_no_transforms.predictions is not None
 
 
 def test_predictor_returns_original_space_by_default(
@@ -328,7 +288,7 @@ def test_predictor_returns_original_space_by_default(
         device="cpu",
         apply_transforms=True,
     ) as predictor:
-        result = predictor.predict({"x": raw_batch})
+        result = predictor.predict(x=raw_batch)
 
     predictions = _extract_prediction_tensor(result)
     assert torch.allclose(predictions, expected, atol=1e-6)
@@ -346,7 +306,7 @@ def test_predictor_accepts_pretransformed_inputs_when_disabled(
         device="cpu",
         apply_transforms=False,
     ) as predictor:
-        result = predictor.predict({"x": normalized_batch})
+        result = predictor.predict(x=normalized_batch)
 
     predictions = _extract_prediction_tensor(result)
     assert torch.allclose(predictions, normalized_batch, atol=1e-6)
@@ -364,7 +324,7 @@ def test_manual_inverse_matches_default_path(predictor_transform_setup: dict[str
         device="cpu",
         apply_transforms=True,
     ) as predictor_default:
-        default_result = predictor_default.predict({"x": raw_batch})
+        default_result = predictor_default.predict(x=raw_batch)
 
     default_predictions = _extract_prediction_tensor(default_result)
 
@@ -374,10 +334,12 @@ def test_manual_inverse_matches_default_path(predictor_transform_setup: dict[str
         device="cpu",
         apply_transforms=False,
     ) as predictor_manual:
-        manual_result = predictor_manual.predict({"x": normalized_batch})
+        manual_result = predictor_manual.predict(x=normalized_batch)
 
     manual_predictions = _extract_prediction_tensor(manual_result)
-    manual_predictions_raw = apply_inverse_chain(manual_predictions, wrapper._batch_transformer._target_chains["y"])
+    manual_predictions_raw = apply_inverse_chain(
+        manual_predictions, wrapper._batch_transformer._target_chains["y"]
+    )
 
     assert torch.allclose(manual_predictions_raw, default_predictions, atol=1e-6)
 
@@ -407,6 +369,7 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     batch_out = preds[0]
     # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
     from tensordict import TensorDict as _TensorDict
+
     assert isinstance(batch_out, _TensorDict)
     inv_pred = batch_out["predictions"]
     inv_targ = batch_out["targets"]["y"]

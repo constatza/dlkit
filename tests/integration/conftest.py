@@ -191,7 +191,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                 "class_name": "ModelComponentSettings",
             },
             "entry_configs": [
-                {"name": "X", "class_name": "Feature"},
+                {"name": "x", "class_name": "Feature"},
                 {"name": "y", "class_name": "Target"},
             ],
         },
@@ -221,7 +221,7 @@ def _make_settings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
         root=data_dir,
-        features=(Feature(name="X", path=data_dir / "features.npy"),),
+        features=(Feature(name="x", path=data_dir / "features.npy"),),
         targets=(Target(name="y", path=data_dir / "targets.npy"),),
         split=IndexSplitSettings(),
     )
@@ -542,7 +542,7 @@ module_path = "dlkit.core.datasets"
 root_dir = "{data_dir.as_posix()}"
 
 [[DATASET.features]]
-name = "X"
+name = "x"
 path = "features.npy"
 
 [[DATASET.targets]]

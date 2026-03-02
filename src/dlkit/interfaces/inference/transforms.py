@@ -15,7 +15,7 @@ from dlkit.core.training.transforms.chain import TransformChain
 
 
 def load_transforms_from_checkpoint(
-    checkpoint: dict[str, Any]
+    checkpoint: dict[str, Any],
 ) -> tuple[dict[str, TransformChain], dict[str, TransformChain]]:
     """Load fitted transforms from checkpoint, separated by type.
 
@@ -89,7 +89,7 @@ def _load_named_transforms(
     for key, value in state_dict.items():
         if not key.startswith(prefix_dot):
             continue
-        remainder = key[len(prefix_dot):]
+        remainder = key[len(prefix_dot) :]
         parts = remainder.split(".", 1)
         if not parts:
             continue
@@ -108,7 +108,6 @@ def _load_named_transforms(
     return transforms
 
 
-
 def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str, Any]) -> None:
     """Register a buffer in the transform chain.
 
@@ -119,7 +118,7 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
     """
     from torch.nn import ModuleList
 
-    parts = key.split('.')
+    parts = key.split(".")
     module = chain
 
     # Navigate to the target module
@@ -132,7 +131,7 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
         idx = int(part)
         if isinstance(module, ModuleList):
             module = module[idx]
-        elif hasattr(module, 'transforms'):
+        elif hasattr(module, "transforms"):
             # TransformChain has transforms attribute
             module = module.transforms[idx]  # type: ignore[index]
         else:
@@ -141,7 +140,7 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
     # Register the buffer
     buffer_name = parts[-1]
     buffer_value = state[key]
-    if not hasattr(module, 'register_buffer'):
+    if not hasattr(module, "register_buffer"):
         raise ValueError(f"Module {type(module)} does not have register_buffer method")
     module.register_buffer(buffer_name, buffer_value)  # type: ignore[attr-defined]
     logger.debug(f"Registered buffer: {key}")
@@ -161,19 +160,17 @@ def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> l
     if not entry_config:
         return []
 
-    if hasattr(entry_config, 'transforms'):
+    if hasattr(entry_config, "transforms"):
         return entry_config.transforms
 
     if isinstance(entry_config, dict):
-        return entry_config.get('transforms', [])
+        return entry_config.get("transforms", [])
 
     return []
 
 
 def _reconstruct_transform_chain(
-    entry_name: str,
-    transform_state: dict[str, Any],
-    entry_configs: dict[str, Any]
+    entry_name: str, transform_state: dict[str, Any], entry_configs: dict[str, Any]
 ) -> TransformChain | None:
     """Reconstruct a TransformChain from state dict.
 
@@ -203,72 +200,11 @@ def _reconstruct_transform_chain(
             except Exception as e:
                 logger.warning(f"Could not register buffer {key}: {e}")
 
-        logger.info(f"Loaded transform chain for '{entry_name}' with {len(chain.transforms)} transforms")
+        logger.info(
+            f"Loaded transform chain for '{entry_name}' with {len(chain.transforms)} transforms"
+        )
         return chain
 
     except Exception as e:
         logger.error(f"Failed to load transform chain for '{entry_name}': {e}")
         return None
-
-
-def apply_transforms(
-    data: dict[str, Any],
-    transforms: dict[str, TransformChain]
-) -> dict[str, Any]:
-    """Apply forward transforms to data dictionary.
-
-    Args:
-        data: Dictionary of tensors to transform
-        transforms: Dictionary of transform chains
-
-    Returns:
-        Transformed data dictionary
-    """
-    transformed = {}
-    for name, tensor in data.items():
-        if name in transforms:
-            transformed[name] = transforms[name](tensor)
-        else:
-            transformed[name] = tensor
-    return transformed
-
-
-def apply_inverse_transforms(
-    data: dict[str, Any] | Any,
-    transforms: dict[str, TransformChain]
-) -> dict[str, Any] | Any:
-    """Apply inverse transforms to data.
-
-    Handles both dict and single tensor cases.
-    Detects ambiguity when single tensor with multiple transforms.
-
-    Args:
-        data: Data to inverse transform (dict or tensor)
-        transforms: Dictionary of transform chains
-
-    Returns:
-        Inverse transformed data
-
-    Raises:
-        ValueError: If single tensor with multiple transforms (ambiguous)
-    """
-    # Dict case: apply inverse to each entry
-    if isinstance(data, dict):
-        return {
-            name: transforms[name].inverse_transform(tensor)
-            if name in transforms else tensor
-            for name, tensor in data.items()
-        }
-
-    # Single tensor case: check for ambiguity
-    if len(transforms) == 0:
-        return data
-    elif len(transforms) == 1:
-        name = next(iter(transforms.keys()))
-        return transforms[name].inverse_transform(data)
-    else:
-        # Ambiguous: which transform to apply?
-        raise ValueError(
-            f"Ambiguous inverse transform: model returned single tensor but "
-            f"multiple target transforms exist: {list(transforms.keys())}"
-        )
