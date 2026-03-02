@@ -238,9 +238,7 @@ class VanillaExecutor(ITrainingExecutor):
                             artifacts["last_checkpoint"] = last_checkpoints[0]
                         # Check for any .ckpt files as fallback for best checkpoint
                         elif not artifacts.get("best_checkpoint"):
-                            ckpt_files = [
-                                f for f in dirpath.glob("*.ckpt") if "last" not in f.name
-                            ]
+                            ckpt_files = [f for f in dirpath.glob("*.ckpt") if "last" not in f.name]
                             if ckpt_files:
                                 artifacts["best_checkpoint"] = ckpt_files[0]
 

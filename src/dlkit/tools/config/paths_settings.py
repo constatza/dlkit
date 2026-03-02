@@ -54,29 +54,18 @@ class PathsSettings(BasicSettings):
     )
 
     # Common standardized path fields (all optional)
-    output_dir: SecurePath | None = Field(
-        default=None,
-        description="Output directory for results"
-    )
+    output_dir: SecurePath | None = Field(default=None, description="Output directory for results")
 
     checkpoint_path: SecurePath | None = Field(
-        default=None,
-        description="Path to model checkpoint file"
+        default=None, description="Path to model checkpoint file"
     )
 
-    data_dir: SecurePath | None = Field(
-        default=None,
-        description="Directory containing datasets"
-    )
+    data_dir: SecurePath | None = Field(default=None, description="Directory containing datasets")
 
-    weights_path: SecurePath | None = Field(
-        default=None,
-        description="Path to model weights file"
-    )
+    weights_path: SecurePath | None = Field(default=None, description="Path to model weights file")
 
     config_path: SecurePath | None = Field(
-        default=None,
-        description="Path to additional config files"
+        default=None, description="Path to additional config files"
     )
 
     def get_path(self, field_name: str) -> SecurePath | None:
@@ -91,7 +80,7 @@ class PathsSettings(BasicSettings):
         Example:
             >>> paths = PathsSettings(matrix_path="data/matrix.txt", custom_data="data/custom.txt")
             >>> paths.get_path("matrix_path")  # Returns SecurePath
-            >>> paths.get_path("custom_data")   # Returns custom path if it exists
+            >>> paths.get_path("custom_data")  # Returns custom path if it exists
             >>> paths.get_path("nonexistent")  # Returns None
         """
         return getattr(self, field_name, None)

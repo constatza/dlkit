@@ -214,14 +214,14 @@ class FlexibleDataset(BaseDataset):
         Multiple features from same .npz file:
             >>> features = [
             ...     Feature(name="features", path="data.npz"),
-            ...     Feature(name="latent", path="data.npz")
+            ...     Feature(name="latent", path="data.npz"),
             ... ]
             >>> dataset = FlexibleDataset(features=features)
 
         Mixed file formats:
             >>> features = [
             ...     Feature(name="x", path="features.npy"),
-            ...     Feature(name="y", path="extra.npz")  # Uses "y" as array key
+            ...     Feature(name="y", path="extra.npz"),  # Uses "y" as array key
             ... ]
             >>> dataset = FlexibleDataset(features=features)
     """

@@ -9,8 +9,12 @@ from unittest.mock import Mock
 import torch
 
 from dlkit.core.shape_specs import (
-    create_shape_spec, ModelFamily, ShapeSource, ShapeInferenceEngine,
-    ShapeSystemFactory, InferenceContext
+    create_shape_spec,
+    ModelFamily,
+    ShapeSource,
+    ShapeInferenceEngine,
+    ShapeSystemFactory,
+    InferenceContext,
 )
 
 
@@ -23,10 +27,12 @@ class TestAPIConceptIntegration:
 
         # 1. Dataset provides shapes through sampling
         mock_dataset = Mock()
-        mock_dataset.__getitem__ = Mock(return_value={
-            'x': torch.randn(28, 28),  # MNIST-like
-            'y': torch.tensor(5)       # Class label
-        })
+        mock_dataset.__getitem__ = Mock(
+            return_value={
+                "x": torch.randn(28, 28),  # MNIST-like
+                "y": torch.tensor(5),  # Class label
+            }
+        )
         mock_dataset.__len__ = Mock(return_value=1000)
 
         # 2. Model settings specify architecture
@@ -42,8 +48,7 @@ class TestAPIConceptIntegration:
         inference_engine = ShapeInferenceEngine(shape_factory=factory)
 
         shape_spec = inference_engine.infer_from_dataset(
-            dataset=mock_dataset,
-            model_settings=model_settings
+            dataset=mock_dataset, model_settings=model_settings
         )
 
         # 4. Verify shape inference worked correctly
@@ -63,8 +68,8 @@ class TestAPIConceptIntegration:
         # For this test, let's verify that shape inference worked and provided reasonable shapes
         assert input_shape is not None
         assert output_shape is not None
-        assert 'x' in all_shapes
-        assert 'y' in all_shapes
+        assert "x" in all_shapes
+        assert "y" in all_shapes
 
     def test_infer_like_workflow_shape_integration(self):
         """Test shape integration in an infer-like workflow."""
@@ -72,30 +77,24 @@ class TestAPIConceptIntegration:
 
         # 1. Create mock checkpoint with shape metadata in V3 format
         checkpoint_metadata = {
-            'dlkit_metadata': {
-                'shape_spec': {
-                    'metadata': {
-                        'version': 'v3',
-                        'format': 'json',
-                        'created_at': '2024-01-01T00:00:00'
+            "dlkit_metadata": {
+                "shape_spec": {
+                    "metadata": {
+                        "version": "v3",
+                        "format": "json",
+                        "created_at": "2024-01-01T00:00:00",
                     },
-                    'data': {
-                        'entries': {
-                            'x': {
-                                'dimensions': [784],
-                                'metadata': {'name': 'x'}
-                            },
-                            'y': {
-                                'dimensions': [10],
-                                'metadata': {'name': 'y'}
-                            }
+                    "data": {
+                        "entries": {
+                            "x": {"dimensions": [784], "metadata": {"name": "x"}},
+                            "y": {"dimensions": [10], "metadata": {"name": "y"}},
                         },
-                        'model_family': 'dlkit_nn',
-                        'source': 'training_dataset',
-                        'default_input': 'x',
-                        'default_output': 'y',
-                        'schema_version': '3.0'
-                    }
+                        "model_family": "dlkit_nn",
+                        "source": "training_dataset",
+                        "default_input": "x",
+                        "default_output": "y",
+                        "schema_version": "3.0",
+                    },
                 }
             }
         }
@@ -103,7 +102,7 @@ class TestAPIConceptIntegration:
         # 2. Shape system loads shapes from checkpoint
         factory = ShapeSystemFactory.create_production_system()
         shape_spec = factory.create_shape_spec_from_serialized(
-            checkpoint_metadata['dlkit_metadata']['shape_spec']
+            checkpoint_metadata["dlkit_metadata"]["shape_spec"]
         )
 
         # 3. Verify shapes loaded correctly
@@ -123,16 +122,18 @@ class TestAPIConceptIntegration:
 
         # 1. Base configuration with dataset
         mock_dataset = Mock()
-        mock_dataset.__getitem__ = Mock(return_value={
-            'x': torch.randn(32, 32, 3),  # CIFAR-like
-            'y': torch.tensor(7)
-        })
+        mock_dataset.__getitem__ = Mock(
+            return_value={
+                "x": torch.randn(32, 32, 3),  # CIFAR-like
+                "y": torch.tensor(7),
+            }
+        )
 
         # 2. Different model configurations to optimize
         model_configs = [
-            {'architecture': 'FeedForwardNN', 'hidden_sizes': [128, 64]},
-            {'architecture': 'FeedForwardNN', 'hidden_sizes': [256, 128, 64]},
-            {'architecture': 'FeedForwardNN', 'hidden_sizes': [512, 256]}
+            {"architecture": "FeedForwardNN", "hidden_sizes": [128, 64]},
+            {"architecture": "FeedForwardNN", "hidden_sizes": [256, 128, 64]},
+            {"architecture": "FeedForwardNN", "hidden_sizes": [512, 256]},
         ]
 
         # 3. Shape inference should be consistent across all configurations
@@ -147,25 +148,24 @@ class TestAPIConceptIntegration:
                     self.architecture = arch
                     self.hidden_sizes = hidden
 
-            settings = ModelSettings(config['architecture'], config['hidden_sizes'])
+            settings = ModelSettings(config["architecture"], config["hidden_sizes"])
 
             shape_spec = inference_engine.infer_from_dataset(
-                dataset=mock_dataset,
-                model_settings=settings
+                dataset=mock_dataset, model_settings=settings
             )
 
             inferred_shapes.append({
-                'input': shape_spec.get_input_shape(),
-                'output': shape_spec.get_output_shape(),
-                'family': shape_spec.model_family()
+                "input": shape_spec.get_input_shape(),
+                "output": shape_spec.get_output_shape(),
+                "family": shape_spec.model_family(),
             })
 
         # 4. All configurations should have same input/output shapes
         base_shapes = inferred_shapes[0]
         for shapes in inferred_shapes[1:]:
-            assert shapes['input'] == base_shapes['input']
-            assert shapes['output'] == base_shapes['output']
-            assert shapes['family'] == base_shapes['family']
+            assert shapes["input"] == base_shapes["input"]
+            assert shapes["output"] == base_shapes["output"]
+            assert shapes["family"] == base_shapes["family"]
 
     def test_graph_model_workflow_integration(self):
         """Test graph model workflow integration."""
@@ -175,9 +175,9 @@ class TestAPIConceptIntegration:
         # Create a simple object instead of Mock for attribute access
         class GraphData:
             def __init__(self):
-                self.x = torch.randn(100, 64)        # Node features
+                self.x = torch.randn(100, 64)  # Node features
                 self.edge_index = torch.randint(0, 100, (2, 500))  # Edges
-                self.y = torch.randn(100, 1)         # Node labels
+                self.y = torch.randn(100, 1)  # Node labels
 
         mock_graph_data = GraphData()
 
@@ -197,13 +197,12 @@ class TestAPIConceptIntegration:
         inference_engine = ShapeInferenceEngine(shape_factory=factory)
 
         shape_spec = inference_engine.infer_from_dataset(
-            dataset=mock_dataset,
-            model_settings=model_settings
+            dataset=mock_dataset, model_settings=model_settings
         )
 
         # 4. Graph-specific shape handling
         assert shape_spec.model_family() == ModelFamily.GRAPH.value
-        assert shape_spec.has_shape("x")           # Node features should be detected
+        assert shape_spec.has_shape("x")  # Node features should be detected
 
         # 5. Verify that at least the main node features were detected
         all_shapes = shape_spec.get_all_shapes()
@@ -219,10 +218,12 @@ class TestAPIConceptIntegration:
 
         # 1. Create inference context that would be repeated
         mock_dataset = Mock()
-        mock_dataset.__getitem__ = Mock(return_value={
-            'x': torch.randn(224, 224, 3),  # Image-like
-            'y': torch.tensor(3)
-        })
+        mock_dataset.__getitem__ = Mock(
+            return_value={
+                "x": torch.randn(224, 224, 3),  # Image-like
+                "y": torch.tensor(3),
+            }
+        )
 
         class ModelSettings:
             architecture = "FeedForwardNN"
@@ -236,10 +237,7 @@ class TestAPIConceptIntegration:
         base_chain = ShapeInferenceChain()
         caching_inferencer = CachingShapeInferencer(base_chain)
 
-        context = InferenceContext(
-            dataset=mock_dataset,
-            model_settings=model_settings
-        )
+        context = InferenceContext(dataset=mock_dataset, model_settings=model_settings)
 
         # 3. First inference (cache miss)
         shape_spec1 = caching_inferencer.infer_shape_spec(context)
@@ -278,8 +276,7 @@ class TestAPIConceptIntegration:
 
         # Should gracefully fallback to defaults
         shape_spec = inference_engine.infer_from_dataset(
-            dataset=mock_empty_dataset,
-            model_settings=model_settings
+            dataset=mock_empty_dataset, model_settings=model_settings
         )
 
         # Should get default fallback
@@ -293,8 +290,7 @@ class TestAPIConceptIntegration:
 
         # Should detect as external model
         shape_spec2 = inference_engine.infer_from_dataset(
-            dataset=mock_empty_dataset,
-            model_settings=invalid_settings
+            dataset=mock_empty_dataset, model_settings=invalid_settings
         )
 
         assert shape_spec2.model_family() == ModelFamily.EXTERNAL.value
@@ -307,7 +303,7 @@ class TestAPIConceptIntegration:
         shape_spec = create_shape_spec(
             shapes={"x": (224, 224, 3), "y": (1000,)},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         # 2. Serialize for checkpoint (as would happen when saving model)
@@ -323,7 +319,7 @@ class TestAPIConceptIntegration:
         restored_spec = create_shape_spec(
             shapes={name: entry.dimensions for name, entry in deserialized_data.entries.items()},
             model_family=deserialized_data.model_family,
-            source=deserialized_data.source
+            source=deserialized_data.source,
         )
 
         # 5. Verify roundtrip consistency
@@ -339,10 +335,10 @@ class TestAPIConceptIntegration:
         shape_spec = create_shape_spec(
             shapes={
                 "x": (10, 20, 30, 40, 50, 60),  # Too many dimensions
-                "y": (5,)
+                "y": (5,),
             },
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         # 2. Validate using the system (as would happen in config validation)
@@ -359,7 +355,7 @@ class TestAPIConceptIntegration:
         valid_spec = create_shape_spec(
             shapes={"x": (784,), "y": (10,)},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         valid_result = validator.validate_collection(valid_spec.get_shape_data())

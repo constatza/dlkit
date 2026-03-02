@@ -264,7 +264,11 @@ class MLflowResourceManager:
         normalized_effective_uri = _normalize_tracking_uri(tracking_uri_str)
 
         # Conflict detection: server started at a different URI than what was configured
-        if normalized_server_uri and normalized_effective_uri and normalized_server_uri != normalized_effective_uri:
+        if (
+            normalized_server_uri
+            and normalized_effective_uri
+            and normalized_server_uri != normalized_effective_uri
+        ):
             msg = (
                 f"Conflicting tracking URIs detected:\n"
                 f"  Server URI: {server_uri}\n"
@@ -528,9 +532,7 @@ class MLflowResourceManager:
                 except Exception:
                     root_dir = Path.cwd()
 
-                artifact_location = _normalize_experiment_artifact_location(
-                    str(dest), root_dir
-                )
+                artifact_location = _normalize_experiment_artifact_location(str(dest), root_dir)
         experiment_id = MLflowClientFactory.get_or_create_experiment(
             client, exp_name, artifact_location
         )

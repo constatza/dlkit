@@ -165,6 +165,7 @@ def test_dependency_inversion_principle_integration(build_components):
     # TrackingDecorator depends on IExperimentTracker abstraction
     # Create mock tracker without spec to allow magic method mocking
     from unittest.mock import MagicMock
+
     mock_tracker = MagicMock()
     # Explicitly set context manager support
     mock_tracker.__enter__.return_value = mock_tracker

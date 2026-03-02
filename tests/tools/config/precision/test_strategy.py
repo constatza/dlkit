@@ -235,7 +235,9 @@ class TestPrecisionStringAliases:
         # Test all aliases from the authoritative mapping
         for alias, expected_strategy in _PRECISION_ALIAS_MAP.items():
             result = PrecisionStrategy.from_string(alias)
-            assert result == expected_strategy, f"Alias '{alias}' should map to {expected_strategy}, got {result}"
+            assert result == expected_strategy, (
+                f"Alias '{alias}' should map to {expected_strategy}, got {result}"
+            )
 
     def test_alias_map_accessible(self):
         """Test that alias map is accessible via get_alias_map()."""

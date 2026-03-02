@@ -6,6 +6,7 @@ to implement the right methods to satisfy the protocol.
 
 Use isinstance(model, IAutoencoder) at predict time to populate latents.
 """
+
 from __future__ import annotations
 from typing import Protocol, runtime_checkable
 

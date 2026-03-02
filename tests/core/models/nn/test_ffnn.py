@@ -127,7 +127,9 @@ class TestFeedForwardNN:
 class TestConstantWidthFFNN:
     """Tests for ConstantWidthFFNN."""
 
-    def test_output_shape(self, constant_ffnn: ConstantWidthFFNN, dense_input: torch.Tensor) -> None:
+    def test_output_shape(
+        self, constant_ffnn: ConstantWidthFFNN, dense_input: torch.Tensor
+    ) -> None:
         """Output should have shape (batch, out_features)."""
         assert constant_ffnn(dense_input).shape == (dense_input.shape[0], 2)
 
@@ -145,9 +147,7 @@ class TestConstantWidthFFNN:
 
     def test_all_hidden_layers_same_width(self) -> None:
         """All hidden layers should have width = hidden_size."""
-        m = ConstantWidthFFNN(
-            in_features=2, out_features=2, hidden_size=8, num_layers=4
-        )
+        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=4)
         # Check that layers were created with constant width
         # First layer: 2 → 8, then 8 → 8 × (num_layers-1)
         assert m.embedding_layer.out_features == 8
@@ -156,22 +156,16 @@ class TestConstantWidthFFNN:
     def test_zero_layers_raises(self) -> None:
         """Zero hidden layers should raise ValueError."""
         with pytest.raises(ValueError):
-            ConstantWidthFFNN(
-                in_features=2, out_features=2, hidden_size=4, num_layers=0
-            )
+            ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=0)
 
     def test_single_hidden_layer(self, dense_input: torch.Tensor) -> None:
         """ConstantWidthFFNN with single layer should work."""
-        m = ConstantWidthFFNN(
-            in_features=2, out_features=2, hidden_size=4, num_layers=1
-        )
+        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=1)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_many_hidden_layers(self, dense_input: torch.Tensor) -> None:
         """ConstantWidthFFNN with many layers should work."""
-        m = ConstantWidthFFNN(
-            in_features=2, out_features=2, hidden_size=4, num_layers=5
-        )
+        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=5)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_has_parameters(self, constant_ffnn: ConstantWidthFFNN) -> None:

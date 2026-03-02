@@ -92,10 +92,7 @@ class DataEntryRegistry:
             Dictionary mapping feature names to Feature objects
         """
         with self._lock:
-            return {
-                name: entry for name, entry in self._entries.items()
-                if is_feature_entry(entry)
-            }
+            return {name: entry for name, entry in self._entries.items() if is_feature_entry(entry)}
 
     def get_targets(self) -> dict[str, Target]:
         """Get all target entries.
@@ -104,10 +101,7 @@ class DataEntryRegistry:
             Dictionary mapping target names to Target objects
         """
         with self._lock:
-            return {
-                name: entry for name, entry in self._entries.items()
-                if is_target_entry(entry)
-            }
+            return {name: entry for name, entry in self._entries.items() if is_target_entry(entry)}
 
     def get_latents(self) -> dict[str, Latent]:
         """Get all latent entries.
@@ -117,8 +111,7 @@ class DataEntryRegistry:
         """
         with self._lock:
             return {
-                name: entry for name, entry in self._entries.items()
-                if isinstance(entry, Latent)
+                name: entry for name, entry in self._entries.items() if isinstance(entry, Latent)
             }
 
     def get_predictions(self) -> dict[str, Prediction]:
@@ -129,7 +122,8 @@ class DataEntryRegistry:
         """
         with self._lock:
             return {
-                name: entry for name, entry in self._entries.items()
+                name: entry
+                for name, entry in self._entries.items()
                 if isinstance(entry, Prediction)
             }
 

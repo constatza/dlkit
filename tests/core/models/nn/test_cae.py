@@ -60,9 +60,7 @@ class TestSkipCAE1d:
         out = skip_cae(conv_input)
         assert out.shape == conv_input.shape
 
-    def test_encode_decode_roundtrip(
-        self, skip_cae: SkipCAE1d, conv_input: torch.Tensor
-    ) -> None:
+    def test_encode_decode_roundtrip(self, skip_cae: SkipCAE1d, conv_input: torch.Tensor) -> None:
         """encode() → decode() should preserve shape."""
         z = skip_cae.encode(conv_input)
         out = skip_cae.decode(z)
@@ -119,7 +117,9 @@ class TestSkipCAE1d:
 class TestLinearCAE1d:
     """Tests for linear convolutional autoencoder."""
 
-    def test_forward_preserves_shape(self, linear_cae: LinearCAE1d, conv_input: torch.Tensor) -> None:
+    def test_forward_preserves_shape(
+        self, linear_cae: LinearCAE1d, conv_input: torch.Tensor
+    ) -> None:
         """Forward pass should preserve input shape."""
         out = linear_cae(conv_input)
         assert out.shape == conv_input.shape
@@ -223,9 +223,7 @@ class TestVAELoss:
         assert loss.ndim == 0
         assert isinstance(loss, torch.Tensor)
 
-    def test_alpha_zero_ignores_reconstruction(
-        self, vae: VAE1d, conv_input: torch.Tensor
-    ) -> None:
+    def test_alpha_zero_ignores_reconstruction(self, vae: VAE1d, conv_input: torch.Tensor) -> None:
         """With alpha=0, reconstruction loss should not affect total."""
         recon, mu, logvar = vae(conv_input)
         loss_with_recon = vae_loss(recon, conv_input, mu, logvar, alpha=0.0, beta=1.0)
@@ -247,9 +245,7 @@ class TestVAELoss:
         loss = vae_loss(recon, conv_input, mu, logvar)
         assert loss.item() > 0
 
-    def test_different_weights_change_loss(
-        self, vae: VAE1d, conv_input: torch.Tensor
-    ) -> None:
+    def test_different_weights_change_loss(self, vae: VAE1d, conv_input: torch.Tensor) -> None:
         """Different alpha/beta weights should produce different losses."""
         recon, mu, logvar = vae(conv_input)
         loss1 = vae_loss(recon, conv_input, mu, logvar, alpha=1.0, beta=0.1)

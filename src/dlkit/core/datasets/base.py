@@ -22,7 +22,6 @@ class BaseDataset(Dataset, ABC):
         raise NotImplementedError
 
 
-
 _dataset_registry = Registry[type[BaseDataset]]()
 
 register_dataset = _dataset_registry.register

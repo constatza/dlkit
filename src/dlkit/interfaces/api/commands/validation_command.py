@@ -30,7 +30,9 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
         """Initialize validation command."""
         super().__init__(command_name)
 
-    def validate_input(self, input_data: ValidationCommandInput, settings: BaseSettingsProtocol) -> None:
+    def validate_input(
+        self, input_data: ValidationCommandInput, settings: BaseSettingsProtocol
+    ) -> None:
         """Validate validation command input.
 
         Args:

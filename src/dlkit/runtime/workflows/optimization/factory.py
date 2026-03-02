@@ -184,13 +184,17 @@ class OptimizationServiceFactory:
 
         # Check if MLflow tracking is enabled
         mlflow_config = getattr(settings, "MLFLOW", None)
-        logger.debug(f"Checking MLflow config - exists={mlflow_config is not None}, enabled={getattr(mlflow_config, 'enabled', False) if mlflow_config else False}")
+        logger.debug(
+            f"Checking MLflow config - exists={mlflow_config is not None}, enabled={getattr(mlflow_config, 'enabled', False) if mlflow_config else False}"
+        )
 
         if mlflow_config and getattr(mlflow_config, "enabled", False):
             from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
 
             experiment_name = determine_experiment_name(settings, mlflow_config)
-            logger.info(f"Creating MLflow tracking adapter for optimization (experiment: {experiment_name})")
+            logger.info(
+                f"Creating MLflow tracking adapter for optimization (experiment: {experiment_name})"
+            )
             session = getattr(settings, "SESSION", None)
             root_dir = getattr(session, "root_dir", None) if session is not None else None
             return MLflowTrackingAdapter(

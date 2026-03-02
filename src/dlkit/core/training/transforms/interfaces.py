@@ -94,8 +94,8 @@ class IFittableTransform(ABC):
         ...     def __init__(self, dim, input_shape):
         ...         super().__init__(input_shape)
         ...         self.dim = dim
-        ...         self.register_buffer('mean', torch.zeros(input_shape))
-        ...         self.register_buffer('std', torch.ones(input_shape))
+        ...         self.register_buffer("mean", torch.zeros(input_shape))
+        ...         self.register_buffer("std", torch.ones(input_shape))
         ...
         ...     def fit(self, data: torch.Tensor) -> None:
         ...         self.mean = data.mean(dim=self.dim, keepdim=True)
@@ -154,8 +154,8 @@ class ISerializableTransform(ABC):
         ...
         ...     def to_checkpoint_dict(self) -> dict:
         ...         return {
-        ...             'transform_states': [t.state_dict() for t in self.transforms],
-        ...             'transform_types': [type(t).__name__ for t in self.transforms]
+        ...             "transform_states": [t.state_dict() for t in self.transforms],
+        ...             "transform_types": [type(t).__name__ for t in self.transforms],
         ...         }
         ...
         ...     @classmethod
@@ -206,7 +206,9 @@ class IShapeAwareTransform(ABC):
         ...
         ...     def fit(self, data: torch.Tensor) -> None:
         ...         # Lazy allocation from data shape
-        ...         moments_shape = tuple([1 if i in self.dim else s for i, s in enumerate(data.shape)])
+        ...         moments_shape = tuple([
+        ...             1 if i in self.dim else s for i, s in enumerate(data.shape)
+        ...         ])
         ...         self.register_buffer("min", torch.zeros(moments_shape))
         ...         self.register_buffer("max", torch.ones(moments_shape))
         ...         # ... fit logic ...

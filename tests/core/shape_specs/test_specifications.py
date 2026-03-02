@@ -7,11 +7,18 @@ import pytest
 from hypothesis import given, strategies as st
 
 from dlkit.core.shape_specs import (
-    ShapeData, ShapeEntry, ModelFamily, ShapeSource,
-    ShapeSpecification, ShapeValidationEngine, ShapeSpecificationBuilder,
-    RequiredEntriesSpecification, PositiveDimensionsSpecification,
-    ModelFamilyCompatibilitySpecification, DimensionRangeSpecification,
-    ValidationResult
+    ShapeData,
+    ShapeEntry,
+    ModelFamily,
+    ShapeSource,
+    ShapeSpecification,
+    ShapeValidationEngine,
+    ShapeSpecificationBuilder,
+    RequiredEntriesSpecification,
+    PositiveDimensionsSpecification,
+    ModelFamilyCompatibilitySpecification,
+    DimensionRangeSpecification,
+    ValidationResult,
 )
 
 
@@ -57,12 +64,10 @@ class TestRequiredEntriesSpecification:
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10, 20)),
             "y": ShapeEntry(name="y", dimensions=(5,)),
-            "features": ShapeEntry(name="features", dimensions=(100,))
+            "features": ShapeEntry(name="features", dimensions=(100,)),
         }
         return ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
     def test_required_entries_all_present(self, sample_shape_data):
@@ -95,12 +100,10 @@ class TestPositiveDimensionsSpecification:
         """Test with all positive dimensions."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10, 20, 30)),
-            "y": ShapeEntry(name="y", dimensions=(5,))
+            "y": ShapeEntry(name="y", dimensions=(5,)),
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = PositiveDimensionsSpecification()
@@ -110,9 +113,7 @@ class TestPositiveDimensionsSpecification:
     def test_positive_dimensions_empty_data(self):
         """Test with empty shape data."""
         shape_data = ShapeData(
-            entries={},
-            model_family=ModelFamily.EXTERNAL,
-            source=ShapeSource.DEFAULT_FALLBACK
+            entries={}, model_family=ModelFamily.EXTERNAL, source=ShapeSource.DEFAULT_FALLBACK
         )
 
         spec = PositiveDimensionsSpecification()
@@ -127,12 +128,10 @@ class TestModelFamilyCompatibilitySpecification:
         """Test DLKIT_NN compatibility with x/y entries."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10,)),
-            "y": ShapeEntry(name="y", dimensions=(5,))
+            "y": ShapeEntry(name="y", dimensions=(5,)),
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = ModelFamilyCompatibilitySpecification(ModelFamily.DLKIT_NN)
@@ -142,13 +141,9 @@ class TestModelFamilyCompatibilitySpecification:
 
     def test_dlkit_nn_compatibility_missing_x(self):
         """Test DLKIT_NN compatibility with missing x entry."""
-        entries = {
-            "y": ShapeEntry(name="y", dimensions=(5,))
-        }
+        entries = {"y": ShapeEntry(name="y", dimensions=(5,))}
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = ModelFamilyCompatibilitySpecification(ModelFamily.DLKIT_NN)
@@ -160,12 +155,10 @@ class TestModelFamilyCompatibilitySpecification:
         """Test GRAPH compatibility with x entry."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(100, 50)),
-            "edge_index": ShapeEntry(name="edge_index", dimensions=(2, 1000))
+            "edge_index": ShapeEntry(name="edge_index", dimensions=(2, 1000)),
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.GRAPH,
-            source=ShapeSource.GRAPH_DATASET
+            entries=entries, model_family=ModelFamily.GRAPH, source=ShapeSource.GRAPH_DATASET
         )
 
         spec = ModelFamilyCompatibilitySpecification(ModelFamily.GRAPH)
@@ -175,13 +168,9 @@ class TestModelFamilyCompatibilitySpecification:
 
     def test_external_compatibility_with_shapes(self):
         """Test EXTERNAL compatibility with shape data."""
-        entries = {
-            "x": ShapeEntry(name="x", dimensions=(10,))
-        }
+        entries = {"x": ShapeEntry(name="x", dimensions=(10,))}
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.EXTERNAL,
-            source=ShapeSource.CONFIGURATION
+            entries=entries, model_family=ModelFamily.EXTERNAL, source=ShapeSource.CONFIGURATION
         )
 
         spec = ModelFamilyCompatibilitySpecification(ModelFamily.EXTERNAL)
@@ -197,12 +186,10 @@ class TestDimensionRangeSpecification:
         """Test with dimensions within range."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10, 20)),  # 2 dimensions
-            "y": ShapeEntry(name="y", dimensions=(5,))       # 1 dimension
+            "y": ShapeEntry(name="y", dimensions=(5,)),  # 1 dimension
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = DimensionRangeSpecification(min_dimensions=1, max_dimensions=3)
@@ -217,9 +204,7 @@ class TestDimensionRangeSpecification:
             "x": ShapeEntry(name="x", dimensions=(10,))  # 1 dimension
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = DimensionRangeSpecification(min_dimensions=2, max_dimensions=5)
@@ -233,9 +218,7 @@ class TestDimensionRangeSpecification:
             "x": ShapeEntry(name="x", dimensions=(10, 20, 30, 40, 50, 60))  # 6 dimensions
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         spec = DimensionRangeSpecification(min_dimensions=1, max_dimensions=3)
@@ -252,12 +235,10 @@ class TestCompositeSpecifications:
         """Valid shape data for testing."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10, 20)),
-            "y": ShapeEntry(name="y", dimensions=(5,))
+            "y": ShapeEntry(name="y", dimensions=(5,)),
         }
         return ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
     def test_and_specification_both_valid(self, valid_shape_data):
@@ -326,12 +307,10 @@ class TestShapeValidationEngine:
         """Test validation engine with DLKIT_NN model family."""
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10, 20)),
-            "y": ShapeEntry(name="y", dimensions=(5,))
+            "y": ShapeEntry(name="y", dimensions=(5,)),
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         result = validation_engine.validate(shape_data)
@@ -339,13 +318,9 @@ class TestShapeValidationEngine:
 
     def test_validation_engine_graph(self, validation_engine):
         """Test validation engine with GRAPH model family."""
-        entries = {
-            "x": ShapeEntry(name="x", dimensions=(100, 50))
-        }
+        entries = {"x": ShapeEntry(name="x", dimensions=(100, 50))}
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.GRAPH,
-            source=ShapeSource.GRAPH_DATASET
+            entries=entries, model_family=ModelFamily.GRAPH, source=ShapeSource.GRAPH_DATASET
         )
 
         result = validation_engine.validate(shape_data)
@@ -353,13 +328,9 @@ class TestShapeValidationEngine:
 
     def test_validation_engine_custom_specification(self, validation_engine):
         """Test validation engine with custom specification."""
-        entries = {
-            "x": ShapeEntry(name="x", dimensions=(10,))
-        }
+        entries = {"x": ShapeEntry(name="x", dimensions=(10,))}
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         # Custom spec requiring both x and y
@@ -379,12 +350,10 @@ class TestShapeSpecificationBuilder:
 
         entries = {
             "x": ShapeEntry(name="x", dimensions=(10,)),
-            "y": ShapeEntry(name="y", dimensions=(5,))
+            "y": ShapeEntry(name="y", dimensions=(5,)),
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         result = spec.is_satisfied_by(shape_data)
@@ -393,19 +362,11 @@ class TestShapeSpecificationBuilder:
     def test_builder_multiple_specifications(self):
         """Test builder with multiple specifications."""
         builder = ShapeSpecificationBuilder()
-        spec = (builder
-                .require_entries({"x"})
-                .positive_dimensions()
-                .dimension_range(1, 3)
-                .build())
+        spec = builder.require_entries({"x"}).positive_dimensions().dimension_range(1, 3).build()
 
-        entries = {
-            "x": ShapeEntry(name="x", dimensions=(10, 20))
-        }
+        entries = {"x": ShapeEntry(name="x", dimensions=(10, 20))}
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         result = spec.is_satisfied_by(shape_data)
@@ -419,19 +380,19 @@ class TestShapeSpecificationBuilder:
 
     @given(
         required_entries=st.sets(
-            st.text(min_size=1).filter(lambda x: x.strip() and x.isascii() and x.replace(' ', '_') == x),
-            min_size=1, max_size=3
+            st.text(min_size=1).filter(
+                lambda x: x.strip() and x.isascii() and x.replace(" ", "_") == x
+            ),
+            min_size=1,
+            max_size=3,
         ),
         min_dims=st.integers(min_value=1, max_value=3),
-        max_dims=st.integers(min_value=4, max_value=10)
+        max_dims=st.integers(min_value=4, max_value=10),
     )
     def test_builder_property_based(self, required_entries, min_dims, max_dims):
         """Property-based test for specification builder."""
         builder = ShapeSpecificationBuilder()
-        spec = (builder
-                .require_entries(required_entries)
-                .dimension_range(min_dims, max_dims)
-                .build())
+        spec = builder.require_entries(required_entries).dimension_range(min_dims, max_dims).build()
 
         # Create valid shape data
         entries = {}
@@ -442,9 +403,7 @@ class TestShapeSpecificationBuilder:
             entries[entry_name] = ShapeEntry(name=entry_name, dimensions=dimensions)
 
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         result = spec.is_satisfied_by(shape_data)

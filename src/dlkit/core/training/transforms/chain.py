@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 # Shape-Aware Transform Composition (Monadic Pattern)
 # -------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ShapedTransform:
     """A transform with its I/O shapes — the monadic unit.
@@ -33,6 +34,7 @@ class ShapedTransform:
         in_shape: Input tensor shape (excluding batch dimension).
         out_shape: Output tensor shape (excluding batch dimension).
     """
+
     transform: Any
     in_shape: tuple[int, ...]
     out_shape: tuple[int, ...]
@@ -61,6 +63,7 @@ def build_shaped_chain(
         >>> # chain[0] = ShapedTransform(minmax, (64,), (64,))
         >>> # chain[1] = ShapedTransform(pca, (64,), (10,))
     """
+
     def _bind(
         acc: tuple[tuple[ShapedTransform, ...], tuple[int, ...]],
         t: Any,
@@ -113,11 +116,7 @@ class TransformChain(Transform):
 
     Example:
         >>> # Create chain with analytical shape inference
-        >>> chain = TransformChain(
-        ...     transform_settings,
-        ...     shape_spec=shape_spec,
-        ...     entry_name="features"
-        ... )
+        >>> chain = TransformChain(transform_settings, shape_spec=shape_spec, entry_name="features")
         >>> chain.fit(x_train)
         >>> x_transformed = chain(x_train)
         >>> x_orig = chain.inverse_transform(x_transformed)
@@ -151,10 +150,7 @@ class TransformChain(Transform):
             >>>
             >>> # With validation (slower but validates compatibility)
             >>> chain = TransformChain(
-            ...     settings,
-            ...     shape_spec=spec,
-            ...     entry_name="features",
-            ...     validate_execution=True
+            ...     settings, shape_spec=spec, entry_name="features", validate_execution=True
             ... )
         """
         super().__init__()
@@ -312,10 +308,7 @@ def build_transforms(
         >>>
         >>> # With validation (slower)
         >>> transforms, output_shape = build_transforms(
-        ...     settings,
-        ...     shape_spec=spec,
-        ...     entry_name="features",
-        ...     validate_execution=True
+        ...     settings, shape_spec=spec, entry_name="features", validate_execution=True
         ... )
     """
     # Get initial shape from shape_spec
@@ -343,7 +336,7 @@ def build_transforms(
         module = FactoryProvider.create_component(transform_settings, context)
 
         # Analytical shape inference using instance method (always computed for tracking)
-        if current_shape is not None and hasattr(module, 'infer_output_shape'):
+        if current_shape is not None and hasattr(module, "infer_output_shape"):
             current_shape = module.infer_output_shape(current_shape)
 
         # Optional: Validate with dummy execution

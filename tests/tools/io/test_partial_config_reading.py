@@ -29,6 +29,7 @@ def reset_section_registry():
 
 class SampleSectionSettings(BaseModel):
     """Test settings for a simple section."""
+
     name: str = Field(default="test")
     value: int = Field(default=42)
     enabled: bool = Field(default=True)
@@ -36,6 +37,7 @@ class SampleSectionSettings(BaseModel):
 
 class PathsTestSettings(BaseModel):
     """Test settings for paths section."""
+
     dataroot: str = Field(default="./data")
     input: str = Field(default="./data/input")
     output: str = Field(default="./data/output")
@@ -43,6 +45,7 @@ class PathsTestSettings(BaseModel):
 
 class ModelTestSettings(BaseModel):
     """Test settings for model section."""
+
     name: str = Field(default="test_model")
     latent_size: int = Field(default=64)
     num_layers: int = Field(default=3)
@@ -153,6 +156,7 @@ class TestLoadSectionConfig:
         """Test loading an existing section."""
         # Register section mapping for test
         from dlkit.tools.io.config import register_section_mapping
+
         register_section_mapping(PathsTestSettings, "PATHS")
 
         paths_config = load_section_config(config_file, PathsTestSettings)
@@ -167,6 +171,7 @@ class TestLoadSectionConfig:
     def test_load_nonexistent_section(self, config_file):
         """Test loading a section that doesn't exist."""
         from dlkit.tools.io.config import register_section_mapping
+
         register_section_mapping(SampleSectionSettings, "NONEXISTENT")
 
         with pytest.raises(ConfigSectionError) as exc_info:
@@ -201,13 +206,11 @@ class TestLoadSectionsConfig:
     def test_load_multiple_sections(self, config_file):
         """Test loading multiple sections at once."""
         from dlkit.tools.io.config import register_section_mapping
+
         register_section_mapping(PathsTestSettings, "PATHS")
         register_section_mapping(ModelTestSettings, "MODEL")
 
-        section_configs = {
-            "PATHS": PathsTestSettings,
-            "MODEL": ModelTestSettings
-        }
+        section_configs = {"PATHS": PathsTestSettings, "MODEL": ModelTestSettings}
 
         configs = load_sections_config(config_file, section_configs)
 
@@ -250,10 +253,7 @@ class TestLoadSectionsConfig:
 
     def test_load_with_missing_section(self, config_file):
         """Test loading when one section is missing."""
-        section_configs = {
-            "PATHS": PathsTestSettings,
-            "NONEXISTENT": SampleSectionSettings
-        }
+        section_configs = {"PATHS": PathsTestSettings, "NONEXISTENT": SampleSectionSettings}
 
         with pytest.raises(ConfigSectionError) as exc_info:
             load_sections_config(config_file, section_configs)
@@ -297,6 +297,7 @@ class TestPerformance:
     def test_partial_vs_full_loading(self, config_file):
         """Test that partial loading is working (functional test)."""
         from dlkit.tools.io.config import load_config, register_section_mapping
+
         register_section_mapping(PathsTestSettings, "PATHS")
 
         # Both should return the same data
@@ -311,14 +312,12 @@ class TestPerformance:
     def test_multiple_sections_efficiency(self, config_file):
         """Test loading multiple sections efficiently."""
         from dlkit.tools.io.config import register_section_mapping
+
         register_section_mapping(PathsTestSettings, "PATHS")
         register_section_mapping(ModelTestSettings, "MODEL")
 
         # Loading multiple sections should work efficiently
-        section_configs = {
-            "PATHS": PathsTestSettings,
-            "MODEL": ModelTestSettings
-        }
+        section_configs = {"PATHS": PathsTestSettings, "MODEL": ModelTestSettings}
 
         configs = load_sections_config(config_file, section_configs)
 
@@ -349,8 +348,7 @@ dataroot = "./test_data"
         assert len(sections) >= 0  # May or may not detect malformed section
 
     def test_validation_error_in_section(self, tmp_path):
-        """Test handling of validation errors in section data.
-        """
+        """Test handling of validation errors in section data."""
         invalid_config = tmp_path / "invalid.toml"
         invalid_config.write_text("""
 [PATHS]

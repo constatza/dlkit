@@ -17,6 +17,7 @@ from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
 @dataclass
 class ValidationResult:
     """Result of shape validation operation."""
+
     is_valid: bool
     errors: List[str]
     warnings: List[str] = None
@@ -60,6 +61,7 @@ class ShapeValidator:
         """
         # Import here to avoid circular dependency
         from .specifications import ShapeValidationEngine
+
         self._validation_engine = validation_engine or ShapeValidationEngine()
 
     def validate_entry(self, entry: ShapeEntry) -> ValidationResult:
@@ -110,6 +112,7 @@ class ShapeSerializer:
         """
         # Import here to avoid circular dependency
         from .serialization import VersionedShapeSerializer
+
         self._versioned_serializer = versioned_serializer or VersionedShapeSerializer()
 
     def serialize(self, data: ShapeData) -> Dict[str, Any]:
@@ -176,41 +179,41 @@ class ShapeAliasResolver:
         new_entries = dict(data.entries)
 
         # Add x alias if missing and we have entries
-        if 'x' not in new_entries and data.entries:
+        if "x" not in new_entries and data.entries:
             # Use explicit default_input, or first available entry
             if data.default_input and data.default_input in data.entries:
                 source_entry = data.entries[data.default_input]
-                new_entries['x'] = ShapeEntry(name='x', dimensions=source_entry.dimensions)
+                new_entries["x"] = ShapeEntry(name="x", dimensions=source_entry.dimensions)
             else:
                 # Use first available entry as x
                 first_entry = next(iter(data.entries.values()))
-                new_entries['x'] = ShapeEntry(name='x', dimensions=first_entry.dimensions)
+                new_entries["x"] = ShapeEntry(name="x", dimensions=first_entry.dimensions)
 
         # Add y alias if missing
-        if 'y' not in new_entries:
+        if "y" not in new_entries:
             if data.default_output and data.default_output in data.entries:
                 # Use explicit default_output
                 source_entry = data.entries[data.default_output]
-                new_entries['y'] = ShapeEntry(name='y', dimensions=source_entry.dimensions)
+                new_entries["y"] = ShapeEntry(name="y", dimensions=source_entry.dimensions)
             elif len(data.entries) > 1:
                 # Use second entry as y, or duplicate x if only one entry
                 entries_list = list(data.entries.values())
                 if len(entries_list) > 1:
                     second_entry = entries_list[1]
-                    new_entries['y'] = ShapeEntry(name='y', dimensions=second_entry.dimensions)
-                elif 'x' in new_entries:
+                    new_entries["y"] = ShapeEntry(name="y", dimensions=second_entry.dimensions)
+                elif "x" in new_entries:
                     # Duplicate x as y for single-entry cases
-                    new_entries['y'] = ShapeEntry(name='y', dimensions=new_entries['x'].dimensions)
-            elif 'x' in new_entries:
+                    new_entries["y"] = ShapeEntry(name="y", dimensions=new_entries["x"].dimensions)
+            elif "x" in new_entries:
                 # Duplicate x as y
-                new_entries['y'] = ShapeEntry(name='y', dimensions=new_entries['x'].dimensions)
+                new_entries["y"] = ShapeEntry(name="y", dimensions=new_entries["x"].dimensions)
 
         return ShapeData(
             entries=new_entries,
             model_family=data.model_family,
             source=data.source,
             default_input=data.default_input,
-            default_output=data.default_output
+            default_output=data.default_output,
         )
 
     def resolve_smart_defaults(self, data: ShapeData) -> tuple[str | None, str | None]:
@@ -231,16 +234,16 @@ class ShapeAliasResolver:
         # Use explicit defaults if available and valid
         if data.default_input and data.has_entry(data.default_input):
             default_input = data.default_input
-        elif data.has_entry('x'):
-            default_input = 'x'
+        elif data.has_entry("x"):
+            default_input = "x"
         else:
             # Use first available entry
             default_input = next(iter(data.entries.keys()), None)
 
         if data.default_output and data.has_entry(data.default_output):
             default_output = data.default_output
-        elif data.has_entry('y'):
-            default_output = 'y'
+        elif data.has_entry("y"):
+            default_output = "y"
         elif len(data.entries) > 1:
             # Use second entry if available
             entries_list = list(data.entries.keys())

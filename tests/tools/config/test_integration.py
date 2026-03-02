@@ -291,13 +291,16 @@ class TestGeneralSettingsEndToEndIntegration:
             integration_config_file: Integration config file fixture
         """
         from dlkit.tools.config import load_settings
+
         settings = load_settings(integration_config_file)
 
         # Verify all components are properly loaded
         assert settings.SESSION.name == "integration_session"
         assert settings.MODEL.input_size == 128
         assert settings.MLFLOW.enabled is True
-        assert settings.MLFLOW.client.experiment_name == "integration_experiment"  # Configured value
+        assert (
+            settings.MLFLOW.client.experiment_name == "integration_experiment"
+        )  # Configured value
         assert settings.OPTUNA.enabled is True
         assert settings.DATAMODULE.dataloader.batch_size == 64
 

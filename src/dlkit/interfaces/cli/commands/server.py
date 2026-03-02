@@ -51,9 +51,7 @@ def _print_server_launch_summary(server_info) -> None:
     console.print(success_panel)
 
 
-def _handle_server_mode(
-    app_service: ServerApplicationService, server_info, detach: bool
-) -> None:
+def _handle_server_mode(app_service: ServerApplicationService, server_info, detach: bool) -> None:
     """Handle attached and detached server modes with graceful shutdown."""
 
     if detach or server_info.process is None:

@@ -22,11 +22,13 @@ class ShapeSystemFactory:
     with proper dependency injection and configuration.
     """
 
-    def __init__(self,
-                 model_registry: Optional[ModelFamilyRegistry] = None,
-                 validator: Optional[ShapeValidator] = None,
-                 serializer: Optional[ShapeSerializer] = None,
-                 alias_resolver: Optional[ShapeAliasResolver] = None):
+    def __init__(
+        self,
+        model_registry: Optional[ModelFamilyRegistry] = None,
+        validator: Optional[ShapeValidator] = None,
+        serializer: Optional[ShapeSerializer] = None,
+        alias_resolver: Optional[ShapeAliasResolver] = None,
+    ):
         """Initialize factory with optional dependencies.
 
         Args:
@@ -35,15 +37,19 @@ class ShapeSystemFactory:
             serializer: Shape serialization strategy
             alias_resolver: Shape alias resolution strategy
         """
-        self._model_registry = model_registry or ModelFamilyRegistryFactory.create_default_registry()
+        self._model_registry = (
+            model_registry or ModelFamilyRegistryFactory.create_default_registry()
+        )
         self._validator = validator or ShapeValidator()
         self._serializer = serializer or ShapeSerializer()
         self._alias_resolver = alias_resolver or ShapeAliasResolver()
 
-    def create_shape_spec_from_data(self,
-                                   shapes: Dict[str, tuple[int, ...]] | None,
-                                   model_settings: Any,
-                                   source: ShapeSource = ShapeSource.DEFAULT_FALLBACK) -> IShapeSpec:
+    def create_shape_spec_from_data(
+        self,
+        shapes: Dict[str, tuple[int, ...]] | None,
+        model_settings: Any,
+        source: ShapeSource = ShapeSource.DEFAULT_FALLBACK,
+    ) -> IShapeSpec:
         """Create shape specification from raw shape data and model settings.
 
         Args:
@@ -60,11 +66,7 @@ class ShapeSystemFactory:
 
         model_family = self._model_registry.detect_family(model_settings)
 
-        return create_shape_spec(
-            shapes=shapes,
-            model_family=model_family,
-            source=source
-        )
+        return create_shape_spec(shapes=shapes, model_family=model_family, source=source)
 
     def create_shape_spec_from_serialized(self, serialized_data: Dict[str, Any]) -> IShapeSpec:
         """Create shape specification from serialized data.
@@ -85,7 +87,7 @@ class ShapeSystemFactory:
                 model_family=shape_data.model_family,
                 source=shape_data.source,
                 default_input=shape_data.default_input,
-                default_output=shape_data.default_output
+                default_output=shape_data.default_output,
             )
         except Exception as e:
             raise ValueError(f"Failed to deserialize shape data: {e}") from e
@@ -106,7 +108,7 @@ class ShapeSystemFactory:
         return create_shape_spec(
             shapes={name: entry.dimensions for name, entry in shape_data.entries.items()},
             model_family=shape_data.model_family,
-            source=shape_data.source
+            source=shape_data.source,
         )
 
     def get_model_registry(self) -> ModelFamilyRegistry:
@@ -127,10 +129,7 @@ class ShapeSystemFactory:
 
     def get_batch_processor(self) -> BatchShapeProcessor:
         """Get batch processor for performance optimization."""
-        return BatchShapeProcessor(
-            validator=self._validator,
-            serializer=self._serializer
-        )
+        return BatchShapeProcessor(validator=self._validator, serializer=self._serializer)
 
     def create_caching_inferencer(self, base_chain) -> CachingShapeInferencer:
         """Create caching inferencer wrapper.
@@ -142,8 +141,7 @@ class ShapeSystemFactory:
             CachingShapeInferencer with performance optimizations
         """
         return CachingShapeInferencer(
-            base_chain=base_chain,
-            cache=LRUShapeCache(max_size=1000, ttl_seconds=3600)
+            base_chain=base_chain, cache=LRUShapeCache(max_size=1000, ttl_seconds=3600)
         )
 
     @classmethod
@@ -157,7 +155,7 @@ class ShapeSystemFactory:
             model_registry=ModelFamilyRegistryFactory.create_default_registry(),
             validator=ShapeValidator(),
             serializer=ShapeSerializer(),
-            alias_resolver=ShapeAliasResolver()
+            alias_resolver=ShapeAliasResolver(),
         )
 
     @classmethod
@@ -171,5 +169,5 @@ class ShapeSystemFactory:
             model_registry=ModelFamilyRegistryFactory.create_minimal_registry(),
             validator=ShapeValidator(),
             serializer=ShapeSerializer(),
-            alias_resolver=ShapeAliasResolver()
+            alias_resolver=ShapeAliasResolver(),
         )

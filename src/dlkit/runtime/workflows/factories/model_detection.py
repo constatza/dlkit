@@ -15,6 +15,7 @@ from dlkit.tools.config import GeneralSettings
 
 class ModelType(Enum):
     """Model type classifications."""
+
     SHAPE_AWARE_DLKIT = "shape_aware_dlkit"
     SHAPE_AGNOSTIC_EXTERNAL = "shape_agnostic_external"
     GRAPH = "graph"
@@ -86,6 +87,7 @@ class ABCModelTypeDetector(IModelTypeDetector):
 
             # Check for external Lightning modules (PyTorch Forecasting, etc.)
             from lightning.pytorch import LightningModule
+
             if issubclass(model_cls, LightningModule):
                 return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
@@ -113,10 +115,10 @@ class ABCModelTypeDetector(IModelTypeDetector):
 
             if isinstance(model_name, str):
                 from dlkit.tools.utils.general import import_object
+
                 try:
                     return import_object(
-                        model_name,
-                        fallback_module=getattr(model_settings, "module_path", "")
+                        model_name, fallback_module=getattr(model_settings, "module_path", "")
                     )
                 except Exception:
                     return None
@@ -125,8 +127,6 @@ class ABCModelTypeDetector(IModelTypeDetector):
             pass
 
         return None
-
-
 
 
 class ModelTypeDetectionChain:

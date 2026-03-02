@@ -11,6 +11,7 @@ from dlkit.interfaces.api.services.precision_service import get_precision_servic
 
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _load_npz(path: Path | str, array_key: str | None = None, **kwargs) -> np.ndarray:
     """Load a single array from an NPZ file.
 
@@ -46,15 +47,13 @@ def _load_npz(path: Path | str, array_key: str | None = None, **kwargs) -> np.nd
         if len(keys) == 1:
             return npz[keys[0]]
         raise ValueError(
-            f"NPZ file '{path}' contains multiple arrays {keys}. "
-            f"Specify array_key to select one."
+            f"NPZ file '{path}' contains multiple arrays {keys}. Specify array_key to select one."
         )
 
     # Use explicit key
     if array_key not in keys:
         raise ValueError(
-            f"Array key '{array_key}' not found in NPZ file '{path}'. "
-            f"Available keys: {keys}"
+            f"Array key '{array_key}' not found in NPZ file '{path}'. Available keys: {keys}"
         )
     return npz[array_key]
 

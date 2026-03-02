@@ -10,10 +10,19 @@ import torch
 from unittest.mock import Mock, patch
 
 from dlkit.core.shape_specs import (
-    create_shape_spec, ShapeSystemFactory, ModelFamily, ShapeSource,
-    ShapeInferenceEngine, InferenceContext, CachingShapeInferencer,
-    ShapeInferenceChain, BatchShapeProcessor, VersionedShapeSerializer,
-    SerializationFormat, ShapeData, ShapeEntry
+    create_shape_spec,
+    ShapeSystemFactory,
+    ModelFamily,
+    ShapeSource,
+    ShapeInferenceEngine,
+    InferenceContext,
+    CachingShapeInferencer,
+    ShapeInferenceChain,
+    BatchShapeProcessor,
+    VersionedShapeSerializer,
+    SerializationFormat,
+    ShapeData,
+    ShapeEntry,
 )
 from dlkit.tools.config.components.model_components import ModelComponentSettings
 
@@ -31,11 +40,13 @@ class TestFullSystemIntegration:
         """Mock dataset for testing."""
         # Create mock dataset with dict-based samples
         dataset = Mock()
-        dataset.__getitem__ = Mock(return_value={
-            'x': torch.randn(10, 20),
-            'y': torch.randn(5),
-            'features': torch.randn(100, 50)
-        })
+        dataset.__getitem__ = Mock(
+            return_value={
+                "x": torch.randn(10, 20),
+                "y": torch.randn(5),
+                "features": torch.randn(100, 50),
+            }
+        )
         dataset.__len__ = Mock(return_value=1000)
         return dataset
 
@@ -47,15 +58,16 @@ class TestFullSystemIntegration:
         settings.class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
         return settings
 
-    def test_end_to_end_shape_inference_from_dataset(self, shape_factory, sample_dataset, sample_model_settings):
+    def test_end_to_end_shape_inference_from_dataset(
+        self, shape_factory, sample_dataset, sample_model_settings
+    ):
         """Test complete end-to-end shape inference from dataset."""
         # Create inference engine
         inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
 
         # Infer shapes from dataset
         shape_spec = inference_engine.infer_from_dataset(
-            dataset=sample_dataset,
-            model_settings=sample_model_settings
+            dataset=sample_dataset, model_settings=sample_model_settings
         )
 
         # Verify results
@@ -103,7 +115,7 @@ class TestFullSystemIntegration:
         original_spec = create_shape_spec(
             shapes={"x": (784,), "y": (10,)},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         # Serialize for checkpoint
@@ -114,10 +126,8 @@ class TestFullSystemIntegration:
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
         checkpoint_data = {
-            'model_state_dict': {},
-            'dlkit_metadata': {
-                'shape_spec': serialized.to_dict()
-            }
+            "model_state_dict": {},
+            "dlkit_metadata": {"shape_spec": serialized.to_dict()},
         }
         torch.save(checkpoint_data, checkpoint_path)
 
@@ -130,7 +140,9 @@ class TestFullSystemIntegration:
         assert reconstructed_spec.get_shape("y") == (10,)
         assert reconstructed_spec.model_family() == ModelFamily.DLKIT_NN.value
 
-    def test_caching_performance_integration(self, shape_factory, sample_dataset, sample_model_settings):
+    def test_caching_performance_integration(
+        self, shape_factory, sample_dataset, sample_model_settings
+    ):
         """Test caching integration with performance benefits."""
         # Create base inference chain
         base_chain = ShapeInferenceChain()
@@ -142,7 +154,7 @@ class TestFullSystemIntegration:
         context = InferenceContext(
             dataset=sample_dataset,
             model_settings=sample_model_settings,
-            shape_factory=shape_factory
+            shape_factory=shape_factory,
         )
 
         # First inference (cache miss)
@@ -171,12 +183,12 @@ class TestFullSystemIntegration:
         for i in range(5):
             entries = {
                 "x": ShapeEntry(name="x", dimensions=(10 * (i + 1), 20)),
-                "y": ShapeEntry(name="y", dimensions=(5,))
+                "y": ShapeEntry(name="y", dimensions=(5,)),
             }
             shape_data = ShapeData(
                 entries=entries,
                 model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )
             shape_data_list.append(shape_data)
 
@@ -212,6 +224,7 @@ class TestFullSystemIntegration:
         class DLKitSettings:
             architecture = "FeedForwardNN"
             class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
+
         detected_family = registry.detect_family(DLKitSettings())
         assert detected_family == ModelFamily.DLKIT_NN
 
@@ -219,12 +232,14 @@ class TestFullSystemIntegration:
         class GraphSettings:
             architecture = "BaseGraphNetwork"
             class_path = "dlkit.core.models.nn.graph.base.BaseGraphNetwork"
+
         detected_family = registry.detect_family(GraphSettings())
         assert detected_family == ModelFamily.GRAPH
 
         # Test external detection (class without MODEL_FAMILY attribute)
         class ExternalSettings:
             class_path = "pytorch_forecasting.models.DeepAR"
+
         detected_family = registry.detect_family(ExternalSettings())
         assert detected_family == ModelFamily.EXTERNAL
 
@@ -235,9 +250,7 @@ class TestFullSystemIntegration:
             "x": ShapeEntry(name="x", dimensions=(10, 20, 30, 40, 50, 60))  # Too many dimensions
         }
         shape_data = ShapeData(
-            entries=entries,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            entries=entries, model_family=ModelFamily.DLKIT_NN, source=ShapeSource.TRAINING_DATASET
         )
 
         # Validate using factory validator
@@ -251,13 +264,7 @@ class TestFullSystemIntegration:
     def test_legacy_format_migration_integration(self, shape_factory):
         """Test legacy format migration integration."""
         # Create legacy shape_info format
-        legacy_shape_info = {
-            '_type': 'dict',
-            'data': {
-                'x': [784],
-                'y': [10]
-            }
-        }
+        legacy_shape_info = {"_type": "dict", "data": {"x": [784], "y": [10]}}
 
         # Migrate using factory
         serializer = shape_factory.get_serializer()
@@ -274,9 +281,7 @@ class TestFullSystemIntegration:
         inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
 
         # Test with no data sources (should fallback to defaults)
-        shape_spec = inference_engine.infer_comprehensive(
-            model_settings=sample_model_settings
-        )
+        shape_spec = inference_engine.infer_comprehensive(model_settings=sample_model_settings)
 
         # Should not be empty (fallback should provide defaults)
         assert not shape_spec.is_empty()
@@ -298,14 +303,14 @@ class TestFullSystemIntegration:
         invalid_data = ShapeData(
             entries={},  # Empty entries
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         result = validator.validate_collection(invalid_data)
         # Empty data might be valid for some specs, but should trigger warnings
         # The exact behavior depends on the specific validation rules
 
-    @patch('torch.load')
+    @patch("torch.load")
     def test_checkpoint_loading_error_handling(
         self,
         mock_torch_load,
@@ -343,7 +348,7 @@ class TestRealWorldScenarios:
         shape_spec = create_shape_spec(
             shapes={"x": (784,), "y": (10,)},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         # Validate
@@ -365,12 +370,12 @@ class TestRealWorldScenarios:
         # Create graph shape spec
         shape_spec = create_shape_spec(
             shapes={
-                "x": (100, 64),      # Node features
+                "x": (100, 64),  # Node features
                 "edge_index": (2, 5000),  # Edge connectivity
-                "y": (100,)          # Node labels
+                "y": (100,),  # Node labels
             },
             model_family=ModelFamily.GRAPH,
-            source=ShapeSource.GRAPH_DATASET
+            source=ShapeSource.GRAPH_DATASET,
         )
 
         # Validate with graph-specific rules
@@ -385,9 +390,7 @@ class TestRealWorldScenarios:
         """Test external model scenario (no shapes)."""
         # Create external model spec
         shape_spec = create_shape_spec(
-            shapes=None,
-            model_family=ModelFamily.EXTERNAL,
-            source=ShapeSource.CONFIGURATION
+            shapes=None, model_family=ModelFamily.EXTERNAL, source=ShapeSource.CONFIGURATION
         )
 
         # Should be empty
@@ -408,10 +411,10 @@ class TestRealWorldScenarios:
         shape_spec = create_shape_spec(
             shapes={
                 "x": (100, 24, 10),  # (batch, sequence, features)
-                "y": (100, 1)        # (batch, prediction)
+                "y": (100, 1),  # (batch, prediction)
             },
             model_family=ModelFamily.TIMESERIES,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         # Validate

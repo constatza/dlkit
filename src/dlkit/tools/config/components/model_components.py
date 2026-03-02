@@ -130,8 +130,7 @@ class LossComponentSettings(ComponentSettings[Callable]):
         >>>
         >>> # External loss from torchmetrics
         >>> LossComponentSettings(
-        ...     name="mean_absolute_error",
-        ...     module_path="torchmetrics.functional.regression"
+        ...     name="mean_absolute_error", module_path="torchmetrics.functional.regression"
         ... )
     """
 
@@ -195,7 +194,6 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
         ),
     )
 
-
     # Model architecture hyperparameters
     heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
     num_layers: IntHyperparameter | None = Field(default=None, description="Number of layers")
@@ -220,7 +218,6 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
         default=None, description="Number of output channels"
     )
     num_heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
-
 
 
 class WrapperComponentSettings(ComponentSettings[nn.Module]):

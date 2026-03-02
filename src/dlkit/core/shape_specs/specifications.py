@@ -92,7 +92,7 @@ class AndSpecification(ShapeSpecification):
         combined_result = ValidationResult(
             is_valid=left_result.is_valid and right_result.is_valid,
             errors=left_result.errors + right_result.errors,
-            warnings=left_result.warnings + right_result.warnings
+            warnings=left_result.warnings + right_result.warnings,
         )
 
         return combined_result
@@ -126,16 +126,14 @@ class OrSpecification(ShapeSpecification):
         if left_result.is_valid or right_result.is_valid:
             # At least one passed - combine warnings but no errors
             return ValidationResult(
-                is_valid=True,
-                errors=[],
-                warnings=left_result.warnings + right_result.warnings
+                is_valid=True, errors=[], warnings=left_result.warnings + right_result.warnings
             )
         else:
             # Both failed - combine all errors and warnings
             return ValidationResult(
                 is_valid=False,
                 errors=left_result.errors + right_result.errors,
-                warnings=left_result.warnings + right_result.warnings
+                warnings=left_result.warnings + right_result.warnings,
             )
 
 
@@ -162,7 +160,9 @@ class NotSpecification(ShapeSpecification):
         result = self._spec.is_satisfied_by(shape_data)
 
         if result.is_valid:
-            return ValidationResult.failure(["Negated specification failed: wrapped spec was satisfied"])
+            return ValidationResult.failure([
+                "Negated specification failed: wrapped spec was satisfied"
+            ])
         else:
             return ValidationResult.success()
 
@@ -263,19 +263,21 @@ class ModelFamilyCompatibilitySpecification(ShapeSpecification):
 
         if self._family == ModelFamily.GRAPH:
             # Graph models typically need 'x' for node features
-            if not shape_data.has_entry('x'):
+            if not shape_data.has_entry("x"):
                 result.add_warning("Graph models typically require 'x' entry for node features")
 
             # Check for common graph entries
-            graph_entries = {'x', 'edge_index', 'edge_attr', 'y'}
+            graph_entries = {"x", "edge_index", "edge_attr", "y"}
             if not any(shape_data.has_entry(entry) for entry in graph_entries):
-                result.add_warning("Graph models typically require graph-specific entries (x, edge_index, etc.)")
+                result.add_warning(
+                    "Graph models typically require graph-specific entries (x, edge_index, etc.)"
+                )
 
         elif self._family == ModelFamily.DLKIT_NN:
             # Standard NN models benefit from x/y entries
-            if not shape_data.has_entry('x'):
+            if not shape_data.has_entry("x"):
                 result.add_warning("Standard NN models typically require 'x' entry for input")
-            if not shape_data.has_entry('y'):
+            if not shape_data.has_entry("y"):
                 result.add_warning("Standard NN models typically require 'y' entry for output")
 
         elif self._family == ModelFamily.EXTERNAL:
@@ -285,10 +287,12 @@ class ModelFamilyCompatibilitySpecification(ShapeSpecification):
 
         elif self._family == ModelFamily.TIMESERIES:
             # Time series models need sequence-like shapes
-            if shape_data.has_entry('x'):
-                x_dims = shape_data.get_dimensions('x')
+            if shape_data.has_entry("x"):
+                x_dims = shape_data.get_dimensions("x")
                 if x_dims and len(x_dims) < 2:
-                    result.add_warning("Time series models typically require multi-dimensional input (sequence, features)")
+                    result.add_warning(
+                        "Time series models typically require multi-dimensional input (sequence, features)"
+                    )
 
         return result
 
@@ -397,7 +401,9 @@ class ShapeValidationEngine:
 
         return spec.is_satisfied_by(shape_data)
 
-    def validate_with_spec(self, shape_data: ShapeData, spec: ShapeSpecification) -> ValidationResult:
+    def validate_with_spec(
+        self, shape_data: ShapeData, spec: ShapeSpecification
+    ) -> ValidationResult:
         """Validate shape data with custom specification.
 
         Args:
@@ -418,10 +424,7 @@ class ShapeValidationEngine:
         Returns:
             ValidationResult from basic validation
         """
-        basic_spec = (
-            PositiveDimensionsSpecification()
-            .and_(UniqueEntryNamesSpecification())
-        )
+        basic_spec = PositiveDimensionsSpecification().and_(UniqueEntryNamesSpecification())
         return basic_spec.is_satisfied_by(shape_data)
 
     def _register_default_specifications(self) -> None:

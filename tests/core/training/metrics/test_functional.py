@@ -72,11 +72,11 @@ def temporal_sequence_3d():
     """Temporal sequence with shape (B=2, T=4, D=2)."""
     preds = torch.tensor([
         [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
-        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]]
+        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
     ])
     target = torch.tensor([
         [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
-        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
+        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
     ])
     return preds, target
 
@@ -232,9 +232,7 @@ class TestVectorMetrics:
     def test_normalized_vector_norm_error_custom_aggregator(self, simple_2d_vectors):
         """Test with custom aggregator (sum instead of mean)."""
         preds, target = simple_2d_vectors
-        error = normalized_vector_norm_error(
-            preds, target, ord=2, dim=-1, aggregator=torch.sum
-        )
+        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1, aggregator=torch.sum)
 
         # Should be sum of per-sample errors, not mean
         error_mean = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
@@ -460,10 +458,7 @@ class TestEdgeCases:
 
         # Create custom metric via partial composition
         my_l1_sum_metric = partial(
-            normalized_vector_norm_error,
-            ord=1,
-            dim=-1,
-            aggregator=torch.sum
+            normalized_vector_norm_error, ord=1, dim=-1, aggregator=torch.sum
         )
 
         result = my_l1_sum_metric(preds, target)

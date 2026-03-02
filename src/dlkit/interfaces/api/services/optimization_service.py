@@ -68,7 +68,9 @@ class OptimizationService:
             optimization_strategy = orch._selector.select_optimization(settings)
 
             # Import at runtime to avoid circular dependency with the strategy module
-            from dlkit.runtime.workflows.optimization.strategy import OptimizationStrategy as CleanOptimizationStrategy
+            from dlkit.runtime.workflows.optimization.strategy import (
+                OptimizationStrategy as CleanOptimizationStrategy,
+            )
             from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
 
             # Get experiment tracker for service-level context management

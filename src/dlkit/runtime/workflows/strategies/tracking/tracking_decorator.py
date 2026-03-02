@@ -288,7 +288,9 @@ class TrackingDecorator(ITrainingExecutor):
 
         if server_status is not None:
             run_context.set_tag("mlflow_server_running", str(bool(server_status.get("running"))))
-            run_context.set_tag("mlflow_server_response_time", str(server_status.get("response_time")))
+            run_context.set_tag(
+                "mlflow_server_response_time", str(server_status.get("response_time"))
+            )
 
     def _log_configuration(
         self,

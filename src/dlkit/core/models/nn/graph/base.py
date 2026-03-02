@@ -29,7 +29,9 @@ class BaseGraphNetwork(DLKitModel):
 
         # Validate shape immediately
         if not self.accepts_shape(unified_shape):
-            raise ValueError(f"{self.__class__.__name__} cannot accept the provided shape specification: {unified_shape}")
+            raise ValueError(
+                f"{self.__class__.__name__} cannot accept the provided shape specification: {unified_shape}"
+            )
 
     def get_unified_shape(self) -> IShapeSpec:
         """Get the unified shape specification for this model.

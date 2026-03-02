@@ -271,11 +271,7 @@ class MLflowAPIHealthChecker(BaseHealthChecker):
             start_time = time.time()
             # Use the search endpoint with max_results=1 to minimize response size
             # This is a reliable endpoint that exists in all MLflow versions
-            response = requests.get(
-                api_url,
-                params={"max_results": 1},
-                timeout=timeout
-            )
+            response = requests.get(api_url, params={"max_results": 1}, timeout=timeout)
             response_time = time.time() - start_time
 
             # MLflow API returns 200 when ready (even if no experiments exist)
@@ -405,9 +401,7 @@ class CompositeHealthChecker(HealthChecker):
         while True:
             now = time.monotonic()
             if now >= deadline:
-                logger.debug(
-                    f"{checker.__class__.__name__} wait loop timed out for {url}"
-                )
+                logger.debug(f"{checker.__class__.__name__} wait loop timed out for {url}")
                 return False
 
             attempt += 1

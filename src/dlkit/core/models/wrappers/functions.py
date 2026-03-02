@@ -69,7 +69,7 @@ def apply_transforms(
         >>> targets = torch.randn(32, 1)
         >>> transformed = apply_transforms(
         ...     (features, targets),
-        ...     (scaler, None)  # Scale features, keep targets
+        ...     (scaler, None),  # Scale features, keep targets
         ... )
     """
     return tuple(t(x) if t is not None else x for x, t in zip(tensors, transforms))
@@ -99,6 +99,7 @@ def apply_inverse_chain(x: Tensor, chain: "torch.nn.Module") -> Tensor:
         Inverse-transformed tensor, or x unchanged if chain is not invertible.
     """
     from dlkit.core.training.transforms.base import InvertibleTransform
+
     if isinstance(chain, InvertibleTransform):
         return chain.inverse_transform(x)
     return x
@@ -119,8 +120,7 @@ def infer_batch_shapes(batch: Any) -> tuple[tuple[int, ...], ...]:
     Example:
         >>> from dlkit.core.datatypes import Batch
         >>> batch = Batch(
-        ...     features=(torch.randn(32, 64), torch.randn(32, 100)),
-        ...     targets=(torch.randn(32, 1),)
+        ...     features=(torch.randn(32, 64), torch.randn(32, 100)), targets=(torch.randn(32, 1),)
         ... )
         >>> shapes = infer_batch_shapes(batch)
         >>> # shapes = ((32, 64), (32, 100))

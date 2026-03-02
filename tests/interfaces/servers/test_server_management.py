@@ -435,9 +435,7 @@ class TestServerConfigurationValidation:
             "backend_store_uri": "sqlite:///new_path.db",
         }
 
-        updated_config = ServerConfigApplier.apply_overrides(
-            test_server_config, valid_overrides
-        )
+        updated_config = ServerConfigApplier.apply_overrides(test_server_config, valid_overrides)
 
         assert updated_config.host == "0.0.0.0"
         assert updated_config.port == 8080

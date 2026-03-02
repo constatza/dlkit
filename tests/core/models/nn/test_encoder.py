@@ -75,25 +75,19 @@ class TestSkipEncoder1d:
 
     def test_with_batch_norm(self, enc_input: torch.Tensor) -> None:
         """Encoder with batch normalization should work."""
-        enc = SkipEncoder1d(
-            channels=[2, 3, 4], timesteps=[16, 8, 4], normalize="batch"
-        )
+        enc = SkipEncoder1d(channels=[2, 3, 4], timesteps=[16, 8, 4], normalize="batch")
         out = enc(enc_input)
         assert out.shape == (enc_input.shape[0], 4, 4)
 
     def test_with_layer_norm(self, enc_input: torch.Tensor) -> None:
         """Encoder with layer normalization should work."""
-        enc = SkipEncoder1d(
-            channels=[2, 3, 4], timesteps=[16, 8, 4], normalize="layer"
-        )
+        enc = SkipEncoder1d(channels=[2, 3, 4], timesteps=[16, 8, 4], normalize="layer")
         out = enc(enc_input)
         assert out.shape == (enc_input.shape[0], 4, 4)
 
     def test_with_dropout(self, enc_input: torch.Tensor) -> None:
         """Encoder with dropout should work."""
-        enc = SkipEncoder1d(
-            channels=[2, 3, 4], timesteps=[16, 8, 4], dropout=0.2
-        )
+        enc = SkipEncoder1d(channels=[2, 3, 4], timesteps=[16, 8, 4], dropout=0.2)
         enc.eval()  # Disable dropout during eval
         out = enc(enc_input)
         assert out.shape == (enc_input.shape[0], 4, 4)
@@ -105,9 +99,7 @@ class TestSkipEncoder1d:
 
     def test_multiple_layers(self, batch_size: int) -> None:
         """Encoder should support varying number of layers."""
-        enc = SkipEncoder1d(
-            channels=[2, 4, 8, 16], timesteps=[32, 16, 8, 4]
-        )
+        enc = SkipEncoder1d(channels=[2, 4, 8, 16], timesteps=[32, 16, 8, 4])
         x = torch.randn(batch_size, 2, 32)
         out = enc(x)
         assert out.shape == (batch_size, 16, 4)
@@ -149,17 +141,13 @@ class TestSkipDecoder1d:
 
     def test_with_batch_norm(self, latent_tensor: torch.Tensor) -> None:
         """Decoder with batch normalization should work."""
-        dec = SkipDecoder1d(
-            channels=[4, 3, 2], timesteps=[4, 8, 16], normalize="batch"
-        )
+        dec = SkipDecoder1d(channels=[4, 3, 2], timesteps=[4, 8, 16], normalize="batch")
         out = dec(latent_tensor)
         assert out.shape == (latent_tensor.shape[0], 2, 16)
 
     def test_with_dropout(self, latent_tensor: torch.Tensor) -> None:
         """Decoder with dropout should work."""
-        dec = SkipDecoder1d(
-            channels=[4, 3, 2], timesteps=[4, 8, 16], dropout=0.2
-        )
+        dec = SkipDecoder1d(channels=[4, 3, 2], timesteps=[4, 8, 16], dropout=0.2)
         dec.eval()
         out = dec(latent_tensor)
         assert out.shape == (latent_tensor.shape[0], 2, 16)

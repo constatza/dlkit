@@ -91,11 +91,7 @@ class ConfigAccessor:
         tags = getattr(client, "registered_model_version_tags", None) if client else None
         if not isinstance(tags, dict):
             return {}
-        return {
-            str(key).strip(): str(value)
-            for key, value in tags.items()
-            if str(key).strip()
-        }
+        return {str(key).strip(): str(value) for key, value in tags.items() if str(key).strip()}
 
     def should_register_model(self) -> bool:
         """Check if model registration is enabled.

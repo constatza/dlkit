@@ -35,7 +35,9 @@ class TestNormalizePath:
         assert result == Path("relative/path")
         assert not result.is_absolute()
 
-    def test_normalize_path_expands_tilde(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_normalize_path_expands_tilde(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """Tilde paths should expand to HOME."""
         fake_home = tmp_path / "home"
         fake_home.mkdir()

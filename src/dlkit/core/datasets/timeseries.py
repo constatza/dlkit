@@ -108,7 +108,6 @@ class ForecastingDataset(BaseDataset):
             **kwargs,
         )
 
-
     # Thin-wrapper attribute access: expose TimeSeriesDataSet API transparently
     def __getattr__(self, name: str):
         """Delegate unknown attributes to the underlying TimeSeriesDataSet.

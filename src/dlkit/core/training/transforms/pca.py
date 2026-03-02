@@ -124,7 +124,9 @@ class PCA(Transform):
         self.register_buffer("total_explained_variance", torch.tensor(total_explained_variance))
 
         self.fitted = True
-        logger.info(f"PCA total explained variance ratio: {self.total_explained_variance.item():.4e}")
+        logger.info(
+            f"PCA total explained variance ratio: {self.total_explained_variance.item():.4e}"
+        )
 
     def _load_from_state_dict(
         self,
@@ -147,7 +149,13 @@ class PCA(Transform):
             unexpected_keys: List to accumulate unexpected key names.
             error_msgs: List to accumulate error messages.
         """
-        for name in ("mean", "components", "explained_variance", "explained_variance_ratio", "total_explained_variance"):
+        for name in (
+            "mean",
+            "components",
+            "explained_variance",
+            "explained_variance_ratio",
+            "total_explained_variance",
+        ):
             key = f"{prefix}{name}"
             if key in state_dict:
                 self.register_buffer(name, torch.empty_like(state_dict[key]))

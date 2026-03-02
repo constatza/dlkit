@@ -18,6 +18,7 @@ from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
 
 class SerializationFormat(Enum):
     """Enumeration of supported serialization formats."""
+
     JSON = "json"
     MSGPACK = "msgpack"
     PICKLE = "pickle"
@@ -25,14 +26,16 @@ class SerializationFormat(Enum):
 
 class SerializationVersion(Enum):
     """Enumeration of serialization format versions."""
-    V1_LEGACY = "v1"      # Legacy shape_info format
-    V2_ENHANCED = "v2"    # Enhanced metadata format
-    V3_MODERN = "v3"      # New modular format (current)
+
+    V1_LEGACY = "v1"  # Legacy shape_info format
+    V2_ENHANCED = "v2"  # Enhanced metadata format
+    V3_MODERN = "v3"  # New modular format (current)
 
 
 @dataclass
 class SerializationMetadata:
     """Metadata for serialized shape specifications."""
+
     version: SerializationVersion
     format: SerializationFormat
     created_at: str
@@ -49,36 +52,37 @@ class SerializationMetadata:
 @dataclass
 class SerializedShape:
     """Container for serialized shape data with metadata."""
+
     metadata: SerializationMetadata
     data: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for storage."""
         return {
-            'metadata': {
-                'version': self.metadata.version.value,
-                'format': self.metadata.format.value,
-                'created_at': self.metadata.created_at,
-                'dlkit_version': self.metadata.dlkit_version,
-                'checksum': self.metadata.checksum,
-                'migration_history': self.metadata.migration_history
+            "metadata": {
+                "version": self.metadata.version.value,
+                "format": self.metadata.format.value,
+                "created_at": self.metadata.created_at,
+                "dlkit_version": self.metadata.dlkit_version,
+                "checksum": self.metadata.checksum,
+                "migration_history": self.metadata.migration_history,
             },
-            'data': self.data
+            "data": self.data,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> SerializedShape:
         """Create from dictionary."""
-        metadata_dict = data.get('metadata', {})
+        metadata_dict = data.get("metadata", {})
         metadata = SerializationMetadata(
-            version=SerializationVersion(metadata_dict.get('version', 'v3')),
-            format=SerializationFormat(metadata_dict.get('format', 'json')),
-            created_at=metadata_dict.get('created_at', datetime.now().isoformat()),
-            dlkit_version=metadata_dict.get('dlkit_version'),
-            checksum=metadata_dict.get('checksum'),
-            migration_history=metadata_dict.get('migration_history', [])
+            version=SerializationVersion(metadata_dict.get("version", "v3")),
+            format=SerializationFormat(metadata_dict.get("format", "json")),
+            created_at=metadata_dict.get("created_at", datetime.now().isoformat()),
+            dlkit_version=metadata_dict.get("dlkit_version"),
+            checksum=metadata_dict.get("checksum"),
+            migration_history=metadata_dict.get("migration_history", []),
         )
-        return cls(metadata=metadata, data=data.get('data', {}))
+        return cls(metadata=metadata, data=data.get("data", {}))
 
 
 class ShapeFormatSerializer(ABC):
@@ -127,20 +131,15 @@ class V3ModernSerializer(ShapeFormatSerializer):
             Serialized dictionary in V3 format
         """
         return {
-            'entries': {
-                name: {
-                    'dimensions': list(entry.dimensions),
-                    'metadata': {
-                        'name': entry.name
-                    }
-                }
+            "entries": {
+                name: {"dimensions": list(entry.dimensions), "metadata": {"name": entry.name}}
                 for name, entry in shape_data.entries.items()
             },
-            'model_family': shape_data.model_family.value,
-            'source': shape_data.source.value,
-            'default_input': shape_data.default_input,
-            'default_output': shape_data.default_output,
-            'schema_version': '3.0'
+            "model_family": shape_data.model_family.value,
+            "source": shape_data.source.value,
+            "default_input": shape_data.default_input,
+            "default_output": shape_data.default_output,
+            "schema_version": "3.0",
         }
 
     def deserialize(self, data: Dict[str, Any]) -> ShapeData:
@@ -153,16 +152,16 @@ class V3ModernSerializer(ShapeFormatSerializer):
             ShapeData object
         """
         entries = {}
-        for name, entry_data in data['entries'].items():
-            dimensions = tuple(entry_data['dimensions'])
+        for name, entry_data in data["entries"].items():
+            dimensions = tuple(entry_data["dimensions"])
             entries[name] = ShapeEntry(name=name, dimensions=dimensions)
 
         return ShapeData(
             entries=entries,
-            model_family=ModelFamily(data['model_family']),
-            source=ShapeSource(data['source']),
-            default_input=data.get('default_input'),
-            default_output=data.get('default_output')
+            model_family=ModelFamily(data["model_family"]),
+            source=ShapeSource(data["source"]),
+            default_input=data.get("default_input"),
+            default_output=data.get("default_output"),
         )
 
     def get_version(self) -> SerializationVersion:
@@ -183,11 +182,11 @@ class V2EnhancedSerializer(ShapeFormatSerializer):
             Serialized dictionary in V2 format
         """
         return {
-            'entries': {name: list(entry.dimensions) for name, entry in shape_data.entries.items()},
-            'model_family': shape_data.model_family.value,
-            'source': shape_data.source.value,
-            'default_input': shape_data.default_input,
-            'default_output': shape_data.default_output
+            "entries": {name: list(entry.dimensions) for name, entry in shape_data.entries.items()},
+            "model_family": shape_data.model_family.value,
+            "source": shape_data.source.value,
+            "default_input": shape_data.default_input,
+            "default_output": shape_data.default_output,
         }
 
     def deserialize(self, data: Dict[str, Any]) -> ShapeData:
@@ -201,15 +200,15 @@ class V2EnhancedSerializer(ShapeFormatSerializer):
         """
         entries = {
             name: ShapeEntry(name=name, dimensions=tuple(dims))
-            for name, dims in data['entries'].items()
+            for name, dims in data["entries"].items()
         }
 
         return ShapeData(
             entries=entries,
-            model_family=ModelFamily(data['model_family']),
-            source=ShapeSource(data['source']),
-            default_input=data.get('default_input'),
-            default_output=data.get('default_output')
+            model_family=ModelFamily(data["model_family"]),
+            source=ShapeSource(data["source"]),
+            default_input=data.get("default_input"),
+            default_output=data.get("default_output"),
         )
 
     def get_version(self) -> SerializationVersion:
@@ -235,15 +234,14 @@ class V1LegacySerializer(ShapeFormatSerializer):
         if len(shape_data.entries) == 1:
             # Single entry - use direct format
             entry = next(iter(shape_data.entries.values()))
-            return {
-                '_type': 'tuple',
-                'data': list(entry.dimensions)
-            }
+            return {"_type": "tuple", "data": list(entry.dimensions)}
         else:
             # Multiple entries - use dict format
             return {
-                '_type': 'dict',
-                'data': {name: list(entry.dimensions) for name, entry in shape_data.entries.items()}
+                "_type": "dict",
+                "data": {
+                    name: list(entry.dimensions) for name, entry in shape_data.entries.items()
+                },
             }
 
     def deserialize(self, data: Dict[str, Any]) -> ShapeData:
@@ -256,19 +254,19 @@ class V1LegacySerializer(ShapeFormatSerializer):
             ShapeData object
         """
         entries = {}
-        shape_type = data.get('_type')
-        shape_data_raw = data.get('data')
+        shape_type = data.get("_type")
+        shape_data_raw = data.get("data")
 
-        if shape_type == 'dict':
+        if shape_type == "dict":
             for key, dims in shape_data_raw.items():
                 entries[key] = ShapeEntry(name=key, dimensions=tuple(dims))
-        elif shape_type in ('tuple', 'torch.Size'):
-            entries['x'] = ShapeEntry(name='x', dimensions=tuple(shape_data_raw))
+        elif shape_type in ("tuple", "torch.Size"):
+            entries["x"] = ShapeEntry(name="x", dimensions=tuple(shape_data_raw))
 
         return ShapeData(
             entries=entries,
             model_family=ModelFamily.EXTERNAL,  # Cannot determine from legacy
-            source=ShapeSource.LEGACY_CHECKPOINT
+            source=ShapeSource.LEGACY_CHECKPOINT,
         )
 
     def get_version(self) -> SerializationVersion:
@@ -284,7 +282,7 @@ class ShapeFormatMigrator:
         self._serializers = {
             SerializationVersion.V1_LEGACY: V1LegacySerializer(),
             SerializationVersion.V2_ENHANCED: V2EnhancedSerializer(),
-            SerializationVersion.V3_MODERN: V3ModernSerializer()
+            SerializationVersion.V3_MODERN: V3ModernSerializer(),
         }
 
     def migrate_to_current(self, serialized_shape: SerializedShape) -> SerializedShape:
@@ -316,9 +314,8 @@ class ShapeFormatMigrator:
             format=serialized_shape.metadata.format,
             created_at=datetime.now().isoformat(),
             dlkit_version=serialized_shape.metadata.dlkit_version,
-            migration_history=serialized_shape.metadata.migration_history + [
-                f"migrated_from_{serialized_shape.metadata.version.value}"
-            ]
+            migration_history=serialized_shape.metadata.migration_history
+            + [f"migrated_from_{serialized_shape.metadata.version.value}"],
         )
 
         return SerializedShape(metadata=new_metadata, data=new_data)
@@ -333,28 +330,30 @@ class ShapeFormatMigrator:
             Detected SerializationVersion
         """
         # Check for explicit version in metadata
-        if 'metadata' in data and 'version' in data['metadata']:
+        if "metadata" in data and "version" in data["metadata"]:
             try:
-                return SerializationVersion(data['metadata']['version'])
+                return SerializationVersion(data["metadata"]["version"])
             except ValueError:
                 pass
 
         # Check for V3 schema version
-        if 'data' in data and 'schema_version' in data['data']:
+        if "data" in data and "schema_version" in data["data"]:
             return SerializationVersion.V3_MODERN
 
         # Check for V2 enhanced format markers
-        if 'entries' in data and 'model_family' in data and 'source' in data:
+        if "entries" in data and "model_family" in data and "source" in data:
             return SerializationVersion.V2_ENHANCED
 
         # Check for V1 legacy format markers
-        if '_type' in data and 'data' in data:
+        if "_type" in data and "data" in data:
             return SerializationVersion.V1_LEGACY
 
         # Default to current version
         return SerializationVersion.V3_MODERN
 
-    def can_migrate(self, from_version: SerializationVersion, to_version: SerializationVersion) -> bool:
+    def can_migrate(
+        self, from_version: SerializationVersion, to_version: SerializationVersion
+    ) -> bool:
         """Check if migration is supported between versions.
 
         Args:
@@ -364,16 +363,17 @@ class ShapeFormatMigrator:
         Returns:
             True if migration is supported
         """
-        return (from_version in self._serializers and
-                to_version in self._serializers)
+        return from_version in self._serializers and to_version in self._serializers
 
 
 class VersionedShapeSerializer:
     """Main serializer with versioning and migration support."""
 
-    def __init__(self,
-                 format: SerializationFormat = SerializationFormat.JSON,
-                 migrator: Optional[ShapeFormatMigrator] = None):
+    def __init__(
+        self,
+        format: SerializationFormat = SerializationFormat.JSON,
+        migrator: Optional[ShapeFormatMigrator] = None,
+    ):
         """Initialize versioned serializer.
 
         Args:
@@ -401,7 +401,7 @@ class VersionedShapeSerializer:
             version=SerializationVersion.V3_MODERN,
             format=self._format,
             created_at=datetime.now().isoformat(),
-            dlkit_version="2.0.0"  # Version would come from package metadata
+            dlkit_version="2.0.0",  # Version would come from package metadata
         )
 
         return SerializedShape(metadata=metadata, data=data)
@@ -420,15 +420,13 @@ class VersionedShapeSerializer:
         """
         if isinstance(serialized, dict):
             # Convert dict to SerializedShape
-            if 'metadata' in serialized and 'data' in serialized:
+            if "metadata" in serialized and "data" in serialized:
                 serialized_shape = SerializedShape.from_dict(serialized)
             else:
                 # Legacy format without metadata wrapper
                 version = self._migrator.detect_version(serialized)
                 metadata = SerializationMetadata(
-                    version=version,
-                    format=self._format,
-                    created_at=datetime.now().isoformat()
+                    version=version, format=self._format, created_at=datetime.now().isoformat()
                 )
                 serialized_shape = SerializedShape(metadata=metadata, data=serialized)
         else:
@@ -471,7 +469,8 @@ class VersionedShapeSerializer:
         elif self._format == SerializationFormat.MSGPACK:
             try:
                 import msgpack
-                return msgpack.packb(serialized.to_dict()).decode('latin1')
+
+                return msgpack.packb(serialized.to_dict()).decode("latin1")
             except ImportError:
                 raise ValueError("msgpack library not available")
         else:
@@ -491,7 +490,8 @@ class VersionedShapeSerializer:
         elif self._format == SerializationFormat.MSGPACK:
             try:
                 import msgpack
-                data = msgpack.unpackb(serialized_string.encode('latin1'), raw=False)
+
+                data = msgpack.unpackb(serialized_string.encode("latin1"), raw=False)
             except ImportError:
                 raise ValueError("msgpack library not available")
         else:

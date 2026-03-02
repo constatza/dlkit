@@ -132,7 +132,9 @@ class MLflowTracker(IExperimentTracker):
 
                 # Skip redundant health check - server was already validated during startup
                 # Performing another check here can interfere with server initialization
-                self._server_status = {"running": True, "response_time": None} if server_url else None
+                self._server_status = (
+                    {"running": True, "response_time": None} if server_url else None
+                )
 
                 logger.info(f"MLflow resources initialized - Server: {server_url}")
 
@@ -232,9 +234,7 @@ class MLflowTracker(IExperimentTracker):
                 with tracker.create_run(experiment_name="hp_opt") as parent:
                     for trial in trials:
                         with tracker.create_run(
-                            experiment_name="hp_opt",
-                            run_name=f"trial_{trial.id}",
-                            nested=True
+                            experiment_name="hp_opt", run_name=f"trial_{trial.id}", nested=True
                         ) as child:
                             child.log_params(trial.params)
                             child.log_metrics({"score": trial.score})
@@ -357,7 +357,9 @@ class MLflowTracker(IExperimentTracker):
         tags = self._build_dataset_tags(settings, dataset)
         sources = self._collect_dataset_sources(settings, dataset)
 
-        structured_logged = self._log_structured_dataset(dataset, run_context, settings, tags, sources)
+        structured_logged = self._log_structured_dataset(
+            dataset, run_context, settings, tags, sources
+        )
         self._log_dataset_manifest_artifact(
             run_context=run_context,
             settings=settings,
@@ -376,7 +378,9 @@ class MLflowTracker(IExperimentTracker):
         sources: list[str],
     ) -> bool:
         if dataset is None:
-            logger.debug("No dataset found in datamodule, continuing with settings-driven lineage logging")
+            logger.debug(
+                "No dataset found in datamodule, continuing with settings-driven lineage logging"
+            )
 
         dataset_name = self._resolve_dataset_name(settings)
         structured_logger = StructuredDatasetLogger()
@@ -551,9 +555,7 @@ class MLflowTracker(IExperimentTracker):
 
         return None
 
-    def _normalize_mlflow_config(
-        self, mlflow_config: Any, root_dir: Path | None
-    ) -> Any:
+    def _normalize_mlflow_config(self, mlflow_config: Any, root_dir: Path | None) -> Any:
         if not mlflow_config or root_dir is None:
             return mlflow_config
 

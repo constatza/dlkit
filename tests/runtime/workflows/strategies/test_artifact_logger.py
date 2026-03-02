@@ -96,12 +96,10 @@ class _RecordingRunContext(IRunContext):
         signature: Any | None = None,
         input_example: Any | None = None,
     ) -> str | None:
-        self.logged_model_calls.append(
-            {
-                "artifact_path": artifact_path,
-                "registered_model_name": registered_model_name,
-            }
-        )
+        self.logged_model_calls.append({
+            "artifact_path": artifact_path,
+            "registered_model_name": registered_model_name,
+        })
         return f"runs:/{self._run_id}/{artifact_path}"
 
     def get_latest_model_version(

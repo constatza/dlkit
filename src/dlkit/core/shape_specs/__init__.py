@@ -25,21 +25,37 @@ from .strategies import ShapeValidator, ShapeSerializer, ShapeAliasResolver, Val
 from .registry import ModelFamilyRegistry, ModelFamilyDetector, ModelFamilyRegistryFactory
 from .factory import ShapeSystemFactory
 from .specifications import (
-    ShapeSpecification, ShapeValidationEngine, ShapeSpecificationBuilder,
-    RequiredEntriesSpecification, PositiveDimensionsSpecification,
-    ModelFamilyCompatibilitySpecification, DimensionRangeSpecification
+    ShapeSpecification,
+    ShapeValidationEngine,
+    ShapeSpecificationBuilder,
+    RequiredEntriesSpecification,
+    PositiveDimensionsSpecification,
+    ModelFamilyCompatibilitySpecification,
+    DimensionRangeSpecification,
 )
 from .inference import (
-    ShapeInferenceStrategy, ShapeInferenceChain, ShapeInferenceEngine,
-    InferenceContext, CheckpointMetadataStrategy, DatasetSamplingStrategy
+    ShapeInferenceStrategy,
+    ShapeInferenceChain,
+    ShapeInferenceEngine,
+    InferenceContext,
+    CheckpointMetadataStrategy,
+    DatasetSamplingStrategy,
 )
 from .performance import (
-    ShapeCache, LRUShapeCache, CachingShapeInferencer, BatchShapeProcessor,
-    CacheStats, PerformanceMonitor, timed_operation
+    ShapeCache,
+    LRUShapeCache,
+    CachingShapeInferencer,
+    BatchShapeProcessor,
+    CacheStats,
+    PerformanceMonitor,
+    timed_operation,
 )
 from .serialization import (
-    VersionedShapeSerializer, SerializationFormat, SerializationVersion,
-    SerializedShape, ShapeFormatMigrator
+    VersionedShapeSerializer,
+    SerializationFormat,
+    SerializationVersion,
+    SerializedShape,
+    ShapeFormatMigrator,
 )
 from .checkpoint_loader import CheckpointShapeLoader
 from .simple_inference import ShapeSummary, infer_shapes_from_dataset
@@ -51,27 +67,22 @@ __all__ = [
     "GraphShapeSpec",
     "NullShapeSpec",
     "create_shape_spec",
-
     # Value objects
     "ShapeEntry",
     "ShapeData",
     "ModelFamily",
     "ShapeSource",
-
     # Strategies
     "ShapeValidator",
     "ShapeSerializer",
     "ShapeAliasResolver",
     "ValidationResult",
-
     # Registry system
     "ModelFamilyRegistry",
     "ModelFamilyDetector",
     "ModelFamilyRegistryFactory",
-
     # Factory system
     "ShapeSystemFactory",
-
     # Specification system
     "ShapeSpecification",
     "ShapeValidationEngine",
@@ -80,7 +91,6 @@ __all__ = [
     "PositiveDimensionsSpecification",
     "ModelFamilyCompatibilitySpecification",
     "DimensionRangeSpecification",
-
     # Inference system
     "ShapeInferenceStrategy",
     "ShapeInferenceChain",
@@ -88,7 +98,6 @@ __all__ = [
     "InferenceContext",
     "CheckpointMetadataStrategy",
     "DatasetSamplingStrategy",
-
     # Performance system
     "ShapeCache",
     "LRUShapeCache",
@@ -97,17 +106,14 @@ __all__ = [
     "CacheStats",
     "PerformanceMonitor",
     "timed_operation",
-
     # Serialization system
     "VersionedShapeSerializer",
     "SerializationFormat",
     "SerializationVersion",
     "SerializedShape",
     "ShapeFormatMigrator",
-
     # Checkpoint utilities
     "CheckpointShapeLoader",
-
     # Simple inference system
     "ShapeSummary",
     "infer_shapes_from_dataset",

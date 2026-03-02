@@ -12,9 +12,9 @@ instances from an overlay of overrides. It supports:
 
 Public API::
 
-    patch_model(model, overrides)          # compile + apply in one call
-    apply_patch(model, patch)              # apply a pre-compiled nested patch
-    compile_mixed_overrides(overrides)     # compile dotted/nested mix → nested dict
+    patch_model(model, overrides)  # compile + apply in one call
+    apply_patch(model, patch)  # apply a pre-compiled nested patch
+    compile_mixed_overrides(overrides)  # compile dotted/nested mix → nested dict
 
 Internal helpers are also exported for independent unit testing.
 """
@@ -131,15 +131,13 @@ def insert_path(
                 cursor = subtree
             case _:
                 raise ValueError(
-                    f"Conflict: {key!r} traverses into {p!r}, "
-                    f"but {p!r} is already a leaf."
+                    f"Conflict: {key!r} traverses into {p!r}, but {p!r} is already a leaf."
                 )
 
     match cursor.get(leaf):
         case dict():
             raise ValueError(
-                f"Conflict: {key!r} sets leaf {leaf!r}, "
-                f"but {leaf!r} is already a parent."
+                f"Conflict: {key!r} sets leaf {leaf!r}, but {leaf!r} is already a parent."
             )
         case _:
             cursor[leaf] = value
@@ -179,9 +177,7 @@ def compile_dotted_overrides(
 
     bad_keys = [k for k in dotted.keys() if not isinstance(k, str)]
     if bad_keys:
-        raise ValueError(
-            f"Dotted override keys must be strings. Bad keys: {bad_keys!r}"
-        )
+        raise ValueError(f"Dotted override keys must be strings. Bad keys: {bad_keys!r}")
 
     root: dict[str, Any] = {}
     for k, v in dotted.items():
@@ -339,10 +335,13 @@ def iter_validated_updates(
             match (current_value, patch_value):
                 case (BaseModel() as nested_model, dict() | Mapping() as nested_patch):
                     # Recurse to keep nested model types intact.
-                    yield field_name, apply_patch(
-                        cast(BaseModel, nested_model),
-                        cast(Mapping[str, Any], nested_patch),
-                        revalidate=revalidate,
+                    yield (
+                        field_name,
+                        apply_patch(
+                            cast(BaseModel, nested_model),
+                            cast(Mapping[str, Any], nested_patch),
+                            revalidate=revalidate,
+                        ),
                     )
                 case _:
                     adapter = TypeAdapter(field_info.annotation)
@@ -353,9 +352,7 @@ def iter_validated_updates(
             yield field_name, patch_value
 
         else:
-            raise KeyError(
-                f"Unknown field {field_name!r} for {model.__class__.__name__}"
-            )
+            raise KeyError(f"Unknown field {field_name!r} for {model.__class__.__name__}")
 
 
 def apply_patch(model: M, patch: Mapping[str, Any], *, revalidate: bool = True) -> M:
@@ -390,9 +387,7 @@ def apply_patch(model: M, patch: Mapping[str, Any], *, revalidate: bool = True) 
         return new_model
 
     # Full-model validation without serialising to dict — excluded fields survive.
-    validated = TypeAdapter(model.__class__).validate_python(
-        new_model, from_attributes=True
-    )
+    validated = TypeAdapter(model.__class__).validate_python(new_model, from_attributes=True)
     return cast(M, validated)
 
 

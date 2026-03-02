@@ -104,9 +104,7 @@ class MLflowServerSettings(BasicSettings):
             if self.keep_alive_interval > 0:
                 uvicorn_opts.append(f"--timeout-keep-alive {self.keep_alive_interval}")
             if self.shutdown_timeout > 0:
-                uvicorn_opts.append(
-                    f"--timeout-graceful-shutdown {self.shutdown_timeout}"
-                )
+                uvicorn_opts.append(f"--timeout-graceful-shutdown {self.shutdown_timeout}")
 
             command.extend([
                 "--uvicorn-opts",

@@ -52,7 +52,9 @@ def get_or_create_split(
             cached_split = load_split_indices(split_file)
 
             # Validate cached split matches dataset size
-            total_cached = len(cached_split.train) + len(cached_split.validation) + len(cached_split.test)
+            total_cached = (
+                len(cached_split.train) + len(cached_split.validation) + len(cached_split.test)
+            )
             if total_cached != num_samples:
                 logger.warning(
                     f"Cached split size ({total_cached}) doesn't match dataset ({num_samples}). "

@@ -50,8 +50,7 @@ class TestModelFactory:
 
     @staticmethod
     def create_precision_test_model(
-        shape_dict: Dict[str, tuple],
-        model_type: str = "shape_aware"
+        shape_dict: Dict[str, tuple], model_type: str = "shape_aware"
     ) -> PrecisionTestModelProtocol:
         """Create a test model for precision testing.
 
@@ -81,10 +80,7 @@ class ShapeAwareTestModel(DLKitModel):
     following the Adapter Pattern to maintain compatibility with existing tests.
     """
 
-    def __init__(
-        self,
-        shape_dict: Dict[str, tuple]
-    ):
+    def __init__(self, shape_dict: Dict[str, tuple]):
         """Initialize test model with shape specification.
 
         Args:
@@ -96,7 +92,7 @@ class ShapeAwareTestModel(DLKitModel):
         shape_spec = create_shape_spec(
             shapes=shape_dict,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
         self._unified_shape = shape_spec
 

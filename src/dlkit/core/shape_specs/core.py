@@ -113,7 +113,7 @@ class ShapeSpec(IShapeSpec):
         data: ShapeData,
         validator: ShapeValidator | None = None,
         serializer: ShapeSerializer | None = None,
-        alias_resolver: ShapeAliasResolver | None = None
+        alias_resolver: ShapeAliasResolver | None = None,
     ):
         """Initialize ShapeSpec with data and strategies.
 
@@ -225,7 +225,7 @@ class ShapeSpec(IShapeSpec):
             data=shape_data,
             validator=factory.get_validator(),
             serializer=factory.get_serializer(),
-            alias_resolver=factory.get_alias_resolver()
+            alias_resolver=factory.get_alias_resolver(),
         )
 
     def with_aliases(self) -> ShapeSpec:
@@ -239,7 +239,7 @@ class ShapeSpec(IShapeSpec):
             data=resolved_data,
             validator=self._validator,
             serializer=self._serializer,
-            alias_resolver=self._alias_resolver
+            alias_resolver=self._alias_resolver,
         )
 
     def with_canonical_aliases(self) -> ShapeSpec:
@@ -349,10 +349,9 @@ class NullShapeSpec(IShapeSpec):
     def get_shape_data(self) -> ShapeData:
         """Get the underlying shape data (empty for null spec)."""
         from .value_objects import ShapeData, ModelFamily, ShapeSource
+
         return ShapeData(
-            entries={},
-            model_family=ModelFamily.EXTERNAL,
-            source=ShapeSource.DEFAULT_FALLBACK
+            entries={}, model_family=ModelFamily.EXTERNAL, source=ShapeSource.DEFAULT_FALLBACK
         )
 
     def get_input_shape(self) -> tuple[int, ...] | None:
@@ -402,7 +401,7 @@ def create_shape_spec(
     model_family: ModelFamily = ModelFamily.DLKIT_NN,
     source: ShapeSource = ShapeSource.DEFAULT_FALLBACK,
     default_input: str | None = None,
-    default_output: str | None = None
+    default_output: str | None = None,
 ) -> IShapeSpec:
     """Factory function to create appropriate shape specification.
 
@@ -420,17 +419,14 @@ def create_shape_spec(
         return NullShapeSpec()
 
     # Convert raw shapes to ShapeEntry objects
-    entries = {
-        name: ShapeEntry(name=name, dimensions=dims)
-        for name, dims in shapes.items()
-    }
+    entries = {name: ShapeEntry(name=name, dimensions=dims) for name, dims in shapes.items()}
 
     shape_data = ShapeData(
         entries=entries,
         model_family=model_family,
         source=source,
         default_input=default_input,
-        default_output=default_output
+        default_output=default_output,
     )
 
     if model_family == ModelFamily.GRAPH:

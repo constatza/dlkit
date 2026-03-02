@@ -142,7 +142,7 @@ class OverrideNormalizer:
             ...     root_dir=None,  # Filtered out
             ...     batch_size=32,
             ...     experiment_name="test",
-            ...     additional_overrides={"custom": "value"}
+            ...     additional_overrides={"custom": "value"},
             ... )
             >>> sorted(overrides.keys())
             ['additional_overrides', 'batch_size', 'checkpoint_path', 'custom', 'experiment_name']

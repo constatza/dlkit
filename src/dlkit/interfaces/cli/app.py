@@ -28,7 +28,11 @@ app = typer.Typer(
 
 # Add top-level sub-apps for train/predict (expose their help/structure)
 app.add_typer(train.app, name="train", help="🏋️ Training commands — Train machine learning models")
-app.add_typer(predict.app, name="predict", help="🔮 Prediction — Run predictions with trained models using training configs")
+app.add_typer(
+    predict.app,
+    name="predict",
+    help="🔮 Prediction — Run predictions with trained models using training configs",
+)
 
 # Keep other command groups
 app.add_typer(

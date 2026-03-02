@@ -41,11 +41,11 @@ def temporal_sequence_3d():
     """Temporal sequence with shape (B=2, T=4, D=2)."""
     preds = torch.tensor([
         [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
-        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]]
+        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
     ])
     target = torch.tensor([
         [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
-        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
+        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
     ])
     return preds, target
 
@@ -96,9 +96,7 @@ class TestNormalizedVectorNormError:
         wrapper_result = metric.compute()
 
         # Functional implementation
-        functional_result = normalized_vector_norm_error(
-            preds, target, ord=2, dim=-1, eps=1e-8
-        )
+        functional_result = normalized_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
 
         assert torch.allclose(wrapper_result, functional_result, atol=1e-6)
 
@@ -222,9 +220,7 @@ class TestTemporalDerivativeError:
         wrapper_result = metric.compute()
 
         # Functional implementation
-        functional_result = temporal_derivative_error(
-            preds, target, n=1, derivative_dim=1
-        )
+        functional_result = temporal_derivative_error(preds, target, n=1, derivative_dim=1)
 
         assert torch.allclose(wrapper_result, functional_result, atol=1e-6)
 
@@ -298,9 +294,7 @@ class TestMetricCollectionIntegration:
         preds, target = simple_2d_vectors
 
         # Create collection with single custom metric
-        metrics = MetricCollection([
-            NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
-        ])
+        metrics = MetricCollection([NormalizedVectorNormError(vector_dim=-1, norm_ord=2)])
 
         # Update and compute
         metrics.update(preds, target)
@@ -319,35 +313,35 @@ class TestMetricCollectionIntegration:
 
         # Create collection with multiple metrics
         metrics = MetricCollection({
-            'norm_l1': NormalizedVectorNormError(norm_ord=1),
-            'norm_l2': NormalizedVectorNormError(norm_ord=2),
+            "norm_l1": NormalizedVectorNormError(norm_ord=1),
+            "norm_l2": NormalizedVectorNormError(norm_ord=2),
         })
 
         metrics.update(preds, target)
         results = metrics.compute()
 
         # Should have both metrics
-        assert 'norm_l1' in results
-        assert 'norm_l2' in results
-        assert results['norm_l1'].item() > 0
-        assert results['norm_l2'].item() > 0
+        assert "norm_l1" in results
+        assert "norm_l2" in results
+        assert results["norm_l1"].item() > 0
+        assert results["norm_l2"].item() > 0
 
     def test_temporal_metric_in_collection(self, temporal_sequence_3d):
         """Test temporal metric in MetricCollection."""
         preds, target = temporal_sequence_3d
 
         metrics = MetricCollection({
-            'velocity_error': TemporalDerivativeError(n=1, derivative_dim=1),
-            'accel_error': TemporalDerivativeError(n=2, derivative_dim=1),
+            "velocity_error": TemporalDerivativeError(n=1, derivative_dim=1),
+            "accel_error": TemporalDerivativeError(n=2, derivative_dim=1),
         })
 
         metrics.update(preds, target)
         results = metrics.compute()
 
-        assert 'velocity_error' in results
-        assert 'accel_error' in results
-        assert results['velocity_error'].item() >= 0
-        assert results['accel_error'].item() >= 0
+        assert "velocity_error" in results
+        assert "accel_error" in results
+        assert results["velocity_error"].item() >= 0
+        assert results["accel_error"].item() >= 0
 
     def test_mixed_metrics_in_collection(self):
         """Test mixing standard and custom metrics in collection."""
@@ -358,25 +352,23 @@ class TestMetricCollectionIntegration:
 
         # Mix standard torchmetrics with custom
         metrics = MetricCollection({
-            'mse': MeanSquaredError(),
-            'norm_error': NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
+            "mse": MeanSquaredError(),
+            "norm_error": NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
         })
 
         metrics.update(preds_2d, target_2d)
         results = metrics.compute()
 
-        assert 'mse' in results
-        assert 'norm_error' in results
-        assert results['mse'].item() > 0
-        assert results['norm_error'].item() > 0
+        assert "mse" in results
+        assert "norm_error" in results
+        assert results["mse"].item() > 0
+        assert results["norm_error"].item() > 0
 
     def test_metric_collection_reset(self, simple_2d_vectors):
         """Test MetricCollection reset works for custom metrics."""
         preds, target = simple_2d_vectors
 
-        metrics = MetricCollection([
-            NormalizedVectorNormError(norm_ord=2)
-        ])
+        metrics = MetricCollection([NormalizedVectorNormError(norm_ord=2)])
 
         # First batch
         metrics.update(preds, target)

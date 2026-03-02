@@ -55,7 +55,7 @@ class TrainingSettings(BasicSettings):
             "Checkpoint to resume training from. Includes full training state: "
             "model weights, optimizer state, scheduler state, epoch, global step, etc. "
             "This checkpoint is used by PyTorch Lightning's Trainer.fit(ckpt_path=...)"
-        )
+        ),
     )
 
     # Core training parameters (flattened)
@@ -67,7 +67,7 @@ class TrainingSettings(BasicSettings):
     mode: str = Field(default="min", description="Monitoring mode (min/max for early stopping)")
     lr_tuner: LRTunerSettings | None = Field(
         default=None,
-        description="Learning rate tuner settings. If configured, automatic LR tuning runs before training."
+        description="Learning rate tuner settings. If configured, automatic LR tuning runs before training.",
     )
 
     # Loss function and metrics configuration

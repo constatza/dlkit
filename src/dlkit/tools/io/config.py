@@ -71,6 +71,7 @@ def _sync_session_root_to_environment(settings: Any) -> None:
     except Exception as e:
         # Non-fatal - path resolution will fall back to CWD if this fails
         from loguru import logger
+
         logger.debug(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
 
 
@@ -1017,12 +1018,11 @@ def load_training_config_eager(config_path: Path | str) -> "TrainingWorkflowConf
         config = load_training_config_eager("config.toml")
 
         # Inject optional sections programmatically
-        config = config.model_copy(update={
-            "DATASET": DatasetSettings(features=(...))
-        })
+        config = config.model_copy(update={"DATASET": DatasetSettings(features=(...))})
 
         # Validate completeness before build
         from dlkit.tools.config.validators import validate_training_config_complete
+
         validate_training_config_complete(config)
 
         # Build components

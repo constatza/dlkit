@@ -177,11 +177,10 @@ class TestGraphWorkflowIntegration:
         assert hasattr(dataset, "edge_attr_shape"), "Should have edge_attr_shape property"
 
         # Verify edge shapes are non-None
-        assert (
-            dataset.edge_index_shape is not None
-        ), "edge_index_shape should be set after processing"
+        assert dataset.edge_index_shape is not None, (
+            "edge_index_shape should be set after processing"
+        )
 
         # Verify edge_index_shape has correct format
         assert len(dataset.edge_index_shape) == 2, "edge_index should be 2D"
         assert dataset.edge_index_shape[0] == 2, "First dimension should be 2 (source, target)"
-

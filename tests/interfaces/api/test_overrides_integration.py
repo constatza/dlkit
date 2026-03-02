@@ -72,7 +72,10 @@ class TestOverrideIntegration:
 
         # Original values should be preserved
         assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # 50
-        assert result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size  # 16
+        assert (
+            result.DATAMODULE.dataloader.batch_size
+            == sample_settings.DATAMODULE.dataloader.batch_size
+        )  # 16
 
         # This demonstrates that SETTINGS VALUES TAKE PRECEDENCE WHEN NO OVERRIDES
         print(
@@ -137,7 +140,8 @@ class TestOverrideIntegration:
         # Only epochs should be changed
         assert result.TRAINING.epochs == 200  # Changed
         assert (
-            result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size
+            result.DATAMODULE.dataloader.batch_size
+            == sample_settings.DATAMODULE.dataloader.batch_size
         )  # Preserved (16)
 
         # This demonstrates PARTIAL OVERRIDES WORK CORRECTLY
@@ -166,7 +170,10 @@ class TestOverrideIntegration:
 
         # Only learning_rate should be changed, None values ignored
         assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # Preserved
-        assert result.DATAMODULE.dataloader.batch_size == sample_settings.DATAMODULE.dataloader.batch_size  # Preserved
+        assert (
+            result.DATAMODULE.dataloader.batch_size
+            == sample_settings.DATAMODULE.dataloader.batch_size
+        )  # Preserved
         assert float(result.TRAINING.optimizer.lr) == pytest.approx(50)  # Changed
 
         # This demonstrates NONE VALUES ARE PROPERLY IGNORED

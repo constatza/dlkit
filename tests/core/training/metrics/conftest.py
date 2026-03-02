@@ -89,13 +89,13 @@ def batch_vectors_2d() -> tuple[Tensor, Tensor]:
         Tuple of (preds, targets) tensors with shape (4, 2).
     """
     preds = torch.tensor([
-        [3.0, 4.0],   # L2 norm = 5.0
-        [1.0, 0.0],   # L2 norm = 1.0
-        [0.0, 2.0],   # L2 norm = 2.0
-        [1.0, 1.0],   # L2 norm = sqrt(2)
+        [3.0, 4.0],  # L2 norm = 5.0
+        [1.0, 0.0],  # L2 norm = 1.0
+        [0.0, 2.0],  # L2 norm = 2.0
+        [1.0, 1.0],  # L2 norm = sqrt(2)
     ])
     targets = torch.tensor([
-        [3.0, 4.0],   # identical to pred 0 → zero error
+        [3.0, 4.0],  # identical to pred 0 → zero error
         [2.0, 0.0],
         [0.0, 1.0],
         [2.0, 2.0],

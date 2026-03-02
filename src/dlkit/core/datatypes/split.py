@@ -36,7 +36,9 @@ class Splitter:
         return IndexSplit(
             train=tuple(perm[:train_count].tolist()),
             validation=tuple(perm[train_count : train_count + val_count].tolist()),
-            test=tuple(perm[train_count + val_count : train_count + val_count + test_count].tolist()),
+            test=tuple(
+                perm[train_count + val_count : train_count + val_count + test_count].tolist()
+            ),
             predict=tuple(perm[train_count + val_count + test_count :].tolist()),
         )
 

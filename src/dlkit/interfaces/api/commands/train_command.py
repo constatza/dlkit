@@ -134,9 +134,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
 
             # Execute training
             checkpoint = overrides.get("checkpoint_path") if overrides else None
-            result = self.training_service.execute_training(
-                settings, checkpoint
-            )
+            result = self.training_service.execute_training(settings, checkpoint)
 
             logger.info(
                 "Training command completed successfully",

@@ -33,7 +33,9 @@ class TestMkdirForLocal:
 
             # Should create directory relative to cwd, NOT at root /mlruns
             expected_dir = tmp_path / "mlruns"
-            assert expected_dir.exists(), f"Directory should exist at {expected_dir}, not at /mlruns"
+            assert expected_dir.exists(), (
+                f"Directory should exist at {expected_dir}, not at /mlruns"
+            )
             assert expected_dir.is_dir()
 
             # Verify we didn't try to create /mlruns (would fail with permission error)
@@ -267,7 +269,9 @@ class TestNormalizeUserPath:
         result = normalize_user_path("relative/run")
         assert result == tmp_path / "relative" / "run"
 
-    def test_normalize_tilde_expansion(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_normalize_tilde_expansion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tilde expansion should respect the HOME environment variable."""
         fake_home = tmp_path / "fake_home"
         fake_home.mkdir()
@@ -280,7 +284,9 @@ class TestNormalizeUserPath:
         result = normalize_user_path("~/runs", require_absolute=True)
         assert result.resolve() == (fake_home / "runs").resolve()
 
-    def test_coerce_root_dir_requires_absolute(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_coerce_root_dir_requires_absolute(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Relative paths that cannot be coerced should return None when absolute required."""
         monkeypatch.chdir(tmp_path)
         result = coerce_root_dir_to_absolute("relative/path")

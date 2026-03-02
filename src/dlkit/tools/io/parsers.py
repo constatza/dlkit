@@ -17,8 +17,8 @@ class PartialTOMLParser:
     """
 
     def __init__(self):
-        self._section_pattern = re.compile(r'^\s*\[([^\]]+)\]')
-        self._nested_section_pattern = re.compile(r'^\s*\[\[([^\]]+)\]\]')
+        self._section_pattern = re.compile(r"^\s*\[([^\]]+)\]")
+        self._nested_section_pattern = re.compile(r"^\s*\[\[([^\]]+)\]\]")
 
     def parse_full(self, config_path: Path | str) -> dict[str, Any]:
         """Parse the entire config file using dynaconf."""
@@ -34,11 +34,7 @@ class PartialTOMLParser:
         config_data = settings.to_dict()
         return self._clean_dynaconf_metadata(config_data)
 
-    def parse_sections(
-        self,
-        config_path: Path | str,
-        section_names: list[str]
-    ) -> dict[str, Any]:
+    def parse_sections(self, config_path: Path | str, section_names: list[str]) -> dict[str, Any]:
         """Parse only specific sections from config file.
 
         Uses efficient line-by-line scanning to extract only requested sections.
@@ -62,10 +58,10 @@ class PartialTOMLParser:
             raise FileNotFoundError(f"Config file not found: {config_path}")
 
         sections = []
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
 
                 # Check for section headers
@@ -84,9 +80,7 @@ class PartialTOMLParser:
         return sections
 
     def _extract_sections_targeted(
-        self,
-        config_path: Path,
-        section_names: list[str]
+        self, config_path: Path, section_names: list[str]
     ) -> dict[str, Any]:
         """Extract specific sections using targeted line-by-line parsing.
 
@@ -95,7 +89,7 @@ class PartialTOMLParser:
         # For sections with potential nested subsections, fall back to full parsing
         # to ensure proper handling of nested TOML structures like [MLFLOW.server]
         has_potentially_nested_sections = any(
-            section_name in {'MLFLOW', 'OPTUNA', 'TRAINING', 'MODEL', 'DATASET'}
+            section_name in {"MLFLOW", "OPTUNA", "TRAINING", "MODEL", "DATASET"}
             for section_name in section_names
         )
 
@@ -112,7 +106,7 @@ class PartialTOMLParser:
         # Normalize section names to handle nested sections
         target_sections = set(section_names)
 
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             for line in f:
                 line.strip()
 
@@ -123,7 +117,7 @@ class PartialTOMLParser:
                 if section_match or nested_match:
                     # Save previous section if it was a target
                     if current_section and current_section in target_sections:
-                        section_toml = '\n'.join([f'[{current_section}]'] + current_content)
+                        section_toml = "\n".join([f"[{current_section}]"] + current_content)
                         sections_data[current_section] = self._parse_toml_section(section_toml)
 
                     # Start new section
@@ -139,7 +133,7 @@ class PartialTOMLParser:
 
         # Handle last section
         if current_section and current_section in target_sections:
-            section_toml = '\n'.join([f'[{current_section}]'] + current_content)
+            section_toml = "\n".join([f"[{current_section}]"] + current_content)
             sections_data[current_section] = self._parse_toml_section(section_toml)
 
         return sections_data
@@ -151,7 +145,7 @@ class PartialTOMLParser:
             import tempfile
             import os
 
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
                 f.write(section_toml)
                 temp_path = f.name
 
@@ -164,7 +158,11 @@ class PartialTOMLParser:
 
                 # Extract the section content (remove the section wrapper)
                 for section_name, section_data in config_data.items():
-                    if section_name not in {'LOAD_DOTENV', 'ENV_FOR_DYNACONF', 'ROOT_PATH_FOR_DYNACONF'}:
+                    if section_name not in {
+                        "LOAD_DOTENV",
+                        "ENV_FOR_DYNACONF",
+                        "ROOT_PATH_FOR_DYNACONF",
+                    }:
                         return section_data
                 return {}
             finally:
@@ -176,11 +174,7 @@ class PartialTOMLParser:
 
     def _clean_dynaconf_metadata(self, config_data: dict[str, Any]) -> dict[str, Any]:
         """Remove dynaconf metadata from config data."""
-        dynaconf_metadata_keys = {
-            "LOAD_DOTENV",
-            "ENV_FOR_DYNACONF",
-            "ROOT_PATH_FOR_DYNACONF"
-        }
+        dynaconf_metadata_keys = {"LOAD_DOTENV", "ENV_FOR_DYNACONF", "ROOT_PATH_FOR_DYNACONF"}
         return {k: v for k, v in config_data.items() if k not in dynaconf_metadata_keys}
 
 
@@ -192,11 +186,7 @@ class DynafconfConfigParser:
         parser = PartialTOMLParser()
         return parser.parse_full(config_path)
 
-    def parse_sections(
-        self,
-        config_path: Path | str,
-        section_names: list[str]
-    ) -> dict[str, Any]:
+    def parse_sections(self, config_path: Path | str, section_names: list[str]) -> dict[str, Any]:
         """Parse all sections then filter (less efficient but compatible)."""
         full_config = self.parse_full(config_path)
         return {name: full_config.get(name, {}) for name in section_names}
@@ -211,17 +201,13 @@ class StandardSectionExtractor:
     """Standard implementation for extracting sections from parsed config."""
 
     def extract_section(
-        self,
-        config_data: dict[str, Any],
-        section_name: str
+        self, config_data: dict[str, Any], section_name: str
     ) -> dict[str, Any] | None:
         """Extract a single section from config data."""
         return config_data.get(section_name)
 
     def extract_sections(
-        self,
-        config_data: dict[str, Any],
-        section_names: list[str]
+        self, config_data: dict[str, Any], section_names: list[str]
     ) -> dict[str, dict[str, Any]]:
         """Extract multiple sections from config data."""
         result = {}

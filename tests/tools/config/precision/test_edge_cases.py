@@ -41,8 +41,9 @@ class BrokenModel(DLKitModel):
 
     def accepts_shape(self, shape_spec):
         """Accept any valid shape specification."""
-        return (shape_spec.get_input_shape() is not None and
-                shape_spec.get_output_shape() is not None)
+        return (
+            shape_spec.get_input_shape() is not None and shape_spec.get_output_shape() is not None
+        )
 
     def forward(self, x):
         return self.linear(x)

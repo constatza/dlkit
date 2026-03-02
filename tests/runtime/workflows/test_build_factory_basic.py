@@ -65,9 +65,14 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
 ) -> None:
     # Batch-returning dataset so infer_shapes_from_dataset works
     import torch
+
     batch_sample = Batch(
         features=(torch.zeros(8, 3),),
-        targets=(torch.ones(1,),),
+        targets=(
+            torch.ones(
+                1,
+            ),
+        ),
         latents=(),
     )
     settings = _make_min_settings(batch_sample, inference=True, ckpt=tmp_checkpoint)

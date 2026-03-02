@@ -95,7 +95,7 @@ def huber_loss(
     abs_error = torch.abs(error)
 
     # Quadratic for small errors, linear for large errors
-    quadratic = 0.5 * error ** 2
+    quadratic = 0.5 * error**2
     linear = delta * (abs_error - 0.5 * delta)
 
     return apply_aggregation(torch.where(abs_error <= delta, quadratic, linear), aggregator)
@@ -230,9 +230,7 @@ def vector_norm_loss(
         Aggregated absolute vector norm loss (differentiable)
     """
     if preds.dim() < 2:
-        raise ValueError(
-            f"Expected at least 2D tensors for vector operations, got {preds.dim()}D"
-        )
+        raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
     error_vecs = compute_error_vectors(preds, target)
     error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
     return apply_aggregation(error_norms, aggregator)
@@ -314,7 +312,7 @@ def energy_norm_loss(
     Examples:
         >>> preds = torch.randn(4, 8)
         >>> target = torch.randn(4, 8)
-        >>> A = torch.eye(8).expand(4, -1, -1)          # identity → same as L2
+        >>> A = torch.eye(8).expand(4, -1, -1)  # identity → same as L2
         >>> loss = energy_norm_loss(preds, target, A)
     """
     error_vecs = compute_error_vectors(preds, target)
@@ -358,7 +356,7 @@ def relative_energy_norm_loss(
     Examples:
         >>> preds = torch.randn(4, 8)
         >>> target = torch.randn(4, 8)
-        >>> A = torch.eye(8)                             # shared identity matrix
+        >>> A = torch.eye(8)  # shared identity matrix
         >>> loss = relative_energy_norm_loss(preds, target, A)
     """
     error_vecs = compute_error_vectors(preds, target)
@@ -408,8 +406,7 @@ def normalized_mse(
         normalizer = torch.mean(target) ** 2 + eps
     else:
         raise ValueError(
-            f"Invalid normalization: {normalization}. "
-            f"Choose from: 'variance', 'range', 'mean'"
+            f"Invalid normalization: {normalization}. Choose from: 'variance', 'range', 'mean'"
         )
 
     return mse_value / normalizer

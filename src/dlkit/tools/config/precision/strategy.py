@@ -264,8 +264,7 @@ class PrecisionStrategy(StrEnum):
                 return cls.MIXED_16  # Default to mixed for integer 16
             else:
                 raise ValueError(
-                    f"Invalid Lightning precision integer: {precision}. "
-                    f"Supported: 64, 32, 16"
+                    f"Invalid Lightning precision integer: {precision}. Supported: 64, 32, 16"
                 )
 
         # Handle Lightning string formats (including numeric strings)

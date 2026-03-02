@@ -37,7 +37,9 @@ from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
 from .model_detection import detect_model_type, ModelType, requires_shape_spec
 
 # Type alias for settings that can be passed to build strategies
-WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+WorkflowSettings = (
+    GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+)
 
 
 @dataclass(frozen=True)
@@ -58,9 +60,7 @@ class IBuildStrategy:
     path contexts, then delegates to _build_core() in each subclass.
     """
 
-    def can_handle(
-        self, settings: WorkflowSettings
-    ) -> bool:  # pragma: no cover - interface
+    def can_handle(self, settings: WorkflowSettings) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
     def build(self, settings: WorkflowSettings) -> BuildComponents:
@@ -101,9 +101,7 @@ class IBuildStrategy:
 class FlexibleBuildStrategy(IBuildStrategy):
     """Default build strategy for flexible array-like datasets."""
 
-    def can_handle(
-        self, settings: WorkflowSettings
-    ) -> bool:
+    def can_handle(self, settings: WorkflowSettings) -> bool:
         # Default/fallback strategy; always true unless an explicit dataset type is provided
         try:
             ds = settings.DATASET
@@ -173,7 +171,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
                 "features": convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ()),
                 "targets": convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ()),
             }
-            dataset = FactoryProvider.create_component(ds_settings, context.with_overrides(**ds_overrides))
+            dataset = FactoryProvider.create_component(
+                ds_settings, context.with_overrides(**ds_overrides)
+            )
 
         # Get or create split (with caching)
         split_cfg = settings.DATASET.split
@@ -272,8 +272,6 @@ class FlexibleBuildStrategy(IBuildStrategy):
 # Shape inference now handled by dlkit.runtime.workflows.shape_inference module
 
 
-
-
 class BuildFactory:
     """Factory that selects an appropriate build strategy and constructs components.
 
@@ -291,7 +289,11 @@ class BuildFactory:
         ]
 
     def _validate_settings(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+        self,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
     ) -> None:
         """Validate settings completeness before building components.
 
@@ -313,7 +315,11 @@ class BuildFactory:
         validate_config_complete(settings)
 
     def build_components(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+        self,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
     ) -> BuildComponents:
         """Build runtime components with pre-build validation.
 
@@ -345,7 +351,11 @@ class GraphBuildStrategy(IBuildStrategy):
     """Build strategy for graph (PyG) datasets and models."""
 
     def can_handle(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+        self,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
     ) -> bool:
         try:
             ds = settings.DATASET
@@ -386,7 +396,9 @@ class GraphBuildStrategy(IBuildStrategy):
         try:
             ds_settings = settings.DATASET
             fp = getattr(ds_settings, "features_path", None)
-            resolved_features = convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ())
+            resolved_features = convert_to_tensor_entries(
+                getattr(ds_settings, "features", ()) or ()
+            )
             resolved_targets = convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ())
             if resolved_features:
                 ds_overrides["features"] = resolved_features
@@ -473,7 +485,11 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
     """Build strategy for time series / forecasting datasets and models."""
 
     def can_handle(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+        self,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
     ) -> bool:
         try:
             ds = settings.DATASET
@@ -513,7 +529,9 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         try:
             ds_settings = settings.DATASET
             fp = getattr(ds_settings, "features_path", None)
-            resolved_features = convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ())
+            resolved_features = convert_to_tensor_entries(
+                getattr(ds_settings, "features", ()) or ()
+            )
             resolved_targets = convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ())
             if resolved_features:
                 ds_overrides["features"] = resolved_features

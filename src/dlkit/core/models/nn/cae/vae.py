@@ -145,7 +145,9 @@ class VAE1d(DLKitModel):
         h = self.vectorize(self.encoder(x))
         return self.mu_layer(h), self.logvar_layer(h)
 
-    def decode(self, mu: torch.Tensor, logvar: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def decode(
+        self, mu: torch.Tensor, logvar: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Sample from latent and decode to output space.
 
         Args:

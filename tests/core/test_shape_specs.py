@@ -12,7 +12,7 @@ class TestShapeSpec:
         shape_spec = create_shape_spec(
             shapes={"x": (10, 5), "y": (5,)},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         assert shape_spec.get_shape("x") == (10, 5)
@@ -26,5 +26,5 @@ class TestShapeSpec:
             create_shape_spec(
                 shapes="invalid",  # type: ignore
                 model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )

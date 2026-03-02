@@ -16,8 +16,7 @@ if TYPE_CHECKING:
 
 
 def infer_shape_specification(
-    checkpoint: dict[str, Any],
-    dataset: Any | None = None
+    checkpoint: dict[str, Any], dataset: Any | None = None
 ) -> ShapeSummary | None:
     """Infer shape specification using fallback strategies.
 
@@ -54,6 +53,7 @@ def infer_shape_specification(
     if dataset is not None:
         try:
             from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+
             return infer_shapes_from_dataset(dataset)
         except Exception as e:
             logger.error(f"Dataset shape inference failed: {e}")
@@ -62,10 +62,7 @@ def infer_shape_specification(
     return None
 
 
-def infer_shape_from_checkpoint_path(
-    checkpoint_path: Path,
-    dataset: Any | None = None
-) -> Any:
+def infer_shape_from_checkpoint_path(checkpoint_path: Path, dataset: Any | None = None) -> Any:
     """Convenience function to infer shapes from checkpoint path.
 
     Args:
@@ -85,6 +82,5 @@ def infer_shape_from_checkpoint_path(
         return infer_shape_specification(checkpoint, dataset)
     except Exception as e:
         raise WorkflowError(
-            f"Failed to load checkpoint or infer shapes from {checkpoint_path}",
-            {"error": str(e)}
+            f"Failed to load checkpoint or infer shapes from {checkpoint_path}", {"error": str(e)}
         ) from e

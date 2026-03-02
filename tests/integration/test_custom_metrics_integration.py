@@ -25,8 +25,8 @@ class TestCustomMetricsIntegration:
         """Test MetricCollection works with our custom metrics."""
         # Create MetricCollection with mix of standard and custom metrics
         metrics = MetricCollection({
-            'mse': MeanSquaredError(),
-            'norm_l2': NormalizedVectorNormError(norm_ord=2),
+            "mse": MeanSquaredError(),
+            "norm_l2": NormalizedVectorNormError(norm_ord=2),
         })
 
         # Test data
@@ -38,16 +38,16 @@ class TestCustomMetricsIntegration:
         results = metrics.compute()
 
         # Verify both metrics returned values
-        assert 'mse' in results
-        assert 'norm_l2' in results
-        assert results['mse'].item() > 0
-        assert results['norm_l2'].item() > 0
+        assert "mse" in results
+        assert "norm_l2" in results
+        assert results["mse"].item() > 0
+        assert results["norm_l2"].item() > 0
 
     def test_temporal_metric_in_collection(self):
         """Test temporal derivative metric in MetricCollection."""
         metrics = MetricCollection({
-            'velocity_error': TemporalDerivativeError(n=1, derivative_dim=1),
-            'accel_error': TemporalDerivativeError(n=2, derivative_dim=1),
+            "velocity_error": TemporalDerivativeError(n=1, derivative_dim=1),
+            "accel_error": TemporalDerivativeError(n=2, derivative_dim=1),
         })
 
         # 3D temporal data (B=2, T=5, D=2)
@@ -57,10 +57,10 @@ class TestCustomMetricsIntegration:
         metrics.update(preds, target)
         results = metrics.compute()
 
-        assert 'velocity_error' in results
-        assert 'accel_error' in results
-        assert results['velocity_error'].item() >= 0
-        assert results['accel_error'].item() >= 0
+        assert "velocity_error" in results
+        assert "accel_error" in results
+        assert results["velocity_error"].item() >= 0
+        assert results["accel_error"].item() >= 0
 
     def test_metric_created_via_factory(self):
         """Test metrics can be created via FactoryProvider (config system)."""
@@ -76,9 +76,9 @@ class TestCustomMetricsIntegration:
         metric = FactoryProvider.create_component(metric_settings, context)
 
         # Verify it's a torchmetrics.Metric instance
-        assert hasattr(metric, 'update')
-        assert hasattr(metric, 'compute')
-        assert hasattr(metric, 'reset')
+        assert hasattr(metric, "update")
+        assert hasattr(metric, "compute")
+        assert hasattr(metric, "reset")
 
         # Test it works
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
@@ -109,8 +109,8 @@ class TestCustomMetricsIntegration:
 
         # Put in MetricCollection
         metrics = MetricCollection({
-            'mse': mse,
-            'norm_l2': norm_metric,
+            "mse": mse,
+            "norm_l2": norm_metric,
         })
 
         # Test data
@@ -120,10 +120,10 @@ class TestCustomMetricsIntegration:
         metrics.update(preds, target)
         results = metrics.compute()
 
-        assert 'mse' in results
-        assert 'norm_l2' in results
-        assert results['mse'].item() > 0
-        assert results['norm_l2'].item() > 0
+        assert "mse" in results
+        assert "norm_l2" in results
+        assert results["mse"].item() > 0
+        assert results["norm_l2"].item() > 0
 
     def test_metric_reset_functionality(self):
         """Test metric reset works correctly."""

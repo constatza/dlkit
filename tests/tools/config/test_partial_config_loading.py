@@ -75,15 +75,15 @@ class TestPartialConfigLoading:
         assert isinstance(settings, TrainingWorkflowSettings)
 
         # Verify all sections are loaded
-        assert hasattr(settings, 'SESSION')
-        assert hasattr(settings, 'MODEL')
-        assert hasattr(settings, 'DATAMODULE')
-        assert hasattr(settings, 'DATASET')
-        assert hasattr(settings, 'TRAINING')
-        assert hasattr(settings, 'MLFLOW')
-        assert hasattr(settings, 'OPTUNA')
-        assert hasattr(settings, 'PATHS')
-        assert hasattr(settings, 'EXTRAS')
+        assert hasattr(settings, "SESSION")
+        assert hasattr(settings, "MODEL")
+        assert hasattr(settings, "DATAMODULE")
+        assert hasattr(settings, "DATASET")
+        assert hasattr(settings, "TRAINING")
+        assert hasattr(settings, "MLFLOW")
+        assert hasattr(settings, "OPTUNA")
+        assert hasattr(settings, "PATHS")
+        assert hasattr(settings, "EXTRAS")
 
         # Verify sections are not None
         assert settings.SESSION is not None
@@ -142,12 +142,12 @@ class TestPartialConfigLoading:
         settings = load_settings(config_file)
 
         # Verify training-specific properties
-        assert hasattr(settings, 'mlflow_enabled')
-        assert hasattr(settings, 'has_training_config')
+        assert hasattr(settings, "mlflow_enabled")
+        assert hasattr(settings, "has_training_config")
 
         # Verify base properties are available
-        assert hasattr(settings, 'is_training')
-        assert hasattr(settings, 'has_data_config')
+        assert hasattr(settings, "is_training")
+        assert hasattr(settings, "has_data_config")
 
         # Test property behavior
         assert settings.mlflow_enabled is False  # Because MLFLOW.enabled = false
@@ -161,8 +161,8 @@ class TestPartialConfigLoading:
         settings = load_sections(config_file, ["MODEL", "DATASET"])
 
         # Should have requested sections
-        assert hasattr(settings, 'MODEL')
-        assert hasattr(settings, 'DATASET')
+        assert hasattr(settings, "MODEL")
+        assert hasattr(settings, "DATASET")
         assert settings.MODEL is not None
         assert settings.DATASET is not None
 

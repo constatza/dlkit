@@ -42,19 +42,19 @@ class TestContextManagerCompliance:
 
     def test_mlflow_adapter_has_enter_exit(self):
         """MLflowTrackingAdapter implements __enter__ and __exit__ methods."""
-        assert hasattr(MLflowTrackingAdapter, '__enter__'), (
+        assert hasattr(MLflowTrackingAdapter, "__enter__"), (
             "MLflowTrackingAdapter must implement __enter__ for context management"
         )
-        assert hasattr(MLflowTrackingAdapter, '__exit__'), (
+        assert hasattr(MLflowTrackingAdapter, "__exit__"), (
             "MLflowTrackingAdapter must implement __exit__ for resource cleanup"
         )
 
     def test_null_adapter_has_enter_exit(self):
         """NullTrackingAdapter implements __enter__ and __exit__ methods."""
-        assert hasattr(NullTrackingAdapter, '__enter__'), (
+        assert hasattr(NullTrackingAdapter, "__enter__"), (
             "NullTrackingAdapter must implement __enter__ for uniform interface"
         )
-        assert hasattr(NullTrackingAdapter, '__exit__'), (
+        assert hasattr(NullTrackingAdapter, "__exit__"), (
             "NullTrackingAdapter must implement __exit__ for uniform interface"
         )
 
@@ -78,18 +78,14 @@ class TestNullObjectPattern:
         """NullTrackingAdapter.__enter__ returns self."""
         adapter = NullTrackingAdapter()
         result = adapter.__enter__()
-        assert result is adapter, (
-            "__enter__ should return self for context manager protocol"
-        )
+        assert result is adapter, "__enter__ should return self for context manager protocol"
 
     def test_null_adapter_exit_returns_false(self):
         """NullTrackingAdapter.__exit__ returns False (doesn't suppress exceptions)."""
         adapter = NullTrackingAdapter()
         adapter.__enter__()
         result = adapter.__exit__(None, None, None)
-        assert result is False, (
-            "__exit__ should return False to propagate exceptions"
-        )
+        assert result is False, "__exit__ should return False to propagate exceptions"
 
 
 class TestSingleResponsibility:
@@ -159,9 +155,9 @@ class TestInterfaceSegregation:
         doc = IExperimentTracker.__doc__ or ""
 
         # Should document context manager requirement
-        assert any(keyword in doc.lower() for keyword in [
-            "context", "enter", "exit", "resource"
-        ]), (
+        assert any(
+            keyword in doc.lower() for keyword in ["context", "enter", "exit", "resource"]
+        ), (
             "IExperimentTracker protocol must document its context manager requirement "
             "to make the contract explicit for implementers"
         )
@@ -172,7 +168,7 @@ class TestInterfaceSegregation:
 
         # Check that abstract methods have docstrings
         for name, method in inspect.getmembers(IExperimentTracker, inspect.isfunction):
-            if name.startswith('_'):
+            if name.startswith("_"):
                 continue
             assert method.__doc__ is not None, (
                 f"Protocol method {name} must be documented to clarify contract"

@@ -4,6 +4,7 @@ This module provides the ShapeSummary dataclass and infer_shapes_from_dataset
 pure function that replaces the complex IShapeSpec subsystem for model
 construction purposes.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -80,14 +81,8 @@ def infer_shapes_from_dataset(dataset: object) -> ShapeSummary:
         if isinstance(sample, TensorDict):
             feat_td = sample["features"]
             targ_td = sample["targets"]
-            in_shapes = tuple(
-                tuple(int(d) for d in feat_td[k].shape)
-                for k in feat_td.keys()
-            )
-            out_shapes = tuple(
-                tuple(int(d) for d in targ_td[k].shape)
-                for k in targ_td.keys()
-            )
+            in_shapes = tuple(tuple(int(d) for d in feat_td[k].shape) for k in feat_td.keys())
+            out_shapes = tuple(tuple(int(d) for d in targ_td[k].shape) for k in targ_td.keys())
             return ShapeSummary(in_shapes=in_shapes, out_shapes=out_shapes)
     except ImportError:
         pass

@@ -138,7 +138,17 @@ class BasicOverrideManager:
         training_overrides = {
             k: v
             for k, v in overrides.items()
-            if k in ["epochs", "batch_size", "learning_rate", "train", "test", "predict", "loss_function", "loss_module"]
+            if k
+            in [
+                "epochs",
+                "batch_size",
+                "learning_rate",
+                "train",
+                "test",
+                "predict",
+                "loss_function",
+                "loss_module",
+            ]
             and v is not None
         }
 
@@ -188,9 +198,7 @@ class BasicOverrideManager:
                 name=loss_name,
                 module_path=loss_module,
             )
-            new_training = current_settings.TRAINING.model_copy(
-                update={"loss_function": new_loss}
-            )
+            new_training = current_settings.TRAINING.model_copy(update={"loss_function": new_loss})
             current_settings = current_settings.model_copy(update={"TRAINING": new_training})
 
         return current_settings
@@ -206,7 +214,15 @@ class BasicOverrideManager:
             for k, v in overrides.items()
             if (
                 k.startswith("mlflow_")
-                or k in ["experiment_name", "run_name", "enable_mlflow", "tracking_uri", "backend_store_uri", "artifacts_destination"]
+                or k
+                in [
+                    "experiment_name",
+                    "run_name",
+                    "enable_mlflow",
+                    "tracking_uri",
+                    "backend_store_uri",
+                    "artifacts_destination",
+                ]
             )
             and v is not None
         }

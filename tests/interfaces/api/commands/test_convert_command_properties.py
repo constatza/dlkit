@@ -282,7 +282,9 @@ class TestConvertCommandProperties:
                 "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
             ) as mock_wrapper_factory,
             patch("dlkit.interfaces.api.commands.convert_command.torch.ones") as mock_torch_ones,
-            patch("dlkit.interfaces.api.commands.convert_command.torch.onnx.export") as mock_torch_export,
+            patch(
+                "dlkit.interfaces.api.commands.convert_command.torch.onnx.export"
+            ) as mock_torch_export,
         ):
             # Setup files and mocks
             checkpoint = tmp_path / "model.ckpt"
@@ -400,9 +402,7 @@ class TestConvertCommandProperties:
         # Mock _parse_or_infer_shapes to return shape with different batch size
         inferred_shapes = [(batch_size_2, 3, 224, 224)]
 
-        with patch.object(
-            command, "_parse_or_infer_shapes", return_value=(inferred_shapes, True)
-        ):
+        with patch.object(command, "_parse_or_infer_shapes", return_value=(inferred_shapes, True)):
             with patch(
                 "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
             ):

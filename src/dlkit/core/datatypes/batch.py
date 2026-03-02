@@ -4,6 +4,7 @@ This module provides the Batch dataclass that replaces string-keyed dict
 batches with a typed, positional structure that enables unambiguous model
 dispatch and immutable enrichment.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -52,20 +53,20 @@ def _collate_batch(batch: list[Batch], *, collate_fn_map=None) -> Batch:
     """
     return Batch(
         features=tuple(
-            torch.stack([b.features[i] for b in batch])
-            for i in range(len(batch[0].features))
+            torch.stack([b.features[i] for b in batch]) for i in range(len(batch[0].features))
         ),
         targets=tuple(
-            torch.stack([b.targets[i] for b in batch])
-            for i in range(len(batch[0].targets))
+            torch.stack([b.targets[i] for b in batch]) for i in range(len(batch[0].targets))
         ),
         latents=tuple(
-            torch.stack([b.latents[i] for b in batch])
-            for i in range(len(batch[0].latents))
-        ) if batch[0].latents else (),
+            torch.stack([b.latents[i] for b in batch]) for i in range(len(batch[0].latents))
+        )
+        if batch[0].latents
+        else (),
     )
 
 
 # Register with PyTorch's collation system so DataLoader handles Batch automatically
 from torch.utils.data._utils.collate import default_collate_fn_map  # noqa: E402
+
 default_collate_fn_map[Batch] = _collate_batch

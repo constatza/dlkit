@@ -376,7 +376,9 @@ class TestConfigAdapterIntegration:
         error = exc_info.value
         assert isinstance(error, ConfigurationError)
         # The error will be about unknown sections since load_settings validates known sections
-        assert "validation error" in error.message.lower() or "failed to load" in error.message.lower()
+        assert (
+            "validation error" in error.message.lower() or "failed to load" in error.message.lower()
+        )
 
     def test_load_config_with_minimal_configuration(
         self,

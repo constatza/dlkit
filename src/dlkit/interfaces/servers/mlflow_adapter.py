@@ -195,7 +195,11 @@ class MLflowServerAdapter(ContextualServerAdapter):
                 if not server_config.backend_store_uri:
                     default_backend_path = locations.mlruns_dir()
                     server_config = server_config.model_copy(
-                        update={"backend_store_uri": url_resolver.build_uri(default_backend_path, scheme="sqlite")}
+                        update={
+                            "backend_store_uri": url_resolver.build_uri(
+                                default_backend_path, scheme="sqlite"
+                            )
+                        }
                     )
                 if not server_config.artifacts_destination:
                     default_artifacts_path = locations.mlartifacts_dir()

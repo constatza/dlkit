@@ -169,7 +169,9 @@ class OptunaOptimizer(IHyperparameterOptimizer):
 
             # Build pruner (no seed injection needed)
             if hasattr(opt_cfg, "pruner") and opt_cfg.pruner:
-                pruner = FactoryProvider.create_component(opt_cfg.pruner, BuildContext(mode="training"))
+                pruner = FactoryProvider.create_component(
+                    opt_cfg.pruner, BuildContext(mode="training")
+                )
         except Exception:
             pass
         return sampler, pruner

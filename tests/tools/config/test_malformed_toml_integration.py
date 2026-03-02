@@ -15,7 +15,11 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.tools.io.config import load_sections_config, ConfigValidationError, load_training_config_eager
+from dlkit.tools.io.config import (
+    load_sections_config,
+    ConfigValidationError,
+    load_training_config_eager,
+)
 
 
 # ============================================================================
@@ -128,7 +132,9 @@ path = "{z_path.as_posix()}"
 class TestValidConfigurations:
     """Test that valid configurations continue to work correctly."""
 
-    def test_valid_features_and_targets_succeed(self, tmp_path: Path, sample_data_file: Path, sample_target_file: Path):
+    def test_valid_features_and_targets_succeed(
+        self, tmp_path: Path, sample_data_file: Path, sample_target_file: Path
+    ):
         """Valid TOML with name + path should succeed."""
         config = tmp_path / "config.toml"
         config.write_text(f"""

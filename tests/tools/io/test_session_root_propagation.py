@@ -74,12 +74,15 @@ epochs = 1
 
     # Create dummy data file
     import numpy as np
+
     np.save(tmp_path / "data.npy", np.random.rand(100, 10))
 
     return config_path
 
 
-def test_session_root_dir_propagated_to_environment(test_config_with_session_root: Path, tmp_path: Path):
+def test_session_root_dir_propagated_to_environment(
+    test_config_with_session_root: Path, tmp_path: Path
+):
     """Test that SESSION.root_dir is propagated to DLKitEnvironment."""
     # Clear any existing DLKIT_ROOT_DIR env var
     original_env = os.environ.pop("DLKIT_ROOT_DIR", None)
@@ -107,7 +110,9 @@ def test_session_root_dir_propagated_to_environment(test_config_with_session_roo
         global_environment.root_dir = None
 
 
-def test_env_var_takes_precedence_over_session_root(test_config_with_session_root: Path, tmp_path: Path):
+def test_env_var_takes_precedence_over_session_root(
+    test_config_with_session_root: Path, tmp_path: Path
+):
     """Test that DLKIT_ROOT_DIR env var takes precedence over SESSION.root_dir."""
     env_root = tmp_path / "env_root"
     env_root.mkdir(parents=True, exist_ok=True)
@@ -120,6 +125,7 @@ def test_env_var_takes_precedence_over_session_root(test_config_with_session_roo
 
         # Reset global environment to pick up env var
         from dlkit.tools.config.environment import DLKitEnvironment
+
         test_env = DLKitEnvironment()
 
         # Load config

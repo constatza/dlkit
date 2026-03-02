@@ -142,7 +142,9 @@ def _expand_generic_url_tilde(parsed: Url, home: str, url: str, include_port: bo
     new_path = path.replace("~", home)
 
     # Normalize only if absolute path
-    new_path = _normalize_url_path(new_path) if path.startswith("/") else new_path.replace("\\", "/")
+    new_path = (
+        _normalize_url_path(new_path) if path.startswith("/") else new_path.replace("\\", "/")
+    )
 
     return _rebuild_url(parsed, path=new_path, include_port=include_port)
 
