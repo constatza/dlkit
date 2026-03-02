@@ -12,6 +12,7 @@ ProcessingLightningWrapper architecture:
 from typing import Any, Protocol, runtime_checkable
 
 import torch.nn as nn
+from tensordict import TensorDict
 from torch import Tensor
 
 
@@ -76,21 +77,24 @@ class IMetricsUpdater(Protocol):
 
 @runtime_checkable
 class IModelInvoker(Protocol):
-    """Single responsibility: extract tensors from TensorDict and call model positionally.
+    """Single responsibility: invoke model and return enriched TensorDict.
 
-    This protocol decouples model invocation from the Lightning wrapper.
-    The standard implementation extracts model_input features in config order.
+    The model invoker reads feature tensors from *batch*, calls the model,
+    and writes the output back into the batch under a ``"predictions"`` key
+    (and optionally latent keys).  Callers read ``batch["predictions"]``
+    after calling ``invoke()``.
     """
 
-    def invoke(self, model: nn.Module, batch: Any) -> Tensor:
-        """Invoke model with tensors extracted from batch.
+    def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:
+        """Invoke model and return batch enriched with ``"predictions"``.
 
         Args:
             model: PyTorch model to invoke.
             batch: TensorDict containing features and targets.
 
         Returns:
-            Model output tensor.
+            Enriched TensorDict with ``"predictions"`` key added (and
+            optionally latent keys such as ``("latents", "mu")``).
         """
         ...
 
@@ -113,17 +117,21 @@ class IBatchTransformer(Protocol):
         """
         ...
 
-    def inverse_transform_predictions(self, predictions: Tensor, target_key: str) -> Tensor:
+    def inverse_transform_predictions(
+        self, predictions: Tensor | TensorDict, target_key: str
+    ) -> Tensor | TensorDict:
         """Apply inverse target transform to predictions.
 
         Used in predict_step to convert predictions back to original space.
+        Single-head (Tensor): uses target_key to look up chain.
+        Multi-head (TensorDict): applies per-key chain lookup; target_key ignored.
 
         Args:
-            predictions: Model output tensor in transformed space.
-            target_key: Name of the target entry whose chain to invert.
+            predictions: Model output in transformed space — Tensor or TensorDict.
+            target_key: Name of the target entry whose chain to invert (single-head only).
 
         Returns:
-            Predictions in original (untransformed) space.
+            Predictions in original (untransformed) space, same type as input.
         """
         ...
 

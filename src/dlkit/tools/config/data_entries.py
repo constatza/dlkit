@@ -72,14 +72,45 @@ class DataEntry(BasicSettings, ABC):
     transforms: list[TransformSettings] = Field(
         default_factory=list, description="Transform chain for this dataflow entry"
     )
-    model_input: bool = Field(
+    model_input: int | str | bool | None = Field(
         default=True,
         description=(
-            "If False, tensor is loaded into the batch and available for loss/metric, but is NOT "
-            "passed as an argument to the model forward(). Use for context tensors "
-            "(e.g. stiffness matrix for energy norm loss)."
+            "Controls whether and how this feature is passed to model.forward(). "
+            "False/None: excluded (context tensor only, not passed to model). "
+            "True (default): passed as kwarg using the entry name — model(entry_name=tensor). "
+            "int: explicit positional index — 0 = first arg, 1 = second, etc. "
+            "    Features are sorted by this index before building the invoker. "
+            "str digit ('0','1',...): explicit positional index (useful in TOML configs). "
+            "str identifier ('name'): keyword argument with this name — model(name=tensor). "
+            "    Decouples the kwarg name from the entry name."
         ),
     )
+
+    @field_validator("model_input")
+    @classmethod
+    def _validate_model_input(cls, v: int | str | bool | None) -> int | str | bool | None:
+        """Validate string model_input values.
+
+        Args:
+            v: The model_input value to validate.
+
+        Returns:
+            The validated value.
+
+        Raises:
+            ValueError: If v is a non-empty string that is neither a digit string
+                nor a valid Python identifier.
+        """
+        if isinstance(v, str):
+            if not v:
+                raise ValueError("model_input must be non-empty. Use False/None to exclude.")
+            if not v.isdigit() and not v.isidentifier():
+                raise ValueError(
+                    f"model_input '{v}' must be a digit string ('0','1',...) "
+                    "or a valid Python identifier (kwarg name)."
+                )
+        return v
+
     loss_input: str | None = Field(
         default=None,
         description=(
@@ -624,7 +655,7 @@ def Feature(
     *,
     value: torch.Tensor | np.ndarray,
     dtype: torch.dtype | None = None,
-    model_input: bool = True,
+    model_input: int | str | bool | None = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> ValueFeature: ...
@@ -636,7 +667,7 @@ def Feature(
     *,
     path: Path | str | None = None,
     dtype: torch.dtype | None = None,
-    model_input: bool = True,
+    model_input: int | str | bool | None = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> PathFeature: ...
@@ -648,7 +679,7 @@ def Feature(
     path: Path | str | None = None,
     value: torch.Tensor | np.ndarray | None = None,
     dtype: torch.dtype | None = None,
-    model_input: bool = True,
+    model_input: int | str | bool | None = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> FeatureType:

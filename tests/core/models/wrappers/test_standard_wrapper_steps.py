@@ -26,8 +26,12 @@ def _make_batch(batch_size: int = 2, feat_dim: int = 3) -> TensorDict:
     """Create a minimal TensorDict batch for wrapper step tests."""
     return TensorDict(
         {
-            "features": TensorDict({"x": torch.ones(batch_size, feat_dim)}, batch_size=[batch_size]),
-            "targets": TensorDict({"y": torch.zeros(batch_size, feat_dim)}, batch_size=[batch_size]),
+            "features": TensorDict(
+                {"x": torch.ones(batch_size, feat_dim)}, batch_size=[batch_size]
+            ),
+            "targets": TensorDict(
+                {"y": torch.zeros(batch_size, feat_dim)}, batch_size=[batch_size]
+            ),
         },
         batch_size=[batch_size],
     )
@@ -116,9 +120,7 @@ def test_loss_input_str_routes_entry_as_named_kwarg(monkeypatch: pytest.MonkeyPa
     K_val = torch.eye(3).unsqueeze(0).expand(2, 3, 3)
     batch = TensorDict(
         {
-            "features": TensorDict(
-                {"x": torch.ones(2, 3), "stiffness": K_val}, batch_size=[2]
-            ),
+            "features": TensorDict({"x": torch.ones(2, 3), "stiffness": K_val}, batch_size=[2]),
             "targets": TensorDict({"y": torch.zeros(2, 3)}, batch_size=[2]),
         },
         batch_size=[2],
@@ -157,9 +159,11 @@ def test_loss_input_context_feature_excluded_from_model(monkeypatch: pytest.Monk
         entry_configs=entry_configs,
     )
 
-    # "K" must not appear in the model invoker's feature keys
-    assert "K" not in wrapper._model_invoker._feature_keys
-    assert "x" in wrapper._model_invoker._feature_keys
+    # "K" must not appear in the model invoker's input keys
+    in_keys = wrapper._model_invoker._in_keys
+    feature_names = [k[1] if isinstance(k, tuple) else k for k in in_keys]
+    assert "K" not in feature_names
+    assert "x" in feature_names
 
     batch = TensorDict(
         {
