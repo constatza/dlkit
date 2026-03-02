@@ -235,29 +235,26 @@ model = load_logged_model(model_uri=latest.model_uri, tracking_uri=tracking_uri)
 
 ### Accessing Stacked Predictions from TrainingResult
 
-`TrainingResult.stacked` gives you concatenated predictions, targets, and latents across all prediction batches as a lazily-computed `StackedResults` object:
+`TrainingResult.stacked` concatenates prediction batches into a single `TensorDict`
+with keys `predictions`, `targets`, and `latents` (cached on first access):
 
 ```python
 result = dlkit.train(settings, epochs=10)
+stacked = result.stacked  # TensorDict | None
 
-# Lazily concatenated across all batches - computed once and cached
-stacked = result.stacked
-
-# Single-output model: stacked.predictions is np.ndarray
-predictions = stacked.predictions  # shape (N, out_dim)
-targets = stacked.targets          # shape (N, target_dim)
-latents = stacked.latents          # shape (N, latent_dim) or None
-
-# Multi-output model: stacked.predictions is tuple[np.ndarray, ...]
-p0, p1 = stacked.predictions
+if stacked is not None:
+    predictions = stacked["predictions"]  # Tensor or nested TensorDict
+    targets = stacked["targets"]
+    latents = stacked["latents"]          # (N, 0) sentinel when absent
 ```
 
-`StackedResults` fields:
-- `predictions` - Model predictions concatenated along axis 0
-- `targets` - Ground-truth targets concatenated along axis 0
-- `latents` - Encoder latent outputs (e.g. for autoencoders); `None` if not produced
+To get NumPy arrays, use `to_numpy()`:
 
-For irregular shapes (e.g. graph data with varying node counts), each field falls back to a list of raw batch items.
+```python
+arrays = result.to_numpy()                          # all keys
+pred_only = result.to_numpy("predictions")          # top-level key
+target_y = result.to_numpy(("targets", "y"))        # nested key path
+```
 
 ## Inference
 
@@ -267,11 +264,12 @@ DLKit loads models from checkpoints with automatic transform handling and precis
 
 ```python
 from dlkit import load_model
+import torch
 
 # Load checkpoint ONCE (expensive operation)
 predictor = load_model(
   checkpoint_path="model.ckpt",
-  device="cuda",  # "auto", "cpu", "cuda", "mps"
+  device="auto",  # "auto", "cpu", "cuda", "mps"
   apply_transforms=True  # Apply saved transforms automatically
 )
 
@@ -279,8 +277,8 @@ predictor = load_model(
 model = predictor.model  # Get the loaded PyTorch model
 predictions = model(inputs)  # Standard PyTorch forward pass
 
-# Option 2: Use predictor.predict() (handles transforms automatically)
-result = predictor.predict({"x": torch.randn(32, 10)})
+# Option 2: Use predictor.predict() — mirrors model.forward() exactly
+output = predictor.predict(x=torch.randn(32, 10))  # → Tensor
 
 # Cleanup when done
 predictor.unload()
@@ -313,17 +311,29 @@ optimizer = torch.optim.Adam(model.parameters())
 
 ### High-Level Predict API
 
-If you want automatic transform handling, use `predictor.predict()`:
+`predict()` mirrors `model.forward()` — pass tensors as positional or keyword args:
 
 ```python
-# Transforms applied automatically (if saved in checkpoint)
-result = predictor.predict({"x": torch.randn(32, 10)})
-predictions = result.predictions  # Already inverse-transformed
+# Single input (most common)
+output = predictor.predict(x=torch.randn(32, 10))       # → Tensor
 
-# Without transforms (raw model output)
+# Multi-input (kwargs)
+output = predictor.predict(x=x_tensor, edge_attr=ea)    # → Tensor
+
+# Multi-input (positional)
+output = predictor.predict(x_tensor, ea_tensor)          # → Tensor
+
+# Multi-output model (e.g. VAE): returns tuple
+recon, mu, logvar = predictor.predict(x=x_tensor)
+
+# Without transforms (raw model output in normalized space)
 predictor_raw = load_model("model.ckpt", apply_transforms=False)
-result = predictor_raw.predict({"x": normalized_inputs})
+output = predictor_raw.predict(x=normalized_inputs)
 ```
+
+`apply_transforms=True` (default) automatically applies forward feature transforms
+before the call and the inverse target transform after, so you always receive
+predictions in the original data space.
 
 ### Context Manager (Automatic Cleanup)
 
@@ -338,20 +348,23 @@ with load_model("model.ckpt", device="cuda") as predictor:
 # Automatic cleanup and GPU memory release
 ```
 
-### Flexible Input Formats
+### Input Formats
 
-The `predict()` method accepts multiple input formats:
+`predict()` accepts any combination of positional and keyword `torch.Tensor` arguments,
+exactly as you would call the underlying `model.forward()`:
 
 ```python
-# Tensors
-result = predictor.predict({"x": torch.randn(32, 10)})
+# Keyword arg (explicit, recommended)
+output = predictor.predict(x=torch.randn(32, 10))
 
-# NumPy arrays (auto-converted)
-result = predictor.predict({"x": np.random.randn(32, 10)})
+# Positional arg (same as above for single-input models)
+output = predictor.predict(torch.randn(32, 10))
 
-# Single tensor (auto-wrapped)
-result = predictor.predict(torch.randn(32, 10))
+# Mixed positional + keyword (multi-input models)
+output = predictor.predict(x_tensor, edge_attr=ea_tensor)
 ```
+
+NumPy arrays are **not** auto-converted — call `torch.from_numpy(arr)` before passing.
 
 ## Transform Pipelines (Training → Inference)
 
@@ -463,16 +476,16 @@ For advanced workflows:
 
   ```python
   with dlkit.load_model("model.ckpt", apply_transforms=True) as predictor:
-      result = predictor.predict({"x": torch.from_numpy(raw_features)})
-      predictions = result.predictions["y"]  # already inverse-transformed
+      predictions = predictor.predict(x=torch.from_numpy(raw_features))
+      # predictions is already inverse-transformed — original data space
   ```
 
 - **Pre-transformed tensors**: If you already normalized features, disable the automatic pass to avoid double application:
 
   ```python
-  normalized = my_chain({"x": raw_features})["x"]
+  normalized = my_chain(raw_features)
   with dlkit.load_model("model.ckpt", apply_transforms=False) as predictor:
-      logits = predictor.predict({"x": normalized})
+      logits = predictor.predict(x=normalized)
   ```
 
 - **Manual control**: Use `load_transforms_from_checkpoint()` from `dlkit.interfaces.inference.transforms` to extract the fitted chains for custom serving stacks (e.g., streaming inference, Spark jobs).
@@ -541,6 +554,7 @@ pca.fit(train_data)
 **New Stateful Predictor API**:
 - ✅ `load_model()` - primary inference API (loads once, predicts many)
 - ✅ `CheckpointPredictor` - stateful predictor object
+- ✅ `predict(*args, **kwargs) → Tensor | tuple[Tensor, ...]` — mirrors `model.forward()` exactly
 - ✅ `validate_checkpoint()` - checkpoint validation utility
 - ✅ `get_checkpoint_info()` - checkpoint metadata extraction
 
@@ -580,8 +594,8 @@ predictor.unload()
 predictor = load_model("model.ckpt", device="cuda", apply_transforms=True)
 
 for data in dataset:
-  result = predictor.predict(data)  # Transforms applied automatically
-  process(result.predictions)
+  output = predictor.predict(x=data)  # Transforms applied automatically
+  process(output)                     # output is a Tensor (or tuple for multi-output)
 
 predictor.unload()
 
@@ -731,13 +745,13 @@ Control transform application during inference:
 ```python
 from dlkit import load_model
 
-# With transforms (default)
+# With transforms (default) — receives predictions in original data space
 predictor = load_model("model.ckpt", apply_transforms=True)
-result = predictor.predict({"x": raw_data})  # Transforms applied automatically
+output = predictor.predict(x=raw_data)
 
-# Without transforms (raw data)
+# Without transforms — receives raw model output (normalized space)
 predictor = load_model("model.ckpt", apply_transforms=False)
-result = predictor.predict({"x": already_normalized_data})
+output = predictor.predict(x=already_normalized_data)
 ```
 
 ### How It Works

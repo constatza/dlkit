@@ -10,12 +10,12 @@ thin coordinator: all computation is delegated to injected SOLID protocol object
 ```
 StandardLightningWrapper.__init__
   │
-  ├─► _build_model_from_settings()  →  nn.Module
+  ├─► _build_model_from_settings()    →  nn.Module
   │
-  ├─► IModelInvoker ── StandardModelInvoker   (feature extraction + positional call)
-  ├─► ILossComputer ── RoutedLossComputer     (named key → loss fn kwargs)
-  ├─► IMetricsUpdater── RoutedMetricsUpdater  (per-metric routing, no MetricCollection.update)
-  └─► IBatchTransformer─NamedBatchTransformer (named ModuleDict chains)
+  ├─► IModelInvoker ── TensorDictModelInvoker  (kwarg/positional dispatch via TensorDictModule)
+  ├─► ILossComputer ── RoutedLossComputer      (named key → loss fn kwargs)
+  ├─► IMetricsUpdater─ RoutedMetricsUpdater    (per-metric routing, no MetricCollection.update)
+  └─► IBatchTransformer NamedBatchTransformer  (named ModuleDict chains)
         │
         └─► IFittableBatchTransformer (fit() called on on_fit_start)
 
@@ -72,7 +72,7 @@ from dlkit.tools.config.data_entries import Feature, Target, ContextFeature
 # Feature — fed to the model (model_input=True by default)
 Feature(name="x", path="data/features.npy")
 
-# Multiple features — model called positionally: model(x_tensor, z_tensor)
+# Multiple features — default dispatch is kwargs: model(x=x_tensor, z=z_tensor)
 Feature(name="x", path="data/features_x.npy")
 Feature(name="z", path="data/features_z.npy")
 
@@ -83,9 +83,18 @@ ContextFeature(name="A", path="data/stiffness.npy")   # model_input=False
 Target(name="y", path="data/targets.npy")
 ```
 
-`model_input` controls whether a feature is sent to `model.forward()`. The
-invoker always uses config-insertion order, so **entry order in your config
-determines positional argument order**.
+`model_input` controls how (and whether) a feature is dispatched to `model.forward()`:
+
+| `model_input` value | Dispatch style | Example |
+|---|---|---|
+| `True` (default) | kwarg, key = entry name | `model(x=tensor)` |
+| `0`, `1`, … (int) | positional, sorted by index | `model(tensor0, tensor1)` |
+| `"name"` (non-digit str) | kwarg, key = `"name"` | `model(name=tensor)` |
+| `False` / `None` | excluded from model call | context feature for loss only |
+
+`_classify_feature_entries()` in `components.py` encodes these rules and is shared by
+the training invoker (`TensorDictModelInvoker`) and the inference `feature_names`
+metadata so both paths use identical dispatch ordering.
 
 For NPZ inputs, the entry `name` is used as the array key.
 
@@ -112,7 +121,7 @@ loss_function = { name = "mse" }
 
 The wrapper automatically:
 - Builds `NamedBatchTransformer(feature_chains={"x": Identity()}, target_chains={"y": Identity()})`
-- Builds `StandardModelInvoker(("x",))` → calls `model(batch["features","x"])`
+- Builds `TensorDictModelInvoker(kwarg_in_keys={"x": ("features","x")})` → calls `model(x=batch["features","x"])`
 - Builds `RoutedLossComputer(loss_fn, target_key=None, default_target_key="y")` → `loss(preds, batch["targets","y"])`
 
 ---
@@ -134,7 +143,16 @@ targets = [{ name = "y", path = "data/targets.npy" }]
 loss_function = { name = "mse" }
 ```
 
-Invocation: `model(batch["features","x"], batch["features","z"])` — strict config-insertion order.
+Default (`model_input=True`) dispatches as kwargs: `model(x=batch["features","x"], z=batch["features","z"])`.
+
+For explicit positional ordering, set `model_input` to an integer:
+```toml
+features = [
+  { name = "x", path = "...", model_input = 0 },
+  { name = "z", path = "...", model_input = 1 },
+]
+```
+Invocation: `model(batch["features","x"], batch["features","z"])` — positionals sorted by index.
 
 ---
 
@@ -184,18 +202,20 @@ Replace any protocol without modifying the wrapper:
 ```python
 from dlkit.core.models.wrappers.protocols import IModelInvoker
 import torch.nn as nn
-from torch import Tensor
+from tensordict import TensorDict
 from typing import Any
 
 class KwargModelInvoker:
-    """Calls model with keyword arguments instead of positional."""
+    """Calls model with keyword arguments and writes output to batch."""
 
     def __init__(self, feature_keys: tuple[str, ...]) -> None:
         self._feature_keys = feature_keys
 
-    def invoke(self, model: nn.Module, batch: Any) -> Tensor:
+    def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:
         kwargs = {k: batch["features", k] for k in self._feature_keys}
-        return model(**kwargs)
+        predictions = model(**kwargs)
+        batch["predictions"] = predictions
+        return batch
 ```
 
 Then pass it directly to `ProcessingLightningWrapper.__init__`:
@@ -252,15 +272,18 @@ checkpoint["dlkit_metadata"] = {
     "model_settings": {"name": "LinearNet", "module_path": "...", "params": {...}},
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
-    "feature_names": ["x"],          # ordered list for inference positional call
-    "predict_target_key": "y",
+    "feature_names": ["x"],          # model-input entries in dispatch order (for inference)
+    "predict_target_key": "y",       # target whose inverse transform is applied at predict time
     "model_family": "dlkit_nn",
     "target_names": ["y"],
 }
 ```
 
-`feature_names` is used by the inference predictor to reconstruct the correct
-positional call order for multi-input models — it mirrors config-insertion order.
+`feature_names` is used by `CheckpointPredictor` to map positional args in
+`predictor.predict(tensor0, tensor1)` to the correct feature transform chain and
+to reconstruct the correct `model.forward()` dispatch order. The list only includes
+model-input entries (those with `model_input ≠ False/None`), in the same order as
+`TensorDictModelInvoker` uses during training.
 
 ---
 
@@ -268,7 +291,7 @@ positional call order for multi-input models — it mirrors config-insertion ord
 
 | Concern | Protocol | Default impl | How to replace |
 |---|---|---|---|
-| Model invocation | `IModelInvoker` | `StandardModelInvoker` | Implement `invoke(model, batch)` |
+| Model invocation | `IModelInvoker` | `TensorDictModelInvoker` | Implement `invoke(model, batch) → TensorDict` |
 | Loss computation | `ILossComputer` | `RoutedLossComputer` | Implement `compute(preds, batch)` |
 | Metric tracking | `IMetricsUpdater` | `RoutedMetricsUpdater` | Implement `update/compute/reset` |
 | Batch transforms | `IBatchTransformer` | `NamedBatchTransformer` | Implement `transform/inverse_transform_predictions` |
