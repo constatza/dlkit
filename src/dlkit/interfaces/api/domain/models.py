@@ -5,58 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-import numpy as np
+import torch
 from lightning.pytorch import LightningDataModule, LightningModule
-from loguru import logger
+from tensordict import TensorDict
 
 from dlkit.tools.config import GeneralSettings
-
-# Union type for the result of stacking a single field across batches.
-_StackedField = np.ndarray | tuple[np.ndarray, ...] | list | None
-
-
-def _ensure_tuple(val: Any) -> tuple[Any, ...]:
-    """Normalize any value to a tuple of stacking candidates.
-
-    Pure function: no side effects, total (never raises).
-
-    Args:
-        val: Any prediction batch value.
-
-    Returns:
-        An empty tuple for ``None``, the sequence coerced to tuple for
-        list/tuple inputs, or a one-element tuple for everything else.
-    """
-    match val:
-        case None:
-            return ()
-        case list() | tuple() as seq:
-            return tuple(seq)
-        case _:
-            return (val,)
-
-
-@dataclass(frozen=True)
-class StackedResults:
-    """Immutable container for stacked model outputs.
-
-    Each field holds the concatenated result for that output stream across
-    all prediction batches.  The type is ``_StackedField`` — a single
-    ``np.ndarray`` when the model has one output, a ``tuple`` of arrays for
-    multi-output models, a ``list`` for irregular (graph) data, or ``None``
-    when the stream was empty.
-
-    Args:
-        predictions: Stacked model predictions.
-        targets: Stacked ground-truth targets.
-        latents: Stacked latent representations.
-    """
-
-    predictions: _StackedField = None
-    targets: _StackedField = None
-    latents: _StackedField = None
+from dlkit.tools.utils.tensordict_utils import NestedKey, tensordict_to_numpy
 
 
 @dataclass(frozen=True)
@@ -95,98 +51,62 @@ class TrainingResult:
     # cached_property writes directly to instance.__dict__, bypassing
     # __setattr__, so it is compatible with frozen=True (no __slots__).
     @cached_property
-    def stacked(self) -> StackedResults:
+    def stacked(self) -> TensorDict | None:
         """All stacked results, computed lazily and cached.
 
+        Concatenates all per-batch prediction TensorDicts along dim 0 into a
+        single TensorDict.  Top-level keys are ``"predictions"``,
+        ``"targets"``, and ``"latents"``; ``"targets"`` may itself be a nested
+        TensorDict when the model was trained with a multi-entry dataset.
+
+        Use :meth:`to_numpy` to convert all leaf Tensors to numpy arrays while
+        preserving the nested key structure.
+
+        Callers detect absent latents via ``stacked["latents"].shape[1] == 0``.
+
         Returns:
-            :class:`StackedResults` with predictions, targets, and latents
-            concatenated across every prediction batch.
+            A :class:`TensorDict` of shape ``(N,)`` where *N* is the total
+            number of samples, or ``None`` when no predictions are available.
         """
         return self._compute_stacked_results()
 
-    def _compute_stacked_results(self) -> StackedResults:
-        """Route raw prediction batches into three parallel streams.
+    def to_numpy(self, *keys: NestedKey) -> dict[str, Any] | Any | None:
+        """Convert stacked results to CPU numpy arrays.
 
-        Single O(N) pass over ``self.predictions``.  Each batch is
-        decomposed into ``(p_tuple, t_tuple, l_tuple)`` using structural
-        pattern matching and normalised via :func:`_ensure_tuple`.
-
-        Returns:
-            :class:`StackedResults` produced by stacking each stream.
-        """
-        if not self.predictions:
-            return StackedResults()
-
-        p_batches: list[tuple[Any, ...]] = []
-        t_batches: list[tuple[Any, ...]] = []
-        l_batches: list[tuple[Any, ...]] = []
-
-        for p in self.predictions:
-            match p:
-                case dict() as d:
-                    p_batches.append(_ensure_tuple(d.get("predictions")))
-                    t_batches.append(_ensure_tuple(d.get("targets")))
-                    l_batches.append(_ensure_tuple(d.get("latents")))
-                case (preds, targets, latents, *_):
-                    p_batches.append(_ensure_tuple(preds))
-                    t_batches.append(_ensure_tuple(targets))
-                    l_batches.append(_ensure_tuple(latents))
-                case (preds, targets):
-                    p_batches.append(_ensure_tuple(preds))
-                    t_batches.append(_ensure_tuple(targets))
-                    l_batches.append(())
-                case _:
-                    p_batches.append(_ensure_tuple(p))
-                    t_batches.append(())
-                    l_batches.append(())
-
-        return StackedResults(
-            predictions=self._stack_batch_list(p_batches, "predictions"),
-            targets=self._stack_batch_list(t_batches, "targets"),
-            latents=self._stack_batch_list(l_batches, "latents"),
-        )
-
-    def _stack_batch_list(
-        self, batches: list[tuple[Any, ...]], field_name: str
-    ) -> _StackedField:
-        """Concatenate a normalised stream of variable-tuples into arrays.
-
-        Iterates over each positional variable (index ``i``) independently,
-        attempting ``np.concatenate`` and falling back to a raw list for
-        irregular shapes (e.g. graphs with varying node counts).
+        Convenience wrapper around :func:`~dlkit.tools.utils.tensordict_to_numpy`
+        for the common case of converting ``self.stacked`` directly.  Supports
+        both flat top-level keys and nested key paths.
 
         Args:
-            batches: List of normalised tuples, one entry per prediction batch.
-            field_name: Name used in debug log messages only.
+            *keys: Optional key names (``str``) or nested key paths
+                   (``tuple[str, ...]``) to select before converting.  When
+                   omitted all keys are converted.
 
         Returns:
-            ``None`` if the stream is empty; a single ``np.ndarray`` for
-            single-variable models; a ``tuple`` of arrays for multi-variable
-            models; or a mixed tuple/list when some variables are irregular.
+            Nested ``dict`` of ``np.ndarray`` leaves, or ``None`` if no
+            predictions are available.
+
+        Example::
+
+            result.to_numpy()  # everything
+            result.to_numpy("predictions")  # flat key
+            result.to_numpy(("targets", "y"))  # nested leaf only
+            result.to_numpy("predictions", ("targets", "y"))  # mix of flat + nested
         """
-        if not batches or not any(batches):
+        if self.stacked is None:
             return None
+        return tensordict_to_numpy(self.stacked, *keys)
 
-        num_variables = max(len(b) for b in batches)
-        stacked: list[Any] = []
+    def _compute_stacked_results(self) -> TensorDict | None:
+        """Concatenate per-batch prediction TensorDicts along dim 0.
 
-        for i in range(num_variables):
-            items = [b[i] for b in batches if i < len(b)]
-            if not items:
-                continue
-            try:
-                arrays = [np.asarray(item) for item in items]
-                stacked.append(np.concatenate(arrays, axis=0))
-            except (ValueError, TypeError):
-                logger.debug(
-                    f"Field '{field_name}' variable {i} is irregular. "
-                    "Returning list of raw items."
-                )
-                stacked.append(items)
-
-        if not stacked:
+        Returns:
+            Stacked :class:`TensorDict` or ``None`` when ``predictions`` is
+            empty.
+        """
+        if not self.predictions:
             return None
-        return stacked[0] if len(stacked) == 1 else tuple(stacked)
+        return cast(TensorDict, torch.cat(self.predictions, dim=0))
 
 
 @dataclass(frozen=True)
