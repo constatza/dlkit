@@ -131,6 +131,7 @@ def output(*parts: str, env: DLKitEnvironment | None = None) -> Path:
     if base.resolve() == (cwd / "output").resolve():
         # Check if there's a SESSION.root_dir that's being ignored
         import os
+
         if not os.environ.get("DLKIT_ROOT_DIR"):
             ctx = get_current_path_context()
             if not ctx or not ctx.root_dir:

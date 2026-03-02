@@ -46,9 +46,7 @@ class ProcessKiller(Protocol):
     """Protocol for terminating server processes (SRP: Single responsibility for process termination)."""
 
     @abstractmethod
-    def stop_server_processes(
-        self, host: str, port: int, force: bool = False
-    ) -> bool:
+    def stop_server_processes(self, host: str, port: int, force: bool = False) -> bool:
         """Stop server processes for given host:port.
 
         Args:

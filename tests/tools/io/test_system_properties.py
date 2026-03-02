@@ -85,6 +85,7 @@ class TestImportFromModuleProperties:
         """
         # Import the module and verify the attribute doesn't exist
         import importlib
+
         module = importlib.import_module(module_name)
         assume(not hasattr(module, invalid_class))
 

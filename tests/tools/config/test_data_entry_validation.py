@@ -102,7 +102,9 @@ class TestFeatureFactory:
         assert isinstance(feat, PathFeature)
         assert feat.is_placeholder()
 
-    def test_feature_with_both_path_and_value_raises(self, tmp_path: Path, sample_numpy_array: np.ndarray):
+    def test_feature_with_both_path_and_value_raises(
+        self, tmp_path: Path, sample_numpy_array: np.ndarray
+    ):
         """Test Feature with both path and value raises ValueError."""
         with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
             Feature(name="test", path=tmp_path / "test.npy", value=sample_numpy_array)
@@ -145,7 +147,9 @@ class TestTargetFactory:
         assert isinstance(targ, PathTarget)
         assert targ.is_placeholder()
 
-    def test_target_with_both_path_and_value_raises(self, tmp_path: Path, sample_numpy_array: np.ndarray):
+    def test_target_with_both_path_and_value_raises(
+        self, tmp_path: Path, sample_numpy_array: np.ndarray
+    ):
         """Test Target with both path and value raises ValueError."""
         with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
             Target(name="test", path=tmp_path / "test.npy", value=sample_numpy_array)
@@ -348,8 +352,7 @@ class TestStrictValidation:
         np.save(test_file, np.ones((10, 5)))
 
         feat = PathFeature.model_validate(
-            {"name": "test", "path": str(test_file)},
-            context={"strict": True}
+            {"name": "test", "path": str(test_file)}, context={"strict": True}
         )
 
         assert feat.has_path()
@@ -358,8 +361,7 @@ class TestStrictValidation:
         """Test PathFeature fails strict validation with non-existing path."""
         with pytest.raises(ValueError, match="Path does not exist"):
             PathFeature.model_validate(
-                {"name": "test", "path": "/nonexistent/path.npy"},
-                context={"strict": True}
+                {"name": "test", "path": "/nonexistent/path.npy"}, context={"strict": True}
             )
 
     def test_path_feature_non_strict_mode_invalid_path(self):
@@ -371,10 +373,7 @@ class TestStrictValidation:
 
     def test_placeholder_strict_mode_ok(self):
         """Test placeholder passes strict validation (no path to check)."""
-        feat = PathFeature.model_validate(
-            {"name": "test"},
-            context={"strict": True}
-        )
+        feat = PathFeature.model_validate({"name": "test"}, context={"strict": True})
 
         assert feat.is_placeholder()
 
@@ -387,7 +386,9 @@ class TestStrictValidation:
 class TestErrorMessages:
     """Tests for error message quality."""
 
-    def test_factory_error_includes_entry_name(self, tmp_path: Path, sample_numpy_array: np.ndarray):
+    def test_factory_error_includes_entry_name(
+        self, tmp_path: Path, sample_numpy_array: np.ndarray
+    ):
         """Test factory error messages include entry name."""
         with pytest.raises(ValueError, match="Feature 'my_feature'"):
             Feature(name="my_feature", path=tmp_path / "test.npy", value=sample_numpy_array)
@@ -600,10 +601,7 @@ class TestDatasetSettingsValuePreservation:
 
         # Create FlexibleDataset using features/targets from DatasetSettings
         # This is the actual usage pattern in BuildFactory
-        dataset = FlexibleDataset(
-            features=ds_settings.features,
-            targets=ds_settings.targets
-        )
+        dataset = FlexibleDataset(features=ds_settings.features, targets=ds_settings.targets)
 
         # Verify dataset works
         assert len(dataset) == 10

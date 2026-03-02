@@ -29,9 +29,7 @@ class TestMLflowResourceManagerThreadSafety:
             tmp_path: Temporary directory fixture
         """
         # Configure minimal MLflow settings
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         manager = MLflowResourceManager(mlflow_config)
@@ -50,9 +48,7 @@ class TestMLflowResourceManagerThreadSafety:
         Args:
             tmp_path: Temporary directory fixture
         """
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         with MLflowResourceManager(mlflow_config) as manager:
@@ -83,9 +79,7 @@ class TestMLflowResourceManagerThreadSafety:
         Args:
             tmp_path: Temporary directory fixture
         """
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         manager = MLflowResourceManager(mlflow_config)
@@ -110,9 +104,7 @@ class TestConflictDetection:
         """
         # This test requires mocking server_info since we can't actually start a server
         # with a different URI than the client config
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns_client").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns_client").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         manager = MLflowResourceManager(mlflow_config)
@@ -157,9 +149,7 @@ class TestConflictDetection:
         Args:
             tmp_path: Temporary directory fixture
         """
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         manager = MLflowResourceManager(mlflow_config)
@@ -181,9 +171,7 @@ class TestStackConsistencyValidation:
         Args:
             tmp_path: Temporary directory fixture
         """
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         with MLflowResourceManager(mlflow_config) as manager:
@@ -209,9 +197,7 @@ class TestStateSnapshot:
         Args:
             tmp_path: Temporary directory fixture
         """
-        client_config = MLflowClientSettings(
-            tracking_uri=(tmp_path / "mlruns").as_uri()
-        )
+        client_config = MLflowClientSettings(tracking_uri=(tmp_path / "mlruns").as_uri())
         mlflow_config = MLflowSettings(enabled=True, client=client_config)
 
         with MLflowResourceManager(mlflow_config) as manager:

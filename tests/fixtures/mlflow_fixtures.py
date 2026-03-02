@@ -6,9 +6,15 @@ from pathlib import Path
 from typing import Generator
 from unittest.mock import Mock
 
-from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import MLflowResourceManager
+from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
+    MLflowResourceManager,
+)
 from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import MLflowClientFactory
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings, MLflowServerSettings
+from dlkit.tools.config.mlflow_settings import (
+    MLflowSettings,
+    MLflowClientSettings,
+    MLflowServerSettings,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -201,9 +207,10 @@ def process_leak_detector():
 
         if leaked_processes:
             import warnings
+
             warnings.warn(
                 f"Detected {len(leaked_processes)} potentially leaked child processes: {leaked_processes}",
-                ResourceWarning
+                ResourceWarning,
             )
     except Exception:
         pass
@@ -228,9 +235,10 @@ def thread_leak_detector():
 
         if thread_names:
             import warnings
+
             warnings.warn(
                 f"Detected {len(thread_names)} potentially leaked threads: {thread_names}",
-                ResourceWarning
+                ResourceWarning,
             )
 
 

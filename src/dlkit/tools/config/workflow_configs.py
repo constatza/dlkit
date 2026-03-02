@@ -62,9 +62,9 @@ class TrainingWorkflowConfig(BasicSettings):
         config = TrainingWorkflowConfig.model_validate(toml_dict)
 
         # Inject sections programmatically (also validated eagerly)
-        config = config.model_copy(update={
-            "DATASET": DatasetSettings(features=(...), targets=(...))
-        })
+        config = config.model_copy(
+            update={"DATASET": DatasetSettings(features=(...), targets=(...))}
+        )
 
         # Validate completeness before building
         validate_training_config_complete(config)  # Raises if sections missing
@@ -78,9 +78,7 @@ class TrainingWorkflowConfig(BasicSettings):
     SESSION: SessionSettings = Field(
         ..., description="Session mode control and execution settings (required)"
     )
-    TRAINING: TrainingConfig = Field(
-        ..., description="Core training configuration (required)"
-    )
+    TRAINING: TrainingConfig = Field(..., description="Core training configuration (required)")
 
     # Optional sections (can be injected programmatically)
     DATAMODULE: DataModuleSettings | None = Field(
@@ -237,12 +235,8 @@ class OptimizationWorkflowConfig(BasicSettings):
     """
 
     # Required sections
-    SESSION: SessionSettings = Field(
-        ..., description="Session mode control (required)"
-    )
-    TRAINING: TrainingConfig = Field(
-        ..., description="Core training configuration (required)"
-    )
+    SESSION: SessionSettings = Field(..., description="Session mode control (required)")
+    TRAINING: TrainingConfig = Field(..., description="Core training configuration (required)")
     OPTUNA: OptunaSettings = Field(
         ..., description="Optuna optimization config with enabled=true (required)"
     )

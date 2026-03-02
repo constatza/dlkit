@@ -49,9 +49,7 @@ module_path = "torch.nn"
         settings = load_settings(config_path)
 
         # Update SESSION.name
-        new_settings = update_settings(settings, {
-            "SESSION": {"name": "new_name"}
-        })
+        new_settings = update_settings(settings, {"SESSION": {"name": "new_name"}})
 
         # Name should be updated
         assert new_settings.SESSION.name == "new_name"
@@ -98,13 +96,7 @@ max_epochs = 100
         settings = load_settings(config_path)
 
         # Update TRAINING.trainer.max_epochs
-        new_settings = update_settings(settings, {
-            "TRAINING": {
-                "trainer": {
-                    "max_epochs": 200
-                }
-            }
-        })
+        new_settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": 200}}})
 
         # max_epochs should be updated
         assert new_settings.TRAINING.trainer.max_epochs == 200
@@ -151,11 +143,14 @@ module_path = "torch.nn"
         settings = load_settings(config_path)
 
         # Update multiple sections
-        new_settings = update_settings(settings, {
-            "SESSION": {"name": "updated_session"},
-            "TRAINING": {"epochs": 100},
-            "DATAMODULE": {"dataloader": {"batch_size": 64}}
-        })
+        new_settings = update_settings(
+            settings,
+            {
+                "SESSION": {"name": "updated_session"},
+                "TRAINING": {"epochs": 100},
+                "DATAMODULE": {"dataloader": {"batch_size": 64}},
+            },
+        )
 
         # All updates should be applied
         assert new_settings.SESSION.name == "updated_session"
@@ -205,13 +200,7 @@ module_path = "torch.nn"
         settings = load_settings(config_path)
 
         # Update only lr
-        new_settings = update_settings(settings, {
-            "TRAINING": {
-                "optimizer": {
-                    "lr": 0.01
-                }
-            }
-        })
+        new_settings = update_settings(settings, {"TRAINING": {"optimizer": {"lr": 0.01}}})
 
         # lr should be updated
         assert new_settings.TRAINING.optimizer.lr == 0.01
@@ -271,14 +260,17 @@ module_path = "torch.nn"
         settings = load_settings(config_path)
 
         # Replace features list completely
-        new_settings = update_settings(settings, {
-            "DATASET": {
-                "features": (
-                    Feature(name="new_feature1", path=features_path),
-                    Feature(name="new_feature2", path=features_path),
-                )
-            }
-        })
+        new_settings = update_settings(
+            settings,
+            {
+                "DATASET": {
+                    "features": (
+                        Feature(name="new_feature1", path=features_path),
+                        Feature(name="new_feature2", path=features_path),
+                    )
+                }
+            },
+        )
 
         # Features list should be completely replaced
         assert len(new_settings.DATASET.features) == 2
@@ -319,9 +311,7 @@ module_path = "torch.nn"
 
         settings = load_settings(config_path)
 
-        new_settings = update_settings(settings, {
-            "SESSION": {"name": "updated"}
-        })
+        new_settings = update_settings(settings, {"SESSION": {"name": "updated"}})
 
         assert new_settings.SESSION.name == "updated"
 
@@ -359,9 +349,7 @@ module_path = "torch.nn"
 
         settings = load_settings(config_path)
 
-        new_settings = update_settings(settings, {
-            "TRAINING": {"epochs": 999}
-        })
+        new_settings = update_settings(settings, {"TRAINING": {"epochs": 999}})
 
         assert new_settings.TRAINING.epochs == 999
 
@@ -405,13 +393,9 @@ module_path = "torch.nn"
 
         settings = load_settings(config_path)
 
-        new_settings = update_settings(settings, {
-            "MODEL": {"checkpoint": ckpt2}
-        })
+        new_settings = update_settings(settings, {"MODEL": {"checkpoint": ckpt2}})
 
         assert new_settings.MODEL.checkpoint == ckpt2
-
-
 
 
 class TestPydanticModelUpdates:
@@ -507,6 +491,7 @@ module_path = "torch.nn"
         assert updated.TRAINING.optimizer.weight_decay == pytest.approx(0.2)
         assert updated.TRAINING.optimizer.lr == pytest.approx(0.123)
 
+
 class TestExtrasHandling:
     """Test handling of EXTRAS (allowing arbitrary keys)."""
 
@@ -549,15 +534,9 @@ custom_field2 = "value2"
         settings = load_settings(config_path)
 
         # Add nested structure while keeping existing keys
-        new_settings = update_settings(settings, {
-            "EXTRAS": {
-                "deeply": {
-                    "nested": {
-                        "custom": "data"
-                    }
-                }
-            }
-        })
+        new_settings = update_settings(
+            settings, {"EXTRAS": {"deeply": {"nested": {"custom": "data"}}}}
+        )
 
         # Original keys remain intact
         assert getattr(new_settings.EXTRAS, "custom_field1") == "value1"
@@ -605,11 +584,14 @@ custom_field2 = "value2"
 
         settings = load_settings(config_path)
 
-        new_settings = update_settings(settings, {
-            "EXTRAS": {
-                "custom_field2": "updated",
-            }
-        })
+        new_settings = update_settings(
+            settings,
+            {
+                "EXTRAS": {
+                    "custom_field2": "updated",
+                }
+            },
+        )
 
         assert getattr(new_settings.EXTRAS, "custom_field1") == "value1"
         assert getattr(new_settings.EXTRAS, "custom_field2") == "updated"
@@ -654,13 +636,10 @@ module_path = "torch.nn"
 
         # Try to update with invalid path - should fail validation
         with pytest.raises(ValidationError):
-            update_settings(settings, {
-                "DATASET": {
-                    "features": (
-                        Feature(name="x", path="/nonexistent/bad/path.npy"),
-                    )
-                }
-            })
+            update_settings(
+                settings,
+                {"DATASET": {"features": (Feature(name="x", path="/nonexistent/bad/path.npy"),)}},
+            )
 
     def test_validation_with_default_catches_errors(self, tmp_path):
         """Test that validation is enabled by default and catches errors."""
@@ -697,9 +676,7 @@ module_path = "torch.nn"
         settings = load_settings(config_path)
 
         # Valid update should work (validation is on by default)
-        new_settings = update_settings(settings, {
-            "SESSION": {"name": "updated"}
-        })
+        new_settings = update_settings(settings, {"SESSION": {"name": "updated"}})
 
         # Should complete successfully with validation
         assert new_settings.SESSION.name == "updated"
@@ -746,12 +723,15 @@ existing_field = "value"
         settings = load_settings(config_path)
 
         # Add new field to EXTRAS
-        new_settings = update_settings(settings, {
-            "EXTRAS": {
-                "existing_field": "value",  # Keep existing
-                "new_field": "new_value"     # Add new
-            }
-        })
+        new_settings = update_settings(
+            settings,
+            {
+                "EXTRAS": {
+                    "existing_field": "value",  # Keep existing
+                    "new_field": "new_value",  # Add new
+                }
+            },
+        )
 
         # EXTRAS is ExtrasSettings with extra="allow", access via attributes
         assert new_settings.EXTRAS.existing_field == "value"

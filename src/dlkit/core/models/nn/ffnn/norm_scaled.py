@@ -95,7 +95,9 @@ class NormScaledFFNN(DLKitModel):
         if not torch.is_floating_point(x):
             raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
         if x.ndim < 1:
-            raise ValueError(f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}.")
+            raise ValueError(
+                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
+            )
 
         norms = self._vector_norm(x)
         eps = self._compute_eps(x, self.eps_gain)

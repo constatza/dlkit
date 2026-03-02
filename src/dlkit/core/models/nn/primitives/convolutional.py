@@ -134,5 +134,7 @@ def output_size(
         case str():
             raise ValueError(f"Unsupported padding string {padding!r} for output size calculation")
         case _:
-            raw = math.floor((input_size + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
+            raw = math.floor(
+                (input_size + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1
+            )
             return int(raw)

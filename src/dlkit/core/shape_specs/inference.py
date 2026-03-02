@@ -24,6 +24,7 @@ class InferenceContext:
     This context object follows the Parameter Object pattern to avoid
     long parameter lists and provide extensibility for future inference sources.
     """
+
     dataset: Any = None
     checkpoint_path: Optional[Path] = None
     model_settings: Any = None
@@ -35,6 +36,7 @@ class InferenceContext:
         """Initialize default factory if not provided."""
         if self.shape_factory is None:
             from .factory import ShapeSystemFactory
+
             self.shape_factory = ShapeSystemFactory.create_production_system()
 
 
@@ -101,9 +103,11 @@ class CheckpointMetadataStrategy(ShapeInferenceStrategy):
         Returns:
             True if checkpoint path is available
         """
-        return (context.checkpoint_path is not None and
-                context.checkpoint_path.exists() and
-                context.checkpoint_path.is_file())
+        return (
+            context.checkpoint_path is not None
+            and context.checkpoint_path.exists()
+            and context.checkpoint_path.is_file()
+        )
 
     def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
         """Extract shapes from enhanced checkpoint metadata.
@@ -116,12 +120,13 @@ class CheckpointMetadataStrategy(ShapeInferenceStrategy):
         """
         try:
             import torch
+
             checkpoint = torch.load(context.checkpoint_path, map_location="cpu", weights_only=False)
 
             # Try enhanced metadata first
-            if 'dlkit_metadata' in checkpoint and 'shape_spec' in checkpoint['dlkit_metadata']:
+            if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
                 shape_data = context.shape_factory.get_serializer().deserialize(
-                    checkpoint['dlkit_metadata']['shape_spec']
+                    checkpoint["dlkit_metadata"]["shape_spec"]
                 )
                 return shape_data
 
@@ -164,10 +169,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
         if not shapes:
             return None
 
-        entries = {
-            name: ShapeEntry(name=name, dimensions=dims)
-            for name, dims in shapes.items()
-        }
+        entries = {name: ShapeEntry(name=name, dimensions=dims) for name, dims in shapes.items()}
         default_output = "y" if "y" in shapes else None
         return ShapeData(
             entries=entries,
@@ -228,9 +230,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
 
         edge_attr = getattr(graph, "edge_attr", None)
         if hasattr(edge_attr, "shape") and edge_attr.shape:
-            attr_dim = (
-                int(edge_attr.shape[-1]) if len(edge_attr.shape) > 1 else 1
-            )
+            attr_dim = int(edge_attr.shape[-1]) if len(edge_attr.shape) > 1 else 1
             if attr_dim > 0:
                 shapes["edge_attr"] = (attr_dim,)
 
@@ -291,18 +291,17 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
             if context.model_family:
                 model_family = context.model_family
             elif context.model_settings:
-                model_family = context.shape_factory.get_model_registry().detect_family(context.model_settings)
+                model_family = context.shape_factory.get_model_registry().detect_family(
+                    context.model_settings
+                )
 
             # Create shape entries
             entries = {
-                name: ShapeEntry(name=name, dimensions=dims)
-                for name, dims in shapes.items()
+                name: ShapeEntry(name=name, dimensions=dims) for name, dims in shapes.items()
             }
 
             return ShapeData(
-                entries=entries,
-                model_family=model_family,
-                source=ShapeSource.TRAINING_DATASET
+                entries=entries, model_family=model_family, source=ShapeSource.TRAINING_DATASET
             )
 
         except Exception:
@@ -319,6 +318,7 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
 
         # Handle Batch dataclass (new positional format)
         from dlkit.core.datatypes.batch import Batch as DLKitBatch
+
         if isinstance(sample, DLKitBatch):
             for i, t in enumerate(sample.features):
                 if hasattr(t, "shape"):
@@ -362,18 +362,22 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
         return shapes if shapes else None
 
     def _enhance_with_entry_configs(
-        self,
-        shapes: Dict[str, tuple[int, ...]],
-        entry_configs: Dict[str, Any]
+        self, shapes: Dict[str, tuple[int, ...]], entry_configs: Dict[str, Any]
     ) -> Dict[str, tuple[int, ...]]:
         """Enhance shapes with information from entry configurations."""
         enhanced = dict(shapes)
 
         # Add x/y aliases based on entry configs
-        features = {name: cfg for name, cfg in entry_configs.items()
-                   if hasattr(cfg, '__class__') and 'Feature' in cfg.__class__.__name__}
-        targets = {name: cfg for name, cfg in entry_configs.items()
-                  if hasattr(cfg, '__class__') and 'Target' in cfg.__class__.__name__}
+        features = {
+            name: cfg
+            for name, cfg in entry_configs.items()
+            if hasattr(cfg, "__class__") and "Feature" in cfg.__class__.__name__
+        }
+        targets = {
+            name: cfg
+            for name, cfg in entry_configs.items()
+            if hasattr(cfg, "__class__") and "Target" in cfg.__class__.__name__
+        }
 
         if len(features) == 1 and "x" not in enhanced:
             feat_name = next(iter(features.keys()))
@@ -420,13 +424,13 @@ class ConfigurationStrategy(ShapeInferenceStrategy):
 
             # Look for explicit shape configuration
             shapes = {}
-            if hasattr(settings, 'input_shape') and settings.input_shape:
-                shapes['x'] = tuple(settings.input_shape)
-            if hasattr(settings, 'output_shape') and settings.output_shape:
-                shapes['y'] = tuple(settings.output_shape)
+            if hasattr(settings, "input_shape") and settings.input_shape:
+                shapes["x"] = tuple(settings.input_shape)
+            if hasattr(settings, "output_shape") and settings.output_shape:
+                shapes["y"] = tuple(settings.output_shape)
 
             # Look for shape dictionary
-            if hasattr(settings, 'shapes') and settings.shapes:
+            if hasattr(settings, "shapes") and settings.shapes:
                 shapes.update(settings.shapes)
 
             if not shapes:
@@ -441,14 +445,11 @@ class ConfigurationStrategy(ShapeInferenceStrategy):
 
             # Create shape entries
             entries = {
-                name: ShapeEntry(name=name, dimensions=dims)
-                for name, dims in shapes.items()
+                name: ShapeEntry(name=name, dimensions=dims) for name, dims in shapes.items()
             }
 
             return ShapeData(
-                entries=entries,
-                model_family=model_family,
-                source=ShapeSource.CONFIGURATION
+                entries=entries, model_family=model_family, source=ShapeSource.CONFIGURATION
             )
 
         except Exception:
@@ -487,7 +488,9 @@ class DefaultFallbackStrategy(ShapeInferenceStrategy):
         if context.model_family:
             model_family = context.model_family
         elif context.model_settings:
-            model_family = context.shape_factory.get_model_registry().detect_family(context.model_settings)
+            model_family = context.shape_factory.get_model_registry().detect_family(
+                context.model_settings
+            )
 
         # Provide appropriate defaults based on model family
         if model_family == ModelFamily.EXTERNAL:
@@ -496,14 +499,12 @@ class DefaultFallbackStrategy(ShapeInferenceStrategy):
         else:
             # Other models get minimal x/y shapes
             entries = {
-                'x': ShapeEntry(name='x', dimensions=(1,)),
-                'y': ShapeEntry(name='y', dimensions=(1,))
+                "x": ShapeEntry(name="x", dimensions=(1,)),
+                "y": ShapeEntry(name="y", dimensions=(1,)),
             }
 
         return ShapeData(
-            entries=entries,
-            model_family=model_family,
-            source=ShapeSource.DEFAULT_FALLBACK
+            entries=entries, model_family=model_family, source=ShapeSource.DEFAULT_FALLBACK
         )
 
     def get_priority(self) -> int:
@@ -550,11 +551,13 @@ class ShapeInferenceChain:
                     shape_data = strategy.infer_shapes(context)
                     if shape_data is not None:
                         # Create shape spec from inferred data
-                        shapes = {name: entry.dimensions for name, entry in shape_data.entries.items()}
+                        shapes = {
+                            name: entry.dimensions for name, entry in shape_data.entries.items()
+                        }
                         return create_shape_spec(
                             shapes=shapes,
                             model_family=shape_data.model_family,
-                            source=shape_data.source
+                            source=shape_data.source,
                         )
                 except Exception:
                     # Continue to next strategy if this one fails
@@ -603,9 +606,11 @@ class ShapeInferenceEngine:
     hiding the complexity of the strategy chain underneath.
     """
 
-    def __init__(self,
-                 inference_chain: Optional[ShapeInferenceChain] = None,
-                 shape_factory: Optional[Any] = None):  # ShapeSystemFactory - avoid circular import
+    def __init__(
+        self,
+        inference_chain: Optional[ShapeInferenceChain] = None,
+        shape_factory: Optional[Any] = None,
+    ):  # ShapeSystemFactory - avoid circular import
         """Initialize inference engine.
 
         Args:
@@ -615,13 +620,14 @@ class ShapeInferenceEngine:
         self._inference_chain = inference_chain or ShapeInferenceChain()
         if shape_factory is None:
             from .factory import ShapeSystemFactory
+
             self._shape_factory = ShapeSystemFactory.create_production_system()
         else:
             self._shape_factory = shape_factory
 
-    def infer_from_checkpoint(self,
-                             checkpoint_path: Path,
-                             model_settings: Any = None) -> IShapeSpec:
+    def infer_from_checkpoint(
+        self, checkpoint_path: Path, model_settings: Any = None
+    ) -> IShapeSpec:
         """Infer shapes from checkpoint file.
 
         Args:
@@ -634,14 +640,16 @@ class ShapeInferenceEngine:
         context = InferenceContext(
             checkpoint_path=checkpoint_path,
             model_settings=model_settings,
-            shape_factory=self._shape_factory
+            shape_factory=self._shape_factory,
         )
         return self._inference_chain.infer_shape_spec(context)
 
-    def infer_from_dataset(self,
-                          dataset: Any,
-                          model_settings: Any = None,
-                          entry_configs: Optional[Dict[str, Any]] = None) -> IShapeSpec:
+    def infer_from_dataset(
+        self,
+        dataset: Any,
+        model_settings: Any = None,
+        entry_configs: Optional[Dict[str, Any]] = None,
+    ) -> IShapeSpec:
         """Infer shapes from dataset.
 
         Args:
@@ -656,7 +664,7 @@ class ShapeInferenceEngine:
             dataset=dataset,
             model_settings=model_settings,
             entry_configs=entry_configs,
-            shape_factory=self._shape_factory
+            shape_factory=self._shape_factory,
         )
         return self._inference_chain.infer_shape_spec(context)
 
@@ -669,17 +677,16 @@ class ShapeInferenceEngine:
         Returns:
             IShapeSpec with inferred shapes
         """
-        context = InferenceContext(
-            model_settings=model_settings,
-            shape_factory=self._shape_factory
-        )
+        context = InferenceContext(model_settings=model_settings, shape_factory=self._shape_factory)
         return self._inference_chain.infer_shape_spec(context)
 
-    def infer_comprehensive(self,
-                           checkpoint_path: Optional[Path] = None,
-                           dataset: Any = None,
-                           model_settings: Any = None,
-                           entry_configs: Optional[Dict[str, Any]] = None) -> IShapeSpec:
+    def infer_comprehensive(
+        self,
+        checkpoint_path: Optional[Path] = None,
+        dataset: Any = None,
+        model_settings: Any = None,
+        entry_configs: Optional[Dict[str, Any]] = None,
+    ) -> IShapeSpec:
         """Comprehensive shape inference using all available sources.
 
         Args:
@@ -696,6 +703,6 @@ class ShapeInferenceEngine:
             dataset=dataset,
             model_settings=model_settings,
             entry_configs=entry_configs,
-            shape_factory=self._shape_factory
+            shape_factory=self._shape_factory,
         )
         return self._inference_chain.infer_shape_spec(context)

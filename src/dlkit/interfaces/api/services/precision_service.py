@@ -261,9 +261,7 @@ class PrecisionService:
             "context_override": self._context.get_override(),
         }
 
-    def infer_precision_from_model(
-        self, model: torch.nn.Module
-    ) -> PrecisionStrategy | None:
+    def infer_precision_from_model(self, model: torch.nn.Module) -> PrecisionStrategy | None:
         """Infer precision strategy from a model's parameter dtype.
 
         Inspects the model's parameters to determine the effective precision

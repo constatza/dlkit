@@ -88,10 +88,7 @@ class SessionSettings(BasicSettings):
             return PrecisionStrategy.from_string(v)
         except ValueError as e:
             # Re-raise with context about where the error occurred
-            raise ValueError(
-                f"Invalid precision value in [SESSION] configuration: {e}"
-            ) from e
-
+            raise ValueError(f"Invalid precision value in [SESSION] configuration: {e}") from e
 
     @property
     def is_training_mode(self) -> bool:

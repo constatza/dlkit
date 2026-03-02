@@ -30,7 +30,10 @@ class ExecutionSelector:
 
     def select(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
         explicit: str | None = None,
     ):
         """Create execution strategy using SOLID factory composition."""
@@ -50,7 +53,11 @@ class ExecutionSelector:
         return self._factory.create_executor(settings)
 
     def select_optimization(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
+        self,
+        settings: GeneralSettings
+        | TrainingWorkflowConfig
+        | InferenceWorkflowConfig
+        | OptimizationWorkflowConfig,
     ):
         """Create optimization strategy using SOLID factory composition."""
         # Log what features are detected

@@ -20,6 +20,7 @@ from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
 from .extras_settings import ExtrasSettings
 
+
 class PartialSettingsLoader:
     """Factory class for efficient partial config loading.
 
@@ -122,12 +123,8 @@ class PartialSettingsLoader:
 
         return TrainingWorkflowSettings(**typed_kwargs)
 
-
-
     def create_settings_for_workflow(
-        self,
-        config_path: Path | str,
-        workflow_type: str
+        self, config_path: Path | str, workflow_type: str
     ) -> BaseWorkflowSettings:
         """Factory method to create settings based on workflow type.
 
@@ -152,19 +149,14 @@ class PartialSettingsLoader:
         if workflow_type not in workflow_factories:
             available_types = list(workflow_factories.keys())
             raise ValueError(
-                f"Unsupported workflow type: {workflow_type}. "
-                f"Available types: {available_types}"
+                f"Unsupported workflow type: {workflow_type}. Available types: {available_types}"
             )
 
         factory_method = workflow_factories[workflow_type]
         return factory_method(config_path)
 
     def load_sections(
-        self,
-        config_path: Path | str,
-        sections: list[str],
-        *,
-        strict: bool = False
+        self, config_path: Path | str, sections: list[str], *, strict: bool = False
     ) -> BaseWorkflowSettings:
         """Load arbitrary combination of configuration sections for maximum flexibility.
 
@@ -198,9 +190,10 @@ class PartialSettingsLoader:
             >>> settings = loader.load_sections("config.toml", ["DATAMODULE", "DATASET", "PATHS"])
             >>>
             >>> # Complete training setup (user-controlled)
-            >>> settings = loader.load_sections("config.toml", [
-            ...     "SESSION", "MODEL", "DATAMODULE", "DATASET", "TRAINING", "MLFLOW"
-            ... ])
+            >>> settings = loader.load_sections(
+            ...     "config.toml",
+            ...     ["SESSION", "MODEL", "DATAMODULE", "DATASET", "TRAINING", "MLFLOW"],
+            ... )
             >>>
             >>> # Strict loading (all sections must exist)
             >>> settings = loader.load_sections("config.toml", ["MODEL", "DATASET"], strict=True)
@@ -228,8 +221,7 @@ class PartialSettingsLoader:
         if unknown_sections:
             available_sections = list(section_model_map.keys())
             raise ValueError(
-                f"Unknown sections: {unknown_sections}. "
-                f"Available sections: {available_sections}"
+                f"Unknown sections: {unknown_sections}. Available sections: {available_sections}"
             )
 
         # Build loading plan based on strict mode
@@ -293,17 +285,23 @@ class PartialSettingsLoader:
         elif has_training:
             # Basic training workflow
             return TrainingWorkflowSettings(**typed_kwargs)
-        elif "SESSION" in typed_kwargs and hasattr(typed_kwargs["SESSION"], "inference") and typed_kwargs["SESSION"].inference:
+        elif (
+            "SESSION" in typed_kwargs
+            and hasattr(typed_kwargs["SESSION"], "inference")
+            and typed_kwargs["SESSION"].inference
+        ):
             # Inference workflow
             return InferenceWorkflowSettings(**typed_kwargs)
         else:
             # Base workflow for any other combination
             return BaseWorkflowSettings(**typed_kwargs)
 
+
 # Default factory instance for convenience
 default_settings_loader = PartialSettingsLoader()
 
 # Convenience functions that delegate to the default loader
+
 
 def load_settings(config_path: Path | str) -> TrainingWorkflowSettings:
     """Load full training configuration from TOML file.
@@ -347,13 +345,8 @@ def load_settings(config_path: Path | str) -> TrainingWorkflowSettings:
 # result = infer(checkpoint_path, inputs)
 
 
-
-
 def load_sections(
-    config_path: Path | str,
-    sections: list[str],
-    *,
-    strict: bool = False
+    config_path: Path | str, sections: list[str], *, strict: bool = False
 ) -> BaseWorkflowSettings:
     """Load specific configuration sections for custom workflows.
 

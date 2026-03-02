@@ -48,7 +48,10 @@ class TestFileBasedServerTracker:
         )
         # Verify save_tracking_data was called (path comes from _path_resolver)
         assert mock_save_data.call_count == 1
-        assert mock_save_data.call_args[0][1] == {"existing:8080": [99999], "localhost:5000": [12345]}
+        assert mock_save_data.call_args[0][1] == {
+            "existing:8080": [99999],
+            "localhost:5000": [12345],
+        }
 
     @patch("dlkit.interfaces.servers.tracking_adapter.load_tracking_data")
     def test_track_server_handles_exceptions_silently(
@@ -79,14 +82,18 @@ class TestFileBasedServerTracker:
         tracking_file.touch()
 
         # Mock path resolver to return our test path
-        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=tracking_file):
+        with patch.object(
+            tracker._path_resolver, "get_tracking_file_path", return_value=tracking_file
+        ):
             mock_load_data.return_value = {"localhost:5000": [12345]}
             mock_remove_server.return_value = {}
 
             tracker.untrack_server("localhost", 5000)
 
             mock_load_data.assert_called_once_with(tracking_file)
-            mock_remove_server.assert_called_once_with({"localhost:5000": [12345]}, "localhost", 5000)
+            mock_remove_server.assert_called_once_with(
+                {"localhost:5000": [12345]}, "localhost", 5000
+            )
             mock_save_data.assert_called_once_with(tracking_file, {})
 
     def test_untrack_server_skips_if_file_missing(
@@ -97,7 +104,9 @@ class TestFileBasedServerTracker:
         """Test that untrack_server skips when tracking file doesn't exist."""
         # Mock path resolver to return non-existent path
         nonexistent_path = tmp_path / "nonexistent.json"
-        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=nonexistent_path):
+        with patch.object(
+            tracker._path_resolver, "get_tracking_file_path", return_value=nonexistent_path
+        ):
             # Should not raise exception and should skip operations
             tracker.untrack_server("localhost", 5000)
 
@@ -116,7 +125,9 @@ class TestFileBasedServerTracker:
         tracking_file.touch()
 
         # Mock path resolver to return our test path
-        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=tracking_file):
+        with patch.object(
+            tracker._path_resolver, "get_tracking_file_path", return_value=tracking_file
+        ):
             mock_load_data.return_value = {"localhost:5000": [12345], "127.0.0.1:5000": [67890]}
             mock_get_pids.return_value = [12345, 67890]
 
@@ -134,7 +145,9 @@ class TestFileBasedServerTracker:
         """Test that get_tracked_pids returns empty list for missing file."""
         # Mock path resolver to return non-existent path
         nonexistent_path = tmp_path / "nonexistent.json"
-        with patch.object(tracker._path_resolver, 'get_tracking_file_path', return_value=nonexistent_path):
+        with patch.object(
+            tracker._path_resolver, "get_tracking_file_path", return_value=nonexistent_path
+        ):
             result = tracker.get_tracked_pids("localhost", 5000)
             assert result == []
 
@@ -418,7 +431,9 @@ class TestMLflowStorageSetup:
         mock_path.mkdir()
 
         # Mock the path resolver
-        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+        with patch.object(
+            storage_setup._path_resolver, "get_default_mlruns_path", return_value=mock_path
+        ):
             mock_file_system.directory_exists.return_value = True
 
             server_config = Mock()
@@ -428,10 +443,8 @@ class TestMLflowStorageSetup:
         mock_file_system.directory_exists.assert_called_once_with(mock_path)
 
     @patch("dlkit.interfaces.servers.storage_adapter.should_use_default_storage")
-
     def test_ensure_storage_setup_creates_directory_automatically(
         self,
-
         mock_should_use_default: Mock,
         mock_user_interaction: Mock,
         mock_file_system: Mock,
@@ -443,7 +456,9 @@ class TestMLflowStorageSetup:
         mock_file_system.directory_exists.return_value = False
 
         # Mock the path resolver to return our mock path
-        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+        with patch.object(
+            storage_setup._path_resolver, "get_default_mlruns_path", return_value=mock_path
+        ):
             server_config = Mock()
             result = storage_setup.ensure_storage_setup(server_config, {})
 
@@ -454,10 +469,8 @@ class TestMLflowStorageSetup:
         mock_file_system.create_directory.assert_called_once_with(mock_path)
 
     @patch("dlkit.interfaces.servers.storage_adapter.should_use_default_storage")
-
     def test_ensure_storage_setup_skips_when_directory_exists(
         self,
-
         mock_should_use_default: Mock,
         mock_user_interaction: Mock,
         mock_file_system: Mock,
@@ -469,7 +482,9 @@ class TestMLflowStorageSetup:
         mock_file_system.directory_exists.return_value = True  # Directory already exists
 
         # Mock the path resolver to return our mock path
-        with patch.object(storage_setup._path_resolver, 'get_default_mlruns_path', return_value=mock_path):
+        with patch.object(
+            storage_setup._path_resolver, "get_default_mlruns_path", return_value=mock_path
+        ):
             server_config = Mock()
             result = storage_setup.ensure_storage_setup(server_config, {})
 
@@ -604,8 +619,8 @@ class TestAdapterIntegration:
         # Verify interaction - mock psutil to find no processes
         with patch("dlkit.interfaces.servers.process_adapter.psutil") as mock_psutil:
             # Mock psutil exceptions
-            mock_psutil.NoSuchProcess = type('NoSuchProcess', (Exception,), {})
-            mock_psutil.AccessDenied = type('AccessDenied', (Exception,), {})
+            mock_psutil.NoSuchProcess = type("NoSuchProcess", (Exception,), {})
+            mock_psutil.AccessDenied = type("AccessDenied", (Exception,), {})
 
             # Mock process_iter to return no processes
             mock_psutil.process_iter.return_value = []

@@ -90,7 +90,9 @@ class MLflowTrackingAdapter(IExperimentTracker):
 
     def __enter__(self):
         """Enter context and initialize MLflow tracker using ExitStack."""
-        logger.info(f"MLflowTrackingAdapter.__enter__ called - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}")
+        logger.info(
+            f"MLflowTrackingAdapter.__enter__ called - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}"
+        )
 
         if self._mlflow_settings and self._tracker:
             try:
@@ -114,7 +116,9 @@ class MLflowTrackingAdapter(IExperimentTracker):
                     self._exit_stack = None
                 raise
         else:
-            logger.warning(f"Skipping MLflow initialization - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}")
+            logger.warning(
+                f"Skipping MLflow initialization - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}"
+            )
 
         return self
 
@@ -214,9 +218,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=f"best_retrain_trial_{best_trial.trial_number}",
                 nested=True,  # Nested under study run
             ) as run_context:
-                retrain_context = MLflowTrialRunContext(
-                    mlflow, run_context, best_trial
-                )
+                retrain_context = MLflowTrialRunContext(mlflow, run_context, best_trial)
                 yield retrain_context
 
         except Exception as e:

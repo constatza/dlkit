@@ -23,4 +23,6 @@ class DLKitModel(nn.Module):
         try:
             return next(self.parameters()).dtype
         except StopIteration:
-            raise RuntimeError(f"{self.__class__.__name__} has no parameters, cannot determine dtype")
+            raise RuntimeError(
+                f"{self.__class__.__name__} has no parameters, cannot determine dtype"
+            )

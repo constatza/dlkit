@@ -165,7 +165,9 @@ def load_registered_model(
                         return loader(model_uri)
                     except Exception:
                         continue
-                raise RuntimeError(f"Failed to load model URI '{model_uri}' with all supported loaders")
+                raise RuntimeError(
+                    f"Failed to load model URI '{model_uri}' with all supported loaders"
+                )
             case _:
                 raise ValueError(f"Unsupported flavor strategy '{flavor}'")
 

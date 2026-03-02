@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from pydantic import Field, NonNegativeFloat, FilePath, DirectoryPath, model_validator, ValidationInfo
+from pydantic import (
+    Field,
+    NonNegativeFloat,
+    FilePath,
+    DirectoryPath,
+    model_validator,
+    ValidationInfo,
+)
 
 from .core.base_settings import ComponentSettings, BasicSettings
 from .enums import DatasetFamily
@@ -94,7 +101,9 @@ class DatasetSettings(ComponentSettings):
         default=None, description="Root directory of the dataset", alias="root_dir"
     )
     # Flexible entries only: lists of Feature/Target settings (mutable for runtime updates)
-    features: list[FeatureType] = Field(default_factory=list, description="Flexible feature entries")
+    features: list[FeatureType] = Field(
+        default_factory=list, description="Flexible feature entries"
+    )
     targets: list[TargetType] = Field(default_factory=list, description="Flexible target entries")
 
     split: IndexSplitSettings = Field(
@@ -120,12 +129,20 @@ class DatasetSettings(ComponentSettings):
         """
         # Validate features
         for feature in self.features:
-            if isinstance(feature, PathFeature) and feature.path is not None and not feature.path.exists():
+            if (
+                isinstance(feature, PathFeature)
+                and feature.path is not None
+                and not feature.path.exists()
+            ):
                 raise ValueError(f"Feature path does not exist: {feature.path}")
 
         # Validate targets
         for target in self.targets:
-            if isinstance(target, PathTarget) and target.path is not None and not target.path.exists():
+            if (
+                isinstance(target, PathTarget)
+                and target.path is not None
+                and not target.path.exists()
+            ):
                 raise ValueError(f"Target path does not exist: {target.path}")
 
         return self

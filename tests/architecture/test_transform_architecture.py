@@ -99,6 +99,7 @@ class TestProtocolBasedArchitecture:
 
     def test_non_invertible_transforms_fail_protocol_check(self):
         """Transforms without inverse_transform() fail InvertibleTransform Protocol check."""
+
         # Create a simple non-invertible transform
         class NonInvertible(Transform):
             def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -112,7 +113,7 @@ class TestProtocolBasedArchitecture:
     def test_no_default_methods_in_base(self):
         """Transform base class should NOT provide default capability methods."""
         # This prevents false positives in Protocol checks
-        assert not hasattr(Transform, 'inverse_transform'), (
+        assert not hasattr(Transform, "inverse_transform"), (
             "Transform base should not have inverse_transform() to prevent false Protocol matches"
         )
         # fit() and configure_shape() have default implementations (no-op/pass)
@@ -169,8 +170,7 @@ class TestSingleResponsibility:
     def test_base_Transform_provides_fitted_property(self):
         """Base Transform class provides fitted property for all transforms."""
         assert hasattr(Transform, "fitted"), (
-            "Transform base class must provide fitted property "
-            "for consistent state management"
+            "Transform base class must provide fitted property for consistent state management"
         )
 
         # Test that it's a property, not just an attribute
@@ -292,6 +292,7 @@ class TestInvariants:
 # PHASE 2 COMPLETION VERIFICATION
 # ===========================================================================================
 
+
 def test_phase2_protocol_architecture_complete():
     """Verify Phase 2 Protocol-based architecture is correctly implemented."""
     from dlkit.core.training.transforms import chain
@@ -313,6 +314,6 @@ def test_phase2_protocol_architecture_complete():
     assert isinstance(scaler, ShapeAwareTransform), "Should pass ShapeAwareTransform check"
 
     # 4. No default inverse_transform() in Transform base
-    assert not hasattr(Transform, 'inverse_transform'), (
+    assert not hasattr(Transform, "inverse_transform"), (
         "Transform base should not have default inverse_transform()"
     )

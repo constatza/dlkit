@@ -59,12 +59,7 @@ class SampleNormL2(Transform):
     _shape_configured: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        *,
-        eps: float = 1e-8,
-        feature_dims: tuple[int, ...] | None = None
-    ) -> None:
+    def __init__(self, *, eps: float = 1e-8, feature_dims: tuple[int, ...] | None = None) -> None:
         """Initialize the sample normalization transform.
 
         Args:

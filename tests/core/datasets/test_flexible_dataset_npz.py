@@ -21,9 +21,7 @@ from dlkit.tools.config.data_entries import Feature, Target
 class TestFlexibleDatasetWithNpz:
     """Test FlexibleDataset loading from NPZ files."""
 
-    def test_load_single_feature_from_single_array_npz(
-        self, npz_single_array: dict
-    ) -> None:
+    def test_load_single_feature_from_single_array_npz(self, npz_single_array: dict) -> None:
         """Test loading a feature from single-array NPZ (auto-detection)."""
         features = [Feature(name="data", path=npz_single_array["path"])]
         dataset = FlexibleDataset(features=features)
@@ -45,9 +43,7 @@ class TestFlexibleDatasetWithNpz:
         assert dataset._dataset_td["features", "features"].shape == (10, 5)
         assert dataset._dataset_td["targets", "targets"].shape == (10, 1)
 
-    def test_load_multiple_features_from_same_npz(
-        self, npz_multi_array: dict
-    ) -> None:
+    def test_load_multiple_features_from_same_npz(self, npz_multi_array: dict) -> None:
         """Test loading multiple features from same NPZ using different names."""
         features = [
             Feature(name="features", path=npz_multi_array["path"]),
@@ -168,9 +164,7 @@ class TestFlexibleDatasetNpzErrors:
         with pytest.raises(ValueError, match="Array key 'missing' not found"):
             FlexibleDataset(features=features)
 
-    def test_single_array_npz_with_matching_name(
-        self, npz_single_array: dict
-    ) -> None:
+    def test_single_array_npz_with_matching_name(self, npz_single_array: dict) -> None:
         """Test that single-array NPZ requires matching entry name."""
         # Entry name must match the array key in NPZ
         features = [Feature(name="data", path=npz_single_array["path"])]
@@ -180,9 +174,7 @@ class TestFlexibleDatasetNpzErrors:
         assert len(dataset) == 10
         assert dataset._dataset_td["features", "data"].shape == (10, 5)
 
-    def test_single_array_npz_with_wrong_name_raises(
-        self, npz_single_array: dict
-    ) -> None:
+    def test_single_array_npz_with_wrong_name_raises(self, npz_single_array: dict) -> None:
         """Test that single-array NPZ with wrong name raises error."""
         # Entry name "wrong_name" doesn't match "data" in NPZ
         features = [Feature(name="wrong_name", path=npz_single_array["path"])]
@@ -202,9 +194,7 @@ class TestFlexibleDatasetNpzErrors:
         features = [Feature(name="features", path=path)]
         targets = [Target(name="targets", path=path)]
 
-        with pytest.raises(
-            BatchComplianceError, match="same first dimension N"
-        ):
+        with pytest.raises(BatchComplianceError, match="same first dimension N"):
             FlexibleDataset(features=features, targets=targets)
 
 

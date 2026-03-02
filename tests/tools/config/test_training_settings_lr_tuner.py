@@ -115,9 +115,7 @@ class TestTrainingSettingsLRTuner:
 
     def test_lr_tuner_with_early_stop_disabled(self) -> None:
         """Test lr_tuner with early_stop_threshold set to None."""
-        settings = TrainingSettings(
-            lr_tuner=LRTunerSettings(early_stop_threshold=None)
-        )
+        settings = TrainingSettings(lr_tuner=LRTunerSettings(early_stop_threshold=None))
 
         assert settings.lr_tuner is not None
         assert settings.lr_tuner.early_stop_threshold is None

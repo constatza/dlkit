@@ -32,8 +32,8 @@ Examples:
     >>>
     >>> # Use custom metrics in MetricCollection
     >>> metrics = MetricCollection({
-    ...     'mse': MeanSquaredError(),
-    ...     'norm_error': NormalizedVectorNormError(norm_ord=2),
+    ...     "mse": MeanSquaredError(),
+    ...     "norm_error": NormalizedVectorNormError(norm_ord=2),
     ... })
     >>>
     >>> preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])

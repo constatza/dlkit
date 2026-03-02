@@ -41,9 +41,7 @@ def test_search_registered_models_uses_name_filter(mock_client_cls: Mock) -> Non
     result = search_registered_models("ModelA", tracking_uri="http://localhost:5000")
 
     assert result == ["model-a"]
-    mock_client.search_registered_models.assert_called_once_with(
-        filter_string="name = 'ModelA'"
-    )
+    mock_client.search_registered_models.assert_called_once_with(filter_string="name = 'ModelA'")
 
 
 @patch("mlflow.tracking.MlflowClient")
@@ -95,7 +93,9 @@ def test_register_logged_model_creates_version(mock_client_cls: Mock) -> None:
 @patch("mlflow.tracking.MlflowClient")
 def test_register_logged_model_ignores_existing_registered_model(mock_client_cls: Mock) -> None:
     mock_client = Mock()
-    mock_client.create_registered_model.side_effect = Exception("RESOURCE_ALREADY_EXISTS: already exists")
+    mock_client.create_registered_model.side_effect = Exception(
+        "RESOURCE_ALREADY_EXISTS: already exists"
+    )
     mock_client.create_model_version.return_value = Mock(version="4")
     mock_client_cls.return_value = mock_client
 

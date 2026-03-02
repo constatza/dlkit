@@ -170,9 +170,7 @@ class TestPathContextFromCliArgs:
 
     def test_from_cli_args_with_path_objects(self) -> None:
         """Test from_cli_args accepts Path objects."""
-        ctx = PathContext.from_cli_args(
-            root_dir=Path("/project"), output_dir=Path("/output")
-        )
+        ctx = PathContext.from_cli_args(root_dir=Path("/project"), output_dir=Path("/output"))
 
         assert ctx.root_dir == Path("/project")
         assert ctx.output_dir == Path("/output")
@@ -311,9 +309,7 @@ class TestPathContextImmutability:
 class TestResolveRootDir:
     """Test resolve_root_dir() function."""
 
-    def test_resolve_root_dir_with_context_takes_precedence(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resolve_root_dir_with_context_takes_precedence(self, tmp_path: Path) -> None:
         """Test that path_context.root_dir takes highest precedence."""
         ctx = PathContext(root_dir=tmp_path / "context")
         env = DLKitEnvironment(root_dir=tmp_path / "env")
@@ -382,9 +378,7 @@ class TestResolveComponentPath:
 
         assert resolved == (tmp_path / "custom_data").resolve()
 
-    def test_resolve_component_path_with_checkpoints_override(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resolve_component_path_with_checkpoints_override(self, tmp_path: Path) -> None:
         """Test resolving 'checkpoints' with explicit checkpoints_dir override."""
         ctx = PathContext(checkpoints_dir=tmp_path / "custom_checkpoints")
 
@@ -392,9 +386,7 @@ class TestResolveComponentPath:
 
         assert resolved == (tmp_path / "custom_checkpoints").resolve()
 
-    def test_resolve_component_path_with_checkpoint_substring(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resolve_component_path_with_checkpoint_substring(self, tmp_path: Path) -> None:
         """Test resolving paths containing 'checkpoint' uses checkpoints_dir."""
         ctx = PathContext(checkpoints_dir=tmp_path / "models")
 

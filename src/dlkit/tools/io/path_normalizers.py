@@ -21,17 +21,27 @@ def canonicalize_file_path(path_str: str) -> str:
 
     candidate = path_str.replace("\\", "/")
 
-    if candidate.startswith("//") and len(candidate) > 3 and candidate[2].isalpha() and candidate[3] == ":":
+    if (
+        candidate.startswith("//")
+        and len(candidate) > 3
+        and candidate[2].isalpha()
+        and candidate[3] == ":"
+    ):
         candidate = candidate[2:]
 
-    if candidate.startswith("/") and len(candidate) > 2 and candidate[1].isalpha() and candidate[2] == ":":
+    if (
+        candidate.startswith("/")
+        and len(candidate) > 2
+        and candidate[1].isalpha()
+        and candidate[2] == ":"
+    ):
         candidate = candidate[1:]
 
     windows_path = PureWindowsPath(candidate)
     if windows_path.drive:
         posix = windows_path.as_posix()
         drive = windows_path.drive.upper()
-        return f"{drive}{posix[len(windows_path.drive):]}"
+        return f"{drive}{posix[len(windows_path.drive) :]}"
 
     return PurePosixPath(candidate).as_posix()
 

@@ -55,7 +55,16 @@ class MetricLogger:
 
         # Filter out stage-specific metrics that are already logged by MLflowEpochLogger
         # These typically have prefixes like "train_", "val_", "test_" or suffixes like " test"
-        stage_prefixes = ("train_", "train/", "val_", "val/", "valid_", "validation_", "test_", "test/")
+        stage_prefixes = (
+            "train_",
+            "train/",
+            "val_",
+            "val/",
+            "valid_",
+            "validation_",
+            "test_",
+            "test/",
+        )
         stage_suffixes = (" test", " train", " val", " validation")
 
         numeric: dict[str, float] = {}

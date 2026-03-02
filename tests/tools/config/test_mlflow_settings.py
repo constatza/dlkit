@@ -141,10 +141,7 @@ class TestMLflowServerSettings:
             uvicorn_opts_value = command[opts_index]
             assert f"--workers {settings.num_workers}" in uvicorn_opts_value
             assert f"--timeout-keep-alive {settings.keep_alive_interval}" in uvicorn_opts_value
-            assert (
-                f"--timeout-graceful-shutdown {settings.shutdown_timeout}"
-                in uvicorn_opts_value
-            )
+            assert f"--timeout-graceful-shutdown {settings.shutdown_timeout}" in uvicorn_opts_value
 
     @given(st.integers(min_value=1, max_value=65535))
     def test_server_property_valid_ports(self, port: int) -> None:

@@ -118,7 +118,7 @@ class TestOptunaMLflowOptimization:
 
         # Verify basic result structure
         assert result is not None
-        assert hasattr(result, 'duration_seconds')
+        assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
 
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
@@ -129,7 +129,7 @@ class TestOptunaMLflowOptimization:
 
         # Verify basic result structure
         assert result is not None
-        assert hasattr(result, 'duration_seconds')
+        assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
 
     def test_no_optimization_raises_error(self):

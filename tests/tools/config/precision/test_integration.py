@@ -134,7 +134,9 @@ class TestPrecisionIntegration:
         tensor_after = load_array(sample_data_file)
         assert tensor_after.dtype == torch.float32
 
-    def test_precision_consistency_across_components(self, sample_data_file, test_model_factory, sample_shape):
+    def test_precision_consistency_across_components(
+        self, sample_data_file, test_model_factory, sample_shape
+    ):
         """Test precision consistency across all components."""
         precision_strategy = PrecisionStrategy.TRUE_BF16
 

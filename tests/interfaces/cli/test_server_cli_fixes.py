@@ -72,11 +72,14 @@ experiment_name = "test_experiment"
         This addresses the reported issue where 'MLflowServerContext' object
         has no attribute 'host' error occurred when using config files.
         """
-        with patch(
-            "dlkit.interfaces.cli.commands.server.ServerApplicationService"
-        ) as mock_service_class, patch(
-            "dlkit.interfaces.cli.commands.server._ensure_storage_setup_at_cli_level"
-        ) as mock_storage_setup:
+        with (
+            patch(
+                "dlkit.interfaces.cli.commands.server.ServerApplicationService"
+            ) as mock_service_class,
+            patch(
+                "dlkit.interfaces.cli.commands.server._ensure_storage_setup_at_cli_level"
+            ) as mock_storage_setup,
+        ):
             # Mock storage setup to avoid real config loading
             mock_storage_setup.return_value = None
 
@@ -110,11 +113,14 @@ experiment_name = "test_experiment"
         This addresses the reported issue where storage setup asked twice
         for user confirmation when no config file was provided.
         """
-        with patch(
-            "dlkit.interfaces.cli.commands.server.ServerApplicationService"
-        ) as mock_service_class, patch(
-            "dlkit.interfaces.cli.commands.server._ensure_storage_setup_at_cli_level"
-        ) as mock_storage_setup:
+        with (
+            patch(
+                "dlkit.interfaces.cli.commands.server.ServerApplicationService"
+            ) as mock_service_class,
+            patch(
+                "dlkit.interfaces.cli.commands.server._ensure_storage_setup_at_cli_level"
+            ) as mock_storage_setup,
+        ):
             # Mock storage setup to avoid real config loading
             mock_storage_setup.return_value = None
 

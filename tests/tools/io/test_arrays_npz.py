@@ -117,9 +117,7 @@ class TestLoadArrayWithNpz:
         features_np = npz_multi_array["features"]
 
         # Convert to same dtype for comparison
-        np.testing.assert_allclose(
-            features_tensor.numpy(), features_np, rtol=1e-5, atol=1e-7
-        )
+        np.testing.assert_allclose(features_tensor.numpy(), features_np, rtol=1e-5, atol=1e-7)
 
 
 class TestNpzIntegrationWithPrecision:
@@ -148,9 +146,7 @@ class TestNpzIntegrationWithPrecision:
     def test_npz_array_key_forwarding(self, npz_multi_array: dict) -> None:
         """Test that array_key is properly forwarded through kwargs."""
         # This tests the **kwargs forwarding mechanism
-        result = load_array(
-            npz_multi_array["path"], dtype=torch.float64, array_key="latent"
-        )
+        result = load_array(npz_multi_array["path"], dtype=torch.float64, array_key="latent")
 
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.float64

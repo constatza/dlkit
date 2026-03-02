@@ -72,6 +72,7 @@ def _has_real_value(settings: Any, name: str) -> bool:
     value = getattr(settings, name)
     return value is not None
 
+
 from .value_objects import ModelFamily
 
 
@@ -117,7 +118,7 @@ class ModelFamilyDetector(ABC):
         class_name = self.__class__.__name__
 
         # Early return if doesn't end with 'Detector'
-        if not class_name.endswith('Detector'):
+        if not class_name.endswith("Detector"):
             return ModelFamily.EXTERNAL
 
         # Extract family name and try to convert to enum
@@ -176,12 +177,12 @@ class ClassBasedDetector(ModelFamilyDetector):
             ModelFamily enum value based on class inheritance, or EXTERNAL if not found
         """
         # Try to get class_path directly first
-        class_path = _string_attribute(settings, 'class_path')
+        class_path = _string_attribute(settings, "class_path")
 
         # If no class_path, construct from name + module_path
         if not class_path:
-            name = _string_attribute(settings, 'name')
-            module_path = _string_attribute(settings, 'module_path')
+            name = _string_attribute(settings, "name")
+            module_path = _string_attribute(settings, "module_path")
 
             if name and module_path:
                 # Construct full class path
@@ -189,7 +190,7 @@ class ClassBasedDetector(ModelFamilyDetector):
             else:
                 return ModelFamily.EXTERNAL
 
-        if not class_path or '.' not in class_path:
+        if not class_path or "." not in class_path:
             return ModelFamily.EXTERNAL
 
         try:
@@ -225,11 +226,12 @@ class ClassBasedDetector(ModelFamilyDetector):
             ImportError: If module or class cannot be imported
             ValueError: If class_path is malformed
         """
-        if '.' not in class_path:
+        if "." not in class_path:
             raise ValueError(f"Invalid class path (no module): {class_path}")
 
         import importlib
-        module_path, class_name = class_path.rsplit('.', 1)
+
+        module_path, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
         return getattr(module, class_name)
 

@@ -55,9 +55,7 @@ class MLflowEpochLogger(Callback):
     def _default_step_resolver(trainer: Trainer, stage: str) -> int:  # pragma: no cover - simple
         return getattr(trainer, "current_epoch", 0)
 
-    def _collect_stage_metrics(
-        self, metrics: dict[str, Any], stage: str
-    ) -> dict[str, float]:
+    def _collect_stage_metrics(self, metrics: dict[str, Any], stage: str) -> dict[str, float]:
         stage_aliases = {
             "train": ("train", "training"),
             "val": ("val", "valid", "validation"),

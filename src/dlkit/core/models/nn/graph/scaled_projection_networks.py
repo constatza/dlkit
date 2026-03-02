@@ -67,7 +67,7 @@ class ScaledGProjection(ProjectionNetwork):
             return x, None
 
         with torch.no_grad():
-            scale = x.norm(dim=0, keepdim=True) / (num_nodes ** 0.5)
+            scale = x.norm(dim=0, keepdim=True) / (num_nodes**0.5)
             scale = scale.clamp_min(EPSILON)
 
         normalized = x / scale

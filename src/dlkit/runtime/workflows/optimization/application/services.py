@@ -511,11 +511,17 @@ class OptimizationOrchestrator:
                         # Execute trial with trial context for metric logging
                         # Disable checkpointing for exploratory trials (enable_checkpointing=False)
                         training_result = self._trial_executor.execute_trial(
-                            trial, base_settings, hyperparameters, trial_context, enable_checkpointing=False
+                            trial,
+                            base_settings,
+                            hyperparameters,
+                            trial_context,
+                            enable_checkpointing=False,
                         )
 
                         # Update trial with results
-                        objective_value = self._trial_executor._extract_objective_value(training_result)
+                        objective_value = self._trial_executor._extract_objective_value(
+                            training_result
+                        )
                         trial = trial.__class__(**{
                             **trial.__dict__,
                             "objective_value": objective_value,
@@ -577,7 +583,11 @@ class OptimizationOrchestrator:
                     )
                     # Enable checkpointing for best model retraining
                     best_training_result = self._trial_executor.execute_trial(
-                        best_trial, base_settings, best_trial.hyperparameters, retrain_context, enable_checkpointing=True
+                        best_trial,
+                        base_settings,
+                        best_trial.hyperparameters,
+                        retrain_context,
+                        enable_checkpointing=True,
                     )
 
                     # Log best retrain configuration and results
@@ -686,7 +696,10 @@ class OptimizationOrchestrator:
         )
 
     def _sample_hyperparameters(
-        self, trial: Trial, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
+        self,
+        trial: Trial,
+        study: Study,
+        base_settings: GeneralSettings | OptimizationWorkflowConfig,
     ) -> dict[str, Any]:
         """Sample hyperparameters for a trial using Optuna's suggest methods.
 
@@ -700,9 +713,9 @@ class OptimizationOrchestrator:
         """
         # Get the actual Optuna study from repository via study_manager
         optuna_study = None
-        if hasattr(self._study_manager, '_repository'):
+        if hasattr(self._study_manager, "_repository"):
             repo = self._study_manager._repository
-            if hasattr(repo, '_study_mapping'):
+            if hasattr(repo, "_study_mapping"):
                 optuna_study = repo._study_mapping.get(study.study_id)
 
         # If we don't have an Optuna study, we can't sample - return empty dict
@@ -731,7 +744,7 @@ class OptimizationOrchestrator:
             hyperparameters = dict(optuna_trial.params)
 
             # Store the optuna trial in a mapping for later reporting with study.tell()
-            if not hasattr(self, '_optuna_trials'):
+            if not hasattr(self, "_optuna_trials"):
                 self._optuna_trials = {}
             self._optuna_trials[trial.trial_id] = optuna_trial
 
@@ -755,15 +768,15 @@ class OptimizationOrchestrator:
             state: Trial state ("complete", "fail", "pruned")
         """
         # Get the Optuna trial and study
-        optuna_trial = getattr(self, '_optuna_trials', {}).get(trial.trial_id)
+        optuna_trial = getattr(self, "_optuna_trials", {}).get(trial.trial_id)
         if not optuna_trial:
             logger.warning(f"No Optuna trial found for {trial.trial_id}, skipping study.tell()")
             return
 
         optuna_study = None
-        if hasattr(self._study_manager, '_repository'):
+        if hasattr(self._study_manager, "_repository"):
             repo = self._study_manager._repository
-            if hasattr(repo, '_study_mapping'):
+            if hasattr(repo, "_study_mapping"):
                 optuna_study = repo._study_mapping.get(study.study_id)
 
         if not optuna_study:

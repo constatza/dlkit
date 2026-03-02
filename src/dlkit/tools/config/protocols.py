@@ -136,4 +136,3 @@ class SettingsLoaderProtocol(Protocol):
     #     """Load settings optimized for inference workflows."""
     #     ...
     # BREAKING CHANGE: Removed - use inference API instead
-

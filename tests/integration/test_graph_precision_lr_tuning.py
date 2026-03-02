@@ -22,6 +22,7 @@ pytestmark = pytest.mark.skipif(
     reason="MPS backend on macOS lacks float64 support",
 )
 
+
 class TestGraphPrecisionLRTuning:
     """Test GNN models with float64 precision and LR tuning."""
 
@@ -151,6 +152,4 @@ class TestGraphPrecisionLRTuning:
         dataset = self._load_dataset(tracked_settings)
         sample = dataset[0]
         assert sample.x.dtype == torch.float64
-        logger.info(
-            "Graph sample dtype after MLflow float64 run: {}", sample.x.dtype
-        )
+        logger.info("Graph sample dtype after MLflow float64 run: {}", sample.x.dtype)

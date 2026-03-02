@@ -13,6 +13,7 @@ from typing import Dict, Tuple
 
 class ModelFamily(Enum):
     """Enumeration of supported model families."""
+
     DLKIT_NN = "dlkit_nn"
     GRAPH = "graph"
     EXTERNAL = "external"
@@ -21,6 +22,7 @@ class ModelFamily(Enum):
 
 class ShapeSource(Enum):
     """Enumeration of shape inference sources."""
+
     TRAINING_DATASET = "training_dataset"
     CHECKPOINT_METADATA = "checkpoint_metadata"
     LEGACY_CHECKPOINT = "legacy_checkpoint"
@@ -41,6 +43,7 @@ class ShapeEntry:
         name: Entry name identifier
         dimensions: Tuple of positive integer dimensions
     """
+
     name: str
     dimensions: Tuple[int, ...]
 
@@ -50,7 +53,9 @@ class ShapeEntry:
             raise ValueError(f"Shape entry name must be non-empty string, got: {self.name}")
 
         if not isinstance(self.dimensions, tuple):
-            raise ValueError(f"Dimensions must be tuple, got {type(self.dimensions)}: {self.dimensions}")
+            raise ValueError(
+                f"Dimensions must be tuple, got {type(self.dimensions)}: {self.dimensions}"
+            )
 
         if not self.dimensions:
             raise ValueError(f"Dimensions cannot be empty for entry '{self.name}'")
@@ -81,6 +86,7 @@ class ShapeData:
         default_input: Optional explicit default input key
         default_output: Optional explicit default output key
     """
+
     entries: Dict[str, ShapeEntry]
     model_family: ModelFamily
     source: ShapeSource
@@ -93,7 +99,9 @@ class ShapeData:
             raise ValueError(f"Entries must be dictionary, got {type(self.entries)}")
 
         if not isinstance(self.model_family, ModelFamily):
-            raise ValueError(f"Model family must be ModelFamily enum, got {type(self.model_family)}")
+            raise ValueError(
+                f"Model family must be ModelFamily enum, got {type(self.model_family)}"
+            )
 
         if not isinstance(self.source, ShapeSource):
             raise ValueError(f"Source must be ShapeSource enum, got {type(self.source)}")
@@ -140,7 +148,7 @@ class ShapeData:
             model_family=self.model_family,
             source=self.source,
             default_input=default_input,
-            default_output=default_output
+            default_output=default_output,
         )
 
     def __len__(self) -> int:

@@ -412,9 +412,7 @@ class TestExcludedFieldRoundTrip:
         self, excluded_model_with_array: ExcludedFieldModel
     ) -> None:
         original_arr = excluded_model_with_array.secret
-        result = apply_patch(
-            excluded_model_with_array, {"label": "updated"}, revalidate=True
-        )
+        result = apply_patch(excluded_model_with_array, {"label": "updated"}, revalidate=True)
         assert result.label == "updated"
         assert result.secret is not None
         np.testing.assert_array_equal(result.secret, original_arr)
@@ -423,9 +421,7 @@ class TestExcludedFieldRoundTrip:
         self, excluded_model_with_array: ExcludedFieldModel
     ) -> None:
         original_arr = excluded_model_with_array.secret
-        result = apply_patch(
-            excluded_model_with_array, {"label": "updated"}, revalidate=False
-        )
+        result = apply_patch(excluded_model_with_array, {"label": "updated"}, revalidate=False)
         assert result.label == "updated"
         np.testing.assert_array_equal(result.secret, original_arr)
 
@@ -433,9 +429,7 @@ class TestExcludedFieldRoundTrip:
         self, excluded_model_with_object: ExcludedFieldModel
     ) -> None:
         original_obj = excluded_model_with_object.secret
-        result = apply_patch(
-            excluded_model_with_object, {"label": "patched"}, revalidate=True
-        )
+        result = apply_patch(excluded_model_with_object, {"label": "patched"}, revalidate=True)
         assert result.label == "patched"
         assert result.secret == original_obj
 

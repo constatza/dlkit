@@ -69,9 +69,7 @@ def compute_error_vectors(preds: Tensor, target: Tensor) -> Tensor:
         ValueError: If shapes don't match
     """
     if preds.shape != target.shape:
-        raise ValueError(
-            f"Shape mismatch: preds {preds.shape} != target {target.shape}"
-        )
+        raise ValueError(f"Shape mismatch: preds {preds.shape} != target {target.shape}")
     return preds - target
 
 
@@ -94,9 +92,7 @@ def compute_vector_norm(tensor: Tensor, ord: int = 2, dim: int = -1) -> Tensor:
         ValueError: If dimension is out of bounds
     """
     if abs(dim) > tensor.dim():
-        raise ValueError(
-            f"Dimension {dim} out of bounds for {tensor.dim()}D tensor"
-        )
+        raise ValueError(f"Dimension {dim} out of bounds for {tensor.dim()}D tensor")
     return torch.linalg.vector_norm(tensor, ord=ord, dim=dim)
 
 
@@ -204,9 +200,7 @@ def normalized_vector_norm_error(
     """
     # Validation
     if preds.dim() < 2:
-        raise ValueError(
-            f"Expected at least 2D tensors for vector operations, got {preds.dim()}D"
-        )
+        raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
     error_vecs = compute_error_vectors(preds, target)
     error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
@@ -280,8 +274,8 @@ def compute_energy_norm(vector: Tensor, matrix: Tensor) -> Tensor:
 
     Examples:
         >>> v = torch.tensor([[3.0, 4.0]])  # (1, 2)
-        >>> A = torch.eye(2)               # identity → ||v||_I = ||v||_2 = 5.0
-        >>> compute_energy_norm(v, A)      # tensor([5.])
+        >>> A = torch.eye(2)  # identity → ||v||_I = ||v||_2 = 5.0
+        >>> compute_energy_norm(v, A)  # tensor([5.])
     """
     return torch.sqrt(compute_quadratic_form(vector, matrix).clamp(min=0))
 
@@ -308,9 +302,7 @@ def compute_energy_norm(vector: Tensor, matrix: Tensor) -> Tensor:
 # ============================================================================
 
 
-def compute_temporal_derivative(
-    tensor: Tensor, n: int = 1, derivative_dim: int = 1
-) -> Tensor:
+def compute_temporal_derivative(tensor: Tensor, n: int = 1, derivative_dim: int = 1) -> Tensor:
     """Compute nth-order finite difference approximation of derivative.
 
     Uses torch.diff to compute discrete differences along temporal dimension.
@@ -344,9 +336,7 @@ def compute_temporal_derivative(
     """
     # Validation: must be 3D
     if tensor.dim() != 3:
-        raise ValueError(
-            f"Temporal metrics require 3D input (B, T, D), got {tensor.dim()}D"
-        )
+        raise ValueError(f"Temporal metrics require 3D input (B, T, D), got {tensor.dim()}D")
 
     # Validation: temporal dimension must be sufficient
     temporal_size = tensor.size(derivative_dim)
@@ -453,9 +443,7 @@ def _normalized_vector_norm_update(
         Per-sample normalized errors (not aggregated)
     """
     if preds.dim() < 2:
-        raise ValueError(
-            f"Expected at least 2D tensors for vector operations, got {preds.dim()}D"
-        )
+        raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
     error_vecs = compute_error_vectors(preds, target)
     error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
@@ -528,9 +516,7 @@ def _temporal_derivative_compute(sum_squared_errors: Tensor, total: int) -> Tens
     return sum_squared_errors / total
 
 
-def _absolute_vector_norm_update(
-    preds: Tensor, target: Tensor, ord: int, dim: int
-) -> Tensor:
+def _absolute_vector_norm_update(preds: Tensor, target: Tensor, ord: int, dim: int) -> Tensor:
     """Compute per-sample absolute vector norm errors without aggregation.
 
     Used by torchmetrics wrapper to accumulate state across batches.
@@ -550,9 +536,7 @@ def _absolute_vector_norm_update(
         Per-sample absolute vector norm errors (not aggregated)
     """
     if preds.dim() < 2:
-        raise ValueError(
-            f"Expected at least 2D tensors for vector operations, got {preds.dim()}D"
-        )
+        raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
     error_vecs = compute_error_vectors(preds, target)
     return compute_vector_norm(error_vecs, ord=ord, dim=dim)
 
@@ -575,9 +559,7 @@ def _absolute_vector_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
     return sum_norms / total
 
 
-def _energy_norm_update(
-    preds: Tensor, target: Tensor, matrix: Tensor
-) -> Tensor:
+def _energy_norm_update(preds: Tensor, target: Tensor, matrix: Tensor) -> Tensor:
     """Compute per-sample absolute energy norm errors without aggregation.
 
     Used by torchmetrics wrapper to accumulate state across batches.

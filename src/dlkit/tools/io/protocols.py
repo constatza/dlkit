@@ -34,11 +34,7 @@ class ConfigParser(Protocol):
         """
 
     @abstractmethod
-    def parse_sections(
-        self,
-        config_path: Path | str,
-        section_names: list[str]
-    ) -> dict[str, Any]:
+    def parse_sections(self, config_path: Path | str, section_names: list[str]) -> dict[str, Any]:
         """Parse only specific sections from config file.
 
         Args:
@@ -74,9 +70,7 @@ class SectionExtractor(Protocol):
 
     @abstractmethod
     def extract_section(
-        self,
-        config_data: dict[str, Any],
-        section_name: str
+        self, config_data: dict[str, Any], section_name: str
     ) -> dict[str, Any] | None:
         """Extract a specific section from config data.
 
@@ -90,9 +84,7 @@ class SectionExtractor(Protocol):
 
     @abstractmethod
     def extract_sections(
-        self,
-        config_data: dict[str, Any],
-        section_names: list[str]
+        self, config_data: dict[str, Any], section_names: list[str]
     ) -> dict[str, dict[str, Any]]:
         """Extract multiple sections from config data.
 
@@ -110,11 +102,7 @@ class ConfigValidator[T: BaseModel](Protocol):
     """Protocol for config validation with Pydantic models."""
 
     @abstractmethod
-    def validate_section(
-        self,
-        section_data: dict[str, Any],
-        model_class: type[T]
-    ) -> T:
+    def validate_section(self, section_data: dict[str, Any], model_class: type[T]) -> T:
         """Validate section data with Pydantic model.
 
         Args:
@@ -130,9 +118,7 @@ class ConfigValidator[T: BaseModel](Protocol):
 
     @abstractmethod
     def validate_sections(
-        self,
-        sections_data: dict[str, dict[str, Any]],
-        model_classes: dict[str, type[BaseModel]]
+        self, sections_data: dict[str, dict[str, Any]], model_classes: dict[str, type[BaseModel]]
     ) -> dict[str, BaseModel]:
         """Validate multiple sections with their corresponding models.
 
@@ -153,11 +139,7 @@ class PartialConfigReader(Protocol):
     """High-level protocol for partial config reading operations."""
 
     @abstractmethod
-    def read_section[U: BaseModel](
-        self,
-        config_path: Path | str,
-        model_class: type[U]
-    ) -> U:
+    def read_section[U: BaseModel](self, config_path: Path | str, model_class: type[U]) -> U:
         """Read and validate a single section.
 
         Args:
@@ -170,9 +152,7 @@ class PartialConfigReader(Protocol):
 
     @abstractmethod
     def read_sections(
-        self,
-        config_path: Path | str,
-        section_configs: dict[str, type[BaseModel]]
+        self, config_path: Path | str, section_configs: dict[str, type[BaseModel]]
     ) -> dict[str, BaseModel]:
         """Read and validate multiple sections.
 

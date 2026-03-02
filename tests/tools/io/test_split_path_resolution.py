@@ -91,7 +91,9 @@ epochs = 1
     return config_path, custom_root
 
 
-def test_splits_saved_to_session_root_dir(training_config_with_custom_root: tuple[Path, Path], tmp_path: Path):
+def test_splits_saved_to_session_root_dir(
+    training_config_with_custom_root: tuple[Path, Path], tmp_path: Path
+):
     """Test that splits are saved to SESSION.root_dir, not CWD.
 
     This is the core bug fix: splits should respect SESSION.root_dir.
@@ -147,7 +149,9 @@ def test_splits_saved_to_session_root_dir(training_config_with_custom_root: tupl
             )
 
             # Verify it's NOT in CWD (the bug we're fixing)
-            cwd_split_file = Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
+            cwd_split_file = (
+                Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
+            )
             if cwd_split_file.exists() and cwd_split_file.resolve() != split_file.resolve():
                 pytest.fail(
                     f"Split file incorrectly saved to CWD!\n"
@@ -163,7 +167,9 @@ def test_splits_saved_to_session_root_dir(training_config_with_custom_root: tupl
         global_environment.root_dir = None
 
 
-def test_splits_respect_session_root_without_session_name(training_config_with_custom_root: tuple[Path, Path], tmp_path: Path):
+def test_splits_respect_session_root_without_session_name(
+    training_config_with_custom_root: tuple[Path, Path], tmp_path: Path
+):
     """Test that splits respect SESSION.root_dir even when SESSION.name is default.
 
     This specifically addresses the user's concern that SESSION.name affects split paths.
@@ -217,7 +223,9 @@ def test_splits_respect_session_root_without_session_name(training_config_with_c
         global_environment.root_dir = None
 
 
-def test_multiple_splits_with_different_sessions(training_config_with_custom_root: tuple[Path, Path], tmp_path: Path):
+def test_multiple_splits_with_different_sessions(
+    training_config_with_custom_root: tuple[Path, Path], tmp_path: Path
+):
     """Test that multiple splits with different session names all go to SESSION.root_dir."""
     config_path, custom_root = training_config_with_custom_root
 

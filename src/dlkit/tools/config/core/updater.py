@@ -10,6 +10,7 @@ Common Use Cases
 1. Updating optimizer learning rate::
 
        from dlkit.tools.config import load_settings, update_settings
+
        config = load_settings("config.toml")
        config = update_settings(config, {"TRAINING": {"optimizer": {"lr": 0.001}}})
 
@@ -17,6 +18,7 @@ Common Use Cases
 
        import numpy as np
        from dlkit.tools.config.data_entries import Feature
+
        config = update_settings(
            config.DATASET,
            {"features": (Feature(name="x", value=np.random.randn(1000, 20)),)},

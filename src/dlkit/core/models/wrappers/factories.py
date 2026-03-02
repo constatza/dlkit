@@ -260,9 +260,7 @@ class WrapperFactory:
                 name=model.__class__, module_path=model.__class__.__module__
             )
 
-        extra_kwargs = {
-            k: v for k, v in kwargs.items() if k not in {"model_settings", "settings"}
-        }
+        extra_kwargs = {k: v for k, v in kwargs.items() if k not in {"model_settings", "settings"}}
         return WrapperFactory.create_wrapper(
             model_settings=kwargs["model_settings"],
             settings=kwargs["settings"],

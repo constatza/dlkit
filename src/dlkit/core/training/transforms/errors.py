@@ -35,9 +35,7 @@ class TransformNotFittedError(TransformError):
         Args:
             transform_name: Name of the transform that wasn't fitted.
         """
-        super().__init__(
-            f"{transform_name} must be fitted before use. Call fit() first."
-        )
+        super().__init__(f"{transform_name} must be fitted before use. Call fit() first.")
 
 
 class ShapeMismatchError(TransformError):
@@ -84,8 +82,7 @@ class TransformChainError(TransformError):
             cause: Original exception that was raised.
         """
         super().__init__(
-            f"Transform chain failed at index {transform_index} "
-            f"({transform_name}): {cause}"
+            f"Transform chain failed at index {transform_index} ({transform_name}): {cause}"
         )
 
 
@@ -140,5 +137,7 @@ class TransformAmbiguityError(TransformError):
         )
         if context:
             msg += f" ({context})"
-        msg += ". Model must return dict with target names, or only one target transform should exist."
+        msg += (
+            ". Model must return dict with target names, or only one target transform should exist."
+        )
         super().__init__(msg)

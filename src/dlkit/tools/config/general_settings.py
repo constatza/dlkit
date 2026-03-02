@@ -222,4 +222,3 @@ class GeneralSettings(BasicSettings):
         if not self.DATASET:
             raise ValueError("No dataset configuration available")
         return self.DATASET
-

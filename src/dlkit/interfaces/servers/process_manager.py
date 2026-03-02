@@ -44,7 +44,9 @@ class _ProcessContext:
         # Check if any threads are still alive
         alive_threads = [t for t in threads if t.is_alive()]
         if alive_threads:
-            logger.warning(f"Some log draining threads did not finish: {len(alive_threads)} still alive")
+            logger.warning(
+                f"Some log draining threads did not finish: {len(alive_threads)} still alive"
+            )
             return False
 
         return True
@@ -73,7 +75,7 @@ def _drain_pipe_with_shutdown(pipe: Any, prefix: str, shutdown_event: threading.
             try:
                 # On Unix, use select to check if data is available with a timeout
                 # On Windows, select doesn't work with pipes, so we use a different approach
-                if os.name != 'nt' and hasattr(select, 'select'):
+                if os.name != "nt" and hasattr(select, "select"):
                     # Wait up to 0.1 seconds for data to be available
                     ready, _, _ = select.select([pipe], [], [], 0.1)
                     if not ready:
@@ -153,7 +155,9 @@ class SubprocessManager(ProcessManager):
             popen_kwargs["start_new_session"] = True
 
         try:
-            logger.debug(f"SubprocessManager: Starting process with command: {' '.join(config.command)}")
+            logger.debug(
+                f"SubprocessManager: Starting process with command: {' '.join(config.command)}"
+            )
             process = cast(Popen[bytes], Popen(config.command, **popen_kwargs))
 
             # Create process context for coordinated management
@@ -166,7 +170,7 @@ class SubprocessManager(ProcessManager):
                 target=_drain_pipe_with_shutdown,
                 args=(process.stdout, f"{prefix}-stdout", context.shutdown_event),
                 daemon=False,  # NOT daemon - allows proper cleanup
-                name=f"{prefix}-stdout-{process.pid}"
+                name=f"{prefix}-stdout-{process.pid}",
             )
             context.stdout_thread.start()
 
@@ -174,7 +178,7 @@ class SubprocessManager(ProcessManager):
                 target=_drain_pipe_with_shutdown,
                 args=(process.stderr, f"{prefix}-stderr", context.shutdown_event),
                 daemon=False,  # NOT daemon - allows proper cleanup
-                name=f"{prefix}-stderr-{process.pid}"
+                name=f"{prefix}-stderr-{process.pid}",
             )
             context.stderr_thread.start()
 
@@ -222,7 +226,9 @@ class SubprocessManager(ProcessManager):
             if context:
                 logger.debug(f"Waiting for log draining threads to finish for PID={pid}")
                 if not context.wait_for_threads(timeout=min(5.0, self._shutdown_timeout)):
-                    logger.warning(f"Some log draining threads did not finish cleanly for PID={pid}")
+                    logger.warning(
+                        f"Some log draining threads did not finish cleanly for PID={pid}"
+                    )
 
             logger.debug(f"Stopped process tree for PID={pid}")
             return True
@@ -269,7 +275,9 @@ class SubprocessManager(ProcessManager):
         for context in contexts:
             try:
                 if context.process.poll() is None:  # Still running
-                    stop_process_tree(context.process.pid, timeout=self._shutdown_timeout / len(contexts))
+                    stop_process_tree(
+                        context.process.pid, timeout=self._shutdown_timeout / len(contexts)
+                    )
             except Exception as e:
                 logger.warning(f"Error stopping process {context.process.pid}: {e}")
 

@@ -22,6 +22,7 @@ from .strategies import ValidationResult, ShapeValidator, ShapeSerializer
 @dataclass
 class CacheStats:
     """Statistics for cache performance monitoring."""
+
     hits: int = 0
     misses: int = 0
     evictions: int = 0
@@ -83,6 +84,7 @@ class ShapeCache(ABC):
 @dataclass
 class CacheEntry:
     """Internal cache entry with metadata."""
+
     data: ShapeData
     timestamp: float
     access_count: int = 0
@@ -180,7 +182,7 @@ class LRUShapeCache(ShapeCache):
                 hits=self._stats.hits,
                 misses=self._stats.misses,
                 evictions=self._stats.evictions,
-                total_requests=self._stats.total_requests
+                total_requests=self._stats.total_requests,
             )
 
     def _update_access(self, key: str) -> None:
@@ -211,10 +213,12 @@ class CachingShapeInferencer:
     repeated expensive computations.
     """
 
-    def __init__(self,
-                 base_chain: ShapeInferenceChain,
-                 cache: Optional[ShapeCache] = None,
-                 cache_ttl: float = 3600):
+    def __init__(
+        self,
+        base_chain: ShapeInferenceChain,
+        cache: Optional[ShapeCache] = None,
+        cache_ttl: float = 3600,
+    ):
         """Initialize caching inferencer.
 
         Args:
@@ -242,9 +246,7 @@ class CachingShapeInferencer:
             # Create shape spec from cached data
             shapes = {name: entry.dimensions for name, entry in cached_data.entries.items()}
             return create_shape_spec(
-                shapes=shapes,
-                model_family=cached_data.model_family,
-                source=cached_data.source
+                shapes=shapes, model_family=cached_data.model_family, source=cached_data.source
             )
 
         # Cache miss - use base chain
@@ -261,11 +263,7 @@ class CachingShapeInferencer:
             model_family = ModelFamily(shape_spec.model_family())
             source = ShapeSource.TRAINING_DATASET  # Default source for cached items
 
-            cached_data = ShapeData(
-                entries=entries,
-                model_family=model_family,
-                source=source
-            )
+            cached_data = ShapeData(entries=entries, model_family=model_family, source=source)
 
             self._cache.put(cache_key, cached_data)
 
@@ -295,11 +293,13 @@ class CachingShapeInferencer:
         if context.dataset is not None:
             try:
                 # Try to get dataset identifier or hash small datasets
-                if hasattr(context.dataset, '__len__') and len(context.dataset) < 10000:
+                if hasattr(context.dataset, "__len__") and len(context.dataset) < 10000:
                     # Small dataset - can hash first few samples
                     sample_data = str(context.dataset[0] if len(context.dataset) > 0 else "")
-                    key_components.append(f"dataset:{hashlib.md5(sample_data.encode()).hexdigest()[:8]}")
-                elif hasattr(context.dataset, 'name'):
+                    key_components.append(
+                        f"dataset:{hashlib.md5(sample_data.encode()).hexdigest()[:8]}"
+                    )
+                elif hasattr(context.dataset, "name"):
                     key_components.append(f"dataset:{context.dataset.name}")
                 else:
                     key_components.append(f"dataset:{id(context.dataset)}")
@@ -340,9 +340,11 @@ class CachingShapeInferencer:
 class BatchShapeProcessor:
     """Processor for batch shape operations to improve performance."""
 
-    def __init__(self,
-                 validator: Optional[ShapeValidator] = None,
-                 serializer: Optional[ShapeSerializer] = None):
+    def __init__(
+        self,
+        validator: Optional[ShapeValidator] = None,
+        serializer: Optional[ShapeSerializer] = None,
+    ):
         """Initialize batch processor.
 
         Args:
@@ -417,9 +419,9 @@ class BatchShapeProcessor:
                 raise ValueError(f"Failed to deserialize item {i}: {e}") from e
         return results
 
-    def process_validation_batch(self,
-                                shape_data_list: List[ShapeData],
-                                fail_fast: bool = False) -> Tuple[List[ValidationResult], List[int]]:
+    def process_validation_batch(
+        self, shape_data_list: List[ShapeData], fail_fast: bool = False
+    ) -> Tuple[List[ValidationResult], List[int]]:
         """Process validation batch with optional fail-fast behavior.
 
         Args:
@@ -479,11 +481,11 @@ class PerformanceMonitor:
 
             durations = self._metrics[operation]
             return {
-                'count': len(durations),
-                'min': min(durations),
-                'max': max(durations),
-                'avg': sum(durations) / len(durations),
-                'total': sum(durations)
+                "count": len(durations),
+                "min": min(durations),
+                "max": max(durations),
+                "avg": sum(durations) / len(durations),
+                "total": sum(durations),
             }
 
     def get_all_statistics(self) -> Dict[str, Dict[str, float]]:
@@ -529,9 +531,11 @@ class TimedOperation:
 # Global performance monitor instance
 _performance_monitor = PerformanceMonitor()
 
+
 def get_performance_monitor() -> PerformanceMonitor:
     """Get the global performance monitor instance."""
     return _performance_monitor
+
 
 def timed_operation(operation: str) -> TimedOperation:
     """Create a timed operation context manager.

@@ -22,9 +22,7 @@ class PsutilProcessKiller(ProcessKiller):
         """
         self._server_tracker = server_tracker
 
-    def stop_server_processes(
-        self, host: str, port: int, force: bool = False
-    ) -> bool:
+    def stop_server_processes(self, host: str, port: int, force: bool = False) -> bool:
         """Stop server processes for given host:port.
 
         Args:
@@ -64,9 +62,7 @@ class PsutilProcessKiller(ProcessKiller):
             logger.error(f"Error stopping MLflow processes: {e}", exc_info=True)
             raise RuntimeError(f"Error stopping MLflow processes: {e}") from e
 
-    def _validate_tracked_processes(
-        self, tracked_pids: list[int]
-    ) -> list[int]:
+    def _validate_tracked_processes(self, tracked_pids: list[int]) -> list[int]:
         """Validate that tracked PIDs are still MLflow servers.
 
         Args:

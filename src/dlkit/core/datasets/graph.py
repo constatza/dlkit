@@ -141,7 +141,6 @@ class GraphDataset(InMemoryDataset, BaseDataset):
             )
 
 
-
 class ScaledGraphDataset(GraphDataset):
     def __init__(self, pre_transform=GCNNorm(), **kwargs):
         super().__init__(pre_transform=pre_transform, **kwargs)

@@ -49,7 +49,9 @@ class MockRunContext(IRunContext):
     def set_tag(self, key: str, value: str) -> None:
         self.tags[key] = value
 
-    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+    def log_dataset(
+        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+    ) -> None:
         """Mock dataset logging."""
         if not hasattr(self, "logged_datasets"):
             self.logged_datasets = []

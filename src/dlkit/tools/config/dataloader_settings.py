@@ -12,7 +12,9 @@ def _default_num_workers() -> int:
 class DataloaderSettings(BasicSettings):
     """Settings for the pytorch dataloader."""
 
-    num_workers: int = Field(default_factory=_default_num_workers, description="Number of worker processes.")
+    num_workers: int = Field(
+        default_factory=_default_num_workers, description="Number of worker processes."
+    )
     batch_size: int = Field(default=64, description="Batch size.")
     shuffle: bool = Field(default=True, description="Whether to shuffle the training dataflow set.")
     persistent_workers: bool = Field(default=True, description="Whether to use persistent workers.")

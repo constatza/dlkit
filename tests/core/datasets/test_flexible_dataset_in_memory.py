@@ -187,8 +187,6 @@ class TestNormalizeEntriesFactoryValidation:
         assert name_y == "y"
 
 
-
-
 # ============================================================================
 # Tests for _load_or_convert_tensor()
 # ============================================================================
@@ -280,9 +278,7 @@ class TestFlexibleDatasetNewHierarchy:
         assert len(sample["features"].keys()) >= 1
         assert len(sample["targets"].keys()) >= 1
 
-    def test_dataset_with_mixed_entries(
-        self, value_feature: ValueFeature, path_target: PathTarget
-    ):
+    def test_dataset_with_mixed_entries(self, value_feature: ValueFeature, path_target: PathTarget):
         """Test FlexibleDataset with mixed value and path entries."""
         ds = FlexibleDataset(features=[value_feature], targets=[path_target])
 
@@ -334,7 +330,9 @@ class TestFlexibleDatasetFactoryEntries:
         sample = ds[5]
 
         assert isinstance(sample, TensorDict)
-        assert torch.allclose(sample["features", "X"], torch.tensor([10.0, 11.0], dtype=torch.float32))
+        assert torch.allclose(
+            sample["features", "X"], torch.tensor([10.0, 11.0], dtype=torch.float32)
+        )
         assert torch.allclose(sample["targets", "Y"], torch.tensor([1.0], dtype=torch.float32))
 
     def test_dataset_with_factory_placeholder_raises(self):
@@ -411,10 +409,7 @@ class TestIntegration:
         X3 = np.ones((5, 4), dtype=np.float32) * 3
         feat3 = ValueFeature(name="feat3", value=X3)
 
-        ds = FlexibleDataset(
-            features=[feat1, feat2, feat3],
-            targets=None
-        )
+        ds = FlexibleDataset(features=[feat1, feat2, feat3], targets=None)
 
         assert len(ds) == 5
         sample = ds[0]
@@ -500,10 +495,7 @@ class TestIntegration:
         y_arr = np.ones((8, 1), dtype=np.float32) * 10
         targ = Target(name="y", value=y_arr)
 
-        dataset = FlexibleDataset(
-            features=[feat1, feat2, feat3],
-            targets=[targ]
-        )
+        dataset = FlexibleDataset(features=[feat1, feat2, feat3], targets=[targ])
 
         assert len(dataset) == 8
         sample = dataset[0]
@@ -573,7 +565,9 @@ class TestBatchCompliance:
         assert sample["features", "x3"].shape == (4, 4)
         assert sample["features", "x4"].shape == (2, 3, 2)
 
-    def test_dataset_td_has_correct_batch_size(self, feature_5x2: ValueFeature, target_5x1: ValueTarget):
+    def test_dataset_td_has_correct_batch_size(
+        self, feature_5x2: ValueFeature, target_5x1: ValueTarget
+    ):
         """Internal _dataset_td is built with batch_size=[N]."""
         ds = FlexibleDataset(features=[feature_5x2], targets=[target_5x1])
 
@@ -581,7 +575,9 @@ class TestBatchCompliance:
         assert ds._dataset_td["features"].batch_size == torch.Size([5])
         assert ds._dataset_td["targets"].batch_size == torch.Size([5])
 
-    def test_getitem_returns_unbatched_tensordict(self, feature_5x2: ValueFeature, target_5x1: ValueTarget):
+    def test_getitem_returns_unbatched_tensordict(
+        self, feature_5x2: ValueFeature, target_5x1: ValueTarget
+    ):
         """__getitem__ returns a TensorDict with batch_size=[] (single sample)."""
         ds = FlexibleDataset(features=[feature_5x2], targets=[target_5x1])
 

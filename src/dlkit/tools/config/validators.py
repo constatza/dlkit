@@ -94,48 +94,54 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
 
         # Validate feature paths exist and placeholders are resolved
         from pathlib import Path
+
         for i, feature in enumerate(config.DATASET.features):
             if isinstance(feature, PathBasedEntry) and not feature.has_path():
                 raise ConfigValidationError(
-                    f"Feature #{i+1} is a placeholder without path/value: {feature.name or 'unknown'}"
+                    f"Feature #{i + 1} is a placeholder without path/value: {feature.name or 'unknown'}"
                 )
             if isinstance(feature, PathFeature) and feature.path is not None:
                 # Handle both str and Path types (model_construct may bypass coercion)
                 path = Path(feature.path) if isinstance(feature.path, str) else feature.path
                 if not path.exists():
                     raise ConfigValidationError(
-                        f"Feature #{i+1} path does not exist: {path}. "
+                        f"Feature #{i + 1} path does not exist: {path}. "
                         f"Ensure the path is correct or the file has been created."
                     )
             if isinstance(feature, ValueBasedEntry) and not feature.has_value():
                 raise ConfigValidationError(
-                    f"Feature #{i+1} is missing in-memory data: {feature.name or 'unknown'}"
+                    f"Feature #{i + 1} is missing in-memory data: {feature.name or 'unknown'}"
                 )
 
         # Validate target paths exist and placeholders are resolved
         for i, target in enumerate(config.DATASET.targets):
             if isinstance(target, PathBasedEntry) and not target.has_path():
                 raise ConfigValidationError(
-                    f"Target #{i+1} is a placeholder without path/value: {target.name or 'unknown'}"
+                    f"Target #{i + 1} is a placeholder without path/value: {target.name or 'unknown'}"
                 )
             if isinstance(target, PathTarget) and target.path is not None:
                 # Handle both str and Path types (model_construct may bypass coercion)
                 path = Path(target.path) if isinstance(target.path, str) else target.path
                 if not path.exists():
                     raise ConfigValidationError(
-                        f"Target #{i+1} path does not exist: {path}. "
+                        f"Target #{i + 1} path does not exist: {path}. "
                         f"Ensure the path is correct or the file has been created."
                     )
             if isinstance(target, ValueBasedEntry) and not target.has_value():
                 raise ConfigValidationError(
-                    f"Target #{i+1} is missing in-memory data: {target.name or 'unknown'}"
+                    f"Target #{i + 1} is missing in-memory data: {target.name or 'unknown'}"
                 )
 
     # Validate MODEL checkpoint path if provided
     if config.MODEL is not None and config.MODEL.checkpoint is not None:
         # Handle both str and Path types
         from pathlib import Path
-        checkpoint_path = Path(config.MODEL.checkpoint) if isinstance(config.MODEL.checkpoint, str) else config.MODEL.checkpoint
+
+        checkpoint_path = (
+            Path(config.MODEL.checkpoint)
+            if isinstance(config.MODEL.checkpoint, str)
+            else config.MODEL.checkpoint
+        )
         if not checkpoint_path.exists():
             raise ConfigValidationError(
                 f"Model checkpoint does not exist: {checkpoint_path}. "
@@ -184,7 +190,12 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
 
     # Handle both str and Path types
     from pathlib import Path
-    checkpoint_path = Path(config.MODEL.checkpoint) if isinstance(config.MODEL.checkpoint, str) else config.MODEL.checkpoint
+
+    checkpoint_path = (
+        Path(config.MODEL.checkpoint)
+        if isinstance(config.MODEL.checkpoint, str)
+        else config.MODEL.checkpoint
+    )
     if not checkpoint_path.exists():
         raise ConfigValidationError(
             f"Model checkpoint does not exist: {checkpoint_path}. "
@@ -214,13 +225,14 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
 
         # Validate feature paths
         from pathlib import Path
+
         for i, feature in enumerate(config.DATASET.features):
             if isinstance(feature, PathFeature) and feature.path is not None:
                 # Handle both str and Path types (model_construct may bypass coercion)
                 path = Path(feature.path) if isinstance(feature.path, str) else feature.path
                 if not path.exists():
                     raise ConfigValidationError(
-                        f"Feature #{i+1} path does not exist: {path}. "
+                        f"Feature #{i + 1} path does not exist: {path}. "
                         "Ensure the path is correct or the file has been created."
                     )
 
@@ -292,23 +304,20 @@ def validate_optimization_config_complete(config: OptimizationWorkflowConfig) ->
 
         # Validate paths
         from pathlib import Path
+
         for i, feature in enumerate(config.DATASET.features):
             if isinstance(feature, PathFeature) and feature.path is not None:
                 # Handle both str and Path types (model_construct may bypass coercion)
                 path = Path(feature.path) if isinstance(feature.path, str) else feature.path
                 if not path.exists():
-                    raise ConfigValidationError(
-                        f"Feature #{i+1} path does not exist: {path}."
-                    )
+                    raise ConfigValidationError(f"Feature #{i + 1} path does not exist: {path}.")
 
         for i, target in enumerate(config.DATASET.targets):
             if isinstance(target, PathTarget) and target.path is not None:
                 # Handle both str and Path types (model_construct may bypass coercion)
                 path = Path(target.path) if isinstance(target.path, str) else target.path
                 if not path.exists():
-                    raise ConfigValidationError(
-                        f"Target #{i+1} path does not exist: {path}."
-                    )
+                    raise ConfigValidationError(f"Target #{i + 1} path does not exist: {path}.")
 
 
 # Convenience function for workflow auto-detection

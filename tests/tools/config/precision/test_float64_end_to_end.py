@@ -142,7 +142,9 @@ class TestFloat64EndToEnd:
 
         # Check all parameter dtypes
         for name, param in model.named_parameters():
-            assert param.dtype == torch.float64, f"Parameter {name} has dtype {param.dtype}, expected float64"
+            assert param.dtype == torch.float64, (
+                f"Parameter {name} has dtype {param.dtype}, expected float64"
+            )
 
     def test_model_weights_float64_with_session(self, model_shape):
         """Test that model uses session precision for float64."""
@@ -153,7 +155,9 @@ class TestFloat64EndToEnd:
 
         # All parameters should be float64
         for name, param in model.named_parameters():
-            assert param.dtype == torch.float64, f"Parameter {name} has dtype {param.dtype}, expected float64"
+            assert param.dtype == torch.float64, (
+                f"Parameter {name} has dtype {param.dtype}, expected float64"
+            )
 
     def test_input_casting_float64(self, model_shape):
         """Test that inputs are cast to float64 by Lightning wrapper during training."""
@@ -329,7 +333,9 @@ class TestFloat64EndToEnd:
         for alias in test_aliases:
             expected_strategy = _PRECISION_ALIAS_MAP[alias]
             session = SessionSettings(precision=alias)
-            assert session.precision == expected_strategy, f"Alias '{alias}' should resolve to {expected_strategy}"
+            assert session.precision == expected_strategy, (
+                f"Alias '{alias}' should resolve to {expected_strategy}"
+            )
 
     def test_float64_memory_factor(self):
         """Test that float64 has 2x memory factor."""

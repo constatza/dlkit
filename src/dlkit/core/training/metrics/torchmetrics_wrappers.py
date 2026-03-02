@@ -94,16 +94,8 @@ class NormalizedVectorNormError(Metric):
         self.eps = eps
 
         # Add metric states (will be synchronized across processes)
-        self.add_state(
-            "sum_errors",
-            default=torch.tensor(0.0),
-            dist_reduce_fx="sum"
-        )
-        self.add_state(
-            "total",
-            default=torch.tensor(0),
-            dist_reduce_fx="sum"
-        )
+        self.add_state("sum_errors", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         """Update metric state with batch of predictions and targets.
@@ -183,8 +175,8 @@ class TemporalDerivativeError(Metric):
         >>>
         >>> # Use in MetricCollection
         >>> metrics = MetricCollection({
-        ...     'velocity_error': TemporalDerivativeError(n=1),
-        ...     'acceleration_error': TemporalDerivativeError(n=2),
+        ...     "velocity_error": TemporalDerivativeError(n=1),
+        ...     "acceleration_error": TemporalDerivativeError(n=2),
         ... })
     """
 
@@ -202,16 +194,8 @@ class TemporalDerivativeError(Metric):
         self.derivative_dim = derivative_dim
 
         # Add metric states
-        self.add_state(
-            "sum_squared_errors",
-            default=torch.tensor(0.0),
-            dist_reduce_fx="sum"
-        )
-        self.add_state(
-            "total",
-            default=torch.tensor(0),
-            dist_reduce_fx="sum"
-        )
+        self.add_state("sum_squared_errors", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         """Update metric state with batch of temporal sequences.
@@ -226,9 +210,7 @@ class TemporalDerivativeError(Metric):
             ValueError: If shapes don't match
         """
         # Compute per-element squared derivative errors
-        squared_errors = _temporal_derivative_update(
-            preds, target, self.n, self.derivative_dim
-        )
+        squared_errors = _temporal_derivative_update(preds, target, self.n, self.derivative_dim)
 
         # Accumulate into state
         self.sum_squared_errors += squared_errors.sum()
@@ -279,9 +261,7 @@ class AbsoluteVectorNormError(Metric):
             preds: Predicted vectors with shape (B, ..., D)
             target: Ground truth vectors with shape (B, ..., D)
         """
-        per_sample = _absolute_vector_norm_update(
-            preds, target, self.norm_ord, self.vector_dim
-        )
+        per_sample = _absolute_vector_norm_update(preds, target, self.norm_ord, self.vector_dim)
         self.sum_norms += per_sample.sum()
         self.total += per_sample.numel()
 

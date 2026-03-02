@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowServerSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import (
+    MLflowSettings,
+    MLflowServerSettings,
+    MLflowClientSettings,
+)
 
 
 @pytest.fixture
@@ -63,7 +67,9 @@ class TestMLflowResourceManagerCleanup:
             patch(
                 "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.MLflowClientFactory"
             ) as mock_factory,
-            patch("dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow") as mock_mlflow,
+            patch(
+                "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow"
+            ) as mock_mlflow,
         ):
             mock_factory.create_client_from_server_info.return_value = mock_mlflow_client
             mock_factory.validate_client_connectivity.return_value = True
@@ -118,7 +124,9 @@ class TestMLflowResourceManagerCleanup:
             patch(
                 "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.MLflowClientFactory"
             ) as mock_factory,
-            patch("dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow") as mock_mlflow,
+            patch(
+                "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow"
+            ) as mock_mlflow,
         ):
             mock_factory.create_client_from_server_info.return_value = mock_mlflow_client
             mock_factory.validate_client_connectivity.return_value = True
@@ -158,7 +166,9 @@ class TestMLflowResourceManagerCleanup:
             patch(
                 "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.MLflowClientFactory"
             ) as mock_factory,
-            patch("dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow") as mock_mlflow,
+            patch(
+                "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow"
+            ) as mock_mlflow,
         ):
             mock_factory.create_client_from_server_info.return_value = mock_mlflow_client
             mock_factory.validate_client_connectivity.return_value = True
@@ -197,8 +207,18 @@ class TestMLflowServerHealthChecking:
         # Second call (after start): HTTP is up
         # Third call (wait_for_health): API is ready
         mock_health_checker.check_health.side_effect = [
-            ServerStatus(is_running=False, url="http://127.0.0.1:5679", response_time=None, error_message="Not running"),
-            ServerStatus(is_running=False, url="http://127.0.0.1:5679", response_time=None, error_message="Not running"),
+            ServerStatus(
+                is_running=False,
+                url="http://127.0.0.1:5679",
+                response_time=None,
+                error_message="Not running",
+            ),
+            ServerStatus(
+                is_running=False,
+                url="http://127.0.0.1:5679",
+                response_time=None,
+                error_message="Not running",
+            ),
         ]
         mock_health_checker.wait_for_health.return_value = True
 

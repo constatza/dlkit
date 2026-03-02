@@ -66,10 +66,7 @@ class IRunContext(ABC):
             run_context.log_metrics({"accuracy": 0.95})
 
             # Log multiple metrics with step
-            run_context.log_metrics(
-                {"loss": 0.3, "val_loss": 0.35, "lr": 0.001},
-                step=42
-            )
+            run_context.log_metrics({"loss": 0.3, "val_loss": 0.35, "lr": 0.001}, step=42)
             ```
         """
         raise NotImplementedError
@@ -90,7 +87,7 @@ class IRunContext(ABC):
                 "batch_size": 32,
                 "optimizer": "adam",
                 "num_layers": 3,
-                "dropout": 0.1
+                "dropout": 0.1,
             })
             ```
         """
@@ -141,7 +138,9 @@ class IRunContext(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+    def log_dataset(
+        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+    ) -> None:
         """Log a dataset to the active run.
 
         Logs dataset metadata for reproducibility and lineage tracking. Accepts MLflow
@@ -161,10 +160,7 @@ class IRunContext(ABC):
             features = np.random.rand(100, 10)
             targets = np.random.rand(100, 1)
             dataset = mlflow.data.from_numpy(
-                features=features,
-                targets=targets,
-                name="training_data",
-                source="data/train.npy"
+                features=features, targets=targets, name="training_data", source="data/train.npy"
             )
 
             # Log to run
@@ -258,6 +254,7 @@ class IExperimentTracker(ABC):
                     tracker.log_settings(settings, run)
                     run.log_metrics({"accuracy": 0.95})
 
+
         # Use MLflow implementation
         train_with_tracking(MLflowTracker(), settings)
 
@@ -293,9 +290,7 @@ class IExperimentTracker(ABC):
             with tracker.create_run(experiment_name="hp_search") as parent:
                 for trial in trials:
                     with tracker.create_run(
-                        experiment_name="hp_search",
-                        run_name=f"trial_{trial.id}",
-                        nested=True
+                        experiment_name="hp_search", run_name=f"trial_{trial.id}", nested=True
                     ) as child:
                         child.log_params(trial.params)
             ```
@@ -345,10 +340,7 @@ class IExperimentTracker(ABC):
             ```python
             # Settings contains model hyperparameters
             settings.MODEL = ModelComponent(
-                name="my_model",
-                hidden_dim=256,
-                num_layers=3,
-                dropout=0.1
+                name="my_model", hidden_dim=256, num_layers=3, dropout=0.1
             )
 
             with tracker.create_run("training") as run:
@@ -372,6 +364,7 @@ class NullRunContext(IRunContext):
         def train(run_context: IRunContext):
             run_context.log_params({"lr": 0.001})  # Works with both real and null context
             run_context.log_metrics({"loss": 0.5})
+
 
         # Works with null context
         train(NullRunContext())
@@ -422,7 +415,9 @@ class NullRunContext(IRunContext):
         """
         pass
 
-    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+    def log_dataset(
+        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+    ) -> None:
         """No-op dataset logging.
 
         Args:

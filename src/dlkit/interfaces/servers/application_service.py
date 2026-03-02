@@ -86,9 +86,7 @@ class ServerApplicationService:
 
         return server_info
 
-    def stop_server(
-        self, host: str = "localhost", port: int = 5000, force: bool = False
-    ) -> bool:
+    def stop_server(self, host: str = "localhost", port: int = 5000, force: bool = False) -> bool:
         """Stop server at given host:port.
 
         Args:
@@ -101,6 +99,7 @@ class ServerApplicationService:
             False if operational failure
         """
         from dlkit.tools.utils.logging_config import get_logger
+
         logger = get_logger(__name__)
 
         # Check if server is running first (unless force)

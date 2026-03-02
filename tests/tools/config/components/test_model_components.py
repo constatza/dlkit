@@ -177,7 +177,6 @@ class TestModelComponentSettings:
         assert settings.latent_size["low"] == 64
         assert settings.latent_size["high"] == 512
 
-
     def test_supports_type_name(self) -> None:
         """Test ModelComponentSettings supports type objects as component names."""
         import torch.nn as nn

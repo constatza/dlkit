@@ -20,6 +20,7 @@ from dlkit.tools.io.parsers import (
 
 class SimpleTestSettings(BaseModel):
     """Simple test settings for protocol testing."""
+
     name: str = Field(default="test")
     value: int = Field(default=1)
 
@@ -28,17 +29,13 @@ class ConfigValidatorImpl:
     """Implementation of ConfigValidator protocol for testing."""
 
     def validate_section[T: BaseModel](
-        self,
-        section_data: dict[str, Any],
-        model_class: type[T]
+        self, section_data: dict[str, Any], model_class: type[T]
     ) -> T:
         """Validate section data with Pydantic model."""
         return model_class.model_validate(section_data)
 
     def validate_sections(
-        self,
-        sections_data: dict[str, dict[str, Any]],
-        model_classes: dict[str, type[BaseModel]]
+        self, sections_data: dict[str, dict[str, Any]], model_classes: dict[str, type[BaseModel]]
     ) -> dict[str, BaseModel]:
         """Validate multiple sections."""
         validated = {}
@@ -137,7 +134,7 @@ class TestSectionExtractorProtocol:
         extractor = StandardSectionExtractor()
         config_data = {
             "SECTION1": {"name": "test1", "value": 42},
-            "SECTION2": {"name": "test2", "value": 100}
+            "SECTION2": {"name": "test2", "value": 100},
         }
 
         section_data = extractor.extract_section(config_data, "SECTION1")
@@ -153,13 +150,10 @@ class TestSectionExtractorProtocol:
         config_data = {
             "SECTION1": {"name": "test1", "value": 42},
             "SECTION2": {"name": "test2", "value": 100},
-            "SECTION3": {"name": "test3", "value": 300}
+            "SECTION3": {"name": "test3", "value": 300},
         }
 
-        sections_data = extractor.extract_sections(
-            config_data,
-            ["SECTION1", "SECTION3", "MISSING"]
-        )
+        sections_data = extractor.extract_sections(config_data, ["SECTION1", "SECTION3", "MISSING"])
 
         assert "SECTION1" in sections_data
         assert "SECTION3" in sections_data
@@ -191,12 +185,9 @@ class TestConfigValidatorProtocol:
         validator = ConfigValidatorImpl()
         sections_data = {
             "SECTION1": {"name": "test1", "value": 42},
-            "SECTION2": {"name": "test2", "value": 100}
+            "SECTION2": {"name": "test2", "value": 100},
         }
-        model_classes = {
-            "SECTION1": SimpleTestSettings,
-            "SECTION2": SimpleTestSettings
-        }
+        model_classes = {"SECTION1": SimpleTestSettings, "SECTION2": SimpleTestSettings}
 
         validated = validator.validate_sections(sections_data, model_classes)
 
@@ -245,10 +236,7 @@ class TestProtocolIntegration:
 
         # Validate all sections
         validator = ConfigValidatorImpl()
-        model_classes = {
-            "SECTION1": SimpleTestSettings,
-            "SECTION2": SimpleTestSettings
-        }
+        model_classes = {"SECTION1": SimpleTestSettings, "SECTION2": SimpleTestSettings}
         validated = validator.validate_sections(sections_data, model_classes)
 
         assert len(validated) == 2
@@ -268,11 +256,7 @@ class TestPartialConfigReaderProtocol:
             self.parser = PartialTOMLParser()
             self.validator = ConfigValidatorImpl()
 
-        def read_section[U: BaseModel](
-            self,
-            config_path: Path | str,
-            model_class: type[U]
-        ) -> U:
+        def read_section[U: BaseModel](self, config_path: Path | str, model_class: type[U]) -> U:
             """Read and validate a single section."""
             # Get section name (simplified)
             section_name = model_class.__name__.replace("Settings", "").upper()
@@ -285,9 +269,7 @@ class TestPartialConfigReaderProtocol:
             return self.validator.validate_section(section_data, model_class)
 
         def read_sections(
-            self,
-            config_path: Path | str,
-            section_configs: dict[str, type[BaseModel]]
+            self, config_path: Path | str, section_configs: dict[str, type[BaseModel]]
         ) -> dict[str, BaseModel]:
             """Read and validate multiple sections."""
             sections_data = self.parser.parse_sections(config_path, list(section_configs.keys()))
@@ -324,10 +306,7 @@ value = 42
         """Test read_sections method."""
         reader = self.PartialConfigReaderImpl()
 
-        section_configs = {
-            "SECTION1": SimpleTestSettings,
-            "SECTION2": SimpleTestSettings
-        }
+        section_configs = {"SECTION1": SimpleTestSettings, "SECTION2": SimpleTestSettings}
 
         validated = reader.read_sections(sample_config_file, section_configs)
 
@@ -352,27 +331,27 @@ class TestProtocolCompliance:
         parsers = [PartialTOMLParser(), DynafconfConfigParser()]
 
         for parser in parsers:
-            assert hasattr(parser, 'parse_full')
-            assert hasattr(parser, 'parse_sections')
-            assert hasattr(parser, 'get_available_sections')
-            assert callable(getattr(parser, 'parse_full'))
-            assert callable(getattr(parser, 'parse_sections'))
-            assert callable(getattr(parser, 'get_available_sections'))
+            assert hasattr(parser, "parse_full")
+            assert hasattr(parser, "parse_sections")
+            assert hasattr(parser, "get_available_sections")
+            assert callable(getattr(parser, "parse_full"))
+            assert callable(getattr(parser, "parse_sections"))
+            assert callable(getattr(parser, "get_available_sections"))
 
     def test_extractor_protocol_methods_exist(self):
         """Test that extractor implementation has all required methods."""
         extractor = StandardSectionExtractor()
 
-        assert hasattr(extractor, 'extract_section')
-        assert hasattr(extractor, 'extract_sections')
-        assert callable(getattr(extractor, 'extract_section'))
-        assert callable(getattr(extractor, 'extract_sections'))
+        assert hasattr(extractor, "extract_section")
+        assert hasattr(extractor, "extract_sections")
+        assert callable(getattr(extractor, "extract_section"))
+        assert callable(getattr(extractor, "extract_sections"))
 
     def test_validator_protocol_methods_exist(self):
         """Test that validator implementation has all required methods."""
         validator = ConfigValidatorImpl()
 
-        assert hasattr(validator, 'validate_section')
-        assert hasattr(validator, 'validate_sections')
-        assert callable(getattr(validator, 'validate_section'))
-        assert callable(getattr(validator, 'validate_sections'))
+        assert hasattr(validator, "validate_section")
+        assert hasattr(validator, "validate_sections")
+        assert callable(getattr(validator, "validate_section"))
+        assert callable(getattr(validator, "validate_sections"))

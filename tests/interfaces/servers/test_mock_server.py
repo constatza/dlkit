@@ -288,8 +288,8 @@ class TestConcurrentMockServerOperations:
         adapters = []
         for i in range(3):
             mock_health_checker = Mock()
-            mock_health_checker.check_health.side_effect = (
-                lambda url: shared_mock_server.check_health()
+            mock_health_checker.check_health.side_effect = lambda url: (
+                shared_mock_server.check_health()
             )
 
             adapter = MLflowServerAdapter(

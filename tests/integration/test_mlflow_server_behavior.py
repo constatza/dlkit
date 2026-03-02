@@ -37,6 +37,7 @@ class _DummyContext:
         type(self).state.entered = True
         # Return minimal ServerInfo-like object
         from dlkit.interfaces.servers.protocols import ServerInfo
+
         return ServerInfo(
             url=f"http://{getattr(self._config, 'host', '127.0.0.1')}:{getattr(self._config, 'port', 5000)}",
             host=getattr(self._config, "host", "127.0.0.1"),

@@ -46,7 +46,7 @@ class FileBasedServerTracker(ServerTracker):
             # Non-critical: tracking failure doesn't break server startup
             logger.debug(
                 f"Non-critical: Failed to track server {host}:{port} (PID {pid}) - {e}",
-                exc_info=True
+                exc_info=True,
             )
 
     def untrack_server(self, host: str, port: int) -> None:
@@ -67,8 +67,7 @@ class FileBasedServerTracker(ServerTracker):
         except Exception as e:
             # Non-critical: tracking cleanup failure is not fatal
             logger.debug(
-                f"Non-critical: Failed to untrack server {host}:{port} - {e}",
-                exc_info=True
+                f"Non-critical: Failed to untrack server {host}:{port} - {e}", exc_info=True
             )
 
     def get_tracked_pids(self, host: str, port: int) -> list[int]:
@@ -91,7 +90,6 @@ class FileBasedServerTracker(ServerTracker):
         except Exception as e:
             # Non-critical: return empty list if tracking data unavailable
             logger.debug(
-                f"Non-critical: Failed to get tracked PIDs for {host}:{port} - {e}",
-                exc_info=True
+                f"Non-critical: Failed to get tracked PIDs for {host}:{port} - {e}", exc_info=True
             )
             return []

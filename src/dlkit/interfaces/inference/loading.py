@@ -125,7 +125,7 @@ def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings
         except Exception as e:
             raise WorkflowError(
                 f"Failed to deserialize model settings from enhanced metadata: {e}",
-                {"has_dlkit_metadata": "true"}
+                {"has_dlkit_metadata": "true"},
             ) from e
 
     # Try legacy hyper_parameters
@@ -136,7 +136,7 @@ def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings
         except Exception as e:
             raise WorkflowError(
                 f"Failed to deserialize model settings from legacy checkpoint: {e}",
-                {"has_hyper_parameters": "true"}
+                {"has_hyper_parameters": "true"},
             ) from e
 
     raise WorkflowError(
@@ -144,7 +144,7 @@ def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings
         {
             "has_dlkit_metadata": str("dlkit_metadata" in checkpoint),
             "has_hyper_parameters": str("hyper_parameters" in checkpoint),
-        }
+        },
     )
 
 
@@ -160,7 +160,10 @@ def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
     # Find first tensor parameter to detect dtype
     for value in state_dict.values():
         if isinstance(value, torch.Tensor) and value.dtype in (
-            torch.float16, torch.bfloat16, torch.float32, torch.float64
+            torch.float16,
+            torch.bfloat16,
+            torch.float32,
+            torch.float64,
         ):
             logger.info(f"Detected checkpoint dtype: {value.dtype}")
             return value.dtype
@@ -220,10 +223,10 @@ def build_model_from_checkpoint(
 
     # Build model using pure factory (tries in_features, in_channels, then kwargs-only)
     # _serialize_model_settings nests hyperparams under 'params'; unpack them here.
-    if hasattr(model_settings, 'model_dump'):
+    if hasattr(model_settings, "model_dump"):
         all_fields = model_settings.model_dump()
-        excluded = {'name', 'module_path', 'checkpoint', 'class_name'}
-        params_nested = all_fields.pop('params', None) or {}
+        excluded = {"name", "module_path", "checkpoint", "class_name"}
+        params_nested = all_fields.pop("params", None) or {}
         hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
         hyperparams.update(params_nested)
     else:
@@ -241,8 +244,7 @@ def build_model_from_checkpoint(
         logger.info("Successfully loaded model weights from checkpoint")
     except Exception as e:
         raise WorkflowError(
-            f"Failed to load state dict into model: {e}",
-            {"model_type": type(model).__name__}
+            f"Failed to load state dict into model: {e}", {"model_type": type(model).__name__}
         ) from e
 
     # Set to eval mode
@@ -271,23 +273,15 @@ def load_checkpoint(checkpoint_path: Path | str) -> dict[str, Any]:
 
     try:
         logger.info(f"Loading checkpoint from {checkpoint_path}")
-        checkpoint = torch.load(
-            checkpoint_path,
-            map_location="cpu",
-            weights_only=False
-        )
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
         if not isinstance(checkpoint, dict):
-            raise WorkflowError(
-                f"Invalid checkpoint format: expected dict, got {type(checkpoint)}"
-            )
+            raise WorkflowError(f"Invalid checkpoint format: expected dict, got {type(checkpoint)}")
 
         return checkpoint
 
     except Exception as e:
-        raise WorkflowError(
-            f"Failed to load checkpoint from {checkpoint_path}: {e}"
-        ) from e
+        raise WorkflowError(f"Failed to load checkpoint from {checkpoint_path}: {e}") from e
 
 
 def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResult:

@@ -36,12 +36,15 @@ def correlated_data() -> torch.Tensor:
     # Create correlated features
     base = torch.randn(n_samples, 3)
     # Add correlated features
-    expanded = torch.cat([
-        base,
-        base[:, :2] * 2 + torch.randn(n_samples, 2) * 0.1,
-        base[:, :3] * 1.5 + torch.randn(n_samples, 3) * 0.1,
-        torch.randn(n_samples, 2) * 0.5
-    ], dim=1)
+    expanded = torch.cat(
+        [
+            base,
+            base[:, :2] * 2 + torch.randn(n_samples, 2) * 0.1,
+            base[:, :3] * 1.5 + torch.randn(n_samples, 3) * 0.1,
+            torch.randn(n_samples, 2) * 0.5,
+        ],
+        dim=1,
+    )
     return expanded
 
 
@@ -101,9 +104,7 @@ class TestPCAGoodPath:
         assert pca_2_components.components is not None
         assert pca_2_components.components.shape == (2, 5)  # (n_components, n_features)
 
-    def test_fit_computes_mean(
-        self, pca_2_components: PCA, simple_2d_data: torch.Tensor
-    ) -> None:
+    def test_fit_computes_mean(self, pca_2_components: PCA, simple_2d_data: torch.Tensor) -> None:
         """Fitting should compute and store the data mean."""
         pca_2_components.fit(simple_2d_data)
 
@@ -164,9 +165,7 @@ class TestPCAGoodPath:
         # Full-rank PCA should give near-perfect reconstruction
         assert torch.allclose(reconstructed, simple_2d_data, atol=1e-4)
 
-    def test_explained_variance_ratio_sums_correctly(
-        self, correlated_data: torch.Tensor
-    ) -> None:
+    def test_explained_variance_ratio_sums_correctly(self, correlated_data: torch.Tensor) -> None:
         """Total explained variance should be reasonable for correlated data."""
         pca = PCA(n_components=3)
         pca.fit(correlated_data)
@@ -175,9 +174,7 @@ class TestPCAGoodPath:
         assert pca.total_explained_variance is not None
         assert pca.total_explained_variance > 0.5  # At least 50%
 
-    def test_multidimensional_data_handling(
-        self, multidim_data: torch.Tensor
-    ) -> None:
+    def test_multidimensional_data_handling(self, multidim_data: torch.Tensor) -> None:
         """PCA should handle 3D data by reshaping correctly."""
         pca = PCA(n_components=3)
         pca.fit(multidim_data)
@@ -232,6 +229,7 @@ class TestPCAEdgeCases:
     ) -> None:
         """Calling forward before fit should raise RuntimeError."""
         from dlkit.core.training.transforms.errors import TransformNotFittedError
+
         with pytest.raises(TransformNotFittedError):
             pca_2_components.forward(simple_2d_data)
 
@@ -240,6 +238,7 @@ class TestPCAEdgeCases:
     ) -> None:
         """Calling inverse_transform before fit should raise RuntimeError."""
         from dlkit.core.training.transforms.errors import TransformNotFittedError
+
         projected = torch.randn(100, 2)
         with pytest.raises(TransformNotFittedError):
             pca_2_components.inverse_transform(projected)
@@ -266,9 +265,7 @@ class TestPCAEdgeCases:
         # Should preserve the single dimension
         assert projected.shape == (50, 1)
 
-    def test_fit_with_custom_dim_parameter(
-        self, multidim_data: torch.Tensor
-    ) -> None:
+    def test_fit_with_custom_dim_parameter(self, multidim_data: torch.Tensor) -> None:
         """Fit should respect the dim parameter for feature dimension."""
         pca = PCA(n_components=3)
 
@@ -288,7 +285,7 @@ class TestPCAEdgeCases:
         projected = pca_2_components.forward(simple_2d_data)
 
         # Move projected data to same device (CPU in this case)
-        projected_same = projected.to('cpu')
+        projected_same = projected.to("cpu")
         reconstructed = pca_2_components.inverse_transform(projected_same)
 
         assert reconstructed.device == projected_same.device
@@ -302,9 +299,7 @@ class TestPCAEdgeCases:
 class TestPCAProperties:
     """Test mathematical properties that should always hold."""
 
-    def test_variance_monotonically_decreasing(
-        self, simple_2d_data: torch.Tensor
-    ) -> None:
+    def test_variance_monotonically_decreasing(self, simple_2d_data: torch.Tensor) -> None:
         """Explained variance should be sorted in descending order."""
         pca = PCA(n_components=4)
         pca.fit(simple_2d_data)
@@ -316,9 +311,7 @@ class TestPCAProperties:
         for i in range(len(variances) - 1):
             assert variances[i] >= variances[i + 1]
 
-    def test_projection_preserves_variance_order(
-        self, correlated_data: torch.Tensor
-    ) -> None:
+    def test_projection_preserves_variance_order(self, correlated_data: torch.Tensor) -> None:
         """Projected data variance should match explained variance ordering."""
         pca = PCA(n_components=5)
         pca.fit(correlated_data)
@@ -391,8 +384,8 @@ class TestPCAProperties:
         # Second component: medium variance along second axis
         # Third component: small variance along third axis
         comp1 = torch.randn(n_samples) * 10.0  # Large variance
-        comp2 = torch.randn(n_samples) * 3.0   # Medium variance
-        comp3 = torch.randn(n_samples) * 0.5   # Small variance
+        comp2 = torch.randn(n_samples) * 3.0  # Medium variance
+        comp3 = torch.randn(n_samples) * 0.5  # Small variance
 
         data = torch.stack([comp1, comp2, comp3], dim=1)
 
@@ -430,8 +423,9 @@ class TestPCAProperties:
 
         # Errors must increase monotonically as we remove components
         for i in range(len(errors) - 1):
-            assert errors[i] < errors[i + 1], \
-                f"Error with more components ({errors[i]}) >= error with fewer ({errors[i+1]})"
+            assert errors[i] < errors[i + 1], (
+                f"Error with more components ({errors[i]}) >= error with fewer ({errors[i + 1]})"
+            )
 
 
 # ============================================================================
@@ -442,9 +436,7 @@ class TestPCAProperties:
 class TestPCAIntegration:
     """Test PCA in realistic usage scenarios."""
 
-    def test_fit_transform_inverse_pipeline(
-        self, correlated_data: torch.Tensor
-    ) -> None:
+    def test_fit_transform_inverse_pipeline(self, correlated_data: torch.Tensor) -> None:
         """Complete pipeline: fit -> transform -> inverse."""
         pca = PCA(n_components=5)
 
@@ -464,9 +456,7 @@ class TestPCAIntegration:
         mse = torch.mean((reconstructed - correlated_data) ** 2)
         assert mse < 1.0  # Should have reasonable reconstruction
 
-    def test_transform_new_data_after_fit(
-        self, simple_2d_data: torch.Tensor
-    ) -> None:
+    def test_transform_new_data_after_fit(self, simple_2d_data: torch.Tensor) -> None:
         """PCA should work on new data after fitting."""
         # Split data
         train_data = simple_2d_data[:80]
@@ -483,9 +473,7 @@ class TestPCAIntegration:
         test_reconstructed = pca.inverse_transform(test_projected)
         assert test_reconstructed.shape == test_data.shape
 
-    def test_batched_processing(
-        self, simple_2d_data: torch.Tensor
-    ) -> None:
+    def test_batched_processing(self, simple_2d_data: torch.Tensor) -> None:
         """PCA should give consistent results with batched processing."""
         pca = PCA(n_components=3)
         pca.fit(simple_2d_data)
@@ -497,7 +485,7 @@ class TestPCAIntegration:
         batch_size = 25
         batched_projected = []
         for i in range(0, len(simple_2d_data), batch_size):
-            batch = simple_2d_data[i:i + batch_size]
+            batch = simple_2d_data[i : i + batch_size]
             batched_projected.append(pca.forward(batch))
 
         batched_result = torch.cat(batched_projected, dim=0)

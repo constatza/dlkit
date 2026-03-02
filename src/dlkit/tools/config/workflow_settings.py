@@ -34,9 +34,7 @@ class BaseWorkflowSettings(BasicSettings):
     )
 
     # Core functional settings (common to all workflows)
-    MODEL: ModelComponentSettings | None = Field(
-        default=None, description="Model configuration"
-    )
+    MODEL: ModelComponentSettings | None = Field(default=None, description="Model configuration")
     DATAMODULE: DataModuleSettings | None = Field(
         default=None,
         description="Data loading and processing configuration",
@@ -78,10 +76,18 @@ class BaseWorkflowSettings(BasicSettings):
         # Validate DATASET nested paths
         if self.DATASET is not None:
             for feature in self.DATASET.features:
-                if isinstance(feature, PathFeature) and feature.path is not None and not feature.path.exists():
+                if (
+                    isinstance(feature, PathFeature)
+                    and feature.path is not None
+                    and not feature.path.exists()
+                ):
                     raise ValueError(f"Feature path does not exist: {feature.path}")
             for target in self.DATASET.targets:
-                if isinstance(target, PathTarget) and target.path is not None and not target.path.exists():
+                if (
+                    isinstance(target, PathTarget)
+                    and target.path is not None
+                    and not target.path.exists()
+                ):
                     raise ValueError(f"Target path does not exist: {target.path}")
 
         return self

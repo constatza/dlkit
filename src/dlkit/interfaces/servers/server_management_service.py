@@ -75,9 +75,7 @@ class ServerManagementService:
         """
         return self._server_tracker.get_tracked_pids(host, port)
 
-    def stop_server_processes(
-        self, host: str, port: int, force: bool = False
-    ) -> bool:
+    def stop_server_processes(self, host: str, port: int, force: bool = False) -> bool:
         """Stop server processes for given host:port.
 
         Args:

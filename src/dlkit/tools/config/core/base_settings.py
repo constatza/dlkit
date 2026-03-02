@@ -13,8 +13,9 @@ rather than mutating existing ones.  This gives:
 To update a config::
 
     from dlkit.tools.config.core.patching import patch_model
+
     new_cfg = patch_model(cfg, {"TRAINING": {"epochs": 100}})
-    new_cfg = cfg.patch({"TRAINING.optimizer.lr": 0.001})   # dotted-key shorthand
+    new_cfg = cfg.patch({"TRAINING.optimizer.lr": 0.001})  # dotted-key shorthand
 
 Note: ``exclude=True`` fields (e.g. ``ValueBasedEntry.value``) are preserved by
 ``model_copy()`` because it copies ``__dict__`` directly — no serialisation round-trip.

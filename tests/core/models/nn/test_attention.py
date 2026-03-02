@@ -21,9 +21,7 @@ from dlkit.core.models.nn.attention.transformer import (
 class TestSelfAttentionBlock:
     """Tests for self-attention block."""
 
-    def test_output_shape_with_permute(
-        self, temporal_input: torch.Tensor
-    ) -> None:
+    def test_output_shape_with_permute(self, temporal_input: torch.Tensor) -> None:
         """Output should preserve input shape when permute=True."""
         sa = SelfAttentionBlock(embed_dim=2, num_heads=1, permute=True)
         out = sa(temporal_input)
@@ -60,6 +58,7 @@ class TestSelfAttentionBlock:
     def test_is_nn_module(self) -> None:
         """SelfAttentionBlock should be an nn.Module."""
         import torch.nn as nn
+
         sa = SelfAttentionBlock(embed_dim=2, num_heads=1)
         assert isinstance(sa, nn.Module)
 
@@ -69,9 +68,7 @@ class TestSelfAttentionBlock:
         params = list(sa.parameters())
         assert len(params) > 0
 
-    def test_self_attention_output_differs_from_input(
-        self, batch_size: int
-    ) -> None:
+    def test_self_attention_output_differs_from_input(self, batch_size: int) -> None:
         """Self-attention output should generally differ from input."""
         sa = SelfAttentionBlock(embed_dim=4, num_heads=1, permute=True)
         x = torch.randn(batch_size, 4, 8)
@@ -98,6 +95,7 @@ class TestTransformerEncoderBlock:
     def test_is_nn_module(self) -> None:
         """TransformerEncoderBlock should be an nn.Module."""
         import torch.nn as nn
+
         te = TransformerEncoderBlock(embed_dim=2, num_heads=1)
         assert isinstance(te, nn.Module)
 
@@ -156,6 +154,7 @@ class TestTransformerDecoderBlock:
     def test_is_nn_module(self) -> None:
         """TransformerDecoderBlock should be an nn.Module."""
         import torch.nn as nn
+
         td = TransformerDecoderBlock(embed_dim=2, num_heads=1)
         assert isinstance(td, nn.Module)
 
@@ -182,7 +181,7 @@ class TestTransformerDecoderBlock:
     def test_different_memory_shapes_handled(self, batch_size: int) -> None:
         """Decoder should handle different memory shapes (seq_len can differ)."""
         td = TransformerDecoderBlock(embed_dim=4, num_heads=1)
-        query = torch.randn(batch_size, 4, 8)   # (batch, embed, time)
+        query = torch.randn(batch_size, 4, 8)  # (batch, embed, time)
         memory = torch.randn(batch_size, 4, 12)  # Different time length
         out = td(query, memory=memory)
         assert out.shape == query.shape

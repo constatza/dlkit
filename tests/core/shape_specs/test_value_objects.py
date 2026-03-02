@@ -66,7 +66,7 @@ class TestShapeEntry:
 
     @given(
         name=st.text(min_size=1).filter(lambda x: x.strip()),
-        dimensions=st.tuples(st.integers(min_value=1, max_value=1000)).filter(lambda x: len(x) > 0)
+        dimensions=st.tuples(st.integers(min_value=1, max_value=1000)).filter(lambda x: len(x) > 0),
     )
     def test_shape_entry_property_based(self, name, dimensions):
         """Property-based test for ShapeEntry creation."""
@@ -85,7 +85,7 @@ class TestShapeData:
         return {
             "x": ShapeEntry(name="x", dimensions=(10, 20)),
             "y": ShapeEntry(name="y", dimensions=(5,)),
-            "features": ShapeEntry(name="features", dimensions=(100, 50, 25))
+            "features": ShapeEntry(name="features", dimensions=(100, 50, 25)),
         }
 
     def test_shape_data_creation_valid(self, sample_entries):
@@ -95,7 +95,7 @@ class TestShapeData:
             model_family=ModelFamily.DLKIT_NN,
             source=ShapeSource.TRAINING_DATASET,
             default_input="x",
-            default_output="y"
+            default_output="y",
         )
 
         assert shape_data.entries == sample_entries
@@ -109,7 +109,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.GRAPH,
-            source=ShapeSource.CHECKPOINT_METADATA
+            source=ShapeSource.CHECKPOINT_METADATA,
         )
 
         assert shape_data.entries == sample_entries
@@ -124,7 +124,7 @@ class TestShapeData:
             ShapeData(
                 entries=["x", "y"],  # List instead of dict
                 model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )
 
     def test_shape_data_invalid_model_family(self):
@@ -133,7 +133,7 @@ class TestShapeData:
             ShapeData(
                 entries={},
                 model_family="invalid",  # String instead of enum
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )
 
     def test_shape_data_invalid_source(self):
@@ -142,7 +142,7 @@ class TestShapeData:
             ShapeData(
                 entries={},
                 model_family=ModelFamily.DLKIT_NN,
-                source="invalid"  # String instead of enum
+                source="invalid",  # String instead of enum
             )
 
     def test_shape_data_invalid_default_input_not_found(self, sample_entries):
@@ -152,7 +152,7 @@ class TestShapeData:
                 entries=sample_entries,
                 model_family=ModelFamily.DLKIT_NN,
                 source=ShapeSource.TRAINING_DATASET,
-                default_input="nonexistent"
+                default_input="nonexistent",
             )
 
     def test_shape_data_invalid_default_output_not_found(self, sample_entries):
@@ -162,7 +162,7 @@ class TestShapeData:
                 entries=sample_entries,
                 model_family=ModelFamily.DLKIT_NN,
                 source=ShapeSource.TRAINING_DATASET,
-                default_output="nonexistent"
+                default_output="nonexistent",
             )
 
     def test_shape_data_invalid_entry_type(self):
@@ -171,7 +171,7 @@ class TestShapeData:
             ShapeData(
                 entries={"x": (10, 20)},  # Tuple instead of ShapeEntry
                 model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )
 
     def test_shape_data_invalid_entry_name_mismatch(self):
@@ -181,7 +181,7 @@ class TestShapeData:
             ShapeData(
                 entries={"x": entry},  # Key 'x' but entry name is 'y'
                 model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET
+                source=ShapeSource.TRAINING_DATASET,
             )
 
     def test_shape_data_has_entry(self, sample_entries):
@@ -189,7 +189,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         assert shape_data.has_entry("x")
@@ -202,7 +202,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         entry = shape_data.get_entry("x")
@@ -217,7 +217,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         assert shape_data.get_dimensions("x") == (10, 20)
@@ -230,7 +230,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         names = shape_data.entry_names()
@@ -239,16 +239,14 @@ class TestShapeData:
     def test_shape_data_is_empty(self):
         """Test is_empty method."""
         empty_data = ShapeData(
-            entries={},
-            model_family=ModelFamily.EXTERNAL,
-            source=ShapeSource.DEFAULT_FALLBACK
+            entries={}, model_family=ModelFamily.EXTERNAL, source=ShapeSource.DEFAULT_FALLBACK
         )
         assert empty_data.is_empty()
 
         non_empty_data = ShapeData(
             entries={"x": ShapeEntry(name="x", dimensions=(10,))},
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
         assert not non_empty_data.is_empty()
 
@@ -257,7 +255,7 @@ class TestShapeData:
         original = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         updated = original.with_defaults(default_input="features", default_output="y")
@@ -277,7 +275,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET
+            source=ShapeSource.TRAINING_DATASET,
         )
 
         assert len(shape_data) == 3
@@ -287,7 +285,7 @@ class TestShapeData:
         shape_data = ShapeData(
             entries=sample_entries,
             model_family=ModelFamily.GRAPH,
-            source=ShapeSource.CHECKPOINT_METADATA
+            source=ShapeSource.CHECKPOINT_METADATA,
         )
 
         str_repr = str(shape_data)
@@ -296,20 +294,13 @@ class TestShapeData:
         assert "checkpoint_metadata" in str_repr
 
     @given(
-        model_family=st.sampled_from(list(ModelFamily)),
-        source=st.sampled_from(list(ShapeSource))
+        model_family=st.sampled_from(list(ModelFamily)), source=st.sampled_from(list(ShapeSource))
     )
     def test_shape_data_property_based(self, model_family, source):
         """Property-based test for ShapeData creation."""
-        entries = {
-            "test": ShapeEntry(name="test", dimensions=(10, 20))
-        }
+        entries = {"test": ShapeEntry(name="test", dimensions=(10, 20))}
 
-        shape_data = ShapeData(
-            entries=entries,
-            model_family=model_family,
-            source=source
-        )
+        shape_data = ShapeData(entries=entries, model_family=model_family, source=source)
 
         assert shape_data.model_family == model_family
         assert shape_data.source == source

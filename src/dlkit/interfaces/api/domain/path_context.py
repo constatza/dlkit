@@ -166,10 +166,7 @@ class PathContext:
 
         Example:
             >>> # From CLI args like: --root-dir /project --output-dir /output
-            >>> ctx = PathContext.from_cli_args(
-            ...     root_dir="/project",
-            ...     output_dir="/output"
-            ... )
+            >>> ctx = PathContext.from_cli_args(root_dir="/project", output_dir="/output")
             >>> ctx.root_dir, ctx.output_dir
             (PosixPath('/project'), PosixPath('/output'))
         """
@@ -248,7 +245,9 @@ class PathContext:
             root_dir=other.root_dir if other.root_dir else self.root_dir,
             output_dir=other.output_dir if other.output_dir else self.output_dir,
             data_dir=other.data_dir if other.data_dir else self.data_dir,
-            checkpoints_dir=other.checkpoints_dir if other.checkpoints_dir else self.checkpoints_dir,
+            checkpoints_dir=other.checkpoints_dir
+            if other.checkpoints_dir
+            else self.checkpoints_dir,
         )
 
 

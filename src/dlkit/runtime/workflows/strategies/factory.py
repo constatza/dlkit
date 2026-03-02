@@ -81,7 +81,9 @@ class ExecutionStrategyFactory:
             experiment_tracker = None
             if self._is_mlflow_enabled(settings):
                 # Import and create the tracking adapter that wraps an existing MLflow tracker
-                from dlkit.runtime.workflows.optimization.infrastructure.tracking import MLflowTrackingAdapter
+                from dlkit.runtime.workflows.optimization.infrastructure.tracking import (
+                    MLflowTrackingAdapter,
+                )
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
                 # Create MLflow tracker for the optimization workflow with context management
@@ -95,6 +97,7 @@ class ExecutionStrategyFactory:
 
                 # Determine experiment name using standard naming convention
                 from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
+
                 experiment_name = determine_experiment_name(settings, mlflow_config)
 
                 session = getattr(settings, "SESSION", None)

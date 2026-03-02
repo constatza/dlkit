@@ -55,9 +55,7 @@ class ClientBasedRunContext(IRunContext):
         """Log artifact using MLflow client."""
         try:
             self._client.log_artifact(
-                self._run_id,
-                str(artifact_path),
-                artifact_path=artifact_dir or None
+                self._run_id, str(artifact_path), artifact_path=artifact_dir or None
             )
         except Exception as e:
             logger.warning(f"Failed to log artifact {artifact_path}: {e}")
@@ -69,7 +67,9 @@ class ClientBasedRunContext(IRunContext):
         except Exception as e:
             logger.warning(f"Failed to set tag {key}: {e}")
 
-    def log_dataset(self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None) -> None:
+    def log_dataset(
+        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+    ) -> None:
         """Log dataset using MLflow client.
 
         Args:
