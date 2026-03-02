@@ -12,11 +12,13 @@ from loguru import logger
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
 from dlkit.tools.utils.checkpoint_security import configure_checkpoint_loading
+
 configure_checkpoint_loading()
 
 import torch
 import torch.nn as nn
 from lightning import LightningModule
+from tensordict import TensorDict
 from torch import Tensor
 
 from dlkit.tools.config import BuildContext, FactoryProvider
@@ -31,43 +33,214 @@ from dlkit.core.models.wrappers.protocols import (
 from dlkit.core.models.wrappers.components import WrapperCheckpointMetadata
 
 
-def _unpack_model_output(raw_output: Any) -> tuple[Tensor, Tensor | None]:
-    """Split model output into (predictions, latents | None).
+def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
+    """Extract (predictions_raw, latents_raw) from any model forward() output.
 
-    Models returning a 2-tuple are assumed to emit (predictions, latents).
-    All other outputs are treated as predictions-only.
+    Handles structural unpacking only: list rejection, tuple splitting, and
+    self-describing dicts/TensorDicts that carry a ``"predictions"`` key.
 
     Args:
         raw_output: Raw output from the model forward pass.
 
     Returns:
-        Tuple of (predictions tensor, latents tensor or None).
+        Tuple of ``(predictions_raw, latents_raw)``. ``latents_raw`` is
+        ``None`` when absent.
+
+    Raises:
+        TypeError: If raw_output is a list (ambiguous at top level).
+        ValueError: If raw_output is an empty tuple.
     """
-    if isinstance(raw_output, tuple) and len(raw_output) == 2:
-        return cast(Tensor, raw_output[0]), cast(Tensor | None, raw_output[1])
-    return cast(Tensor, raw_output), None
+    if isinstance(raw_output, list):
+        raise TypeError(
+            "forward() returned a list — ambiguous at top level. "
+            "Use dict[str, ...] for multi-head or a (predictions, latents) tuple."
+        )
+    if isinstance(raw_output, tuple):
+        match len(raw_output):
+            case 0:
+                raise ValueError("forward() returned an empty tuple")
+            case 1:
+                return raw_output[0], None
+            case 2:
+                return raw_output[0], raw_output[1]
+            case _:
+                return raw_output[0], raw_output[1:]  # latents = tuple → positional TD
+    # Self-describing: dict or TensorDict with "predictions" key
+    if isinstance(raw_output, (dict, TensorDict)) and "predictions" in raw_output:
+        latents_raw = (
+            raw_output.get("latents", None)
+            if isinstance(raw_output, TensorDict)
+            else raw_output.get("latents")
+        )
+        return raw_output["predictions"], latents_raw
+    return raw_output, None
 
 
-def _build_predict_tensordict(
-    predictions: Tensor,
-    targets: Any,
-    latents: Tensor | None = None,
-) -> Any:
-    """Assemble the predict_step TensorDict from its components.
+def _batch_size_of(value: Any) -> int:
+    """Infer batch size from the first dimension of a Tensor, TensorDict, or dict.
 
     Args:
-        predictions: Inverse-transformed prediction tensor.
-        targets: Raw (untransformed) targets from the batch.
-        latents: Optional latent tensor from the model.
+        value: A Tensor, TensorDict, or non-empty dict with Tensor/TensorDict values.
 
     Returns:
-        TensorDict with keys 'predictions', 'targets', and optionally 'latents'.
+        Integer batch size.
+
+    Raises:
+        ValueError: If value is an empty dict.
+        TypeError: If value type is unsupported.
     """
-    from tensordict import TensorDict
-    contents: dict[str, Any] = {"predictions": predictions, "targets": targets}
-    if latents is not None:
-        contents["latents"] = latents
-    return TensorDict(contents, batch_size=predictions.shape[:1])
+    match value:
+        case torch.Tensor():
+            return value.shape[0]
+        case TensorDict():
+            return int(value.batch_size[0])
+        case dict() if value:
+            return _batch_size_of(next(iter(value.values())))
+        case dict():
+            raise ValueError("Cannot determine batch size from empty dict")
+        case _:
+            raise TypeError(f"Cannot determine batch size from {type(value).__name__}")
+
+
+# Maximum nesting depth for recursive model output normalization.
+# Each dict/sequence level consumed from forward() increments the counter;
+# Tensor/TensorDict leaves terminate immediately. A depth of 8 supports any
+# realistic multi-head/latent structure while bounding runaway recursion.
+_MAX_NORMALIZE_DEPTH = 8
+
+
+def _normalize_dict(d: dict[str, Any], context: str, batch_size: int, _depth: int) -> TensorDict:
+    """Normalize a plain dict to TensorDict with a per-entry leaf fast-path.
+
+    Args:
+        d: Source dict mapping string keys to output values.
+        context: Human-readable context string for error messages.
+        batch_size: Batch dimension to set on the resulting TensorDict.
+        _depth: Current recursion depth (internal — callers pass 0 at top level).
+
+    Returns:
+        TensorDict with ``batch_size=[batch_size]``.
+    """
+    normalized: dict[str, Tensor | TensorDict] = {}
+    for k, v in d.items():
+        match v:
+            case torch.Tensor() | TensorDict():
+                normalized[k] = v
+            case _:
+                normalized[k] = _normalize_output(v, f"{context}.{k}", batch_size, _depth)
+    return TensorDict(normalized, batch_size=[batch_size])
+
+
+def _normalize_sequence(
+    seq: list | tuple, context: str, batch_size: int, _depth: int
+) -> TensorDict:
+    """Normalize a positional sequence to TensorDict with integer string keys.
+
+    Args:
+        seq: Non-empty list or tuple of output values.
+        context: Human-readable context string for error messages.
+        batch_size: Batch dimension to set on the resulting TensorDict.
+        _depth: Current recursion depth (internal — callers pass 0 at top level).
+
+    Returns:
+        TensorDict with keys ``"0"``, ``"1"``, … and ``batch_size=[batch_size]``.
+    """
+    from dlkit.tools.utils.tensordict_utils import sequence_to_tensordict
+
+    normalized = [
+        _normalize_output(v, f"{context}[{i}]", batch_size, _depth) for i, v in enumerate(seq)
+    ]
+    return sequence_to_tensordict(normalized)
+
+
+def _normalize_output(
+    value: Any, context: str, batch_size: int, _depth: int = 0
+) -> Tensor | TensorDict:
+    """Recursively normalize a model output value to Tensor or TensorDict.
+
+    Each recursive call increments *_depth*; a ``RecursionError`` is raised
+    when ``_depth`` exceeds ``_MAX_NORMALIZE_DEPTH``, preventing infinite loops
+    from pathological or circular model outputs.
+
+    Args:
+        value: A Tensor, TensorDict, dict, list, or tuple.
+        context: Human-readable context string for error messages.
+        batch_size: Batch dimension used when constructing nested TensorDicts.
+        _depth: Current recursion depth; callers should omit (defaults to 0).
+
+    Returns:
+        Tensor (unchanged) or TensorDict (constructed).
+
+    Raises:
+        RecursionError: If nesting depth exceeds ``_MAX_NORMALIZE_DEPTH``.
+        ValueError: If value is an empty dict, list, or tuple.
+        TypeError: If value type is unsupported.
+    """
+    if _depth > _MAX_NORMALIZE_DEPTH:
+        raise RecursionError(
+            f"{context}: model output nesting exceeds maximum depth "
+            f"{_MAX_NORMALIZE_DEPTH}. Ensure forward() returns Tensors at the leaves."
+        )
+    match value:
+        case torch.Tensor():
+            return value
+        case TensorDict():
+            return value
+        case dict() if value:
+            return _normalize_dict(value, context, batch_size, _depth + 1)
+        case dict():
+            raise ValueError(f"{context}: empty dict is not a valid model output")
+        case list() | tuple() if value:
+            return _normalize_sequence(value, context, batch_size, _depth + 1)
+        case list() | tuple():
+            raise ValueError(f"{context}: empty sequence is not a valid model output")
+        case _:
+            raise TypeError(
+                f"{context}: unsupported output type {type(value).__name__}. "
+                "Expected Tensor, TensorDict, dict, list, or tuple."
+            )
+
+
+def _leaf_dtype(value: Tensor | TensorDict) -> torch.dtype:
+    """Return the dtype of the first leaf Tensor in value.
+
+    Falls back to ``torch.float32`` when *value* is an empty TensorDict.
+
+    Args:
+        value: A Tensor or (possibly nested) TensorDict.
+
+    Returns:
+        The ``torch.dtype`` of the first leaf tensor found, or
+        ``torch.float32`` when *value* contains no tensors.
+    """
+    v: Any = value
+    while isinstance(v, TensorDict):
+        try:
+            v = next(iter(v.values()))
+        except StopIteration:
+            return torch.float32
+    return cast(Tensor, v).dtype
+
+
+def _leaf_device(value: Tensor | TensorDict) -> torch.device:
+    """Return the device of the first leaf Tensor in value.
+
+    Falls back to ``torch.device("cpu")`` when *value* is an empty TensorDict.
+
+    Args:
+        value: A Tensor or (possibly nested) TensorDict.
+
+    Returns:
+        The ``torch.device`` of the first leaf tensor found, or
+        ``torch.device("cpu")`` when *value* contains no tensors.
+    """
+    v: Any = value
+    while isinstance(v, TensorDict):
+        try:
+            v = next(iter(v.values()))
+        except StopIteration:
+            return torch.device("cpu")
+    return cast(Tensor, v).device
 
 
 def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -> nn.Module:
@@ -157,6 +330,7 @@ class ProcessingLightningWrapper(LightningModule):
 
         # Apply precision to model immediately after creation
         from dlkit.interfaces.api.services.precision_service import get_precision_service
+
         precision_service = get_precision_service()
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
@@ -172,6 +346,7 @@ class ProcessingLightningWrapper(LightningModule):
         """Reapply precision after Lightning setup/checkpoint restore."""
         super().configure_model()
         from dlkit.interfaces.api.services.precision_service import get_precision_service
+
         precision_service = get_precision_service()
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
@@ -202,6 +377,10 @@ class ProcessingLightningWrapper(LightningModule):
     def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Training step: transform → invoke → loss → log.
 
+        The model invoker enriches *batch* in-place with a ``"predictions"``
+        key (and optionally latent keys).  The loss computer reads
+        ``batch["predictions"]`` as its first argument.
+
         Args:
             batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
@@ -210,8 +389,8 @@ class ProcessingLightningWrapper(LightningModule):
             Dictionary containing the training loss.
         """
         batch = self._batch_transformer.transform(batch)
-        predictions = self._model_invoker.invoke(self.model, batch)
-        loss = self._loss_computer.compute(predictions, batch)
+        batch = self._model_invoker.invoke(self.model, batch)
+        loss = self._loss_computer.compute(batch["predictions"], batch)
         self._log_stage_outputs("train", loss)
         return {"loss": loss}
 
@@ -226,9 +405,9 @@ class ProcessingLightningWrapper(LightningModule):
             Dictionary containing validation loss.
         """
         batch = self._batch_transformer.transform(batch)
-        predictions = self._model_invoker.invoke(self.model, batch)
-        val_loss = self._loss_computer.compute(predictions, batch)
-        self._metrics_updater.update(predictions, batch, stage="val")
+        batch = self._model_invoker.invoke(self.model, batch)
+        val_loss = self._loss_computer.compute(batch["predictions"], batch)
+        self._metrics_updater.update(batch["predictions"], batch, stage="val")
         self._log_stage_outputs("val", val_loss)
         return {"val_loss": val_loss}
 
@@ -243,19 +422,19 @@ class ProcessingLightningWrapper(LightningModule):
             Dictionary containing test loss.
         """
         batch = self._batch_transformer.transform(batch)
-        predictions = self._model_invoker.invoke(self.model, batch)
-        test_loss = self._loss_computer.compute(predictions, batch)
-        self._metrics_updater.update(predictions, batch, stage="test")
+        batch = self._model_invoker.invoke(self.model, batch)
+        test_loss = self._loss_computer.compute(batch["predictions"], batch)
+        self._metrics_updater.update(batch["predictions"], batch, stage="test")
         self._log_stage_outputs("test", test_loss)
         return {"test_loss": test_loss}
 
-    def predict_step(self, batch: Any, batch_idx: int) -> Any:
-        """Prediction step returning a TensorDict with predictions and targets.
+    def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
+        """Prediction step returning a TensorDict with predictions, targets and latents.
 
-        Captures original (untransformed) targets before applying the batch
-        transform, so predictions and targets are guaranteed to be aligned.
-        If the model returns a 2-tuple ``(predictions, latents)``, the latents
-        are included in the output under the ``"latents"`` key.
+        Clones targets before transforming so the output always carries the
+        original (untransformed) ground truth.  The model invoker writes
+        ``"predictions"`` (and optionally latent keys) into the enriched batch;
+        any ``"latents"`` key present is forwarded as-is.
 
         Args:
             batch: TensorDict batch from dataset.
@@ -263,16 +442,35 @@ class ProcessingLightningWrapper(LightningModule):
 
         Returns:
             TensorDict with keys ``"predictions"``, ``"targets"``, and
-            optionally ``"latents"``.
+            ``"latents"`` (zero-size ``(B, 0)`` sentinel when absent).
         """
-        original_targets = batch["targets"]
-        batch = self._batch_transformer.transform(batch)
-        raw_output = self._model_invoker.invoke(self.model, batch)
-        predictions, latents = _unpack_model_output(raw_output)
+        original_targets = batch["targets"].clone()
+        transformed_batch = self._batch_transformer.transform(batch)
+        enriched_batch = self._model_invoker.invoke(self.model, transformed_batch)
+
+        predictions: Tensor | TensorDict = enriched_batch["predictions"]
         predictions = self._batch_transformer.inverse_transform_predictions(
             predictions, self._predict_target_key
         )
-        return _build_predict_tensordict(predictions, original_targets, latents)
+
+        batch_size = _batch_size_of(predictions)
+
+        raw_latents = enriched_batch.get("latents", None)
+        latents: Tensor | TensorDict
+        if raw_latents is not None:
+            latents = raw_latents
+        else:
+            latents = torch.zeros(
+                batch_size,
+                0,
+                dtype=_leaf_dtype(predictions),
+                device=_leaf_device(predictions),
+            )
+
+        return TensorDict(
+            {"predictions": predictions, "targets": original_targets, "latents": latents},
+            batch_size=[batch_size],
+        )
 
     @staticmethod
     def collect_targets(predict_outputs: list[Any]) -> list[Any]:
@@ -324,15 +522,9 @@ class ProcessingLightningWrapper(LightningModule):
 
         if self._checkpoint_metadata is not None:
             meta = self._checkpoint_metadata
-            dlkit_metadata["model_settings"] = self._serialize_model_settings(
-                meta.model_settings
-            )
-            dlkit_metadata["entry_configs"] = self._serialize_entry_configs(
-                meta.entry_configs
-            )
-            dlkit_metadata["shape_summary"] = self._compute_shape_summary(
-                meta.shape_summary
-            )
+            dlkit_metadata["model_settings"] = self._serialize_model_settings(meta.model_settings)
+            dlkit_metadata["entry_configs"] = self._serialize_entry_configs(meta.entry_configs)
+            dlkit_metadata["shape_summary"] = self._compute_shape_summary(meta.shape_summary)
             dlkit_metadata["feature_names"] = list(meta.feature_names)
             dlkit_metadata["predict_target_key"] = meta.predict_target_key
             dlkit_metadata["model_family"] = self._detect_model_family()
@@ -352,9 +544,11 @@ class ProcessingLightningWrapper(LightningModule):
         """
         try:
             from dlkit.runtime.workflows.factories.model_detection import detect_model_type
+
             if self._checkpoint_metadata is not None:
                 model_type = detect_model_type(
-                    self._checkpoint_metadata.model_settings, None  # type: ignore[arg-type]
+                    self._checkpoint_metadata.model_settings,
+                    None,  # type: ignore[arg-type]
                 )
                 return model_type.value
         except Exception:
@@ -379,9 +573,7 @@ class ProcessingLightningWrapper(LightningModule):
                 all_fields = model_settings.model_dump()
                 excluded = {"name", "module_path", "checkpoint"}
                 params = {
-                    k: v
-                    for k, v in all_fields.items()
-                    if k not in excluded and v is not None
+                    k: v for k, v in all_fields.items() if k not in excluded and v is not None
                 }
             return {
                 "name": name,
@@ -502,8 +694,7 @@ class ProcessingLightningWrapper(LightningModule):
             self._safe_log(loss_name, loss, on_step=False, on_epoch=True, prog_bar=True)
         if metrics:
             formatted = {
-                self._format_metric_name(stage, key): value
-                for key, value in metrics.items()
+                self._format_metric_name(stage, key): value for key, value in metrics.items()
             }
             self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
 
@@ -556,6 +747,7 @@ class ProcessingLightningWrapper(LightningModule):
         if fabric is not None:
             try:
                 from lightning.pytorch.core.module import _TrainerFabricShim
+
                 return _TrainerFabricShim(fabric=fabric)
             except Exception:
                 return None
@@ -651,6 +843,7 @@ class ProcessingLightningWrapper(LightningModule):
             Tuple of Feature configurations.
         """
         from dlkit.tools.config.data_entries import is_feature_entry
+
         return tuple(e for e in self._entry_configs if is_feature_entry(e))
 
     def get_target_configs(self) -> tuple[Any, ...]:
@@ -660,6 +853,7 @@ class ProcessingLightningWrapper(LightningModule):
             Tuple of Target configurations.
         """
         from dlkit.tools.config.data_entries import is_target_entry
+
         return tuple(e for e in self._entry_configs if is_target_entry(e))
 
     # =========================================================================

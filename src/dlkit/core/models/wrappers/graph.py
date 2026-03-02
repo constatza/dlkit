@@ -15,7 +15,12 @@ from torch.nn import Identity
 from torch_geometric.data import Batch as PyGBatch, Data
 from torchmetrics import MetricCollection
 
-from dlkit.tools.config import BuildContext, FactoryProvider, ModelComponentSettings, WrapperComponentSettings
+from dlkit.tools.config import (
+    BuildContext,
+    FactoryProvider,
+    ModelComponentSettings,
+    WrapperComponentSettings,
+)
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.core.models.wrappers.components import (
     NamedBatchTransformer,
@@ -213,22 +218,33 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
     def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> Any:
         """Predict step for PyG Data/Batch returning a TensorDict.
 
+        Always emits all three keys (``"predictions"``, ``"targets"``,
+        ``"latents"``) using zero-size sentinels when a field is absent, so
+        that ``torch.cat`` across batches is unconditionally safe.
+
         Args:
             batch: PyG Data or Batch from a PyG DataLoader.
             batch_idx: Index of the batch.
 
         Returns:
-            TensorDict with key ``"predictions"`` and optionally ``"targets"``
-            when a target attribute is present on the batch.
+            TensorDict with keys ``"predictions"``, ``"targets"``, and
+            ``"latents"`` (zero-size sentinels when absent).
         """
         from tensordict import TensorDict
+
         raw_target: Tensor | None = getattr(batch, self._graph_target_name, None)
         x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
         predictions = self.model(x, edge_index, edge_attr)
-        contents: dict[str, Any] = {"predictions": predictions}
-        if raw_target is not None:
-            contents["targets"] = raw_target
-        return TensorDict(contents, batch_size=predictions.shape[:1])
+        batch_size = predictions.shape[0]
+        sentinel = torch.zeros(batch_size, 0, dtype=predictions.dtype, device=predictions.device)
+        return TensorDict(
+            {
+                "predictions": predictions,
+                "targets": raw_target if raw_target is not None else sentinel,
+                "latents": sentinel,
+            },
+            batch_size=predictions.shape[:1],
+        )
 
     def on_validation_epoch_end(self) -> None:
         """Reset validation metrics at the end of the epoch."""

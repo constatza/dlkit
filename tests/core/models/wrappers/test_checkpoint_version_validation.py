@@ -13,6 +13,7 @@ from dlkit.tools.config import (
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.core.shape_specs import create_shape_spec
+from dlkit.tools.config.data_entries import Feature
 
 
 class _DummyModel(nn.Module):
@@ -58,11 +59,18 @@ def dummy_shape_spec():
     )
 
 
+@pytest.fixture
+def dummy_entry_configs():
+    """Minimal entry configurations with one model-input feature."""
+    return (Feature("x", value=torch.zeros(4, 1)),)
+
+
 def test_checkpoint_save_includes_version(
     patch_factory,
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
     tmp_path: Path,
 ):
     """Test that saved checkpoints include version field."""
@@ -70,6 +78,7 @@ def test_checkpoint_save_includes_version(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Create a checkpoint dict
@@ -87,12 +96,14 @@ def test_checkpoint_load_rejects_missing_metadata(
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
 ):
     """Test that loading a checkpoint without dlkit_metadata raises ValueError."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Create a legacy checkpoint without dlkit_metadata
@@ -110,12 +121,14 @@ def test_checkpoint_load_rejects_missing_version(
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
 ):
     """Test that loading a checkpoint without version field raises ValueError."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Create a checkpoint with dlkit_metadata but no version
@@ -136,12 +149,14 @@ def test_checkpoint_load_rejects_unsupported_version(
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
 ):
     """Test that loading a checkpoint with unsupported version raises ValueError."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Create a checkpoint with an old version
@@ -163,12 +178,14 @@ def test_checkpoint_load_accepts_supported_version(
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
 ):
     """Test that loading a checkpoint with version 2.0 succeeds."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Create a valid v2.0 checkpoint
@@ -190,12 +207,14 @@ def test_checkpoint_save_is_pure(
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
+    dummy_entry_configs,
 ):
     """Test that on_save_checkpoint does not mutate wrapper state."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
         shape_spec=dummy_shape_spec,
+        entry_configs=dummy_entry_configs,
     )
 
     # Capture initial entry_configs reference

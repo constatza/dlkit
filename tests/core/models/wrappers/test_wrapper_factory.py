@@ -11,6 +11,7 @@ from dlkit.tools.config.components.model_components import (
 )
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
+from dlkit.tools.config.data_entries import Feature
 
 
 class _Std(nn.Module):
@@ -27,7 +28,9 @@ class _Graph(nn.Module):
 def test_wrapper_factory_detects_standard(monkeypatch):  # noqa: ANN001
     # FactoryProvider.create_component should return a standard-like model
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
-    mdl = ModelComponentSettings(name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory")
+    mdl = ModelComponentSettings(
+        name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
+    )
     wrapper_type = WrapperFactory._detect_wrapper_type(mdl)
     assert wrapper_type == "standard"
 
@@ -42,18 +45,26 @@ def test_wrapper_factory_create_standard_wrapper(monkeypatch):  # noqa: ANN001
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
 
-    mdl = ModelComponentSettings(name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory")
+    mdl = ModelComponentSettings(
+        name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
+    )
     wset = WrapperComponentSettings()
-    wrapper = WrapperFactory.create_standard_wrapper(model_settings=mdl, settings=wset, shape=None)
+    entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
+    wrapper = WrapperFactory.create_standard_wrapper(
+        model_settings=mdl, settings=wset, shape=None, entry_configs=entry_configs
+    )
     assert wrapper is not None
 
 
 def test_wrapper_factory_auto_creates_standard(monkeypatch):  # noqa: ANN001
     # Detection returns standard; auto path should create standard
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
-    mdl = ModelComponentSettings(name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory")
+    mdl = ModelComponentSettings(
+        name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
+    )
     wset = WrapperComponentSettings()
+    entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
     w = WrapperFactory.create_wrapper(
-        model_settings=mdl, settings=wset, wrapper_type="auto"
+        model_settings=mdl, settings=wset, wrapper_type="auto", entry_configs=entry_configs
     )
     assert w.__class__.__name__.lower().startswith("standard")

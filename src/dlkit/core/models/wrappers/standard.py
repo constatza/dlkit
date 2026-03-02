@@ -12,17 +12,24 @@ from typing import TYPE_CHECKING, Any
 from torch import Tensor
 from torch.nn import Identity
 
-from dlkit.tools.config import BuildContext, FactoryProvider, ModelComponentSettings, WrapperComponentSettings
+from dlkit.tools.config import (
+    BuildContext,
+    FactoryProvider,
+    ModelComponentSettings,
+    WrapperComponentSettings,
+)
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.tools.config.components.model_components import LossInputRef
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.core.models.wrappers.components import (
+    ModelOutputSpec,
     NamedBatchTransformer,
     RoutedLossComputer,
     RoutedMetricsUpdater,
     MetricRoute,
-    StandardModelInvoker,
     WrapperCheckpointMetadata,
+    _build_invoker_from_entries,
+    _classify_feature_entries,
 )
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 
@@ -96,19 +103,17 @@ def _validate_extra_inputs_against_signature(
     if not extra_inputs:
         return
     import inspect
+
     try:
         sig = inspect.signature(loss_fn)
     except (ValueError, TypeError):
         return  # Uninspectable — skip validation
     params = sig.parameters
-    accepts_var_keyword = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-    )
+    accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
     if accepts_var_keyword:
         return  # **kwargs — all kwarg names are valid
     positional_only = {
-        name for name, p in params.items()
-        if p.kind == inspect.Parameter.POSITIONAL_ONLY
+        name for name, p in params.items() if p.kind == inspect.Parameter.POSITIONAL_ONLY
     }
     for ref in extra_inputs:
         if ref.arg not in params:
@@ -189,6 +194,26 @@ def _merge_extra_inputs(
     return tuple({**auto, **explicit_by_arg}.values())
 
 
+def _ordered_model_input_names(feature_entries: list[DataEntry]) -> tuple[str, ...]:
+    """Return feature entry names in invoker dispatch order.
+
+    Mirrors :func:`_build_invoker_from_entries` ordering: positionals first
+    (sorted by index), then kwargs (entry insertion order).  Used to store
+    ``feature_names`` in checkpoint metadata so inference can map positional
+    tensor args to the correct transform chain.
+
+    Args:
+        feature_entries: Feature DataEntry objects in config-insertion order.
+
+    Returns:
+        Tuple of entry names in the same order that the invoker dispatches
+        tensors to ``model.forward()``.
+    """
+    positional, kwarg_map = _classify_feature_entries(feature_entries)
+    positional.sort(key=lambda x: x[0])
+    return tuple(name for _, name in positional) + tuple(kwarg_map.keys())
+
+
 class StandardLightningWrapper(ProcessingLightningWrapper):
     """Concrete wrapper for tensor/TensorDict-based models.
 
@@ -234,10 +259,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         feature_entries = [e for e in entry_configs if is_feature_entry(e)]
         target_entries = [e for e in entry_configs if is_target_entry(e)]
 
-        model_input_keys: tuple[str, ...] = tuple(
-            e.name for e in feature_entries
-            if getattr(e, "model_input", True) and e.name is not None
-        )
         all_target_keys: tuple[str, ...] = tuple(
             e.name for e in target_entries if e.name is not None
         )
@@ -252,8 +273,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         }
         batch_transformer = NamedBatchTransformer(feature_chains, target_chains)
 
-        # --- Build model invoker ---
-        model_invoker = StandardModelInvoker(model_input_keys)
+        # --- Build model invoker (resolves model_input ordering) ---
+        output_spec = ModelOutputSpec()
+        model_invoker = _build_invoker_from_entries(feature_entries, output_spec)
 
         # --- Build loss computer ---
         loss_fn = FactoryProvider.create_component(
@@ -289,9 +311,10 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             model_settings=model_settings,
             wrapper_settings=settings,
             entry_configs=entry_configs,
-            feature_names=tuple(e.name for e in feature_entries if e.name is not None),
+            feature_names=_ordered_model_input_names(feature_entries),
             predict_target_key=predict_target_key,
             shape_summary=shape_summary,
+            output_spec=output_spec,
         )
 
         super().__init__(
@@ -328,7 +351,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             meta = self._checkpoint_metadata
             if meta is not None:
                 target_names = [
-                    e.name for e in meta.entry_configs
-                    if is_target_entry(e) and e.name is not None
+                    e.name for e in meta.entry_configs if is_target_entry(e) and e.name is not None
                 ]
                 checkpoint["dlkit_metadata"]["target_names"] = target_names

@@ -11,6 +11,7 @@ from dlkit.tools.config.components.model_components import (
 )
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
+from dlkit.tools.config.data_entries import Feature
 
 
 class _IdentityModel(nn.Module):
@@ -37,8 +38,8 @@ def _build_wrapper():
     return StandardLightningWrapper(
         model_settings=model_settings,
         settings=wrapper_settings,
-        shape=None,
-        entry_configs={},
+        shape_summary=None,
+        entry_configs=(Feature("x", value=torch.zeros(4, 1)),),
     )
 
 
