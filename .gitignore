@@ -197,6 +197,7 @@ lightning_logs
 mlartifacts/
 
 # Personal configuration and documentation
+.vscode/
 .claude/
 .dlkit/
 plan.md
