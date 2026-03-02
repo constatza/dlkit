@@ -49,26 +49,6 @@ app = typer.Typer(
 console = Console()
 
 
-def _build_feature_dict(
-    features: tuple,
-    feature_names: list[str],
-) -> dict:
-    """Map a positional features tuple to a named dict for the predictor.
-
-    Args:
-        features: Positional feature tensors from the dataloader batch.
-        feature_names: Ordered feature names from checkpoint metadata.
-
-    Returns:
-        Dict mapping name -> tensor, using indices as fallback names.
-    """
-    if feature_names and len(features) == len(feature_names):
-        return dict(zip(feature_names, features))
-    if len(features) == 1:
-        return {"x": features[0]}
-    return {str(i): t for i, t in enumerate(features)}
-
-
 def _run_inference_impl(
     config_path: CONFIG_PATH_ARG,
     checkpoint: CHECKPOINT_ARG,
@@ -150,12 +130,10 @@ def _run_inference_impl(
             # Build datamodule from settings, iterate batches, call predict()
             inference_task = progress.add_task("Running inference...", total=None)
 
-            # Get feature names from checkpoint metadata for ordered dict construction
-            feature_names: list[str] = []
-            if predictor.is_loaded() and predictor._model_state is not None:
-                raw = predictor._model_state.metadata.get("feature_names", [])
-                if isinstance(raw, list):
-                    feature_names = raw
+            # Get ordered feature names for kwarg dispatch (from checkpoint metadata)
+            feature_names: tuple[str, ...] = (
+                predictor._model_state.feature_names if predictor._model_state is not None else ()
+            )
 
             factory = BuildFactory()
             components = factory.build_components(settings)
@@ -163,36 +141,36 @@ def _run_inference_impl(
             datamodule.setup("predict")
             loader = datamodule.predict_dataloader()
 
+            import torch as _torch
+
             all_predictions = []
             for batch in loader:
-                feature_dict = _build_feature_dict(batch.features, feature_names)
-                result = predictor.predict(feature_dict)
-                all_predictions.append(result.predictions)
+                features_td = batch["features"]
+                if feature_names:
+                    feature_kwargs = {
+                        name: features_td[name]
+                        for name in feature_names
+                        if name in features_td.keys()
+                    }
+                else:
+                    # Fallback: use all feature keys from batch
+                    feature_kwargs = {k: features_td[k] for k in features_td.keys()}
+
+                output = predictor.predict(**feature_kwargs)
+                # Extract primary prediction (first element of tuple, or the tensor itself)
+                prediction = output[0] if isinstance(output, tuple) else output
+                if isinstance(prediction, _torch.Tensor):
+                    all_predictions.append(prediction)
 
             progress.remove_task(inference_task)
 
             # Unload predictor to free resources
             predictor.unload()
 
-        # Combine predictions from all batches
+        # Combine predictions from all batches (all elements are Tensors)
         import torch
 
-        if all_predictions:
-            if isinstance(all_predictions[0], dict):
-                combined_predictions: dict = {}
-                for key in all_predictions[0].keys():
-                    values = [pred[key] for pred in all_predictions if key in pred]
-                    if values and torch.is_tensor(values[0]):
-                        combined_predictions[key] = torch.cat(values, dim=0)
-                    else:
-                        combined_predictions[key] = values
-                predictions = combined_predictions
-            elif torch.is_tensor(all_predictions[0]):
-                predictions = torch.cat(all_predictions, dim=0)
-            else:
-                predictions = all_predictions
-        else:
-            predictions = None
+        predictions = torch.cat(all_predictions, dim=0) if all_predictions else None
 
         # Create InferenceResult for presentation
         from dlkit.interfaces.api.domain.models import InferenceResult

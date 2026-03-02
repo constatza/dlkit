@@ -239,8 +239,8 @@ class TestCheckpointPredictor:
         # Should infer float32 from model
         assert predictor._inferred_precision == PrecisionStrategy.FULL_32
 
-    def test_predictor_predict_single_tensor(self, simple_checkpoint: Path):
-        """Test prediction with single tensor input."""
+    def test_predictor_predict_positional(self, simple_checkpoint: Path):
+        """Test prediction with a positional tensor arg."""
         config = PredictorConfig(
             checkpoint_path=simple_checkpoint,
             auto_load=True,
@@ -249,37 +249,25 @@ class TestCheckpointPredictor:
 
         predictor = CheckpointPredictor(config)
 
-        # Single tensor input
-        inputs = torch.randn(32, 10)
-        result = predictor.predict(inputs)
+        # Positional tensor input — mirrors model.forward(tensor)
+        result = predictor.predict(torch.randn(32, 10))
 
-        # Verify result structure
-        assert hasattr(result, "predictions")
-        assert isinstance(result.predictions, dict)
-        # Extract tensor from result
-        predictions = next(iter(result.predictions.values()))
-        assert isinstance(predictions, torch.Tensor)
-        assert predictions.shape == (32, 5)
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == (32, 5)
 
-    def test_predictor_predict_dict_input(self, simple_checkpoint: Path):
-        """Test prediction with dict input."""
+    def test_predictor_predict_kwarg(self, simple_checkpoint: Path):
+        """Test prediction with a keyword tensor arg."""
         config = PredictorConfig(
             checkpoint_path=simple_checkpoint, auto_load=True, apply_transforms=False
         )
 
         predictor = CheckpointPredictor(config)
 
-        # Dict input
-        inputs = {"x": torch.randn(32, 10)}
-        result = predictor.predict(inputs)
+        # Kwarg input — mirrors model.forward(weight=tensor)
+        result = predictor.predict(input=torch.randn(32, 10))
 
-        # Verify result structure
-        assert hasattr(result, "predictions")
-        assert isinstance(result.predictions, dict)
-        # Extract tensor from result
-        predictions = next(iter(result.predictions.values()))
-        assert isinstance(predictions, torch.Tensor)
-        assert predictions.shape == (32, 5)
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == (32, 5)
 
     def test_predictor_context_manager(self, simple_checkpoint: Path):
         """Test predictor as context manager."""
@@ -287,9 +275,9 @@ class TestCheckpointPredictor:
 
         with CheckpointPredictor(config) as predictor:
             assert predictor.is_loaded()
-            inputs = torch.randn(32, 10)
-            predictions = predictor.predict(inputs)
-            assert predictions is not None
+            predictions = predictor.predict(torch.randn(32, 10))
+            assert isinstance(predictions, torch.Tensor)
+            assert predictions.shape == (32, 5)
 
         # Should be unloaded after context exit
         assert not predictor.is_loaded()
@@ -339,14 +327,11 @@ class TestLoadPredictorAPI:
         assert isinstance(predictor, CheckpointPredictor)
         assert predictor.is_loaded()
 
-        # Test prediction
-        inputs = torch.randn(16, 10)
-        result = predictor.predict(inputs)
+        # predict() returns Tensor directly for single-output models
+        result = predictor.predict(torch.randn(16, 10))
 
-        # Extract predictions from result
-        assert hasattr(result, "predictions")
-        predictions = next(iter(result.predictions.values()))
-        assert predictions.shape == (16, 5)
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == (16, 5)
 
     def test_load_model_with_precision(self, simple_checkpoint: Path):
         """Test load_model() with precision parameter."""
@@ -358,11 +343,9 @@ class TestLoadPredictorAPI:
     def test_load_model_context_manager(self, simple_checkpoint: Path):
         """Test load_model() with context manager."""
         with load_model(simple_checkpoint) as predictor:
-            inputs = torch.randn(8, 10)
-            result = predictor.predict(inputs)
-            # Extract predictions from result
-            predictions = next(iter(result.predictions.values()))
-            assert predictions.shape == (8, 5)
+            result = predictor.predict(torch.randn(8, 10))
+            assert isinstance(result, torch.Tensor)
+            assert result.shape == (8, 5)
 
 
 if __name__ == "__main__":

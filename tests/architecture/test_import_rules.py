@@ -40,7 +40,7 @@ def analyze_python_file(file_path: Path) -> Tuple[List[Tuple[str, str]], List[Tu
         Tuple of (imports, from_imports) lists
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
         tree = ast.parse(content)
@@ -63,10 +63,10 @@ def get_python_files(directory: Path, exclude_patterns: List[str] = None) -> Lis
         List of Python file paths
     """
     if exclude_patterns is None:
-        exclude_patterns = ['__pycache__', '.venv', '.git', 'node_modules']
+        exclude_patterns = ["__pycache__", ".venv", ".git", "node_modules"]
 
     python_files = []
-    for file_path in directory.rglob('*.py'):
+    for file_path in directory.rglob("*.py"):
         # Skip excluded patterns
         if any(pattern in str(file_path) for pattern in exclude_patterns):
             continue
@@ -121,7 +121,7 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 for pattern in prohibited_patterns:
@@ -162,7 +162,7 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 # Check for high-level API usage
@@ -170,6 +170,7 @@ class TestImportRules:
                     r"dlkit\.train\s*\(",
                     r"dlkit\.infer\s*\(",
                     r"dlkit\.optimize\s*\(",
+                    r"dlkit\.load_model\s*\(",  # stateful inference API
                 ]
 
                 has_api_usage = any(re.search(pattern, content) for pattern in high_level_apis)
@@ -181,7 +182,8 @@ class TestImportRules:
                 continue
 
         assert not violations, (
-            f"Integration tests must use high-level APIs (dlkit.train/infer/optimize). "
+            f"Integration tests must use high-level APIs "
+            f"(dlkit.train/infer/optimize/load_model). "
             f"Files without high-level API usage: {violations}"
         )
 
@@ -197,8 +199,8 @@ class TestImportRules:
         for file_path in src_files:
             # Convert file path to module name
             relative_path = file_path.relative_to(file_path.parents[3])  # Remove up to src/
-            module_name = str(relative_path.with_suffix(''))
-            module_name = module_name.replace('/', '.')
+            module_name = str(relative_path.with_suffix(""))
+            module_name = module_name.replace("/", ".")
 
             dependencies[module_name] = set()
 
@@ -206,11 +208,11 @@ class TestImportRules:
 
             # Analyze imports for dlkit modules
             for _, name in imports:
-                if name.startswith('dlkit'):
+                if name.startswith("dlkit"):
                     dependencies[module_name].add(name)
 
             for module, _ in from_imports:
-                if module and module.startswith('dlkit'):
+                if module and module.startswith("dlkit"):
                     dependencies[module_name].add(module)
 
         # Detect cycles using DFS
@@ -244,7 +246,11 @@ class TestImportRules:
 
         # Known exceptions for function-level imports that break circular dependencies
         known_exceptions = {
-            ('dlkit.tools.io.config', 'dlkit.tools.config.general_settings', 'dlkit.tools.io.config')
+            (
+                "dlkit.tools.io.config",
+                "dlkit.tools.config.general_settings",
+                "dlkit.tools.io.config",
+            )
         }
 
         cycle = has_cycle(dependencies)
@@ -286,7 +292,7 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 # Check for infrastructure imports
@@ -347,11 +353,11 @@ class TestImportRules:
 
         for file_path in test_files:
             # Skip conftest files and architecture tests
-            if 'conftest.py' in str(file_path) or 'architecture' in str(file_path):
+            if "conftest.py" in str(file_path) or "architecture" in str(file_path):
                 continue
 
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 # Check for data creation inside test methods
@@ -383,7 +389,9 @@ class TestArchitecturalCompliance:
     @pytest.fixture(scope="class")
     def project_root(self) -> Path:
         """Get project root directory."""
-        return Path(__file__).parents[2]  # Go up from tests/architecture/test_import_rules.py to project root
+        return Path(__file__).parents[
+            2
+        ]  # Go up from tests/architecture/test_import_rules.py to project root
 
     def test_solid_principles_documentation(self) -> None:
         """Ensure SOLID principles are documented and followed."""
@@ -407,13 +415,13 @@ class TestArchitecturalCompliance:
         # Check that factories follow consistent patterns
         for factory_file in factory_files:
             try:
-                with open(factory_file, 'r', encoding='utf-8') as f:
+                with open(factory_file, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 # Factories should typically have build/create methods
                 has_factory_methods = any(
                     pattern in content.lower()
-                    for pattern in ['def build', 'def create', 'def make']
+                    for pattern in ["def build", "def create", "def make"]
                 )
 
                 assert has_factory_methods, f"Factory {factory_file} should have factory methods"

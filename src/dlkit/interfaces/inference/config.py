@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 if TYPE_CHECKING:
-    import torch
     import torch.nn as nn
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
     from dlkit.core.training.transforms.chain import TransformChain
@@ -45,6 +44,19 @@ class ModelState:
 
     Simplified from previous version - no state machine, just data.
     Holds loaded model and associated metadata.
+
+    Attributes:
+        model: PyTorch model in eval mode.
+        device: Device string (e.g., "cpu", "cuda").
+        shape_spec: Optional shape summary from dataset inference.
+        feature_transforms: Named transform chains keyed by entry name.
+        target_transforms: Named inverse transform chains keyed by entry name.
+        metadata: Raw dlkit_metadata dict from checkpoint.
+        feature_names: Ordered model-input entry names. Positional arg ``i``
+            uses the transform registered under ``feature_names[i]``.
+            Kwarg ``k`` uses the transform registered under ``k``.
+        predict_target_key: Entry name whose chain is applied as inverse
+            transform to the first model output at predict time.
     """
 
     model: "nn.Module"  # PyTorch model in eval mode
@@ -53,17 +65,5 @@ class ModelState:
     feature_transforms: dict[str, "TransformChain"] | None = None
     target_transforms: dict[str, "TransformChain"] | None = None
     metadata: dict[str, str | int | float | bool | dict | list] = field(default_factory=dict)
-
-
-@dataclass
-class InferenceResult:
-    """Result from inference prediction.
-
-    Simple dataclass holding prediction results.
-    Following good practice of using dataclasses instead of bare returns.
-    Access to model should be via predictor.model property, not in result.
-    """
-
-    predictions: "torch.Tensor | dict[str, torch.Tensor]"
-
-
+    feature_names: tuple[str, ...] = field(default_factory=tuple)
+    predict_target_key: str = ""

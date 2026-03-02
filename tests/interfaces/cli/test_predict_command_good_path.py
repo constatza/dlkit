@@ -11,19 +11,16 @@ from typer.testing import CliRunner
 from dlkit.interfaces.cli.commands.predict import app as predict_app
 from dlkit.interfaces.api.domain import ConfigurationError
 from dlkit.tools.config import GeneralSettings
-from dlkit.interfaces.inference.config import InferenceResult as InferenceResultInference
 
 
 def _make_mock_predictor(feature_names: list[str] | None = None) -> MagicMock:
-    """Create a mock predictor that returns a single-tensor inference result."""
+    """Create a mock predictor that returns the predictor's primary tensor output."""
     mock_predictor = MagicMock()
     mock_predictor.is_loaded.return_value = True
     mock_state = MagicMock()
     mock_state.metadata = {"feature_names": feature_names or ["x"]}
     mock_predictor._model_state = mock_state
-    mock_predictor.predict.return_value = InferenceResultInference(
-        predictions={"y": torch.tensor([[0.1, 0.9]])}
-    )
+    mock_predictor.predict.return_value = torch.tensor([[0.1, 0.9]])
     return mock_predictor
 
 
