@@ -169,6 +169,8 @@ assert components.meta["dataset_type"] == "flexible"
 - Handles legacy `SupervisedArrayDataset` x/y parameters
 - Translates x/y to flexible features/targets
 - Uses `FlexibleDataset` for entries-based datasets
+- Passes raw `Feature`/`Target` entries into dataset construction (no eager `convert_to_tensor_entries` on flexible path)
+- Preserves file-backed semantics for `memmap_cache_dir` and avoids build-time array materialization
 - Registers entry configs for transform-aware pipelines
 - Infers shapes for shape-aware models
 - Raises ValueError if shape inference fails (dataset must return Batch)
@@ -439,7 +441,10 @@ factory = BuildFactory()
 components = factory.build_components(settings)
 
 # Automatically translated to flexible features/targets
-# FlexibleDataset(features={"x": "data/features.npy"}, targets={"y": "data/targets.npy"})
+# FlexibleDataset(
+#   features=[Feature(name="x", path="data/features.npy")],
+#   targets=[Target(name="y", path="data/targets.npy")]
+# )
 ```
 
 ## Error Handling

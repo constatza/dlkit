@@ -57,6 +57,19 @@ Key architectural decisions:
 | `IMetricRegistry` | `register()`, `get()`, `list_metrics()` | Registry interface |
 | `IMetricFactory` | `create_metric()` | Factory interface |
 
+## Files
+
+| File | Purpose |
+|---|---|
+| `functional.py` | Functional metric implementations |
+| `torchmetrics_wrappers.py` | TorchMetrics integration |
+| `compat.py` | Compatibility layer |
+| `collect.py` | `collect_metrics()` — convert trainer metric dicts to plain Python floats |
+
+`collect.py` was moved here from `tools/utils/metrics.py` so all metric-related code
+lives in one package. `VanillaExecutor` imports it to extract callback/progress/logged
+metrics after training.
+
 ## Dependencies
 
 ### Internal Dependencies
@@ -65,6 +78,13 @@ Key architectural decisions:
 ### External Dependencies
 - `torch`: Tensor operations and mathematical functions
 - `threading`: Thread-safe registry implementation
+
+## Energy-Norm Sparse Execution
+
+- No decorator-level cache (`@cache` / `@lru_cache`) is used on tensor-argument functions.
+- Relative energy paths (`relative_energy_norm_loss`, `_relative_energy_norm_update`) use call-scoped sparse preprocessing reuse:
+  - sparse kernels are prepared once per call and reused for both numerator and denominator norms.
+- Sparse execution remains sparse (`torch.mm` with sparse tensors); there is no forced dense conversion in the sparse path.
 
 ## Key Components
 
@@ -695,12 +715,14 @@ except ValueError as e:
 - Vectorized operations over loops for batch processing
 - Thread-safe registries use RLock for minimal contention
 - Factory caching could further optimize repeated metric creation
+- Energy-norm primitives use batched dense matvec for dense tensors and block-diagonal
+  sparse `torch.mm` for sparse tensors; callers provide shared matrices as `(1, D, D)`
 
 ## Future Improvements / TODOs
 - [ ] Add GPU benchmarks for large-scale metric computation
 - [ ] Implement metric caching for repeated computations
 - [ ] Add statistical metrics (R², correlation, etc.)
-- [ ] Support for sparse tensor inputs
+- [ ] Benchmark sparse block-diagonal `torch.mm` path against alternative sparse kernels for large batches
 - [ ] Implement metric visualization utilities
 - [ ] Add automatic metric selection based on task type
 - [ ] Support for multi-task metrics (different metrics per output)

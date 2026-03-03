@@ -1,7 +1,7 @@
 # I/O Module
 
 ## Overview
-The I/O module provides comprehensive file input/output operations for DLKit, including TOML configuration loading, array/tensor loading with precision management, path resolution with context awareness, standardized location management, and data format handling (tables, indices). It implements clean separation between path resolution (pure functions), directory creation (explicit provisioning), and data loading with strong type safety throughout.
+The I/O module provides comprehensive file input/output operations for DLKit, including TOML configuration loading, array/tensor loading with precision management, sparse matrix pack storage/loading, path resolution with context awareness, standardized location management, and data format handling (tables, indices). It implements clean separation between path resolution (pure functions), directory creation (explicit provisioning), and data loading with strong type safety throughout.
 
 ## Architecture & Design Patterns
 - **Single Responsibility Principle (SRP)**: Separate modules for config loading, path resolution, provisioning, and data loading
@@ -37,9 +37,17 @@ Key architectural decisions:
 | `load_array()` | Function | Load array/tensor with precision management | `Tensor` |
 | `read_table()` | Function | Load tabular data (CSV, Parquet) | `pl.DataFrame` |
 | `load_split_indices()` | Function | Load train/val/test indices | `IndexSplit` |
+| `save_sparse_pack()` | Function | Save sparse payload files (`indices`, `values`, `nnz_ptr`, `values_scale`) | `None` |
+| `open_sparse_pack()` | Function | Open sparse pack directly from payload files | `AbstractSparsePackReader` |
+| `validate_sparse_pack()` | Function | Validate sparse payload consistency (shape/nnz/ranges/dtype) | `None` |
+| `is_sparse_pack_dir()` | Function | Check whether directory has required sparse payload files | `bool` |
 | `save_split_indices()` | Function | Save index splits to JSON | `None` |
+| `mkdir_for_local()` | Function | Ensure local directory exists for URI/path | `None` |
+| `normalize_user_path()` | Function | Normalize user-supplied path (tilde, relative) | `Path \| None` |
+| `coerce_root_dir_to_absolute()` | Function | Coerce root_dir value to absolute Path | `Path \| None` |
 | `locations` | Module | Standardized location resolution | Various `Path` functions |
 | `provisioning` | Module | Explicit directory creation | Various `ensure_*` functions |
+| `sparse` | Module | Sparse matrix pack I/O (COO now, CSR-ready) with Pydantic contracts and value-scale support | `save_sparse_pack()`, `open_sparse_pack()`, `validate_sparse_pack()` |
 
 ### Internal Components
 | Name | Type | Purpose | Returns |
@@ -66,7 +74,9 @@ Key architectural decisions:
 | `arrays.py` | Array/tensor loading | `load_array()`, `load_array_with_session_precision()` |
 | `tables.py` | Tabular data loading | `read_table()` |
 | `index.py` | Index split persistence | `load_split_indices()`, `save_split_indices()` |
+| `sparse/` | Sparse matrix pack persistence and reading — OCP registry, ISP protocols, LSP ABC | `SparseFormat`, `PackFiles`, `PackManifest`, `CooPackCodec`, `CooPackReader`, `register_format`, `value_scale` + `denormalize` flow |
 | `parsers.py` | TOML parsing utilities | `PartialTOMLParser` |
+| `paths.py` | Path normalization and local URI helpers | `mkdir_for_local()`, `normalize_user_path()`, `coerce_root_dir_to_absolute()` |
 
 ## Dependencies
 
@@ -437,7 +447,39 @@ df = read_table("data.csv", separator=";", skip_rows=1)
 
 ---
 
-### Component 9: `load_split_indices()` and `save_split_indices()`
+### Component 9: `paths.py` — Path Normalization Utilities
+
+**Purpose**: User-path normalization and local-directory provisioning for URIs.
+Moved here from `tools/utils/system_utils.py` to co-locate I/O concerns.
+
+**Key Functions**:
+- `mkdir_for_local(uri, *, root)` — Creates the local directory implied by a file/sqlite URI or plain path. Ignores remote schemes.
+- `normalize_user_path(value, *, require_absolute)` — Expands `~`, resolves relative paths against CWD, optionally enforces absolute.
+- `coerce_root_dir_to_absolute(value)` — Thin wrapper: `normalize_user_path(value, require_absolute=True)`.
+
+**Example**:
+```python
+from dlkit.tools.io.paths import mkdir_for_local, normalize_user_path, coerce_root_dir_to_absolute
+
+mkdir_for_local("sqlite:///./mlruns/mlflow.db")      # creates ./mlruns/
+mkdir_for_local("file:///abs/path/data.db")           # creates /abs/path/
+
+normalize_user_path("~/runs")                         # → Path(<home>/runs)
+normalize_user_path("relative/run")                   # → Path(<cwd>/relative/run)
+
+coerce_root_dir_to_absolute("/abs/root")              # → Path("/abs/root")
+coerce_root_dir_to_absolute("relative")               # → None (not absolute)
+```
+
+**Implementation Notes**:
+- Handles `file://`, `sqlite://` schemes and plain paths
+- Ignores non-local schemes (`http`, `https`, `s3`, etc.)
+- Cross-platform: uses `pathlib` throughout
+- Lazy imports `url_resolver` to avoid circular imports at module init time
+
+---
+
+### Component 10: `load_split_indices()` and `save_split_indices()`
 
 **Purpose**: Load and save train/val/test index splits for reproducible data partitioning.
 
@@ -654,8 +696,10 @@ except Exception as e:
 - `dlkit.interfaces.api.overrides`: Path override context
 - `dlkit.interfaces.api.services.precision_service`: Precision management
 - `dlkit.runtime.workflows`: Uses io for checkpoint and output management
+- `dlkit.tools.utils`: Cross-cutting reflection, logging, and server-worker utilities
 
 ## Change Log
+- **2026-03-03**: Sparse pack SOLID refactor — ISP protocol split (`SparseWriter`/`SparseLoader`/`SparseCodec`), `AbstractSparsePackReader` ABC for LSP, OCP format registry (`_registry.py`), `CooPackWriter` renamed to `CooPackCodec`, validate-before-write correctness fix, `_validate_coo_pack` made pure (no I/O), single load in `validate_sparse_pack`, `SparseFeature` removed from sparse package exports
 - **2025-10-03**: Comprehensive documentation created
 - **2024-10-02**: Test environment detection and artifact routing added
 - **2024-09-30**: Precision service integration for array loading

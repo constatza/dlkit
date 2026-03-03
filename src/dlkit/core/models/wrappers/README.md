@@ -36,6 +36,7 @@ ProcessingLightningWrapper (base)
 | `graph.py` | `GraphLightningWrapper` — PyG Data/Batch workflows |
 | `timeseries.py` | `TimeSeriesLightningWrapper` — tuple-batch workflows |
 | `factories.py` | `WrapperFactory` — detects model family, returns correct wrapper |
+| `security.py` | Checkpoint security — `configure_checkpoint_loading()`, `register_dlkit_safe_globals()` |
 
 ---
 
@@ -255,8 +256,14 @@ _batch_transformer._feature_chains.x.transforms.0._fitted   # StandardScaler
 _batch_transformer._feature_chains.x.transforms.1._fitted   # PCA
 ```
 
-Fittable transforms (`StandardScaler`, `MinMaxScaler`, `PCA`) are fitted automatically
-during `on_fit_start` using the full training dataloader (one pass).
+Fittable transforms are fitted automatically during `on_fit_start` using a streaming
+multi-pass dataloader flow (no full `torch.cat` buffering):
+
+- Incremental-capable transforms (currently `StandardScaler`, `MinMaxScaler`) are
+  fitted batch-by-batch.
+- Non-incremental fittable transforms must already be fitted; otherwise fitting
+  fails fast with a clear error.
+- Current policy: online fitting for unfitted `PCA` is rejected (`TODO: incremental PCA`).
 
 ---
 

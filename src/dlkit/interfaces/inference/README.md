@@ -117,8 +117,9 @@ predictor_no_tf = load_model("model.ckpt", apply_transforms=False)
 output = predictor_no_tf.predict(x=normalized_features)
 ```
 
-Transform chains are reconstructed from the checkpoint's `state_dict` — the same
-`MinMaxScaler`, `StandardScaler`, `PCA` settings fitted during training.
+Transform chains are reconstructed from the checkpoint's `state_dict`, including
+fitted `MinMaxScaler`/`StandardScaler` statistics and any pre-fitted `PCA`
+components saved at training time. Inference does not fit missing transform state.
 
 ---
 
