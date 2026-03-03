@@ -39,7 +39,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dlkit.tools.utils.system_utils import normalize_user_path
+from dlkit.tools.io.paths import normalize_user_path
 
 
 class OverrideNormalizer:

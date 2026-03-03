@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
 from dlkit.tools.io.url_utils import parse_url
-from dlkit.tools.utils.system_utils import mkdir_for_local
+from dlkit.tools.io.paths import mkdir_for_local
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from dlkit.tools.utils.system_utils import (
+from dlkit.tools.io.paths import (
     coerce_root_dir_to_absolute,
     mkdir_for_local,
     normalize_user_path,
