@@ -12,13 +12,20 @@ from dlkit.core.shape_specs.simple_inference import ShapeSummary
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 from dlkit.runtime.workflows.factories.model_detection import ModelType
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.components.model_components import (
+    LossComponentSettings,
+    LossInputRef,
+    MetricComponentSettings,
+    MetricInputRef,
+    ModelComponentSettings,
+)
 from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.dataset_settings import DatasetSettings
 from dlkit.tools.config.training_settings import TrainingSettings
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
+from dlkit.tools.config.data_entries import Feature, Target
 
 
 class _FakeDataset:
@@ -216,12 +223,7 @@ def test_build_factory_selects_timeseries_strategy(
 def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
-    """Test that optimizer and scheduler settings from TRAINING are passed to WrapperComponentSettings.
-
-    This test verifies the fix for the bug where training optimizer/scheduler configurations
-    were being ignored because WrapperComponentSettings() was created with defaults instead
-    of using the user-provided settings from settings.TRAINING.
-    """
+    """Optimizer/scheduler from TRAINING should be forwarded to wrapper settings."""
     from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
 
     # Create custom optimizer and scheduler settings
@@ -311,6 +313,377 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     )
     assert passed_scheduler.factor != 0.5, "Got default factor=0.5 instead of custom factor=0.8"
     assert passed_scheduler.patience != 50, "Got default patience=50 instead of custom patience=5"
+
+
+def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    x_path = tmp_path / "x.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.zeros((8, 3), dtype=np.float32))
+    np.save(y_path, np.zeros((8, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="SupervisedArrayDataset",
+        module_path="dlkit.core.datasets",
+        features=[Feature(name="x", path=x_path)],
+        targets=[Target(name="y", path=y_path)],
+        memmap_cache=True,
+    )
+    dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
+    mdl = ModelComponentSettings(
+        name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=mdl,
+        DATASET=ds,
+        DATAMODULE=dm,
+        TRAINING=TrainingSettings(),
+    )
+
+    captured: dict[str, Any] = {}
+
+    class _CapturedFlexibleDataset:
+        def __init__(self, *, features, targets=None, memmap_cache_dir=None):  # noqa: ANN001
+            captured["features"] = list(features)
+            captured["targets"] = list(targets or ())
+            captured["memmap_cache_dir"] = memmap_cache_dir
+            self._n = 8
+
+        def __len__(self) -> int:
+            return self._n
+
+        def __getitem__(self, idx: int) -> Batch:
+            import torch
+
+            return Batch(features=(torch.zeros(3),), targets=(torch.zeros(1),), latents=())
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    monkeypatch.setattr("dlkit.core.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset)
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(lambda *_, **__: _FakeModel()),
+    )
+
+    comps = BuildFactory().build_components(settings)
+
+    assert isinstance(comps.datamodule, _FakeDataModule)
+    assert captured["memmap_cache_dir"] is not None
+    assert captured["features"]
+    assert captured["targets"]
+    first_feature = captured["features"][0]
+    first_target = captured["targets"][0]
+    assert hasattr(first_feature, "path")
+    assert hasattr(first_target, "path")
+    assert not hasattr(first_feature, "tensor")
+    assert not hasattr(first_target, "tensor")
+
+
+def test_flexible_build_strategy_factory_path_uses_raw_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    x_path = tmp_path / "x.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.zeros((6, 2), dtype=np.float32))
+    np.save(y_path, np.zeros((6, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        features=[Feature(name="x", path=x_path)],
+        targets=[Target(name="y", path=y_path)],
+    )
+    dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
+    mdl = ModelComponentSettings(
+        name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=mdl,
+        DATASET=ds,
+        DATAMODULE=dm,
+        TRAINING=TrainingSettings(),
+    )
+
+    captured: dict[str, Any] = {}
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATASET:
+            captured["features"] = list(ctx.overrides["features"])
+            captured["targets"] = list(ctx.overrides["targets"])
+            return _FakeDataset({"x": np.zeros((2,))})
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(lambda *_, **__: _FakeModel()),
+    )
+
+    BuildFactory().build_components(settings)
+
+    assert captured["features"]
+    assert captured["targets"]
+    first_feature = captured["features"][0]
+    first_target = captured["targets"][0]
+    assert hasattr(first_feature, "path")
+    assert hasattr(first_target, "path")
+    assert not hasattr(first_feature, "tensor")
+    assert not hasattr(first_target, "tensor")
+
+
+def test_flexible_build_strategy_prunes_unreferenced_features(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    x_path = tmp_path / "x.npy"
+    matrix_path = tmp_path / "matrix.npy"
+    aux_path = tmp_path / "aux.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.zeros((6, 2), dtype=np.float32))
+    np.save(matrix_path, np.zeros((6, 2, 2), dtype=np.float32))
+    np.save(aux_path, np.ones((6, 2), dtype=np.float32))
+    np.save(y_path, np.zeros((6, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        features=[
+            Feature(name="x", path=x_path),
+            Feature(name="matrix", path=matrix_path, model_input=False),
+            Feature(name="aux", path=aux_path, model_input=False),
+        ],
+        targets=[Target(name="y", path=y_path)],
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        DATASET=ds,
+        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        TRAINING=TrainingSettings(),
+    )
+
+    captured: dict[str, Any] = {}
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATASET:
+            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            captured["dataset_target_names"] = [entry.name for entry in ctx.overrides["targets"]]
+            return _FakeDataset({"x": np.zeros((2,))})
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    def _capture_wrapper(*_, **kwargs):  # noqa: ANN001
+        captured["entry_config_names"] = [e.name for e in kwargs.get("entry_configs", ())]
+        return _FakeModel()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(_capture_wrapper),
+    )
+
+    BuildFactory().build_components(settings)
+
+    assert captured["dataset_feature_names"] == ["x"]
+    assert captured["dataset_target_names"] == ["y"]
+    assert captured["entry_config_names"] == ["x", "y"]
+
+
+def test_flexible_build_strategy_keeps_loss_routed_feature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    x_path = tmp_path / "x.npy"
+    matrix_path = tmp_path / "matrix.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.zeros((5, 2), dtype=np.float32))
+    np.save(matrix_path, np.zeros((5, 2, 2), dtype=np.float32))
+    np.save(y_path, np.zeros((5, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        features=[
+            Feature(name="x", path=x_path),
+            Feature(name="matrix", path=matrix_path, model_input=False),
+        ],
+        targets=[Target(name="y", path=y_path)],
+    )
+    training = TrainingSettings(
+        loss_function=LossComponentSettings(
+            extra_inputs=(LossInputRef(arg="matrix", key="features.matrix"),)
+        )
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        DATASET=ds,
+        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        TRAINING=training,
+    )
+
+    captured: dict[str, Any] = {}
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATASET:
+            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            return _FakeDataset({"x": np.zeros((2,))})
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(lambda *_, **__: _FakeModel()),
+    )
+
+    BuildFactory().build_components(settings)
+
+    assert captured["dataset_feature_names"] == ["x", "matrix"]
+
+
+def test_flexible_build_strategy_keeps_metric_routed_feature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    x_path = tmp_path / "x.npy"
+    matrix_path = tmp_path / "matrix.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.zeros((5, 2), dtype=np.float32))
+    np.save(matrix_path, np.zeros((5, 2, 2), dtype=np.float32))
+    np.save(y_path, np.zeros((5, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        features=[
+            Feature(name="x", path=x_path),
+            Feature(name="matrix", path=matrix_path, model_input=False),
+        ],
+        targets=[Target(name="y", path=y_path)],
+    )
+    training = TrainingSettings(
+        metrics=(
+            MetricComponentSettings(
+                extra_inputs=(MetricInputRef(arg="matrix", key="features.matrix"),)
+            ),
+        )
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        DATASET=ds,
+        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        TRAINING=training,
+    )
+
+    captured: dict[str, Any] = {}
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATASET:
+            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            return _FakeDataset({"x": np.zeros((2,))})
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(lambda *_, **__: _FakeModel()),
+    )
+
+    BuildFactory().build_components(settings)
+
+    assert captured["dataset_feature_names"] == ["x", "matrix"]
+
+
+def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tmp_checkpoint: Path,
+) -> None:
+    matrix_path = tmp_path / "matrix.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(matrix_path, np.zeros((4, 2, 2), dtype=np.float32))
+    np.save(y_path, np.zeros((4, 1), dtype=np.float32))
+
+    ds = DatasetSettings(
+        name="FlexibleDataset",
+        module_path="dlkit.core.datasets",
+        features=[Feature(name="matrix", path=matrix_path, model_input=False)],
+        targets=[Target(name="y", path=y_path)],
+    )
+    settings = GeneralSettings(
+        SESSION=SessionSettings(inference=True),
+        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        DATASET=ds,
+        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        TRAINING=TrainingSettings(),
+    )
+    settings.DATASET.__dict__["targets"] = [types.SimpleNamespace(name="recon", feature_ref="matrix")]
+
+    captured: dict[str, Any] = {}
+
+    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+        if s is settings.DATASET:
+            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            return _FakeDataset({"x": np.zeros((2,))})
+        if s is settings.DATAMODULE:
+            return _FakeDataModule()
+        return _FakeModel()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
+    )
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        staticmethod(lambda *_, **__: _FakeModel()),
+    )
+
+    BuildFactory().build_components(settings)
+
+    assert captured["dataset_feature_names"] == ["matrix"]
 
 
 def test_build_factory_handles_none_scheduler_correctly(

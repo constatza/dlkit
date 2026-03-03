@@ -32,6 +32,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "optuna-integration>=4.5.0",
     "yarl>=1.9.0",
+    "platformdirs>=2.0",
 ]
 
 [dependency-groups]
