@@ -29,19 +29,19 @@ Capability Interfaces (ABC Mixins):
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import overload
-from collections.abc import Iterable
 
 import numpy as np
 import torch
-from pydantic import Field, model_validator, field_validator, ValidationInfo
+from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic_settings import SettingsConfigDict
 
 from .core.base_settings import BasicSettings
 from .transform_settings import TransformSettings
-
 
 # =============================================================================
 # Base Classes
@@ -300,7 +300,6 @@ class IPathBased(ABC):
         Returns:
             Path object if available, None if placeholder mode.
         """
-        pass
 
 
 class IValueBased(ABC):
@@ -325,7 +324,6 @@ class IValueBased(ABC):
         Returns:
             Tensor or array if available, None if placeholder mode.
         """
-        pass
 
 
 class IWritable(ABC):
@@ -345,7 +343,7 @@ class IWritable(ABC):
         >>> target.write  # True
     """
 
-    pass  # Pure marker interface - implementations provide 'write' attribute
+    # Pure marker interface - implementations provide 'write' attribute
 
 
 class IRuntimeGenerated(ABC):
@@ -363,7 +361,7 @@ class IRuntimeGenerated(ABC):
         >>> is_runtime_generated(latent)  # True
     """
 
-    pass  # Pure marker interface
+    # Pure marker interface
 
 
 class IFeatureReference(ABC):
@@ -382,7 +380,7 @@ class IFeatureReference(ABC):
         >>> target.feature_ref  # "x"
     """
 
-    pass  # Pure marker interface - implementations provide 'feature_ref' attribute
+    # Pure marker interface - implementations provide 'feature_ref' attribute
 
 
 # =============================================================================
@@ -575,6 +573,80 @@ class PathFeature(PathBasedEntry):
     """
 
 
+def _validate_sparse_filename(name: str, field_name: str) -> None:
+    """Validate sparse payload filename configuration."""
+    if not name:
+        raise ValueError(f"{field_name} filename must be non-empty")
+    if "/" in name or "\\" in name:
+        raise ValueError(f"{field_name} filename must be a local basename, got '{name}'")
+    if not name.endswith(".npy"):
+        raise ValueError(f"{field_name} filename must end with '.npy', got '{name}'")
+
+
+@pydantic_dataclass(config=ConfigDict(frozen=True))
+class SparseFilesConfig:
+    """Pydantic contract for sparse payload filenames in data entries."""
+
+    indices: str = "indices.npy"
+    values: str = "values.npy"
+    nnz_ptr: str = "nnz_ptr.npy"
+    values_scale: str = "values_scale.npy"
+
+    def __post_init__(self) -> None:
+        _validate_sparse_filename(self.indices, "indices")
+        _validate_sparse_filename(self.values, "values")
+        _validate_sparse_filename(self.nnz_ptr, "nnz_ptr")
+        _validate_sparse_filename(self.values_scale, "values_scale")
+
+
+class SparseFeature(PathBasedEntry):
+    """Feature entry loaded from a sparse pack directory.
+
+    The `path` points to a sparse pack directory containing sparse payload arrays.
+    Runtime loading does not require a manifest file.
+    """
+    files: SparseFilesConfig = Field(
+        default_factory=SparseFilesConfig,
+        description="Sparse payload file naming",
+    )
+    denormalize: bool = Field(
+        default=False,
+        description=(
+            "If true, apply values_scale during read: A_original = A_stored * values_scale."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_is_sparse_pack(self) -> "SparseFeature":
+        """Validate that `path` is a sparse pack directory."""
+        if self.path is None:
+            return self
+        if not self.path.is_dir():
+            raise ValueError(f"SparseFeature path must be a directory, got: {self.path}")
+        required = (self.files.indices, self.files.values, self.files.nnz_ptr)
+        if not all((self.path / name).exists() for name in required):
+            raise ValueError(
+                f"Not a sparse pack directory: {self.path}. "
+                f"Expected payload files: {self.files}"
+            )
+        scale_path = self.path / self.files.values_scale
+        if scale_path.exists():
+            raw_scale = np.load(scale_path, allow_pickle=False)
+            if raw_scale.ndim == 0:
+                value_scale = float(raw_scale)
+            elif raw_scale.ndim == 1 and raw_scale.size == 1:
+                value_scale = float(raw_scale[0])
+            else:
+                raise ValueError(
+                    f"SparseFeature values_scale must be scalar or shape (1,), got {raw_scale.shape}"
+                )
+            if not np.isfinite(value_scale) or value_scale <= 0.0:
+                raise ValueError(
+                    f"SparseFeature values_scale must be finite and > 0, got {value_scale}"
+                )
+        return self
+
+
 class PathTarget(PathBasedEntry, IWritable):
     """Target entry loaded from a file path.
 
@@ -645,7 +717,7 @@ class ValueTarget(ValueBasedEntry, IWritable):
 # =============================================================================
 
 # Type aliases for backwards compatibility and type hints
-FeatureType = PathFeature | ValueFeature
+FeatureType = PathFeature | ValueFeature | SparseFeature
 TargetType = PathTarget | ValueTarget
 
 
@@ -1088,7 +1160,7 @@ def is_feature_entry(entry: DataEntry) -> bool:
     Returns:
         True if entry is PathFeature, ValueFeature, or created via Feature()
     """
-    return isinstance(entry, (PathFeature, ValueFeature))
+    return isinstance(entry, (PathFeature, ValueFeature, SparseFeature))
 
 
 def is_target_entry(entry: DataEntry) -> bool:
