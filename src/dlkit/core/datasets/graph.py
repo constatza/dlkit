@@ -8,7 +8,7 @@ from loguru import logger
 
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.tools.io import load_array
-from dlkit.tools.utils.torch_utils import ensure2d
+from dlkit.core.datasets.tensor_utils import ensure2d
 
 from .base import register_dataset, BaseDataset
 

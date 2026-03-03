@@ -26,6 +26,7 @@ DLKit's `FlexibleDataset` supports multiple array file formats out of the box:
 - **NumPy**: `.npy` (single array), `.npz` (multi-array archive)
 - **PyTorch**: `.pt`, `.pth` (tensor files)
 - **Text**: `.txt`, `.csv` (array data)
+- **Sparse packs**: directory-based COO payload packs (defaults: `indices.npy`, `values.npy`, `nnz_ptr.npy`, `values_scale.npy`; names are configurable via `PackFiles` / `SparseFeature.files`)
 
 ### NPZ Multi-Array Support
 
@@ -48,6 +49,30 @@ path = "data.npz"
 ```
 
 See `src/dlkit/core/datasets/README.md` for detailed documentation and examples.
+
+### Sparse Pack Context Features
+
+For per-sample sparse matrices (for example, `A` matrices for energy-norm losses),
+point a feature entry to a sparse pack directory. `FlexibleDataset` auto-detects
+pack directories when `path` points to a folder containing sparse payload files.
+
+```toml
+[[DATASET.features]]
+name = "matrix"
+path = "data/matrix_pack"   # directory, not a .npy file
+model_input = false
+loss_input = "matrix"
+```
+
+Sparse pack API:
+- `save_sparse_pack(...)`
+- `open_sparse_pack(...)`
+- `validate_sparse_pack(...)`
+
+Scale contract:
+- `A_original = A_stored * value_scale`
+- `value_scale` defaults to `1.0`
+- scaling is applied only when sparse readers use `denormalize=True` (including `SparseFeature(denormalize=True)`)
 
 ## Quick Start (CLI)
 
@@ -411,7 +436,7 @@ targets = [
 
 - **MinMaxScaler** (`dlkit.core.training.transforms.minmax`): Min-max normalization to [-1, 1] range (fittable, invertible)
 - **StandardScaler** (`dlkit.core.training.transforms.standard`): Z-score normalization using mean/std (fittable, invertible)
-- **PCA** (`dlkit.core.training.transforms.pca`): Principal component analysis for dimensionality reduction (fittable, invertible)
+- **PCA** (`dlkit.core.training.transforms.pca`): Principal component analysis for dimensionality reduction (fittable, invertible; online fitting currently requires pre-fitted state)
 - **SampleNormL2** (`dlkit.core.training.transforms.sample_norm`): Per-sample L2 normalization (invertible only - does not require fitting)
 - **Permutation** (`dlkit.core.training.transforms.permute`): Permute tensor dimensions
 - **TensorSubset** (`dlkit.core.training.transforms.subset`): Extract tensor subsets
@@ -420,10 +445,11 @@ targets = [
 ### How Transforms Are Fitted and Applied
 
 **Fitting Phase** (`on_fit_start()` - before first training step):
-1. Accumulates **entire training dataset** across all batches
-2. Builds `TransformChain` per named entry (features and targets)
-3. Fits chains globally on raw training data
-4. Stores fitted chains inside a `NamedBatchTransformer` with two `ModuleDict`s:
+1. Builds `TransformChain` per named entry (features and targets)
+2. Fits each chain using a **streaming multi-pass dataloader flow** (no full `torch.cat` buffering)
+3. Incremental transforms (`MinMaxScaler`, `StandardScaler`) accumulate fit state batch-by-batch
+4. Unfitted non-incremental fittable transforms fail fast (current policy: `PCA` online fit rejected; TODO incremental PCA)
+5. Stores fitted chains inside a `NamedBatchTransformer` with two `ModuleDict`s:
    - `_batch_transformer._feature_chains.<name>` - for input preprocessing
    - `_batch_transformer._target_chains.<name>` - for target normalization
 
@@ -453,7 +479,7 @@ The `StandardLightningWrapper` handles all transform application automatically. 
 
 - Transforms are cached globally and written to the checkpoint alongside model weights.
 - Saving via Lightning (`Trainer.save_checkpoint`) or a raw `state_dict()` preserves the fitted chains.
-- Loading the wrapper or `load_model()` reconstructs the exact chain, including running stats (e.g., min/max, PCA components).
+- Loading the wrapper or `load_model()` reconstructs the exact chain, including fitted parameters (e.g., min/max, mean/std, and any pre-fitted PCA components).
 
 For checkpoint structure and state dict key patterns, see [`src/dlkit/core/models/wrappers/README.md`](src/dlkit/core/models/wrappers/README.md).
 
