@@ -644,6 +644,27 @@ def cleanup_mlflow_state():
 
 
 @pytest.fixture
+def double_precision_settings(training_settings: GeneralSettings) -> GeneralSettings:
+    """Create GeneralSettings configured for double (float64) precision training.
+
+    Patches the base training settings to use FULL_64 precision, exercising
+    Lightning's DoublePrecisionPlugin which applies apply_to_collection on batches.
+
+    Args:
+        training_settings: Base training settings fixture.
+
+    Returns:
+        GeneralSettings with SESSION.precision set to FULL_64.
+    """
+    from dlkit.tools.config.precision import PrecisionStrategy
+
+    new_session = training_settings.SESSION.model_copy(
+        update={"precision": PrecisionStrategy.FULL_64}
+    )
+    return training_settings.model_copy(update={"SESSION": new_session})
+
+
+@pytest.fixture
 def integration_test_timeout() -> int:
     """Timeout for integration tests in seconds.
 

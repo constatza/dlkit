@@ -11,6 +11,7 @@ from typing import Any
 from pathlib import Path
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
+from loguru import logger
 
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
@@ -33,7 +34,12 @@ from dlkit.tools.config.data_entries import (
 )
 from dlkit.core.models.wrappers.factories import WrapperFactory
 from dlkit.tools.io.split_provider import get_or_create_split
-from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
+from dlkit.tools.io.paths import coerce_root_dir_to_absolute
+from .feature_dependencies import (
+    collect_feature_dependencies,
+    select_required_features,
+    validate_feature_selection,
+)
 from .model_detection import detect_model_type, ModelType, requires_shape_spec
 
 # Type alias for settings that can be passed to build strategies
@@ -138,15 +144,44 @@ class FlexibleBuildStrategy(IBuildStrategy):
 
         # Build dataset with legacy compatibility for SupervisedArrayDataset x/y
         ds_settings = settings.DATASET
+        configured_features: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "features", ()) or ())
+        configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
+        feature_dependencies = collect_feature_dependencies(
+            configured_features,
+            configured_targets,
+            getattr(settings.TRAINING, "loss_function", None),
+            tuple(getattr(settings.TRAINING, "metrics", ()) or ()),
+        )
+        selected_features = select_required_features(configured_features, feature_dependencies)
+        validate_feature_selection(selected_features, feature_dependencies)
+        selected_targets = tuple(configured_targets)
+
+        selected_feature_names = {
+            entry.name for entry in selected_features if isinstance(entry.name, str) and entry.name
+        }
+        dropped_feature_names = [
+            entry.name
+            for entry in configured_features
+            if isinstance(entry.name, str) and entry.name and entry.name not in selected_feature_names
+        ]
+        dependency_reasons = {
+            name: sorted(reasons)
+            for name, reasons in feature_dependencies.items()
+            if name in selected_feature_names
+        }
+        logger.debug(
+            "Flexible feature selection: selected={} dropped={} reasons={}",
+            sorted(selected_feature_names),
+            sorted(dropped_feature_names),
+            dependency_reasons,
+        )
         dataset = None
         if ds_settings is not None:
             ds_name = str(getattr(ds_settings, "name", "")).lower()
             # Translate legacy x/y -> flexible entries when helpful
             legacy_x = getattr(ds_settings, "x", None)
             legacy_y = getattr(ds_settings, "y", None)
-            has_flexible_entries = bool(getattr(ds_settings, "features", ())) or bool(
-                getattr(ds_settings, "targets", ())
-            )
+            has_flexible_entries = bool(selected_features) or bool(selected_targets)
             if "supervisedarraydataset" in ds_name:
                 from dlkit.core.datasets.flexible import FlexibleDataset
 
@@ -156,20 +191,22 @@ class FlexibleBuildStrategy(IBuildStrategy):
                     y_path = legacy_y or legacy_x
                     # Build FlexibleDataset - precision handled by context
                     dataset = FlexibleDataset(
-                        features=convert_to_tensor_entries([Feature(name="x", path=x_path)]),
-                        targets=convert_to_tensor_entries([Target(name="y", path=y_path)]),
+                        features=[Feature(name="x", path=x_path)],
+                        targets=[Target(name="y", path=y_path)],
+                        memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
                     )
                 else:
                     # Build from flexible entries - precision handled by context
                     dataset = FlexibleDataset(
-                        features=convert_to_tensor_entries(getattr(ds_settings, "features", ())),
-                        targets=convert_to_tensor_entries(getattr(ds_settings, "targets", ())),
+                        features=selected_features,
+                        targets=selected_targets,
+                        memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
                     )
         # Default factory construction
         if dataset is None:
             ds_overrides = {
-                "features": convert_to_tensor_entries(getattr(ds_settings, "features", ()) or ()),
-                "targets": convert_to_tensor_entries(getattr(ds_settings, "targets", ()) or ()),
+                "features": selected_features,
+                "targets": selected_targets,
             }
             dataset = FactoryProvider.create_component(
                 ds_settings, context.with_overrides(**ds_overrides)
@@ -196,10 +233,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
         # Build entry_configs (features + targets) as tuple for wrapper, dict for registry
         entry_configs: tuple[DataEntry, ...] = ()
         try:
-            feats = getattr(settings.DATASET, "features", ()) or ()
-            targs = getattr(settings.DATASET, "targets", ()) or ()
-            if feats or targs:
-                entry_configs = tuple([*feats, *targs])
+            if selected_features or selected_targets:
+                entry_configs = tuple([*selected_features, *selected_targets])
         except Exception:
             entry_configs = ()
 

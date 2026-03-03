@@ -43,6 +43,19 @@ class TestBasicIntegration:
         if training_result.metrics:
             assert isinstance(training_result.metrics, dict)
 
+    def test_double_precision_training(self, double_precision_settings: GeneralSettings) -> None:
+        """Regression test: double precision training must not crash on TensorDict batches.
+
+        Lightning's DoublePrecisionPlugin.convert_input calls apply_to_collection which
+        cannot reconstruct LazyStackedTensorDict from OrderedDict. This test catches
+        that regression.
+
+        Args:
+            double_precision_settings: Training settings with FULL_64 precision.
+        """
+        result = dlkit.train(double_precision_settings)
+        assert result.duration_seconds > 0
+
     def test_inference_basic_workflow(
         self, inference_settings: GeneralSettings, minimal_model_checkpoint: Path
     ) -> None:

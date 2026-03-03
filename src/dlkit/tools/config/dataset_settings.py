@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from pydantic import (
     Field,
     NonNegativeFloat,
@@ -109,6 +110,16 @@ class DatasetSettings(ComponentSettings):
     split: IndexSplitSettings = Field(
         default_factory=IndexSplitSettings, description="Index split configuration"
     )
+    memmap_cache: bool = Field(
+        default=False,
+        description=(
+            "If true, load dataset using OS memory-mapped files. "
+            "Enables out-of-memory datasets that do not fit in RAM. "
+            "All entries must be file-backed (PathBasedEntry). "
+            "Cache stored at platformdirs.user_cache_path('dlkit') / 'memmap'. "
+            "Auto-invalidates when source files or dtype change."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_nested_paths(self, info: ValidationInfo) -> "DatasetSettings":
@@ -146,6 +157,19 @@ class DatasetSettings(ComponentSettings):
                 raise ValueError(f"Target path does not exist: {target.path}")
 
         return self
+
+    @property
+    def resolved_memmap_cache_dir(self) -> Path | None:
+        """Resolve the OS-standard memmap cache directory when enabled.
+
+        Returns:
+            Path | None: Cache directory path, or None when memmap_cache is False.
+        """
+        if not self.memmap_cache:
+            return None
+        from platformdirs import user_cache_path
+
+        return user_cache_path("dlkit") / "memmap"
 
     @property
     def has_targets(self) -> bool:
@@ -189,9 +213,13 @@ class DatasetSettings(ComponentSettings):
 
     def get_init_kwargs(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Return initialization kwargs preserving nested DataEntry objects."""
-        base = super().get_init_kwargs(exclude)
+        # Exclude memmap_cache bool — FlexibleDataset uses memmap_cache_dir (resolved Path)
+        base = super().get_init_kwargs(exclude={"memmap_cache", *(exclude or set())})
         # Preserve DataEntry instances instead of serialized dicts
         base["features"] = list(self.features)
         base["targets"] = list(self.targets)
         base["split"] = self.split
+        resolved = self.resolved_memmap_cache_dir
+        if resolved is not None:
+            base["memmap_cache_dir"] = resolved
         return base
