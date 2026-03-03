@@ -39,37 +39,50 @@ class MinMaxScaler(Transform):
         # and load_state_dict() can fill them without pre-registration hacks
         self.register_buffer("min", torch.tensor([]))
         self.register_buffer("max", torch.tensor([]))
+        self._fit_min: torch.Tensor | None = None
+        self._fit_max: torch.Tensor | None = None
 
     def fit(self, data: torch.Tensor) -> None:
-        """Compute (and accumulate) the min/max along specified dimensions.
-
-        When called multiple times, accumulates global min/max values.
+        """Compute min/max statistics from a single in-memory tensor.
 
         Args:
             data: Input tensor to compute min/max statistics from.
                 Shape varies but must be compatible with dim specification.
-
-        Example:
-            >>> scaler = MinMaxScaler(dim=0)
-            >>> scaler.fit(batch1)  # Computes min/max
-            >>> scaler.fit(batch2)  # Accumulates global min/max
         """
+        self.reset_fit_state()
+        self.update_fit(data)
+        self.finalize_fit()
+
+    def reset_fit_state(self) -> None:
+        """Reset incremental fit accumulators."""
+        self._fit_min = None
+        self._fit_max = None
+        self.fitted = False
+
+    def update_fit(self, batch: torch.Tensor) -> None:
+        """Accumulate min/max statistics from one batch."""
         # Normalize dim indices
-        dim = tuple(idx % len(data.shape) for idx in self.dim)
+        dim = tuple(idx % len(batch.shape) for idx in self.dim)
         self.dim = dim
 
         # Compute current batch statistics
-        current_min = torch.amin(input=data, dim=list(dim), keepdim=True)
-        current_max = torch.amax(input=data, dim=list(dim), keepdim=True)
+        current_min = torch.amin(input=batch, dim=list(dim), keepdim=True)
+        current_max = torch.amax(input=batch, dim=list(dim), keepdim=True)
 
-        # First fit or accumulate
-        if not self.fitted:
-            self.register_buffer("min", current_min)
-            self.register_buffer("max", current_max)
-            self.fitted = True
+        if self._fit_min is None or self._fit_max is None:
+            self._fit_min = current_min
+            self._fit_max = current_max
         else:
-            self.register_buffer("min", torch.minimum(self.min, current_min))
-            self.register_buffer("max", torch.maximum(self.max, current_max))
+            self._fit_min = torch.minimum(self._fit_min, current_min)
+            self._fit_max = torch.maximum(self._fit_max, current_max)
+
+    def finalize_fit(self) -> None:
+        """Finalize accumulated statistics into fitted buffers."""
+        if self._fit_min is None or self._fit_max is None:
+            raise ValueError("MinMaxScaler.finalize_fit() called before any update_fit() call.")
+        self.min = self._fit_min
+        self.max = self._fit_max
+        self.fitted = True
 
     def _load_from_state_dict(
         self,

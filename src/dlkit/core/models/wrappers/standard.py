@@ -47,7 +47,11 @@ def _make_chain(entry: DataEntry) -> Any:
         TransformChain if transforms configured, nn.Identity otherwise.
     """
     settings = getattr(entry, "transforms", None)
-    return TransformChain(settings) if settings else Identity()
+    return (
+        TransformChain(settings, entry_name=getattr(entry, "name", None))
+        if settings
+        else Identity()
+    )
 
 
 def _make_routes(

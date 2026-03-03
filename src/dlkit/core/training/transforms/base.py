@@ -58,6 +58,27 @@ class FittableTransform(Protocol):
 
 
 @runtime_checkable
+class IncrementalFittableTransform(Protocol):
+    """Protocol for transforms that can be fitted incrementally on data batches.
+
+    Incremental transforms support streaming training-data passes without
+    materializing the full dataset in memory.
+    """
+
+    def reset_fit_state(self) -> None:
+        """Reset internal fitting accumulators before a new fit pass."""
+        ...
+
+    def update_fit(self, batch: torch.Tensor) -> None:
+        """Update fitting accumulators from one data batch."""
+        ...
+
+    def finalize_fit(self) -> None:
+        """Finalize accumulators into fitted buffers and mark transform fitted."""
+        ...
+
+
+@runtime_checkable
 class InvertibleTransform(Protocol):
     """Protocol for transforms that support inverse transformation.
 

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Sequence, Callable
 from dataclasses import dataclass
 from functools import reduce
 from typing import TYPE_CHECKING, Any
@@ -10,7 +10,13 @@ from torch.nn import ModuleList
 
 from dlkit.tools.config.transform_settings import TransformSettings
 from dlkit.tools.config import BuildContext, FactoryProvider
-from .base import Transform, FittableTransform, InvertibleTransform, ShapeAwareTransform
+from .base import (
+    Transform,
+    FittableTransform,
+    IncrementalFittableTransform,
+    InvertibleTransform,
+    ShapeAwareTransform,
+)
 from .errors import TransformNotFittedError, TransformChainError
 
 if TYPE_CHECKING:
@@ -200,6 +206,83 @@ class TransformChain(Transform):
         # Mark as fitted and store the shape after all transforms
         self.fitted = True
         self.transformed_shape = tuple(x.shape)
+
+    def fit_from_dataloader(
+        self,
+        dataloader: Any,
+        tensor_selector: Callable[[Any], Tensor],
+    ) -> None:
+        """Fit the chain from a re-iterable dataloader without full-data buffering.
+
+        Each fittable transform is handled in order:
+        - Incremental-capable transforms are fitted by streaming batches.
+        - Non-incremental fittable transforms must already be fitted, otherwise
+          fitting fails fast.
+
+        Args:
+            dataloader: Re-iterable training dataloader.
+            tensor_selector: Function that extracts this chain's tensor from one batch.
+
+        Raises:
+            ValueError: If dataloader is empty.
+            TypeError: If an unfitted non-incremental transform is encountered.
+            TransformChainError: If any fit/apply step fails.
+        """
+        sample: Tensor | None = None
+        for batch in dataloader:
+            sample = tensor_selector(batch)
+            break
+
+        if sample is None:
+            raise ValueError("Cannot fit TransformChain on empty dataloader.")
+
+        for i, transform in enumerate(self.transforms):
+            if not isinstance(transform, FittableTransform):
+                continue
+
+            if not isinstance(transform, IncrementalFittableTransform):
+                if not getattr(transform, "fitted", False):
+                    raise TypeError(
+                        f"Incremental fitting for '{transform.__class__.__name__}' is not "
+                        "implemented. Remove this transform from online fit path. "
+                        "TODO: incremental PCA."
+                    )
+                continue
+
+            try:
+                logger.info(
+                    "Incremental fit pass for transform '{}' (entry='{}', index={})",
+                    transform.__class__.__name__,
+                    self._entry_name or "unknown",
+                    i,
+                )
+                transform.reset_fit_state()
+                for batch in dataloader:
+                    x = tensor_selector(batch)
+                    for prev in self.transforms[:i]:
+                        x = prev(x)
+                    transform.update_fit(x)
+                transform.finalize_fit()
+            except Exception as e:
+                raise TransformChainError(
+                    transform_index=i,
+                    transform_name=transform.__class__.__name__,
+                    cause=e,
+                ) from e
+
+        # Infer transformed shape from one sample after fitting.
+        try:
+            sample_out = sample
+            for i, transform in enumerate(self.transforms):
+                sample_out = transform(sample_out)
+            self.transformed_shape = tuple(sample_out.shape)
+            self.fitted = True
+        except Exception as e:
+            raise TransformChainError(
+                transform_index=i,
+                transform_name=transform.__class__.__name__,
+                cause=e,
+            ) from e
 
     def forward(self, x: Tensor) -> Tensor:
         """Apply the transform chain.

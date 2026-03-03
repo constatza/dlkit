@@ -20,12 +20,17 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from loguru import logger
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import Tensor
 from torchmetrics import Metric
 
-from dlkit.core.training.transforms.base import FittableTransform, InvertibleTransform
+from dlkit.core.training.transforms.base import (
+    FittableTransform,
+    IncrementalFittableTransform,
+    InvertibleTransform,
+)
 from dlkit.tools.config.components.model_components import LossInputRef, MetricInputRef
 
 
@@ -530,31 +535,46 @@ class NamedBatchTransformer(nn.Module):
     def fit(self, dataloader: Any) -> None:
         """Fit all fittable transforms using training data.
 
-        Accumulates full training data per entry name, then fits once.
-
         Args:
             dataloader: Training DataLoader to iterate for fitting.
-
-        Note:
-            Known limitation: full-data accumulation in memory. OOM risk for
-            large datasets. Future: IIncrementalFittableTransform for streaming.
         """
-        feat_buffers: dict[str, list[Tensor]] = {k: [] for k in self._feature_chains}
-        tgt_buffers: dict[str, list[Tensor]] = {k: [] for k in self._target_chains}
+        for namespace, chains in (("features", self._feature_chains), ("targets", self._target_chains)):
+            for entry_name, chain in chains.items():
+                if not isinstance(chain, FittableTransform):
+                    continue
 
-        for batch in dataloader:
-            for k in feat_buffers:
-                feat_buffers[k].append(batch["features", k])
-            for k in tgt_buffers:
-                tgt_buffers[k].append(batch["targets", k])
+                logger.info(
+                    "Fitting transform chain for {}.{} ({})",
+                    namespace,
+                    entry_name,
+                    chain.__class__.__name__,
+                )
 
-        for k, chain in self._feature_chains.items():
-            if isinstance(chain, FittableTransform) and feat_buffers.get(k):
-                chain.fit(torch.cat(feat_buffers[k], dim=0))
+                if hasattr(chain, "fit_from_dataloader"):
+                    chain.fit_from_dataloader(
+                        dataloader,
+                        lambda batch, ns=namespace, key=entry_name: batch[ns, key],
+                    )
+                    continue
 
-        for k, chain in self._target_chains.items():
-            if isinstance(chain, FittableTransform) and tgt_buffers.get(k):
-                chain.fit(torch.cat(tgt_buffers[k], dim=0))
+                if isinstance(chain, IncrementalFittableTransform):
+                    seen = False
+                    chain.reset_fit_state()
+                    for batch in dataloader:
+                        chain.update_fit(batch[namespace, entry_name])
+                        seen = True
+                    if not seen:
+                        raise ValueError("Cannot fit transforms on an empty dataloader.")
+                    chain.finalize_fit()
+                    continue
+
+                if getattr(chain, "fitted", False):
+                    continue
+
+                raise TypeError(
+                    f"Incremental fitting for '{chain.__class__.__name__}' is not implemented. "
+                    "Remove this transform from online fit path. TODO: incremental PCA."
+                )
 
     def is_fitted(self) -> bool:
         """Check if all fittable transforms are fitted.

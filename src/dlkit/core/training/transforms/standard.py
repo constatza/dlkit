@@ -30,17 +30,64 @@ class StandardScaler(Transform):
         # and load_state_dict() can fill them without pre-registration hacks
         self.register_buffer("mean", torch.tensor([]))
         self.register_buffer("std", torch.tensor([]))
+        self._fit_count: int = 0
+        self._fit_mean: torch.Tensor | None = None
+        self._fit_m2: torch.Tensor | None = None
 
     def fit(self, data: torch.Tensor) -> None:
-        """Compute mean and std along specified dimensions.
+        """Compute mean/std statistics from a single in-memory tensor.
 
         Args:
             data: Input tensor to compute statistics from.
         """
-        mean = torch.mean(data, dim=self.dim, keepdim=True)
-        std = torch.std(data, dim=self.dim, keepdim=True)
-        self.register_buffer("mean", mean)
-        self.register_buffer("std", std)
+        self.reset_fit_state()
+        self.update_fit(data)
+        self.finalize_fit()
+
+    def reset_fit_state(self) -> None:
+        """Reset incremental fit accumulators."""
+        self._fit_count = 0
+        self._fit_mean = None
+        self._fit_m2 = None
+        self.fitted = False
+
+    def update_fit(self, batch: torch.Tensor) -> None:
+        """Accumulate running mean/variance statistics from one batch."""
+        dim_raw = self.dim if isinstance(self.dim, (list, tuple)) else (self.dim,)
+        dim = tuple(int(idx) % len(batch.shape) for idx in dim_raw)
+        self.dim = dim
+
+        batch_mean = torch.mean(batch, dim=dim, keepdim=True)
+        batch_var = torch.var(batch, dim=dim, keepdim=True, unbiased=False)
+        batch_count = 1
+        for axis in dim:
+            batch_count *= int(batch.shape[axis])
+
+        if self._fit_mean is None or self._fit_m2 is None or self._fit_count == 0:
+            self._fit_mean = batch_mean
+            self._fit_m2 = batch_var * batch_count
+            self._fit_count = batch_count
+            return
+
+        current_count = self._fit_count
+        total_count = current_count + batch_count
+        delta = batch_mean - self._fit_mean
+        self._fit_mean = self._fit_mean + delta * (batch_count / total_count)
+        self._fit_m2 = (
+            self._fit_m2
+            + (batch_var * batch_count)
+            + delta.pow(2) * (current_count * batch_count / total_count)
+        )
+        self._fit_count = total_count
+
+    def finalize_fit(self) -> None:
+        """Finalize accumulated statistics into fitted buffers."""
+        if self._fit_mean is None or self._fit_m2 is None or self._fit_count <= 0:
+            raise ValueError("StandardScaler.finalize_fit() called before any update_fit() call.")
+
+        variance = self._fit_m2 / float(self._fit_count)
+        self.mean = self._fit_mean
+        self.std = torch.sqrt(torch.clamp(variance, min=0.0))
         self.fitted = True
 
     def _load_from_state_dict(
