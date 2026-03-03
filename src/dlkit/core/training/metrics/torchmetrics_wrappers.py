@@ -284,7 +284,7 @@ class EnergyNormError(Metric):
 
     Shape Contract:
         preds/target: (B, D)
-        matrix: (B, D, D) per-sample, or (D, D) shared
+        matrix: (B, D, D) batched
 
     Attributes:
         sum_norms: Accumulated sum of per-sample A-norm errors
@@ -306,7 +306,7 @@ class EnergyNormError(Metric):
         Args:
             preds: Predicted vectors with shape (B, D)
             target: Ground truth vectors with shape (B, D)
-            matrix: Positive (semi-)definite matrix with shape (B, D, D) or (D, D)
+            matrix: Positive (semi-)definite matrix with shape (B, D, D)
         """
         per_sample = _energy_norm_update(preds, target, matrix)
         self.sum_norms += per_sample.sum()
@@ -332,7 +332,7 @@ class RelativeEnergyNormError(Metric):
 
     Shape Contract:
         preds/target: (B, D)
-        matrix: (B, D, D) per-sample, or (D, D) shared
+        matrix: (B, D, D) batched
 
     Attributes:
         sum_norms: Accumulated sum of per-sample relative energy norm errors
@@ -356,7 +356,7 @@ class RelativeEnergyNormError(Metric):
         Args:
             preds: Predicted vectors with shape (B, D)
             target: Ground truth vectors with shape (B, D)
-            matrix: Positive (semi-)definite matrix with shape (B, D, D) or (D, D)
+            matrix: Positive (semi-)definite matrix with shape (B, D, D)
         """
         per_sample = _relative_energy_norm_update(preds, target, matrix, eps=self.eps)
         self.sum_norms += per_sample.sum()

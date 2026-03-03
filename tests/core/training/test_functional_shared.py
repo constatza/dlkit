@@ -8,14 +8,20 @@ import torch
 from torch import Tensor
 
 from dlkit.core.training.functional import (
-    mse,
-    mae,
     huber_loss,
-    smooth_l1_loss,
     log_cosh_loss,
-    quantile_loss,
+    mae,
+    mse,
     normalized_mse,
     normalized_vector_norm_loss,
+    quantile_loss,
+    relative_energy_norm_loss,
+    smooth_l1_loss,
+    vector_norm_loss,
+)
+from dlkit.core.training.metrics.functional import (
+    _relative_energy_norm_compute,
+    _relative_energy_norm_update,
 )
 
 
@@ -185,6 +191,57 @@ class TestCorrectness:
         expected = mse(preds, target) / (torch.var(target) + 1e-8)
 
         assert torch.allclose(loss, expected)
+
+    def test_vector_norm_loss_defaults_to_mean_aggregation(self):
+        """Default aggregator should match explicit torch.mean."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+
+        implicit = vector_norm_loss(preds, target, ord=2, dim=-1)
+        explicit = vector_norm_loss(preds, target, ord=2, dim=-1, aggregator=torch.mean)
+
+        assert torch.allclose(implicit, explicit)
+
+    def test_relative_energy_norm_loss_parity_with_update_compute_split(self):
+        """Direct relative energy loss should match update/compute split behavior."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        matrix = torch.eye(2).unsqueeze(0)
+
+        direct = relative_energy_norm_loss(preds, target, matrix, eps=1e-8)
+        per_sample = _relative_energy_norm_update(preds, target, matrix, eps=1e-8)
+        split = _relative_energy_norm_compute(per_sample.sum(), per_sample.numel())
+
+        assert torch.allclose(direct, split)
+
+    def test_relative_energy_norm_loss_sparse_matches_dense(self):
+        """Sparse and dense matrices should produce the same relative energy loss."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        dense_matrix = torch.eye(2).unsqueeze(0)
+        sparse_matrix = dense_matrix.to_sparse_coo()
+
+        dense = relative_energy_norm_loss(preds, target, dense_matrix, eps=1e-8)
+        sparse = relative_energy_norm_loss(preds, target, sparse_matrix, eps=1e-8)
+
+        assert torch.allclose(dense, sparse)
+
+    def test_relative_energy_norm_loss_sparse_per_sample_matches_dense(self):
+        """Sparse per-sample (B, D, D) relative energy loss should match dense."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        dense_batch = torch.tensor(
+            [
+                [[2.0, 0.0], [0.0, 1.0]],
+                [[3.0, 0.2], [0.2, 2.0]],
+            ]
+        )
+        sparse_batch = dense_batch.to_sparse_coo()
+
+        dense = relative_energy_norm_loss(preds, target, dense_batch, eps=1e-8)
+        sparse = relative_energy_norm_loss(preds, target, sparse_batch, eps=1e-8)
+
+        assert torch.allclose(dense, sparse)
 
 
 # ============================================================================
