@@ -2,6 +2,7 @@ from .base import (
     BaseTransform,
     Transform,
     FittableTransform,
+    IncrementalFittableTransform,
     InvertibleTransform,
     ShapeAwareTransform,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "SampleNormL2",
     # Protocols
     "FittableTransform",
+    "IncrementalFittableTransform",
     "InvertibleTransform",
     "ShapeAwareTransform",
     # Deprecated: backward compatibility

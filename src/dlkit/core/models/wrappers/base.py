@@ -11,7 +11,7 @@ from typing import Any, cast
 from loguru import logger
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
-from dlkit.tools.utils.checkpoint_security import configure_checkpoint_loading
+from dlkit.core.models.wrappers.security import configure_checkpoint_loading
 
 configure_checkpoint_loading()
 
@@ -364,11 +364,12 @@ class ProcessingLightningWrapper(LightningModule):
         dm = trainer.datamodule
         if dm is None or not hasattr(dm, "train_dataloader"):
             return
-        try:
-            loader = dm.train_dataloader()
-            self._batch_transformer.fit(loader)
-        except Exception:
-            pass
+        from loguru import logger
+
+        loader = dm.train_dataloader()
+        logger.info("Starting transform fitting from training dataloader.")
+        self._batch_transformer.fit(loader)
+        logger.info("Finished transform fitting.")
 
     # =========================================================================
     # Lightning Step Methods (delegate to protocols)
