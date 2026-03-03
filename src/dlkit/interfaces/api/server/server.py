@@ -8,7 +8,7 @@ import requests
 from loguru import logger
 
 from dlkit.tools.config.mlflow_settings import MLflowServerSettings
-from dlkit.tools.utils.system_utils import mkdir_for_local
+from dlkit.tools.io.paths import mkdir_for_local
 from dlkit.tools.utils.subprocess import stop_process_tree
 
 # -------------------------------------------------------------------

@@ -35,7 +35,7 @@ def _sync_session_root_to_environment(settings: Any) -> None:
     try:
         import os
         from dlkit.tools.config.environment import env as global_environment
-        from dlkit.tools.utils.system_utils import coerce_root_dir_to_absolute
+        from dlkit.tools.io.paths import coerce_root_dir_to_absolute
         from loguru import logger
 
         # Only update if DLKitEnvironment doesn't already have root_dir from env var

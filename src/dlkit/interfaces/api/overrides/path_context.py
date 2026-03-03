@@ -15,7 +15,7 @@ from typing import Any
 from collections.abc import Generator
 
 from dlkit.tools.config.environment import DLKitEnvironment
-from dlkit.tools.utils.system_utils import normalize_user_path
+from dlkit.tools.io.paths import normalize_user_path
 
 
 @dataclass
