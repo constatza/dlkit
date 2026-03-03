@@ -12,6 +12,87 @@ from typing import Any
 import numpy as np
 import pytest
 
+from dlkit.tools.io.sparse import save_sparse_pack
+
+
+# ---------------------------------------------------------------------------
+# Sparse pack fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def dense_matrices() -> list[np.ndarray]:
+    """Three 3×3 dense float64 matrices for COO pack tests.
+
+    Returns:
+        List of three sparse-ish 3×3 numpy arrays.
+    """
+    return [
+        np.array(
+            [[2.0, 0.0, 1.0], [0.0, 3.0, 0.0], [1.0, 0.0, 4.0]],
+            dtype=np.float64,
+        ),
+        np.array(
+            [[5.0, 1.0, 0.0], [1.0, 6.0, 2.0], [0.0, 2.0, 7.0]],
+            dtype=np.float64,
+        ),
+        np.array(
+            [[8.0, 0.0, 0.0], [0.0, 9.0, 3.0], [0.0, 3.0, 10.0]],
+            dtype=np.float64,
+        ),
+    ]
+
+
+@pytest.fixture
+def coo_pack_arrays(
+    dense_matrices: list[np.ndarray],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]]:
+    """Convert dense matrices to COO pack format arrays.
+
+    Args:
+        dense_matrices: Dense matrices to convert.
+
+    Returns:
+        Tuple of ``(indices, values, nnz_ptr, size)``.
+    """
+    row_parts: list[np.ndarray] = []
+    col_parts: list[np.ndarray] = []
+    value_parts: list[np.ndarray] = []
+    nnz_ptr = [0]
+
+    for matrix in dense_matrices:
+        rows, cols = np.nonzero(matrix)
+        vals = matrix[rows, cols]
+        row_parts.append(rows.astype(np.int64))
+        col_parts.append(cols.astype(np.int64))
+        value_parts.append(vals)
+        nnz_ptr.append(nnz_ptr[-1] + int(vals.size))
+
+    indices = np.vstack([np.concatenate(row_parts), np.concatenate(col_parts)])
+    values = np.concatenate(value_parts)
+    ptr = np.asarray(nnz_ptr, dtype=np.int64)
+    return indices, values, ptr, dense_matrices[0].shape
+
+
+@pytest.fixture
+def saved_sparse_pack(
+    tmp_path: Path,
+    coo_pack_arrays: tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]],
+) -> Path:
+    """Save a COO sparse pack with default parameters and return its directory path.
+
+    Args:
+        tmp_path: pytest temporary directory.
+        coo_pack_arrays: Arrays to save.
+
+    Returns:
+        Path to the saved sparse pack directory.
+    """
+    indices, values, nnz_ptr, size = coo_pack_arrays
+    pack_path = tmp_path / "matrix_pack"
+    save_sparse_pack(pack_path, indices, values, nnz_ptr, size)
+    return pack_path
+
 
 # Test module constants
 BUILTIN_MODULE_NAMES = [
