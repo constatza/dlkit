@@ -11,40 +11,34 @@ from functools import partial
 
 import pytest
 import torch
-from torch import Tensor
 
 from dlkit.core.training.metrics.functional import (
-    # Primitives
-    compute_error_vectors,
-    compute_vector_norm,
-    safe_divide,
-    apply_aggregation,
-    # Vector metrics
-    normalized_vector_norm_error,
-    normalized_l1_error,
-    normalized_l2_error,
-    normalized_linf_error,
-    # Energy norm primitives
-    compute_quadratic_form,
-    compute_energy_norm,
-    # Temporal metrics
-    compute_temporal_derivative,
-    temporal_derivative_error,
-    first_derivative_error,
-    second_derivative_error,
+    _absolute_vector_norm_compute,
+    _energy_norm_compute,
+    _normalized_vector_norm_compute,
     # Update/compute split
     _normalized_vector_norm_update,
-    _normalized_vector_norm_compute,
-    _absolute_vector_norm_update,
-    _absolute_vector_norm_compute,
-    _energy_norm_update,
-    _energy_norm_compute,
-    _relative_energy_norm_update,
     _relative_energy_norm_compute,
-    _temporal_derivative_update,
+    _relative_energy_norm_update,
     _temporal_derivative_compute,
+    _temporal_derivative_update,
+    apply_aggregation,
+    compute_energy_norm,
+    compute_error_vectors,
+    # Energy norm primitives
+    compute_quadratic_form,
+    # Temporal metrics
+    compute_temporal_derivative,
+    compute_vector_norm,
+    first_derivative_error,
+    normalized_l1_error,
+    normalized_linf_error,
+    # Vector metrics
+    normalized_vector_norm_error,
+    safe_divide,
+    second_derivative_error,
+    temporal_derivative_error,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -248,7 +242,73 @@ class TestVectorMetrics:
 
 
 # ============================================================================
-# 3. TEMPORAL METRICS TESTS
+# 3. ENERGY NORM TESTS
+# ============================================================================
+
+
+class TestEnergyNormMetrics:
+    """Test dense/sparse paths for quadratic forms with batched matrices."""
+
+    def test_quadratic_form_sparse_batched_matches_dense(self):
+        """Sparse batched (B, D, D) path should match dense reference."""
+        vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+        dense_matrix = torch.tensor([[[5.0, 1.0], [1.0, 6.0]]], dtype=torch.float64)
+
+        dense_result = compute_quadratic_form(vector, dense_matrix)
+        sparse_result = compute_quadratic_form(vector, dense_matrix.to_sparse_coo())
+
+        assert torch.allclose(sparse_result, dense_result)
+
+    def test_quadratic_form_unbatched_matrix_fails(self):
+        """Caller must pass at least (1, D, D), unbatched (D, D) is rejected."""
+        vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+        unbatched = torch.tensor([[5.0, 1.0], [1.0, 6.0]], dtype=torch.float64)
+
+        with pytest.raises(ValueError, match="Expected matrix with shape \\(B, D, D\\)"):
+            compute_quadratic_form(vector, unbatched)
+
+    def test_quadratic_form_non_tensor_matrix_fails(self):
+        """Non-tensor matrix inputs should fail fast with ValueError."""
+        vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+        invalid_matrix = [torch.eye(2, dtype=torch.float64)]
+
+        with pytest.raises(ValueError, match="Expected matrix tensor with shape \\(B, D, D\\)"):
+            compute_quadratic_form(vector, invalid_matrix)  # type: ignore[arg-type]
+
+    def test_quadratic_form_sparse_per_sample_matches_dense(self):
+        """Per-sample (B, D, D) sparse COO path should match dense batch reference."""
+        vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+        dense_batch = torch.tensor(
+            [
+                [[2.0, 0.0], [0.0, 3.0]],
+                [[4.0, 1.0], [1.0, 5.0]],
+            ],
+            dtype=torch.float64,
+        )
+        sparse_batch = dense_batch.to_sparse_coo()
+
+        dense_result = compute_quadratic_form(vector, dense_batch)
+        sparse_result = compute_quadratic_form(vector, sparse_batch)
+
+        assert torch.allclose(sparse_result, dense_result)
+
+    def test_quadratic_form_sparse_batch_mismatch_fails(self):
+        """Sparse batch mismatch should raise ValueError."""
+        vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+        mismatched = torch.stack(
+            [
+                torch.eye(2, dtype=torch.float64),
+                2 * torch.eye(2, dtype=torch.float64),
+                3 * torch.eye(2, dtype=torch.float64),
+            ]
+        ).to_sparse_coo()
+
+        with pytest.raises(ValueError, match="Batch mismatch"):
+            compute_quadratic_form(vector, mismatched)
+
+
+# ============================================================================
+# 4. TEMPORAL METRICS TESTS
 # ============================================================================
 
 
@@ -415,6 +475,102 @@ class TestUpdateComputeSplit:
         split_result = _temporal_derivative_compute(sum_squared, total)
 
         assert torch.allclose(direct_result, split_result)
+
+    def test_relative_energy_norm_split_equals_direct(self):
+        """Test relative energy update/compute split matches direct calculation."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        matrix = torch.eye(2).unsqueeze(0)
+
+        error_vecs = compute_error_vectors(preds, target)
+        direct = torch.mean(
+            safe_divide(
+                compute_energy_norm(error_vecs, matrix),
+                compute_energy_norm(target, matrix),
+                eps=1e-8,
+            )
+        )
+
+        per_sample = _relative_energy_norm_update(preds, target, matrix, eps=1e-8)
+        split = _relative_energy_norm_compute(per_sample.sum(), per_sample.numel())
+
+        assert torch.allclose(direct, split)
+
+    def test_relative_energy_norm_update_sparse_matches_dense(self):
+        """Sparse and dense batched matrices should produce the same per-sample values."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        dense_matrix = torch.eye(2).unsqueeze(0)
+        sparse_matrix = dense_matrix.to_sparse_coo()
+
+        dense = _relative_energy_norm_update(preds, target, dense_matrix, eps=1e-8)
+        sparse = _relative_energy_norm_update(preds, target, sparse_matrix, eps=1e-8)
+
+        assert torch.allclose(dense, sparse)
+
+    def test_relative_energy_norm_update_sparse_per_sample_matches_dense(self):
+        """Relative energy update should support sparse per-sample (B, D, D) matrices."""
+        preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
+        dense_batch = torch.tensor(
+            [
+                [[2.0, 0.0], [0.0, 1.0]],
+                [[3.0, 0.2], [0.2, 2.0]],
+            ]
+        )
+        sparse_batch = dense_batch.to_sparse_coo()
+
+        dense = _relative_energy_norm_update(preds, target, dense_batch, eps=1e-8)
+        sparse = _relative_energy_norm_update(preds, target, sparse_batch, eps=1e-8)
+
+        assert torch.allclose(dense, sparse)
+
+    def test_relative_energy_norm_update_sparse_has_no_cross_call_state(self):
+        """Sparse preprocessing must be call-scoped with no cross-call leakage."""
+        preds = torch.tensor([[0.5, 1.5], [2.0, 3.0]])
+        target = torch.tensor([[1.0, 2.0], [2.5, 3.5]])
+
+        dense_a = torch.tensor([[[2.0, 0.0], [0.0, 1.0]]])
+        dense_b = torch.tensor([[[1.0, 0.4], [0.4, 3.0]]])
+        sparse_a = dense_a.to_sparse_coo()
+        sparse_b = dense_b.to_sparse_coo()
+
+        expected_a = _relative_energy_norm_update(preds, target, dense_a, eps=1e-8)
+        expected_b = _relative_energy_norm_update(preds, target, dense_b, eps=1e-8)
+        actual_a = _relative_energy_norm_update(preds, target, sparse_a, eps=1e-8)
+        actual_b = _relative_energy_norm_update(preds, target, sparse_b, eps=1e-8)
+
+        assert torch.allclose(actual_a, expected_a)
+        assert torch.allclose(actual_b, expected_b)
+
+    @pytest.mark.parametrize(
+        "compute_fn",
+        [
+            _normalized_vector_norm_compute,
+            _temporal_derivative_compute,
+            _absolute_vector_norm_compute,
+            _energy_norm_compute,
+            _relative_energy_norm_compute,
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("sum_value", "total"),
+        [
+            (torch.tensor(10.0), 4),
+            (torch.tensor(0.0), 0),
+            (torch.tensor(10.0), 0),
+        ],
+    )
+    def test_compute_helpers_preserve_raw_sum_over_total_semantics(
+        self,
+        compute_fn,
+        sum_value: torch.Tensor,
+        total: int,
+    ):
+        """All compute helpers should preserve raw `sum / total` behavior."""
+        expected = sum_value / total
+        result = compute_fn(sum_value, total)
+        assert torch.allclose(result, expected, equal_nan=True)
 
 
 # ============================================================================

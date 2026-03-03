@@ -11,7 +11,7 @@ from loguru import logger
 from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.updater import update_settings
-from dlkit.tools.utils.metrics import collect_metrics
+from dlkit.core.training.metrics.collect import collect_metrics
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 

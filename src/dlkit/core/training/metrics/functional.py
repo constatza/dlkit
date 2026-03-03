@@ -25,11 +25,18 @@ Shape Notation:
     (,) = Scalar tensor
 """
 
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, TypeAlias
+from typing import TypeAlias
 
 import torch
 from torch import Tensor
+
+from .._norm_ops import (
+    compute_error_norms,
+    compute_relative_norms,
+    compute_state_mean,
+)
 
 # ============================================================================
 # TYPE ALIASES
@@ -41,6 +48,18 @@ AggregatorFn: TypeAlias = Callable[[Tensor], Tensor]
 Examples:
     torch.mean, torch.sum, partial(torch.mean, dim=0)
 """
+
+_SPARSE_LAYOUTS = frozenset(
+    layout
+    for layout in (
+        getattr(torch, "sparse_coo", None),
+        getattr(torch, "sparse_csr", None),
+        getattr(torch, "sparse_csc", None),
+        getattr(torch, "sparse_bsr", None),
+        getattr(torch, "sparse_bsc", None),
+    )
+    if layout is not None
+)
 
 
 # ============================================================================
@@ -202,10 +221,15 @@ def normalized_vector_norm_error(
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
-    error_vecs = compute_error_vectors(preds, target)
-    error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
-    target_norms = compute_vector_norm(target, ord=ord, dim=dim)
-    normalized = safe_divide(error_norms, target_norms, eps=eps)
+    norm_fn = partial(compute_vector_norm, ord=ord, dim=dim)
+    normalized = compute_relative_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=norm_fn,
+        divide_fn=safe_divide,
+        eps=eps,
+    )
     return apply_aggregation(normalized, aggregator)
 
 
@@ -223,35 +247,123 @@ normalized_linf_error = partial(normalized_vector_norm_error, ord=float("inf"))
 #
 # SHAPE ASSUMPTIONS:
 #   - vector: (B, D) — one D-dimensional vector per sample
-#   - matrix: (B, D, D) per-sample SPD matrix, OR (D, D) shared matrix
+#   - matrix: (B, D, D) batched SPD matrix
 #   - output: (B,) — one scalar per sample (pre-aggregation)
 # ============================================================================
+
+
+def _compute_Av(matrix: Tensor, vector: Tensor) -> Tensor:
+    """Compute batched matrix-vector product.
+
+    Args:
+        matrix: (B, D, D) dense or sparse tensor.
+        vector: (B, D) batch of vectors.
+
+    Returns:
+        (B, D) result of matrix-vector products.
+
+    Raises:
+        ValueError: If matrix is not a batched matrix tensor with shape (B, D, D).
+    """
+    if not isinstance(matrix, Tensor):
+        raise ValueError(
+            f"Expected matrix tensor with shape (B, D, D), got type {type(matrix).__name__}."
+        )
+    if matrix.dim() != 3:
+        raise ValueError(
+            f"Expected matrix with shape (B, D, D), got {tuple(matrix.shape)}. "
+            "Callers must provide batched matrices (use (1, D, D) for shared matrices)."
+        )
+
+    batch_vectors, dim = vector.shape
+
+    if matrix.layout == torch.strided:
+        batch_matrices = matrix.size(0)
+        if batch_matrices == 1:
+            return torch.mm(matrix.squeeze(0), vector.T).T
+        if batch_matrices == batch_vectors:
+            return torch.bmm(matrix, vector.unsqueeze(-1)).squeeze(-1)
+        raise ValueError(
+            f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
+            "Expected matrix batch to be 1 (shared) or equal to vector batch."
+        )
+
+    if matrix.layout in _SPARSE_LAYOUTS:
+        prepared, shared = _prepare_sparse_kernel(matrix, batch_vectors, dim)
+        return _apply_prepared_kernel(prepared, vector, shared=shared)
+
+    raise ValueError(
+        f"Unsupported matrix layout {matrix.layout} for shape {tuple(matrix.shape)}. "
+        "Expected dense or sparse batched tensor (B, D, D)."
+    )
+
+
+def _prepare_sparse_kernel(matrix: Tensor, batch_vectors: int, dim: int) -> tuple[Tensor, bool]:
+    """Prepare sparse kernel once for repeated sparse matvec operations.
+
+    Returns:
+        Tuple of (prepared_sparse_matrix, shared_matrix_flag).
+    """
+    sparse = matrix.to_sparse_coo().coalesce()
+    batch_matrices = sparse.size(0)
+    idx = sparse.indices()
+    values = sparse.values()
+
+    if batch_matrices == 1:
+        shared_idx = torch.stack([idx[1], idx[2]])
+        shared = torch.sparse_coo_tensor(
+            shared_idx, values, (dim, dim), device=sparse.device, dtype=sparse.dtype
+        ).coalesce()
+        return shared, True
+
+    if batch_matrices == batch_vectors:
+        block_idx = torch.stack([idx[0] * dim + idx[1], idx[0] * dim + idx[2]])
+        block = torch.sparse_coo_tensor(
+            block_idx,
+            values,
+            (batch_vectors * dim, batch_vectors * dim),
+            device=sparse.device,
+            dtype=sparse.dtype,
+        ).coalesce()
+        return block, False
+
+    raise ValueError(
+        f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
+        "Expected matrix batch to be 1 (shared) or equal to vector batch."
+    )
+
+
+def _apply_prepared_kernel(prepared: Tensor, vector: Tensor, *, shared: bool) -> Tensor:
+    """Apply already-prepared sparse kernel to a batch of vectors."""
+    if shared:
+        return torch.mm(prepared, vector.T).T
+
+    batch_vectors, dim = vector.shape
+    flat_result = torch.mm(prepared, vector.reshape(batch_vectors * dim, 1))
+    return flat_result.reshape(batch_vectors, dim)
 
 
 def compute_quadratic_form(vector: Tensor, matrix: Tensor) -> Tensor:
     """Compute per-sample quadratic form v^T A v.
 
-    Supports both per-sample and shared matrices via broadcasting.
-
     Shape Contract:
         vector: (B, D)
-        matrix: (B, D, D) per-sample, or (D, D) shared (broadcast over B)
+        matrix: (B, D, D) dense or sparse batched matrix
         output: (B,) — one scalar per sample
 
     Args:
         vector: Batch of vectors.
-        matrix: Positive (semi-)definite matrix per sample or shared.
+        matrix: Positive (semi-)definite batched matrix.
 
     Returns:
         Per-sample quadratic form values.
 
     Examples:
         >>> v = torch.tensor([[1.0, 0.0], [0.0, 1.0]])  # (2, 2)
-        >>> A = torch.eye(2)  # (2, 2) — identity (shared)
+        >>> A = torch.eye(2).unsqueeze(0)  # (1, 2, 2) shared via batch dim
         >>> compute_quadratic_form(v, A)  # tensor([1., 1.])
     """
-    # Av: (B, D) — handles both (B, D, D) and (D, D) via matmul broadcasting
-    Av = torch.matmul(matrix, vector.unsqueeze(-1)).squeeze(-1)
+    Av = _compute_Av(matrix, vector)
     return (vector * Av).sum(dim=-1)
 
 
@@ -262,22 +374,71 @@ def compute_energy_norm(vector: Tensor, matrix: Tensor) -> Tensor:
 
     Shape Contract:
         vector: (B, D)
-        matrix: (B, D, D) per-sample, or (D, D) shared (broadcast over B)
+        matrix: (B, D, D) batched matrix
         output: (B,) — one norm value per sample
 
     Args:
         vector: Batch of vectors.
-        matrix: Positive (semi-)definite matrix per sample or shared.
+        matrix: Positive (semi-)definite batched matrix.
 
     Returns:
         Per-sample A-norm values.
 
     Examples:
         >>> v = torch.tensor([[3.0, 4.0]])  # (1, 2)
-        >>> A = torch.eye(2)  # identity → ||v||_I = ||v||_2 = 5.0
+        >>> A = torch.eye(2).unsqueeze(0)  # shared via batch dim
         >>> compute_energy_norm(v, A)  # tensor([5.])
     """
     return torch.sqrt(compute_quadratic_form(vector, matrix).clamp(min=0))
+
+
+def _compute_relative_energy_components(
+    preds: Tensor,
+    target: Tensor,
+    matrix: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Compute (error_norms, target_norms) for relative energy metrics in one call scope."""
+    error_vectors = compute_error_vectors(preds, target)
+    batch_vectors, dim = target.shape
+
+    if not isinstance(matrix, Tensor):
+        raise ValueError(
+            f"Expected matrix tensor with shape (B, D, D), got type {type(matrix).__name__}."
+        )
+    if matrix.dim() != 3:
+        raise ValueError(
+            f"Expected matrix with shape (B, D, D), got {tuple(matrix.shape)}. "
+            "Callers must provide batched matrices (use (1, D, D) for shared matrices)."
+        )
+
+    batch_matrices = matrix.size(0)
+
+    if matrix.layout == torch.strided:
+        if batch_matrices == 1:
+            dense = matrix.squeeze(0)
+            error_Av = torch.mm(dense, error_vectors.T).T
+            target_Av = torch.mm(dense, target.T).T
+        elif batch_matrices == batch_vectors:
+            error_Av = torch.bmm(matrix, error_vectors.unsqueeze(-1)).squeeze(-1)
+            target_Av = torch.bmm(matrix, target.unsqueeze(-1)).squeeze(-1)
+        else:
+            raise ValueError(
+                f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
+                "Expected matrix batch to be 1 (shared) or equal to vector batch."
+            )
+    elif matrix.layout in _SPARSE_LAYOUTS:
+        prepared, shared = _prepare_sparse_kernel(matrix, batch_vectors, dim)
+        error_Av = _apply_prepared_kernel(prepared, error_vectors, shared=shared)
+        target_Av = _apply_prepared_kernel(prepared, target, shared=shared)
+    else:
+        raise ValueError(
+            f"Unsupported matrix layout {matrix.layout} for shape {tuple(matrix.shape)}. "
+            "Expected dense or sparse batched tensor (B, D, D)."
+        )
+
+    error_norms = torch.sqrt((error_vectors * error_Av).sum(dim=-1).clamp(min=0))
+    target_norms = torch.sqrt((target * target_Av).sum(dim=-1).clamp(min=0))
+    return error_norms, target_norms
 
 
 # ============================================================================
@@ -400,10 +561,12 @@ def temporal_derivative_error(
         >>> accel_error = temporal_derivative_error(preds, target, n=2)
         >>> # Compares acceleration across time
     """
-    # Validate inputs (compute_temporal_derivative will validate dimensions)
-    error = compute_error_vectors(preds, target)
-    derivative_error = compute_temporal_derivative(error, n=n, derivative_dim=derivative_dim)
-    squared_derivative = torch.pow(derivative_error, 2)
+    squared_derivative = _temporal_derivative_update(
+        preds,
+        target,
+        n=n,
+        derivative_dim=derivative_dim,
+    )
     return apply_aggregation(squared_derivative, aggregator)
 
 
@@ -445,10 +608,15 @@ def _normalized_vector_norm_update(
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
-    error_vecs = compute_error_vectors(preds, target)
-    error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
-    target_norms = compute_vector_norm(target, ord=ord, dim=dim)
-    return safe_divide(error_norms, target_norms, eps=eps)
+    norm_fn = partial(compute_vector_norm, ord=ord, dim=dim)
+    return compute_relative_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=norm_fn,
+        divide_fn=safe_divide,
+        eps=eps,
+    )
 
 
 def _normalized_vector_norm_compute(sum_errors: Tensor, total: int) -> Tensor:
@@ -466,7 +634,7 @@ def _normalized_vector_norm_compute(sum_errors: Tensor, total: int) -> Tensor:
     Returns:
         Mean normalized error
     """
-    return sum_errors / total
+    return compute_state_mean(sum_errors, total)
 
 
 def _temporal_derivative_update(
@@ -513,7 +681,7 @@ def _temporal_derivative_compute(sum_squared_errors: Tensor, total: int) -> Tens
     Returns:
         Mean squared derivative error
     """
-    return sum_squared_errors / total
+    return compute_state_mean(sum_squared_errors, total)
 
 
 def _absolute_vector_norm_update(preds: Tensor, target: Tensor, ord: int, dim: int) -> Tensor:
@@ -537,8 +705,12 @@ def _absolute_vector_norm_update(preds: Tensor, target: Tensor, ord: int, dim: i
     """
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
-    error_vecs = compute_error_vectors(preds, target)
-    return compute_vector_norm(error_vecs, ord=ord, dim=dim)
+    return compute_error_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=partial(compute_vector_norm, ord=ord, dim=dim),
+    )
 
 
 def _absolute_vector_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
@@ -556,7 +728,7 @@ def _absolute_vector_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
     Returns:
         Mean absolute vector norm error
     """
-    return sum_norms / total
+    return compute_state_mean(sum_norms, total)
 
 
 def _energy_norm_update(preds: Tensor, target: Tensor, matrix: Tensor) -> Tensor:
@@ -567,7 +739,7 @@ def _energy_norm_update(preds: Tensor, target: Tensor, matrix: Tensor) -> Tensor
     Shape:
         preds:  (B, D)
         target: (B, D)
-        matrix: (B, D, D) or (D, D) shared
+        matrix: (B, D, D) dense/sparse
         output: (B,) — one A-norm value per sample
 
     Args:
@@ -578,8 +750,12 @@ def _energy_norm_update(preds: Tensor, target: Tensor, matrix: Tensor) -> Tensor
     Returns:
         Per-sample absolute energy norm errors (not aggregated)
     """
-    error_vecs = compute_error_vectors(preds, target)
-    return compute_energy_norm(error_vecs, matrix)
+    return compute_error_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=partial(compute_energy_norm, matrix=matrix),
+    )
 
 
 def _energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
@@ -597,7 +773,7 @@ def _energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
     Returns:
         Mean absolute energy norm error
     """
-    return sum_norms / total
+    return compute_state_mean(sum_norms, total)
 
 
 def _relative_energy_norm_update(
@@ -610,7 +786,7 @@ def _relative_energy_norm_update(
     Shape:
         preds:  (B, D)
         target: (B, D)
-        matrix: (B, D, D) or (D, D) shared
+        matrix: (B, D, D) dense/sparse
         output: (B,) — one relative error per sample
 
     Args:
@@ -622,9 +798,7 @@ def _relative_energy_norm_update(
     Returns:
         Per-sample relative energy norm errors (not aggregated)
     """
-    error_vecs = compute_error_vectors(preds, target)
-    error_norms = compute_energy_norm(error_vecs, matrix)
-    target_norms = compute_energy_norm(target, matrix)
+    error_norms, target_norms = _compute_relative_energy_components(preds, target, matrix)
     return safe_divide(error_norms, target_norms, eps=eps)
 
 
@@ -643,7 +817,7 @@ def _relative_energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
     Returns:
         Mean relative energy norm error
     """
-    return sum_norms / total
+    return compute_state_mean(sum_norms, total)
 
 
 # ============================================================================

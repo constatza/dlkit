@@ -33,13 +33,16 @@ Examples:
     >>> metric_value = mae(pred.detach(), target)
 """
 
+from functools import partial
 from typing import Literal
 
 import torch
 from torch import Tensor
 
+from ._norm_ops import compute_error_norms, compute_relative_norms
 from .metrics.functional import (
     AggregatorFn,
+    _compute_relative_energy_components,
     apply_aggregation,
     compute_error_vectors,
     compute_vector_norm,
@@ -231,9 +234,13 @@ def vector_norm_loss(
     """
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
-    error_vecs = compute_error_vectors(preds, target)
-    error_norms = compute_vector_norm(error_vecs, ord=ord, dim=dim)
-    return apply_aggregation(error_norms, aggregator)
+    per_sample_norms = compute_error_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=partial(compute_vector_norm, ord=ord, dim=dim),
+    )
+    return apply_aggregation(per_sample_norms, aggregator)
 
 
 def normalized_vector_norm_loss(
@@ -296,7 +303,7 @@ def energy_norm_loss(
     Shape:
         preds:  (B, D)
         target: (B, D)
-        matrix: (B, D, D) per-sample SPD matrix, or (D, D) shared matrix
+        matrix: (B, D, D) batched SPD matrix
         output: (,) scalar (default aggregator)
 
     Args:
@@ -315,8 +322,12 @@ def energy_norm_loss(
         >>> A = torch.eye(8).expand(4, -1, -1)  # identity → same as L2
         >>> loss = energy_norm_loss(preds, target, A)
     """
-    error_vecs = compute_error_vectors(preds, target)
-    per_sample_norms = compute_energy_norm(error_vecs, matrix)
+    per_sample_norms = compute_error_norms(
+        preds,
+        target,
+        error_fn=compute_error_vectors,
+        norm_fn=partial(compute_energy_norm, matrix=matrix),
+    )
     return apply_aggregation(per_sample_norms, aggregator)
 
 
@@ -338,7 +349,7 @@ def relative_energy_norm_loss(
     Shape:
         preds:  (B, D)
         target: (B, D)
-        matrix: (B, D, D) per-sample SPD matrix, or (D, D) shared matrix
+        matrix: (B, D, D) batched SPD matrix
         output: (,) scalar (default aggregator)
 
     Args:
@@ -356,13 +367,12 @@ def relative_energy_norm_loss(
     Examples:
         >>> preds = torch.randn(4, 8)
         >>> target = torch.randn(4, 8)
-        >>> A = torch.eye(8)  # shared identity matrix
+        >>> A = torch.eye(8).unsqueeze(0)  # shared identity via batch dim
         >>> loss = relative_energy_norm_loss(preds, target, A)
     """
-    error_vecs = compute_error_vectors(preds, target)
-    error_norms = compute_energy_norm(error_vecs, matrix)
-    target_norms = compute_energy_norm(target, matrix)
-    return apply_aggregation(safe_divide(error_norms, target_norms, eps=eps), aggregator)
+    error_norms, target_norms = _compute_relative_energy_components(preds, target, matrix)
+    per_sample_relative = safe_divide(error_norms, target_norms, eps=eps)
+    return apply_aggregation(per_sample_relative, aggregator)
 
 
 def normalized_mse(
