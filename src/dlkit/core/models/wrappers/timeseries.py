@@ -77,7 +77,7 @@ class TimeSeriesLightningWrapper(StandardLightningWrapper):
             y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
             predictions = self.model(x)
             loss = self.loss_function(predictions, y.to(predictions.dtype))
-            self._log_stage_outputs("train", loss)
+            self._log_stage_outputs("train", loss, batch_size=predictions.shape[0])
             return {"loss": loss}
         return super().training_step(batch, batch_idx)
 
@@ -96,7 +96,7 @@ class TimeSeriesLightningWrapper(StandardLightningWrapper):
             y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
             predictions = self.model(x)
             val_loss = self.loss_function(predictions, y.to(predictions.dtype))
-            self._log_stage_outputs("val", val_loss)
+            self._log_stage_outputs("val", val_loss, batch_size=predictions.shape[0])
             return {"val_loss": val_loss}
         return super().validation_step(batch, batch_idx)
 
@@ -115,6 +115,6 @@ class TimeSeriesLightningWrapper(StandardLightningWrapper):
             y = y_tuple[0] if isinstance(y_tuple, (tuple, list)) else y_tuple
             predictions = self.model(x)
             test_loss = self.loss_function(predictions, y.to(predictions.dtype))
-            self._log_stage_outputs("test", test_loss)
+            self._log_stage_outputs("test", test_loss, batch_size=predictions.shape[0])
             return {"test_loss": test_loss}
         return super().test_step(batch, batch_idx)

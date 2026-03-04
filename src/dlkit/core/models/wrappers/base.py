@@ -392,7 +392,8 @@ class ProcessingLightningWrapper(LightningModule):
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
         loss = self._loss_computer.compute(batch["predictions"], batch)
-        self._log_stage_outputs("train", loss)
+        batch_size = _batch_size_of(batch["predictions"])
+        self._log_stage_outputs("train", loss, batch_size=batch_size)
         return {"loss": loss}
 
     def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
@@ -408,8 +409,9 @@ class ProcessingLightningWrapper(LightningModule):
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
         val_loss = self._loss_computer.compute(batch["predictions"], batch)
+        batch_size = _batch_size_of(batch["predictions"])
         self._metrics_updater.update(batch["predictions"], batch, stage="val")
-        self._log_stage_outputs("val", val_loss)
+        self._log_stage_outputs("val", val_loss, batch_size=batch_size)
         return {"val_loss": val_loss}
 
     def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
@@ -425,8 +427,9 @@ class ProcessingLightningWrapper(LightningModule):
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
         test_loss = self._loss_computer.compute(batch["predictions"], batch)
+        batch_size = _batch_size_of(batch["predictions"])
         self._metrics_updater.update(batch["predictions"], batch, stage="test")
-        self._log_stage_outputs("test", test_loss)
+        self._log_stage_outputs("test", test_loss, batch_size=batch_size)
         return {"test_loss": test_loss}
 
     def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
@@ -682,6 +685,7 @@ class ProcessingLightningWrapper(LightningModule):
         stage: str,
         loss: Tensor | None,
         metrics: dict[str, Any] | None = None,
+        batch_size: int | None = None,
     ) -> None:
         """Centralized metric logging for training stages.
 
@@ -689,15 +693,21 @@ class ProcessingLightningWrapper(LightningModule):
             stage: Stage identifier ('train', 'val', 'test', 'val_epoch', 'test_epoch').
             loss: Scalar loss tensor (optional).
             metrics: Additional metrics dict (optional).
+            batch_size: Batch size for correct epoch-level weighted averaging by Lightning.
         """
         if loss is not None:
             loss_name = self._format_metric_name(stage, "loss")
-            self._safe_log(loss_name, loss, on_step=False, on_epoch=True, prog_bar=True)
+            self._safe_log(
+                loss_name, loss, on_step=False, on_epoch=True, prog_bar=True,
+                batch_size=batch_size,
+            )
         if metrics:
             formatted = {
                 self._format_metric_name(stage, key): value for key, value in metrics.items()
             }
-            self._safe_log_dict(formatted, on_step=False, on_epoch=True, prog_bar=True)
+            self._safe_log_dict(
+                formatted, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size,
+            )
 
     def _format_metric_name(self, stage: str, name: str) -> str:
         """Normalize metric names per stage conventions.

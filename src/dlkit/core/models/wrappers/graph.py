@@ -41,6 +41,14 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
     target-entry config name (default ``"y"``). All Lightning step methods
     are overridden; the base protocol objects serve as no-op sentinels.
 
+    **batch_size semantics**: All step methods pass ``batch_size=predictions.shape[0]``
+    (total node count M across the PyG batch) to ``self.log()``. This is
+    mathematically correct for node-level losses with mean reduction: Lightning
+    computes the epoch mean as ``Σ(loss_i × M_i) / Σ(M_i)``, recovering the
+    true per-node mean over the full dataset. Using ``num_graphs`` instead
+    would bias the epoch mean toward batches with more nodes per graph, and
+    it is also unavailable on single ``Data`` objects.
+
     Attributes:
         loss_function: Loss callable for training/validation/test steps.
         val_metrics: Validation MetricCollection.
@@ -171,12 +179,16 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         Returns:
             Dictionary containing the training loss.
+
+        Note:
+            ``batch_size=predictions.shape[0]`` passes the total node count so
+            Lightning weights epoch-level aggregation by nodes, not graphs.
         """
         x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
         predictions = self.model(x, edge_index, edge_attr)
         target = self._extract_pyg_target(batch, predictions)
         loss = self.loss_function(predictions, target)
-        self._log_stage_outputs("train", loss)
+        self._log_stage_outputs("train", loss, batch_size=predictions.shape[0])
         return {"loss": loss}
 
     def validation_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
@@ -188,13 +200,17 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         Returns:
             Dictionary containing the validation loss.
+
+        Note:
+            ``batch_size=predictions.shape[0]`` passes the total node count so
+            Lightning weights epoch-level aggregation by nodes, not graphs.
         """
         x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
         predictions = self.model(x, edge_index, edge_attr)
         target = self._extract_pyg_target(batch, predictions)
         val_loss = self.loss_function(predictions, target)
         metrics = self.val_metrics(predictions, target)
-        self._log_stage_outputs("val", val_loss, metrics if metrics else None)
+        self._log_stage_outputs("val", val_loss, metrics if metrics else None, batch_size=predictions.shape[0])
         return {"val_loss": val_loss}
 
     def test_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
@@ -206,13 +222,17 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         Returns:
             Dictionary containing the test loss.
+
+        Note:
+            ``batch_size=predictions.shape[0]`` passes the total node count so
+            Lightning weights epoch-level aggregation by nodes, not graphs.
         """
         x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
         predictions = self.model(x, edge_index, edge_attr)
         target = self._extract_pyg_target(batch, predictions)
         test_loss = self.loss_function(predictions, target)
         metrics = self.test_metrics(predictions, target)
-        self._log_stage_outputs("test", test_loss, metrics if metrics else None)
+        self._log_stage_outputs("test", test_loss, metrics if metrics else None, batch_size=predictions.shape[0])
         return {"test_loss": test_loss}
 
     def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> Any:
