@@ -16,11 +16,9 @@ def _get_default_optuna_storage() -> str:
     Returns:
         Default Optuna storage URL resolved through environment settings
     """
-    from dlkit.tools.config.environment import DLKitEnvironment
-    from dlkit.interfaces.servers.path_resolution import ServerPathResolver
+    from dlkit.tools.io import locations
 
-    path_resolver = ServerPathResolver(DLKitEnvironment())
-    return path_resolver.get_default_optuna_storage_url()
+    return locations.optuna_storage_uri()
 
 
 def _get_environment_aware_output_dir() -> str:
@@ -95,15 +93,9 @@ def build_mlflow_template_dict() -> dict:
         },
         "MLFLOW": {
             "enabled": True,
-            "server": {
-                "host": "localhost",
-                "port": 5000,
-            },
-            "client": {
-                "experiment_name": "my_experiment",
-                "run_name": "my_run",
-                "register_model": True,
-            },
+            "experiment_name": "my_experiment",
+            "run_name": "my_run",
+            "register_model": True,
         },
         "TRAINING": {
             "trainer": {
@@ -134,9 +126,7 @@ def build_optuna_template_dict() -> dict:
         },
         "MLFLOW": {
             "enabled": True,
-            "client": {
-                "experiment_name": "my_experiment",
-            },
+            "experiment_name": "my_experiment",
         },
         "OPTUNA": {
             "enabled": True,

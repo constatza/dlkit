@@ -108,7 +108,7 @@ def _get_error_suggestions(error: DLKitError) -> list[str]:
         # Add strategy-specific suggestions
         strategy = error.context.get("strategy")
         if strategy == "mlflow":
-            suggestions.append("Check MLflow server configuration and connectivity")
+            suggestions.append("Check MLflow tracking URI/env configuration and connectivity")
         elif strategy == "optuna":
             suggestions.append("Verify Optuna study configuration and storage")
 

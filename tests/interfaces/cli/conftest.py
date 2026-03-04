@@ -78,8 +78,6 @@ checkpoint = "{checkpoint_path}"
 
 [MLFLOW]
 enabled = true
-
-[MLFLOW.client]
 experiment_name = "test_experiment"
 
 [TRAINING.trainer]
@@ -497,8 +495,6 @@ output_dir = "{output_dir}"
 [MLFLOW]
 enabled = true
 is_active = true
-
-[MLFLOW.client]
 experiment_name = "test_experiment"
 run_name = "test_run"
 
@@ -533,8 +529,6 @@ output_dir = "{output_dir}"
 [MLFLOW]
 enabled = true
 is_active = true
-
-[MLFLOW.client]
 experiment_name = "test_experiment"
 run_name = "test_run"
 
@@ -567,8 +561,6 @@ def train_override_scenarios() -> dict[str, dict[str, Any]]:
         },
         "mlflow_overrides": {
             "strategy": "mlflow",
-            "mlflow_host": "localhost",
-            "mlflow_port": 5000,
             "experiment_name": "custom_experiment",
             "run_name": "custom_run",
         },

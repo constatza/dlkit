@@ -52,7 +52,7 @@ def test_help_is_comprehensive(cli_runner: CliRunner) -> None:
 
 def test_all_subcommands_have_help(cli_runner: CliRunner) -> None:
     """Test that all main subcommands provide help documentation."""
-    subcommands = ["train", "config", "predict", "optimize", "server"]
+    subcommands = ["train", "config", "predict", "optimize"]
 
     for subcmd in subcommands:
         result = cli_runner.invoke(cli_app, [subcmd, "--help"])

@@ -22,7 +22,7 @@ from dlkit.runtime.workflows.strategies.tracking.artifact_logger import (
 )
 from dlkit.runtime.workflows.strategies.tracking.interfaces import IRunContext
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import MLflowSettings
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +145,7 @@ def test_registers_model_with_class_name_without_default_aliases_or_tags() -> No
         MODEL=None,
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000",
-                register_model=True,
-            ),
+            register_model=True,
         ),
     )
 
@@ -178,10 +175,7 @@ def test_logs_model_without_registration_when_disabled() -> None:
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000",
-                register_model=False,
-            ),
+            register_model=False,
         ),
     )
     logger = ArtifactLogger(tracker=Mock())
@@ -208,12 +202,9 @@ def test_merges_configured_aliases_and_model_version_tags() -> None:
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000",
-                register_model=True,
-                registered_model_aliases=("benchmark_high_precision", "dataset_A_latest"),
-                registered_model_version_tags={"team": "platform"},
-            ),
+            register_model=True,
+            registered_model_aliases=("benchmark_high_precision", "dataset_A_latest"),
+            registered_model_version_tags={"team": "platform"},
         ),
     )
     logger = ArtifactLogger(tracker=Mock())
@@ -251,10 +242,7 @@ def test_maybe_register_model_uses_inner_model_class_name_for_tag(
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000",
-                register_model=False,
-            ),
+            register_model=False,
         ),
     )
     artifact_logger = ArtifactLogger(tracker=Mock())

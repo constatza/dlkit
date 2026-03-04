@@ -210,8 +210,6 @@ class TestIntegrationWithCommandInput:
             epochs=100,
             batch_size=32,
             learning_rate=0.001,
-            mlflow_host="localhost",
-            mlflow_port=5000,
             experiment_name="test_exp",
             run_name="test_run",
             additional_overrides={"custom": "value"},
@@ -225,8 +223,6 @@ class TestIntegrationWithCommandInput:
         assert result["epochs"] == 100
         assert result["batch_size"] == 32
         assert result["learning_rate"] == 0.001
-        assert result["mlflow_host"] == "localhost"
-        assert result["mlflow_port"] == 5000
         assert result["experiment_name"] == "test_exp"
         assert result["run_name"] == "test_run"
         assert result["custom"] == "value"

@@ -18,12 +18,11 @@ from dlkit.runtime.workflows.strategies.tracking import determine_study_name
 
 
 def _make_settings(run_name: str | None = None) -> SimpleNamespace:
-    client = SimpleNamespace(run_name=run_name) if run_name is not None else None
-    mlflow = SimpleNamespace(client=client) if client is not None else None
+    mlflow = SimpleNamespace(run_name=run_name) if run_name is not None else None
     return SimpleNamespace(SESSION=None, MLFLOW=mlflow)
 
 
-def test_determine_study_name_prefers_explicit_client_run_name() -> None:
+def test_determine_study_name_prefers_explicit_run_name() -> None:
     settings = _make_settings(run_name="  explicit_name  ")
     optuna_config = SimpleNamespace(study_name=None)
 
@@ -83,7 +82,7 @@ def test_adapter_parent_run_defaults_to_study_name_when_no_explicit_run_name() -
 def test_adapter_parent_run_respects_explicit_run_name_over_study() -> None:
     adapter = MLflowTrackingAdapter(
         mlflow_tracker=Mock(),
-        mlflow_settings=SimpleNamespace(client=SimpleNamespace(run_name="configured")),
+        mlflow_settings=SimpleNamespace(run_name="configured"),
         session_name="experiment",
     )
     study = Study(

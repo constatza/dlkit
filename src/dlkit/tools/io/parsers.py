@@ -84,10 +84,10 @@ class PartialTOMLParser:
     ) -> dict[str, Any]:
         """Extract specific sections using targeted line-by-line parsing.
 
-        Handles nested sections like [MLFLOW.server] as part of the [MLFLOW] section.
+        Handles nested sections as part of parent section parsing.
         """
         # For sections with potential nested subsections, fall back to full parsing
-        # to ensure proper handling of nested TOML structures like [MLFLOW.server]
+        # to ensure proper handling of nested TOML structures.
         has_potentially_nested_sections = any(
             section_name in {"MLFLOW", "OPTUNA", "TRAINING", "MODEL", "DATASET"}
             for section_name in section_names

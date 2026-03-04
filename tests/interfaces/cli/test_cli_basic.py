@@ -52,7 +52,7 @@ def test_cli_invalid_command(cli_runner: CliRunner) -> None:
     assert result.exit_code == 2
 
 
-@pytest.mark.parametrize("subcommand", ["train", "predict", "optimize", "config", "server"])
+@pytest.mark.parametrize("subcommand", ["train", "predict", "optimize", "config"])
 def test_subcommand_help_accessible(cli_runner: CliRunner, subcommand: str) -> None:
     """Test that each subcommand's help is accessible."""
     result = cli_runner.invoke(cli_app, [subcommand, "--help"])

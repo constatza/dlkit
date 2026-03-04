@@ -36,7 +36,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
     """MLflow adapter implementing proper nested run hierarchy for optimization.
 
     This adapter creates the proper Study → Trial → Best Retrain hierarchy
-    by delegating to the existing MLflowTracker which handles server lifecycle.
+    by delegating to the existing MLflowTracker client lifecycle.
 
     Usage:
         with adapter:
@@ -54,7 +54,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
         """Initialize MLflow tracking adapter.
 
         Args:
-            mlflow_tracker: Existing MLflowTracker instance with server management
+            mlflow_tracker: Existing MLflowTracker instance
             mlflow_settings: MLflow configuration settings for initialization
             session_name: Session name to use as experiment name
         """
@@ -66,16 +66,14 @@ class MLflowTrackingAdapter(IExperimentTracker):
         self._explicit_run_name: str | None = None
 
         if self._mlflow_settings:
-            client = getattr(self._mlflow_settings, "client", None)
-            if client is not None:
-                candidate = getattr(client, "run_name", None)
-                if isinstance(candidate, str):
-                    candidate = candidate.strip() or None
-                if candidate:
-                    self._explicit_run_name = candidate
+            candidate = getattr(self._mlflow_settings, "run_name", None)
+            if isinstance(candidate, str):
+                candidate = candidate.strip() or None
+            if candidate:
+                self._explicit_run_name = candidate
 
         if self._tracker is None:
-            # Import and create the existing MLflowTracker with server management
+            # Import and create the existing MLflowTracker
             try:
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
@@ -240,7 +238,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
         """Resolve parent MLflow run name for the study.
 
         Returns the explicit run name only when configured under
-        ``MLFLOW.client.run_name``. Otherwise ``None`` is returned so MLflow can
+        ``MLFLOW.run_name``. Otherwise ``None`` is returned so MLflow can
         generate a random run name instead of mirroring the experiment name.
 
         Args:

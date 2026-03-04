@@ -22,8 +22,6 @@ from ..params import (
     EXPERIMENT_NAME_PARAM,
     LEARNING_RATE_PARAM,
     MLFLOW_FLAG,
-    MLFLOW_HOST_PARAM,
-    MLFLOW_PORT_PARAM,
     OUTPUT_DIR_PARAM,
     ROOT_DIR_PARAM,
     RUN_NAME_PARAM,
@@ -50,8 +48,6 @@ def _run_training_impl(
     epochs: EPOCHS_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     learning_rate: LEARNING_RATE_PARAM = None,
-    mlflow_host: MLFLOW_HOST_PARAM = None,
-    mlflow_port: MLFLOW_PORT_PARAM = None,
     experiment_name: EXPERIMENT_NAME_PARAM = None,
     run_name: RUN_NAME_PARAM = None,
 ) -> None:
@@ -61,7 +57,7 @@ def _run_training_impl(
         dlkit train config.toml
         dlkit train config.toml --mlflow --epochs 100
         dlkit train config.toml --checkpoint model.ckpt --output-dir ./custom
-        dlkit train config.toml --mlflow --mlflow-host localhost --experiment-name test
+        dlkit train config.toml --mlflow --experiment-name test
         dlkit train config.toml --validate-only
     """
     try:
@@ -115,10 +111,6 @@ def _run_training_impl(
             override_messages.append(f"Batch size: {batch_size}")
         if learning_rate:
             override_messages.append(f"Learning rate: {learning_rate}")
-        if mlflow_host:
-            override_messages.append(f"MLflow host: {mlflow_host}")
-        if mlflow_port:
-            override_messages.append(f"MLflow port: {mlflow_port}")
         if experiment_name:
             override_messages.append(f"Experiment: {experiment_name}")
         if run_name:
@@ -147,8 +139,6 @@ def _run_training_impl(
                 epochs=epochs,
                 batch_size=batch_size,
                 learning_rate=learning_rate,
-                mlflow_host=mlflow_host,
-                mlflow_port=mlflow_port,
                 experiment_name=experiment_name,
                 run_name=run_name,
             )
@@ -189,8 +179,6 @@ def entry(
     epochs: EPOCHS_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     learning_rate: LEARNING_RATE_PARAM = None,
-    mlflow_host: MLFLOW_HOST_PARAM = None,
-    mlflow_port: MLFLOW_PORT_PARAM = None,
     experiment_name: EXPERIMENT_NAME_PARAM = None,
     run_name: RUN_NAME_PARAM = None,
 ) -> None:
@@ -210,8 +198,6 @@ def entry(
         epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
-        mlflow_host=mlflow_host,
-        mlflow_port=mlflow_port,
         experiment_name=experiment_name,
         run_name=run_name,
     )

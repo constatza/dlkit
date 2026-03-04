@@ -81,8 +81,7 @@ def sample_general_settings_data() -> dict[str, Any]:
         },
         "MLFLOW": {
             "enabled": True,
-            "server": {"host": "localhost", "port": 5000},
-            "client": {"experiment_name": "test_general_experiment"},
+            "experiment_name": "test_general_experiment",
         },
         "OPTUNA": {"enabled": True, "n_trials": 50},
         "DATAMODULE": {
@@ -177,13 +176,6 @@ out_channels = 10
 
 [MLFLOW]
 enabled = true
-
-[MLFLOW.server]
-scheme = "https"
-host = "mlflow.example.com"
-port = 443
-
-[MLFLOW.client]
 experiment_name = "advanced_experiment"
 run_name = "advanced_run_001"
 register_model = true

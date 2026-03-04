@@ -65,15 +65,11 @@ class DLKitEnvironment(BaseSettings):
     # DLKit internal artifacts only (not user dataflow)
     internal_dir: str = Field(
         default=".dlkit",
-        description="Directory for DLKit internal artifacts (logs, server tracking)",
+        description="Directory for DLKit internal artifacts (logs)",
     )
 
     log_filename: str = Field(
         default="dlkit.log", description="Default log file name within internal directory"
-    )
-
-    server_tracking_file: str = Field(
-        default="servers.json", description="Server tracking file name within internal directory"
     )
 
     def get_root_path(self) -> Path:
@@ -114,20 +110,6 @@ class DLKitEnvironment(BaseSettings):
             Path: Path to log file in internal directory
         """
         return self.get_internal_dir_path() / self.log_filename
-
-    def get_server_tracking_path(self) -> Path:
-        """Get path to server tracking file.
-
-        Returns:
-            Path: Path to server tracking file in user's home .dlkit directory
-
-        Note:
-            Server tracking always goes in user's home directory for global access,
-            not in the project's internal directory.
-        """
-        user_internal_dir = Path.home() / self.internal_dir
-        user_internal_dir.mkdir(parents=True, exist_ok=True)
-        return user_internal_dir / self.server_tracking_file
 
 
 # Global instance for easy access throughout the system

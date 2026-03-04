@@ -19,7 +19,7 @@ from dlkit.runtime.workflows.strategies.tracking import (
 )
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import MLflowSettings
 
 
 class MockRunContext(IRunContext):
@@ -165,11 +165,8 @@ def mlflow_settings():
     return GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000",
-                experiment_name="test_experiment",
-                run_name="test_run",
-            ),
+            experiment_name="test_experiment",
+            run_name="test_run",
         )
     )
 
@@ -209,8 +206,8 @@ def test_tracking_decorator_single_responsibility(
 
     # Verify tracking was performed
     assert len(mock_tracker.created_runs) == 1
-    # Experiment name priority: MLFLOW.client.experiment_name → SESSION.name → "DLKit"
-    # Explicit MLFLOW.client.experiment_name takes priority over SESSION.name
+    # Experiment name priority: MLFLOW.experiment_name → SESSION.name → "DLKit"
+    # Explicit MLFLOW.experiment_name takes priority over SESSION.name
     assert mock_tracker.created_runs[0]["experiment_name"] == "test_experiment"
     assert mock_tracker.created_runs[0]["run_name"] == "test_run"
 
@@ -257,10 +254,10 @@ def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_component
     mock_executor.execute.assert_called_once_with(build_components, settings_no_mlflow)
 
 
-def test_tracking_decorator_server_metadata_tagging(
+def test_tracking_decorator_tracking_uri_tagging(
     mock_executor, mock_tracker, mlflow_settings, build_components
 ):
-    """Test that server metadata is properly tagged."""
+    """Test that tracking URI metadata is tagged."""
 
     # Mock tracker with server info capabilities
     class MockMLflowTracker(MockExperimentTracker):
@@ -272,10 +269,7 @@ def test_tracking_decorator_server_metadata_tagging(
 
     result = decorator.execute(build_components, mlflow_settings)
 
-    # Verify server tags were set
-    assert tracker.run_context.tags["mlflow_server_url"] == "http://localhost:5000"
-    assert tracker.run_context.tags["mlflow_server_running"] == "True"
-    assert tracker.run_context.tags["mlflow_server_response_time"] == "0.1"
+    assert tracker.run_context.tags["mlflow_tracking_uri"] == "http://localhost:5000"
     assert isinstance(result, TrainingResult)
 
 

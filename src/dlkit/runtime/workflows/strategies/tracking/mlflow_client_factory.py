@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any
 
 import mlflow
 from mlflow import MlflowClient
 
-from dlkit.tools.config.mlflow_settings import MLflowClientSettings
 from dlkit.tools.io.url_utils import parse_url
 from mlflow.environment_variables import (
     MLFLOW_HTTP_REQUEST_TIMEOUT,
@@ -30,25 +28,17 @@ class MLflowClientFactory:
 
     @staticmethod
     def create_client(
-        client_config: MLflowClientSettings | None = None,
         tracking_uri: str | None = None,
     ) -> MlflowClient:
         """Create MLflow client with explicit configuration.
 
         Args:
-            client_config: Client configuration settings
             tracking_uri: Override tracking URI
 
         Returns:
             Configured MlflowClient instance
         """
-        # Determine tracking URI from various sources
-        uri = None
-
-        if tracking_uri:
-            uri = str(tracking_uri)
-        elif client_config and hasattr(client_config, "tracking_uri"):
-            uri = str(client_config.tracking_uri)
+        uri = str(tracking_uri) if tracking_uri else None
 
         # Validate tracking URI if provided
         if uri:
@@ -66,31 +56,6 @@ class MLflowClientFactory:
         else:
             logger.debug("Creating MLflow client with default tracking URI")
             return MlflowClient()
-
-    @staticmethod
-    def create_client_from_server_info(
-        server_info: Any,
-        client_config: MLflowClientSettings | None = None,
-    ) -> MlflowClient:
-        """Create MLflow client configured for specific server.
-
-        Args:
-            server_info: Server information containing URL
-            client_config: Additional client configuration
-
-        Returns:
-            MlflowClient configured for the server
-        """
-        server_url = getattr(server_info, "url", None)
-        if not server_url:
-            logger.warning("Server info missing URL, using default client")
-            return MLflowClientFactory.create_client(client_config)
-
-        logger.debug(f"Creating MLflow client for server: {server_url}")
-        return MLflowClientFactory.create_client(
-            client_config=client_config,
-            tracking_uri=server_url,
-        )
 
     @staticmethod
     def validate_client_connectivity(client: MlflowClient) -> bool:

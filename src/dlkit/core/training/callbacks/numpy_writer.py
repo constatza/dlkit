@@ -7,7 +7,6 @@ from lightning.pytorch import Callback, LightningModule, Trainer
 from loguru import logger
 from pydantic import DirectoryPath, validate_call
 
-from dlkit.interfaces.servers import create_mlflow_adapter
 from dlkit.tools.io.url_utils import get_url_path
 
 
@@ -30,20 +29,12 @@ class NumpyWriter(Callback):
         """
         super().__init__()
         self.output_dir = output_dir
-        self._mlflow_adapter = create_mlflow_adapter()
         self._use_mlflow = False
 
         if self.output_dir is None:
-            artifact_uri = self._mlflow_adapter.get_artifact_uri()
-            if artifact_uri:
-                self.output_dir = Path(get_url_path(artifact_uri).lstrip("/"))
-                self._use_mlflow = True
-            else:
-                # Fallback to current directory
-                self.output_dir = Path.cwd() / "predictions"
-                self._use_mlflow = False
+            self.output_dir, self._use_mlflow = self._resolve_default_output_dir()
         if self.output_dir is not None:
-            self.output_dir.parent.mkdir(parents=True, exist_ok=True)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
         # This dictionary will accumulate predictions across batches.
         # The keys are strings and values are lists of torch.Tensor.
         self._predictions: dict[str, list[torch.Tensor]] = {}
@@ -104,12 +95,11 @@ class NumpyWriter(Callback):
             try:
                 np.save(output_path, concatenated)
                 if self._use_mlflow:
-                    current_run = self._mlflow_adapter.get_active_run()
+                    import mlflow
+
+                    current_run = mlflow.active_run()
                     if current_run is not None:
-                        run_id = current_run.info.run_id
-                        self._mlflow_adapter.log_artifact(
-                            str(output_path), artifact_path="predictions", run_id=run_id
-                        )
+                        mlflow.log_artifact(str(output_path), artifact_path="predictions")
 
                 logger.debug(f"Successfully saved output: {output_path}")
             except OSError as e:
@@ -130,3 +120,16 @@ class NumpyWriter(Callback):
         if key not in self._predictions:
             self._predictions[key] = []
         self._predictions[key].append(value)
+
+    @staticmethod
+    def _resolve_default_output_dir() -> tuple[Path, bool]:
+        try:
+            import mlflow
+
+            artifact_uri = mlflow.get_artifact_uri()
+            if artifact_uri and artifact_uri.startswith("file://"):
+                return Path(get_url_path(artifact_uri).lstrip("/")), True
+        except Exception:
+            pass
+
+        return Path.cwd() / "predictions", False

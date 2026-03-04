@@ -196,12 +196,9 @@ class ConfigurationService:
         # Add MLflow configuration
         result["MLFLOW"] = {
             "enabled": True,
-            "server": {"host": "localhost", "port": 5000},
-            "client": {
-                "experiment_name": "my_experiment",
-                "run_name": "my_run",
-                "register_model": True,
-            },
+            "experiment_name": "my_experiment",
+            "run_name": "my_run",
+            "register_model": True,
         }
 
         return result
@@ -229,11 +226,9 @@ class ConfigurationService:
         Returns:
             Default Optuna storage URL
         """
-        from dlkit.tools.config.environment import DLKitEnvironment
-        from dlkit.interfaces.servers.path_resolution import ServerPathResolver
+        from dlkit.tools.io import locations
 
-        path_resolver = ServerPathResolver(DLKitEnvironment())
-        return path_resolver.get_default_optuna_storage_url()
+        return locations.optuna_storage_uri()
 
     @classmethod
     def _get_environment_aware_output_dir(cls) -> str:
@@ -271,10 +266,8 @@ class ConfigurationService:
         if template_type in ["mlflow", "optuna"]:
             base_comments.update({
                 "MLFLOW.enabled": "Enable MLflow experiment tracking",
-                "MLFLOW.server.host": "MLflow server host",
-                "MLFLOW.server.port": "MLflow server port",
-                "MLFLOW.client.experiment_name": "MLflow experiment name",
-                "MLFLOW.client.run_name": "MLflow run name",
+                "MLFLOW.experiment_name": "MLflow experiment name",
+                "MLFLOW.run_name": "MLflow run name",
             })
 
         if template_type == "optuna":

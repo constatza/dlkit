@@ -59,7 +59,7 @@ def test_verbose_flag_with_valid_command(cli_runner: CliRunner) -> None:
 
 def test_subcommands_are_available(cli_runner: CliRunner) -> None:
     """Test that main subcommands are available and show help."""
-    subcommands = ["train", "config", "predict", "optimize", "server"]
+    subcommands = ["train", "config", "predict", "optimize"]
 
     for subcmd in subcommands:
         result = cli_runner.invoke(cli_app, [subcmd, "--help"])

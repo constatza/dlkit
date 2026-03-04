@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from dlkit.tools.utils.logging_config import configure_logging, get_logger
-from .commands import optimize, config, server, convert
+from .commands import optimize, config, convert
 from .commands import train as train
 from .commands import predict as predict
 
@@ -40,7 +40,6 @@ app.add_typer(
 )
 app.add_typer(optimize.app, name="optimize", help="⚡ Hyperparameter optimization commands")
 app.add_typer(config.app, name="config", help="⚙️ Configuration validation and utilities")
-app.add_typer(server.app, name="server", help="🖥️ Server management commands")
 
 console = Console()
 

@@ -49,8 +49,8 @@ def test_apply_mlflow_overrides_names() -> None:
     base = _base_settings()
 
     new = mgr.apply_overrides(base, experiment_name="expA", run_name="run1")
-    assert new.MLFLOW.client.experiment_name == "expA"
-    assert new.MLFLOW.client.run_name == "run1"
+    assert new.MLFLOW.experiment_name == "expA"
+    assert new.MLFLOW.run_name == "run1"
 
 
 def test_validate_overrides_checks_values_and_plugins(tmp_path: Path) -> None:
@@ -63,6 +63,6 @@ def test_validate_overrides_checks_values_and_plugins(tmp_path: Path) -> None:
 
     # numeric must be positive
     errors = mgr.validate_overrides(
-        base, epochs=0, batch_size=-1, learning_rate=0, mlflow_port=-10, trials=0
+        base, epochs=0, batch_size=-1, learning_rate=0, trials=0
     )
-    assert len(errors) >= 5
+    assert len(errors) >= 4

@@ -15,7 +15,7 @@ from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
 # OptimizationDecorator removed - use clean architecture tests instead
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
 
 
@@ -75,9 +75,7 @@ def test_open_closed_principle_integration(build_components):
     mlflow_settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000", experiment_name="integration_test"
-            ),
+            experiment_name="integration_test",
         )
     )
 
@@ -113,12 +111,10 @@ def test_liskov_substitution_principle_integration(build_components):
 
     # Create different executor configurations
     vanilla_settings = GeneralSettings()
-    mlflow_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings())
-    )
+    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
     optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=2))
     both_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings()),
+        MLFLOW=MLflowSettings(enabled=True),
         OPTUNA=OptunaSettings(enabled=True, n_trials=2),
     )
 
@@ -170,7 +166,7 @@ def test_dependency_inversion_principle_integration(build_components):
     # Explicitly set context manager support
     mock_tracker.__enter__.return_value = mock_tracker
     mock_tracker.__exit__.return_value = None
-    # Mock setup_mlflow_config to return server_url and status
+    # Mock setup_mlflow_config to return tracking URI and status placeholder
     mock_tracker.setup_mlflow_config.return_value = (None, None)
     mock_run_context = MagicMock()
     mock_tracker.create_run.return_value.__enter__.return_value = mock_run_context
@@ -180,7 +176,7 @@ def test_dependency_inversion_principle_integration(build_components):
     tracking_decorator = TrackingDecorator(vanilla_executor, mock_tracker)
 
     # Should be able to inject any implementation
-    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings()))
+    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
 
     result = tracking_decorator.execute(build_components, settings)
     assert isinstance(result, TrainingResult)
@@ -240,7 +236,7 @@ def test_end_to_end_solid_workflow():
 
     # Settings with all features enabled
     full_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings()),
+        MLFLOW=MLflowSettings(enabled=True),
         OPTUNA=OptunaSettings(enabled=True, n_trials=2),
     )
 

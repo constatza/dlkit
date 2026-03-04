@@ -21,7 +21,6 @@ tests/integration/
 ├── test_custom_metrics_integration.py           # Custom metrics end-to-end tests
 ├── test_graph_components.py                     # Graph neural network integration tests
 ├── test_graph_precision_lr_tuning.py            # Graph precision and LR tuning tests
-├── test_mlflow_server_behavior.py               # MLflow server lifecycle tests
 ├── test_mlflow_training_integration.py          # MLflow workflow tests
 ├── test_optuna_mlflow_integration.py            # Optuna + MLflow integration tests
 └── test_transforms_persistence_and_inference.py # Transform save/load and inference tests
@@ -120,7 +119,7 @@ Comprehensive MLflow training integration tests including:
 - Artifact URI validation under pytest `tmp_path`
 - Dataset lineage artifact verification (`lineage/`)
 - Fallback behavior when MLflow unavailable
-- Server health checking
+- Tracking endpoint health checking
 - Auto-detection from settings
 - Training metrics preservation
 - Invalid configuration handling
@@ -150,9 +149,6 @@ Graph neural network integration tests including PyG data handling, graph wrappe
 
 ### `test_graph_precision_lr_tuning.py`
 Precision and learning-rate tuning tests for graph models.
-
-### `test_mlflow_server_behavior.py`
-MLflow server lifecycle integration tests covering startup, health checks, and graceful shutdown.
 
 ## Fixtures Reference
 

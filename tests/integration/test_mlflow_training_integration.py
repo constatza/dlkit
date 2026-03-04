@@ -6,6 +6,7 @@ to MLflow strategy execution to final results logging.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -15,6 +16,7 @@ from urllib.request import url2pathname
 import pytest
 
 pytest.importorskip("mlflow")
+import mlflow
 from mlflow.tracking import MlflowClient
 
 import dlkit
@@ -36,6 +38,23 @@ def _resolve_effective_model_name(model: Any) -> str:
     if isinstance(model, ProcessingLightningWrapper):
         return type(model.model).__name__
     return type(model).__name__
+
+
+def _expected_tracking_uri() -> str:
+    """Resolve tracking URI used by tests (env-first, then current MLflow URI)."""
+    from_env = os.getenv("MLFLOW_TRACKING_URI")
+    if from_env:
+        return from_env
+    return mlflow.get_tracking_uri()
+
+
+def _candidate_tracking_uris(metrics: dict[str, Any]) -> tuple[str, ...]:
+    """Build tracking URI candidates in priority order without duplicates."""
+    primary = _expected_tracking_uri()
+    metric_uri = metrics.get("mlflow_tracking_uri")
+    if metric_uri and metric_uri != primary:
+        return (primary, metric_uri)
+    return (primary,)
 
 
 @pytest.mark.slow
@@ -73,14 +92,25 @@ class TestMLflowTrainingIntegration:
         assert len(metrics) > 0, "Expected some metrics to be logged"
 
         # Verify MLflow run was created
-        tracking_uri = mlflow_settings.MLFLOW.client.tracking_uri
-        # Use same logic as tracking system: MLFLOW.client.experiment_name → SESSION.name
+        uri_candidates = _candidate_tracking_uris(metrics if isinstance(metrics, dict) else {})
+        # Use same logic as tracking system: MLFLOW.experiment_name → SESSION.name
         from dlkit.runtime.workflows.strategies.tracking.naming import determine_experiment_name
 
         experiment_name = determine_experiment_name(mlflow_settings, mlflow_settings.MLFLOW)
-        client = MlflowClient(tracking_uri=tracking_uri)
-        experiment = client.get_experiment_by_name(experiment_name)
-        assert experiment is not None, "Expected MLflow experiment to exist"
+        experiment = None
+        client = None
+        for candidate_uri in uri_candidates:
+            candidate_client = MlflowClient(tracking_uri=candidate_uri)
+            candidate_experiment = candidate_client.get_experiment_by_name(experiment_name)
+            if candidate_experiment is not None:
+                client = candidate_client
+                experiment = candidate_experiment
+                break
+        assert experiment is not None, (
+            "Expected MLflow experiment to exist "
+            f"(name={experiment_name}, tried={uri_candidates})"
+        )
+        assert client is not None
         runs = client.search_runs(
             [experiment.experiment_id],
             order_by=["attributes.start_time DESC"],
@@ -107,11 +137,8 @@ class TestMLflowTrainingIntegration:
             mlflow_settings: GeneralSettings fixture with MLflow enabled.
         """
         mlflow_cfg = mlflow_settings.MLFLOW
-        disabled_client_cfg = mlflow_cfg.client.model_copy(update={"register_model": False})
         disabled_settings = mlflow_settings.model_copy(
-            update={
-                "MLFLOW": mlflow_cfg.model_copy(update={"client": disabled_client_cfg}),
-            }
+            update={"MLFLOW": mlflow_cfg.model_copy(update={"register_model": False})}
         )
 
         # Act
@@ -120,11 +147,11 @@ class TestMLflowTrainingIntegration:
         # Should still have training metadata even if MLflow doesn't fully work
         assert training_result.duration_seconds > 0, "Training should have completed"
 
-    def test_mlflow_training_with_server_health_check(
+    def test_mlflow_training_with_tracking_endpoint_health_check(
         self,
         mlflow_settings: GeneralSettings,
     ) -> None:
-        """Test MLflow training includes server health check metadata.
+        """Test MLflow training includes tracking endpoint health-check behavior.
 
         Args:
             mlflow_settings: GeneralSettings fixture with MLflow enabled.
@@ -132,7 +159,7 @@ class TestMLflowTrainingIntegration:
         # Act
         training_result = dlkit.train(mlflow_settings)
 
-        # Training should complete successfully even if MLflow server has issues
+        # Training should complete successfully even if the tracking endpoint has issues
         assert training_result.duration_seconds > 0, "Training should complete"
         assert training_result.metrics is not None, "Should have some metrics"
 
@@ -152,7 +179,7 @@ class TestMLflowTrainingIntegration:
         # Act - Don't specify strategy, let it auto-detect
         training_result = dlkit.train(mlflow_settings)
 
-        # Verify training completed (MLflow may or may not have metadata depending on server state)
+        # Verify training completed (MLflow may or may not have metadata depending on endpoint state)
         assert training_result.duration_seconds > 0, "Training should have completed"
 
     def test_mlflow_training_preserves_training_metrics(
@@ -167,7 +194,7 @@ class TestMLflowTrainingIntegration:
         # Act
         training_result = dlkit.train(mlflow_settings)
 
-        # Should have training results regardless of MLflow server state
+        # Should have training results regardless of tracking endpoint state
         assert training_result.metrics is not None, "Should have metrics"
         assert training_result.duration_seconds > 0, "Should have completed"
 
@@ -182,7 +209,7 @@ class TestMLflowTrainingIntegration:
             tmp_path: Pytest temporary directory fixture.
         """
         # Use existing mlflow_settings but training should still work
-        # even if server connection fails (which it will in test environment)
+        # even if tracking endpoint connection fails (which it will in test environment)
         # Act - Should handle invalid URI gracefully (MLflow will likely fail but training should continue)
         training_result = dlkit.train(mlflow_settings)
 
@@ -217,22 +244,20 @@ class TestMLflowTrainingIntegration:
         tmp_path: Path,
     ) -> None:
         """Real E2E check: register model, resolve aliases, and load by name/version."""
-        tracking_uri = str(mlflow_settings.MLFLOW.client.tracking_uri)
+        tracking_uri = _expected_tracking_uri()
         unique_suffix = uuid4().hex[:8]
 
         mlflow_cfg = mlflow_settings.MLFLOW
-        mlflow_client_cfg = mlflow_cfg.client.model_copy(
+        mlflow_cfg_updated = mlflow_cfg.model_copy(
             update={
                 "register_model": True,
                 "experiment_name": f"registry_e2e_{unique_suffix}",
                 "run_name": f"registry_run_{unique_suffix}",
                 "registered_model_aliases": ("dataset_A_latest", "benchmark_high_precision"),
-            }
+            },
         )
         settings_with_registration = mlflow_settings.model_copy(
-            update={
-                "MLFLOW": mlflow_cfg.model_copy(update={"client": mlflow_client_cfg}),
-            }
+            update={"MLFLOW": mlflow_cfg_updated}
         )
 
         result = dlkit.train(settings_with_registration)
@@ -266,7 +291,7 @@ class TestMLflowTrainingIntegration:
         )
         assert int(version_entity.version) == latest_version
 
-        experiment = client.get_experiment_by_name(mlflow_client_cfg.experiment_name)
+        experiment = client.get_experiment_by_name(mlflow_cfg_updated.experiment_name)
         assert experiment is not None
         runs = client.search_runs(
             [experiment.experiment_id],
@@ -319,21 +344,19 @@ class TestMLflowTrainingIntegration:
         tmp_path: Path,
     ) -> None:
         """Real E2E check: unregistered runs still support model lookup/load via runs:/."""
-        tracking_uri = str(mlflow_settings.MLFLOW.client.tracking_uri)
+        tracking_uri = _expected_tracking_uri()
         unique_suffix = uuid4().hex[:8]
 
         mlflow_cfg = mlflow_settings.MLFLOW
-        mlflow_client_cfg = mlflow_cfg.client.model_copy(
+        mlflow_cfg_updated = mlflow_cfg.model_copy(
             update={
                 "register_model": False,
                 "experiment_name": f"logged_e2e_{unique_suffix}",
                 "run_name": f"logged_run_{unique_suffix}",
-            }
+            },
         )
         settings_without_registration = mlflow_settings.model_copy(
-            update={
-                "MLFLOW": mlflow_cfg.model_copy(update={"client": mlflow_client_cfg}),
-            }
+            update={"MLFLOW": mlflow_cfg_updated}
         )
 
         result = dlkit.train(settings_without_registration)
@@ -341,7 +364,7 @@ class TestMLflowTrainingIntegration:
         model_name = _resolve_effective_model_name(result.model_state.model)
 
         client = MlflowClient(tracking_uri=tracking_uri)
-        experiment = client.get_experiment_by_name(mlflow_client_cfg.experiment_name)
+        experiment = client.get_experiment_by_name(mlflow_cfg_updated.experiment_name)
         assert experiment is not None
         runs = client.search_runs(
             [experiment.experiment_id],
@@ -363,7 +386,7 @@ class TestMLflowTrainingIntegration:
 
         logged_results = search_logged_models(
             model_name=model_name,
-            experiment_name=mlflow_client_cfg.experiment_name,
+            experiment_name=mlflow_cfg_updated.experiment_name,
             tracking_uri=tracking_uri,
         )
         assert logged_results, "Expected logged model entries for non-registered run"

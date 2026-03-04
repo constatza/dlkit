@@ -10,11 +10,7 @@ from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import 
     MLflowResourceManager,
 )
 from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import MLflowClientFactory
-from dlkit.tools.config.mlflow_settings import (
-    MLflowSettings,
-    MLflowClientSettings,
-    MLflowServerSettings,
-)
+from dlkit.tools.config.mlflow_settings import MLflowSettings
 
 
 @pytest.fixture(autouse=True)
@@ -60,38 +56,11 @@ def mock_mlflow_client():
 
 @pytest.fixture
 def mlflow_test_settings():
-    """Provide test MLflow settings without server auto-start."""
+    """Provide test MLflow settings."""
     return MLflowSettings(
         enabled=True,
-        client=MLflowClientSettings(
-            tracking_uri="http://localhost:5000",
-            experiment_name="test_experiment",
-            run_name="test_run",
-        ),
-        # No server settings - prevents auto-start
-        server=None,
-    )
-
-
-@pytest.fixture
-def mlflow_server_test_settings():
-    """Provide test MLflow settings with server configuration."""
-    return MLflowSettings(
-        enabled=True,
-        client=MLflowClientSettings(
-            tracking_uri="http://localhost:5000",
-            experiment_name="test_experiment",
-            run_name="test_run",
-        ),
-        server=MLflowServerSettings(
-            host="127.0.0.1",
-            port=5000,
-            backend_store_uri=None,
-            artifacts_destination=None,
-            health_timeout=10.0,
-            request_timeout=2.0,
-            poll_interval=0.5,
-        ),
+        experiment_name="test_experiment",
+        run_name="test_run",
     )
 
 
@@ -143,45 +112,11 @@ def isolated_mlflow_tracker():
     try:
         yield tracker
     finally:
-        # Ensure cleanup
+        # Ensure tracker context is closed if a test left it open
         try:
-            tracker.cleanup_server()
+            tracker.__exit__(None, None, None)
         except Exception:
             pass
-
-
-@pytest.fixture(scope="session")
-def subprocess_manager_cleanup():
-    """Session-scoped fixture to ensure subprocess manager cleanup.
-
-    This helps prevent process leaks between test sessions.
-    """
-    from dlkit.interfaces.servers.process_manager import SubprocessManager
-
-    # Keep track of all managers created during tests
-    managers = []
-
-    original_init = SubprocessManager.__init__
-
-    def tracked_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        managers.append(self)
-
-    SubprocessManager.__init__ = tracked_init
-
-    try:
-        yield
-    finally:
-        # Cleanup all managers
-        for manager in managers:
-            try:
-                manager.cleanup_all_processes()
-            except Exception:
-                pass
-
-        # Restore original init
-        SubprocessManager.__init__ = original_init
-
 
 @pytest.fixture
 def process_leak_detector():

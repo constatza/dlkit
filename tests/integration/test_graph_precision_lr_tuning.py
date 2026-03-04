@@ -128,6 +128,7 @@ class TestGraphPrecisionLRTuning:
         self,
         graph_settings: GeneralSettings,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """MLflow tracking must not reintroduce dtype mismatches."""
         # Warm-up in default precision (float32) to populate cache
@@ -138,11 +139,11 @@ class TestGraphPrecisionLRTuning:
         manager = BasicOverrideManager()
         mlruns_dir = tmp_path / "mlruns"
         mlruns_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
 
         tracked_settings = manager.apply_overrides(
             base_settings,
             enable_mlflow=True,
-            tracking_uri=str(mlruns_dir.as_uri()),
             experiment_name=f"graph_precision_mlflow_{tmp_path.name}",
         )
 

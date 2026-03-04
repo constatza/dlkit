@@ -95,15 +95,13 @@ class TrackingDecorator(ITrainingExecutor):
         """
         # Configure the tracker before entering its context
         logger.debug("Setting up tracking")
-        server_url, server_status = self._setup_tracking(settings)
+        tracking_uri = self._setup_tracking(settings)
 
         # Use tracker as context manager for proper resource management
         logger.info("Starting training with MLflow tracking")
         with self._tracker:  # type: ignore[attr-defined]
-            logger.debug("Entering tracker context, resolving metadata")
-            server_url, server_status = self._resolve_tracker_metadata(server_url, server_status)
             logger.debug("Executing training with tracking")
-            result = self._execute_with_tracking(components, settings, server_url, server_status)
+            result = self._execute_with_tracking(components, settings, tracking_uri)
             logger.debug("Training completed, exiting tracker context")
             return result
 
@@ -111,16 +109,14 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         components: BuildComponents,
         settings: GeneralSettings,
-        server_url: str | None = None,
-        server_status: dict | None = None,
+        tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Execute training with tracking - separated for SRP compliance.
 
         Args:
             components: Pre-built training components
             settings: Global training settings
-            server_url: MLflow server URL if available
-            server_status: MLflow server status if available
+            tracking_uri: Resolved MLflow tracking URI if available
 
         Returns:
             TrainingResult enriched with tracking metadata
@@ -141,7 +137,7 @@ class TrackingDecorator(ITrainingExecutor):
                 logger.debug("MLflow run created successfully")
 
                 # Log metadata and configuration
-                self._log_tracking_metadata(run_context, server_url, server_status)
+                self._log_tracking_metadata(run_context, tracking_uri)
                 self._log_configuration(components, settings, run_context)
 
                 # Inject MLflow logger into trainer for automatic metric logging
@@ -163,7 +159,7 @@ class TrackingDecorator(ITrainingExecutor):
 
                 # Enrich result with tracking metadata (delegate to ResultEnricher)
                 enriched_result = self._result_enricher.enrich_result(
-                    result, settings, server_url, server_status
+                    result, settings, tracking_uri
                 )
 
             self._artifact_logger.finalize_model_registration(pending_registration, run_context)
@@ -178,7 +174,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _setup_tracking(
         self,
         settings: GeneralSettings,
-    ) -> tuple[str | None, dict | None]:
+    ) -> str | None:
         """Setup tracking configuration.
 
         Delegates to tracker's setup method if available, using ConfigAccessor
@@ -188,7 +184,7 @@ class TrackingDecorator(ITrainingExecutor):
             settings: Global settings
 
         Returns:
-            Tuple of (server_url, server_status)
+            Resolved tracking URI, if available.
         """
         accessor = ConfigAccessor(settings)
         mlflow_config = accessor.get_mlflow_config()
@@ -197,53 +193,17 @@ class TrackingDecorator(ITrainingExecutor):
             root_dir = accessor.get_session_root_dir()
             setup_fn = getattr(self._tracker, "setup_mlflow_config")
             try:
-                return setup_fn(mlflow_config, root_dir=root_dir)
+                tracking_uri, _status = setup_fn(mlflow_config, root_dir=root_dir)
+                return tracking_uri
             except TypeError as exc:
                 # Fall back for trackers that have not yet adopted the root_dir kwarg
                 if "unexpected keyword argument 'root_dir'" in str(exc):
                     logger.debug("Tracker does not support root_dir parameter, using fallback")
-                    return setup_fn(mlflow_config)
+                    tracking_uri, _status = setup_fn(mlflow_config)
+                    return tracking_uri
                 raise
 
-        return None, None
-
-    def _resolve_tracker_metadata(
-        self,
-        server_url: str | None,
-        server_status: dict | None,
-    ) -> tuple[str | None, dict | None]:
-        """Merge tracker-provided metadata discovered during context entry.
-
-        Gives tracker a chance to provide metadata after entering its context.
-        Metadata from setup is preferred if already provided.
-
-        Args:
-            server_url: Server URL from setup
-            server_status: Server status from setup
-
-        Returns:
-            Tuple of (resolved_url, resolved_status)
-        """
-        # Prefer metadata returned from setup if provided
-        if server_url is None and hasattr(self._tracker, "get_server_url"):
-            try:
-                candidate_url = self._tracker.get_server_url()  # type: ignore[attr-defined]
-            except TypeError:
-                # Some implementations may require server_url parameter
-                candidate_url = self._tracker.get_server_url(server_url)  # type: ignore[attr-defined]
-            if candidate_url:
-                server_url = candidate_url
-
-        if server_status is None and hasattr(self._tracker, "get_server_status"):
-            try:
-                candidate_status = self._tracker.get_server_status(server_url)  # type: ignore[attr-defined]
-            except TypeError:
-                # Some implementations may not require server_url parameter
-                candidate_status = self._tracker.get_server_status()  # type: ignore[attr-defined]
-            if candidate_status is not None:
-                server_status = candidate_status
-
-        return server_url, server_status
+        return None
 
     def _extract_run_config(self, settings: GeneralSettings) -> dict:
         """Extract run configuration from settings.
@@ -271,26 +231,18 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_tracking_metadata(
         self,
         run_context: IRunContext,
-        server_url: str | None,
-        server_status: dict | None,
+        tracking_uri: str | None,
     ) -> None:
         """Log tracking metadata to run context.
 
-        Logs server URL and status information as MLflow tags.
+        Logs resolved tracking URI as an MLflow tag.
 
         Args:
             run_context: Run context for logging
-            server_url: Server URL if available
-            server_status: Server status if available
+            tracking_uri: Resolved tracking URI if available
         """
-        if server_url:
-            run_context.set_tag("mlflow_server_url", server_url)
-
-        if server_status is not None:
-            run_context.set_tag("mlflow_server_running", str(bool(server_status.get("running"))))
-            run_context.set_tag(
-                "mlflow_server_response_time", str(server_status.get("response_time"))
-            )
+        if tracking_uri:
+            run_context.set_tag("mlflow_tracking_uri", tracking_uri)
 
     def _log_configuration(
         self,

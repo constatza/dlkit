@@ -37,7 +37,7 @@ class BasicOverrideManager:
             ...     checkpoint_path=Path("./model.ckpt"),
             ...     output_dir=Path("./output"),
             ...     epochs=100,
-            ...     mlflow_host="localhost",
+            ...     experiment_name="my-exp",
             ... )
         """
         current_settings = base_settings
@@ -212,18 +212,7 @@ class BasicOverrideManager:
         mlflow_overrides = {
             k: v
             for k, v in overrides.items()
-            if (
-                k.startswith("mlflow_")
-                or k
-                in [
-                    "experiment_name",
-                    "run_name",
-                    "enable_mlflow",
-                    "tracking_uri",
-                    "backend_store_uri",
-                    "artifacts_destination",
-                ]
-            )
+            if k in ["experiment_name", "run_name", "enable_mlflow", "register_model"]
             and v is not None
         }
 
@@ -236,18 +225,11 @@ class BasicOverrideManager:
             and mlflow_overrides["enable_mlflow"]
             and not settings.MLFLOW
         ):
-            from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+            from dlkit.tools.config.mlflow_settings import MLflowSettings
 
             # Create minimal MLflow settings - user should configure properly
             experiment_name = mlflow_overrides.get("experiment_name", "default_experiment")
-            tracking_uri = mlflow_overrides.get("tracking_uri", "http://localhost:5000")
-
-            default_mlflow = MLflowSettings(
-                enabled=True,
-                client=MLflowClientSettings(
-                    experiment_name=experiment_name, tracking_uri=tracking_uri
-                ),
-            )
+            default_mlflow = MLflowSettings(enabled=True, experiment_name=experiment_name)
             current_mlflow = default_mlflow
             settings = settings.model_copy(update={"MLFLOW": current_mlflow})
         elif not settings.MLFLOW:
@@ -255,33 +237,16 @@ class BasicOverrideManager:
         else:
             current_mlflow = settings.MLFLOW
 
-        # Apply server overrides
-        server_overrides = {}
-        if "mlflow_host" in mlflow_overrides:
-            server_overrides["host"] = mlflow_overrides["mlflow_host"]
-        if "mlflow_port" in mlflow_overrides:
-            server_overrides["port"] = mlflow_overrides["mlflow_port"]
-        if "backend_store_uri" in mlflow_overrides:
-            server_overrides["backend_store_uri"] = mlflow_overrides["backend_store_uri"]
-        if "artifacts_destination" in mlflow_overrides:
-            server_overrides["artifacts_destination"] = mlflow_overrides["artifacts_destination"]
-
-        if server_overrides:
-            new_server = current_mlflow.server.model_copy(update=server_overrides)
-            current_mlflow = current_mlflow.model_copy(update={"server": new_server})
-
-        # Apply client overrides
-        client_overrides = {}
+        mlflow_updates: dict[str, Any] = {}
         if "experiment_name" in mlflow_overrides:
-            client_overrides["experiment_name"] = mlflow_overrides["experiment_name"]
+            mlflow_updates["experiment_name"] = mlflow_overrides["experiment_name"]
         if "run_name" in mlflow_overrides:
-            client_overrides["run_name"] = mlflow_overrides["run_name"]
-        if "tracking_uri" in mlflow_overrides:
-            client_overrides["tracking_uri"] = mlflow_overrides["tracking_uri"]
+            mlflow_updates["run_name"] = mlflow_overrides["run_name"]
+        if "register_model" in mlflow_overrides:
+            mlflow_updates["register_model"] = bool(mlflow_overrides["register_model"])
 
-        if client_overrides:
-            new_client = current_mlflow.client.model_copy(update=client_overrides)
-            current_mlflow = current_mlflow.model_copy(update={"client": new_client})
+        if mlflow_updates:
+            current_mlflow = current_mlflow.model_copy(update=mlflow_updates)
 
         # Apply to flattened structure
         return settings.model_copy(update={"MLFLOW": current_mlflow})
@@ -308,15 +273,12 @@ class BasicOverrideManager:
             and not settings.OPTUNA
         ):
             from dlkit.tools.config.optuna_settings import OptunaSettings
+            from dlkit.tools.io import locations
 
             # Create minimal Optuna settings - user should configure properly
             n_trials = optuna_overrides.get("trials", 3)  # Minimal default for testing
             study_name = optuna_overrides.get("study_name", "default_study")
-            from dlkit.interfaces.servers.path_resolution import ServerPathResolver
-            from dlkit.tools.config.environment import DLKitEnvironment
-
-            resolver = ServerPathResolver(DLKitEnvironment())
-            storage = optuna_overrides.get("storage", resolver.get_default_optuna_storage_url())
+            storage = optuna_overrides.get("storage", locations.optuna_storage_uri())
 
             default_optuna = OptunaSettings(
                 enabled=True, n_trials=n_trials, study_name=study_name, storage=storage
@@ -373,7 +335,7 @@ class BasicOverrideManager:
                 errors.append(f"Checkpoint file does not exist: {checkpoint_path}")
 
         # Validate numeric parameters (ignore None values)
-        numeric_params = ["epochs", "batch_size", "learning_rate", "mlflow_port", "trials"]
+        numeric_params = ["epochs", "batch_size", "learning_rate", "trials"]
         for param in numeric_params:
             if param in overrides and overrides[param] is not None:
                 value = overrides[param]
@@ -384,7 +346,7 @@ class BasicOverrideManager:
         mlflow_overrides = [
             k
             for k in overrides.keys()
-            if (k.startswith("mlflow_") or k in ["experiment_name", "run_name"])
+            if k in ["experiment_name", "run_name", "enable_mlflow", "register_model"]
             and overrides[k] is not None
         ]
         if mlflow_overrides:
