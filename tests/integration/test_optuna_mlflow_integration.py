@@ -2,10 +2,9 @@
 
 This module tests that when both Optuna and MLflow are enabled:
 1. The high-level optimize() API works correctly
-2. MLflow server lifecycle is properly managed
-3. Server startup messages are logged and visible
-4. Nested run structure works (parent study + trial runs + best run)
-5. Server cleanup happens correctly
+2. MLflow tracking lifecycle is properly managed
+3. Nested run structure works (parent study + trial runs + best run)
+4. Tracking cleanup happens correctly
 
 These are true integration tests that test real behavior using high-level APIs.
 """
@@ -17,21 +16,15 @@ import pytest
 
 import dlkit
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.mlflow_settings import (
-    MLflowSettings,
-    MLflowClientSettings,
-    MLflowServerSettings,
-)
 from dlkit.tools.config.optuna_settings import OptunaSettings
-from tests.test_timeouts import FAST_TEST_TIMEOUT, MEDIUM_TEST_TIMEOUT, SLOW_TEST_TIMEOUT
+from tests.test_timeouts import FAST_TEST_TIMEOUT, MEDIUM_TEST_TIMEOUT
 
 
 @pytest.fixture
-def combined_settings(training_settings: GeneralSettings, tmp_path):
+def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch):
     """Create settings with both Optuna and MLflow enabled (fast file:// tracking).
 
-    Uses file-based MLflow tracking for speed. For HTTP server tests, use
-    combined_settings_http fixture instead.
+    Uses sqlite tracking for speed and deterministic isolation.
     """
     from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
 
@@ -41,6 +34,8 @@ def combined_settings(training_settings: GeneralSettings, tmp_path):
     # Create isolated MLflow directory per test for proper isolation
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
+    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
     # Enable both MLflow (file:// for speed) and Optuna
     # Use unique experiment name per test to prevent conflicts
@@ -48,7 +43,6 @@ def combined_settings(training_settings: GeneralSettings, tmp_path):
         training_settings,
         enable_mlflow=True,
         experiment_name=f"test_optuna_mlflow_{tmp_path.name}",  # Unique per test
-        tracking_uri=str(mlruns_dir.as_uri()),  # Fast file:// URI
         enable_optuna=True,
         trials=1,  # Minimal trials for speed
         study_name=f"test_study_{tmp_path.name}",  # Unique per test
@@ -60,42 +54,6 @@ def combined_settings(training_settings: GeneralSettings, tmp_path):
         update={
             "storage": unique_storage,
             "study_name": f"test_study_{tmp_path.name}",
-        }
-    )
-    return settings_with_overrides.model_copy(update={"OPTUNA": new_optuna})
-
-
-@pytest.fixture
-def combined_settings_http(training_settings: GeneralSettings, tmp_path, free_port):
-    """Create settings with both Optuna and MLflow enabled (HTTP server for lifecycle tests).
-
-    This fixture starts a real MLflow HTTP server. Only use for tests that specifically
-    need to verify server lifecycle behavior. For most tests, use combined_settings instead.
-    """
-    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
-
-    # Start with base training settings
-    manager = BasicOverrideManager()
-
-    # Enable both MLflow (with HTTP server) and Optuna with unique port
-    settings_with_overrides = manager.apply_overrides(
-        training_settings,
-        enable_mlflow=True,
-        experiment_name=f"test_optuna_mlflow_http_{tmp_path.name}",  # Unique per test
-        tracking_uri=f"http://127.0.0.1:{free_port}",
-        mlflow_host="127.0.0.1",
-        mlflow_port=free_port,
-        enable_optuna=True,
-        trials=1,  # Minimal trials for speed
-        study_name=f"test_study_http_{tmp_path.name}",  # Unique per test
-    )
-
-    # Ensure optuna has isolated storage per test
-    unique_storage = f"sqlite:///{(tmp_path / 'optuna_http.db').as_posix()}"
-    new_optuna = settings_with_overrides.OPTUNA.model_copy(
-        update={
-            "storage": unique_storage,
-            "study_name": f"test_study_http_{tmp_path.name}",
         }
     )
     return settings_with_overrides.model_copy(update={"OPTUNA": new_optuna})
@@ -144,40 +102,18 @@ class TestOptunaMLflowOptimization:
         assert "OPTUNA is not enabled" in str(exc_info.value)
 
 
-class TestMLflowServerLifecycle:
-    """Test MLflow server lifecycle management in combined workflows."""
-
-    @pytest.mark.slow  # This test actually starts an HTTP server
-    @pytest.mark.timeout(SLOW_TEST_TIMEOUT)
-    def test_optimization_handles_server_lifecycle(self, combined_settings_http):
-        """Test that optimize() API properly handles MLflow server lifecycle.
-
-        This test uses HTTP server to verify actual server lifecycle management.
-        """
-        # Should successfully start server, run optimization, and clean up
-        result = dlkit.optimize(combined_settings_http)
-
-        # Verify the optimization completed successfully
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-        # Server lifecycle is handled internally - no need to verify specific implementation
-
-
-class TestServerMessagePropagation:
-    """Test that MLflow server messages are properly logged and visible."""
+class TestTrackingBehavior:
+    """Test combined optimization behavior with MLflow tracking enabled."""
 
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optimization_handles_message_display(self, combined_settings):
-        """Test that optimize() API properly handles server message display."""
+    def test_optimization_handles_tracking_metadata(self, combined_settings):
+        """Test that optimize() API runs correctly with tracking enabled."""
         # Should successfully run with proper message handling
         result = dlkit.optimize(combined_settings)
 
         # Verify successful completion
         assert result is not None
         assert result.duration_seconds >= 0
-
-        # Message handling is done internally
 
     @pytest.mark.timeout(MEDIUM_TEST_TIMEOUT)
     def test_combined_vs_optuna_only_workflows(self, combined_settings, optuna_only_settings):

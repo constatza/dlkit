@@ -391,7 +391,9 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
 
 
 @pytest.fixture
-def mlflow_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
+def mlflow_settings(
+    minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> GeneralSettings:
     """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
     from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
 
@@ -404,57 +406,22 @@ def mlflow_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> General
         epochs=EPOCHS,
     )
 
-    # Enable MLflow using overrides.
-    # Use a SQLite tracking URI (absolute path in tmp_path) instead of file://.
-    # MLflow 3.x deprecated the file-based model registry backend; when using
-    # file:// URIs with model registration it falls back to sqlite:///mlflow.db
-    # in CWD.  A SQLite URI keeps both tracking store and model registry inside
-    # tmp_path so nothing leaks into the project root.
+    # Configure MLflow infrastructure via env vars.
     manager = BasicOverrideManager()
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
     tracking_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
     mlartifacts_dir = tmp_path / "mlartifacts"
     mlartifacts_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
     mlflow_settings = manager.apply_overrides(
         base_settings,
         enable_mlflow=True,
         experiment_name="test_experiment",
-        tracking_uri=tracking_uri,
-        artifacts_destination=str(mlartifacts_dir),
     )
 
     return mlflow_settings
-
-
-@pytest.fixture
-def mlflow_settings_http(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
-    """Create GeneralSettings with MLflow enabled using HTTP tracking URI.
-
-    Uses localhost and default MLflow server port to align with server settings
-    so the tracker attempts to start a local server context. Tests patch the
-    server context to avoid starting a real process.
-    """
-    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
-
-    base_settings = _make_settings(
-        data_dir=minimal_dataset["data_dir"],
-        output_dir=tmp_path / "outputs",
-        inference=False,
-        batch_size=BATCH_SIZE,
-        epochs=EPOCHS,
-    )
-
-    manager = BasicOverrideManager()
-    http_uri = "http://127.0.0.1:5000"
-    http_mlflow_settings = manager.apply_overrides(
-        base_settings,
-        enable_mlflow=True,
-        experiment_name="test_experiment_http",
-        tracking_uri=http_uri,
-    )
-
-    return http_mlflow_settings
 
 
 @pytest.fixture

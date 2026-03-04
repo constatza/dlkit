@@ -39,19 +39,17 @@ class ResultEnricher:
         self,
         result: TrainingResult,
         settings: GeneralSettings,
-        server_url: str | None = None,
-        server_status: dict[str, Any] | None = None,
+        tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Enrich training result with MLflow tracking metadata.
 
-        Adds MLflow run ID, experiment ID, tracking URI, and server information
+        Adds MLflow run ID, experiment ID, and tracking URI
         to the result metrics without modifying the original result.
 
         Args:
             result: Training result to enrich
             settings: Global settings (currently unused but kept for extensibility)
-            server_url: MLflow server URL if available
-            server_status: MLflow server status if available
+            tracking_uri: Resolved tracking URI, if available
 
         Returns:
             New TrainingResult with enriched metrics
@@ -70,11 +68,8 @@ class ResultEnricher:
             # The global MLflow approach is simpler and sufficient for most use cases.
             self._add_mlflow_run_info(enriched)
 
-            # Add tracking URI (prefer server URL, fall back to client URI)
-            self._add_tracking_uri(enriched, server_url)
-
-            # Add server metadata
-            self._add_server_metadata(enriched, server_url, server_status)
+            # Add tracking URI (prefer resolved URI, fall back to active MLflow URI)
+            self._add_tracking_uri(enriched, tracking_uri)
 
             # Create new result with enriched metrics (preserve predictions)
             return TrainingResult(
@@ -109,54 +104,24 @@ class ResultEnricher:
         except Exception as e:
             logger.warning(f"Failed to add MLflow run info: {e}")
 
-    def _add_tracking_uri(self, enriched: dict[str, Any], server_url: str | None) -> None:
+    def _add_tracking_uri(self, enriched: dict[str, Any], tracking_uri: str | None) -> None:
         """Add MLflow tracking URI to enriched metrics.
 
-        Prefers server URL from setup, falls back to client's tracking URI.
+        Prefers the resolved tracking URI, falls back to current MLflow URI.
 
         Args:
             enriched: Dictionary to add tracking URI to
-            server_url: Server URL from setup (preferred)
+            tracking_uri: Resolved tracking URI from setup (preferred)
         """
         try:
-            if server_url:
-                enriched["mlflow_tracking_uri"] = server_url
+            if tracking_uri:
+                enriched["mlflow_tracking_uri"] = tracking_uri
             else:
-                # Fall back to client's tracking URI if tracker supports it
-                try:
-                    if hasattr(self._tracker, "get_client"):
-                        client = self._tracker.get_client()  # type: ignore[attr-defined]
-                        tracking_uri = getattr(client, "tracking_uri", None)
-                        if tracking_uri:
-                            enriched["mlflow_tracking_uri"] = tracking_uri
-                except Exception as e:
-                    logger.debug(f"Could not get tracking URI from client: {e}")
+                import mlflow
+
+                current_uri = mlflow.get_tracking_uri()
+                if current_uri:
+                    enriched["mlflow_tracking_uri"] = current_uri
 
         except Exception as e:
             logger.warning(f"Failed to add tracking URI: {e}")
-
-    def _add_server_metadata(
-        self,
-        enriched: dict[str, Any],
-        server_url: str | None,
-        server_status: dict[str, Any] | None,
-    ) -> None:
-        """Add MLflow server metadata to enriched metrics.
-
-        Args:
-            enriched: Dictionary to add server metadata to
-            server_url: Server URL if available
-            server_status: Server status if available
-        """
-        try:
-            if server_url:
-                enriched["mlflow_server_url"] = server_url
-
-            if server_status is not None:
-                enriched["mlflow_server_running"] = bool(server_status.get("running"))
-                response_time = server_status.get("response_time")
-                if response_time is not None:
-                    enriched["mlflow_server_response_time"] = response_time
-
-        except Exception as e:
-            logger.warning(f"Failed to add server metadata: {e}")

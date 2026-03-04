@@ -110,15 +110,11 @@ def create_mock_settings_with_urls(root_path: Path, urls: dict[str, str]) -> Moc
     mock_paths.output_dir = "outputs"
     mock_paths.model_copy = Mock(return_value=mock_paths)
 
-    mock_mlflow_server = Mock()
-    mock_mlflow_server.backend_store_uri = urls.get(
-        "mlflow.backend_store_uri", "sqlite:///default.db"
-    )
-    mock_mlflow_server.artifacts_destination = urls.get("mlflow.artifacts_destination", "artifacts")
-    mock_mlflow_server.model_copy = Mock(return_value=mock_mlflow_server)
-
     mock_mlflow = Mock()
-    mock_mlflow.server = mock_mlflow_server
+    mock_mlflow.enabled = True
+    mock_mlflow.experiment_name = "test_experiment"
+    mock_mlflow.run_name = None
+    mock_mlflow.register_model = True
     mock_mlflow.model_copy = Mock(return_value=mock_mlflow)
 
     mock_settings = Mock()
@@ -152,17 +148,8 @@ def create_config_content_with_urls(
         config_lines.extend([
             "[MLFLOW]",
             "enabled = true",
-            "",
-            "[MLFLOW.server]",
-            'host = "localhost"',
-            "port = 5000",
+            'experiment_name = "test_experiment"',
         ])
-
-        if "mlflow.backend_store_uri" in urls:
-            config_lines.append(f'backend_store_uri = "{urls["mlflow.backend_store_uri"]}"')
-
-        if "mlflow.artifacts_destination" in urls:
-            config_lines.append(f'artifacts_destination = "{urls["mlflow.artifacts_destination"]}"')
 
         config_lines.append("")
 

@@ -23,8 +23,6 @@ GeneralSettings
 │   ├── targets[]    → Target/PathTarget
 │   └── split        → IndexSplitSettings
 ├── MLFLOW           → MLflowSettings
-│   ├── server       → MLflowServerSettings
-│   └── client       → MLflowClientSettings
 ├── OPTUNA           → OptunaSettings
 │   ├── sampler      → SamplerSettings
 │   └── pruner       → PrunerSettings
@@ -202,32 +200,17 @@ MLflow experiment tracking configuration.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | `bool` | `False` | Enable MLflow tracking |
-| `server` | `MLflowServerSettings` | defaults | Server configuration |
-| `client` | `MLflowClientSettings` | defaults | Client configuration |
-
-### MLflowServerSettings
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scheme` | `str` | `"http"` | Server scheme (`http`/`https`) |
-| `host` | `str` | `"127.0.0.1"` | Server host |
-| `port` | `int` | `5000` | Server port |
-| `backend_store_uri` | `str \| None` | `None` | Backend store URI |
-| `artifacts_destination` | `str \| None` | `None` | Artifacts storage path |
-| `num_workers` | `int` | `1` | Worker processes (SQLite requires 1) |
-
-### MLflowClientSettings
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
 | `experiment_name` | `str` | `"Experiment"` | Experiment name |
 | `run_name` | `str \| None` | `None` | Run name |
+| `register_model` | `bool` | `True` | Register trained models |
 | `registered_model_name` | `str \| None` | `None` | Optional registered model name override |
 | `registered_model_aliases` | `tuple[str, ...] \| None` | `None` | Optional aliases applied to each registered version |
 | `registered_model_version_tags` | `dict[str, str] \| None` | `None` | Optional model-version tags applied after registration |
-| `tracking_uri` | `str \| None` | auto-computed | Tracking server URI |
-| `register_model` | `bool` | `True` | Register trained models |
 | `max_trials` | `int` | `3` | Max connection attempts |
+
+Infrastructure URIs are env-driven and not accepted in TOML:
+- `MLFLOW_TRACKING_URI`
+- `MLFLOW_ARTIFACT_URI`
 
 ---
 

@@ -90,12 +90,8 @@ def _run_optimization_impl(
                 study_name=study_name,
                 root_dir=root_dir,
                 # Pass MLflow experiment/run names if MLflow is enabled
-                experiment_name=settings.MLFLOW.client.experiment_name
-                if mlflow_enabled and settings.MLFLOW
-                else None,
-                run_name=settings.MLFLOW.client.run_name
-                if mlflow_enabled and settings.MLFLOW
-                else None,
+                experiment_name=settings.MLFLOW.experiment_name if mlflow_enabled and settings.MLFLOW else None,
+                run_name=settings.MLFLOW.run_name if mlflow_enabled and settings.MLFLOW else None,
             )
             progress.remove_task(task)
 

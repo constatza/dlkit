@@ -54,16 +54,11 @@ class ConfigAccessor:
         return getattr(self._settings, "MLFLOW", None)
 
     def get_mlflow_client_config(self) -> Any:
-        """Get MLflow client configuration.
-
-        Returns:
-            Client configuration object or None
-        """
-        mlflow_config = self.get_mlflow_config()
-        return getattr(mlflow_config, "client", None) if mlflow_config else None
+        """Get MLflow configuration object (flat schema)."""
+        return self.get_mlflow_config()
 
     def get_run_name(self) -> str | None:
-        """Get configured run name from MLflow client settings.
+        """Get configured MLflow run name.
 
         Returns:
             Run name or None if not configured
@@ -73,13 +68,13 @@ class ConfigAccessor:
 
     def get_registered_model_name(self) -> str | None:
         """Get optional registered model name override."""
-        client = self.get_mlflow_client_config()
-        return getattr(client, "registered_model_name", None) if client else None
+        mlflow_cfg = self.get_mlflow_client_config()
+        return getattr(mlflow_cfg, "registered_model_name", None) if mlflow_cfg else None
 
     def get_registered_model_aliases(self) -> tuple[str, ...] | None:
         """Get optional registered model aliases override."""
-        client = self.get_mlflow_client_config()
-        aliases = getattr(client, "registered_model_aliases", None) if client else None
+        mlflow_cfg = self.get_mlflow_client_config()
+        aliases = getattr(mlflow_cfg, "registered_model_aliases", None) if mlflow_cfg else None
         if not aliases:
             return None
         normalized = tuple(str(alias).strip() for alias in aliases if str(alias).strip())
@@ -87,8 +82,8 @@ class ConfigAccessor:
 
     def get_registered_model_version_tags(self) -> dict[str, str]:
         """Get optional registered model version tag overrides."""
-        client = self.get_mlflow_client_config()
-        tags = getattr(client, "registered_model_version_tags", None) if client else None
+        mlflow_cfg = self.get_mlflow_client_config()
+        tags = getattr(mlflow_cfg, "registered_model_version_tags", None) if mlflow_cfg else None
         if not isinstance(tags, dict):
             return {}
         return {str(key).strip(): str(value) for key, value in tags.items() if str(key).strip()}
@@ -99,8 +94,8 @@ class ConfigAccessor:
         Returns:
             True if model registration is enabled
         """
-        client = self.get_mlflow_client_config()
-        return bool(client and getattr(client, "register_model", False))
+        mlflow_cfg = self.get_mlflow_client_config()
+        return bool(mlflow_cfg and getattr(mlflow_cfg, "register_model", False))
 
     def get_extras(self) -> Any | None:
         """Get EXTRAS configuration section.

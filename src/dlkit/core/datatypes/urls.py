@@ -178,7 +178,7 @@ CloudStorageUrl = Annotated[
 # Common SQL database URL types
 # ------------------------------
 
-# Allow typical SQLAlchemy database backends used by MLflow server
+# Allow typical SQLAlchemy database backends used by MLflow tracking
 DbUrl = Annotated[
     Url,
     UrlConstraints(

@@ -160,9 +160,7 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
 
     session_block = '[SESSION]\nname = "test_session"\ninference = false\nseed = 42\n'
 
-    mlflow_block = (
-        '[MLFLOW]\nenabled = true\n\n[MLFLOW.client]\nexperiment_name = "test_experiment"\n'
-    )
+    mlflow_block = '[MLFLOW]\nenabled = true\nexperiment_name = "test_experiment"\n'
 
     trainer_block = '[TRAINING.trainer]\ndefault_root_dir = "work"\n'
 
@@ -422,11 +420,9 @@ from tests.fixtures.mlflow_fixtures import (
     mlflow_global_state_isolation,
     mock_mlflow_client,
     mlflow_test_settings,
-    mlflow_server_test_settings,
     mlflow_resource_manager,
     mock_mlflow_resource_manager,
     isolated_mlflow_tracker,
-    subprocess_manager_cleanup,
     process_leak_detector,
     thread_leak_detector,
     resource_leak_detection,

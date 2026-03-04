@@ -154,7 +154,7 @@ Examples:
 
 ### MLflow Registry and Model Loading
 
-`[MLFLOW.client].register_model` is `true` by default.
+`[MLFLOW].register_model` is `true` by default.
 
 - Registered model name defaults to the trained model class name.
 - DLKit does **not** add default aliases or model-version tags.
@@ -187,6 +187,7 @@ Use the training output to register and annotate models programmatically:
 
 ```python
 import dlkit
+import mlflow
 
 settings = ...  # your GeneralSettings
 result = dlkit.train(settings)
@@ -195,17 +196,17 @@ run_id = (result.metrics or {}).get("mlflow_run_id")
 if run_id is None:
     raise RuntimeError("MLflow run id missing from training result metrics")
 
-model_name = (
-    getattr(settings.MLFLOW.client, "registered_model_name", None)
-    or type(result.model_state.model).__name__
-)
+tracking_uri = mlflow.get_tracking_uri()
+model_name = getattr(settings.MLFLOW, "registered_model_name", None) or type(
+    result.model_state.model
+).__name__
 
 # Register from the run artifact (useful when register_model=false)
 version_entity = dlkit.register_logged_model(
     model_name,
     run_id=run_id,
     artifact_path="model",
-    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+    tracking_uri=tracking_uri,
 )
 version = int(version_entity.version)
 
@@ -214,20 +215,20 @@ dlkit.set_registered_model_alias(
     model_name,
     alias="dataset_A_latest",
     version=version,
-    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+    tracking_uri=tracking_uri,
 )
 dlkit.set_registered_model_version_tags(
     model_name,
     version=version,
     tags={"dataset": "dataset_A", "benchmark": "high_precision"},
-    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+    tracking_uri=tracking_uri,
 )
 
 # Load by alias (PyTorch flavor preferred, sklearn/pyfunc fallback in auto mode)
 model = dlkit.load_registered_model(
     model_name,
     alias="dataset_A_latest",
-    tracking_uri=str(settings.MLFLOW.client.tracking_uri),
+    tracking_uri=tracking_uri,
     flavor="auto",  # "pytorch" | "sklearn" | "pyfunc"
 )
 ```
@@ -235,14 +236,14 @@ model = dlkit.load_registered_model(
 You can also set aliases/tags declaratively in TOML:
 
 ```toml
-[MLFLOW.client]
+[MLFLOW]
 register_model = true
 registered_model_name = "FFNN"
 registered_model_aliases = ["dataset_A_latest", "benchmark_high_precision"]
 registered_model_version_tags = { dataset = "dataset_A", benchmark = "high_precision" }
 ```
 
-When you set `[MLFLOW.client].register_model = false`, DLKit still logs the model artifact under the run (`runs:/...`) and you can locate/load it with logged-model helpers:
+When you set `[MLFLOW].register_model = false`, DLKit still logs the model artifact under the run (`runs:/...`) and you can locate/load it with logged-model helpers:
 
 ```python
 from dlkit import search_logged_models, load_logged_model
@@ -840,8 +841,9 @@ Detailed guide and edge-case behavior:
   - `[TRAINING.optimizer]`: optimizer settings (e.g., `name`, `lr`)
 - `[MLFLOW]`: experiment tracking
   - `enabled`: bool; when true, MLflow is configured/used
-  - `[MLFLOW.server]`: `scheme`, `host`, `port`, optional storage URIs
-  - `[MLFLOW.client]`: `tracking_uri` (auto from server), `experiment_name`, `run_name`, `register_model`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
+  - `experiment_name`, `run_name`, `register_model`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
+  - Infra is env-only: `MLFLOW_TRACKING_URI`, `MLFLOW_ARTIFACT_URI`
+  - Tracking URI resolution order: env URI -> `http://127.0.0.1:5000` when alive -> local sqlite fallback
 - `[OPTUNA]`: hyperparameter optimization
   - `enabled`: bool; when true and selected, optimization runs
   - `n_trials`, `study_name`; optional `sampler`, `pruner`, `storage`
@@ -857,10 +859,8 @@ These runtime overrides can be applied via CLI flags or Python API keyword args.
 - epochs: overrides `[TRAINING].epochs` and `[TRAINING.trainer].max_epochs`
 - batch_size: overrides `[DATAMODULE].batch_size` and `[DATAMODULE.dataloader].batch_size`
 - learning_rate: overrides `[TRAINING.optimizer].lr`
-- mlflow_host: overrides `[MLFLOW.server].host`
-- mlflow_port: overrides `[MLFLOW.server].port`
-- experiment_name: overrides `[MLFLOW.client].experiment_name`
-- run_name: overrides `[MLFLOW.client].run_name`
+- experiment_name: overrides `[MLFLOW].experiment_name`
+- run_name: overrides `[MLFLOW].run_name`
 - trials: overrides `[OPTUNA].n_trials`
 - study_name: overrides `[OPTUNA].study_name`
 

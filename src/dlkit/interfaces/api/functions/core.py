@@ -41,8 +41,6 @@ def train(
     batch_size: int | None = None,
     learning_rate: float | None = None,
     # MLflow overrides
-    mlflow_host: str | None = None,
-    mlflow_port: int | None = None,
     experiment_name: str | None = None,
     run_name: str | None = None,
     **additional_overrides: Any,
@@ -62,10 +60,8 @@ def train(
         epochs: Override `[TRAINING].epochs` and `[TRAINING.trainer].max_epochs`.
         batch_size: Override `[DATAMODULE].batch_size` and `[DATAMODULE.dataloader].batch_size`.
         learning_rate: Override `[TRAINING.optimizer].lr`.
-        mlflow_host: Override `[MLFLOW.server].host`.
-        mlflow_port: Override `[MLFLOW.server].port`.
-        experiment_name: Override `[MLFLOW.client].experiment_name`.
-        run_name: Override `[MLFLOW.client].run_name`.
+        experiment_name: Override `[MLFLOW].experiment_name`.
+        run_name: Override `[MLFLOW].run_name`.
         additional_overrides: Extra overrides passed through to the manager.
 
     Returns:
@@ -92,8 +88,6 @@ def train(
         epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
-        mlflow_host=mlflow_host,
-        mlflow_port=mlflow_port,
         experiment_name=experiment_name,
         run_name=run_name,
         additional_overrides=additional_overrides,
@@ -140,8 +134,8 @@ def optimize(
         output_dir: Override the output base directory.
         data_dir: Override the input dataflow directory.
         study_name: Override `[OPTUNA].study_name`.
-        experiment_name: Override `[MLFLOW.client].experiment_name`.
-        run_name: Override `[MLFLOW.client].run_name`.
+        experiment_name: Override `[MLFLOW].experiment_name`.
+        run_name: Override `[MLFLOW].run_name`.
         additional_overrides: Extra overrides passed through to the manager.
 
     Returns:

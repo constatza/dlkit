@@ -104,11 +104,7 @@ class LRTuner:
         from dlkit.tools.config.dataset_settings import DatasetSettings, IndexSplitSettings
         from dlkit.tools.config.dataloader_settings import DataloaderSettings
         from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
-        from dlkit.tools.config.mlflow_settings import (
-            MLflowSettings,
-            MLflowServerSettings,
-            MLflowClientSettings,
-        )
+        from dlkit.tools.config.mlflow_settings import MLflowSettings
         from dlkit.tools.config.core.base_settings import BasicSettings
         from dlkit.tools.config.general_settings import GeneralSettings
         from dlkit.tools.config.training_settings import TrainingSettings
@@ -138,6 +134,4 @@ class LRTuner:
             # Other settings
             LRTunerSettings,
             MLflowSettings,
-            MLflowServerSettings,
-            MLflowClientSettings,
         ]

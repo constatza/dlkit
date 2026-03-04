@@ -88,7 +88,7 @@ tests/settings/
 - Backward compatibility
 
 #### `test_mlflow_settings.py`
-- MLflow server and client configuration
+- Flat MLflow configuration
 - Tracking URI validation and defaults
 - Active state detection
 - Property accessors

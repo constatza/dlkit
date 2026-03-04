@@ -32,8 +32,6 @@ class TrainCommandInput:
     batch_size: int | None = None
     learning_rate: float | None = None
     # MLflow overrides
-    mlflow_host: str | None = None
-    mlflow_port: int | None = None
     experiment_name: str | None = None
     run_name: str | None = None
     # Additional overrides
@@ -186,8 +184,6 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             epochs=input_data.epochs,
             batch_size=input_data.batch_size,
             learning_rate=input_data.learning_rate,
-            mlflow_host=input_data.mlflow_host,
-            mlflow_port=input_data.mlflow_port,
             experiment_name=input_data.experiment_name,
             run_name=input_data.run_name,
             additional_overrides=input_data.additional_overrides,

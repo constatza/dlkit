@@ -15,7 +15,6 @@ EXPECTED_SUBCOMMANDS = {
     "predict": "Prediction",
     "optimize": "optimization",
     "config": "Configuration",
-    "server": "Server",
 }
 
 SUCCESS_EXIT_CODE = 0
@@ -79,12 +78,6 @@ def test_config_subcommand_structure(cli_runner: CliRunner) -> None:
     assert result.exit_code == HELP_EXIT_CODE
 
 
-def test_server_subcommand_structure(cli_runner: CliRunner) -> None:
-    """Test server subcommand has expected structure."""
-    result = cli_runner.invoke(cli_app, ["server", "--help"])
-    assert result.exit_code == HELP_EXIT_CODE
-
-
 def test_optimize_subcommand_structure(cli_runner: CliRunner) -> None:
     """Test optimize subcommand has expected structure."""
     result = cli_runner.invoke(cli_app, ["optimize", "--help"])
@@ -124,7 +117,6 @@ def test_subcommand_help_consistency(cli_runner: CliRunner) -> None:
         ("predict", ["model", "dataflow", "output"]),
         ("optimize", ["trials", "study"]),
         ("config", ["validate", "show"]),
-        ("server", ["start", "stop", "status"]),
     ],
 )
 def test_subcommand_specific_keywords(

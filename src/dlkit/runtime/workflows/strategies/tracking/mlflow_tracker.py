@@ -15,23 +15,20 @@ from dlkit.tools.utils.logging_config import get_logger
 from .interfaces import IExperimentTracker, IRunContext
 from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
 from .mlflow_resource_manager import MLflowResourceManager
+from .uri_resolver import resolve_tracking_uri
 
 logger = get_logger(__name__)
 
 # MLflow integration constants
 MLFLOW_DEFAULT_EXPERIMENT = "DLKit"
-MLFLOW_TAG_SERVER_URL = "mlflow_server_url"
-MLFLOW_TAG_SERVER_RUNNING = "mlflow_server_running"
-MLFLOW_TAG_SERVER_LATENCY = "mlflow_server_response_time"
-HEALTHCHECK_TIMEOUT_S = 0.2
 
 
 class MLflowTracker(IExperimentTracker):
     """MLflow implementation of experiment tracker using resource manager pattern.
 
     Provides MLflow-based experiment tracking with proper resource lifecycle management
-    through MLflowResourceManager. Handles MLflow server startup, client creation,
-    experiment/run management, and guaranteed cleanup.
+    through MLflowResourceManager. Handles client creation, experiment/run management,
+    and guaranteed cleanup.
 
     The tracker should be used as a context manager to ensure proper resource cleanup:
 
@@ -51,35 +48,30 @@ class MLflowTracker(IExperimentTracker):
         ```
 
     Attributes:
-        disable_autostart (bool): Skip automatic MLflow server startup.
-        skip_health_checks (bool): Skip server health validation checks.
+        disable_autostart (bool): Skip automatic tracker setup.
     """
 
     def __init__(self, disable_autostart: bool = False, skip_health_checks: bool = False):
         """Initialize MLflow tracker.
 
         Args:
-            disable_autostart: If True, skip automatic server startup. Useful when
-                server is already running externally.
-            skip_health_checks: If True, skip health validation checks. Useful for
-                faster startup when server health is guaranteed.
+            disable_autostart: If True, skip automatic tracker setup.
+            skip_health_checks: Kept for compatibility, unused in client-only mode.
         """
         self.disable_autostart = disable_autostart
         self.skip_health_checks = skip_health_checks
         self._resource_manager: MLflowResourceManager | None = None
         self._mlflow_config: Any = None
         self._exit_stack: ExitStack | None = None
-        self._configured_server_url: str | None = None
-        self._server_url: str | None = None
-        self._server_status: dict | None = None
+        self._tracking_uri: str | None = None
         self._root_dir: Path | None = None
 
     def __enter__(self) -> "MLflowTracker":
         """Context manager entry - initializes MLflow resources using ExitStack.
 
-        Creates and enters the MLflowResourceManager which handles server startup,
-        client creation, and experiment setup. Uses ExitStack for nested context
-        management to ensure proper cleanup.
+        Creates and enters the MLflowResourceManager which handles client
+        initialization and experiment setup. Uses ExitStack for nested context
+        management to ensure cleanup.
 
         Returns:
             MLflowTracker: Self for context manager protocol.
@@ -121,22 +113,7 @@ class MLflowTracker(IExperimentTracker):
                 resource_manager = MLflowResourceManager(self._mlflow_config)
                 self._resource_manager = self._exit_stack.enter_context(resource_manager)
 
-                # Get server info if available
-                server_info = self._resource_manager.get_server_info()
-                server_url = getattr(server_info, "url", None) if server_info else None
-
-                if server_url:
-                    self._server_url = server_url
-                elif self._configured_server_url:
-                    self._server_url = self._configured_server_url
-
-                # Skip redundant health check - server was already validated during startup
-                # Performing another check here can interfere with server initialization
-                self._server_status = (
-                    {"running": True, "response_time": None} if server_url else None
-                )
-
-                logger.info(f"MLflow resources initialized - Server: {server_url}")
+                logger.info("MLflow resources initialized")
 
             except Exception as e:
                 logger.error(f"Failed to initialize MLflow resources: {e}")
@@ -145,8 +122,7 @@ class MLflowTracker(IExperimentTracker):
                     self._exit_stack.__exit__(None, None, None)
                     self._exit_stack = None
                 self._resource_manager = None
-                self._server_url = None
-                self._server_status = None
+                self._tracking_uri = None
                 raise
         else:
             logger.debug("Skipping resource initialization - no config provided")
@@ -161,8 +137,7 @@ class MLflowTracker(IExperimentTracker):
     ) -> None:
         """Context manager exit with cleanup via ExitStack.
 
-        Ensures all MLflow resources (server, client, runs) are properly cleaned up,
-        even if exceptions occurred during execution.
+        Ensures MLflow resources (client and runs) are properly cleaned up.
 
         Args:
             exc_type: Exception type if an exception occurred, None otherwise.
@@ -188,8 +163,7 @@ class MLflowTracker(IExperimentTracker):
             finally:
                 self._exit_stack = None
                 self._resource_manager = None
-        self._server_url = None
-        self._server_status = None
+        self._tracking_uri = None
         self._mlflow_config = None
         logger.info("MLflowTracker.__exit__ completed")
 
@@ -481,7 +455,7 @@ class MLflowTracker(IExperimentTracker):
         """Configure MLflow tracking - stores config for deferred resource initialization.
 
         Stores the MLflow configuration for later use. Actual resource initialization
-        (server startup, client creation) is deferred until __enter__() to follow
+        (client creation and URI setup) is deferred until __enter__() to follow
         proper context manager protocol and ensure cleanup.
 
         Args:
@@ -489,9 +463,7 @@ class MLflowTracker(IExperimentTracker):
                 Must have 'enabled' attribute. If enabled=False, tracking is skipped.
 
         Returns:
-            tuple[str | None, dict | None]: Tuple of (configured_server_url, server_status).
-                Always returns (url, None) or (None, None) since resources aren't
-                initialized yet. The URL is extracted from config but server isn't started.
+            tuple[str | None, dict | None]: Tuple of (tracking_uri, None).
 
         Example:
             ```python
@@ -500,9 +472,9 @@ class MLflowTracker(IExperimentTracker):
             settings = GeneralSettings.from_toml("config.toml")
             tracker = MLflowTracker()
 
-            # Just stores config - no server startup yet
+            # Just stores config - no resource initialization yet
             url, status = tracker.setup_mlflow_config(settings.MLFLOW)
-            print(f"Will use server: {url}")  # May be None
+            print(f"Tracking URI: {url}")  # May be None
 
             # Resources initialized here
             with tracker:
@@ -511,10 +483,8 @@ class MLflowTracker(IExperimentTracker):
             ```
         """
         self._root_dir = self._determine_root_dir(root_dir)
-        self._mlflow_config = self._normalize_mlflow_config(mlflow_config, self._root_dir)
-        self._server_status = None
-        self._server_url = None
-        self._configured_server_url = None
+        self._mlflow_config = mlflow_config
+        self._tracking_uri = None
 
         # Skip setup if disabled
         if (
@@ -525,22 +495,9 @@ class MLflowTracker(IExperimentTracker):
             logger.debug("MLflow disabled or autostart disabled")
             return None, None
 
-        configured_url = None
-        client = getattr(mlflow_config, "client", None)
-        if client:
-            tracking_uri = getattr(client, "tracking_uri", None)
-            if tracking_uri:
-                tracking_uri_str = str(tracking_uri)
-                if tracking_uri_str.startswith(("http://", "https://")):
-                    configured_url = tracking_uri_str
-
-        if configured_url is None:
-            configured_url = self._derive_server_url(mlflow_config)
-
-        self._configured_server_url = configured_url
-
+        self._tracking_uri = resolve_tracking_uri()
         logger.debug("MLflow config stored - will initialize in context entry")
-        return configured_url, None
+        return self._tracking_uri, None
 
     def _determine_root_dir(self, candidate: Path | str | None) -> Path | None:
         if candidate is not None:
@@ -553,163 +510,4 @@ class MLflowTracker(IExperimentTracker):
             except TypeError:
                 return Path(str(ctx.root_dir)).resolve()
 
-        return None
-
-    def _normalize_mlflow_config(self, mlflow_config: Any, root_dir: Path | None) -> Any:
-        if not mlflow_config or root_dir is None:
-            return mlflow_config
-
-        try:
-            server = getattr(mlflow_config, "server", None)
-            if server is not None:
-                normalized_server = self._normalize_server_paths(server, root_dir)
-                if normalized_server is not server:
-                    mlflow_config = mlflow_config.model_copy(update={"server": normalized_server})
-        except Exception:
-            return mlflow_config
-
-        return mlflow_config
-
-    @staticmethod
-    def _normalize_server_paths(server_config: Any, root_dir: Path) -> Any:
-        updates: dict[str, Any] = {}
-
-        backend_uri = getattr(server_config, "backend_store_uri", None)
-        if backend_uri:
-            backend_str = str(backend_uri)
-            normalized_backend = MLflowTracker._normalize_backend_uri(backend_str, root_dir)
-            if normalized_backend != backend_str:
-                updates["backend_store_uri"] = normalized_backend
-
-        artifacts_dest = getattr(server_config, "artifacts_destination", None)
-        if artifacts_dest:
-            artifacts_str = str(artifacts_dest)
-            normalized_artifacts = MLflowTracker._normalize_artifacts_destination(
-                artifacts_str, root_dir
-            )
-            if normalized_artifacts != artifacts_str:
-                updates["artifacts_destination"] = normalized_artifacts
-
-        if updates:
-            return server_config.model_copy(update=updates)
-        return server_config
-
-    @staticmethod
-    def _normalize_backend_uri(uri: str, root_dir: Path) -> str:
-        from urllib.request import url2pathname
-
-        from dlkit.tools.io.url_utils import parse_url
-        from dlkit.tools.io import url_resolver
-        from dlkit.tools.io.path_normalizers import path_to_file_uri
-
-        parsed = parse_url(uri)
-        if parsed.scheme not in {"file", "sqlite"}:
-            return uri
-
-        path = Path(url2pathname(parsed.path))
-        if path.is_absolute():
-            return uri
-
-        resolved = (root_dir / path).resolve()
-        if parsed.scheme == "sqlite":
-            return url_resolver.build_uri(resolved, scheme="sqlite")
-        return path_to_file_uri(resolved)
-
-    @staticmethod
-    def _normalize_artifacts_destination(destination: str, root_dir: Path) -> str:
-        from urllib.request import url2pathname
-
-        from dlkit.tools.io.url_utils import parse_url
-        from dlkit.tools.io.path_normalizers import path_to_file_uri
-
-        parsed = parse_url(destination)
-
-        if parsed.scheme in {"", None}:
-            path = Path(destination)
-            if path.is_absolute():
-                return destination
-            return str((root_dir / path).resolve())
-
-        if parsed.scheme == "file":
-            path = Path(url2pathname(parsed.path))
-            if path.is_absolute():
-                return destination
-            resolved = (root_dir / path).resolve()
-            return path_to_file_uri(resolved)
-
-        return destination
-
-    def _derive_server_url(self, mlflow_config: Any) -> str | None:
-        """Derive server URL from resource manager or config.
-
-        Args:
-            mlflow_config: MLflow configuration
-
-        Returns:
-            Server URL if available
-        """
-        # Try to get URL from resource manager first
-        if self._resource_manager:
-            server_info = self._resource_manager.get_server_info()
-            if server_info:
-                return getattr(server_info, "url", None)
-
-        client = getattr(mlflow_config, "client", None) if mlflow_config else None
-        if client:
-            tracking_uri = getattr(client, "tracking_uri", None)
-            if tracking_uri:
-                tracking_uri_str = str(tracking_uri)
-                if tracking_uri_str.startswith(("http://", "https://")):
-                    return tracking_uri_str
-
-        return None
-
-    def cleanup_server(self) -> None:
-        """Clean up MLflow resources.
-
-        Note: This method exists for backward compatibility. Prefer using
-        the context manager protocol (with statement) instead.
-        """
-        if self._exit_stack:
-            logger.debug("Cleaning up via ExitStack")
-            try:
-                self._exit_stack.__exit__(None, None, None)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup: {e}")
-            finally:
-                self._exit_stack = None
-                self._resource_manager = None
-
-    def _health_check(self, server_url: str) -> dict | None:
-        """Check MLflow server health."""
-        try:
-            from dlkit.interfaces.servers.health_checker import HTTPHealthChecker
-
-            status = HTTPHealthChecker(request_timeout=HEALTHCHECK_TIMEOUT_S).check_health(
-                server_url
-            )
-            return {
-                "running": bool(getattr(status, "is_running", False)),
-                "response_time": getattr(status, "response_time", None),
-                "error": getattr(status, "error_message", None),
-            }
-        except Exception:
-            return None
-
-    def get_server_url(self) -> str | None:
-        """Return the best-known server URL, if any."""
-        return self._server_url or self._configured_server_url
-
-    def get_server_status(self, server_url: str | None = None) -> dict | None:
-        """Get the most recent server status information."""
-        if self._server_status is not None:
-            return dict(self._server_status)
-
-        # If we have a server URL but no cached status, attempt a lightweight check
-        url = server_url or self.get_server_url()
-        if url and not self.skip_health_checks:
-            status = self._health_check(url)
-            if status is not None:
-                self._server_status = status
-                return dict(status)
         return None

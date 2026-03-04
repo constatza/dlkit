@@ -22,13 +22,10 @@ class BasicOverrides(TypedDict, total=False):
     batch_size: int
     learning_rate: float
 
-    # MLflow server overrides
-    mlflow_host: str
-    mlflow_port: int
-
-    # MLflow client overrides
+    # MLflow overrides
     experiment_name: str
     run_name: str
+    register_model: bool
 
     # Optuna overrides
     trials: int
@@ -38,13 +35,7 @@ class BasicOverrides(TypedDict, total=False):
 class MLflowOverrides(TypedDict, total=False):
     """Type definition for MLflow-specific overrides."""
 
-    # Server configuration
-    host: str
-    port: int
-    backend_store_uri: str
-    artifacts_destination: str
-
-    # Client configuration
+    # Flat configuration
     experiment_name: str
     run_name: str
     register_model: bool

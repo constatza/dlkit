@@ -33,7 +33,7 @@ def test_cli_main_workflow_help_and_info(cli_runner: CliRunner) -> None:
 
 def test_all_subcommand_groups_accessible(cli_runner: CliRunner) -> None:
     """Test that all subcommand groups are accessible and have help."""
-    subcommands = ["train", "predict", "optimize", "config", "server"]
+    subcommands = ["train", "predict", "optimize", "config"]
 
     for subcommand in subcommands:
         result = cli_runner.invoke(cli_app, [subcommand, "--help"])
@@ -136,7 +136,7 @@ def test_rich_formatting_in_output(cli_runner: CliRunner) -> None:
 
 def test_help_consistency_across_subcommands(cli_runner: CliRunner) -> None:
     """Test that help commands return success across subcommands."""
-    subcommands = ["train", "predict", "optimize", "config", "server"]
+    subcommands = ["train", "predict", "optimize", "config"]
 
     for subcommand in subcommands:
         result = cli_runner.invoke(cli_app, [subcommand, "--help"])

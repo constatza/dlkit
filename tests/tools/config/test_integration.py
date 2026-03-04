@@ -19,6 +19,15 @@ from dlkit.tools.config.components.model_components import ModelComponentSetting
 # Mock components for integration testing
 
 
+@pytest.fixture(autouse=True)
+def _isolate_factory_provider_registry():
+    """Prevent global FactoryProvider state from leaking across test modules."""
+    previous = FactoryProvider._instance  # type: ignore[attr-defined]
+    FactoryProvider._instance = None  # type: ignore[attr-defined]
+    yield
+    FactoryProvider._instance = previous  # type: ignore[attr-defined]
+
+
 class MockModel:
     """Mock model for integration testing."""
 
@@ -115,7 +124,7 @@ def complete_config_data() -> dict[str, Any]:
             "input_size": 128,
             "output_size": 10,
         },
-        "MLFLOW": {"enabled": True, "client": {"experiment_name": "integration_experiment"}},
+        "MLFLOW": {"enabled": True, "experiment_name": "integration_experiment"},
         "OPTUNA": {"enabled": True, "n_trials": 10},
         "DATAMODULE": {
             "name": "IntegrationDataModule",
@@ -154,8 +163,6 @@ output_size = 10
 
 [MLFLOW]
 enabled = true
-
-[MLFLOW.client]
 experiment_name = "integration_experiment"
 
 [OPTUNA]
@@ -298,9 +305,7 @@ class TestGeneralSettingsEndToEndIntegration:
         assert settings.SESSION.name == "integration_session"
         assert settings.MODEL.input_size == 128
         assert settings.MLFLOW.enabled is True
-        assert (
-            settings.MLFLOW.client.experiment_name == "integration_experiment"
-        )  # Configured value
+        assert settings.MLFLOW.experiment_name == "integration_experiment"  # Configured value
         assert settings.OPTUNA.enabled is True
         assert settings.DATAMODULE.dataloader.batch_size == 64
 

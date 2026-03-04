@@ -128,7 +128,7 @@ Useful for quick learning rate experiments without changing config files.
 
 
 # ============================================================================
-# MLflow Server/Client Overrides
+# MLflow Overrides
 # ============================================================================
 
 MLFLOW_FLAG = Annotated[
@@ -139,26 +139,6 @@ MLFLOW_FLAG = Annotated[
 
 Enables MLflow experiment tracking for training or optimization runs.
 When enabled, metrics, parameters, and artifacts are logged to MLflow.
-"""
-
-MLFLOW_HOST_PARAM = Annotated[
-    str | None,
-    typer.Option("--mlflow-host", help="Override MLflow server hostname"),
-]
-"""MLflow server hostname override.
-
-Overrides the hostname of the MLflow tracking server. Defaults to
-'localhost' if not specified in config or via this parameter.
-"""
-
-MLFLOW_PORT_PARAM = Annotated[
-    int | None,
-    typer.Option("--mlflow-port", help="Override MLflow server port"),
-]
-"""MLflow server port override.
-
-Overrides the port of the MLflow tracking server. Defaults to 5000
-if not specified in config or via this parameter.
 """
 
 EXPERIMENT_NAME_PARAM = Annotated[

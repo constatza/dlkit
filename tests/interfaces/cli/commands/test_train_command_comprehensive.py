@@ -395,13 +395,13 @@ class TestTrainCommandProperties:
             )
             assert result.exit_code == 0
 
-    @given(port=st.integers(min_value=MIN_PORT, max_value=MAX_PORT))
+    @given(suffix=st.integers(min_value=MIN_PORT, max_value=MAX_PORT))
     def test_train_mlflow_parameters(
         self,
-        port: int,
+        suffix: int,
         tmp_path_factory: pytest.TempPathFactory,
     ) -> None:
-        """Test MLflow strategy with various port configurations."""
+        """Test MLflow strategy with supported naming overrides."""
         tmp_dir = tmp_path_factory.mktemp("train_mlflow")
         cli_runner = CliRunner()
         config_path = tmp_dir / "config.toml"
@@ -419,7 +419,16 @@ class TestTrainCommandProperties:
             patch("dlkit.interfaces.cli.commands.train.present_training_result"),
         ):
             result = cli_runner.invoke(
-                cli_app, ["train", "--mlflow", "--mlflow-port", str(port), str(config_path)]
+                cli_app,
+                [
+                    "train",
+                    "--mlflow",
+                    "--experiment-name",
+                    f"exp-{suffix}",
+                    "--run-name",
+                    f"run-{suffix}",
+                    str(config_path),
+                ],
             )
             assert result.exit_code == 0
 

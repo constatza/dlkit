@@ -11,7 +11,7 @@ from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
 
 # OptimizationDecorator removed - tests updated for clean architecture
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings, MLflowClientSettings
+from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
 
 
@@ -41,9 +41,7 @@ def test_factory_creates_tracking_decorator_for_mlflow(factory):
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000", experiment_name="test"
-            ),
+            experiment_name="test",
         )
     )
 
@@ -78,9 +76,7 @@ def test_factory_creates_composed_executor_for_both_features(factory):
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
             enabled=True,
-            client=MLflowClientSettings(
-                tracking_uri="http://localhost:5000", experiment_name="test"
-            ),
+            experiment_name="test",
         ),
         OPTUNA=OptunaSettings(enabled=True, n_trials=5, direction="minimize"),
     )
@@ -102,9 +98,7 @@ def test_factory_follows_open_closed_principle(factory):
     """Test that factory can be extended without modification (OCP)."""
     # Original factory should work with existing settings
     vanilla_settings = GeneralSettings()
-    mlflow_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings())
-    )
+    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
     optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=3))
 
     vanilla_executor = factory.create_executor(vanilla_settings)
@@ -126,7 +120,7 @@ def test_factory_mlflow_detection_logic(factory):
 
     # MLflow enabled case
     assert factory._is_mlflow_enabled(
-        GeneralSettings(MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings()))
+        GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
     )
 
 
@@ -151,7 +145,7 @@ def test_factory_direct_usage():
     """Test that factory can be used directly."""
     from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
 
-    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True, client=MLflowClientSettings()))
+    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
 
     factory = ExecutionStrategyFactory()
     executor = factory.create_executor(settings)

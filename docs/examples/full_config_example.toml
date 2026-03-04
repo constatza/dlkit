@@ -377,57 +377,28 @@ val_ratio = 0.15                    # Alias: val
 [MLFLOW]
 # Enable/disable MLflow tracking
 enabled = false
-
-
-# -----------------------------------------------------------------------------
-# MLFLOW.server - MLflow Server Settings
-# -----------------------------------------------------------------------------
-[MLFLOW.server]
-# Server scheme (http or https only)
-scheme = "http"
-
-# Server host and port
-host = "127.0.0.1"
-port = 5000
-
-# Backend store URI for experiment metadata
-# Options: SQLite, PostgreSQL, MySQL
-# SQLite (local): "sqlite:///mlruns/mlflow.db"
-# PostgreSQL: "postgresql://user:pass@host:port/dbname"
-# backend_store_uri = "sqlite:///mlruns/mlflow.db"
-
-# Artifacts storage location
-# Local filesystem or S3-compatible storage
-# artifacts_destination = "mlartifacts/"
-
-# Number of server worker processes
-# Note: SQLite backends require num_workers = 1
-num_workers = 1
-
-# Keep-alive and timeout settings (seconds)
-keep_alive_interval = 5
-shutdown_timeout = 10
-health_timeout = 30.0
-
-
-# -----------------------------------------------------------------------------
-# MLFLOW.client - MLflow Client Settings
-# -----------------------------------------------------------------------------
-[MLFLOW.client]
-# Experiment name for grouping runs
+# Experiment/run naming
 experiment_name = "MyExperiment"
-
-# Optional run name for this specific run
 # run_name = "experiment-v1"
-
-# Tracking URI (auto-computed from server settings if not specified)
-# tracking_uri = "http://127.0.0.1:5000"
 
 # Register trained models in MLflow Model Registry
 register_model = false
 
-# Maximum connection attempts to server
+# Optional model registry overrides
+# registered_model_name = "MyModel"
+# registered_model_aliases = ["latest", "candidate"]
+# registered_model_version_tags = { team = "platform", dataset = "A" }
+
+# Maximum connection attempts for transient client operations
 max_trials = 3
+
+# Infrastructure endpoints are env-only (not TOML):
+# - MLFLOW_TRACKING_URI:
+#   1) If set, used as-is.
+#   2) Else if local MLflow responds at http://127.0.0.1:5000, use it.
+#   3) Else fallback to local sqlite backend.
+# - MLFLOW_ARTIFACT_URI:
+#   Optional explicit artifact URI override.
 
 
 # =============================================================================

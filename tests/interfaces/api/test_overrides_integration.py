@@ -45,8 +45,6 @@ class TestOverrideIntegration:
         assert input_data.epochs is None
         assert input_data.batch_size is None
         assert input_data.learning_rate is None
-        assert input_data.mlflow_host is None
-        assert input_data.mlflow_port is None
         assert input_data.experiment_name is None
         assert input_data.run_name is None
         assert input_data.additional_overrides == {}
