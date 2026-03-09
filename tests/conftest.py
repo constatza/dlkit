@@ -5,10 +5,27 @@ import pathlib
 import os
 import shutil
 import socket
-from collections.abc import Iterator
+import sys as _sys
+import traceback as _traceback
+
+_cwd = os.path.abspath(".")
+_target = os.path.join(_cwd, "mlflow.db")
+
+_orig_os_open = os.open
+_orig_os_makedirs = os.makedirs
+
+def _traced_os_open(path, flags, *a, **kw):
+    resolved = os.path.abspath(str(path)) if not os.path.isabs(str(path)) else str(path)
+    if resolved == _target:
+        _sys.stderr.write("\n=== os.open mlflow.db: " + resolved + " ===\n")
+        _traceback.print_stack(file=_sys.stderr, limit=20)
+        _sys.stderr.write("=== END ===\n\n")
+        _sys.stderr.flush()
+    return _orig_os_open(path, flags, *a, **kw)
+
+os.open = _traced_os_open
 
 from _pytest.tmpdir import TempPathFactory
-import psutil
 import pytest
 
 from dlkit.tools.io import load_config
@@ -17,70 +34,12 @@ from dlkit.tools.config.environment import env as global_environment
 
 _ORIGINAL_HOME_ENV = os.environ.get("HOME")
 _ORIGINAL_DLKIT_ROOT_DIR = os.environ.get("DLKIT_ROOT_DIR")
+_ORIGINAL_MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI")
 _ORIGINAL_PATH_HOME = pathlib.Path.home
 _ORIGINAL_ENV_ROOT = global_environment.root_dir
 _TEST_SESSION_ROOT: Path | None = None
 _TEST_HOME_DIR: Path | None = None
 _TEST_ARTIFACTS_DIR: Path | None = None
-
-
-def _find_free_port(host: str = "127.0.0.1") -> int:
-    """Find an available TCP port on the given host.
-
-    Returns a port number that was free at the time of asking by binding to
-    port 0 and querying the assigned port, then immediately releasing it.
-    """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((host, 0))
-        return int(s.getsockname()[1])
-
-
-def _kill_processes_on_port(port: int) -> None:
-    """Best-effort cleanup of any processes listening on a port."""
-    for proc in psutil.process_iter(["pid", "name"]):
-        try:
-            for conn in proc.net_connections():
-                if conn.laddr and conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
-                    try:
-                        proc.terminate()
-                        proc.wait(timeout=1.0)
-                    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
-                        try:
-                            proc.kill()
-                        except psutil.NoSuchProcess:
-                            pass
-                    break
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-
-
-@pytest.fixture()
-def free_port() -> Iterator[int]:
-    """Provide a free localhost TCP port and ensure cleanup after test.
-
-    Many server tests need an available port; using this fixture avoids clashes
-    on shared CI runners. After the test, any listener on the port is terminated
-    as a safety net to prevent leaks across tests.
-    """
-    port = _find_free_port()
-    try:
-        yield port
-    finally:
-        _kill_processes_on_port(port)
-
-
-@pytest.fixture()
-def free_ports() -> Iterator[tuple[int, int]]:
-    """Provide two distinct free ports for tests that need multiple servers."""
-    p1 = _find_free_port()
-    p2 = _find_free_port()
-    # extremely small chance of collision if a different process binds between these calls
-    try:
-        yield (p1, p2)
-    finally:
-        _kill_processes_on_port(p1)
-        _kill_processes_on_port(p2)
 
 
 @pytest.fixture(params=["io", "general_from_file"])
@@ -134,7 +93,6 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
         'checkpoints_dir = "checkpoints"\n'
         'figures_dir = "figures"\n'
         'predictions_dir = "preds"\n'
-        'mlruns_dir = "mlruns"\n'
     )
 
     dataset_block = (
@@ -231,6 +189,12 @@ def pytest_configure(config):
     os.environ["DLKIT_TEST_ARTIFACT_ROOT"] = str(artifacts_dir)
     os.environ.setdefault("DLKIT_ROOT_DIR", str(root_dir))
 
+    # Pin MLflow tracking URI to an isolated session-level SQLite DB so that
+    # collection-phase and import-time MLflow calls never write to the project root.
+    mlruns_session_dir = session_root / "mlruns"
+    mlruns_session_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:///{(mlruns_session_dir / 'mlflow.db').as_posix()}"
+
     pathlib.Path.home = classmethod(lambda cls, _home=home_dir: _home)  # type: ignore[assignment]
     global_environment.root_dir = str(root_dir)
 
@@ -257,6 +221,10 @@ def pytest_unconfigure(config):
     os.environ.pop("DLKIT_ROOT_DIR", None)
     if _ORIGINAL_DLKIT_ROOT_DIR is not None:
         os.environ["DLKIT_ROOT_DIR"] = _ORIGINAL_DLKIT_ROOT_DIR
+
+    os.environ.pop("MLFLOW_TRACKING_URI", None)
+    if _ORIGINAL_MLFLOW_TRACKING_URI is not None:
+        os.environ["MLFLOW_TRACKING_URI"] = _ORIGINAL_MLFLOW_TRACKING_URI
 
     pathlib.Path.home = _ORIGINAL_PATH_HOME
 

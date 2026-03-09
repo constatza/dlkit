@@ -43,6 +43,9 @@ class MockRunContext(IRunContext):
     def log_params(self, params: dict[str, Any]) -> None:
         self.logged_params.update(params)
 
+    def log_text(self, text: str, artifact_file: str) -> None:
+        pass
+
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         self.logged_artifacts.append((artifact_path, artifact_dir))
 

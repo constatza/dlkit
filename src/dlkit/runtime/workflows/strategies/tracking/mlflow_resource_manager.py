@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import Any
 import threading
 
+import os
+
 import mlflow
 from mlflow import MlflowClient
 
 from dlkit.runtime.workflows.strategies.tracking.uri_resolver import (
-    parse_scheme,
+    parse_mlflow_scheme,
     resolve_mlflow_uris,
 )
 from dlkit.tools.config.mlflow_settings import MLflowSettings
@@ -56,6 +58,10 @@ class MLflowResourceManager:
         self._is_initialized = False
 
     def _initialize_resources(self) -> None:
+        from dlkit.tools.config.environment import ensure_mlflow_defaults
+
+        ensure_mlflow_defaults()
+
         if not self._config or not getattr(self._config, "enabled", False):
             logger.debug("MLflow disabled, creating default client")
             self._state.client = MLflowClientFactory.create_client()
@@ -73,7 +79,7 @@ class MLflowResourceManager:
             logger.warning("MLflow client connectivity validation failed")
 
     def _ensure_local_storage_if_needed(self, tracking_uri: str, artifact_uri: str | None) -> None:
-        match parse_scheme(tracking_uri):
+        match parse_mlflow_scheme(tracking_uri):
             case "sqlite":
                 db_path = self._sqlite_db_path(tracking_uri)
                 db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,11 +234,17 @@ class MLflowResourceManager:
     @staticmethod
     def reset_global_state() -> None:
         try:
-            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
             try:
                 mlflow.end_run()
             except Exception:
                 pass
+            # set_tracking_uri(None) in MLflow 3.x removes MLFLOW_TRACKING_URI from
+            # os.environ when mlflow previously set it.  Preserve the env var so that
+            # any code running after this reset still uses the correct tracking backend.
+            _saved_uri = os.environ.get("MLFLOW_TRACKING_URI")
+            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
+            if _saved_uri is not None:
+                os.environ["MLFLOW_TRACKING_URI"] = _saved_uri
             if hasattr(mlflow, "_active_run_stack"):
                 mlflow._active_run_stack.clear()  # type: ignore[attr-defined]
         except Exception as e:  # pragma: no cover - best-effort safety

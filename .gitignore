@@ -193,7 +193,9 @@ tmp/
 lightning_logs
 *~
 
-# MLflow artifacts and tracking
+# MLflow artifacts and tracking (should never appear at project root)
+/mlflow.db
+/mlruns/
 mlartifacts/
 
 # Personal configuration and documentation
