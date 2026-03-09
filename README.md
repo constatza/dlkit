@@ -105,8 +105,8 @@ name = "my_training_session"
 inference = false
 # Random seed for reproducibility
 seed = 42
-# Computation precision preset (e.g., '32', '16-mixed')
-precision = "32"
+# Computation precision preset (use semantic aliases such as 'float32', 'mixed16', 'bf16')
+precision = "float32"
 
 [MODEL]
 # Model class path or registry alias
@@ -127,6 +127,12 @@ name = "your.datamodule.class"
 [DATASET]
 # Dataset class path or alias
 name = "your.dataset.class"
+
+[MLFLOW]
+# Flat, client-only tracking settings
+enabled = true
+experiment_name = "my-experiment"
+register_model = true
 
 [EXTRAS]
 # Optional user-defined helpers (ignored by core)
@@ -154,11 +160,20 @@ Examples:
 
 ### MLflow Registry and Model Loading
 
+`[MLFLOW]` is a flat, client-only section. Keep infrastructure endpoints in the environment:
+
+- `MLFLOW_TRACKING_URI`
+- `MLFLOW_ARTIFACT_URI`
+
+Legacy nested blocks such as `[MLFLOW.server]` / `[MLFLOW.client]` and TOML infra keys like
+`tracking_uri` / `artifacts_destination` are rejected during validation.
+
 `[MLFLOW].register_model` is `true` by default.
 
 - Registered model name defaults to the trained model class name.
 - DLKit does **not** add default aliases or model-version tags.
 - Aliases/tags are attached only when explicitly configured or set via API.
+- `max_retries` controls transient MLflow client retry attempts.
 - Dataset lineage is logged as a JSON artifact under `lineage/` plus run tags (`dataset_manifest_artifact`, `dataset_source_count`, `dataset_fingerprint`).
 
 ```python
@@ -699,44 +714,59 @@ All paths are resolved relative to SESSION.root_dir using DLKit's SecurePath sys
 
 ## Enhanced IO System
 
-DLKit provides a comprehensive IO system with efficient section-level config loading and protocol-based design:
+DLKit exposes two config-loading layers:
 
-### Partial Config Loading (Section-Level)
+- High-level workflow loaders in `dlkit.tools.io` / `dlkit.tools.config`
+- Low-level section readers and registry helpers in `dlkit.tools.io.config`
 
-Load only specific config sections with eager validation; missing sections are supported only at whole-section granularity (e.g., omit `DATASET`/`DATAMODULE`/`MODEL` and inject later):
+### Workflow Loaders
+
+Use these for normal application code:
 
 ```python
-from dlkit.tools.io.config import load_sections_config, load_section_config
+from dlkit.tools.io import load_settings, load_sections
 
-# Load multiple sections efficiently (eager validation)
+settings = load_settings("config.toml")  # TrainingWorkflowSettings
+partial = load_sections("config.toml", ["MODEL", "DATASET"])
+```
+
+### Section-Level Loading
+
+Use the low-level readers when you need explicit section models or registry-driven lookup:
+
+```python
+from dlkit.tools.config import SessionSettings
+from dlkit.tools.io.config import (
+    get_available_sections,
+    load_section_config,
+    load_sections_config,
+)
+
 sections = load_sections_config("config.toml", ["MODEL", "DATASET"])
 model_config = sections["MODEL"]
 dataset_config = sections["DATASET"]
 
-# Load single section
-model_section = load_section_config("config.toml", "MODEL")
+session = load_section_config("config.toml", SessionSettings)
+model = load_section_config("config.toml", section_name="MODEL")
 
-# Check available sections without full parsing
-from dlkit.tools.io.config import get_available_sections
 available = get_available_sections("config.toml")
 ```
 
-### IO Protocols and Parsers
+### Config Protocols
 
-The IO system follows SOLID principles with configurable parsers:
+The low-level config API is documented by protocol contracts in `dlkit.tools.io.protocols`:
 
-- **`ConfigParser`**: Strategy pattern for different parsing approaches
-- **`PartialTOMLParser`**: Efficient section extraction for large configs
-- **`SectionExtractor`**: Clean section extraction from parsed data
-- **`ConfigValidator`**: Pydantic-based validation with proper error handling
+- `ConfigParser`: full-file and section-aware parsing
+- `SectionExtractor`: extraction of named top-level sections
+- `ConfigValidator[T]`: eager Pydantic validation for section payloads
+- `PartialConfigReader`: high-level section reader contract
 
-### IO Module Structure
+Current implementation details:
 
-- **`dlkit.tools.io.config`**: Config loading, validation, and writing
-- **`dlkit.tools.io.locations`**: Centralized path policy and standard locations
-- **`dlkit.tools.io.provisioning`**: Explicit directory creation at runtime
-- **`dlkit.tools.io.protocols`**: Protocol definitions for parsers and validators
-- **`dlkit.tools.io.parsers`**: Concrete parser implementations
+- `DLKitTomlSource` in `dlkit.tools.config.core.sources` reads TOML and preprocesses paths before section filtering.
+- `load_sections_config()` and `load_section_config()` use the section-mapping registry in `dlkit.tools.io.config`.
+- `register_section_mapping()` / `reset_section_mappings()` let custom models participate in registry-driven loading.
+- Environment overrides follow `DLKIT_<SECTION>__<field>` and are merged via strict validated patching.
 
 ## URL Parsing Guidelines
 
@@ -841,8 +871,9 @@ Detailed guide and edge-case behavior:
   - `[TRAINING.optimizer]`: optimizer settings (e.g., `name`, `lr`)
 - `[MLFLOW]`: experiment tracking
   - `enabled`: bool; when true, MLflow is configured/used
-  - `experiment_name`, `run_name`, `register_model`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
+  - `experiment_name`, `run_name`, `register_model`, `max_retries`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
   - Infra is env-only: `MLFLOW_TRACKING_URI`, `MLFLOW_ARTIFACT_URI`
+  - Legacy nested sections are removed: `[MLFLOW.server]` and `[MLFLOW.client]` are invalid
   - Tracking URI resolution order: env URI -> `http://127.0.0.1:5000` when alive -> local sqlite fallback
 - `[OPTUNA]`: hyperparameter optimization
   - `enabled`: bool; when true and selected, optimization runs
@@ -1054,7 +1085,7 @@ Create a minimal TOML with only training settings:
 [SESSION]
 name = "my_experiment"
 seed = 42
-precision = "32"
+precision = "float32"
 
 [MODEL]
 name = "examples.minimal_e2e.model.SimpleNet"
