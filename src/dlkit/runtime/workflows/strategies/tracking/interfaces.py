@@ -94,6 +94,23 @@ class IRunContext(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def log_text(self, text: str, artifact_file: str) -> None:
+        """Log text content as an artifact without writing to disk.
+
+        Args:
+            text: Text content to log.
+            artifact_file: Filename (with optional subdirectory) within the run's
+                artifact store, e.g. ``"config/settings.toml"`` or ``"manifest.json"``.
+
+        Example:
+            ```python
+            run_context.log_text('{"key": "value"}', "lineage/manifest.json")
+            run_context.log_text("[MLFLOW]\\nenabled = true", "config/settings.toml")
+            ```
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         """Log an artifact file to the active run.
 
@@ -394,6 +411,15 @@ class NullRunContext(IRunContext):
 
         Args:
             params: Ignored.
+        """
+        pass
+
+    def log_text(self, text: str, artifact_file: str) -> None:
+        """No-op text artifact logging.
+
+        Args:
+            text: Ignored.
+            artifact_file: Ignored.
         """
         pass
 

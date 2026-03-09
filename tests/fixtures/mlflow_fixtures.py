@@ -26,14 +26,16 @@ def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None, None, None]
     """
     isolation_uri = f"sqlite:///{(tmp_path / 'mlflow_isolation.db').as_posix()}"
 
-    # Reset state before test, then pin the default to tmp_path
+    # Pin URI first so end_run() in reset_global_state uses the safe path,
+    # then reset (end_run + clear stack), then re-pin after reset clears the URI.
+    mlflow.set_tracking_uri(isolation_uri)
     MLflowResourceManager.reset_global_state()
     mlflow.set_tracking_uri(isolation_uri)
 
     yield
 
-    # Reset state after test, then pin again so teardown doesn't leave a
-    # CWD-relative URI behind for the next test's setup phase
+    # Same order on teardown: pin → reset → re-pin
+    mlflow.set_tracking_uri(isolation_uri)
     MLflowResourceManager.reset_global_state()
     mlflow.set_tracking_uri(isolation_uri)
 
@@ -70,18 +72,8 @@ def mlflow_resource_manager(mlflow_test_settings) -> Generator[MLflowResourceMan
 
     This fixture ensures proper setup and cleanup of MLflow resources.
     """
-    manager = MLflowResourceManager(mlflow_test_settings)
-
-    try:
-        with manager:
-            yield manager
-    except Exception as e:
-        # Ensure cleanup even if test fails
-        try:
-            manager.__exit__(None, None, None)
-        except Exception:
-            pass
-        raise e
+    with MLflowResourceManager(mlflow_test_settings) as manager:
+        yield manager
 
 
 @pytest.fixture

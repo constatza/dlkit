@@ -23,8 +23,18 @@ class ResolvedMlflowUris:
     scheme: str
 
 
-def parse_scheme(uri: str) -> str:
-    """Parse and validate URI scheme."""
+def parse_mlflow_scheme(uri: str) -> str:
+    """Parse and validate MLflow tracking URI scheme.
+
+    Args:
+        uri: MLflow tracking URI string.
+
+    Returns:
+        One of ``"http"``, ``"https"``, or ``"sqlite"``.
+
+    Raises:
+        ValueError: If the URI is empty or uses an unsupported scheme.
+    """
     candidate = uri.strip()
     if not candidate:
         raise ValueError("MLflow URI cannot be empty")
@@ -69,7 +79,7 @@ def resolve_artifact_uri(tracking_uri: str) -> str | None:
     if env_artifact:
         return env_artifact
 
-    match parse_scheme(tracking_uri):
+    match parse_mlflow_scheme(tracking_uri):
         case "sqlite":
             return derive_sqlite_artifact_uri(tracking_uri)
         case "http" | "https":
@@ -88,7 +98,7 @@ def derive_sqlite_artifact_uri(tracking_uri: str) -> str:
 def resolve_mlflow_uris() -> ResolvedMlflowUris:
     """Resolve MLflow tracking and artifact URIs in one immutable result."""
     tracking_uri = resolve_tracking_uri()
-    scheme = parse_scheme(tracking_uri)
+    scheme = parse_mlflow_scheme(tracking_uri)
     artifact_uri = resolve_artifact_uri(tracking_uri)
     return ResolvedMlflowUris(
         tracking_uri=tracking_uri,
@@ -100,7 +110,7 @@ def resolve_mlflow_uris() -> ResolvedMlflowUris:
 def _normalize_tracking_uri(uri: str) -> str:
     """Normalize tracking URI and absolute-resolve sqlite paths."""
     cleaned = uri.strip()
-    scheme = parse_scheme(cleaned)
+    scheme = parse_mlflow_scheme(cleaned)
 
     match scheme:
         case "sqlite":
@@ -133,26 +143,21 @@ def _tcp_port_open(host: str, port: int) -> bool:
 
 
 def _looks_like_mlflow(base_url: str) -> bool:
-    """Perform lightweight HTTP sanity checks to reduce false positives."""
-    probe_paths = ("/health", "/version", "/")
-    for path in probe_paths:
-        if _probe_endpoint(base_url + path):
-            return True
-    return False
+    """Confirm the service at base_url is MLflow by probing a canonical REST endpoint.
 
+    Uses the unambiguous ``/api/2.0/mlflow/experiments/list`` path instead of generic
+    heuristics so that any non-MLflow service on port 5000 is not mistakenly accepted.
 
-def _probe_endpoint(url: str) -> bool:
+    Args:
+        base_url: Base URL of the service to probe (e.g. ``"http://127.0.0.1:5000"``).
+
+    Returns:
+        True only when the canonical MLflow experiments endpoint returns HTTP 200.
+    """
     try:
+        url = f"{base_url}/api/2.0/mlflow/experiments/list"
         req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=0.35) as resp:  # noqa: S310 - controlled localhost probe
-            body = resp.read(512).decode("utf-8", errors="ignore").lower()
-            if "mlflow" in body:
-                return True
-            server_header = (resp.headers.get("Server") or "").lower()
-            if "mlflow" in server_header:
-                return True
-            if url.endswith("/health") and resp.status == 200:
-                return True
-            return False
+        with request.urlopen(req, timeout=1.0) as resp:  # noqa: S310 - controlled localhost probe
+            return resp.status == 200
     except Exception:
         return False

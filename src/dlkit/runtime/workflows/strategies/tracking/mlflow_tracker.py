@@ -1,6 +1,7 @@
 """MLflow adapter implementing tracking abstractions."""
 
 from contextlib import contextmanager, ExitStack, AbstractContextManager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +16,26 @@ from dlkit.tools.utils.logging_config import get_logger
 from .interfaces import IExperimentTracker, IRunContext
 from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
 from .mlflow_resource_manager import MLflowResourceManager
-from .uri_resolver import resolve_tracking_uri
 
 logger = get_logger(__name__)
 
 # MLflow integration constants
 MLFLOW_DEFAULT_EXPERIMENT = "DLKit"
+
+
+@dataclass(frozen=True)
+class TrackingSetupResult:
+    """Typed result returned by :meth:`MLflowTracker.setup_mlflow_config`.
+
+    Attributes:
+        tracking_uri: Resolved MLflow tracking URI, or ``None`` when tracking is disabled.
+        resolved_artifact_uri: Resolved artifact URI, or ``None`` when using server-side storage.
+        is_local: ``True`` when the tracking backend is a local SQLite file.
+    """
+
+    tracking_uri: str | None
+    resolved_artifact_uri: str | None
+    is_local: bool
 
 
 class MLflowTracker(IExperimentTracker):
@@ -249,30 +264,14 @@ class MLflowTracker(IExperimentTracker):
             ```
         """
         try:
-            # Log full config as TOML artifact (excluding unset values)
-            from dlkit.tools.io.config import write_config
-            from pathlib import Path
-            import os
-            import tempfile
+            from dlkit.tools.io import serialize_config_to_string
 
-            # Create temporary TOML file with unset values excluded
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as temp_file:
-                write_config(
-                    settings,
-                    temp_file.name,
-                    exclude_unset=True,
-                    exclude_value_entries=True,
-                )
-                temp_path = Path(temp_file.name)
-
-            try:
-                # Log TOML file as artifact only using run context
-                run_context.log_artifact(temp_path, artifact_dir="")
-            finally:
-                # Clean up temp file
-                if temp_path.exists():
-                    os.unlink(temp_path)
-
+            toml_content = serialize_config_to_string(
+                settings,
+                exclude_unset=True,
+                exclude_value_entries=True,
+            )
+            run_context.log_text(toml_content, "GeneralSettings.toml")
         except Exception as e:
             raise RuntimeError("Couldn't log settings") from e
 
@@ -414,8 +413,6 @@ class MLflowTracker(IExperimentTracker):
         try:
             import json
             import hashlib
-            import os
-            import tempfile
 
             fingerprint_payload = json.dumps(sorted(sources), separators=(",", ":"))
             fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
@@ -430,16 +427,10 @@ class MLflowTracker(IExperimentTracker):
                 "structured_mlflow_dataset_logged": structured_logged,
             }
 
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
-                json.dump(manifest, temp_file, indent=2, sort_keys=True)
-                temp_path = Path(temp_file.name)
-
-            try:
-                run_context.log_artifact(temp_path, artifact_dir="lineage")
-            finally:
-                if temp_path.exists():
-                    os.unlink(temp_path)
-
+            run_context.log_text(
+                json.dumps(manifest, indent=2, sort_keys=True),
+                "lineage/dataset_manifest.json",
+            )
             run_context.set_tag("dataset_manifest_artifact", "lineage")
             run_context.set_tag("dataset_source_count", str(len(sources)))
             run_context.set_tag("dataset_fingerprint", fingerprint)
@@ -451,7 +442,7 @@ class MLflowTracker(IExperimentTracker):
         mlflow_config: Any,
         *,
         root_dir: Path | str | None = None,
-    ) -> tuple[str | None, dict | None]:
+    ) -> TrackingSetupResult:
         """Configure MLflow tracking - stores config for deferred resource initialization.
 
         Stores the MLflow configuration for later use. Actual resource initialization
@@ -493,21 +484,26 @@ class MLflowTracker(IExperimentTracker):
             or not getattr(mlflow_config, "enabled", False)
         ):
             logger.debug("MLflow disabled or autostart disabled")
-            return None, None
+            return TrackingSetupResult(tracking_uri=None, resolved_artifact_uri=None, is_local=False)
 
-        self._tracking_uri = resolve_tracking_uri()
+        from .uri_resolver import resolve_mlflow_uris
+
+        resolved = resolve_mlflow_uris()
+        self._tracking_uri = resolved.tracking_uri
         logger.debug("MLflow config stored - will initialize in context entry")
-        return self._tracking_uri, None
+        return TrackingSetupResult(
+            tracking_uri=resolved.tracking_uri,
+            resolved_artifact_uri=resolved.artifact_uri,
+            is_local=resolved.scheme == "sqlite",
+        )
 
     def _determine_root_dir(self, candidate: Path | str | None) -> Path | None:
         if candidate is not None:
             return Path(candidate).resolve()
 
         ctx = get_current_path_context()
-        if ctx and getattr(ctx, "root_dir", None):
-            try:
-                return Path(ctx.root_dir).resolve()
-            except TypeError:
-                return Path(str(ctx.root_dir)).resolve()
+        root_dir_val = getattr(ctx, "root_dir", None) if ctx else None
+        if root_dir_val is not None:
+            return Path(str(root_dir_val)).resolve()
 
         return None

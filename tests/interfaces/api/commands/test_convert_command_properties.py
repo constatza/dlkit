@@ -235,8 +235,8 @@ class TestConvertCommandProperties:
             st.one_of(
                 st.integers(max_value=0),  # Invalid: zero or negative
                 st.text().filter(
-                    lambda x: not x.isdigit() and x.strip() != ""
-                ),  # Invalid: non-numeric
+                    lambda x: not x.strip().isdigit() and x.strip() != ""
+                ),  # Invalid: non-numeric after stripping
             ),
             min_size=1,
             max_size=3,

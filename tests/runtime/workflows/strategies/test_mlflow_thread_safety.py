@@ -7,6 +7,8 @@ particularly the nested run stack and global state management.
 from __future__ import annotations
 
 import threading
+import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,73 +17,89 @@ from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import 
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 
 
+@pytest.fixture
+def mlflow_config_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MLflowSettings:
+    """Provide an enabled MLflow settings instance with an isolated tracking URI."""
+    monkeypatch.setenv(
+        "MLFLOW_TRACKING_URI",
+        f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+    )
+    return MLflowSettings(enabled=True)
+
+
 class TestMLflowResourceManagerThreadSafety:
     """Test thread safety of MLflow resource manager."""
 
-    def test_stack_operations_are_thread_safe(self, tmp_path: Any) -> None:
-        """Test that stack operations are protected by locks.
+    def test_stack_is_safe_under_concurrent_mutations(
+        self, mlflow_config_enabled: MLflowSettings
+    ) -> None:
+        """Concurrent push/pop must not corrupt the active run stack.
+
+        50 threads each push a unique run ID and then pop it under the stack lock.
+        After all threads finish the stack must be empty with no duplicates lost.
 
         Args:
-            tmp_path: Temporary directory fixture
+            mlflow_config_enabled: Enabled MLflow settings fixture.
         """
-        mlflow_config = MLflowSettings(enabled=True)
+        manager = MLflowResourceManager(mlflow_config_enabled)
+        errors: list[Exception] = []
 
-        manager = MLflowResourceManager(mlflow_config)
+        def push_and_pop(run_id: str) -> None:
+            with manager._state.stack_lock:
+                manager._state.active_run_stack.append(run_id)
+            time.sleep(0)  # yield to increase contention
+            with manager._state.stack_lock:
+                if run_id in manager._state.active_run_stack:
+                    manager._state.active_run_stack.remove(run_id)
 
-        # Test that stack_lock exists and is a lock type
-        assert hasattr(manager._state, "stack_lock")
-        # threading.Lock returns an instance, not a type - check it has lock methods
-        assert hasattr(manager._state.stack_lock, "acquire")
-        assert hasattr(manager._state.stack_lock, "release")
-        assert callable(manager._state.stack_lock.acquire)
-        assert callable(manager._state.stack_lock.release)
+        threads = [threading.Thread(target=push_and_pop, args=(f"run-{i}",)) for i in range(50)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
-    def test_concurrent_state_snapshot_access(self, tmp_path: Any) -> None:
-        """Test that state snapshots are thread-safe.
+        assert manager._state.active_run_stack == [], "Stack must be empty after all threads complete"
+        assert len(errors) == 0
+
+    def test_concurrent_state_snapshot_access(
+        self, mlflow_config_enabled: MLflowSettings
+    ) -> None:
+        """State snapshots must be readable from multiple concurrent threads.
 
         Args:
-            tmp_path: Temporary directory fixture
+            mlflow_config_enabled: Enabled MLflow settings fixture.
         """
-        mlflow_config = MLflowSettings(enabled=True)
-
-        with MLflowResourceManager(mlflow_config) as manager:
-            # Simulate concurrent access to state snapshot
-            snapshots = []
-            errors = []
+        with MLflowResourceManager(mlflow_config_enabled) as manager:
+            snapshots: list[dict] = []
+            errors: list[Exception] = []
 
             def get_snapshot() -> None:
                 try:
-                    snapshot = manager._get_state_snapshot()
-                    snapshots.append(snapshot)
+                    snapshots.append(manager._get_state_snapshot())
                 except Exception as e:
                     errors.append(e)
 
             threads = [threading.Thread(target=get_snapshot) for _ in range(10)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
-            # All snapshots should be retrieved without errors
             assert len(errors) == 0
             assert len(snapshots) == 10
 
-    def test_cleanup_is_thread_safe(self, tmp_path: Any) -> None:
-        """Test that cleanup operations are thread-safe.
+    def test_cleanup_clears_stack(self, mlflow_config_enabled: MLflowSettings) -> None:
+        """Stack must be empty after context manager exit.
 
         Args:
-            tmp_path: Temporary directory fixture
+            mlflow_config_enabled: Enabled MLflow settings fixture.
         """
-        mlflow_config = MLflowSettings(enabled=True)
-
-        manager = MLflowResourceManager(mlflow_config)
+        manager = MLflowResourceManager(mlflow_config_enabled)
 
         with manager:
-            # Manually add some run IDs to the stack
             with manager._state.stack_lock:
                 manager._state.active_run_stack.extend(["run1", "run2", "run3"])
 
-        # After exit, stack should be empty (cleanup should have cleared it)
         assert len(manager._state.active_run_stack) == 0
 
 

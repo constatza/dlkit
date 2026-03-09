@@ -51,6 +51,18 @@ class ClientBasedRunContext(IRunContext):
         except Exception as e:
             logger.warning(f"Failed to log params: {e}")
 
+    def log_text(self, text: str, artifact_file: str) -> None:
+        """Log text content directly as an artifact without writing to disk.
+
+        Args:
+            text: Text content to log.
+            artifact_file: Destination path within the run artifact store.
+        """
+        try:
+            self._client.log_text(self._run_id, text, artifact_file)
+        except Exception as e:
+            logger.warning(f"Failed to log text artifact '{artifact_file}': {e}")
+
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         """Log artifact using MLflow client."""
         try:

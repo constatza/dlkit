@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
+import mlflow
 import pytest
 
 import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
@@ -46,9 +48,9 @@ def test_resolve_tracking_uri_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPat
     assert resolved.endswith("mlflow.db")
 
 
-def test_parse_scheme_rejects_invalid_scheme() -> None:
+def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
     with pytest.raises(ValueError, match="Unsupported MLflow tracking URI scheme"):
-        uri_resolver.parse_scheme("ftp://example.com/mlflow")
+        uri_resolver.parse_mlflow_scheme("ftp://example.com/mlflow")
 
 
 def test_resolve_artifact_uri_derives_from_sqlite(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,3 +115,16 @@ def test_create_run_preserves_nested_parent_child_structure(
     assert parent_call["nested"] is False
     assert child_call["nested"] is True
     assert child_call["parent_run_id"] == "parent-run"
+
+
+def test_reset_global_state_preserves_tracking_uri_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracking_uri = "sqlite:////tmp/mlruns/env-preserve.db"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    mlflow.set_tracking_uri(tracking_uri)
+
+    MLflowResourceManager.reset_global_state()
+
+    assert os.environ.get("MLFLOW_TRACKING_URI") == tracking_uri
+    assert mlflow.get_tracking_uri() == tracking_uri

@@ -62,7 +62,8 @@ def configure_logging(
 
     # Determine log level
     if level is None:
-        level = os.getenv("DLKIT_LOG_LEVEL", "INFO").upper()
+        from dlkit.tools.config.environment import env as _env
+        level = _env.log_level.upper()
 
     # Determine debug mode
     if debug_enabled is None:
@@ -102,8 +103,9 @@ def configure_logging(
 
     # Add file handler for errors if not in debug mode
     if not debug_enabled:
+        from dlkit.tools.config.environment import env as _env
         default_log_file = _get_default_log_file_path()
-        log_file = os.getenv("DLKIT_LOG_FILE", str(default_log_file))
+        log_file = _env.log_file or str(default_log_file)
         logger.add(
             log_file,
             format=(
@@ -151,7 +153,8 @@ def _is_debug_enabled() -> bool:
         return True
 
     # Check explicit log level
-    return os.getenv("DLKIT_LOG_LEVEL", "").upper() == "DEBUG"
+    from dlkit.tools.config.environment import env as _env
+    return _env.log_level.upper() == "DEBUG"
 
 
 def _debug_filter(record: Any) -> bool:

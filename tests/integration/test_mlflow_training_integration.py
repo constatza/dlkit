@@ -174,7 +174,6 @@ class TestMLflowTrainingIntegration:
         """
         # Verify MLflow is configured and active
         assert mlflow_settings.MLFLOW.enabled
-        assert mlflow_settings.MLFLOW.enabled
 
         # Act - Don't specify strategy, let it auto-detect
         training_result = dlkit.train(mlflow_settings)
@@ -222,18 +221,24 @@ class TestMLflowTrainingIntegration:
         self,
         mlflow_settings: GeneralSettings,
     ) -> None:
-        """Test MLflow training with multiple epochs (slower test).
+        """Test MLflow training with multiple real epochs.
+
+        Uses max_epochs=2, limit_train_batches=2 instead of fast_dev_run so that
+        the multi-epoch code path is actually exercised and metrics are logged.
 
         Args:
             mlflow_settings: MLflow settings fixture.
-            tmp_path: Pytest temporary directory fixture.
         """
-        # This would normally test multi-epoch training but our fixture uses fast_dev_run
-        # so this test just ensures MLflow integration works
-        # Act
-        training_result = dlkit.train(mlflow_settings)
+        training = mlflow_settings.TRAINING
+        trainer = training.trainer.model_copy(
+            update={"fast_dev_run": False, "max_epochs": 2, "limit_train_batches": 2}
+        )
+        multi_epoch_settings = mlflow_settings.model_copy(
+            update={"TRAINING": training.model_copy(update={"trainer": trainer})}
+        )
 
-        # Should complete successfully
+        training_result = dlkit.train(multi_epoch_settings)
+
         assert training_result.duration_seconds > 0
         assert training_result.metrics is not None
 

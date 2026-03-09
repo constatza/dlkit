@@ -123,9 +123,31 @@ class NumpyWriter(Callback):
 
     @staticmethod
     def _resolve_default_output_dir() -> tuple[Path, bool]:
+        """Resolve the default output directory for predictions.
+
+        Checks whether an MLflow run is currently active. If so, returns the
+        run's local artifact directory so that prediction arrays are written
+        alongside other run artifacts. Falls back to ``<cwd>/predictions``
+        when no run is active or when the artifact URI is not a local
+        ``file://`` path.
+
+        Returns:
+            tuple[Path, bool]: A ``(path, use_mlflow)`` pair where ``use_mlflow``
+                is ``True`` only when the path was derived from an active MLflow
+                run's artifact store.
+
+        Warning:
+            In MLflow 3.x, calling ``mlflow.get_artifact_uri()`` **without an
+            active run auto-creates a new run** and initializes the tracking
+            store, potentially writing ``mlflow.db`` to the current working
+            directory. This method guards against that side-effect by checking
+            ``mlflow.active_run()`` before calling ``get_artifact_uri()``.
+        """
         try:
             import mlflow
 
+            if mlflow.active_run() is None:
+                return Path.cwd() / "predictions", False
             artifact_uri = mlflow.get_artifact_uri()
             if artifact_uri and artifact_uri.startswith("file://"):
                 return Path(get_url_path(artifact_uri).lstrip("/")), True

@@ -36,10 +36,12 @@ class _DatasetRunContext(IRunContext):
     def log_params(self, params: dict[str, Any]) -> None:
         pass
 
+    def log_text(self, text: str, artifact_file: str) -> None:
+        if artifact_file.startswith("lineage/"):
+            self.manifests.append(json.loads(text))
+
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
-        if artifact_dir != "lineage":
-            return
-        self.manifests.append(json.loads(artifact_path.read_text(encoding="utf-8")))
+        pass
 
     def set_tag(self, key: str, value: str) -> None:
         self.tags[key] = value

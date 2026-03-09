@@ -193,15 +193,15 @@ class TrackingDecorator(ITrainingExecutor):
             root_dir = accessor.get_session_root_dir()
             setup_fn = getattr(self._tracker, "setup_mlflow_config")
             try:
-                tracking_uri, _status = setup_fn(mlflow_config, root_dir=root_dir)
-                return tracking_uri
+                result = setup_fn(mlflow_config, root_dir=root_dir)
             except TypeError as exc:
                 # Fall back for trackers that have not yet adopted the root_dir kwarg
                 if "unexpected keyword argument 'root_dir'" in str(exc):
                     logger.debug("Tracker does not support root_dir parameter, using fallback")
-                    tracking_uri, _status = setup_fn(mlflow_config)
-                    return tracking_uri
-                raise
+                    result = setup_fn(mlflow_config)
+                else:
+                    raise
+            return result.tracking_uri if hasattr(result, "tracking_uri") else result[0]
 
         return None
 
