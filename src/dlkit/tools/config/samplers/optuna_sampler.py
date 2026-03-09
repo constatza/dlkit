@@ -6,7 +6,7 @@ from typing import Any
 
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
-from dlkit.tools.config.core.base_settings import HyperParameterSettings
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import ISettingsSampler
@@ -110,13 +110,8 @@ class OptunaSettingsSampler:
             return base_settings
 
         try:
-            # Deep merge sampled parameters into MODEL
-            updated_model_dict = HyperParameterSettings.deep_merge_model(
-                base_settings.MODEL, sampled_params
-            )
-
-            # Create new model instance with updated parameters
-            updated_model = base_settings.MODEL.__class__(**updated_model_dict)
+            # Patch MODEL with sampled parameters using compile_mixed_overrides semantics
+            updated_model = patch_model(base_settings.MODEL, sampled_params)
 
             # Return new settings with updated MODEL
             result = base_settings.model_copy(update={"MODEL": updated_model})

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from lightning import LightningDataModule
 from pydantic import Field
 
 from .core.base_settings import ComponentSettings, HyperParameterSettings
@@ -10,7 +9,7 @@ from .enums import DataModuleName
 from .dataloader_settings import DataloaderSettings
 
 
-class DataModuleSettings(ComponentSettings[LightningDataModule], HyperParameterSettings):
+class DataModuleSettings(ComponentSettings, HyperParameterSettings):
     """Top-level DataModule configuration for dataflow loading and processing.
 
     Flattened from component architecture to top-level for easier access.
@@ -30,7 +29,7 @@ class DataModuleSettings(ComponentSettings[LightningDataModule], HyperParameterS
     name: str | DataModuleName = Field(
         default=DataModuleName.IN_MEMORY, description="DataModule class name"
     )
-    module_path: str = Field(
+    module_path: str | None = Field(
         default="dlkit.core.datamodules",
         description="Module path where the datamodule class is located",
     )

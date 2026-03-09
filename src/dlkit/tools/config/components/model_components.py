@@ -1,21 +1,15 @@
 """Model component settings without build() methods - pure configuration."""
 
-from typing import TYPE_CHECKING
+from typing import Any
 from collections.abc import Callable
 from pathlib import Path
 
-from lightning import LightningModule
-from pydantic import Field, FilePath, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
-from torchmetrics import Metric
-import torch.nn as nn
 
 from dlkit.core.datatypes.base import IntHyperparameter
 from ..core.base_settings import ComponentSettings, HyperParameterSettings, BasicSettings
 from ..optimizer_settings import OptimizerSettings, SchedulerSettings
-
-if TYPE_CHECKING:
-    pass
 
 
 def _validate_batch_key(v: str) -> str:
@@ -72,7 +66,7 @@ class MetricInputRef(BasicSettings, frozen=True):
         return _validate_batch_key(v)
 
 
-class MetricComponentSettings(ComponentSettings[Metric]):
+class MetricComponentSettings(ComponentSettings):
     """Configuration for metrics components - pure configuration only.
 
     This replaces MetricSettings.build() with factory pattern.
@@ -84,8 +78,8 @@ class MetricComponentSettings(ComponentSettings[Metric]):
         extra_inputs: Extra kwargs passed to the metric, routed from batch
     """
 
-    name: str = Field(default="MeanSquaredError", description="Name of the metric")
-    module_path: str = Field(
+    name: str | type | Callable[..., Any] | None = Field(default="MeanSquaredError", description="Name of the metric")
+    module_path: str | None = Field(
         default="torchmetrics.regression", description="Module path to the metric"
     )
     target_key: str | None = Field(
@@ -105,7 +99,7 @@ class MetricComponentSettings(ComponentSettings[Metric]):
         return v
 
 
-class LossComponentSettings(ComponentSettings[Callable]):
+class LossComponentSettings(ComponentSettings):
     """Configuration for loss function components - pure configuration only.
 
     This replaces LossSettings.build() with factory pattern.
@@ -134,10 +128,10 @@ class LossComponentSettings(ComponentSettings[Callable]):
         ... )
     """
 
-    name: str | Callable = Field(
+    name: str | type | Callable[..., Any] | None = Field(
         default="mse", description="Name of the loss function (default: mse)"
     )
-    module_path: str = Field(
+    module_path: str | None = Field(
         default="dlkit.core.training.functional",
         description="Module path to the loss function (default: shared functional module)",
     )
@@ -158,7 +152,7 @@ class LossComponentSettings(ComponentSettings[Callable]):
         return v
 
 
-class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterSettings):
+class ModelComponentSettings(ComponentSettings, HyperParameterSettings):
     """Model architecture configuration - pure configuration only.
 
     This replaces ModelSettings.build() with factory pattern.
@@ -182,8 +176,8 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
 
-    name: str | type[nn.Module] = Field(..., description="Model namespace path")
-    module_path: str = Field(default="dlkit.core.models.nn", description="Module path to the model")
+    name: str | type | Callable[..., Any] | None = Field(..., description="Model namespace path")
+    module_path: str | None = Field(default="dlkit.core.models.nn", description="Module path to the model")
 
     # Checkpoint for inference (NOT for training resume)
     checkpoint: Path | str | None = Field(
@@ -220,7 +214,7 @@ class ModelComponentSettings(ComponentSettings[LightningModule], HyperParameterS
     num_heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
 
 
-class WrapperComponentSettings(ComponentSettings[nn.Module]):
+class WrapperComponentSettings(ComponentSettings):
     """Model wrapper configuration - pure configuration only.
 
     This replaces WrapperSettings.build() with factory pattern.
@@ -241,10 +235,10 @@ class WrapperComponentSettings(ComponentSettings[nn.Module]):
         Metrics configuration
     """
 
-    name: str | type[nn.Module] = Field(
+    name: str | type | Callable[..., Any] | None = Field(
         default="StandardLightningWrapper", description="Name of the wrapper"
     )
-    module_path: str = Field(
+    module_path: str | None = Field(
         default="dlkit.core.models.wrappers", description="Module path to the wrapper"
     )
 

@@ -8,12 +8,10 @@ from typing import Any, TypeVar, cast, overload, TYPE_CHECKING
 import sys
 import torch
 
-from dynaconf import Dynaconf
 from pydantic import BaseModel
 from enum import Enum
 from tomlkit import document, table, dumps
 
-from .parsers import PartialTOMLParser
 
 if TYPE_CHECKING:
     from dlkit.tools.config.workflow_configs import (
@@ -276,173 +274,10 @@ def load_config[T: BaseModel](
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    settings = Dynaconf(
-        settings_files=[str(config_path)],
-        load_dotenv=False,
-    )
+    from dlkit.tools.config.core.sources import DLKitTomlSource
 
-    config_data = settings.to_dict()
-
-    # Flatten any redundant nesting created by dotted assignments like
-    # "MODEL.checkpoint = ..." which Dynaconf may represent as
-    # {"MODEL": {"name": ..., "MODEL": {"checkpoint": ...}}}
-    # Merge inner dict into the parent to match expected Pydantic structure.
-    try:
-        for section in (
-            "SESSION",
-            "MODEL",
-            "DATASET",
-            "DATAMODULE",
-            "TRAINING",
-            "MLFLOW",
-            "OPTUNA",
-            "ENVIRONMENT",
-            "EXTRAS",
-        ):
-            sec_val = config_data.get(section)
-            if (
-                isinstance(sec_val, dict)
-                and section in sec_val
-                and isinstance(sec_val[section], dict)
-            ):
-                inner = sec_val.pop(section)
-                # Don't overwrite existing keys unless explicitly set in inner
-                for k, v in inner.items():
-                    sec_val[k] = v
-    except Exception:
-        # Best-effort flattening; ignore if structure is unexpected
-        pass
-
-    # No PATHS injection; environment root is authoritative
-
-    # Filter out Dynaconf metadata that shouldn't be passed to Pydantic
-    dynaconf_metadata_keys = {"LOAD_DOTENV", "ENV_FOR_DYNACONF", "ROOT_PATH_FOR_DYNACONF"}
-    config_data = {k: v for k, v in config_data.items() if k not in dynaconf_metadata_keys}
-
-    # Minimal pre-resolution for fields that use FilePath/DirectoryPath validators.
-    try:
-        from pathlib import Path as _Path
-        from dlkit.core.datatypes.urls import tilde_expand_strict
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context
-
-        config_dir = Path(config_path).resolve().parent
-
-        def _compute_root_dict(cfg: dict[str, Any]) -> _Path:
-            """Compute effective root with standard precedence.
-
-            Priority:
-            1) DLKIT_ROOT_DIR env var (via DLKitEnvironment)
-            2) ENVIRONMENT.root_dir in config (resolved relative to config file dir if relative)
-            3) SESSION.root_dir in config (legacy-friendly; resolved relative to config file dir)
-            4) Parent directory of the config file
-            5) Current working directory
-            """
-            # 1) Process environment (explicit env wins)
-            # 0) CLI/path override context (highest priority)
-            try:
-                ctx = get_current_path_context()
-                root_dir = getattr(ctx, "root_dir", None) if ctx else None
-                if root_dir is not None:
-                    return _Path(root_dir).resolve()
-            except Exception:
-                pass
-
-            # 1) SESSION.root_dir (formal config override)
-            ses = cfg.get("SESSION")
-            if isinstance(ses, dict) and ses.get("root_dir"):
-                p = _Path(tilde_expand_strict(str(ses["root_dir"])))
-                return (p if p.is_absolute() else (config_dir / p)).resolve()
-
-            # 2) Config directory, then 3) CWD
-            return config_dir if config_dir.exists() else _Path.cwd().resolve()
-
-        def _is_url(value: Any) -> bool:
-            return isinstance(value, str) and "://" in value
-
-        # No directory creation during config load
-
-        def _process_path_field(value: Any, root: _Path) -> Any:
-            if not isinstance(value, str):
-                return value
-            if _is_url(value):
-                # Leave URL values as-is; Pydantic types will validate later
-                return value
-            expanded = tilde_expand_strict(value)
-            path = _Path(expanded)
-            if not path.is_absolute():
-                path = (root / path).resolve()
-            return str(path)
-
-        root = _compute_root_dict(config_data)
-
-        # 1) TRAINING.trainer.default_root_dir (absolute path only)
-        trainer = (
-            (config_data.get("TRAINING") or {}).get("trainer")
-            if isinstance(config_data.get("TRAINING"), dict)
-            else None
-        )
-        if isinstance(trainer, dict) and "default_root_dir" in trainer:
-            val = trainer["default_root_dir"]
-            processed = _process_path_field(val, root)
-            trainer["default_root_dir"] = processed
-
-        # 2) MODEL.checkpoint
-        model_sec = config_data.get("MODEL")
-        if isinstance(model_sec, dict) and "checkpoint" in model_sec:
-            model_sec["checkpoint"] = _process_path_field(model_sec["checkpoint"], root)
-
-        # 3) DATASET.split.filepath and DATASET.features/targets paths relative to DATASET.root
-        dataset_sec = config_data.get("DATASET")
-        if isinstance(dataset_sec, dict):
-            # Compute dataset base directory if provided
-            dataset_root_val = dataset_sec.get("root_dir", dataset_sec.get("root"))
-            dataset_base: _Path | None = None
-            if isinstance(dataset_root_val, str) and dataset_root_val:
-                processed_root = _process_path_field(dataset_root_val, root)
-                dataset_base = _Path(processed_root)
-
-            split = dataset_sec.get("split")
-            if isinstance(split, dict) and "filepath" in split:
-                fp_val = split["filepath"]
-                if isinstance(fp_val, str) and dataset_base and not _is_url(fp_val):
-                    p = _Path(tilde_expand_strict(fp_val))
-                    if not p.is_absolute():
-                        split["filepath"] = str((dataset_base / p).resolve())
-                    else:
-                        split["filepath"] = str(p)
-                else:
-                    split["filepath"] = _process_path_field(fp_val, root)
-
-            # 4) DATASET.features[*].path and DATASET.targets[*].path
-            for list_key in ("features", "targets"):
-                entries = dataset_sec.get(list_key)
-                if isinstance(entries, (list, tuple)):
-                    new_entries = []
-                    changed = False
-                    for item in entries:
-                        if not isinstance(item, dict):
-                            new_entries.append(item)
-                            continue
-                        if "path" in item:
-                            path_val = item["path"]
-                            if isinstance(path_val, str) and dataset_base and not _is_url(path_val):
-                                p = _Path(tilde_expand_strict(path_val))
-                                if not p.is_absolute():
-                                    new_path = str((dataset_base / p).resolve())
-                                else:
-                                    new_path = str(p)
-                            else:
-                                new_path = _process_path_field(path_val, root)
-                            if new_path is not item["path"]:
-                                item = dict(item)
-                                item["path"] = new_path
-                                changed = True
-                        new_entries.append(item)
-                    if changed:
-                        dataset_sec[list_key] = new_entries
-
-    except Exception:
-        pass
+    source = DLKitTomlSource(config_path)
+    config_data = source()
 
     # Return raw dict if explicitly requested
     if raw:
@@ -497,10 +332,7 @@ def _to_toml_compatible(value: Any) -> Any:
         return str(value)
     if isinstance(value, Enum):
         return value.value
-    # Handle Pydantic AnyUrl objects
-    if hasattr(value, "__class__") and "AnyUrl" in str(type(value)):
-        return str(value)
-    # Handle pydantic_core Url objects
+    # Handle pydantic_core Url objects (covers both AnyUrl and Url)
     try:
         from pydantic_core import Url as _CoreUrl  # type: ignore
 
@@ -554,6 +386,54 @@ def _exclude_value_entries(data: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
+def serialize_config_to_string(
+    config: BaseModel | dict[str, Any],
+    *,
+    by_alias: bool = True,
+    exclude_none: bool = True,
+    exclude_unset: bool = False,
+    exclude_value_entries: bool = False,
+    sort_sections: bool = True,
+) -> str:
+    """Serialize a DLKit configuration to a TOML string without writing to disk.
+
+    Accepts a Pydantic model (e.g., GeneralSettings) or a raw dict mapping
+    top-level section names to their contents.
+
+    Args:
+        config: Pydantic settings model or raw dict to serialize.
+        by_alias: Dump using field aliases.
+        exclude_none: Exclude fields that are None.
+        exclude_unset: Exclude fields that were not explicitly set.
+        exclude_value_entries: When True, strip in-memory DataEntry values from Dataset sections.
+        sort_sections: Write sections in sorted order for stable diffs.
+
+    Returns:
+        TOML-formatted string representation of the config.
+    """
+    if isinstance(config, BaseModel):
+        data = config.model_dump(
+            by_alias=by_alias, exclude_none=exclude_none, exclude_unset=exclude_unset
+        )
+    else:
+        data = dict(config)
+
+    if exclude_value_entries:
+        data = _exclude_value_entries(data)
+
+    doc = document()
+    items = sorted(data.items(), key=lambda kv: kv[0]) if sort_sections else data.items()
+    for section, content in items:
+        if content is None:
+            continue
+        sec_table = table()
+        for k, v in _to_toml_compatible(content).items():
+            sec_table.add(k, v)
+        doc.add(section, sec_table)
+
+    return dumps(doc)
+
+
 def write_config(
     config: BaseModel | dict[str, Any],
     output_path: Path | str,
@@ -582,182 +462,17 @@ def write_config(
         Path to the written TOML file
     """
     output_path = Path(output_path)
-
-    if isinstance(config, BaseModel):
-        data = config.model_dump(
-            by_alias=by_alias, exclude_none=exclude_none, exclude_unset=exclude_unset
-        )
-    else:
-        data = dict(config)
-
-    if exclude_value_entries:
-        data = _exclude_value_entries(data)
-
-    # Create TOML document and add sections
-    doc = document()
-    items = sorted(data.items(), key=lambda kv: kv[0]) if sort_sections else data.items()
-    for section, content in items:
-        if content is None:
-            continue
-        sec_table = table()
-        for k, v in _to_toml_compatible(content).items():
-            sec_table.add(k, v)
-        doc.add(section, sec_table)
-
-    output_path.write_text(dumps(doc))
+    toml_str = serialize_config_to_string(
+        config,
+        by_alias=by_alias,
+        exclude_none=exclude_none,
+        exclude_unset=exclude_unset,
+        exclude_value_entries=exclude_value_entries,
+        sort_sections=sort_sections,
+    )
+    output_path.write_text(toml_str)
     return output_path
 
-
-def _preprocess_sections(config_path: Path, sections: dict[str, Any]) -> dict[str, Any]:
-    """Apply path resolution and normalization to section data."""
-
-    if not sections:
-        return sections
-
-    try:
-        from pathlib import Path as _Path
-        from dlkit.core.datatypes.urls import tilde_expand_strict
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context
-    except Exception:
-        # If imports fail (e.g., minimal environment), skip preprocessing gracefully
-        return sections
-
-    config_dir = config_path.resolve().parent
-
-    def _is_url(value: Any) -> bool:
-        return isinstance(value, str) and "://" in value
-
-    def _process_path_field(value: Any, base: _Path) -> Any:
-        if not isinstance(value, str):
-            return value
-        if _is_url(value):
-            return value
-        expanded = tilde_expand_strict(value)
-        path_obj = _Path(expanded)
-        if not path_obj.is_absolute():
-            path_obj = (base / path_obj).resolve()
-        return str(path_obj)
-
-    def _resolve_root_dir(session_data: dict[str, Any] | None) -> _Path:
-        try:
-            ctx = get_current_path_context()
-            root_dir = getattr(ctx, "root_dir", None) if ctx else None
-            if root_dir is not None:
-                return _Path(root_dir).resolve()
-        except Exception:
-            pass
-
-        if isinstance(session_data, dict):
-            candidate = session_data.get("root_dir")
-            if isinstance(candidate, str) and candidate:
-                base = _process_path_field(candidate, config_dir)
-                return _Path(base).resolve()
-
-        return config_dir if config_dir.exists() else _Path.cwd().resolve()
-
-    processed_sections = dict(sections)
-    session_data = processed_sections.get("SESSION")
-    if isinstance(session_data, dict) and "root_dir" in session_data:
-        session_copy = dict(session_data)
-        session_copy["root_dir"] = _process_path_field(session_copy["root_dir"], config_dir)
-        processed_sections["SESSION"] = session_copy
-        session_data = session_copy
-
-    root_dir = _resolve_root_dir(session_data)
-
-    def _preprocess_training_section(data: dict[str, Any]) -> dict[str, Any]:
-        trainer = data.get("trainer")
-        if isinstance(trainer, dict) and "default_root_dir" in trainer:
-            trainer_copy = dict(trainer)
-            trainer_copy["default_root_dir"] = _process_path_field(
-                trainer_copy["default_root_dir"], root_dir
-            )
-            data = dict(data)
-            data["trainer"] = trainer_copy
-        return data
-
-    def _preprocess_model_section(data: dict[str, Any]) -> dict[str, Any]:
-        if "checkpoint" in data:
-            model_copy = dict(data)
-            model_copy["checkpoint"] = _process_path_field(model_copy["checkpoint"], root_dir)
-            return model_copy
-        return data
-
-    def _preprocess_dataset_section(data: dict[str, Any]) -> dict[str, Any]:
-        dataset_copy = dict(data)
-        dataset_root_val = dataset_copy.get("root_dir", dataset_copy.get("root"))
-        dataset_base: _Path | None = None
-        if isinstance(dataset_root_val, str) and dataset_root_val:
-            processed_root = _process_path_field(dataset_root_val, root_dir)
-            dataset_copy["root_dir"] = processed_root
-            dataset_base = _Path(processed_root)
-
-        split = dataset_copy.get("split")
-        if isinstance(split, dict) and "filepath" in split:
-            split_copy = dict(split)
-            value = split_copy["filepath"]
-            if isinstance(value, str) and dataset_base and not _is_url(value):
-                p = _Path(tilde_expand_strict(value))
-                if not p.is_absolute():
-                    split_copy["filepath"] = str((dataset_base / p).resolve())
-                else:
-                    split_copy["filepath"] = str(p)
-            else:
-                split_copy["filepath"] = _process_path_field(value, root_dir)
-            dataset_copy["split"] = split_copy
-
-        for list_key in ("features", "targets"):
-            entries = dataset_copy.get(list_key)
-            if isinstance(entries, (list, tuple)):
-                new_entries = []
-                changed = False
-                for item in entries:
-                    if not isinstance(item, dict):
-                        new_entries.append(item)
-                        continue
-                    if "path" in item:
-                        new_item = dict(item)
-                        path_val = new_item["path"]
-                        if isinstance(path_val, str) and dataset_base and not _is_url(path_val):
-                            p_val = _Path(tilde_expand_strict(path_val))
-                            if not p_val.is_absolute():
-                                new_item["path"] = str((dataset_base / p_val).resolve())
-                            else:
-                                new_item["path"] = str(p_val)
-                        else:
-                            new_item["path"] = _process_path_field(path_val, root_dir)
-                        if new_item["path"] != item.get("path"):
-                            changed = True
-                        new_entries.append(new_item)
-                    else:
-                        new_entries.append(item)
-                if changed:
-                    dataset_copy[list_key] = new_entries
-
-        return dataset_copy
-
-    def _preprocess_paths_section(data: dict[str, Any]) -> dict[str, Any]:
-        paths_copy = dict(data)
-        for key, value in list(paths_copy.items()):
-            if isinstance(value, str) and value:
-                paths_copy[key] = _process_path_field(value, root_dir)
-        return paths_copy
-
-    if isinstance(processed_sections.get("TRAINING"), dict):
-        processed_sections["TRAINING"] = _preprocess_training_section(
-            processed_sections["TRAINING"]
-        )
-
-    if isinstance(processed_sections.get("MODEL"), dict):
-        processed_sections["MODEL"] = _preprocess_model_section(processed_sections["MODEL"])
-
-    if isinstance(processed_sections.get("DATASET"), dict):
-        processed_sections["DATASET"] = _preprocess_dataset_section(processed_sections["DATASET"])
-
-    if isinstance(processed_sections.get("PATHS"), dict):
-        processed_sections["PATHS"] = _preprocess_paths_section(processed_sections["PATHS"])
-
-    return processed_sections
 
 
 def _resolve_section_models(
@@ -826,16 +541,15 @@ def load_sections_config(
     if not resolved_models:
         return {}
 
-    # Use partial parser for efficiency
-    parser = PartialTOMLParser()
-    section_names = list(resolved_models.keys())
+    from dlkit.tools.config.core.sources import DLKitTomlSource
 
-    # Get raw section data
-    sections_data = parser.parse_sections(config_path, section_names)
+    section_names = list(resolved_models.keys())
+    source = DLKitTomlSource(config_path, sections=section_names)
+    sections_data = source()
     sections_data = {name.upper(): content for name, content in sections_data.items()}
 
     # Check for missing sections
-    available_sections = parser.get_available_sections(config_path)
+    available_sections = get_available_sections(config_path)
     missing_sections = [name for name in section_names if name not in sections_data]
 
     if missing_sections:
@@ -845,8 +559,6 @@ def load_sections_config(
             section_name=missing_sections[0] if missing_sections else None,
             available_sections=available_sections,
         )
-
-    sections_data = _preprocess_sections(config_path, sections_data)
 
     # Construct or validate each section based on validate parameter
     constructed_sections = {}
@@ -955,13 +667,7 @@ def check_section_exists(config_path: Path | str, section_name: str) -> bool:
         >>> if check_section_exists("config.toml", "PATHS"):
         ...     paths_config = load_section_config("config.toml", PathsSettings)
     """
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    parser = PartialTOMLParser()
-    available_sections = parser.get_available_sections(config_path)
-    return section_name in available_sections
+    return section_name in get_available_sections(config_path)
 
 
 def get_available_sections(config_path: Path | str) -> list[str]:
@@ -984,8 +690,9 @@ def get_available_sections(config_path: Path | str) -> list[str]:
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    parser = PartialTOMLParser()
-    return parser.get_available_sections(config_path)
+    import tomllib
+    with open(config_path, "rb") as f:
+        return list(tomllib.load(f).keys())
 
 
 # ============================================================================

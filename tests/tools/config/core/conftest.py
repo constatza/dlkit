@@ -21,7 +21,7 @@ class MockBasicSettings(BasicSettings):
     enabled: bool = True
 
 
-class MockComponentSettings(ComponentSettings[Any]):
+class MockComponentSettings(ComponentSettings):
     """Mock implementation of ComponentSettings for testing."""
 
     param1: str = "default"
