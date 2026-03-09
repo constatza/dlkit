@@ -1,303 +1,115 @@
-# DLKit Settings Test Suite
+# DLKit Config Test Suite
 
-This comprehensive test suite provides thorough coverage of the DLKit settings module using SOLID principles, pytest fixtures, and property-based testing with Hypothesis.
+This directory covers the configuration layer, workflow loaders, patching utilities, and precision handling.
 
-## Test Structure
+## Layout
 
-The test suite mirrors the settings module structure following best practices:
-
-```
-tests/settings/
-├── README.md                          # This file
-├── conftest.py                        # Global fixtures
-├── test_general_settings.py           # General settings tests
-├── test_session_settings.py           # Session settings tests  
-├── test_mlflow_settings.py           # MLflow settings tests
-├── test_hyperparameter_properties.py  # Property-based hyperparameter tests
-├── test_integration.py               # Integration tests
-├── test_standalone_core.py           # Standalone core functionality tests
+```text
+tests/tools/config/
+├── README.md
+├── conftest.py
+├── test_mlflow_settings.py
+├── test_partial_config_loading.py
+├── test_eager_validation.py
+├── test_environment.py
+├── test_updater.py
+├── test_dataset_settings.py
+├── test_data_entries.py
+├── test_sparse_feature.py
+├── test_integration.py
+├── precision/
 ├── core/
-│   ├── conftest.py                    # Core module fixtures
-│   ├── test_base_settings.py         # Base settings classes tests
-│   ├── test_context.py               # BuildContext tests
-│   └── test_factories.py             # Factory pattern tests
 └── components/
-    ├── conftest.py                    # Component fixtures
-    └── test_model_components.py       # Model component tests
 ```
 
-## Key Testing Principles
+## Main Coverage Areas
 
-### 1. SOLID Principles Applied to Tests
-- **Single Responsibility**: Each test function tests one specific behavior
-- **Open/Closed**: Tests can be extended without modifying existing code
-- **Dependency Inversion**: Uses fixtures and dependency injection
-- **Interface Segregation**: Tests specific interfaces and contracts
-- **Liskov Substitution**: Ensures subclasses work correctly
+- `test_mlflow_settings.py`
+  - Validates the flat `MLflowSettings` model
+  - Confirms legacy `server` / `client` blocks are rejected
+  - Confirms `tracking_uri` / `artifacts_destination` are env-only and invalid in TOML
+  - Covers `max_retries`, aliases, tags, and defaults
 
-### 2. Fixture-Based Architecture
-- **NEVER create data inside test functions**
-- **ALWAYS use fixtures for test data**
-- **Modular, composable fixtures** in conftest.py files
-- **Separate data creation from test logic**
+- `test_partial_config_loading.py`
+  - Covers `load_settings()` returning `TrainingWorkflowSettings`
+  - Covers `load_sections()` partial workflow loading
+  - Verifies strict mode for missing sections
 
-### 3. Property-Based Testing
-- Uses Hypothesis for generating test cases
-- Tests invariants across all hyperparameter types
-- Ensures robust behavior with edge cases
-- Validates mathematical properties and constraints
+- `test_eager_validation.py` and `test_config_missing_path.py`
+  - Verify fail-fast validation for malformed configs and missing paths
 
-### 4. Functional Programming Style
-- **Data fixtures**: Pure data creation without side effects
-- **Pure functions**: Assertions and validation logic
-- **Side-effectful actions**: Isolated in specific test functions
+- `test_environment.py`
+  - Verifies MLflow retry-related environment defaults
 
-## Test Categories
+- `test_updater.py`
+  - Covers strict in-place config mutation via `update_settings()`
 
-### Core Infrastructure Tests (`core/`)
+- `precision/`
+  - Covers `PrecisionStrategy`, context handling, services, and end-to-end precision behavior
 
-#### `test_base_settings.py`
-- **BasicSettings**: Immutability, validation, serialization
-- **ComponentSettings**: Dynamic component configuration 
-- **HyperParameterSettings**: Optuna integration, hyperparameter sampling
+- `core/`
+  - Covers base settings classes, factories, and patch compilation utilities
 
-#### `test_context.py`
-- **BuildContext**: Dependency injection, override management
-- Context creation and modification
-- Override chaining and immutability
+- `components/`
+  - Covers component settings models such as `ModelComponentSettings`
 
-#### `test_factories.py`
-- **ComponentFactory**: Abstract factory pattern
-- **DefaultComponentFactory**: Standard component creation
-- **ComponentRegistry**: Factory registration and management
-- **FactoryProvider**: Global singleton access
+## Configuration Behaviors Under Test
 
-### Settings Class Tests
+### Flat MLflow configuration
 
-#### `test_general_settings.py`
-- Complete configuration loading from files
-- Mode detection and validation
-- Feature flag properties
-- Configuration access methods
-- Parser-backed TOML integration
+The test suite assumes the current MLflow contract:
 
-#### `test_session_settings.py`
-- Session mode management (training/inference/testing)
-- Mode-specific validation
-- Configuration access patterns
-- Backward compatibility
+```toml
+[MLFLOW]
+enabled = true
+experiment_name = "baseline"
+run_name = "trial-01"
+register_model = true
+registered_model_name = "FFNN"
+registered_model_aliases = ["candidate"]
+registered_model_version_tags = { team = "platform" }
+max_retries = 3
+```
 
-#### `test_mlflow_settings.py`
-- Flat MLflow configuration
-- Tracking URI validation and defaults
-- Active state detection
-- Property accessors
+Infrastructure is env-driven:
 
-#### `test_model_components.py`
-- Model component configuration
-- Hyperparameter specifications
-- Checkpoint handling
-- Shape inference
-- Metric and loss components
-- Wrapper component configuration
+- `MLFLOW_TRACKING_URI`
+- `MLFLOW_ARTIFACT_URI`
 
-### Advanced Testing
+These TOML shapes are intentionally invalid and covered by tests:
 
-#### `test_hyperparameter_properties.py`
-- **Property-based tests** using Hypothesis
-- Hyperparameter sampling invariants
-- Type preservation across sampling
-- Error handling for invalid specifications
-- Integration across all settings classes
+- `[MLFLOW.server]`
+- `[MLFLOW.client]`
+- `tracking_uri = "..."`
+- `artifacts_destination = "..."`
 
-#### `test_integration.py`
-- End-to-end workflows
-- Factory pattern integration
-- Settings loading and validation
-- Cross-component interaction
-- Build context application
+### Protocol-oriented loading
 
-#### `test_standalone_core.py`
-- **Standalone functionality verification**
-- Works without full package imports
-- Core feature validation
-- Dependency-free testing
+The low-level config I/O surface is based on the protocol contracts in `src/dlkit/tools/io/protocols.py`:
 
-## Running Tests
+- `ConfigParser`
+- `SectionExtractor`
+- `ConfigValidator[T]`
+- `PartialConfigReader`
 
-### Full Test Suite
+The tests exercise the concrete behavior through:
+
+- `load_settings()`
+- `load_sections()`
+- `load_sections_config()`
+- `load_section_config()`
+- section mapping registration / reset helpers
+
+## Running the Suite
+
 ```bash
-# Run all settings tests
-uv run pytest tests/settings/ -v
-
-# Run with coverage
-uv run pytest tests/settings/ --cov=dlkit.tools.config --cov-report=html
+uv run pytest tests/tools/config -v
 ```
 
-### Specific Test Categories
+Focused runs:
+
 ```bash
-# Core functionality
-uv run pytest tests/settings/core/ -v
-
-# Component tests
-uv run pytest tests/settings/components/ -v
-
-# Property-based tests
-uv run pytest tests/settings/test_hyperparameter_properties.py -v
-
-# Integration tests
-uv run pytest tests/settings/test_integration.py -v
+uv run pytest tests/tools/config/test_mlflow_settings.py -v
+uv run pytest tests/tools/config/test_partial_config_loading.py -v
+uv run pytest tests/tools/config/precision -v
 ```
-
-### Standalone Testing
-```bash
-# Test core functionality without dependencies
-python tests/settings/test_standalone_core.py
-```
-
-## Fixtures Reference
-
-### Global Fixtures (`conftest.py`)
-
-#### Data Fixtures
-- `sample_config_data()`: Complete configuration dictionary
-- `sample_model_config_data()`: Model configuration
-- `sample_hyperparameter_data()`: Hyperparameter specifications
-- `config_file_content()`: TOML configuration content
-
-#### Utility Fixtures  
-- `config_file(tmp_path)`: Temporary configuration file
-- `mock_trial()`: Mock Optuna trial for hyperparameter testing
-- `sample_build_context()`: BuildContext for dependency injection
-
-#### Hypothesis Strategies
-- `basic_settings_data()`: Generate BasicSettings data
-- `hyperparameter_spec()`: Generate hyperparameter specifications
-- `session_mode_strategy()`: Generate SessionMode values
-
-### Core Fixtures (`core/conftest.py`)
-
-#### Test Implementations
-- `TestBasicSettings`: Concrete BasicSettings implementation
-- `TestComponentSettings`: Concrete ComponentSettings implementation
-- `TestHyperParameterSettings`: Concrete HyperParameterSettings implementation
-
-#### Data Fixtures
-- `basic_settings_data()`: BasicSettings configuration
-- `component_settings_data()`: ComponentSettings configuration
-- `hyperparameter_settings_data()`: HyperParameterSettings configuration
-- `build_context_data()`: BuildContext configuration
-
-#### Hypothesis Strategies
-- `valid_component_name()`: Generate valid component names
-- `hyperparameter_int_spec()`: Generate integer hyperparameter specs
-- `hyperparameter_float_spec()`: Generate float hyperparameter specs
-- `hyperparameter_categorical_spec()`: Generate categorical hyperparameter specs
-
-### Component Fixtures (`components/conftest.py`)
-
-#### Model Component Data
-- `model_component_data()`: Basic model configuration
-- `model_component_with_checkpoint_data()`: Model with checkpoint
-- `hyperparameter_model_data()`: Model with hyperparameters
-
-#### Other Component Data
-- `metric_component_data()`: Metric configuration
-- `loss_component_data()`: Loss function configuration
-- `wrapper_component_data()`: Wrapper configuration
-- `complex_wrapper_data()`: Advanced wrapper configuration
-
-### Settings Package Fixtures (`settings/conftest.py`)
-
-#### General Settings Data
-- `sample_general_settings_data()`: Complete GeneralSettings configuration
-- `inference_config_data()`: Inference mode configuration
-- `invalid_inference_config_data()`: Invalid inference configuration
-
-#### Advanced Configuration
-- `sample_toml_config_advanced()`: Complex TOML configuration
-- `malformed_toml_config()`: Invalid TOML for error testing
-- `optuna_model_config()`: Configuration with Optuna model settings
-
-## Best Practices Demonstrated
-
-### 1. Test Data Management
-```python
-# ✅ Good: Using fixtures
-def test_settings_creation(sample_config_data: Dict[str, Any]) -> None:
-    settings = GeneralSettings(**sample_config_data)
-    assert settings.SESSION.name == "test_session"
-
-# ❌ Bad: Creating dataflow in test
-def test_settings_creation() -> None:
-    data = {"SESSION": {"name": "test_session"}}  # Don't do this
-    settings = GeneralSettings(**data)
-```
-
-### 2. File Path Management
-```python
-# ✅ Good: Using tmp_path fixture
-def test_config_loading(tmp_path: Path) -> None:
-    config_file = tmp_path / "config.toml"
-    # Use tmp_path directly
-
-# ❌ Bad: Using tempfile
-def test_config_loading() -> None:
-    import tempfile  # Don't do this
-```
-
-### 3. Property-Based Testing
-```python
-# ✅ Good: Testing invariants
-@given(hyperparameter_spec())
-def test_sampling_invariant(spec: Dict[str, Any]) -> None:
-    # Test that sampling preserves expected properties
-    
-# ❌ Bad: Only testing specific cases
-def test_sampling_specific() -> None:
-    # Only tests one specific case
-```
-
-### 4. Error Testing
-```python
-# ✅ Good: Testing error conditions
-def test_invalid_config_raises_error() -> None:
-    with pytest.raises(ValidationError, match="specific message"):
-        GeneralSettings(invalid_config)
-
-# ❌ Bad: Not testing error cases
-```
-
-## Coverage Goals
-
-- **Line Coverage**: >95% for all settings classes
-- **Branch Coverage**: >90% for all conditional logic
-- **Property Coverage**: All hyperparameter invariants tested
-- **Integration Coverage**: All factory patterns tested
-- **Error Coverage**: All validation errors tested
-
-## Extending the Tests
-
-When adding new settings classes or features:
-
-1. **Add fixtures** in appropriate conftest.py
-2. **Create property tests** for invariants
-3. **Add integration tests** for cross-component interaction
-4. **Test error conditions** thoroughly
-5. **Follow SOLID principles** in test design
-
-## Dependencies
-
-- `pytest`: Test framework
-- `hypothesis`: Property-based testing
-- `pydantic`: Settings validation
-- `pathlib`: File path handling (no tempfile!)
-
-## Notes
-
-- All tests use type hints following Google docstring style
-- Tests are designed to run in any order (no dependencies)
-- Fixtures provide clean separation between data and test logic
-- Property-based tests catch edge cases traditional tests miss
-- Integration tests verify SOLID principle compliance
-- The standalone test verifies core functionality without package dependencies
