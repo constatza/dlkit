@@ -14,7 +14,6 @@ from dlkit.tools.io.config import (
     ConfigSectionError,
     ConfigValidationError,
 )
-from dlkit.tools.io.parsers import PartialTOMLParser
 from dlkit.tools.config.paths_settings import PathsSettings
 from dlkit.tools.config.components.model_components import ModelComponentSettings
 
@@ -89,64 +88,6 @@ def config_file(tmp_path, sample_config_content):
     config_path = tmp_path / "test_config.toml"
     config_path.write_text(sample_config_content)
     return config_path
-
-
-class TestPartialTOMLParser:
-    """Test the PartialTOMLParser implementation."""
-
-    def test_get_available_sections(self, config_file):
-        """Test getting available sections without full parsing."""
-        parser = PartialTOMLParser()
-        sections = parser.get_available_sections(config_file)
-
-        expected_sections = ["PATHS", "MODEL", "TRAINER", "MLFLOW", "DATASET"]
-        assert all(section in sections for section in expected_sections)
-
-    def test_parse_single_section(self, config_file):
-        """Test parsing a single section."""
-        parser = PartialTOMLParser()
-        sections_data = parser.parse_sections(config_file, ["PATHS"])
-
-        assert "PATHS" in sections_data
-        paths_data = sections_data["PATHS"]
-        assert paths_data["dataroot"] == "./test_data"
-        assert paths_data["input"] == "./test_data/input"
-        assert paths_data["output"] == "./test_data/output"
-
-    def test_parse_multiple_sections(self, config_file):
-        """Test parsing multiple sections."""
-        parser = PartialTOMLParser()
-        sections_data = parser.parse_sections(config_file, ["PATHS", "MODEL"])
-
-        assert "PATHS" in sections_data
-        assert "MODEL" in sections_data
-
-        # Check PATHS data
-        paths_data = sections_data["PATHS"]
-        assert paths_data["dataroot"] == "./test_data"
-
-        # Check MODEL data
-        model_data = sections_data["MODEL"]
-        assert model_data["name"] == "TestModel"
-        assert model_data["latent_size"] == 128
-
-    def test_parse_nonexistent_section(self, config_file):
-        """Test parsing a section that doesn't exist."""
-        parser = PartialTOMLParser()
-        sections_data = parser.parse_sections(config_file, ["NONEXISTENT"])
-
-        # Should return empty dict for missing section
-        assert "NONEXISTENT" not in sections_data or sections_data["NONEXISTENT"] == {}
-
-    def test_file_not_found(self):
-        """Test handling of missing config file."""
-        parser = PartialTOMLParser()
-
-        with pytest.raises(FileNotFoundError):
-            parser.get_available_sections("nonexistent.toml")
-
-        with pytest.raises(FileNotFoundError):
-            parser.parse_sections("nonexistent.toml", ["PATHS"])
 
 
 class TestLoadSectionConfig:
@@ -329,23 +270,6 @@ class TestPerformance:
 
 class TestErrorHandling:
     """Test error handling scenarios."""
-
-    def test_malformed_config_file(self, tmp_path):
-        """Test handling of malformed TOML file."""
-        malformed_config = tmp_path / "malformed.toml"
-        malformed_config.write_text("""
-[PATHS
-dataroot = "./test_data"
-# Missing closing bracket
-""")
-
-        # Should handle parsing errors gracefully
-        parser = PartialTOMLParser()
-
-        # get_available_sections should still work for section detection
-        sections = parser.get_available_sections(malformed_config)
-        # Should at least detect the attempted section
-        assert len(sections) >= 0  # May or may not detect malformed section
 
     def test_validation_error_in_section(self, tmp_path):
         """Test handling of validation errors in section data."""

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, Self
 
 from pydantic import Field, model_validator, ValidationInfo
+from pydantic_settings import SettingsConfigDict
 
 from .core.base_settings import BasicSettings
 from .session_settings import SessionSettings
@@ -13,7 +14,7 @@ from .mlflow_settings import MLflowSettings
 from .optuna_settings import OptunaSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .training_settings import TrainingSettings as TrainingConfig
+from .training_settings import TrainingSettings
 from .components.model_components import ModelComponentSettings
 from .extras_settings import ExtrasSettings
 from .paths_settings import PathsSettings
@@ -92,6 +93,46 @@ class BaseWorkflowSettings(BasicSettings):
 
         return self
 
+    @classmethod
+    def from_toml(
+        cls,
+        config_path: Path | str,
+        *,
+        sections: list[str] | None = None,
+        **overrides: Any,
+    ) -> Self:
+        """Load workflow settings from a TOML file.
+
+        Priority: TOML values < env vars (``DLKIT_<SECTION>__<field>``) < ``**overrides``.
+
+        Args:
+            config_path: Path to the TOML configuration file.
+            sections: Optional list of top-level section names to load.
+                When ``None`` all sections present in the file are loaded.
+            **overrides: Top-level field overrides applied last (highest priority).
+
+        Returns:
+            Validated settings instance of the calling class.
+
+        Raises:
+            FileNotFoundError: If the config file does not exist.
+            pydantic.ValidationError: If validation fails.
+        """
+        from dlkit.tools.config.core.sources import DLKitTomlSource, _read_env_patches
+        from dlkit.tools.config.core.patching import patch_model
+        from dlkit.tools.io.config import _sync_session_root_to_environment
+
+        source = DLKitTomlSource(Path(config_path), sections=sections)
+        settings: Self = cls.model_validate(source())
+
+        if env := _read_env_patches("DLKIT_", "__"):
+            settings = patch_model(settings, env)
+        if overrides:
+            settings = patch_model(settings, overrides)
+
+        _sync_session_root_to_environment(settings)
+        return settings
+
     @property
     def is_training(self) -> bool:
         """True if running training (not inference)."""
@@ -149,8 +190,22 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
     via programmatic updates.
     """
 
+    model_config = SettingsConfigDict(env_prefix="DLKIT_", env_nested_delimiter="__")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type,
+        init_settings: Any,
+        env_settings: Any,
+        dotenv_settings: Any,
+        file_secret_settings: Any,
+    ) -> tuple[Any, ...]:
+        """Use only init and env sources; disable file/dotenv auto-loading."""
+        return (init_settings, env_settings)
+
     # Training-specific sections (optional at load, validated before build)
-    TRAINING: TrainingConfig | None = Field(
+    TRAINING: TrainingSettings | None = Field(
         default=None,
         description="Core training configuration with nested library settings",
     )
@@ -182,7 +237,7 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
         """Check if training configuration is available."""
         return self.TRAINING is not None
 
-    def get_training_config(self) -> TrainingConfig:
+    def get_training_config(self) -> TrainingSettings:
         """Get flattened training configuration.
 
         Returns:
@@ -206,6 +261,20 @@ class InferenceWorkflowSettings(BaseWorkflowSettings):
     Optional sections can be omitted initially and supplied before execution.
     """
 
+    model_config = SettingsConfigDict(env_prefix="DLKIT_", env_nested_delimiter="__")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type,
+        init_settings: Any,
+        env_settings: Any,
+        dotenv_settings: Any,
+        file_secret_settings: Any,
+    ) -> tuple[Any, ...]:
+        """Use only init and env sources; disable file/dotenv auto-loading."""
+        return (init_settings, env_settings)
+
     _workflow_type: ClassVar[str] = "inference"
 
     @model_validator(mode="after")
@@ -223,9 +292,3 @@ class InferenceWorkflowSettings(BaseWorkflowSettings):
     def checkpoint_path(self) -> Path | str | None:
         """Get checkpoint path for inference."""
         return self.MODEL.checkpoint if self.MODEL else None
-
-
-# Expose type aliases for clean imports
-BaseSettings = BaseWorkflowSettings
-TrainingSettings = TrainingWorkflowSettings
-InferenceSettings = InferenceWorkflowSettings

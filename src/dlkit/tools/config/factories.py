@@ -3,302 +3,92 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast, Any
 
 from .workflow_settings import (
     BaseWorkflowSettings,
     TrainingWorkflowSettings,
-    # BREAKING CHANGE: InferenceWorkflowSettings removed
 )
-from .session_settings import SessionSettings
-from .datamodule_settings import DataModuleSettings
-from .dataset_settings import DatasetSettings
-from .training_settings import TrainingSettings as TrainingConfig
-from .components.model_components import ModelComponentSettings
-from .mlflow_settings import MLflowSettings
-from .optuna_settings import OptunaSettings
-from .paths_settings import PathsSettings
-from .extras_settings import ExtrasSettings
 
 
-class PartialSettingsLoader:
-    """Factory class for efficient partial config loading.
+class WorkflowSettingsLoader:
+    """Factory class for config loading.
 
-    Implements SettingsLoaderProtocol and follows the Factory Method pattern
-    to create workflow-specific settings with minimal parsing overhead.
-
-    This class follows:
-    - Single Responsibility: Only handles settings creation
-    - Open/Closed: Extensible for new workflow types
-    - Dependency Inversion: Depends on abstractions (protocols)
-    - Interface Segregation: Provides minimal, focused methods
+    Thin facade over :meth:`TrainingWorkflowSettings.from_toml` that preserves
+    the public ``load_settings`` / ``load_sections`` API surface.
     """
 
-    def __init__(self) -> None:
-        """Initialize the partial settings loader."""
-        # Section mapping for workflow types
-        self._base_required_sections = {
-            "SESSION": SessionSettings,
-        }
-
-        self._base_optional_sections = {
-            "DATAMODULE": DataModuleSettings,
-            "DATASET": DatasetSettings,
-            "MODEL": ModelComponentSettings,
-            "PATHS": PathsSettings,
-            "EXTRAS": ExtrasSettings,
-        }
-
-        self._training_additional_required = {
-            "TRAINING": TrainingConfig,
-        }
-
-        self._training_additional_optional = {
-            "MLFLOW": MLflowSettings,
-            "OPTUNA": OptunaSettings,
-        }
-
     def load_training_settings(self, config_path: Path | str) -> TrainingWorkflowSettings:
-        """Load settings optimized for training workflows with eager validation.
-
-        Only loads sections required for training:
-        - Required: SESSION, TRAINING
-        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+        """Load full training configuration from a TOML file.
 
         Args:
-            config_path: Path to TOML configuration file
+            config_path: Path to TOML configuration file.
 
         Returns:
-            TrainingWorkflowSettings: Training-specific settings instance (unvalidated)
+            TrainingWorkflowSettings: Training-specific settings instance.
 
         Raises:
-            FileNotFoundError: If config file doesn't exist
-            ConfigSectionError: If required sections are missing from TOML file
+            FileNotFoundError: If config file doesn't exist.
+            pydantic.ValidationError: If validation fails.
         """
-        from dlkit.tools.io.config import load_sections_config, check_section_exists
-
-        # Combine required sections for training
-        required_sections = {
-            **self._base_required_sections,
-            **self._training_additional_required,
-        }
-
-        # Combine optional sections
-        optional_sections = {
-            **self._base_optional_sections,
-            **self._training_additional_optional,
-        }
-
-        # Load required sections
-        sections_data = load_sections_config(config_path, required_sections)
-
-        # Load optional sections that exist
-        for section_name, model_class in optional_sections.items():
-            if check_section_exists(config_path, section_name):
-                optional_data = load_sections_config(config_path, {section_name: model_class})
-                sections_data.update(optional_data)
-
-        # Create training settings instance
-        # Cast sections_data to proper types for constructor
-        typed_kwargs: dict[str, Any] = {}
-        for key, value in sections_data.items():
-            if key == "SESSION":
-                typed_kwargs[key] = cast(SessionSettings, value)
-            elif key == "DATAMODULE":
-                typed_kwargs[key] = cast(DataModuleSettings, value)
-            elif key == "DATASET":
-                typed_kwargs[key] = cast(DatasetSettings, value)
-            elif key == "TRAINING":
-                typed_kwargs[key] = cast(TrainingConfig, value)
-            elif key == "MODEL":
-                typed_kwargs[key] = cast(ModelComponentSettings, value)
-            elif key == "MLFLOW":
-                typed_kwargs[key] = cast(MLflowSettings, value)
-            elif key == "OPTUNA":
-                typed_kwargs[key] = cast(OptunaSettings, value)
-            elif key == "PATHS":
-                typed_kwargs[key] = cast(PathsSettings, value)
-            elif key == "EXTRAS":
-                typed_kwargs[key] = cast(ExtrasSettings, value)
-
-        return TrainingWorkflowSettings(**typed_kwargs)
+        return TrainingWorkflowSettings.from_toml(config_path)
 
     def create_settings_for_workflow(
         self, config_path: Path | str, workflow_type: str
     ) -> BaseWorkflowSettings:
         """Factory method to create settings based on workflow type.
 
-        This method implements the Factory Method pattern, allowing
-        for easy extension with new workflow types following OCP.
-
         Args:
-            config_path: Path to TOML configuration file
-            workflow_type: Type of workflow ("training", "inference", "general")
+            config_path: Path to TOML configuration file.
+            workflow_type: Type of workflow. Only ``"training"`` is supported.
 
         Returns:
-            BaseWorkflowSettings: Appropriate settings instance
+            BaseWorkflowSettings: Appropriate settings instance.
 
         Raises:
-            ValueError: If workflow_type is not supported
+            ValueError: If workflow_type is not supported.
         """
-        workflow_factories = {
-            "training": self.load_training_settings,
-            # "inference": Removed - use inference API instead
-        }
-
-        if workflow_type not in workflow_factories:
-            available_types = list(workflow_factories.keys())
+        if workflow_type != "training":
             raise ValueError(
-                f"Unsupported workflow type: {workflow_type}. Available types: {available_types}"
+                f"Unsupported workflow type: {workflow_type}. Available types: ['training']"
             )
-
-        factory_method = workflow_factories[workflow_type]
-        return factory_method(config_path)
+        return self.load_training_settings(config_path)
 
     def load_sections(
         self, config_path: Path | str, sections: list[str], *, strict: bool = False
     ) -> BaseWorkflowSettings:
-        """Load arbitrary combination of configuration sections for maximum flexibility.
-
-        This method gives users complete control over which sections to load,
-        enabling any workflow combination. Sections can be treated as optional
-        (default) or strict (must exist) based on the strict parameter.
+        """Load an arbitrary combination of configuration sections.
 
         Args:
-            config_path: Path to TOML configuration file
-            sections: List of section names to load (e.g., ['MODEL', 'DATASET', 'MLFLOW'])
-            strict: If True, all specified sections must exist; if False (default),
-                   missing sections are ignored for maximum flexibility
+            config_path: Path to TOML configuration file.
+            sections: List of section names to load.
+            strict: If ``True``, all specified sections must exist in the file.
 
         Returns:
-            BaseWorkflowSettings: Settings containing only the requested sections
+            BaseWorkflowSettings: Settings containing only the requested sections.
 
         Raises:
-            ValueError: If no valid sections are specified or unknown sections are requested
-            FileNotFoundError: If config file doesn't exist
-            ConfigSectionError: If strict=True and required sections are missing
-            ConfigValidationError: If validation fails
-
-        Examples:
-            >>> # Custom evaluation workflow
-            >>> settings = loader.load_sections("config.toml", ["MODEL", "DATASET"])
-            >>>
-            >>> # Experiment tracking only
-            >>> settings = loader.load_sections("config.toml", ["MLFLOW", "OPTUNA"])
-            >>>
-            >>> # Data pipeline configuration
-            >>> settings = loader.load_sections("config.toml", ["DATAMODULE", "DATASET", "PATHS"])
-            >>>
-            >>> # Complete training setup (user-controlled)
-            >>> settings = loader.load_sections(
-            ...     "config.toml",
-            ...     ["SESSION", "MODEL", "DATAMODULE", "DATASET", "TRAINING", "MLFLOW"],
-            ... )
-            >>>
-            >>> # Strict loading (all sections must exist)
-            >>> settings = loader.load_sections("config.toml", ["MODEL", "DATASET"], strict=True)
+            ValueError: If no sections are specified or strict mode detects missing sections.
+            FileNotFoundError: If config file doesn't exist.
         """
-        from dlkit.tools.io.config import load_sections_config, check_section_exists
-
         if not sections:
             raise ValueError("At least one section must be specified")
 
-        # Map section names to model classes
-        section_model_map = {
-            "SESSION": SessionSettings,
-            "MODEL": ModelComponentSettings,
-            "DATAMODULE": DataModuleSettings,
-            "DATASET": DatasetSettings,
-            "TRAINING": TrainingConfig,
-            "MLFLOW": MLflowSettings,
-            "OPTUNA": OptunaSettings,
-            "PATHS": PathsSettings,
-            "EXTRAS": ExtrasSettings,
-        }
+        if strict:
+            from dlkit.tools.io.config import get_available_sections
+            available = get_available_sections(config_path)
+            missing = [s for s in sections if s not in available]
+            if missing:
+                raise ValueError(
+                    f"Strict mode: Required sections missing from config file: {missing}"
+                )
 
-        # Validate requested sections
-        unknown_sections = [s for s in sections if s not in section_model_map]
-        if unknown_sections:
-            available_sections = list(section_model_map.keys())
-            raise ValueError(
-                f"Unknown sections: {unknown_sections}. Available sections: {available_sections}"
-            )
-
-        # Build loading plan based on strict mode
-        sections_to_load = {}
-        missing_sections = []
-
-        for section_name in sections:
-            section_exists = check_section_exists(config_path, section_name)
-
-            if section_exists:
-                sections_to_load[section_name] = section_model_map[section_name]
-            elif strict:
-                missing_sections.append(section_name)
-            # In non-strict mode, missing sections are silently ignored
-
-        # Handle strict mode violations
-        if strict and missing_sections:
-            raise ValueError(
-                f"Strict mode: Required sections missing from config file: {missing_sections}"
-            )
-
-        # Load existing sections
-        if sections_to_load:
-            sections_data = load_sections_config(config_path, sections_to_load)
-        else:
-            sections_data = {}
-
-        # Determine the best settings class based on requested sections
-        has_training = "TRAINING" in sections_data
-        has_mlflow = "MLFLOW" in sections_data
-        has_optuna = "OPTUNA" in sections_data
-
-        # Cast all loaded sections to proper types
-        typed_kwargs: dict[str, Any] = {}
-
-        for section_name in sections_data:
-            value = sections_data[section_name]
-            if section_name == "SESSION":
-                typed_kwargs[section_name] = cast(SessionSettings, value)
-            elif section_name == "DATAMODULE":
-                typed_kwargs[section_name] = cast(DataModuleSettings, value)
-            elif section_name == "DATASET":
-                typed_kwargs[section_name] = cast(DatasetSettings, value)
-            elif section_name == "TRAINING":
-                typed_kwargs[section_name] = cast(TrainingConfig, value)
-            elif section_name == "MODEL":
-                typed_kwargs[section_name] = cast(ModelComponentSettings, value)
-            elif section_name == "MLFLOW":
-                typed_kwargs[section_name] = cast(MLflowSettings, value)
-            elif section_name == "OPTUNA":
-                typed_kwargs[section_name] = cast(OptunaSettings, value)
-            elif section_name == "PATHS":
-                typed_kwargs[section_name] = cast(PathsSettings, value)
-            elif section_name == "EXTRAS":
-                typed_kwargs[section_name] = cast(ExtrasSettings, value)
-
-        # Choose the appropriate settings class based on loaded sections
-        if has_training and (has_mlflow or has_optuna):
-            # Full training workflow
-            return TrainingWorkflowSettings(**typed_kwargs)
-        elif has_training:
-            # Basic training workflow
-            return TrainingWorkflowSettings(**typed_kwargs)
-        elif (
-            "SESSION" in typed_kwargs
-            and hasattr(typed_kwargs["SESSION"], "inference")
-            and typed_kwargs["SESSION"].inference
-        ):
-            # Inference workflow
-            return InferenceWorkflowSettings(**typed_kwargs)
-        else:
-            # Base workflow for any other combination
-            return BaseWorkflowSettings(**typed_kwargs)
+        return TrainingWorkflowSettings.from_toml(
+            config_path, sections=[s.upper() for s in sections]
+        )
 
 
 # Default factory instance for convenience
-default_settings_loader = PartialSettingsLoader()
+default_settings_loader = WorkflowSettingsLoader()
 
 # Convenience functions that delegate to the default loader
 
@@ -379,3 +169,7 @@ def load_sections(
         - `load_settings()`: Load full training configuration (recommended).
     """
     return default_settings_loader.load_sections(config_path, sections, strict=strict)
+
+
+# Backward-compat alias
+PartialSettingsLoader = WorkflowSettingsLoader

@@ -44,14 +44,18 @@ from .session_settings import SessionSettings
 from .workflow_settings import (
     BaseWorkflowSettings,
     TrainingWorkflowSettings,
-    BaseSettings,
-    TrainingSettings as WorkflowTrainingSettings,
-    InferenceSettings,
+    InferenceWorkflowSettings,
 )
+
+# Backward-compat aliases
+BaseSettings = BaseWorkflowSettings
+WorkflowTrainingSettings = TrainingWorkflowSettings
+InferenceSettings = InferenceWorkflowSettings
 
 
 # Partial loading factories
 from .factories import (
+    WorkflowSettingsLoader,
     PartialSettingsLoader,
     default_settings_loader,
     load_settings,
@@ -89,10 +93,13 @@ __all__ = [
     # Workflow-specific settings (SOLID-compliant)
     "BaseWorkflowSettings",
     "TrainingWorkflowSettings",
+    "InferenceWorkflowSettings",
+    # Backward-compat aliases
     "BaseSettings",
     "WorkflowTrainingSettings",
     "InferenceSettings",
     # Partial loading factories
+    "WorkflowSettingsLoader",
     "PartialSettingsLoader",
     "default_settings_loader",
     "load_settings",

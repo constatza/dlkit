@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal, Any
+from collections.abc import Callable
+from typing import Any, Literal
 from pydantic import Field, PositiveInt
-from optuna.pruners import BasePruner
-from optuna.samplers import BaseSampler
 
 from .core.base_settings import ComponentSettings, BasicSettings
 
 
-class PrunerSettings(ComponentSettings[BasePruner]):
+class PrunerSettings(ComponentSettings):
     """Optuna pruner configuration settings.
 
     Args:
@@ -20,17 +19,17 @@ class PrunerSettings(ComponentSettings[BasePruner]):
         interval_steps: Interval between pruning steps
     """
 
-    name: str = Field(
+    name: str | type | Callable[..., Any] | None = Field(
         default="NopPruner", description="Pruner algorithm name for hyperparameter optimization"
     )
-    module_path: str = Field(default="optuna.pruners", description="Module path for the pruner")
+    module_path: str | None = Field(default="optuna.pruners", description="Module path for the pruner")
     n_warmup_steps: int | None = Field(
         default=None, description="Number of warmup steps before pruning starts"
     )
     interval_steps: int | None = Field(default=None, description="Interval between pruning steps")
 
 
-class SamplerSettings(ComponentSettings[BaseSampler]):
+class SamplerSettings(ComponentSettings):
     """Optuna sampler configuration settings.
 
     Args:
@@ -39,10 +38,10 @@ class SamplerSettings(ComponentSettings[BaseSampler]):
         seed: Random seed for reproducibility
     """
 
-    name: str = Field(
+    name: str | type | Callable[..., Any] | None = Field(
         default="TPESampler", description="Sampler algorithm name for hyperparameter optimization"
     )
-    module_path: str = Field(default="optuna.samplers", description="Module path for the sampler")
+    module_path: str | None = Field(default="optuna.samplers", description="Module path for the sampler")
     seed: int | None = Field(default=None, description="Optional random seed for reproducibility")
 
 

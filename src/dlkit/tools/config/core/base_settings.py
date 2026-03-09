@@ -23,13 +23,27 @@ Note: ``exclude=True`` fields (e.g. ``ValueBasedEntry.value``) are preserved by
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any, Self
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.core.updater import update_settings
+
+
+def _auto_section_name(cls: type) -> str:
+    """Derive TOML section name from settings class name.
+
+    Args:
+        cls: Settings class to derive name from.
+
+    Returns:
+        Uppercase section name, e.g. ``SessionSettings`` → ``"SESSION"``.
+    """
+    name = cls.__name__
+    return name[:-8].upper() if name.endswith("Settings") else name.upper()
 
 
 class BasicSettings(BaseSettings):
@@ -114,8 +128,39 @@ class BasicSettings(BaseSettings):
         """
         return patch_model(self, overrides, sep=sep, revalidate=revalidate)
 
+    @classmethod
+    def from_toml(cls, config_path: Path | str, **overrides: Any) -> Self:
+        """Load a single settings section from a TOML file.
 
-class ComponentSettings[T](BasicSettings):
+        Infers section name from the class name (``SessionSettings`` → ``SESSION``).
+        Priority: TOML values < env vars (``DLKIT_<SECTION>__<field>``) < ``**overrides``.
+
+        Args:
+            config_path: Path to the TOML configuration file.
+            **overrides: Field overrides applied last (highest priority).
+
+        Returns:
+            Validated settings instance of the calling class.
+
+        Raises:
+            FileNotFoundError: If the config file does not exist.
+            pydantic.ValidationError: If validation fails.
+        """
+        from dlkit.tools.config.core.sources import DLKitTomlSource, _read_env_patches
+
+        section_name = _auto_section_name(cls)
+        source = DLKitTomlSource(Path(config_path), sections=[section_name])
+        section_data = source().get(section_name, {})
+
+        settings = cls.model_validate(section_data)
+        if env := _read_env_patches(f"DLKIT_{section_name}__", "__"):
+            settings = patch_model(settings, env)
+        if overrides:
+            settings = patch_model(settings, overrides)
+        return settings
+
+
+class ComponentSettings(BasicSettings):
     """Settings for components that can be dynamically constructed.
 
     This replaces the old ClassSettings but removes the build() method
@@ -127,10 +172,8 @@ class ComponentSettings[T](BasicSettings):
     """
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
-    # Use Any for base types to allow subclasses to be more specific without LSP violations
-    # Subclasses can override with specific types that are compatible
-    name: Any
-    module_path: Any = None
+    name: str | type | Callable[..., Any] | None = None
+    module_path: str | None = None
 
     def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Serialize component settings, excluding meta fields.
@@ -162,7 +205,7 @@ class ComponentSettings[T](BasicSettings):
         )
 
 
-class HyperParameterSettings(BaseSettings):
+class HyperParameterSettings(BasicSettings):
     """Settings that can contain hyperparameter specifications.
 
     This class only holds hyperparameter configuration
@@ -174,56 +217,3 @@ class HyperParameterSettings(BaseSettings):
     """
 
     pass
-
-    @staticmethod
-    def deep_merge_model(base_model: Any, sampled_params: dict[str, Any]) -> dict[str, Any]:
-        """Deep merge sampled hyperparameters into base model settings.
-
-        Args:
-            base_model: Base model settings object
-            sampled_params: Dictionary of sampled parameter values with dot-notation keys
-
-        Returns:
-            dict: Updated model dictionary for model_copy
-
-        Example:
-            base_model.hidden_size = 64
-            sampled_params = {"hidden_size": 128, "optimizer.lr": 0.001}
-            -> {"hidden_size": 128, "optimizer": {"lr": 0.001}}
-        """
-        # Convert base model to dict
-        if hasattr(base_model, "model_dump"):
-            result = base_model.model_dump()
-        elif hasattr(base_model, "dict"):
-            result = base_model.dict()
-        else:
-            result = dict(base_model) if hasattr(base_model, "__dict__") else {}
-
-        # Deep merge sampled parameters
-        for param_path, value in sampled_params.items():
-            HyperParameterSettings._set_nested_value(result, param_path, value)
-
-        return result
-
-    @staticmethod
-    def _set_nested_value(target_dict: dict, path: str, value: Any) -> None:
-        """Set a nested value in a dictionary using dot notation path.
-
-        Args:
-            target_dict: Target dictionary to update
-            path: Dot-notation path (e.g., "optimizer.lr")
-            value: Value to set
-        """
-        keys = path.split(".")
-        current = target_dict
-
-        # Navigate to the parent of the target key
-        for key in keys[:-1]:
-            if key not in current:
-                current[key] = {}
-            elif not isinstance(current[key], dict):
-                current[key] = {}
-            current = current[key]
-
-        # Set the final value
-        current[keys[-1]] = value

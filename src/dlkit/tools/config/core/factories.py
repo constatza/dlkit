@@ -21,7 +21,7 @@ class ComponentFactory[T](ABC):
     """
 
     @abstractmethod
-    def create(self, settings: ComponentSettings[T], context: BuildContext) -> T:
+    def create(self, settings: ComponentSettings, context: BuildContext) -> T:
         """Create a component instance from settings.
 
         Args:
@@ -41,7 +41,7 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
     with compatible keyword arguments.
     """
 
-    def create(self, settings: ComponentSettings[T], context: BuildContext) -> T:
+    def create(self, settings: ComponentSettings, context: BuildContext) -> T:
         """Create component using default pattern: resolve class and construct.
 
         Args:
@@ -75,7 +75,7 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
             )
 
     def _resolve_class(
-        self, settings: ComponentSettings[T], context: BuildContext
+        self, settings: ComponentSettings, context: BuildContext
     ) -> type[T] | Callable:
         """Resolve the target class from settings.
 
@@ -121,7 +121,7 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
             return target  # type: ignore[return-value]
 
     @staticmethod
-    def _infer_kind_from_settings(settings: ComponentSettings[T]) -> str | None:
+    def _infer_kind_from_settings(settings: ComponentSettings) -> str | None:
         """Infer component kind from settings type.
 
         Returns one of: "model", "dataset", "datamodule", "loss", "metric" or None if unknown.
@@ -151,7 +151,7 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         return None
 
     def _prepare_init_kwargs(
-        self, settings: ComponentSettings[T], context: BuildContext, cls: type
+        self, settings: ComponentSettings, context: BuildContext, cls: type
     ) -> dict[str, Any]:
         """Prepare initialization kwargs compatible with the target class.
 
@@ -244,7 +244,7 @@ class ComponentRegistry:
         """
         return self._factories.get(settings_type, self._default_factory)
 
-    def create_component(self, settings: ComponentSettings[Any], context: BuildContext) -> Any:
+    def create_component(self, settings: ComponentSettings, context: BuildContext) -> Any:
         """Create a component using the appropriate factory.
 
         Args:
@@ -279,7 +279,7 @@ class FactoryProvider:
         return cls._instance
 
     @classmethod
-    def create_component(cls, settings: ComponentSettings[Any], context: BuildContext) -> Any:
+    def create_component(cls, settings: ComponentSettings, context: BuildContext) -> Any:
         """Create a component using the global registry.
 
         Args:

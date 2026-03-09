@@ -14,6 +14,7 @@ from .config import (
     load_sections_config,  # low-level, not in __all__
     register_section_mapping,
     reset_section_mappings,
+    serialize_config_to_string,
     write_config,
 )
 from .index import load_split_indices
@@ -46,6 +47,7 @@ __all__ = [
     "get_available_sections",
     "reset_section_mappings",
     "write_config",
+    "serialize_config_to_string",
     "register_section_mapping",
     "ConfigSectionError",
     "ConfigValidationError",

@@ -22,7 +22,7 @@ def mlflow_settings_data() -> dict[str, Any]:
         "registered_model_name": "RegisteredFFNN",
         "registered_model_aliases": ("dataset_A_latest",),
         "registered_model_version_tags": {"team": "platform"},
-        "max_trials": 5,
+        "max_retries": 5,
     }
 
 
@@ -39,7 +39,7 @@ class TestMLflowSettings:
         assert settings.registered_model_name is None
         assert settings.registered_model_aliases is None
         assert settings.registered_model_version_tags is None
-        assert settings.max_trials == 3
+        assert settings.max_retries == 3
 
     def test_initialization_with_custom_data(self, mlflow_settings_data: dict[str, Any]) -> None:
         settings = MLflowSettings(**mlflow_settings_data)
@@ -51,7 +51,7 @@ class TestMLflowSettings:
         assert settings.registered_model_name == "RegisteredFFNN"
         assert settings.registered_model_aliases == ("dataset_A_latest",)
         assert settings.registered_model_version_tags == {"team": "platform"}
-        assert settings.max_trials == 5
+        assert settings.max_retries == 5
 
     @given(
         st.text(min_size=1, max_size=80),
@@ -61,17 +61,17 @@ class TestMLflowSettings:
     def test_property_based_configuration(
         self,
         experiment_name: str,
-        max_trials: int,
+        max_retries: int,
         register_model: bool,
     ) -> None:
         settings = MLflowSettings(
             experiment_name=experiment_name,
-            max_trials=max_trials,
+            max_retries=max_retries,
             register_model=register_model,
         )
 
         assert settings.experiment_name == experiment_name
-        assert settings.max_trials == max_trials
+        assert settings.max_retries == max_retries
         assert settings.register_model is register_model
 
     def test_legacy_nested_sections_fail_with_migration_message(self) -> None:

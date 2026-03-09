@@ -32,9 +32,9 @@ class MLflowSettings(BasicSettings):
         default=None,
         description="Optional tags to attach to registered model versions",
     )
-    max_trials: int = Field(
+    max_retries: int = Field(
         default=3,
-        description="Maximum connection retries for transient MLflow client operations",
+        description="Maximum connection retries for transient MLflow client operations.",
     )
 
     @model_validator(mode="before")

@@ -1,4 +1,5 @@
-from typing import Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import Callback, ModelSummary
@@ -12,23 +13,23 @@ from .core import BuildContext, FactoryProvider
 from loguru import logger as loguru_logger
 
 
-class CallbackSettings(ComponentSettings[Callback]):
-    name: str | None = Field(default=None, description="Name of the callback")
-    module_path: str = Field(
+class CallbackSettings(ComponentSettings):
+    name: str | type | Callable[..., Any] | None = Field(default=None, description="Name of the callback")
+    module_path: str | None = Field(
         default="lightning.pytorch.callbacks",
         description="Module path where the callback class is located.",
     )
 
 
-class LoggerSettings(ComponentSettings[Logger]):
-    name: str | None = Field(default=None, description="Name of the logger.")
-    module_path: str = Field(
+class LoggerSettings(ComponentSettings):
+    name: str | type | Callable[..., Any] | None = Field(default=None, description="Name of the logger.")
+    module_path: str | None = Field(
         default="lightning.pytorch.loggers",
         description="Module path where the logger class is located.",
     )
 
 
-class TrainerSettings(ComponentSettings[Trainer]):
+class TrainerSettings(ComponentSettings):
     """TrainerSettings defines configuration options for training a model.
 
     Attributes:
@@ -42,8 +43,8 @@ class TrainerSettings(ComponentSettings[Trainer]):
         accelerator (Literal["cpu", "cuda"]): Accelerator to use for training. Defaults to "cuda".
     """
 
-    name: str = Field(default="Trainer", description="Name of the trainer.")
-    module_path: str = Field(
+    name: str | type | Callable[..., Any] | None = Field(default="Trainer", description="Name of the trainer.")
+    module_path: str | None = Field(
         default="lightning.pytorch",
         description="Module path where the trainer class is located.",
     )
