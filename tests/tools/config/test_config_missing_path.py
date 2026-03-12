@@ -86,8 +86,8 @@ def test_factory_function_with_path_is_not_placeholder():
     the placeholder logic, not path existence validation.
     """
     # Use model_construct to bypass path validation
-    feat = PathFeature.model_construct(name="test_feature", path="/tmp/test.npy")
-    targ = PathTarget.model_construct(name="test_target", path="/tmp/test.npy")
+    feat = PathFeature.model_construct(name="test_feature", path="test.npy")
+    targ = PathTarget.model_construct(name="test_target", path="test.npy")
 
     assert not feat.is_placeholder()
     assert not targ.is_placeholder()
@@ -102,6 +102,6 @@ def test_factory_function_both_path_and_value_raises():
     arr = np.ones((10, 5))
 
     with pytest.raises(ValueError) as exc_info:
-        Feature(name="test", path="/tmp/test.npy", value=arr)
+        Feature(name="test", path="test.npy", value=arr)
 
     assert "cannot have both 'path' and 'value'" in str(exc_info.value)

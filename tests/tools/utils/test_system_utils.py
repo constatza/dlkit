@@ -122,7 +122,7 @@ class TestMkdirForLocal:
 
             target = tmp_path / "file_url_test" / "data.txt"
             # RFC 8089: file URLs require 3 slashes for empty authority
-            # Unix: file:///tmp/path, Windows: file:///C:/path
+            # Unix: file:///absolute/path, Windows: file:///C:/path
             uri = f"file:///{target.as_posix()}"
             mkdir_for_local(uri)
 

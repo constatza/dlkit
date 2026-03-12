@@ -1,7 +1,7 @@
 """Benchmark: dense vs sparse FlexibleDataset operation timings.
 
 Run:
-    UV_CACHE_DIR=/tmp/uv-cache uv run python tests/branchmarks/benchmark_sparse_io_n10000.py
+    uv run python tests/branchmarks/benchmark_sparse_io_n10000.py
 """
 
 from __future__ import annotations
@@ -110,7 +110,12 @@ def main() -> None:
         REPEATS=repeats,
     )
 
-    root = Path("/tmp/dlkit_io_bench_d256_n628_b628")
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "artifacts"
+        / "benchmarks"
+        / "dlkit_io_bench_d256_n628_b628"
+    )
     root.mkdir(parents=True, exist_ok=True)
     pack_path = root / "pack_full"
     if pack_path.exists():

@@ -83,7 +83,7 @@ class TestMLflowSettings:
             MLflowSettings(tracking_uri="http://127.0.0.1:5000")  # type: ignore[arg-type]
 
         with pytest.raises(ValidationError, match="env-only"):
-            MLflowSettings(artifacts_destination="file:///tmp/artifacts")  # type: ignore[arg-type]
+            MLflowSettings(artifacts_destination="file:///C:/artifacts")  # type: ignore[arg-type]
 
     def test_enabled_field_is_rejected(self) -> None:
         with pytest.raises(ValidationError, match="no longer has an 'enabled' field"):

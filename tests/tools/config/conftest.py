@@ -227,9 +227,9 @@ name = "CosineAnnealingLR"
 T_max = 100
 
 [PATHS]
-output_dir = "/output/advanced"
-checkpoints_dir = "/checkpoints/advanced"
-figures_dir = "/figures/advanced"
+output_dir = "output/advanced"
+checkpoints_dir = "checkpoints/advanced"
+figures_dir = "figures/advanced"
 """
 
 
