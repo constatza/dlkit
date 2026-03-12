@@ -16,7 +16,9 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 
-@dataclass(frozen=False)
+# TODO: Investigate whether Batch should remain a distinct type or be folded
+# into TensorDict-centric flows.
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Batch:
     """Typed, positional batch container.
 

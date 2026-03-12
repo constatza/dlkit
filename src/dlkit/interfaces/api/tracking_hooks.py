@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TrackingHooks:
     """Functional extension points for MLflow tracking lifecycle.
 

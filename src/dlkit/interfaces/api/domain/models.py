@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,8 +13,10 @@ from tensordict import TensorDict
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.tensordict_utils import NestedKey, tensordict_to_numpy
 
+_STACKED_CACHE_UNSET = object()
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TrainingResult:
     """Result of a training workflow execution.
 
@@ -34,6 +35,12 @@ class TrainingResult:
     predictions: list[Any] | None = field(default=None)
     mlflow_run_id: str | None = field(default=None)
     mlflow_tracking_uri: str | None = field(default=None)
+    _stacked_cache: TensorDict | None | object = field(
+        default=_STACKED_CACHE_UNSET,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def checkpoint_path(self) -> Path | None:
@@ -50,9 +57,9 @@ class TrainingResult:
             return self.artifacts["last_checkpoint"]
         return None
 
-    # cached_property writes directly to instance.__dict__, bypassing
-    # __setattr__, so it is compatible with frozen=True (no __slots__).
-    @cached_property
+    # Slot-based dataclasses do not expose __dict__, so cache this lazily in
+    # an explicit internal slot instead of using functools.cached_property.
+    @property
     def stacked(self) -> TensorDict | None:
         """All stacked results, computed lazily and cached.
 
@@ -70,7 +77,9 @@ class TrainingResult:
             A :class:`TensorDict` of shape ``(N,)`` where *N* is the total
             number of samples, or ``None`` when no predictions are available.
         """
-        return self._compute_stacked_results()
+        if self._stacked_cache is _STACKED_CACHE_UNSET:
+            object.__setattr__(self, "_stacked_cache", self._compute_stacked_results())
+        return cast(TensorDict | None, self._stacked_cache)
 
     def to_numpy(self, *keys: NestedKey) -> dict[str, Any] | Any | None:
         """Convert stacked results to CPU numpy arrays.
@@ -111,7 +120,7 @@ class TrainingResult:
         return cast(TensorDict, torch.cat(self.predictions, dim=0))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class InferenceResult:
     """Result of an inference workflow execution.
 
@@ -128,7 +137,7 @@ class InferenceResult:
     duration_seconds: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OptimizationResult:
     """Result of hyperparameter optimization workflow.
 
@@ -146,7 +155,7 @@ class OptimizationResult:
     duration_seconds: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ModelState:
     """Represents the complete state of a model and its components.
 

@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Any, Optional, List, Union
-from dataclasses import dataclass
+from typing import Dict, Any, Optional, Union
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
@@ -32,7 +32,7 @@ class SerializationVersion(Enum):
     V3_MODERN = "v3"  # New modular format (current)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SerializationMetadata:
     """Metadata for serialized shape specifications."""
 
@@ -41,15 +41,14 @@ class SerializationMetadata:
     created_at: str
     dlkit_version: Optional[str] = None
     checksum: Optional[str] = None
-    migration_history: Optional[List[str]] = None
+    migration_history: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         """Initialize default values."""
-        if self.migration_history is None:
-            self.migration_history = []
+        object.__setattr__(self, "migration_history", tuple(self.migration_history))
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SerializedShape:
     """Container for serialized shape data with metadata."""
 

@@ -26,7 +26,7 @@ from dlkit.tools.config.environment import DLKitEnvironment
 from dlkit.tools.config.general_settings import GeneralSettings
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PathContext:
     """Explicit path context for API/CLI operations.
 

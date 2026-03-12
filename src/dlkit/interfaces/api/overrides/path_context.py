@@ -18,7 +18,7 @@ from dlkit.tools.config.environment import DLKitEnvironment
 from dlkit.tools.io.paths import normalize_user_path
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PathOverrideContext:
     """Context for API path overrides.
 

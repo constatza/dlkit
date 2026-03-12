@@ -504,7 +504,7 @@ class ValueBasedEntry(DataEntry, IValueBased, ABC):
 # =============================================================================
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TensorDataEntry:
     """Runtime entry that holds a resolved tensor for model consumption."""
 

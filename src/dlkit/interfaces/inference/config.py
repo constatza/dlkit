@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from dlkit.core.training.transforms.chain import TransformChain
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PredictorConfig:
     """Configuration for predictor creation.
 
@@ -35,10 +35,10 @@ class PredictorConfig:
     def __post_init__(self):
         """Ensure checkpoint_path is a Path object."""
         if isinstance(self.checkpoint_path, str):
-            self.checkpoint_path = Path(self.checkpoint_path)
+            object.__setattr__(self, "checkpoint_path", Path(self.checkpoint_path))
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ModelState:
     """Model state container.
 

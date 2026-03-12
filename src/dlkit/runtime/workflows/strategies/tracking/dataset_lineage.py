@@ -154,7 +154,7 @@ class DatasetSourceCollector:
         return sources
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class EntryNumpyPayload:
     """Structured payload derived from DATASET Feature/Target entries."""
 

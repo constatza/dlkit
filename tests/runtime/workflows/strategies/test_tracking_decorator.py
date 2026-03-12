@@ -179,7 +179,7 @@ def mlflow_settings():
 def build_components():
     """Create BuildComponents for testing."""
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class DummyModel:
         pass
 

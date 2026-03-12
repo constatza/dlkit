@@ -17,7 +17,7 @@ from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
 from .base import BaseCommand
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TrainCommandInput:
     """Input dataflow for train command."""
 

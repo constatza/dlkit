@@ -19,9 +19,12 @@ from .inference import InferenceContext, ShapeInferenceChain
 from .strategies import ValidationResult, ShapeValidator, ShapeSerializer
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CacheStats:
     """Statistics for cache performance monitoring."""
+
+    # TODO: remove this public snapshot type once cache metrics stop being part of
+    # the shape-spec public surface; keep it immutable until that cleanup lands.
 
     hits: int = 0
     misses: int = 0
@@ -80,21 +83,6 @@ class ShapeCache(ABC):
         """
         ...
 
-
-@dataclass
-class CacheEntry:
-    """Internal cache entry with metadata."""
-
-    data: ShapeData
-    timestamp: float
-    access_count: int = 0
-
-    def __post_init__(self):
-        """Initialize timestamp if not provided."""
-        if self.timestamp == 0:
-            self.timestamp = time.time()
-
-
 class LRUShapeCache(ShapeCache):
     """Least Recently Used (LRU) cache implementation for shape data.
 
@@ -111,9 +99,12 @@ class LRUShapeCache(ShapeCache):
         """
         self._max_size = max_size
         self._ttl_seconds = ttl_seconds
-        self._cache: Dict[str, CacheEntry] = {}
+        self._cache: Dict[str, tuple[ShapeData, float]] = {}
         self._access_order: List[str] = []
-        self._stats = CacheStats()
+        self._hits = 0
+        self._misses = 0
+        self._evictions = 0
+        self._total_requests = 0
         self._lock = RLock()
 
     def get(self, key: str) -> Optional[ShapeData]:
@@ -126,26 +117,25 @@ class LRUShapeCache(ShapeCache):
             Cached ShapeData or None if not found or expired
         """
         with self._lock:
-            self._stats.total_requests += 1
+            self._total_requests += 1
 
             if key not in self._cache:
-                self._stats.misses += 1
+                self._misses += 1
                 return None
 
-            entry = self._cache[key]
+            shape_data, timestamp = self._cache[key]
 
             # Check if entry has expired
-            if time.time() - entry.timestamp > self._ttl_seconds:
+            if time.time() - timestamp > self._ttl_seconds:
                 self._remove_entry(key)
-                self._stats.misses += 1
+                self._misses += 1
                 return None
 
             # Update access order and count
             self._update_access(key)
-            entry.access_count += 1
-            self._stats.hits += 1
+            self._hits += 1
 
-            return entry.data
+            return shape_data
 
     def put(self, key: str, shape_data: ShapeData) -> None:
         """Store shape data in cache.
@@ -164,8 +154,7 @@ class LRUShapeCache(ShapeCache):
                 self._evict_lru()
 
             # Add new entry
-            entry = CacheEntry(data=shape_data, timestamp=time.time())
-            self._cache[key] = entry
+            self._cache[key] = (shape_data, time.time())
             self._access_order.append(key)
 
     def clear(self) -> None:
@@ -173,16 +162,19 @@ class LRUShapeCache(ShapeCache):
         with self._lock:
             self._cache.clear()
             self._access_order.clear()
-            self._stats = CacheStats()
+            self._hits = 0
+            self._misses = 0
+            self._evictions = 0
+            self._total_requests = 0
 
     def get_stats(self) -> CacheStats:
         """Get cache performance statistics."""
         with self._lock:
             return CacheStats(
-                hits=self._stats.hits,
-                misses=self._stats.misses,
-                evictions=self._stats.evictions,
-                total_requests=self._stats.total_requests,
+                hits=self._hits,
+                misses=self._misses,
+                evictions=self._evictions,
+                total_requests=self._total_requests,
             )
 
     def _update_access(self, key: str) -> None:
@@ -203,7 +195,7 @@ class LRUShapeCache(ShapeCache):
         if self._access_order:
             lru_key = self._access_order[0]
             self._remove_entry(lru_key)
-            self._stats.evictions += 1
+            self._evictions += 1
 
 
 class CachingShapeInferencer:

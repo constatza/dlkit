@@ -16,7 +16,7 @@ from dlkit.core.models.wrappers.factories import WrapperFactory
 from .base import BaseCommand
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ConvertCommandInput:
     """Input dataflow for model conversion/export."""
 
@@ -29,7 +29,7 @@ class ConvertCommandInput:
     batch_size: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ConvertResult:
     """Result of a conversion/export action."""
 

@@ -140,7 +140,7 @@ def _build_components(model: Any) -> BuildComponents:
 
 
 def test_registers_model_with_class_name_without_default_aliases_or_tags() -> None:
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class FancyNet:
         pass
 
@@ -170,7 +170,7 @@ def test_registers_model_with_class_name_without_default_aliases_or_tags() -> No
 
 
 def test_logs_model_without_registration_when_disabled() -> None:
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class FancyNet:
         pass
 
@@ -196,7 +196,7 @@ def test_logs_model_without_registration_when_disabled() -> None:
 
 
 def test_merges_configured_aliases_and_model_version_tags() -> None:
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class FancyNet:
         pass
 

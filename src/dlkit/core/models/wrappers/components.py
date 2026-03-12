@@ -59,7 +59,7 @@ def _parse_key(key: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ModelOutputSpec:
     """Declares model output key paths for TensorDictModule routing.
 
@@ -332,7 +332,7 @@ class RoutedLossComputer:
         return self._loss_fn(predictions, target, **extra_kwargs)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class MetricRoute:
     """Value object carrying per-metric routing configuration.
 
@@ -643,7 +643,7 @@ class _NullMetricsUpdater:
         """No-op reset."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WrapperCheckpointMetadata:
     """Value object carrying serialisation-only metadata for checkpoint persistence.
 

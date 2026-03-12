@@ -8,40 +8,41 @@ from __future__ import annotations
 
 import torch
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Dict, Any, List, Set
+from dataclasses import dataclass, field, replace
+from typing import Dict, Any, Iterable, Set
 
 from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
 
 
-@dataclass
+# TODO: Investigate whether ValidationResult should align with TensorDict-based
+# validation/reporting flows instead of remaining a standalone carrier.
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ValidationResult:
     """Result of shape validation operation."""
 
     is_valid: bool
-    errors: List[str]
-    warnings: List[str] = None
+    errors: tuple[str, ...] | Iterable[str] = field(default_factory=tuple)
+    warnings: tuple[str, ...] | Iterable[str] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if self.warnings is None:
-            self.warnings = []
+        object.__setattr__(self, "errors", tuple(self.errors))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
 
-    def add_error(self, error: str) -> None:
+    def add_error(self, error: str) -> ValidationResult:
         """Add validation error."""
-        self.errors.append(error)
-        self.is_valid = False
+        return replace(self, is_valid=False, errors=self.errors + (error,))
 
-    def add_warning(self, warning: str) -> None:
+    def add_warning(self, warning: str) -> ValidationResult:
         """Add validation warning."""
-        self.warnings.append(warning)
+        return replace(self, warnings=self.warnings + (warning,))
 
     @classmethod
     def success(cls) -> ValidationResult:
         """Create successful validation result."""
-        return cls(is_valid=True, errors=[])
+        return cls(is_valid=True)
 
     @classmethod
-    def failure(cls, errors: List[str]) -> ValidationResult:
+    def failure(cls, errors: Iterable[str]) -> ValidationResult:
         """Create failed validation result."""
         return cls(is_valid=False, errors=errors)
 

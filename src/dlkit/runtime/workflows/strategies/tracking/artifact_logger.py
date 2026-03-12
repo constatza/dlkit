@@ -45,7 +45,7 @@ def _resolve_model_class_name(model: Any) -> str:
     return type(model).__name__
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PendingModelRegistration:
     """Run-scoped model registration payload finalized after run closure."""
 

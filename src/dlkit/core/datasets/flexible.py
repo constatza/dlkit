@@ -68,7 +68,7 @@ class PlaceholderNotResolvedError(ValueError):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SparseSourceBinding:
     """Sparse source binding with read-time denormalization behavior."""
 
