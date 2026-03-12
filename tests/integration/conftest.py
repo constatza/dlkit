@@ -415,13 +415,12 @@ def mlflow_settings(
     mlartifacts_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
-    mlflow_settings = manager.apply_overrides(
-        base_settings,
-        enable_mlflow=True,
-        experiment_name="test_experiment",
-    )
+    from dlkit.tools.config.mlflow_settings import MLflowSettings
 
-    return mlflow_settings
+    mlflow_cfg = MLflowSettings(experiment_name="test_experiment")
+    settings_with_mlflow = base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
+
+    return settings_with_mlflow
 
 
 @pytest.fixture

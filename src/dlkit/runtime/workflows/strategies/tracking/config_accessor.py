@@ -137,6 +137,15 @@ class ConfigAccessor:
             return list(artifacts)
         return [artifacts]
 
+    def get_run_tags(self) -> dict[str, str] | None:
+        """Get run tags from MLflow configuration.
+
+        Returns:
+            Tags dict or None if not configured
+        """
+        mlflow_cfg = self.get_mlflow_client_config()
+        return getattr(mlflow_cfg, "tags", None) if mlflow_cfg else None
+
     def get_mlflow_artifacts_toml(self) -> dict[str, dict[str, Any]]:
         """Get user-defined TOML artifacts from EXTRAS.
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 
 from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult
+from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
     TrainingWorkflowConfig,
@@ -35,13 +36,14 @@ class ExecutionSelector:
         | InferenceWorkflowConfig
         | OptimizationWorkflowConfig,
         explicit: str | None = None,
+        hooks: TrackingHooks | None = None,
     ):
         """Create execution strategy using SOLID factory composition."""
         # Log what features are detected
         features = []
         if settings.OPTUNA and getattr(settings.OPTUNA, "enabled", False):
             features.append("Optuna optimization")
-        if settings.MLFLOW and getattr(settings.MLFLOW, "enabled", False):
+        if settings.MLFLOW:
             features.append("MLflow tracking")
         if not features:
             features.append("vanilla training")
@@ -50,7 +52,7 @@ class ExecutionSelector:
         logger.info(f"Creating executor with: {feature_str}")
 
         # Use factory to create composed executor based on settings
-        return self._factory.create_executor(settings)
+        return self._factory.create_executor(settings, hooks=hooks)  # type: ignore[arg-type]
 
     def select_optimization(
         self,
@@ -64,7 +66,7 @@ class ExecutionSelector:
         features = []
         if settings.OPTUNA and getattr(settings.OPTUNA, "enabled", False):
             features.append("Optuna optimization")
-        if settings.MLFLOW and getattr(settings.MLFLOW, "enabled", False):
+        if settings.MLFLOW:
             features.append("MLflow tracking")
         if not features:
             features.append("vanilla training (adapted)")
@@ -88,6 +90,7 @@ class Orchestrator:
     def execute_training(
         self,
         settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        hooks: TrackingHooks | None = None,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")
         try:
@@ -106,7 +109,7 @@ class Orchestrator:
             logger.debug("Runtime components built successfully")
 
             # Select and run execution strategy
-            exec_strategy = self._selector.select(settings)
+            exec_strategy = self._selector.select(settings, hooks=hooks)
             logger.info("Starting training execution with selected strategy")
             result = exec_strategy.execute(components, settings)
             logger.info("Training execution completed successfully")

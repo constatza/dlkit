@@ -64,7 +64,7 @@ def test_resolve_artifact_uri_derives_from_sqlite(monkeypatch: pytest.MonkeyPatc
 def test_create_run_preserves_nested_parent_child_structure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = MLflowSettings(enabled=True, experiment_name="exp")
+    settings = MLflowSettings(experiment_name="exp")
     manager = MLflowResourceManager(settings)
 
     mock_client = Mock()

@@ -62,8 +62,8 @@ class MLflowResourceManager:
 
         ensure_mlflow_defaults()
 
-        if not self._config or not getattr(self._config, "enabled", False):
-            logger.debug("MLflow disabled, creating default client")
+        if not self._config:
+            logger.debug("MLflow not configured, creating default client")
             self._state.client = MLflowClientFactory.create_client()
             return
 
@@ -125,6 +125,7 @@ class MLflowResourceManager:
         experiment_name: str | None = None,
         run_name: str | None = None,
         nested: bool = False,
+        tags: dict[str, str] | None = None,
     ):
         if not self._is_initialized:
             raise RuntimeError("Resource manager not initialized")
@@ -151,6 +152,8 @@ class MLflowResourceManager:
         }
         if parent_run_id:
             start_kwargs["parent_run_id"] = parent_run_id
+        if tags:
+            start_kwargs["tags"] = tags
 
         with mlflow.start_run(**start_kwargs) as active_run:
             run_id = active_run.info.run_id

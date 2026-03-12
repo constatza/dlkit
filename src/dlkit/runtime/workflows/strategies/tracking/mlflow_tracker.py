@@ -188,6 +188,7 @@ class MLflowTracker(IExperimentTracker):
         experiment_name: str | None = None,
         run_name: str | None = None,
         nested: bool = False,
+        tags: dict[str, str] | None = None,
     ) -> AbstractContextManager[IRunContext]:
         """Create MLflow run using resource manager.
 
@@ -238,6 +239,7 @@ class MLflowTracker(IExperimentTracker):
             experiment_name=exp_name,
             run_name=run_name,
             nested=nested,
+            tags=tags,
         ) as run_context:
             yield run_context
 
@@ -477,13 +479,9 @@ class MLflowTracker(IExperimentTracker):
         self._mlflow_config = mlflow_config
         self._tracking_uri = None
 
-        # Skip setup if disabled
-        if (
-            self.disable_autostart
-            or not mlflow_config
-            or not getattr(mlflow_config, "enabled", False)
-        ):
-            logger.debug("MLflow disabled or autostart disabled")
+        # Skip setup if disabled or no config provided
+        if self.disable_autostart or not mlflow_config:
+            logger.debug("MLflow not configured or autostart disabled")
             return TrackingSetupResult(tracking_uri=None, resolved_artifact_uri=None, is_local=False)
 
         from .uri_resolver import resolve_mlflow_uris

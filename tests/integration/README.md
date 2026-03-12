@@ -166,7 +166,7 @@ Precision and learning-rate tuning tests for graph models.
 
 #### Settings Objects
 - `training_settings(...)` - Loaded GeneralSettings for training
-- `mlflow_settings(...)` - GeneralSettings with MLflow enabled
+- `mlflow_settings(...)` - GeneralSettings with MLflow configured
 - `optuna_settings(...)` - GeneralSettings with Optuna enabled
 - `inference_settings(...)` - GeneralSettings for inference mode
 

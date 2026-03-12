@@ -11,8 +11,7 @@ from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
 
-from .config_accessor import ConfigAccessor
-from .interfaces import IExperimentTracker
+from .interfaces import IExperimentTracker, IRunContext
 
 logger = get_logger(__name__)
 
@@ -40,88 +39,114 @@ class ResultEnricher:
         result: TrainingResult,
         settings: GeneralSettings,
         tracking_uri: str | None = None,
+        run_context: IRunContext | None = None,
     ) -> TrainingResult:
         """Enrich training result with MLflow tracking metadata.
 
-        Adds MLflow run ID, experiment ID, and tracking URI
-        to the result metrics without modifying the original result.
+        Adds MLflow run ID, experiment ID, and tracking URI as both first-class
+        fields and metric dict entries (backward compat) without modifying the
+        original result.
 
         Args:
             result: Training result to enrich
             settings: Global settings (currently unused but kept for extensibility)
             tracking_uri: Resolved tracking URI, if available
+            run_context: Active run context (preferred source of run_id)
 
         Returns:
-            New TrainingResult with enriched metrics
+            New TrainingResult with enriched fields and metrics
         """
         if not isinstance(result, TrainingResult):
             logger.warning(f"Cannot enrich non-TrainingResult: {type(result)}")
-            return result
+            return result  # type: ignore[return-value]
 
         try:
-            # Start with existing metrics
             enriched = dict(getattr(result, "metrics", {}) or {})
 
-            # Add MLflow run information from global state
-            # Note: Client-based enrichment would require access to run_context,
-            # which is not available after the context manager exits.
-            # The global MLflow approach is simpler and sufficient for most use cases.
-            self._add_mlflow_run_info(enriched)
+            run_id = self._resolve_run_id(run_context)
+            resolved_uri = self._resolve_tracking_uri(tracking_uri)
 
-            # Add tracking URI (prefer resolved URI, fall back to active MLflow URI)
-            self._add_tracking_uri(enriched, tracking_uri)
+            if run_id:
+                enriched["mlflow_run_id"] = run_id
+                logger.debug(f"Enriched result with run_id={run_id}")
+            else:
+                logger.debug("No active MLflow run for enrichment")
 
-            # Create new result with enriched metrics (preserve predictions)
+            self._add_experiment_id(enriched)
+
+            if resolved_uri:
+                enriched["mlflow_tracking_uri"] = resolved_uri
+
             return TrainingResult(
                 model_state=result.model_state,
                 metrics=enriched,
                 artifacts=result.artifacts,
                 duration_seconds=result.duration_seconds,
                 predictions=result.predictions,
+                mlflow_run_id=run_id,
+                mlflow_tracking_uri=resolved_uri,
             )
 
         except Exception as e:
             logger.warning(f"Failed to enrich result: {e}")
             return result
 
-    def _add_mlflow_run_info(self, enriched: dict[str, Any]) -> None:
-        """Add MLflow run ID and experiment ID to enriched metrics.
+    def _resolve_run_id(self, run_context: IRunContext | None) -> str | None:
+        """Resolve run ID preferring run_context over global state.
 
         Args:
-            enriched: Dictionary to add run info to
+            run_context: Active run context if available
+
+        Returns:
+            Run ID string or None
+        """
+        if run_context is not None:
+            run_id = getattr(run_context, "run_id", None)
+            if run_id and run_id != "null-run-id":
+                return run_id
+
+        try:
+            import mlflow
+
+            run = mlflow.active_run()
+            if run:
+                return run.info.run_id
+        except Exception as e:
+            logger.warning(f"Failed to get MLflow run_id from global state: {e}")
+
+        return None
+
+    def _add_experiment_id(self, enriched: dict[str, Any]) -> None:
+        """Add MLflow experiment ID to enriched metrics from global state.
+
+        Args:
+            enriched: Dictionary to add experiment ID to
         """
         try:
             import mlflow
 
             run = mlflow.active_run()
             if run:
-                enriched["mlflow_run_id"] = run.info.run_id
                 enriched["mlflow_experiment_id"] = run.info.experiment_id
-                logger.debug(f"Enriched result with run_id={run.info.run_id}")
-            else:
-                logger.debug("No active MLflow run for enrichment")
-
         except Exception as e:
-            logger.warning(f"Failed to add MLflow run info: {e}")
+            logger.warning(f"Failed to add MLflow experiment_id: {e}")
 
-    def _add_tracking_uri(self, enriched: dict[str, Any], tracking_uri: str | None) -> None:
-        """Add MLflow tracking URI to enriched metrics.
-
-        Prefers the resolved tracking URI, falls back to current MLflow URI.
+    def _resolve_tracking_uri(self, tracking_uri: str | None) -> str | None:
+        """Resolve tracking URI preferring explicit value over global state.
 
         Args:
-            enriched: Dictionary to add tracking URI to
-            tracking_uri: Resolved tracking URI from setup (preferred)
+            tracking_uri: Explicit tracking URI if available
+
+        Returns:
+            Resolved tracking URI or None
         """
+        if tracking_uri:
+            return tracking_uri
         try:
-            if tracking_uri:
-                enriched["mlflow_tracking_uri"] = tracking_uri
-            else:
-                import mlflow
+            import mlflow
 
-                current_uri = mlflow.get_tracking_uri()
-                if current_uri:
-                    enriched["mlflow_tracking_uri"] = current_uri
-
+            current_uri = mlflow.get_tracking_uri()
+            return current_uri or None
         except Exception as e:
-            logger.warning(f"Failed to add tracking URI: {e}")
+            logger.warning(f"Failed to get MLflow tracking URI: {e}")
+            return None

@@ -141,11 +141,10 @@ class TestGraphPrecisionLRTuning:
         mlruns_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
 
-        tracked_settings = manager.apply_overrides(
-            base_settings,
-            enable_mlflow=True,
-            experiment_name=f"graph_precision_mlflow_{tmp_path.name}",
-        )
+        from dlkit.tools.config.mlflow_settings import MLflowSettings
+
+        mlflow_cfg = MLflowSettings(experiment_name=f"graph_precision_mlflow_{tmp_path.name}")
+        tracked_settings = base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
 
         tracked_result = dlkit.train(tracked_settings)
         assert isinstance(tracked_result, TrainingResult)

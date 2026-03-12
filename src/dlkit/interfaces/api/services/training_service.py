@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.orchestrator import Orchestrator
@@ -29,6 +30,7 @@ class TrainingService:
         self,
         settings: GeneralSettings,
         checkpoint_path: Path | None = None,
+        hooks: TrackingHooks | None = None,
     ) -> TrainingResult:
         """Execute training workflow.
 
@@ -57,20 +59,22 @@ class TrainingService:
             orchestrator = Orchestrator()
             if overrides:
                 with path_override_context(overrides):
-                    exec_result = orchestrator.execute_training(settings)
+                    exec_result = orchestrator.execute_training(settings, hooks=hooks)
             else:
-                exec_result = orchestrator.execute_training(settings)
+                exec_result = orchestrator.execute_training(settings, hooks=hooks)
             duration = time.time() - start_time
             value = exec_result
-            # Replace duration_seconds with measured duration
+            # Replace duration_seconds with measured duration; propagate new first-class fields
             return TrainingResult(
                 model_state=getattr(value, "model_state", None),
-                metrics=getattr(value, "metrics", None),
-                artifacts=getattr(value, "artifacts", None),
+                metrics=getattr(value, "metrics", None) or {},
+                artifacts=getattr(value, "artifacts", None) or {},
                 duration_seconds=duration
                 if duration > 0
                 else getattr(value, "duration_seconds", 0.0),
                 predictions=getattr(value, "predictions", None),
+                mlflow_run_id=getattr(value, "mlflow_run_id", None),
+                mlflow_tracking_uri=getattr(value, "mlflow_tracking_uri", None),
             )
 
         except Exception as e:
