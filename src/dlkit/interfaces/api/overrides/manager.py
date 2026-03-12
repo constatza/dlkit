@@ -212,31 +212,14 @@ class BasicOverrideManager:
         mlflow_overrides = {
             k: v
             for k, v in overrides.items()
-            if k in ["experiment_name", "run_name", "enable_mlflow", "register_model"]
+            if k in ["experiment_name", "run_name", "register_model", "tags"]
             and v is not None
         }
 
-        if not mlflow_overrides:
+        if not mlflow_overrides or not settings.MLFLOW:
             return settings
 
-        # Handle enabling MLflow when not present
-        if (
-            "enable_mlflow" in mlflow_overrides
-            and mlflow_overrides["enable_mlflow"]
-            and not settings.MLFLOW
-        ):
-            from dlkit.tools.config.mlflow_settings import MLflowSettings
-
-            # Create minimal MLflow settings - user should configure properly
-            experiment_name = mlflow_overrides.get("experiment_name", "default_experiment")
-            default_mlflow = MLflowSettings(enabled=True, experiment_name=experiment_name)
-            current_mlflow = default_mlflow
-            settings = settings.model_copy(update={"MLFLOW": current_mlflow})
-        elif not settings.MLFLOW:
-            return settings
-        else:
-            current_mlflow = settings.MLFLOW
-
+        current_mlflow = settings.MLFLOW
         mlflow_updates: dict[str, Any] = {}
         if "experiment_name" in mlflow_overrides:
             mlflow_updates["experiment_name"] = mlflow_overrides["experiment_name"]
@@ -244,11 +227,12 @@ class BasicOverrideManager:
             mlflow_updates["run_name"] = mlflow_overrides["run_name"]
         if "register_model" in mlflow_overrides:
             mlflow_updates["register_model"] = bool(mlflow_overrides["register_model"])
+        if "tags" in mlflow_overrides:
+            mlflow_updates["tags"] = mlflow_overrides["tags"]
 
         if mlflow_updates:
             current_mlflow = current_mlflow.model_copy(update=mlflow_updates)
 
-        # Apply to flattened structure
         return settings.model_copy(update={"MLFLOW": current_mlflow})
 
     def _apply_optuna_overrides(
@@ -342,16 +326,18 @@ class BasicOverrideManager:
                 if not isinstance(value, (int, float)) or value <= 0:
                     errors.append(f"{param} must be a positive number, got: {value}")
 
-        # Validate MLflow overrides require MLflow plugin (ignore None values)
+        # Validate MLflow overrides require MLflow config section (ignore None values)
         mlflow_overrides = [
             k
             for k in overrides.keys()
-            if k in ["experiment_name", "run_name", "enable_mlflow", "register_model"]
+            if k in ["experiment_name", "run_name", "register_model", "tags"]
             and overrides[k] is not None
         ]
         if mlflow_overrides:
-            if not (settings.MLFLOW and settings.MLFLOW.enabled):
-                errors.append("MLflow overrides require MLflow to be enabled in configuration")
+            if not settings.MLFLOW:
+                errors.append(
+                    "MLflow overrides require an [MLFLOW] section in configuration"
+                )
 
         # Validate Optuna overrides require Optuna plugin (ignore None values)
         optuna_overrides = [

@@ -92,7 +92,6 @@ def build_mlflow_template_dict() -> dict:
             "name": "your.model.class",
         },
         "MLFLOW": {
-            "enabled": True,
             "experiment_name": "my_experiment",
             "run_name": "my_run",
             "register_model": True,
@@ -125,7 +124,6 @@ def build_optuna_template_dict() -> dict:
             "name": "your.model.class",
         },
         "MLFLOW": {
-            "enabled": True,
             "experiment_name": "my_experiment",
         },
         "OPTUNA": {

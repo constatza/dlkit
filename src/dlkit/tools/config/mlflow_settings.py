@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 from pydantic import Field
 from pydantic import model_validator
 
@@ -14,12 +16,18 @@ class MLflowSettings(BasicSettings):
     Infrastructure endpoints are intentionally env-driven:
     - ``MLFLOW_TRACKING_URI``
     - ``MLFLOW_ARTIFACT_URI``
+
+    Note: The presence of an ``[MLFLOW]`` config section enables tracking.
+    There is no separate ``enabled`` flag.
     """
 
-    enabled: bool = Field(default=False, description="Whether to enable MLflow tracking")
     experiment_name: str = Field(default="Experiment", description="MLflow experiment name")
     run_name: str | None = Field(default=None, description="Optional MLflow run name")
-    register_model: bool = Field(default=True, description="Whether to register model artifacts")
+    tags: dict[str, str] | None = Field(
+        default=None,
+        description="Key-value tags attached to every MLflow run",
+    )
+    register_model: bool = Field(default=False, description="Whether to register model artifacts")
     registered_model_name: str | None = Field(
         default=None,
         description="Optional override for registered model name",
@@ -61,4 +69,23 @@ class MLflowSettings(BasicSettings):
                 f"{joined}. Use MLFLOW_TRACKING_URI and MLFLOW_ARTIFACT_URI."
             )
 
+        if "enabled" in data:
+            raise ValueError(
+                "MLflowSettings no longer has an 'enabled' field. "
+                "The presence of the [MLFLOW] section in config enables tracking."
+            )
+
         return data
+
+    @model_validator(mode="after")
+    def warn_missing_model_name(self) -> "MLflowSettings":
+        """Warn when model registration is enabled but no name is configured."""
+        if self.register_model and not self.registered_model_name:
+            warnings.warn(
+                "MLflow model registration is enabled but 'registered_model_name' is not set. "
+                "The model class name will be used as fallback, which may cause name clashes. "
+                "Set 'registered_model_name' explicitly to avoid this.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self

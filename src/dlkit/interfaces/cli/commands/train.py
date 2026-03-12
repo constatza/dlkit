@@ -70,7 +70,7 @@ def _run_training_impl(
             raise typer.Exit(1)
 
         # Show training mode
-        if mlflow or (settings.MLFLOW and settings.MLFLOW.enabled):
+        if mlflow or settings.MLFLOW:
             console.print("🎯 Using [bold]training with MLflow tracking[/bold]")
         else:
             console.print("🎯 Using [bold]vanilla training[/bold]")

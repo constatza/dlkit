@@ -76,14 +76,15 @@ TrainingWorkflowSettings
 
 ## MLflowSettings
 
-`MLflowSettings` is a flat, client-only model.
+`MLflowSettings` is a flat, client-only model. The presence of an `[MLFLOW]`
+section enables tracking; there is no separate `enabled` flag.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | `bool` | `False` | Enable MLflow tracking |
 | `experiment_name` | `str` | `"Experiment"` | Experiment name |
 | `run_name` | `str \| None` | `None` | Optional run name |
-| `register_model` | `bool` | `True` | Register logged model artifacts |
+| `tags` | `dict[str, str] \| None` | `None` | Tags attached to every run |
+| `register_model` | `bool` | `False` | Register logged model artifacts |
 | `registered_model_name` | `str \| None` | `None` | Optional registered model name override |
 | `registered_model_aliases` | `tuple[str, ...] \| None` | `None` | Optional aliases applied after registration |
 | `registered_model_version_tags` | `dict[str, str] \| None` | `None` | Optional model-version tags applied after registration |
@@ -97,16 +98,17 @@ Infrastructure stays in environment variables, not TOML:
 Fail-fast validation rejects removed or env-only TOML keys:
 
 - Legacy nested sections: `server`, `client`
+- Removed enablement field: `enabled`
 - Env-only infra fields: `tracking_uri`, `artifacts_destination`
 
 Example:
 
 ```toml
 [MLFLOW]
-enabled = true
 experiment_name = "baseline"
 run_name = "ffnn-01"
-register_model = true
+tags = { team = "platform", dataset = "A" }
+register_model = false
 registered_model_name = "FFNN"
 registered_model_aliases = ["candidate", "dataset_A_latest"]
 registered_model_version_tags = { dataset = "A", team = "platform" }
@@ -210,6 +212,6 @@ settings = GeneralSettings(
         features=[Feature(name="x", path="data/features.npy")],
         targets=[Target(name="y", path="data/targets.npy")],
     ),
-    MLFLOW=MLflowSettings(enabled=True, experiment_name="baseline"),
+    MLFLOW=MLflowSettings(experiment_name="baseline"),
 )
 ```

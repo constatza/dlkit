@@ -62,8 +62,9 @@ class GeneralSettings(BasicSettings):
 
     # Flattened functional settings
     MLFLOW: MLflowSettings | None = Field(
-        default_factory=MLflowSettings,
-        description="MLflow experiment tracking configuration",
+        default=None,
+        description="MLflow experiment tracking configuration. "
+        "The presence of this section enables MLflow tracking.",
     )
     OPTUNA: OptunaSettings | None = Field(
         default_factory=OptunaSettings,
@@ -155,7 +156,7 @@ class GeneralSettings(BasicSettings):
         Returns:
             bool: True if MLflow tracking is active
         """
-        return self.MLFLOW is not None and self.MLFLOW.enabled
+        return self.MLFLOW is not None
 
     @property
     def optuna_enabled(self) -> bool:

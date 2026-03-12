@@ -60,7 +60,6 @@ def mock_mlflow_client():
 def mlflow_test_settings():
     """Provide test MLflow settings."""
     return MLflowSettings(
-        enabled=True,
         experiment_name="test_experiment",
         run_name="test_run",
     )

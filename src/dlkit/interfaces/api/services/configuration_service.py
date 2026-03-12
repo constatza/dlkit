@@ -195,7 +195,6 @@ class ConfigurationService:
 
         # Add MLflow configuration
         result["MLFLOW"] = {
-            "enabled": True,
             "experiment_name": "my_experiment",
             "run_name": "my_run",
             "register_model": True,
@@ -265,7 +264,6 @@ class ConfigurationService:
 
         if template_type in ["mlflow", "optuna"]:
             base_comments.update({
-                "MLFLOW.enabled": "Enable MLflow experiment tracking",
                 "MLFLOW.experiment_name": "MLflow experiment name",
                 "MLFLOW.run_name": "MLflow run name",
             })

@@ -77,7 +77,6 @@ module_path = "dlkit.core.models.nn.ffnn.simple"
 checkpoint = "{checkpoint_path}"
 
 [MLFLOW]
-enabled = true
 experiment_name = "test_experiment"
 
 [TRAINING.trainer]
@@ -327,7 +326,7 @@ def sample_settings() -> Mock:
         "SESSION": {"name": "test_session", "inference": False, "seed": 42},
         "DATASET": {"name": "FlexibleDataset", "root_dir": "."},
         "MODEL": {"name": "ConstantWidthFFNN", "module_path": "dlkit.core.models.nn.ffnn.simple"},
-        "MLFLOW": {"enabled": True, "client": {"experiment_name": "test_experiment"}},
+        "MLFLOW": {"experiment_name": "test_experiment"},
     }
     return mock_settings
 

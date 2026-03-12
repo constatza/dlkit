@@ -61,15 +61,18 @@ The test suite assumes the current MLflow contract:
 
 ```toml
 [MLFLOW]
-enabled = true
 experiment_name = "baseline"
 run_name = "trial-01"
+tags = { team = "platform" }
 register_model = true
 registered_model_name = "FFNN"
 registered_model_aliases = ["candidate"]
 registered_model_version_tags = { team = "platform" }
 max_retries = 3
 ```
+
+The `[MLFLOW]` section itself enables tracking. The old `enabled` field is
+intentionally invalid and covered by tests.
 
 Infrastructure is env-driven:
 
