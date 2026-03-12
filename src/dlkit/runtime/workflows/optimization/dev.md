@@ -95,7 +95,7 @@ Key architectural decisions:
 - `study_id: str` - Unique identifier
 - `study_name: str` - Human-readable name
 - `direction: OptimizationDirection` - Optimization direction
-- `trials: list[Trial]` - All trials in study
+- `trials: tuple[Trial, ...]` - All trials in study
 - `created_at: datetime` - Creation timestamp
 - `completed_at: datetime | None` - Completion timestamp
 - `target_trials: int` - Number of trials to run
@@ -111,10 +111,10 @@ Key architectural decisions:
 - `duration_seconds: float` - Total study duration
 
 **Methods**:
-- `add_trial(trial: Trial)` - Add new trial to study
-- `update_trial(trial_id: str, **updates)` - Update existing trial
+- `add_trial(trial: Trial) -> Study` - Return a new study with the trial appended
+- `update_trial(trial_id: str, **updates) -> Study` - Return a new study with the trial updated
 - `get_trial(trial_id: str) -> Trial | None` - Retrieve trial by ID
-- `complete_study()` - Mark study as completed
+- `complete_study() -> Study` - Return a new study marked as completed
 
 **Example**:
 ```python
@@ -132,6 +132,10 @@ study = Study(
 if study.is_complete:
     print(f"Best params: {study.best_hyperparameters}")
     print(f"Best value: {study.best_objective_value}")
+
+# Immutable updates return a new aggregate
+study = study.add_trial(trial)
+study = study.complete_study()
 
 # Access trials
 for trial in study.successful_trials:
@@ -386,6 +390,7 @@ retrieved = manager.get_study(study.study_id)
 **Implementation Notes**:
 - Delegates all persistence to repository interface
 - Logs study lifecycle events comprehensively
+- Rebinds the immutable `Study` aggregate returned by lifecycle operations
 - Wraps repository exceptions in `WorkflowError`
 
 ---

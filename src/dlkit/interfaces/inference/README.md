@@ -36,7 +36,7 @@ predictor.unload()
 | `load_model()` | function | Primary factory — creates a loaded `CheckpointPredictor` |
 | `CheckpointPredictor` | class | Stateful predictor (load → predict × N → unload) |
 | `IPredictor` | protocol | Interface for custom predictor implementations |
-| `PredictorConfig` | dataclass | Configuration for `CheckpointPredictor` |
+| `PredictorConfig` | frozen dataclass | Keyword-only configuration for `CheckpointPredictor` |
 | `validate_checkpoint()` | function | Check checkpoint integrity without loading |
 | `get_checkpoint_info()` | function | Extract metadata without loading the model |
 | `PredictorNotLoadedError` | exception | Raised when `predict()` called before `load()` |
