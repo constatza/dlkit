@@ -74,7 +74,6 @@ def test_open_closed_principle_integration(build_components):
     # Can add MLflow tracking without modifying VanillaExecutor
     mlflow_settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             experiment_name="integration_test",
         )
     )
@@ -111,10 +110,10 @@ def test_liskov_substitution_principle_integration(build_components):
 
     # Create different executor configurations
     vanilla_settings = GeneralSettings()
-    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
+    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings())
     optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=2))
     both_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True),
+        MLFLOW=MLflowSettings(),
         OPTUNA=OptunaSettings(enabled=True, n_trials=2),
     )
 
@@ -176,7 +175,7 @@ def test_dependency_inversion_principle_integration(build_components):
     tracking_decorator = TrackingDecorator(vanilla_executor, mock_tracker)
 
     # Should be able to inject any implementation
-    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
+    settings = GeneralSettings(MLFLOW=MLflowSettings())
 
     result = tracking_decorator.execute(build_components, settings)
     assert isinstance(result, TrainingResult)
@@ -236,7 +235,7 @@ def test_end_to_end_solid_workflow():
 
     # Settings with all features enabled
     full_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True),
+        MLFLOW=MLflowSettings(),
         OPTUNA=OptunaSettings(enabled=True, n_trials=2),
     )
 

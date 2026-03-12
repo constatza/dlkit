@@ -24,7 +24,7 @@ def mlflow_config_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ML
         "MLFLOW_TRACKING_URI",
         f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
     )
-    return MLflowSettings(enabled=True)
+    return MLflowSettings()
 
 
 class TestMLflowResourceManagerThreadSafety:
@@ -112,7 +112,7 @@ class TestConflictDetection:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings(enabled=True)
+        mlflow_config = MLflowSettings()
 
         manager = MLflowResourceManager(mlflow_config)
 
@@ -133,7 +133,7 @@ class TestStackConsistencyValidation:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings(enabled=True)
+        mlflow_config = MLflowSettings()
 
         with MLflowResourceManager(mlflow_config) as manager:
             # Manually add a run ID to simulate desynchronization
@@ -158,7 +158,7 @@ class TestStateSnapshot:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings(enabled=True)
+        mlflow_config = MLflowSettings()
 
         with MLflowResourceManager(mlflow_config) as manager:
             snapshot = manager._get_state_snapshot()

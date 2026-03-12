@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from dlkit.tools.config import GeneralSettings
 
@@ -105,7 +105,7 @@ class IRunContext(ABC):
         Example:
             ```python
             run_context.log_text('{"key": "value"}', "lineage/manifest.json")
-            run_context.log_text("[MLFLOW]\\nenabled = true", "config/settings.toml")
+            run_context.log_text("[MLFLOW]\\nexperiment_name = \"demo\"", "config/settings.toml")
             ```
         """
         raise NotImplementedError
@@ -286,6 +286,7 @@ class IExperimentTracker(ABC):
         experiment_name: str | None = None,
         run_name: str | None = None,
         nested: bool = False,
+        tags: dict[str, str] | None = None,
     ) -> AbstractContextManager[IRunContext]:
         """Create a tracking run context.
 
@@ -293,6 +294,7 @@ class IExperimentTracker(ABC):
             experiment_name: Name of experiment to organize runs under. If None, uses default.
             run_name: Optional name for this specific run. If None, auto-generated.
             nested: Whether this is a child run under an active parent run.
+            tags: Optional key-value tags to attach to the run.
 
         Returns:
             AbstractContextManager[IRunContext]: Context manager yielding active run context.
@@ -503,7 +505,7 @@ class NullTracker(IExperimentTracker):
     Example:
         ```python
         # Select tracker based on configuration
-        if settings.MLFLOW.enabled:
+        if settings.MLFLOW is not None:
             tracker: IExperimentTracker = MLflowTracker()
         else:
             tracker: IExperimentTracker = NullTracker()
@@ -544,6 +546,7 @@ class NullTracker(IExperimentTracker):
         experiment_name: str | None = None,
         run_name: str | None = None,
         nested: bool = False,
+        tags: dict[str, str] | None = None,
     ) -> AbstractContextManager[IRunContext]:
         """Create a null context manager that provides a NullRunContext.
 
@@ -551,6 +554,7 @@ class NullTracker(IExperimentTracker):
             experiment_name: Ignored.
             run_name: Ignored.
             nested: Ignored.
+            tags: Ignored.
 
         Returns:
             AbstractContextManager[IRunContext]: Context manager yielding NullRunContext.
@@ -590,3 +594,21 @@ class NullTracker(IExperimentTracker):
             settings: Ignored.
         """
         pass
+
+
+@runtime_checkable
+class ITrackingSetup(Protocol):
+    """Optional protocol for trackers that support external configuration setup."""
+
+    def setup_mlflow_config(
+        self, mlflow_config: Any, *, root_dir: Any = None
+    ) -> Any: ...
+
+
+@runtime_checkable
+class IDatasetLogger(Protocol):
+    """Optional protocol for trackers that support dataset lineage logging."""
+
+    def log_dataset_to_run(
+        self, datamodule: Any, run_context: IRunContext, settings: Any
+    ) -> None: ...

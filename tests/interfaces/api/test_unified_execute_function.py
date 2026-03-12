@@ -10,9 +10,11 @@ from dlkit.interfaces.api.services.execution_service import (
     ExecutionService,
     WorkflowDetectionResult,
 )
-from dlkit.interfaces.api.domain import TrainingResult, InferenceResult, OptimizationResult
+from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
+from dlkit.tools.config.session_settings import SessionSettings
 
 
 class TestUnifiedExecuteFunction:
@@ -42,33 +44,15 @@ class TestUnifiedExecuteFunction:
         assert isinstance(result, TrainingResult)
         mock_training_service.return_value.execute_training.assert_called_once()
 
-    @patch("dlkit.interfaces.api.services.execution_service.InferenceService")
-    @patch.object(ExecutionService, "_detect_workflow")
-    def test_inference_workflow_detection(self, mock_detect, mock_inference_service):
-        """Test that inference settings route to inference workflow."""
-        # Setup
-        mock_result = InferenceResult(
-            model_state=Mock(), predictions=[1, 2, 3], metrics=None, duration_seconds=5.0
-        )
-        mock_inference_service.return_value.execute_inference.return_value = mock_result
-
-        # Mock workflow detection to return inference
-        mock_detect.return_value = WorkflowDetectionResult(
-            workflow_type="inference",
-            service_class=type(mock_inference_service.return_value),
-            reasoning="settings.SESSION.inference=True",
-            mlflow_enabled=False,
-            optuna_enabled=False,
+    def test_inference_workflow_is_rejected(self):
+        """Inference must use the dedicated predictor API, not execute()."""
+        settings = GeneralSettings(
+            SESSION=SessionSettings(inference=True),
+            MODEL=ModelComponentSettings(name="LinearNetwork", checkpoint="model.ckpt"),
         )
 
-        settings = GeneralSettings()
-
-        # Execute
-        result = execute(settings, checkpoint_path="model.ckpt")
-
-        # Verify
-        assert isinstance(result, InferenceResult)
-        mock_inference_service.return_value.execute_inference.assert_called_once()
+        with pytest.raises(WorkflowError, match="load_model"):
+            execute(settings)
 
     @patch("dlkit.interfaces.api.services.execution_service.OptimizationService")
     def test_optimization_workflow_detection(self, mock_optimization_service):
@@ -95,55 +79,35 @@ class TestUnifiedExecuteFunction:
 
     @patch.object(GeneralSettings, "__init__", return_value=None)
     def test_workflow_detection_priority_order(self, mock_init):
-        """Test the priority order of workflow detection."""
+        """Optimization has priority over default training."""
         service = ExecutionService()
 
-        # Create mock settings objects to avoid validation issues
-        inference_settings = Mock()
-        inference_settings.SESSION = Mock()
-        inference_settings.SESSION.inference = True
-        inference_settings.OPTUNA = Mock()
-        inference_settings.OPTUNA.enabled = True
-        inference_settings.MLFLOW = Mock()
-        inference_settings.MLFLOW.enabled = True
-
-        result = service._detect_workflow(inference_settings, "model.ckpt")
-        assert result.workflow_type == "inference"
-
-        # Test 2: Optimization has second priority
         optimization_settings = Mock()
         optimization_settings.SESSION = None
         optimization_settings.OPTUNA = Mock()
         optimization_settings.OPTUNA.enabled = True
-        optimization_settings.MLFLOW = Mock()
-        optimization_settings.MLFLOW.enabled = True
 
-        result = service._detect_workflow(optimization_settings, None)
+        result = service._detect_workflow(optimization_settings)
         assert result.workflow_type == "optimization"
         assert result.optuna_enabled
-        assert result.mlflow_enabled
 
-        # Test 3: Training is default
         training_settings = Mock()
         training_settings.SESSION = None
         training_settings.OPTUNA = None
-        training_settings.MLFLOW = Mock()
-        training_settings.MLFLOW.enabled = True
 
-        result = service._detect_workflow(training_settings, None)
+        result = service._detect_workflow(training_settings)
         assert result.workflow_type == "training"
-        assert result.mlflow_enabled
         assert not result.optuna_enabled
 
-    def test_inference_requires_checkpoint_path(self):
-        """Test that inference workflow requires checkpoint_path."""
+    def test_inference_settings_raise_clear_error(self):
+        """ExecutionService should reject inference settings explicitly."""
         service = ExecutionService()
         mock_settings = Mock()
+        mock_settings.SESSION = Mock()
+        mock_settings.SESSION.inference = True
 
-        with pytest.raises(Exception) as exc_info:
-            service._execute_inference(mock_settings, None, None, None, None, None)
-
-        assert "checkpoint_path" in str(exc_info.value)
+        with pytest.raises(WorkflowError, match="load_model"):
+            service.execute(mock_settings)
 
     @patch.object(ExecutionService, "_detect_workflow")
     def test_parameter_routing_by_workflow(self, mock_detect):
@@ -154,18 +118,17 @@ class TestUnifiedExecuteFunction:
         with (
             patch.object(service, "_execute_training") as mock_training,
             patch.object(service, "_execute_optimization") as mock_optimization,
-            patch.object(service, "_execute_inference") as mock_inference,
         ):
             # Test training parameter routing
             mock_detect.return_value = WorkflowDetectionResult(
                 workflow_type="training",
                 service_class=Mock,
                 reasoning="default workflow",
-                mlflow_enabled=False,
                 optuna_enabled=False,
             )
 
             mock_settings = Mock()
+            mock_settings.SESSION = None
             service.execute(mock_settings, epochs=20, batch_size=64)
             mock_training.assert_called_once()
 
@@ -178,14 +141,12 @@ class TestUnifiedExecuteFunction:
             # Reset mocks
             mock_training.reset_mock()
             mock_optimization.reset_mock()
-            mock_inference.reset_mock()
 
             # Test optimization parameter routing
             mock_detect.return_value = WorkflowDetectionResult(
                 workflow_type="optimization",
                 service_class=Mock,
                 reasoning="settings.OPTUNA.enabled=True",
-                mlflow_enabled=False,
                 optuna_enabled=True,
             )
 
@@ -198,29 +159,6 @@ class TestUnifiedExecuteFunction:
             assert call_args[1] == 50  # trials
             assert call_args[6] == "test_study"  # study_name
 
-            # Reset mocks
-            mock_training.reset_mock()
-            mock_optimization.reset_mock()
-            mock_inference.reset_mock()
-
-            # Test inference parameter routing
-            mock_detect.return_value = WorkflowDetectionResult(
-                workflow_type="inference",
-                service_class=Mock,
-                reasoning="settings.SESSION.inference=True",
-                mlflow_enabled=False,
-                optuna_enabled=False,
-            )
-
-            service.execute(mock_settings, checkpoint_path="model.ckpt", batch_size=32)
-            mock_inference.assert_called_once()
-
-            # Check positional arguments for inference
-            call_args = mock_inference.call_args[0]
-            # _execute_inference(settings, checkpoint_path, root_dir, output_dir, data_dir, batch_size, **additional_overrides)
-            assert call_args[1] == "model.ckpt"  # checkpoint_path
-            assert call_args[5] == 32  # batch_size
-
 
 class TestExecutionServiceDetection:
     """Test the ExecutionService workflow detection logic."""
@@ -229,21 +167,13 @@ class TestExecutionServiceDetection:
         """Test that workflow detection provides clear reasoning."""
         service = ExecutionService()
 
-        # Test inference detection reasoning
-        inference_settings = Mock()
-        inference_settings.SESSION = Mock()
-        inference_settings.SESSION.inference = True
-
-        result = service._detect_workflow(inference_settings, "model.ckpt")
-        assert result.reasoning == "settings.SESSION.inference=True"
-
         # Test optimization detection reasoning
         optuna_settings = Mock()
         optuna_settings.SESSION = None
         optuna_settings.OPTUNA = Mock()
         optuna_settings.OPTUNA.enabled = True
 
-        result = service._detect_workflow(optuna_settings, None)
+        result = service._detect_workflow(optuna_settings)
         assert result.reasoning == "settings.OPTUNA.enabled=True"
 
         # Test default training reasoning
@@ -251,23 +181,18 @@ class TestExecutionServiceDetection:
         default_settings.SESSION = None
         default_settings.OPTUNA = None
 
-        result = service._detect_workflow(default_settings, None)
+        result = service._detect_workflow(default_settings)
         assert "default workflow" in result.reasoning
 
-    def test_mlflow_detection_helper(self):
-        """Test the MLflow detection helper method."""
+    def test_inference_guard(self):
+        """Inference settings should be rejected before workflow detection."""
         service = ExecutionService()
+        inference_settings = Mock()
+        inference_settings.SESSION = Mock()
+        inference_settings.SESSION.inference = True
 
-        # Test MLflow disabled
-        disabled_settings = Mock()
-        disabled_settings.MLFLOW = None
-        assert not service._is_mlflow_enabled(disabled_settings)
-
-        # Test MLflow enabled
-        enabled_settings = Mock()
-        enabled_settings.MLFLOW = Mock()
-        enabled_settings.MLFLOW.enabled = True
-        assert service._is_mlflow_enabled(enabled_settings)
+        with pytest.raises(WorkflowError, match="load_model"):
+            service._ensure_not_inference(inference_settings)
 
     def test_optuna_detection_helper(self):
         """Test the Optuna detection helper method."""
@@ -294,12 +219,10 @@ class TestWorkflowDetectionResult:
             workflow_type="optimization",
             service_class=ExecutionService,
             reasoning="test reasoning",
-            mlflow_enabled=True,
             optuna_enabled=True,
         )
 
         assert result.workflow_type == "optimization"
         assert result.service_class == ExecutionService
         assert result.reasoning == "test reasoning"
-        assert result.mlflow_enabled
         assert result.optuna_enabled

@@ -32,6 +32,8 @@ class TrainingResult:
     artifacts: dict[str, Path]
     duration_seconds: float
     predictions: list[Any] | None = field(default=None)
+    mlflow_run_id: str | None = field(default=None)
+    mlflow_tracking_uri: str | None = field(default=None)
 
     @property
     def checkpoint_path(self) -> Path | None:

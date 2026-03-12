@@ -125,11 +125,13 @@ class MockExperimentTracker(IExperimentTracker):
         experiment_name: str | None = None,
         run_name: str | None = None,
         nested: bool = False,
+        tags: dict[str, str] | None = None,
     ):
         self.created_runs.append({
             "experiment_name": experiment_name,
             "run_name": run_name,
             "nested": nested,
+            "tags": tags,
         })
         yield self.run_context
 
@@ -167,7 +169,6 @@ def mlflow_settings():
     """Create MLflow settings for testing."""
     return GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             experiment_name="test_experiment",
             run_name="test_run",
         )

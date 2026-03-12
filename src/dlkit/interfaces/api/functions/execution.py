@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dlkit.interfaces.api.domain import (
     TrainingResult,
-    InferenceResult,
     OptimizationResult,
 )
 from dlkit.interfaces.api.services.execution_service import ExecutionService
+from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import (
     TrainingWorkflowConfig,
-    InferenceWorkflowConfig,
     OptimizationWorkflowConfig,
 )
 
@@ -23,12 +22,10 @@ from dlkit.tools.config.workflow_configs import (
 def execute(
     settings: (
         TrainingWorkflowConfig
-        | InferenceWorkflowConfig
         | OptimizationWorkflowConfig
         | GeneralSettings
         | BaseSettingsProtocol
     ),
-    mlflow: bool = False,
     checkpoint_path: Path | str | None = None,
     root_dir: Path | str | None = None,
     output_dir: Path | str | None = None,
@@ -40,24 +37,22 @@ def execute(
     study_name: str | None = None,
     experiment_name: str | None = None,
     run_name: str | None = None,
+    tags: dict[str, str] | None = None,
+    hooks: TrackingHooks | None = None,
     **additional_overrides: Any,
-) -> TrainingResult | InferenceResult | OptimizationResult:
+) -> TrainingResult | OptimizationResult:
     """Execute DLKit workflow with intelligent routing based on settings.
 
-    This unified function automatically determines the correct workflow based on configuration:
+    This unified function automatically determines the correct training-family
+    workflow based on configuration:
 
-    **Priority-based workflow detection:**
-    1. **Inference** (highest priority): when `settings.SESSION.inference=True`
-    2. **Optimization**: when `settings.OPTUNA.enabled=True`
-    3. **Training** (default): all other cases (includes MLflow if `settings.MLFLOW.enabled=True`)
-
-    The system intelligently routes to the appropriate underlying service without requiring
-    manual strategy specification, following SOLID principles for clean separation of concerns.
+    **Workflow detection:**
+    1. **Optimization**: when `settings.OPTUNA.enabled=True`
+    2. **Training** (default): all other cases
 
     Args:
-        settings: Parsed and validated configuration settings (supports new workflow configs or legacy GeneralSettings)
-        mlflow: Enable MLflow tracking (overrides config settings)
-        checkpoint_path: Optional checkpoint path (required for inference, optional for others)
+        settings: Parsed and validated configuration settings
+        checkpoint_path: Optional training resume or optimization warm-start checkpoint
         root_dir: Override the root directory for path resolution
         output_dir: Override the output base directory
         data_dir: Override the input dataflow directory
@@ -66,42 +61,48 @@ def execute(
         learning_rate: Override learning rate (applied to training and optimization workflows)
         trials: Override number of optimization trials (applied to optimization workflows)
         study_name: Override Optuna study name (applied to optimization workflows)
-        experiment_name: Override MLflow experiment name (applied when MLflow enabled)
-        run_name: Override MLflow run name (applied when MLflow enabled)
+        experiment_name: Override MLflow experiment name
+        run_name: Override MLflow run name
+        tags: Key-value tags attached to every MLflow run (merged with settings tags)
+        hooks: Functional extension points for tracking lifecycle events
         **additional_overrides: Extra overrides passed to underlying services
 
     Returns:
         Appropriate result type based on detected workflow:
-        - InferenceResult: for inference workflows
         - OptimizationResult: for optimization workflows (includes best trial info)
         - TrainingResult: for training workflows
 
     Raises:
-        WorkflowError: On execution failure or invalid configuration
+        WorkflowError: On execution failure, invalid configuration, or when
+            inference settings are passed to this training-family API
 
     Examples:
-        >>> from dlkit.interfaces.api import execute
+        >>> from dlkit.interfaces.api import execute, TrackingHooks
         >>> from dlkit.tools.io import load_settings
         >>>
         >>> # Training with MLflow (auto-detected from settings)
         >>> settings = load_settings("training_config.toml")
-        >>> result = execute(settings, mlflow=True, epochs=50, batch_size=32)
-        >>> print(f"Training loss: {result.metrics['train_loss']}")
+        >>> result = execute(settings, epochs=50, batch_size=32)
+        >>> print(f"Run ID: {result.mlflow_run_id}")
         >>>
-        >>> # Optimization with Optuna (auto-detected from settings)
-        >>> optuna_settings = load_settings("optuna_config.toml")
-        >>> result = execute(optuna_settings, mlflow=True, trials=100, study_name="my_study")
-        >>> print(f"Best trial: {result.best_trial}")
+        >>> # With hooks
+        >>> result = execute(
+        ...     settings,
+        ...     checkpoint_path="resume.ckpt",
+        ...     tags={"team": "ml", "version": "v3"},
+        ...     hooks=TrackingHooks(
+        ...         on_run_created=lambda run_id, uri: print(f"Run: {run_id}"),
+        ...     ),
+        ... )
         >>>
-        >>> # Inference - use load_model() instead
+        >>> # Inference is separate - use load_model()
         >>> from dlkit.interfaces.inference import load_model
         >>> predictor = load_model("best_model.ckpt")
         >>> predictions = predictor.predict(inputs)
     """
     execution_service = ExecutionService()
     return execution_service.execute(
-        settings=settings,
-        mlflow=mlflow,
+        settings=cast(GeneralSettings, settings),
         checkpoint_path=checkpoint_path,
         root_dir=root_dir,
         output_dir=output_dir,
@@ -113,5 +114,7 @@ def execute(
         study_name=study_name,
         experiment_name=experiment_name,
         run_name=run_name,
+        tags=tags,
+        hooks=hooks,
         **additional_overrides,
     )

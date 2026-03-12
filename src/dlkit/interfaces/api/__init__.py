@@ -32,6 +32,9 @@ from .domain import (
 # Import configuration settings
 from dlkit.tools.config import GeneralSettings
 
+# Import TrackingHooks value object
+from .tracking_hooks import TrackingHooks
+
 # Import API functions from dedicated modules
 from .functions import (
     # Core workflow functions
@@ -118,4 +121,5 @@ __all__ = [
     "GeneralSettings",
     "InferenceCommand",
     "InferenceCommandInput",
+    "TrackingHooks",
 ]

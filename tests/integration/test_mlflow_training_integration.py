@@ -173,7 +173,7 @@ class TestMLflowTrainingIntegration:
             mlflow_settings: GeneralSettings fixture with MLflow enabled.
         """
         # Verify MLflow is configured and active
-        assert mlflow_settings.MLFLOW.enabled
+        assert mlflow_settings.MLFLOW is not None
 
         # Act - Don't specify strategy, let it auto-detect
         training_result = dlkit.train(mlflow_settings)

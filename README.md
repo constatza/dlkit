@@ -130,9 +130,10 @@ name = "your.dataset.class"
 
 [MLFLOW]
 # Flat, client-only tracking settings
-enabled = true
 experiment_name = "my-experiment"
-register_model = true
+run_name = "baseline"
+tags = { team = "research" }
+register_model = false
 
 [EXTRAS]
 # Optional user-defined helpers (ignored by core)
@@ -143,24 +144,26 @@ example_key = "value"
 
 - **Training**: Use `dlkit train` command (vanilla or with MLflow tracking)
 - **Optimization**: Use `dlkit optimize` command for hyperparameter tuning with Optuna
-- **MLflow tracking**: Add `--mlflow` flag to either command to enable tracking
+- **MLflow tracking**: Add an `[MLFLOW]` section to your config; its presence enables tracking
+- **Unified Python execution**: `execute()` routes only training and optimization workflows; use `load_model()` for inference
 
 Examples:
 - CLI (vanilla training): `uv run dlkit train config.toml --epochs 20`
-- CLI (training with MLflow): `uv run dlkit train config.toml --mlflow --epochs 20`
+- CLI (training with MLflow): `uv run dlkit train config_with_mlflow.toml --epochs 20`
 - CLI (optuna optimization): `uv run dlkit optimize config.toml --trials 50`
-- CLI (optuna with MLflow): `uv run dlkit optimize config.toml --trials 50 --mlflow`
+- CLI (optuna with MLflow): `uv run dlkit optimize config_with_mlflow.toml --trials 50`
 - Python (mlflow):
   ```python
   from dlkit.interfaces.api import train
   from dlkit.tools.io import load_settings
-  cfg = load_settings("config.toml")
-  res = train(cfg, mlflow=True, epochs=20, batch_size=64)
+  cfg = load_settings("config_with_mlflow.toml")
+  res = train(cfg, epochs=20, batch_size=64)
+  print(res.mlflow_run_id)
   ```
 
 ### MLflow Registry and Model Loading
 
-`[MLFLOW]` is a flat, client-only section. Keep infrastructure endpoints in the environment:
+`[MLFLOW]` is a flat, client-only section. Its presence enables tracking; keep infrastructure endpoints in the environment:
 
 - `MLFLOW_TRACKING_URI`
 - `MLFLOW_ARTIFACT_URI`
@@ -168,7 +171,7 @@ Examples:
 Legacy nested blocks such as `[MLFLOW.server]` / `[MLFLOW.client]` and TOML infra keys like
 `tracking_uri` / `artifacts_destination` are rejected during validation.
 
-`[MLFLOW].register_model` is `true` by default.
+`[MLFLOW].register_model` defaults to `false`.
 
 - Registered model name defaults to the trained model class name.
 - DLKit does **not** add default aliases or model-version tags.
@@ -207,11 +210,11 @@ import mlflow
 settings = ...  # your GeneralSettings
 result = dlkit.train(settings)
 
-run_id = (result.metrics or {}).get("mlflow_run_id")
+run_id = result.mlflow_run_id
 if run_id is None:
-    raise RuntimeError("MLflow run id missing from training result metrics")
+    raise RuntimeError("MLflow run id missing from training result")
 
-tracking_uri = mlflow.get_tracking_uri()
+tracking_uri = result.mlflow_tracking_uri or mlflow.get_tracking_uri()
 model_name = getattr(settings.MLFLOW, "registered_model_name", None) or type(
     result.model_state.model
 ).__name__
@@ -870,8 +873,9 @@ Detailed guide and edge-case behavior:
   - `[TRAINING.trainer]`: Lightning Trainer kwargs (e.g., `max_epochs`, `accelerator`)
   - `[TRAINING.optimizer]`: optimizer settings (e.g., `name`, `lr`)
 - `[MLFLOW]`: experiment tracking
-  - `enabled`: bool; when true, MLflow is configured/used
-  - `experiment_name`, `run_name`, `register_model`, `max_retries`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
+  - The section itself enables MLflow tracking; there is no separate `enabled` flag
+  - `experiment_name`, `run_name`, `tags`, `register_model`, `max_retries`, optional `registered_model_name`, optional `registered_model_aliases`, optional `registered_model_version_tags`
+  - `register_model` defaults to `false`; `enabled` is rejected during validation
   - Infra is env-only: `MLFLOW_TRACKING_URI`, `MLFLOW_ARTIFACT_URI`
   - Legacy nested sections are removed: `[MLFLOW.server]` and `[MLFLOW.client]` are invalid
   - Tracking URI resolution order: env URI -> `http://127.0.0.1:5000` when alive -> local sqlite fallback
@@ -897,8 +901,8 @@ These runtime overrides can be applied via CLI flags or Python API keyword args.
 
 Examples (CLI):
 - `uv run dlkit train config.toml --epochs 20 --batch-size 64`
-- `uv run dlkit train config.toml --mlflow --experiment-name MyExp --run-name Run1`
-- `uv run dlkit optimize config.toml --trials 50 --study-name Study --mlflow`
+- `uv run dlkit train config_with_mlflow.toml --experiment-name MyExp --run-name Run1`
+- `uv run dlkit optimize config_with_mlflow.toml --trials 50 --study-name Study`
 
 Examples (Python):
 
@@ -910,7 +914,7 @@ from dlkit.tools.io import load_settings
 cfg = load_settings("config.toml")
 res = train(cfg, epochs=20, batch_size=64, learning_rate=1e-3)
 
-# For inference, use load_model instead
+# execute() is training/optimization only; for inference, use load_model instead
 from dlkit import load_model
 predictor = load_model("model.ckpt")
 ```

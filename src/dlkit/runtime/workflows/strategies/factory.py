@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 
 from .core import ITrainingExecutor, VanillaExecutor
@@ -21,11 +22,16 @@ class ExecutionStrategyFactory:
     Supports both training executors and optimization strategies.
     """
 
-    def create_executor(self, settings: GeneralSettings) -> ITrainingExecutor:
+    def create_executor(
+        self,
+        settings: GeneralSettings,
+        hooks: TrackingHooks | None = None,
+    ) -> ITrainingExecutor:
         """Create composed execution strategy from settings.
 
         Args:
             settings: Configuration settings with feature flags
+            hooks: Optional functional extension points for tracking lifecycle
 
         Returns:
             Composed training executor with requested capabilities
@@ -39,9 +45,8 @@ class ExecutionStrategyFactory:
         # Start with core vanilla executor
         executor: ITrainingExecutor = VanillaExecutor()
 
-        # Always create a tracker (null object pattern eliminates conditionals)
-        if self._is_mlflow_enabled(settings):
-            # Import lazily from the concrete module so tests can patch it reliably
+        # Use real tracker when MLFLOW section is present, null tracker otherwise
+        if self._has_mlflow_config(settings):
             from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
             tracker = MLflowTracker(
@@ -49,13 +54,12 @@ class ExecutionStrategyFactory:
                 skip_health_checks=False,
             )
         else:
-            # Use null tracker when MLflow is disabled
             from dlkit.runtime.workflows.strategies.tracking import NullTracker
 
             tracker = NullTracker()
 
-        # Always apply tracking layer (real or null)
-        executor = TrackingDecorator(executor, tracker)
+        # Always apply tracking layer (real or null), forwarding hooks
+        executor = TrackingDecorator(executor, tracker, hooks=hooks)
 
         # Note: Optimization layer is NOT added here - that's handled by create_optimization_strategy
         # This method returns: TrackingDecorator -> VanillaExecutor
@@ -79,23 +83,19 @@ class ExecutionStrategyFactory:
         if self._is_optuna_enabled(settings):
             # Create experiment tracker here to avoid duplication
             experiment_tracker = None
-            if self._is_mlflow_enabled(settings):
-                # Import and create the tracking adapter that wraps an existing MLflow tracker
+            if self._has_mlflow_config(settings):
                 from dlkit.runtime.workflows.optimization.infrastructure.tracking import (
                     MLflowTrackingAdapter,
                 )
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
-                # Create MLflow tracker for the optimization workflow with context management
                 mlflow_tracker = MLflowTracker(
                     disable_autostart=False,
                     skip_health_checks=False,
                 )
 
-                # Get MLflow config
                 mlflow_config = getattr(settings, "MLFLOW", None)
 
-                # Determine experiment name using standard naming convention
                 from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
 
                 experiment_name = determine_experiment_name(settings, mlflow_config)
@@ -103,7 +103,6 @@ class ExecutionStrategyFactory:
                 session = getattr(settings, "SESSION", None)
                 root_dir = getattr(session, "root_dir", None) if session is not None else None
 
-                # Wrap it in our optimization tracking adapter with settings
                 experiment_tracker = MLflowTrackingAdapter(
                     mlflow_tracker=mlflow_tracker,
                     mlflow_settings=mlflow_config,
@@ -111,13 +110,11 @@ class ExecutionStrategyFactory:
                     root_dir=root_dir,
                 )
 
-            # Use the clean architecture that fixes SOLID violations
             from dlkit.runtime.workflows.optimization import OptimizationServiceFactory
 
             factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
             return factory.create_optimization_strategy(settings)
         else:
-            # No compatibility layer - optimization must be explicitly enabled
             from dlkit.interfaces.api.domain import WorkflowError
 
             raise WorkflowError(
@@ -126,13 +123,13 @@ class ExecutionStrategyFactory:
                 {"stage": "strategy_creation", "optuna_enabled": False},
             )
 
-    def _is_mlflow_enabled(self, settings: GeneralSettings) -> bool:
-        """Check if MLflow tracking is enabled in settings.
+    def _has_mlflow_config(self, settings: GeneralSettings) -> bool:
+        """Check if MLflow configuration section is present in settings.
 
-        Do not silently disable when package is missing — errors surface later.
+        MLflow is enabled whenever the [MLFLOW] section exists — no separate
+        ``enabled`` flag is needed.
         """
-        mlflow_config = getattr(settings, "MLFLOW", None)
-        return bool(mlflow_config and getattr(mlflow_config, "enabled", False))
+        return bool(getattr(settings, "MLFLOW", None))
 
     def _is_optuna_enabled(self, settings: GeneralSettings) -> bool:
         """Check if Optuna optimization is enabled in settings."""

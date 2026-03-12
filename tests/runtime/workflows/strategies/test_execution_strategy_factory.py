@@ -40,7 +40,6 @@ def test_factory_creates_tracking_decorator_for_mlflow(factory):
     """Test that factory creates tracking decorator when MLflow is enabled."""
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             experiment_name="test",
         )
     )
@@ -75,7 +74,6 @@ def test_factory_creates_composed_executor_for_both_features(factory):
     """Test that factory creates tracking decorator even when both features are enabled."""
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             experiment_name="test",
         ),
         OPTUNA=OptunaSettings(enabled=True, n_trials=5, direction="minimize"),
@@ -98,7 +96,7 @@ def test_factory_follows_open_closed_principle(factory):
     """Test that factory can be extended without modification (OCP)."""
     # Original factory should work with existing settings
     vanilla_settings = GeneralSettings()
-    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
+    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings())
     optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=3))
 
     vanilla_executor = factory.create_executor(vanilla_settings)
@@ -114,14 +112,11 @@ def test_factory_follows_open_closed_principle(factory):
 def test_factory_mlflow_detection_logic(factory):
     """Test MLflow feature detection logic."""
     # MLflow disabled cases
-    assert not factory._is_mlflow_enabled(GeneralSettings())
-    assert not factory._is_mlflow_enabled(GeneralSettings(MLFLOW=None))
-    assert not factory._is_mlflow_enabled(GeneralSettings(MLFLOW=MLflowSettings(enabled=False)))
+    assert not factory._has_mlflow_config(GeneralSettings())
+    assert not factory._has_mlflow_config(GeneralSettings(MLFLOW=None))
 
     # MLflow enabled case
-    assert factory._is_mlflow_enabled(
-        GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
-    )
+    assert factory._has_mlflow_config(GeneralSettings(MLFLOW=MLflowSettings()))
 
 
 def test_factory_optuna_detection_logic(factory):
@@ -145,7 +140,7 @@ def test_factory_direct_usage():
     """Test that factory can be used directly."""
     from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
 
-    settings = GeneralSettings(MLFLOW=MLflowSettings(enabled=True))
+    settings = GeneralSettings(MLFLOW=MLflowSettings())
 
     factory = ExecutionStrategyFactory()
     executor = factory.create_executor(settings)
@@ -175,7 +170,7 @@ def test_factory_handles_partial_configurations():
     """Test that factory handles partial/incomplete configurations gracefully."""
     # MLflow with minimal config
     minimal_mlflow = GeneralSettings(
-        MLFLOW=MLflowSettings(enabled=True)  # No client section
+        MLFLOW=MLflowSettings()  # Minimal flat config
     )
     executor = ExecutionStrategyFactory().create_executor(minimal_mlflow)
     assert isinstance(executor, TrackingDecorator)

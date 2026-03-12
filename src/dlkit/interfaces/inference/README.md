@@ -5,6 +5,10 @@ Stateful checkpoint predictor — load once, predict many times.
 No configuration files required. All model settings, shapes, and transform chains are
 reconstructed automatically from the checkpoint.
 
+Inference is now separate from the unified workflow executor: use `load_model()`
+for checkpoint inference, and keep `train()`, `optimize()`, or `execute()` for
+training-family workflows only.
+
 ---
 
 ## Quick Start
