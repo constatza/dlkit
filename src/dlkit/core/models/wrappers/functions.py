@@ -1,8 +1,7 @@
 """Pure functions for Lightning wrapper computations.
 
 These functions are pure (no side effects, no self) and easily testable.
-They handle core processing operations like loss computation, transform application,
-and batch shape inference.
+They handle core processing operations like loss computation and transform application.
 
 Design Pattern: Functional Programming
 - Pure functions with no side effects
@@ -103,26 +102,3 @@ def apply_inverse_chain(x: Tensor, chain: "torch.nn.Module") -> Tensor:
     if isinstance(chain, InvertibleTransform):
         return chain.inverse_transform(x)
     return x
-
-
-def infer_batch_shapes(batch: Any) -> tuple[tuple[int, ...], ...]:
-    """Extract feature shapes from Batch. Pure function for logging/debugging.
-
-    Extracts tensor shapes from a batch object with a 'features' attribute.
-    Used for shape validation, logging, and debugging.
-
-    Args:
-        batch: Batch dataclass with features tuple.
-
-    Returns:
-        Tuple of shapes, one per feature tensor.
-
-    Example:
-        >>> from dlkit.core.datatypes import Batch
-        >>> batch = Batch(
-        ...     features=(torch.randn(32, 64), torch.randn(32, 100)), targets=(torch.randn(32, 1),)
-        ... )
-        >>> shapes = infer_batch_shapes(batch)
-        >>> # shapes = ((32, 64), (32, 100))
-    """
-    return tuple(tuple(t.shape) for t in batch.features)

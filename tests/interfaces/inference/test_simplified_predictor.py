@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 import torch
+from dataclasses import replace
 from pathlib import Path
 
 from dlkit.interfaces.inference import load_model, CheckpointPredictor, PredictorConfig
@@ -346,6 +347,28 @@ class TestLoadPredictorAPI:
             result = predictor.predict(torch.randn(8, 10))
             assert isinstance(result, torch.Tensor)
             assert result.shape == (8, 5)
+
+    def test_predictor_preserves_tuple_model_outputs(self, simple_checkpoint: Path):
+        """Tuple-valued forward outputs remain supported after Batch cleanup."""
+
+        class TupleOutputModel(torch.nn.Module):
+            def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+                return x[:, :5], x[:, 5:]
+
+        predictor = load_model(simple_checkpoint, device="cpu")
+        assert predictor._model_state is not None
+
+        predictor._model_state = replace(
+            predictor._model_state,
+            model=TupleOutputModel().eval(),
+        )
+
+        result = predictor.predict(torch.randn(8, 10))
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0].shape == (8, 5)
+        assert result[1].shape == (8, 5)
 
 
 if __name__ == "__main__":

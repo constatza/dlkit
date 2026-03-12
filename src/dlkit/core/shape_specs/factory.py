@@ -12,7 +12,6 @@ from .core import IShapeSpec, create_shape_spec
 from .value_objects import ShapeData, ModelFamily, ShapeSource
 from .registry import ModelFamilyRegistry, ModelFamilyRegistryFactory
 from .strategies import ShapeValidator, ShapeSerializer, ShapeAliasResolver
-from .performance import CachingShapeInferencer, BatchShapeProcessor, LRUShapeCache
 
 
 class ShapeSystemFactory:
@@ -126,23 +125,6 @@ class ShapeSystemFactory:
     def get_alias_resolver(self) -> ShapeAliasResolver:
         """Get the alias resolver."""
         return self._alias_resolver
-
-    def get_batch_processor(self) -> BatchShapeProcessor:
-        """Get batch processor for performance optimization."""
-        return BatchShapeProcessor(validator=self._validator, serializer=self._serializer)
-
-    def create_caching_inferencer(self, base_chain) -> CachingShapeInferencer:
-        """Create caching inferencer wrapper.
-
-        Args:
-            base_chain: Base inference chain to wrap
-
-        Returns:
-            CachingShapeInferencer with performance optimizations
-        """
-        return CachingShapeInferencer(
-            base_chain=base_chain, cache=LRUShapeCache(max_size=1000, ttl_seconds=3600)
-        )
 
     @classmethod
     def create_production_system(cls) -> ShapeSystemFactory:

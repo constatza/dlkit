@@ -254,7 +254,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
             except (ValueError, IndexError) as exc:
                 raise ValueError(
                     f"Shape inference failed for '{settings.MODEL.name}'. "
-                    "Ensure dataset.__getitem__ returns a Batch with features and targets."
+                    "Ensure dataset.__getitem__ returns a nested TensorDict with "
+                    "'features' and 'targets'."
                 ) from exc
 
         # Build wrapper settings with training optimizer/scheduler/loss/metrics configuration

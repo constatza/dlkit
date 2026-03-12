@@ -1,6 +1,4 @@
 from collections.abc import Sequence, Callable
-from dataclasses import dataclass
-from functools import reduce
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -22,98 +20,6 @@ from .errors import TransformNotFittedError, TransformChainError
 if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
 
-
-# -------------------------------------------------------------------
-# Shape-Aware Transform Composition (Monadic Pattern)
-# -------------------------------------------------------------------
-
-
-# TODO: Investigate whether ShapedTransform should remain separate or be
-# expressed through TensorDict-aware transform metadata.
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ShapedTransform:
-    """A transform with its I/O shapes — the monadic unit.
-
-    Immutable composition unit that tracks input and output shapes through
-    a transform chain. Enables analytical shape inference without dummy execution.
-
-    Attributes:
-        transform: Transform instance.
-        in_shape: Input tensor shape (excluding batch dimension).
-        out_shape: Output tensor shape (excluding batch dimension).
-    """
-
-    transform: Any
-    in_shape: tuple[int, ...]
-    out_shape: tuple[int, ...]
-
-
-def build_shaped_chain(
-    transforms: tuple[Any, ...],
-    initial_shape: tuple[int, ...],
-) -> tuple[ShapedTransform, ...]:
-    """Thread shapes through a transform sequence analytically.
-
-    Each transform must implement infer_output_shape(in_shape) -> tuple[int, ...].
-    Pure function — no side effects, no state mutations.
-
-    Args:
-        transforms: Ordered transform instances to compose.
-        initial_shape: Shape entering the first transform (excluding batch dim).
-
-    Returns:
-        Tuple of ShapedTransform, each knowing its exact I/O shapes.
-
-    Example:
-        >>> minmax = MinMaxScaler(dim=0)
-        >>> pca = PCA(n_components=10)
-        >>> chain = build_shaped_chain((minmax, pca), (64,))
-        >>> # chain[0] = ShapedTransform(minmax, (64,), (64,))
-        >>> # chain[1] = ShapedTransform(pca, (64,), (10,))
-    """
-
-    def _bind(
-        acc: tuple[tuple[ShapedTransform, ...], tuple[int, ...]],
-        t: Any,
-    ) -> tuple[tuple[ShapedTransform, ...], tuple[int, ...]]:
-        steps, current = acc
-        out = t.infer_output_shape(current)
-        return steps + (
-            ShapedTransform(transform=t, in_shape=current, out_shape=out),
-        ), out
-
-    steps, _ = reduce(_bind, transforms, ((), initial_shape))
-    return steps
-
-
-def apply_shaped_chain(x: Tensor, chain: tuple[ShapedTransform, ...]) -> Tensor:
-    """Apply chain left-fold. Pure computation.
-
-    Args:
-        x: Input tensor to transform.
-        chain: Sequence of ShapedTransform.
-
-    Returns:
-        Transformed tensor.
-    """
-    return reduce(lambda acc, step: step.transform(acc), chain, x)
-
-
-def chain_output_shape(chain: tuple[ShapedTransform, ...]) -> tuple[int, ...] | None:
-    """Final output shape of the chain. Pure function.
-
-    Args:
-        chain: Sequence of ShapedTransform.
-
-    Returns:
-        Final output shape or None if chain is empty.
-    """
-    return chain[-1].out_shape if chain else None
-
-
-# -------------------------------------------------------------------
-# Core decoupled pipeline
-# -------------------------------------------------------------------
 class TransformChain(Transform):
     """Pipeline for chaining multiple transformations for one tensor stream.
 

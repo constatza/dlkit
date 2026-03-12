@@ -41,15 +41,6 @@ from .inference import (
     CheckpointMetadataStrategy,
     DatasetSamplingStrategy,
 )
-from .performance import (
-    ShapeCache,
-    LRUShapeCache,
-    CachingShapeInferencer,
-    BatchShapeProcessor,
-    CacheStats,
-    PerformanceMonitor,
-    timed_operation,
-)
 from .serialization import (
     VersionedShapeSerializer,
     SerializationFormat,
@@ -98,14 +89,6 @@ __all__ = [
     "InferenceContext",
     "CheckpointMetadataStrategy",
     "DatasetSamplingStrategy",
-    # Performance system
-    "ShapeCache",
-    "LRUShapeCache",
-    "CachingShapeInferencer",
-    "BatchShapeProcessor",
-    "CacheStats",
-    "PerformanceMonitor",
-    "timed_operation",
     # Serialization system
     "VersionedShapeSerializer",
     "SerializationFormat",
