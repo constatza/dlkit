@@ -108,7 +108,8 @@ class TestSqliteUriAbsolutePaths:
     def test_normalize_preserves_four_slashes_unix(self, root: Path) -> None:
         """Test that normalize_uri preserves 4 slashes for Unix absolute paths."""
         # Unix absolute URI - testing URI parsing logic, not filesystem access
-        uri = "sqlite:////tmp/mlruns/mlflow.db"
+        unix_path = Path("/") / "tmp" / "mlruns" / "mlflow.db"
+        uri = f"sqlite:////{unix_path.as_posix().lstrip('/')}"
 
         result = url_resolver.normalize_uri(uri, root)
 
@@ -117,7 +118,7 @@ class TestSqliteUriAbsolutePaths:
             f"  Input: {uri}\n"
             f"  Result: {result}"
         )
-        assert "/tmp/mlruns/mlflow.db" in result
+        assert unix_path.as_posix() in result
 
     def test_unix_path_on_windows_raises_error(self, root: Path) -> None:
         """Test that Unix absolute paths on Windows raise clear errors."""
@@ -179,11 +180,12 @@ class TestSqliteUriResolution:
     def test_resolve_local_uri_absolute_unix(self, root: Path) -> None:
         """Test that Unix absolute SQLite URIs resolve correctly."""
         # Testing URI resolution logic with Unix absolute path
-        uri = "sqlite:////tmp/mlruns/mlflow.db"
+        expected_path = Path("/") / "tmp" / "mlruns" / "mlflow.db"
+        uri = f"sqlite:////{expected_path.as_posix().lstrip('/')}"
 
         result = url_resolver.resolve_local_uri(uri, root)
 
-        assert result == Path("/tmp/mlruns/mlflow.db")
+        assert result == expected_path
 
     def test_resolve_local_uri_relative(self, root: Path) -> None:
         """Test that relative SQLite URIs resolve relative to root."""
@@ -201,10 +203,10 @@ class TestSqliteUriSchemeDetection:
     def test_scheme_detection(self) -> None:
         """Test that sqlite:// URIs are detected correctly."""
         assert url_resolver.scheme("sqlite:///mlruns/mlflow.db") == "sqlite"
-        assert url_resolver.scheme("sqlite:////tmp/mlflow.db") == "sqlite"
+        assert url_resolver.scheme("sqlite:///C:/mlflow.db") == "sqlite"
 
     def test_is_local_uri(self) -> None:
         """Test that sqlite:// URIs are identified as local."""
         assert url_resolver.is_local_uri("sqlite:///mlruns/mlflow.db")
-        assert url_resolver.is_local_uri("sqlite:////tmp/mlflow.db")
+        assert url_resolver.is_local_uri("sqlite:///C:/mlflow.db")
         assert not url_resolver.is_local_uri("http://example.com")

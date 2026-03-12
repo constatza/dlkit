@@ -15,6 +15,7 @@ import pytest
 
 from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import MLflowResourceManager
 from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.tools.io import url_resolver
 
 
 @pytest.fixture
@@ -106,7 +107,7 @@ class TestMLflowResourceManagerThreadSafety:
 class TestConflictDetection:
     """Test tracking URI conflict detection."""
 
-    def test_set_global_tracking_uri_conflict_detection(self, tmp_path: Any) -> None:
+    def test_set_global_tracking_uri_conflict_detection(self, tmp_path: Path) -> None:
         """Test that changing tracking URI is detected.
 
         Args:
@@ -115,13 +116,15 @@ class TestConflictDetection:
         mlflow_config = MLflowSettings()
 
         manager = MLflowResourceManager(mlflow_config)
+        first_uri = url_resolver.build_uri(tmp_path / "mlruns1.db", scheme="sqlite")
+        second_uri = url_resolver.build_uri(tmp_path / "mlruns2.db", scheme="sqlite")
 
         # First set
-        manager._set_global_tracking_uri("sqlite:////tmp/mlruns1.db")
+        manager._set_global_tracking_uri(first_uri)
 
         # Attempt to change to different URI should raise error
         with pytest.raises(RuntimeError, match="Attempting to change global tracking URI"):
-            manager._set_global_tracking_uri("sqlite:////tmp/mlruns2.db")
+            manager._set_global_tracking_uri(second_uri)
 
 
 class TestStackConsistencyValidation:

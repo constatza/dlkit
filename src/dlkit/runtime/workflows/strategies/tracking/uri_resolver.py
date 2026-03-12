@@ -9,6 +9,7 @@ import os
 import socket
 
 from dlkit.tools.io import locations
+from dlkit.tools.io import url_resolver
 
 
 _LOCAL_MLFLOW_URL = "http://127.0.0.1:5000"
@@ -92,7 +93,7 @@ def derive_sqlite_artifact_uri(tracking_uri: str) -> str:
     """Derive `<db_parent>/artifacts` for sqlite tracking URIs."""
     sqlite_db_path = _sqlite_db_path(tracking_uri)
     artifacts_dir = (sqlite_db_path.parent / "artifacts").resolve()
-    return artifacts_dir.as_uri()
+    return url_resolver.build_uri(artifacts_dir, scheme="file")
 
 
 def resolve_mlflow_uris() -> ResolvedMlflowUris:
@@ -114,8 +115,7 @@ def _normalize_tracking_uri(uri: str) -> str:
 
     match scheme:
         case "sqlite":
-            db_path = _sqlite_db_path(cleaned)
-            return f"sqlite:///{db_path.as_posix()}"
+            return url_resolver.normalize_uri(cleaned, Path.cwd())
         case "http" | "https":
             return cleaned.rstrip("/")
         case unexpected:
@@ -126,12 +126,7 @@ def _sqlite_db_path(uri: str) -> Path:
     """Resolve sqlite URI path to an absolute DB path."""
     if not uri.startswith("sqlite:///"):
         raise ValueError(f"Expected sqlite URI, got '{uri}'")
-
-    raw_path = uri[len("sqlite:///") :]
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path.resolve()
-    return (Path.cwd() / path).resolve()
+    return url_resolver.resolve_local_uri(uri, Path.cwd())
 
 
 def _tcp_port_open(host: str, port: int) -> bool:

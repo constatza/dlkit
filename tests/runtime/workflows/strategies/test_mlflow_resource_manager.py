@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
@@ -17,6 +18,7 @@ from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import 
     MLflowResourceManager,
 )
 from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.tools.io import url_resolver
 
 
 def test_resolve_tracking_uri_prefers_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,19 +55,27 @@ def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
         uri_resolver.parse_mlflow_scheme("ftp://example.com/mlflow")
 
 
-def test_resolve_artifact_uri_derives_from_sqlite(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_artifact_uri_derives_from_sqlite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
-    tracking_uri = "sqlite:////tmp/mlruns/mlflow.db"
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    tracking_uri = url_resolver.build_uri(db_path, scheme="sqlite")
 
     artifact_uri = uri_resolver.resolve_artifact_uri(tracking_uri)
-    assert artifact_uri == "file:///tmp/mlruns/artifacts"
+    expected_artifact_uri = url_resolver.build_uri(db_path.parent / "artifacts", scheme="file")
+    assert artifact_uri == expected_artifact_uri
 
 
 def test_create_run_preserves_nested_parent_child_structure(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     settings = MLflowSettings(experiment_name="exp")
     manager = MLflowResourceManager(settings)
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    tracking_uri = url_resolver.build_uri(db_path, scheme="sqlite")
+    artifact_uri = url_resolver.build_uri(db_path.parent / "artifacts", scheme="file")
 
     mock_client = Mock()
     monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
@@ -78,8 +88,8 @@ def test_create_run_preserves_nested_parent_child_structure(
     monkeypatch.setattr(
         "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.resolve_mlflow_uris",
         lambda: uri_resolver.ResolvedMlflowUris(
-            tracking_uri="sqlite:////tmp/mlruns/mlflow.db",
-            artifact_uri="file:///tmp/mlruns/artifacts",
+            tracking_uri=tracking_uri,
+            artifact_uri=artifact_uri,
             scheme="sqlite",
         ),
     )
@@ -119,8 +129,9 @@ def test_create_run_preserves_nested_parent_child_structure(
 
 def test_reset_global_state_preserves_tracking_uri_env_var(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    tracking_uri = "sqlite:////tmp/mlruns/env-preserve.db"
+    tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "env-preserve.db", scheme="sqlite")
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     mlflow.set_tracking_uri(tracking_uri)
 

@@ -15,11 +15,13 @@ def root(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_scheme_and_is_local() -> None:
-    assert url_resolver.scheme("file:///tmp/x") == "file"
+def test_scheme_and_is_local(root: Path) -> None:
+    file_uri = url_resolver.build_uri(root / "x", scheme="file")
+
+    assert url_resolver.scheme(file_uri) == "file"
     assert url_resolver.scheme("sqlite:///db") == "sqlite"
-    assert url_resolver.scheme("/tmp/x") == ""
-    assert url_resolver.is_local_uri("file:///tmp/x")
+    assert url_resolver.scheme("plain/path") == ""
+    assert url_resolver.is_local_uri(file_uri)
     assert url_resolver.is_local_uri("sqlite:///db")
     assert not url_resolver.is_local_uri("http://example.com")
 
@@ -151,6 +153,7 @@ class TestFileUrlValidation:
     @pytest.mark.skipif(os.name == "nt", reason="Unix paths not valid on Windows")
     def test_unix_file_url_accepted(self) -> None:
         """Standard Unix file:///path should work."""
-        unix_url = "file:///tmp/test/file.txt"
+        unix_path = Path("/") / "var" / "test" / "file.txt"
+        unix_url = url_resolver.build_uri(unix_path, scheme="file")
         result = url_resolver.resolve_local_uri(unix_url, Path.cwd())
-        assert result == Path("/tmp/test/file.txt").resolve()
+        assert result == unix_path.resolve()

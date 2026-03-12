@@ -62,18 +62,18 @@ seed = 42
 
 [DATASET]
 name = "FlexibleDataset" 
-root_dir = "/tmp/test_data"
+root_dir = "<tmp_path>/test_data"
 
 [[DATASET.features]]
 name = "X"
-path = "/tmp/test_data/features.npy"
+path = "<tmp_path>/test_data/features.npy"
 
 [[DATASET.targets]]
 name = "y"
-path = "/tmp/test_data/targets.npy"
+path = "<tmp_path>/test_data/targets.npy"
 
 [DATASET.split]
-filepath = "/tmp/test_data/split.txt"
+filepath = "<tmp_path>/test_data/split.txt"
 
 [MODEL]
 name = "ConstantWidthFFNN"

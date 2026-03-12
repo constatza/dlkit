@@ -18,6 +18,7 @@ from dlkit.runtime.workflows.strategies.tracking.uri_resolver import (
     resolve_mlflow_uris,
 )
 from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.tools.io import url_resolver
 from dlkit.tools.utils.logging_config import get_logger
 
 from .mlflow_client_factory import MLflowClientFactory
@@ -89,13 +90,12 @@ class MLflowResourceManager:
                 raise ValueError(f"Unsupported tracking scheme: {unexpected}")
 
         if artifact_uri and artifact_uri.startswith("file://"):
-            artifact_path = Path(artifact_uri[len("file://") :]).resolve()
+            artifact_path = url_resolver.resolve_local_uri(artifact_uri, Path.cwd())
             artifact_path.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _sqlite_db_path(uri: str) -> Path:
-        raw = uri[len("sqlite:///") :]
-        return Path(raw).resolve()
+        return url_resolver.resolve_local_uri(uri, Path.cwd())
 
     def _set_global_tracking_uri(self, uri: str) -> None:
         current_uri = self._state.tracking_uri
