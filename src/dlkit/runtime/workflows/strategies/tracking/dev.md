@@ -143,7 +143,7 @@ with tracker:
 - `mlflow_config: MLflowSettings | None` - MLflow configuration settings
 
 **Key Attributes**:
-- `_state: MLflowResourceState` - Container for managed resources
+- `_state: MLflowResourceState` - Mutable dataclass container for managed resources
 - `_config: MLflowSettings` - Configuration settings
 - `_is_initialized: bool` - Initialization flag
 

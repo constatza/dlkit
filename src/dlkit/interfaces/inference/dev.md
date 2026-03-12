@@ -91,7 +91,8 @@ from the checkpoint's `feature_names`.
 
 ## ModelState: What Gets Stored
 
-`ModelState` is a plain dataclass that holds all inference state after `load()`:
+`ModelState` is a frozen, slot-backed keyword-only dataclass that holds all inference
+state after `load()`:
 
 | Field | Type | Purpose |
 |---|---|---|
