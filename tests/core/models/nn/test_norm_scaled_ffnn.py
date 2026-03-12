@@ -5,7 +5,12 @@ import torch
 
 from dlkit.nn.ffnn import (
     NormScaledConstantWidthFFNN,
+    NormScaledFactorizedLinear,
     NormScaledLinearFFNN,
+    NormScaledSPDFactorizedLinear,
+    NormScaledSPDLinear,
+    NormScaledSymmetricFactorizedLinear,
+    NormScaledSymmetricLinear,
 )
 
 
@@ -63,3 +68,112 @@ def test_norm_scaled_linear_ffnn_rejects_integer_inputs():
 
     with pytest.raises(TypeError, match="Expected floating point tensor"):
         module(rhs)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def norm_scaled_symmetric_linear() -> NormScaledSymmetricLinear:
+    return NormScaledSymmetricLinear(features=4)
+
+
+@pytest.fixture
+def norm_scaled_spd_linear() -> NormScaledSPDLinear:
+    return NormScaledSPDLinear(features=4)
+
+
+@pytest.fixture
+def norm_scaled_factorized_linear() -> NormScaledFactorizedLinear:
+    return NormScaledFactorizedLinear(in_features=4, out_features=4)
+
+
+@pytest.fixture
+def norm_scaled_symmetric_factorized_linear() -> NormScaledSymmetricFactorizedLinear:
+    return NormScaledSymmetricFactorizedLinear(features=4)
+
+
+@pytest.fixture
+def norm_scaled_spd_factorized_linear() -> NormScaledSPDFactorizedLinear:
+    return NormScaledSPDFactorizedLinear(features=4)
+
+
+# ---------------------------------------------------------------------------
+# Test classes
+# ---------------------------------------------------------------------------
+
+
+class TestNormScaledSymmetricLinear:
+    def test_forward_shape(self, norm_scaled_symmetric_linear: NormScaledSymmetricLinear) -> None:
+        x = torch.randn(3, 4)
+        out = norm_scaled_symmetric_linear(x)
+        assert out.shape == (3, 4)
+
+    def test_scale_equivariance(self, norm_scaled_symmetric_linear: NormScaledSymmetricLinear) -> None:
+        x = torch.randn(3, 4)
+        scale = 3.0
+        out_base = norm_scaled_symmetric_linear(x)
+        out_scaled = norm_scaled_symmetric_linear(x * scale)
+        assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
+
+
+class TestNormScaledSPDLinear:
+    def test_forward_shape(self, norm_scaled_spd_linear: NormScaledSPDLinear) -> None:
+        x = torch.randn(3, 4)
+        out = norm_scaled_spd_linear(x)
+        assert out.shape == (3, 4)
+
+    def test_scale_equivariance(self, norm_scaled_spd_linear: NormScaledSPDLinear) -> None:
+        x = torch.randn(3, 4)
+        scale = 2.5
+        out_base = norm_scaled_spd_linear(x)
+        out_scaled = norm_scaled_spd_linear(x * scale)
+        assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
+
+
+class TestNormScaledFactorizedLinear:
+    def test_forward_shape(self, norm_scaled_factorized_linear: NormScaledFactorizedLinear) -> None:
+        x = torch.randn(3, 4)
+        out = norm_scaled_factorized_linear(x)
+        assert out.shape == (3, 4)
+
+    def test_scale_equivariance(self, norm_scaled_factorized_linear: NormScaledFactorizedLinear) -> None:
+        x = torch.randn(3, 4)
+        scale = 4.0
+        out_base = norm_scaled_factorized_linear(x)
+        out_scaled = norm_scaled_factorized_linear(x * scale)
+        assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
+
+
+class TestNormScaledSymmetricFactorizedLinear:
+    def test_forward_shape(
+        self, norm_scaled_symmetric_factorized_linear: NormScaledSymmetricFactorizedLinear
+    ) -> None:
+        x = torch.randn(3, 4)
+        out = norm_scaled_symmetric_factorized_linear(x)
+        assert out.shape == (3, 4)
+
+    def test_scale_equivariance(
+        self, norm_scaled_symmetric_factorized_linear: NormScaledSymmetricFactorizedLinear
+    ) -> None:
+        x = torch.randn(3, 4)
+        scale = 1.5
+        out_base = norm_scaled_symmetric_factorized_linear(x)
+        out_scaled = norm_scaled_symmetric_factorized_linear(x * scale)
+        assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
+
+
+class TestNormScaledSPDFactorizedLinear:
+    def test_forward_shape(self, norm_scaled_spd_factorized_linear: NormScaledSPDFactorizedLinear) -> None:
+        x = torch.randn(3, 4)
+        out = norm_scaled_spd_factorized_linear(x)
+        assert out.shape == (3, 4)
+
+    def test_scale_equivariance(self, norm_scaled_spd_factorized_linear: NormScaledSPDFactorizedLinear) -> None:
+        x = torch.randn(3, 4)
+        scale = 5.0
+        out_base = norm_scaled_spd_factorized_linear(x)
+        out_scaled = norm_scaled_spd_factorized_linear(x * scale)
+        assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)

@@ -4,6 +4,11 @@ from .norm_scaled import (
     NormScaledFFNN,
     NormScaledLinearFFNN,
     NormScaledConstantWidthFFNN,
+    NormScaledSymmetricLinear,
+    NormScaledSPDLinear,
+    NormScaledFactorizedLinear,
+    NormScaledSymmetricFactorizedLinear,
+    NormScaledSPDFactorizedLinear,
 )
 
 __all__ = [
@@ -13,4 +18,9 @@ __all__ = [
     "NormScaledFFNN",
     "NormScaledLinearFFNN",
     "NormScaledConstantWidthFFNN",
+    "NormScaledSymmetricLinear",
+    "NormScaledSPDLinear",
+    "NormScaledFactorizedLinear",
+    "NormScaledSymmetricFactorizedLinear",
+    "NormScaledSPDFactorizedLinear",
 ]
