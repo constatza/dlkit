@@ -5,6 +5,11 @@ from .ffnn.norm_scaled import (
     NormScaledFFNN,
     NormScaledLinearFFNN,
     NormScaledConstantWidthFFNN,
+    NormScaledSymmetricLinear,
+    NormScaledSPDLinear,
+    NormScaledFactorizedLinear,
+    NormScaledSymmetricFactorizedLinear,
+    NormScaledSPDFactorizedLinear,
 )
 
 from . import attention
@@ -20,6 +25,11 @@ __all__ = [
     "NormScaledFFNN",
     "NormScaledLinearFFNN",
     "NormScaledConstantWidthFFNN",
+    "NormScaledSymmetricLinear",
+    "NormScaledSPDLinear",
+    "NormScaledFactorizedLinear",
+    "NormScaledSymmetricFactorizedLinear",
+    "NormScaledSPDFactorizedLinear",
     "attention",
     "cae",
     "encoder",
