@@ -7,10 +7,10 @@ They model the proper Optuna Study → Trial hierarchy for clean architecture.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from datetime import datetime
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
-from datetime import datetime
 
 from dlkit.interfaces.api.domain import TrainingResult
 
@@ -31,7 +31,7 @@ class TrialState(Enum):
     FAILED = "FAIL"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class HyperParameter:
     """Single hyperparameter definition."""
 
@@ -40,7 +40,7 @@ class HyperParameter:
     parameter_type: str  # 'categorical', 'uniform', 'int', etc.
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Trial:
     """Domain model representing a single optimization trial.
 
@@ -82,7 +82,7 @@ class Trial:
         return self.state == TrialState.PRUNED
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Study:
     """Domain model representing an optimization study.
 
@@ -94,12 +94,15 @@ class Study:
     study_id: str
     study_name: str
     direction: OptimizationDirection
-    trials: list[Trial] = field(default_factory=list)
+    trials: tuple[Trial, ...] | list[Trial] = field(default_factory=tuple)
     created_at: datetime = field(default_factory=datetime.now)
     completed_at: datetime | None = None
     target_trials: int = 100
     pruner_config: dict[str, Any] | None = None
     sampler_config: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trials", tuple(self.trials))
 
     @property
     def is_complete(self) -> bool:
@@ -142,21 +145,20 @@ class Study:
             return (datetime.now() - self.created_at).total_seconds()
         return (self.completed_at - self.created_at).total_seconds()
 
-    def add_trial(self, trial: Trial) -> None:
+    def add_trial(self, trial: Trial) -> Study:
         """Add a new trial to the study."""
         if any(t.trial_id == trial.trial_id for t in self.trials):
             raise ValueError(f"Trial {trial.trial_id} already exists in study")
-        self.trials.append(trial)
+        return replace(self, trials=self.trials + (trial,))
 
-    def update_trial(self, trial_id: str, **updates) -> None:
+    def update_trial(self, trial_id: str, **updates) -> Study:
         """Update an existing trial with new information."""
-        for trial in self.trials:
+        for idx, trial in enumerate(self.trials):
             if trial.trial_id == trial_id:
-                # Since trials are frozen dataclasses, we need to replace
-                updated_trial = trial.__class__(**{**trial.__dict__, **updates})
-                idx = self.trials.index(trial)
-                self.trials[idx] = updated_trial
-                return
+                updated_trial = replace(trial, **updates)
+                updated_trials = list(self.trials)
+                updated_trials[idx] = updated_trial
+                return replace(self, trials=tuple(updated_trials))
         raise ValueError(f"Trial {trial_id} not found in study")
 
     def get_trial(self, trial_id: str) -> Trial | None:
@@ -166,12 +168,12 @@ class Study:
                 return trial
         return None
 
-    def complete_study(self) -> None:
+    def complete_study(self) -> Study:
         """Mark study as completed."""
-        self.completed_at = datetime.now()
+        return replace(self, completed_at=datetime.now())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OptimizationResult:
     """Domain model for optimization results.
 

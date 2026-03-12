@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dlkit.tools.utils.logging_config import get_logger
 from dlkit.tools.config import GeneralSettings
@@ -14,7 +14,7 @@ from .base import BaseCommand
 logger = get_logger(__name__, "dispatcher")
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CommandRegistry:
     """Registry for command implementations.
 
@@ -24,7 +24,9 @@ class CommandRegistry:
 
     commands: dict[str, type[BaseCommand[Any, Any]]]
 
-    def register(self, name: str, command_class: type[BaseCommand[Any, Any]]) -> None:
+    def register(
+        self, name: str, command_class: type[BaseCommand[Any, Any]]
+    ) -> CommandRegistry:
         """Register a command implementation.
 
         Args:
@@ -32,7 +34,7 @@ class CommandRegistry:
             command_class: Command implementation class
         """
         logger.debug("Registering command", command_name=name, command_class=command_class.__name__)
-        self.commands[name] = command_class
+        return replace(self, commands={**self.commands, name: command_class})
 
     def get(self, name: str) -> type[BaseCommand[Any, Any]] | None:
         """Get command class by name.
@@ -72,7 +74,7 @@ class CommandDispatcher:
             command_class: Command implementation class
         """
         logger.debug("Registering command in dispatcher", command_name=name)
-        self.registry.register(name, command_class)
+        self.registry = self.registry.register(name, command_class)
 
     def execute(
         self, command_name: str, input_data: Any, settings: BaseSettingsProtocol, **kwargs: Any

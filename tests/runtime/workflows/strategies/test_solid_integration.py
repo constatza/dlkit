@@ -23,7 +23,7 @@ from dlkit.tools.config.optuna_settings import OptunaSettings
 def build_components():
     """Create realistic BuildComponents for integration testing."""
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class TestModel:
         pass
 

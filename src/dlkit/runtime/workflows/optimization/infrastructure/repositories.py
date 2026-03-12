@@ -309,7 +309,7 @@ class InMemoryStudyRepository(IStudyRepository):
                 f"Study not found: {study_id}", {"stage": "trial_addition", "study_id": study_id}
             )
 
-        study.add_trial(trial)
+        self._studies[study_id] = study.add_trial(trial)
 
     def update_trial_in_study(self, study_id: str, trial_id: str, **updates) -> None:
         """Update trial in study in memory."""
@@ -319,7 +319,7 @@ class InMemoryStudyRepository(IStudyRepository):
                 f"Study not found: {study_id}", {"stage": "trial_update", "study_id": study_id}
             )
 
-        study.update_trial(trial_id, **updates)
+        self._studies[study_id] = study.update_trial(trial_id, **updates)
 
     def get_best_trial(self, study_id: str) -> Trial | None:
         """Get best trial from study in memory."""

@@ -22,7 +22,7 @@ from .optimization_service import OptimizationService
 logger = get_logger(__name__, "execution_service")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WorkflowDetectionResult:
     """Result of training-family workflow detection logic."""
 

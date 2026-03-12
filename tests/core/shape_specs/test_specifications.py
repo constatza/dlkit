@@ -29,28 +29,28 @@ class TestValidationResult:
         """Test successful validation result."""
         result = ValidationResult.success()
         assert result.is_valid
-        assert result.errors == []
-        assert result.warnings == []
+        assert result.errors == ()
+        assert result.warnings == ()
 
     def test_validation_result_failure(self):
         """Test failed validation result."""
         errors = ["Error 1", "Error 2"]
         result = ValidationResult.failure(errors)
         assert not result.is_valid
-        assert result.errors == errors
-        assert result.warnings == []
+        assert result.errors == tuple(errors)
+        assert result.warnings == ()
 
     def test_validation_result_add_error(self):
         """Test adding error to validation result."""
         result = ValidationResult.success()
-        result.add_error("Test error")
+        result = result.add_error("Test error")
         assert not result.is_valid
         assert "Test error" in result.errors
 
     def test_validation_result_add_warning(self):
         """Test adding warning to validation result."""
         result = ValidationResult.success()
-        result.add_warning("Test warning")
+        result = result.add_warning("Test warning")
         assert result.is_valid  # Still valid with warnings
         assert "Test warning" in result.warnings
 
@@ -75,7 +75,7 @@ class TestRequiredEntriesSpecification:
         spec = RequiredEntriesSpecification({"x", "y"})
         result = spec.is_satisfied_by(sample_shape_data)
         assert result.is_valid
-        assert result.errors == []
+        assert result.errors == ()
 
     def test_required_entries_some_missing(self, sample_shape_data):
         """Test when some required entries are missing."""

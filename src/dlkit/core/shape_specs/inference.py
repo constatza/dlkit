@@ -17,7 +17,7 @@ from .core import IShapeSpec, create_shape_spec
 # Avoid circular import - factory imported at runtime where needed
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class InferenceContext:
     """Context object containing all information needed for shape inference.
 
@@ -37,7 +37,7 @@ class InferenceContext:
         if self.shape_factory is None:
             from .factory import ShapeSystemFactory
 
-            self.shape_factory = ShapeSystemFactory.create_production_system()
+            object.__setattr__(self, "shape_factory", ShapeSystemFactory.create_production_system())
 
 
 class ShapeInferenceStrategy(ABC):

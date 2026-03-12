@@ -16,7 +16,7 @@ from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig
 from .base import BaseCommand
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OptimizationCommandInput:
     """Input dataflow for optimization command."""
 

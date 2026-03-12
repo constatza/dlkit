@@ -14,7 +14,7 @@ from dlkit.tools.io import locations
 _LOCAL_MLFLOW_URL = "http://127.0.0.1:5000"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ResolvedMlflowUris:
     """Immutable MLflow endpoint resolution result."""
 

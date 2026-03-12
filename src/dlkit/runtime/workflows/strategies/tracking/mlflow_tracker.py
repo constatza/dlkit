@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 MLFLOW_DEFAULT_EXPERIMENT = "DLKit"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TrackingSetupResult:
     """Typed result returned by :meth:`MLflowTracker.setup_mlflow_config`.
 

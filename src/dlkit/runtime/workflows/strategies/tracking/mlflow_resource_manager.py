@@ -25,9 +25,9 @@ from .mlflow_client_factory import MLflowClientFactory
 logger = get_logger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class MLflowResourceState:
-    """Mutable state for resource lifecycle and nested-run stack."""
+    """Mutable resource lifecycle state for MLflow manager internals."""
 
     client: MlflowClient | None = None
     active_run_stack: list[str] = field(default_factory=list)

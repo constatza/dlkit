@@ -7,15 +7,15 @@ adhere to KISS and SOLID (no heavy central dispatcher).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
 class NotStackableError(Exception):
     """Raised when batches cannot be stacked in strict mode."""
 
-    message: str
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.message

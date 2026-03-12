@@ -48,7 +48,7 @@ WorkflowSettings = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class BuildComponents:
     """Runtime components constructed from settings."""
 

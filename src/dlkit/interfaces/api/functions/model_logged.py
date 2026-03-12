@@ -8,7 +8,7 @@ from typing import Any
 from ._mlflow_context import create_mlflow_client, tracking_uri_context
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class LoggedModelRecord:
     """Run-scoped logged model metadata for search results."""
 

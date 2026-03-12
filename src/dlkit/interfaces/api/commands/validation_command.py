@@ -11,7 +11,7 @@ from dlkit.tools.config.protocols import BaseSettingsProtocol
 from .base import BaseCommand
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ValidationCommandInput:
     """Input dataflow for validation command."""
 

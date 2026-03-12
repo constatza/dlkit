@@ -192,7 +192,7 @@ class RequiredEntriesSpecification(ShapeSpecification):
         missing_entries = self._required_entries - shape_data.entry_names()
         if missing_entries:
             for entry in missing_entries:
-                result.add_error(f"Required shape entry '{entry}' is missing")
+                result = result.add_error(f"Required shape entry '{entry}' is missing")
 
         return result
 
@@ -214,7 +214,7 @@ class PositiveDimensionsSpecification(ShapeSpecification):
         for entry in shape_data.entries.values():
             for i, dim in enumerate(entry.dimensions):
                 if not isinstance(dim, int) or dim <= 0:
-                    result.add_error(
+                    result = result.add_error(
                         f"Dimension {i} of entry '{entry.name}' must be positive integer, "
                         f"got {type(dim).__name__}: {dim}"
                     )
@@ -264,33 +264,41 @@ class ModelFamilyCompatibilitySpecification(ShapeSpecification):
         if self._family == ModelFamily.GRAPH:
             # Graph models typically need 'x' for node features
             if not shape_data.has_entry("x"):
-                result.add_warning("Graph models typically require 'x' entry for node features")
+                result = result.add_warning(
+                    "Graph models typically require 'x' entry for node features"
+                )
 
             # Check for common graph entries
             graph_entries = {"x", "edge_index", "edge_attr", "y"}
             if not any(shape_data.has_entry(entry) for entry in graph_entries):
-                result.add_warning(
+                result = result.add_warning(
                     "Graph models typically require graph-specific entries (x, edge_index, etc.)"
                 )
 
         elif self._family == ModelFamily.DLKIT_NN:
             # Standard NN models benefit from x/y entries
             if not shape_data.has_entry("x"):
-                result.add_warning("Standard NN models typically require 'x' entry for input")
+                result = result.add_warning(
+                    "Standard NN models typically require 'x' entry for input"
+                )
             if not shape_data.has_entry("y"):
-                result.add_warning("Standard NN models typically require 'y' entry for output")
+                result = result.add_warning(
+                    "Standard NN models typically require 'y' entry for output"
+                )
 
         elif self._family == ModelFamily.EXTERNAL:
             # External models shouldn't have shapes
             if not shape_data.is_empty():
-                result.add_warning("External models typically don't use shape specifications")
+                result = result.add_warning(
+                    "External models typically don't use shape specifications"
+                )
 
         elif self._family == ModelFamily.TIMESERIES:
             # Time series models need sequence-like shapes
             if shape_data.has_entry("x"):
                 x_dims = shape_data.get_dimensions("x")
                 if x_dims and len(x_dims) < 2:
-                    result.add_warning(
+                    result = result.add_warning(
                         "Time series models typically require multi-dimensional input (sequence, features)"
                     )
 
@@ -324,12 +332,12 @@ class DimensionRangeSpecification(ShapeSpecification):
         for entry in shape_data.entries.values():
             num_dims = len(entry.dimensions)
             if num_dims < self._min_dimensions:
-                result.add_error(
+                result = result.add_error(
                     f"Entry '{entry.name}' has {num_dims} dimensions, "
                     f"minimum required: {self._min_dimensions}"
                 )
             elif num_dims > self._max_dimensions:
-                result.add_error(
+                result = result.add_error(
                     f"Entry '{entry.name}' has {num_dims} dimensions, "
                     f"maximum allowed: {self._max_dimensions}"
                 )
@@ -356,7 +364,9 @@ class UniqueEntryNamesSpecification(ShapeSpecification):
         for entry_name in shape_data.entry_names():
             lower_name = entry_name.lower()
             if lower_name in seen_names:
-                result.add_error(f"Duplicate entry name (case-insensitive): '{entry_name}'")
+                result = result.add_error(
+                    f"Duplicate entry name (case-insensitive): '{entry_name}'"
+                )
             seen_names.add(lower_name)
 
         return result

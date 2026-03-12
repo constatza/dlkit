@@ -32,7 +32,7 @@ class ShapeSource(Enum):
     ENTRY_CONFIGS = "entry_configs"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ShapeEntry:
     """Single shape entry with basic validation.
 
@@ -72,7 +72,7 @@ class ShapeEntry:
         return f"{self.name}={self.dimensions}"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ShapeData:
     """Collection of validated shape entries with metadata.
 

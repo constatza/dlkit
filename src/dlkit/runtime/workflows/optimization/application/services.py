@@ -8,6 +8,7 @@ and depends on abstractions rather than concrete implementations.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -135,7 +136,7 @@ class StudyManager:
                 f"Study not found: {study_id}", {"stage": "study_completion", "study_id": study_id}
             )
 
-        study.complete_study()
+        study = study.complete_study()
         self._repository.save_study(study)
 
         logger.info(
@@ -522,13 +523,13 @@ class OptimizationOrchestrator:
                         objective_value = self._trial_executor._extract_objective_value(
                             training_result
                         )
-                        trial = trial.__class__(**{
-                            **trial.__dict__,
-                            "objective_value": objective_value,
-                            "training_result": training_result,
-                            "state": TrialState.COMPLETE,
-                            "completed_at": datetime.now(),
-                        })
+                        trial = replace(
+                            trial,
+                            objective_value=objective_value,
+                            training_result=training_result,
+                            state=TrialState.COMPLETE,
+                            completed_at=datetime.now(),
+                        )
 
                         # Report result back to Optuna study using study.tell()
                         self._report_trial_to_optuna(trial, objective_value, study)
@@ -538,30 +539,30 @@ class OptimizationOrchestrator:
                         trial_context.log_trial_artifacts(training_result.artifacts or {})
 
                         # Add trial to study
-                        study.add_trial(trial)
+                        study = study.add_trial(trial)
 
                     except TrialPrunedException as e:
                         # Handle pruned trial
-                        trial = trial.__class__(**{
-                            **trial.__dict__,
-                            "state": TrialState.PRUNED,
-                            "pruned_at_step": e.pruned_at_step,
-                            "completed_at": datetime.now(),
-                        })
+                        trial = replace(
+                            trial,
+                            state=TrialState.PRUNED,
+                            pruned_at_step=e.pruned_at_step,
+                            completed_at=datetime.now(),
+                        )
                         # Report pruned trial to Optuna
                         self._report_trial_to_optuna(trial, None, study, state="pruned")
-                        study.add_trial(trial)
+                        study = study.add_trial(trial)
 
                     except TrialFailedException:
                         # Handle failed trial
-                        trial = trial.__class__(**{
-                            **trial.__dict__,
-                            "state": TrialState.FAILED,
-                            "completed_at": datetime.now(),
-                        })
+                        trial = replace(
+                            trial,
+                            state=TrialState.FAILED,
+                            completed_at=datetime.now(),
+                        )
                         # Report failed trial to Optuna
                         self._report_trial_to_optuna(trial, None, study, state="fail")
-                        study.add_trial(trial)
+                        study = study.add_trial(trial)
 
             # Retrain with best parameters
             best_trial = study.best_trial
@@ -598,7 +599,7 @@ class OptimizationOrchestrator:
                     retrain_context.log_trial_artifacts(best_training_result.artifacts or {})
 
             # Complete study
-            study.complete_study()
+            study = study.complete_study()
             self._study_manager.save_study(study)
 
             # Create final result
@@ -634,26 +635,26 @@ class OptimizationOrchestrator:
                 )
 
                 # Update trial with results
-                trial = trial.__class__(**{
-                    **trial.__dict__,
-                    "objective_value": self._trial_executor._extract_objective_value(
+                trial = replace(
+                    trial,
+                    objective_value=self._trial_executor._extract_objective_value(
                         training_result
                     ),
-                    "training_result": training_result,
-                    "state": TrialState.COMPLETE,
-                    "completed_at": datetime.now(),
-                })
+                    training_result=training_result,
+                    state=TrialState.COMPLETE,
+                    completed_at=datetime.now(),
+                )
 
-                study.add_trial(trial)
+                study = study.add_trial(trial)
 
             except (TrialPrunedException, TrialFailedException):
                 # Handle failed/pruned trials
-                trial = trial.__class__(**{
-                    **trial.__dict__,
-                    "state": TrialState.FAILED,
-                    "completed_at": datetime.now(),
-                })
-                study.add_trial(trial)
+                trial = replace(
+                    trial,
+                    state=TrialState.FAILED,
+                    completed_at=datetime.now(),
+                )
+                study = study.add_trial(trial)
 
         # Retrain with best parameters
         best_trial = study.best_trial
@@ -665,7 +666,7 @@ class OptimizationOrchestrator:
             )
 
         # Complete study
-        study.complete_study()
+        study = study.complete_study()
         self._study_manager.save_study(study)
 
         # Create final result

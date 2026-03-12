@@ -28,7 +28,9 @@ if TYPE_CHECKING:
 # -------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+# TODO: Investigate whether ShapedTransform should remain separate or be
+# expressed through TensorDict-aware transform metadata.
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ShapedTransform:
     """A transform with its I/O shapes — the monadic unit.
 
@@ -76,7 +78,9 @@ def build_shaped_chain(
     ) -> tuple[tuple[ShapedTransform, ...], tuple[int, ...]]:
         steps, current = acc
         out = t.infer_output_shape(current)
-        return steps + (ShapedTransform(t, current, out),), out
+        return steps + (
+            ShapedTransform(transform=t, in_shape=current, out_shape=out),
+        ), out
 
     steps, _ = reduce(_bind, transforms, ((), initial_shape))
     return steps

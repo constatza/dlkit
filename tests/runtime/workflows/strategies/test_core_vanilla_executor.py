@@ -40,7 +40,7 @@ def trainer_stub():
 def build_components(trainer_stub):
     """Create BuildComponents for testing."""
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True, slots=True)
     class DummyModel:
         pass
 
