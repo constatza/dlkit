@@ -123,7 +123,7 @@ class TestEagerValidationSuccessCases:
         assert config.MODEL is None
 
         # Default values for tracking sections
-        assert config.MLFLOW.enabled is False
+        assert config.MLFLOW is None
         assert config.OPTUNA.enabled is False
 
     def test_inference_config_with_checkpoint_succeeds(self, tmp_path: Path):
@@ -722,9 +722,7 @@ class TestEdgeCasesAndErrorMessages:
                 "name": "LinearNetwork",
                 "module_path": "dlkit.core.models.nn.ffnn",
             },
-            "MLFLOW": {
-                "enabled": True,
-            },
+            "MLFLOW": {},
             "OPTUNA": {
                 "enabled": False,
             },

@@ -95,9 +95,9 @@ class TrainingWorkflowConfig(BasicSettings):
     )
 
     # Optional tracking/optimization
-    MLFLOW: MLflowSettings = Field(
-        default_factory=lambda: MLflowSettings(enabled=False),
-        description="MLflow experiment tracking (defaults to disabled)",
+    MLFLOW: MLflowSettings | None = Field(
+        default=None,
+        description="MLflow experiment tracking (presence of section enables tracking)",
     )
     OPTUNA: OptunaSettings = Field(
         default_factory=lambda: OptunaSettings(enabled=False),
@@ -120,7 +120,7 @@ class TrainingWorkflowConfig(BasicSettings):
     @property
     def mlflow_enabled(self) -> bool:
         """Check if MLflow tracking is enabled."""
-        return self.MLFLOW.enabled
+        return self.MLFLOW is not None
 
     @property
     def optuna_enabled(self) -> bool:
@@ -256,9 +256,9 @@ class OptimizationWorkflowConfig(BasicSettings):
     )
 
     # Optional tracking
-    MLFLOW: MLflowSettings = Field(
-        default_factory=lambda: MLflowSettings(enabled=False),
-        description="MLflow experiment tracking (defaults to disabled)",
+    MLFLOW: MLflowSettings | None = Field(
+        default=None,
+        description="MLflow experiment tracking (presence of section enables tracking)",
     )
 
     # Optional user sections
@@ -276,7 +276,7 @@ class OptimizationWorkflowConfig(BasicSettings):
     @property
     def mlflow_enabled(self) -> bool:
         """Check if MLflow tracking is enabled."""
-        return self.MLFLOW.enabled
+        return self.MLFLOW is not None
 
     @property
     def has_complete_data_config(self) -> bool:

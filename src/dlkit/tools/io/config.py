@@ -1,6 +1,7 @@
 """TOML config loader with subsettings support using dynaconf."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict, is_dataclass
 from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
@@ -324,6 +325,8 @@ def _to_toml_compatible(value: Any) -> Any:
     - Converts Path to str
     - Converts Enum to its value
     - Converts torch.dtype to str
+    - Converts Pydantic models and dataclasses to plain dictionaries
+    - Uses ``to_dict()`` when available for runtime value objects such as shape specs
     - Recursively processes dicts and sequences
     """
     if value is None:
@@ -332,6 +335,18 @@ def _to_toml_compatible(value: Any) -> Any:
         return str(value)
     if isinstance(value, Enum):
         return value.value
+    if isinstance(value, BaseModel):
+        return _to_toml_compatible(value.model_dump(exclude_none=True))
+    if is_dataclass(value) and not isinstance(value, type):
+        return _to_toml_compatible(asdict(value))
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        try:
+            serialized = to_dict()
+        except Exception:
+            serialized = None
+        if serialized is not None:
+            return _to_toml_compatible(serialized)
     # Handle pydantic_core Url objects (covers both AnyUrl and Url)
     try:
         from pydantic_core import Url as _CoreUrl  # type: ignore
@@ -350,6 +365,10 @@ def _to_toml_compatible(value: Any) -> Any:
         return {k: _to_toml_compatible(v) for k, v in value.items() if v is not None}
     if isinstance(value, (list, tuple)):
         return [_to_toml_compatible(v) for v in value if v is not None]
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if hasattr(value, "__module__") and value.__module__.startswith("dlkit."):
+        return str(value)
     return value
 
 

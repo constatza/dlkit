@@ -163,7 +163,7 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
 
     def _mlflow_enabled(self, settings: BaseSettingsProtocol) -> bool:
         mlflow_cfg = getattr(settings, "MLFLOW", None)
-        return bool(mlflow_cfg and getattr(mlflow_cfg, "enabled", False))
+        return mlflow_cfg is not None
 
     def _is_inference(self, settings: BaseSettingsProtocol) -> bool:
         session = getattr(settings, "SESSION", None)

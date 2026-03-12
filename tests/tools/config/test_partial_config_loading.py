@@ -42,9 +42,6 @@ epochs = 10
 [TRAINING.trainer]
 accelerator = "cpu"
 
-[MLFLOW]
-enabled = false
-
 [OPTUNA]
 enabled = false
 
@@ -150,7 +147,7 @@ class TestPartialConfigLoading:
         assert hasattr(settings, "has_data_config")
 
         # Test property behavior
-        assert settings.mlflow_enabled is False  # Because MLFLOW.enabled = false
+        assert settings.mlflow_enabled is False  # Because the MLFLOW section is omitted
         assert settings.has_training_config is True
         assert settings.is_training is True
         assert settings.has_data_config is True

@@ -124,7 +124,7 @@ def complete_config_data() -> dict[str, Any]:
             "input_size": 128,
             "output_size": 10,
         },
-        "MLFLOW": {"enabled": True, "experiment_name": "integration_experiment"},
+        "MLFLOW": {"experiment_name": "integration_experiment"},
         "OPTUNA": {"enabled": True, "n_trials": 10},
         "DATAMODULE": {
             "name": "IntegrationDataModule",
@@ -162,7 +162,6 @@ input_size = 128
 output_size = 10
 
 [MLFLOW]
-enabled = true
 experiment_name = "integration_experiment"
 
 [OPTUNA]
@@ -304,7 +303,7 @@ class TestGeneralSettingsEndToEndIntegration:
         # Verify all components are properly loaded
         assert settings.SESSION.name == "integration_session"
         assert settings.MODEL.input_size == 128
-        assert settings.MLFLOW.enabled is True
+        assert settings.MLFLOW is not None
         assert settings.MLFLOW.experiment_name == "integration_experiment"  # Configured value
         assert settings.OPTUNA.enabled is True
         assert settings.DATAMODULE.dataloader.batch_size == 64

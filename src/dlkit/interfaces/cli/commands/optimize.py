@@ -65,7 +65,7 @@ def _run_optimization_impl(
 
         # Show optimization parameters
         console.print("⚡ Starting hyperparameter optimization")
-        if mlflow or (settings.MLFLOW and settings.MLFLOW.enabled):
+        if mlflow or settings.MLFLOW:
             console.print("  With MLflow tracking enabled")
         console.print(f"  Trials: {trials}")
         if study_name:
@@ -80,8 +80,6 @@ def _run_optimization_impl(
             console=console,
         ) as progress:
             task = progress.add_task(f"Running {trials} optimization trials...", total=None)
-            # Enable MLflow if flag is set or if configured
-            mlflow_enabled = mlflow or (settings.MLFLOW and settings.MLFLOW.enabled)
 
             optimization_result = api_optimize(
                 settings,
@@ -89,9 +87,9 @@ def _run_optimization_impl(
                 mlflow=mlflow,
                 study_name=study_name,
                 root_dir=root_dir,
-                # Pass MLflow experiment/run names if MLflow is enabled
-                experiment_name=settings.MLFLOW.experiment_name if mlflow_enabled and settings.MLFLOW else None,
-                run_name=settings.MLFLOW.run_name if mlflow_enabled and settings.MLFLOW else None,
+                # Pass MLflow experiment/run names if MLflow is configured
+                experiment_name=settings.MLFLOW.experiment_name if settings.MLFLOW else None,
+                run_name=settings.MLFLOW.run_name if settings.MLFLOW else None,
             )
             progress.remove_task(task)
 

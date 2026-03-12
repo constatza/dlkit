@@ -182,13 +182,11 @@ class OptimizationServiceFactory:
         if self._experiment_tracker_override:
             return self._experiment_tracker_override
 
-        # Check if MLflow tracking is enabled
+        # Check if MLflow tracking is configured (presence of section enables it)
         mlflow_config = getattr(settings, "MLFLOW", None)
-        logger.debug(
-            f"Checking MLflow config - exists={mlflow_config is not None}, enabled={getattr(mlflow_config, 'enabled', False) if mlflow_config else False}"
-        )
+        logger.debug(f"Checking MLflow config - exists={mlflow_config is not None}")
 
-        if mlflow_config and getattr(mlflow_config, "enabled", False):
+        if mlflow_config:
             from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
 
             experiment_name = determine_experiment_name(settings, mlflow_config)

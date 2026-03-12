@@ -268,8 +268,7 @@ def valid_training_settings() -> Mock:
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -290,8 +289,7 @@ def valid_inference_settings() -> Mock:
     settings.TRAINING = None
     settings.SESSION = Mock()
     settings.SESSION.inference = True
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -312,7 +310,6 @@ def mlflow_active_settings() -> Mock:
     settings.SESSION = Mock()
     settings.SESSION.inference = False
     settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = True
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -332,8 +329,7 @@ def optuna_active_settings() -> Mock:
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = True
     return settings
@@ -353,8 +349,7 @@ def missing_model_settings() -> Mock:
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -374,8 +369,7 @@ def missing_dataset_settings() -> Mock:
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -395,8 +389,7 @@ def missing_datamodule_settings() -> Mock:
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -416,8 +409,7 @@ def missing_training_settings() -> Mock:
     settings.TRAINING = None
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings
@@ -438,8 +430,7 @@ def missing_checkpoint_inference_settings() -> Mock:
     settings.TRAINING = None
     settings.SESSION = Mock()
     settings.SESSION.inference = True
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
     return settings

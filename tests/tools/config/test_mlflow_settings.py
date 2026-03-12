@@ -15,7 +15,6 @@ from dlkit.tools.config.mlflow_settings import MLflowSettings
 def mlflow_settings_data() -> dict[str, Any]:
     """Sample data for MLflowSettings testing."""
     return {
-        "enabled": True,
         "experiment_name": "TestExperiment",
         "run_name": "test_run_001",
         "register_model": True,
@@ -32,10 +31,9 @@ class TestMLflowSettings:
     def test_initialization_with_defaults(self) -> None:
         settings = MLflowSettings()
 
-        assert settings.enabled is False
         assert settings.experiment_name == "Experiment"
         assert settings.run_name is None
-        assert settings.register_model is True
+        assert settings.register_model is False
         assert settings.registered_model_name is None
         assert settings.registered_model_aliases is None
         assert settings.registered_model_version_tags is None
@@ -44,7 +42,6 @@ class TestMLflowSettings:
     def test_initialization_with_custom_data(self, mlflow_settings_data: dict[str, Any]) -> None:
         settings = MLflowSettings(**mlflow_settings_data)
 
-        assert settings.enabled is True
         assert settings.experiment_name == "TestExperiment"
         assert settings.run_name == "test_run_001"
         assert settings.register_model is True
@@ -76,14 +73,18 @@ class TestMLflowSettings:
 
     def test_legacy_nested_sections_fail_with_migration_message(self) -> None:
         with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
-            MLflowSettings(enabled=True, client={"experiment_name": "exp"})  # type: ignore[arg-type]
+            MLflowSettings(client={"experiment_name": "exp"})  # type: ignore[arg-type]
 
         with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
-            MLflowSettings(enabled=True, server={"host": "127.0.0.1"})  # type: ignore[arg-type]
+            MLflowSettings(server={"host": "127.0.0.1"})  # type: ignore[arg-type]
 
     def test_infra_fields_in_toml_are_rejected(self) -> None:
         with pytest.raises(ValidationError, match="env-only"):
-            MLflowSettings(enabled=True, tracking_uri="http://127.0.0.1:5000")  # type: ignore[arg-type]
+            MLflowSettings(tracking_uri="http://127.0.0.1:5000")  # type: ignore[arg-type]
 
         with pytest.raises(ValidationError, match="env-only"):
-            MLflowSettings(enabled=True, artifacts_destination="file:///tmp/artifacts")  # type: ignore[arg-type]
+            MLflowSettings(artifacts_destination="file:///tmp/artifacts")  # type: ignore[arg-type]
+
+    def test_enabled_field_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="no longer has an 'enabled' field"):
+            MLflowSettings(enabled=True)  # type: ignore[arg-type]

@@ -147,7 +147,6 @@ def test_registers_model_with_class_name_without_default_aliases_or_tags() -> No
     settings = GeneralSettings(
         MODEL=None,
         MLFLOW=MLflowSettings(
-            enabled=True,
             register_model=True,
         ),
     )
@@ -177,7 +176,6 @@ def test_logs_model_without_registration_when_disabled() -> None:
 
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             register_model=False,
         ),
     )
@@ -204,7 +202,6 @@ def test_merges_configured_aliases_and_model_version_tags() -> None:
 
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             register_model=True,
             registered_model_aliases=("benchmark_high_precision", "dataset_A_latest"),
             registered_model_version_tags={"team": "platform"},
@@ -244,7 +241,6 @@ def test_maybe_register_model_uses_inner_model_class_name_for_tag(
 ) -> None:
     settings = GeneralSettings(
         MLFLOW=MLflowSettings(
-            enabled=True,
             register_model=False,
         ),
     )

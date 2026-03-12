@@ -57,7 +57,6 @@ name = "TestDataset"
     if enable_mlflow:
         config_content += """
 [MLFLOW]
-enabled = true
 experiment_name = "test_experiment"
 run_name = "test_run"
 """
@@ -116,7 +115,6 @@ def create_json_config(
 
     if enable_mlflow:
         config_data["MLFLOW"] = {
-            "enabled": True,
             "experiment_name": "test_experiment",
             "run_name": "test_run",
         }

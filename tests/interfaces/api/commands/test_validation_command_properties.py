@@ -52,9 +52,8 @@ def mock_settings_with_sections(draw) -> Mock:
         has_checkpoint = draw(st.booleans())
         settings.MODEL.checkpoint = "/path/to/checkpoint.ckpt" if has_checkpoint else None
 
-    # Plugin settings use "enabled" flag to mirror GeneralSettings implementations
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = draw(st.booleans())
+    mlflow_active = draw(st.booleans())
+    settings.MLFLOW = Mock() if mlflow_active else None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = draw(st.booleans())
 
@@ -134,8 +133,7 @@ def test_plugin_activation_profiles(mlflow_active: bool, optuna_active: bool) ->
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = mlflow_active
+    settings.MLFLOW = Mock() if mlflow_active else None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = optuna_active
 
@@ -163,8 +161,7 @@ def test_inference_mode_detection_robustness(has_session: bool) -> None:
     else:
         settings.SESSION = None
 
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
 
@@ -224,8 +221,7 @@ def test_workflow_error_context_preservation(
     settings.TRAINING = Mock()
     settings.SESSION = Mock()
     settings.SESSION.inference = False
-    settings.MLFLOW = Mock()
-    settings.MLFLOW.enabled = False
+    settings.MLFLOW = None
     settings.OPTUNA = Mock()
     settings.OPTUNA.enabled = False
 
