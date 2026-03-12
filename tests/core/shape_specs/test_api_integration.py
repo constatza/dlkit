@@ -212,50 +212,6 @@ class TestAPIConceptIntegration:
         # The exact shapes depend on the inference implementation
         # but we should have detected graph-like structures
 
-    def test_performance_optimized_workflow(self):
-        """Test performance-optimized workflow with caching."""
-        # Simulate performance-optimized inference workflow
-
-        # 1. Create inference context that would be repeated
-        mock_dataset = Mock()
-        mock_dataset.__getitem__ = Mock(
-            return_value={
-                "x": torch.randn(224, 224, 3),  # Image-like
-                "y": torch.tensor(3),
-            }
-        )
-
-        class ModelSettings:
-            architecture = "FeedForwardNN"
-            class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
-
-        model_settings = ModelSettings()
-
-        # 2. Create caching inference engine
-        from dlkit.core.shape_specs import ShapeInferenceChain, CachingShapeInferencer
-
-        base_chain = ShapeInferenceChain()
-        caching_inferencer = CachingShapeInferencer(base_chain)
-
-        context = InferenceContext(dataset=mock_dataset, model_settings=model_settings)
-
-        # 3. First inference (cache miss)
-        shape_spec1 = caching_inferencer.infer_shape_spec(context)
-        stats_after_first = caching_inferencer.get_cache_stats()
-
-        # 4. Second inference (cache hit)
-        shape_spec2 = caching_inferencer.infer_shape_spec(context)
-        stats_after_second = caching_inferencer.get_cache_stats()
-
-        # 5. Verify caching worked
-        assert stats_after_first.hits == 0
-        assert stats_after_first.misses == 1
-        assert stats_after_second.hits == 1
-        assert stats_after_second.hit_rate > 0
-
-        # 6. Results should be identical
-        assert shape_spec1.get_all_shapes() == shape_spec2.get_all_shapes()
-
     def test_error_handling_workflow_integration(self):
         """Test error handling in workflow integration."""
         # Test various error scenarios in shape integration

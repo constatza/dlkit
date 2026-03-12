@@ -1,4 +1,4 @@
-"""Simple shape inference from positional Batch samples.
+"""Simple shape inference from TensorDict dataset samples.
 
 This module provides the ShapeSummary dataclass and infer_shapes_from_dataset
 pure function that replaces the complex IShapeSpec subsystem for model
@@ -59,26 +59,23 @@ class ShapeSummary:
 
 
 def infer_shapes_from_dataset(dataset: object) -> ShapeSummary:
-    """Sample index 0 from dataset and extract shapes from the returned Batch or TensorDict.
+    """Sample index 0 from dataset and extract shapes from a nested TensorDict sample.
 
     Args:
-        dataset: Any dataset object whose __getitem__ returns a Batch or TensorDict.
+        dataset: Any dataset object whose __getitem__ returns a nested TensorDict.
 
     Returns:
         ShapeSummary with in_shapes and out_shapes extracted from the sample.
 
     Raises:
-        ValueError: If dataset[0] does not return a Batch or TensorDict instance.
+        ValueError: If dataset[0] does not return a nested TensorDict sample.
     """
-    from dlkit.core.datatypes.batch import Batch
-
     sample = dataset[0]
 
-    # Handle TensorDict format (new)
     try:
-        from tensordict import TensorDict
+        from tensordict import TensorDictBase
 
-        if isinstance(sample, TensorDict):
+        if isinstance(sample, TensorDictBase):
             feat_td = sample["features"]
             targ_td = sample["targets"]
             in_shapes = tuple(tuple(int(d) for d in feat_td[k].shape) for k in feat_td.keys())
@@ -87,14 +84,7 @@ def infer_shapes_from_dataset(dataset: object) -> ShapeSummary:
     except ImportError:
         pass
 
-    # Handle legacy Batch format (backward compat)
-    if isinstance(sample, Batch):
-        return ShapeSummary(
-            in_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.features),
-            out_shapes=tuple(tuple(int(d) for d in t.shape) for t in sample.targets),
-        )
-
     raise ValueError(
-        f"Expected dataset[0] to return a Batch or TensorDict instance, got {type(sample).__name__}. "
-        "Update your dataset's __getitem__ to return Batch or TensorDict."
+        f"Expected dataset[0] to return a nested TensorDict with 'features' and 'targets', "
+        f"got {type(sample).__name__}. Update your dataset's __getitem__ accordingly."
     )

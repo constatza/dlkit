@@ -3,7 +3,7 @@
 DLKit provides a thin, typed workflow layer on top of PyTorch and Lightning with:
 - Flattened, typed configuration models (Pydantic) and a single TOML loader
 - Strategy-based training (vanilla, MLflow) and hyperparameter optimization (Optuna)
-- Simple dataset/datamodule factories with shape inference
+- Simple dataset/datamodule factories with TensorDict-based shape inference
 - A small CLI to create/validate configs and run workflows
 
 ## Installation

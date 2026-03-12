@@ -14,8 +14,9 @@ from typing import Dict, Any, Iterable, Set
 from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
 
 
-# TODO: Investigate whether ValidationResult should align with TensorDict-based
-# validation/reporting flows instead of remaining a standalone carrier.
+# TODO: Investigate whether shape-spec validation needs a dedicated result carrier.
+# If this remains public, rename it to something domain-specific such as
+# ShapeValidationReport; otherwise remove it with the broader validation surface.
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ValidationResult:
     """Result of shape validation operation."""

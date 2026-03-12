@@ -63,6 +63,10 @@ batch.batch_size              # [B]
 batch.to("cuda")              # recursive device transfer — no custom collation needed
 ```
 
+The standard wrapper no longer accepts DLKit's legacy custom `Batch` transport.
+For non-graph workflows, datasets and dataloaders must yield nested `TensorDict`
+objects with top-level `"features"` and `"targets"` entries.
+
 ---
 
 ## DataEntry Configurations

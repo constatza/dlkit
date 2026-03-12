@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 import pytest
+from tensordict import TensorDict
 
-from dlkit.core.datatypes.batch import Batch
 from dlkit.core.shape_specs.simple_inference import ShapeSummary
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 from dlkit.runtime.workflows.factories.model_detection import ModelType
@@ -70,17 +70,15 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
 def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
-    # Batch-returning dataset so infer_shapes_from_dataset works
+    # TensorDict-returning dataset so infer_shapes_from_dataset works
     import torch
 
-    batch_sample = Batch(
-        features=(torch.zeros(8, 3),),
-        targets=(
-            torch.ones(
-                1,
-            ),
-        ),
-        latents=(),
+    batch_sample = TensorDict(
+        {
+            "features": TensorDict({"x": torch.zeros(8, 3)}, batch_size=[8]),
+            "targets": TensorDict({"y": torch.ones(1)}, batch_size=[]),
+        },
+        batch_size=[],
     )
     settings = _make_min_settings(batch_sample, inference=True, ckpt=tmp_checkpoint)
 
@@ -215,7 +213,7 @@ def test_build_factory_selects_timeseries_strategy(
 
     comps = BuildFactory().build_components(settings)
     assert comps.meta.get("dataset_type") == "timeseries"
-    # Timeseries dataset returns dict sample (not Batch), so shape inference returns None
+    # Timeseries dataset returns dict sample, so shape inference returns None
     assert comps.shape_spec is None
     assert captured_spec["summary"] is None
 
@@ -356,10 +354,16 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         def __len__(self) -> int:
             return self._n
 
-        def __getitem__(self, idx: int) -> Batch:
+        def __getitem__(self, idx: int) -> TensorDict:
             import torch
 
-            return Batch(features=(torch.zeros(3),), targets=(torch.zeros(1),), latents=())
+            return TensorDict(
+                {
+                    "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
+                    "targets": TensorDict({"y": torch.zeros(1)}, batch_size=[]),
+                },
+                batch_size=[],
+            )
 
     def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
         if s is settings.DATAMODULE:

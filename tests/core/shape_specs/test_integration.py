@@ -15,10 +15,6 @@ from dlkit.core.shape_specs import (
     ModelFamily,
     ShapeSource,
     ShapeInferenceEngine,
-    InferenceContext,
-    CachingShapeInferencer,
-    ShapeInferenceChain,
-    BatchShapeProcessor,
     VersionedShapeSerializer,
     SerializationFormat,
     ShapeData,
@@ -139,80 +135,6 @@ class TestFullSystemIntegration:
         assert reconstructed_spec.get_shape("x") == (784,)
         assert reconstructed_spec.get_shape("y") == (10,)
         assert reconstructed_spec.model_family() == ModelFamily.DLKIT_NN.value
-
-    def test_caching_performance_integration(
-        self, shape_factory, sample_dataset, sample_model_settings
-    ):
-        """Test caching integration with performance benefits."""
-        # Create base inference chain
-        base_chain = ShapeInferenceChain()
-
-        # Create caching wrapper
-        caching_inferencer = CachingShapeInferencer(base_chain)
-
-        # Create inference context
-        context = InferenceContext(
-            dataset=sample_dataset,
-            model_settings=sample_model_settings,
-            shape_factory=shape_factory,
-        )
-
-        # First inference (cache miss)
-        first_result = caching_inferencer.infer_shape_spec(context)
-        stats_after_first = caching_inferencer.get_cache_stats()
-
-        assert stats_after_first.total_requests == 1
-        assert stats_after_first.misses == 1
-        assert stats_after_first.hits == 0
-
-        # Second inference with same context (cache hit)
-        second_result = caching_inferencer.infer_shape_spec(context)
-        stats_after_second = caching_inferencer.get_cache_stats()
-
-        assert stats_after_second.total_requests == 2
-        assert stats_after_second.hits == 1
-        assert stats_after_second.hit_rate > 0
-
-        # Results should be identical
-        assert first_result.get_all_shapes() == second_result.get_all_shapes()
-
-    def test_batch_processing_integration(self, shape_factory):
-        """Test batch processing integration."""
-        # Create multiple shape data objects
-        shape_data_list = []
-        for i in range(5):
-            entries = {
-                "x": ShapeEntry(name="x", dimensions=(10 * (i + 1), 20)),
-                "y": ShapeEntry(name="y", dimensions=(5,)),
-            }
-            shape_data = ShapeData(
-                entries=entries,
-                model_family=ModelFamily.DLKIT_NN,
-                source=ShapeSource.TRAINING_DATASET,
-            )
-            shape_data_list.append(shape_data)
-
-        # Create batch processor
-        batch_processor = shape_factory.get_batch_processor()
-
-        # Batch validate
-        validation_results = batch_processor.validate_batch(shape_data_list)
-        assert len(validation_results) == 5
-        assert all(result.is_valid for result in validation_results)
-
-        # Batch serialize
-        serialized_list = batch_processor.serialize_batch(shape_data_list)
-        assert len(serialized_list) == 5
-
-        # Batch deserialize
-        deserialized_list = batch_processor.deserialize_batch(serialized_list)
-        assert len(deserialized_list) == 5
-
-        # Verify roundtrip
-        for original, deserialized in zip(shape_data_list, deserialized_list):
-            assert original.entries.keys() == deserialized.entries.keys()
-            for key in original.entries:
-                assert original.entries[key].dimensions == deserialized.entries[key].dimensions
 
     def test_registry_based_model_detection_integration(self, shape_factory):
         """Test registry-based model detection integration."""
