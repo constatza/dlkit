@@ -235,7 +235,7 @@ class NormScaledSPDLinear(NormScaledFFNN):
         in_features: Number of input features.
         out_features: Number of output features.
         bias: Whether to include a bias term.
-        min_diag: Positive diagonal floor for the Cholesky decomposition.
+        min_diag: Positive diagonal slack floor for SPD enforcement.
         norm: Vector norm type to use.
         eps_gain: Epsilon gain multiplier.
         keep_stats: Whether to return norm statistics.
@@ -352,7 +352,7 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
         in_features: Number of input features.
         out_features: Number of output features.
         bias: Whether to include a bias term.
-        min_diag: Positive diagonal floor for the Cholesky decomposition.
+        min_diag: Positive diagonal slack floor for SPD enforcement.
         mean: Mean for log-scale initialisation.
         std: Standard deviation for log-scale initialisation.
         norm: Vector norm type to use.
