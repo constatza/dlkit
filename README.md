@@ -539,7 +539,7 @@ These guarantees are covered by the integration tests in `tests/integration/test
 
 ## Breaking Changes
 
-### Transform API Changes (v2.1+)
+### Transform API Changes
 
 **Breaking Change: `input_shape` Parameter Removed**
 
@@ -587,7 +587,7 @@ pca.fit(train_data)
 
 ---
 
-### Inference API Changes (v2.0+)
+### Inference API Changes
 
 **Removed APIs**:
 - ❌ `infer()` function - replaced with `load_model()`

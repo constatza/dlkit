@@ -197,19 +197,19 @@ is_valid = val_cmd.execute(val_input, settings)
 
 ## Breaking Changes
 
-### Version 2.0 (Current)
+### Current Layout
 - **Inference API**: `infer()` now requires checkpoint and inputs only (no config)
 - **Prediction API**: Use `predict_with_config()` for Lightning-based prediction
 - **InferenceWorkflowSettings**: Deprecated - use `TrainingWorkflowSettings` with `SESSION.inference=True`
 
 ### Migration Guide
 ```python
-# OLD (v1.x):
+# BEFORE:
 from dlkit.tools.config import load_inference_settings
 settings = load_inference_settings("config.toml")
 result = infer(settings, checkpoint_path)
 
-# NEW (v2.0):
+# NOW:
 from dlkit.interfaces.api import infer
 result = infer(checkpoint_path, input_data)
 

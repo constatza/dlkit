@@ -47,7 +47,6 @@ console = Console()
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    version: bool = typer.Option(False, "--version", "-v", help="Show version information"),
     verbose: bool = typer.Option(False, "--verbose", help="Enable verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
     log_level: str = typer.Option(
@@ -77,46 +76,15 @@ def main(
         print(f"Warning: Logging configuration failed: {e}")
         pass
 
-    if version:
-        show_version()
-        raise typer.Exit()
-
     # If no subcommand was invoked and no special flags, show help
-    if ctx.invoked_subcommand is None and not version:
+    if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
 
 
-def show_version() -> None:
-    """Display version information."""
-    from dlkit import __version__
-
-    version_text = __version__
-
-    version_panel = Panel.fit(
-        Text(f"DLKit v{version_text}", style="bold green"), title="Version", border_style="green"
-    )
-    console.print(version_panel)
-
-
-def _get_version(module_name: str, module) -> str:
-    """Safely get version from a module."""
-    try:
-        if hasattr(module, "__version__"):
-            return module.__version__
-        elif hasattr(module, "version"):
-            return module.version
-        elif module_name == "mlflow":
-            return getattr(module, "version", {}).get("VERSION", "unknown")
-        else:
-            return "unknown"
-    except Exception:
-        return "unknown"
-
-
 @app.command("info")
 def show_info() -> None:
-    """Show system and DLKit information."""
+    """Show system and DLKit environment information."""
     try:
         import torch
         import lightning
@@ -126,15 +94,12 @@ def show_info() -> None:
         info_text = Text()
         info_text.append("🧠 DLKit - Deep Learning Toolkit\n\n", style="bold blue")
         info_text.append("Dependencies:\n", style="bold")
-        info_text.append(f"  • PyTorch: {_get_version('torch', torch)}\n")
-        info_text.append(f"  • Lightning: {_get_version('lightning', lightning)}\n")
-        info_text.append(f"  • MLflow: {_get_version('mlflow', mlflow)}\n")
-        info_text.append(f"  • Optuna: {_get_version('optuna', optuna)}\n")
+        info_text.append(f"  • PyTorch: {torch.__name__}\n")
+        info_text.append(f"  • Lightning: {lightning.__name__}\n")
+        info_text.append(f"  • MLflow: {mlflow.__name__}\n")
+        info_text.append(f"  • Optuna: {optuna.__name__}\n")
 
-        # Add Python and system info
-        info_text.append(
-            f"\nPython: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}\n"
-        )
+        info_text.append(f"\nPython executable: {sys.executable}\n")
         info_text.append(f"Platform: {sys.platform}\n")
 
         info_panel = Panel.fit(info_text, title="System Information", border_style="blue")

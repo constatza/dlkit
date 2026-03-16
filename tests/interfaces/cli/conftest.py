@@ -117,16 +117,16 @@ def mock_dependencies() -> dict[str, Mock]:
     """
     # Mock system dependencies that info command checks
     mock_torch = Mock()
-    mock_torch.__version__ = "2.4.0"
+    mock_torch.__name__ = "torch"
 
     mock_lightning = Mock()
-    mock_lightning.__version__ = "2.3.2"
+    mock_lightning.__name__ = "lightning"
 
     mock_mlflow = Mock()
-    mock_mlflow.version = {"VERSION": "3.0.0"}
+    mock_mlflow.__name__ = "mlflow"
 
     mock_optuna = Mock()
-    mock_optuna.__version__ = "3.7.0"
+    mock_optuna.__name__ = "optuna"
 
     return {
         "torch": mock_torch,
@@ -248,20 +248,14 @@ def expected_help_patterns() -> dict[str, str]:
 
 
 @pytest.fixture
-def version_info_patterns() -> dict[str, str]:
-    """Expected patterns in version and info output.
-
-    Returns:
-        Dictionary of version/info output patterns.
-    """
+def info_output_patterns() -> dict[str, str]:
+    """Expected patterns in info output."""
     return {
-        "version_title": "Version",
-        "version_text": "DLKit v",
         "info_title": "System Information",
         "dependencies": "Dependencies:",
         "pytorch": "PyTorch:",
         "lightning": "Lightning:",
-        "python": "Python:",
+        "python": "Python executable:",
     }
 
 
