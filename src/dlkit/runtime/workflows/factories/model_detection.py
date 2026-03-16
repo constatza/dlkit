@@ -10,8 +10,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Type
 from enum import Enum
 
-from dlkit.tools.config import GeneralSettings
-
 
 class ModelType(Enum):
     """Model type classifications."""
@@ -26,12 +24,11 @@ class IModelTypeDetector(ABC):
     """Interface for model type detection strategies."""
 
     @abstractmethod
-    def can_detect(self, model_settings: Any, settings: GeneralSettings) -> bool:
+    def can_detect(self, model_settings: Any) -> bool:
         """Check if this detector can classify the model.
 
         Args:
             model_settings: Model configuration settings
-            settings: General settings for context
 
         Returns:
             True if this detector can classify the model
@@ -39,12 +36,11 @@ class IModelTypeDetector(ABC):
         ...
 
     @abstractmethod
-    def detect_type(self, model_settings: Any, settings: GeneralSettings) -> ModelType:
+    def detect_type(self, model_settings: Any) -> ModelType:
         """Detect the model type.
 
         Args:
             model_settings: Model configuration settings
-            settings: General settings for context
 
         Returns:
             Detected model type
@@ -55,16 +51,15 @@ class IModelTypeDetector(ABC):
 class ABCModelTypeDetector(IModelTypeDetector):
     """ABC-based model type detector using inheritance checks."""
 
-    def can_detect(self, model_settings: Any, settings: GeneralSettings) -> bool:
+    def can_detect(self, model_settings: Any) -> bool:
         """Always can attempt detection."""
         return True
 
-    def detect_type(self, model_settings: Any, settings: GeneralSettings) -> ModelType:
+    def detect_type(self, model_settings: Any) -> ModelType:
         """Detect model type using class inheritance.
 
         Args:
             model_settings: Model configuration settings
-            settings: General settings for context
 
         Returns:
             Model type based on class inheritance
@@ -142,19 +137,18 @@ class ModelTypeDetectionChain:
             ABCModelTypeDetector(),
         ]
 
-    def detect_model_type(self, model_settings: Any, settings: GeneralSettings) -> ModelType:
+    def detect_model_type(self, model_settings: Any) -> ModelType:
         """Detect model type using chain of detectors.
 
         Args:
             model_settings: Model configuration settings
-            settings: General settings for context
 
         Returns:
             Detected model type
         """
         for detector in self._detectors:
-            if detector.can_detect(model_settings, settings):
-                return detector.detect_type(model_settings, settings)
+            if detector.can_detect(model_settings):
+                return detector.detect_type(model_settings)
 
         # Should never reach here with ABCModelTypeDetector (always returns True for can_detect)
         return ModelType.SHAPE_AGNOSTIC_EXTERNAL
@@ -164,17 +158,16 @@ class ModelTypeDetectionChain:
 _detection_chain = ModelTypeDetectionChain()
 
 
-def detect_model_type(model_settings: Any, settings: GeneralSettings) -> ModelType:
+def detect_model_type(model_settings: Any) -> ModelType:
     """Detect model type using the global detection chain.
 
     Args:
         model_settings: Model configuration settings
-        settings: General settings for context
 
     Returns:
         Detected model type
     """
-    return _detection_chain.detect_model_type(model_settings, settings)
+    return _detection_chain.detect_model_type(model_settings)
 
 
 def requires_shape_spec(model_type: ModelType) -> bool:

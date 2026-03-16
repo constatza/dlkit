@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
 
-from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.enums import DatasetFamily
 
 
-def _is_graph_hint(settings: GeneralSettings) -> bool:
+def _is_graph_hint(settings: Any) -> bool:
     try:
         ds = settings.DATASET
         dm = settings.DATAMODULE
@@ -15,7 +15,7 @@ def _is_graph_hint(settings: GeneralSettings) -> bool:
         return False
 
 
-def _is_timeseries_hint(settings: GeneralSettings) -> bool:
+def _is_timeseries_hint(settings: Any) -> bool:
     try:
         ds = settings.DATASET
         dm = settings.DATAMODULE
@@ -33,7 +33,7 @@ class FamilyDefaults:
     """
 
     @staticmethod
-    def is_graph(settings: GeneralSettings) -> bool:
+    def is_graph(settings: Any) -> bool:
         try:
             explicit = getattr(settings.DATASET, "type", None)
             if explicit is not None and str(explicit).lower() == "graph":
@@ -43,7 +43,7 @@ class FamilyDefaults:
         return _is_graph_hint(settings)
 
     @staticmethod
-    def is_timeseries(settings: GeneralSettings) -> bool:
+    def is_timeseries(settings: Any) -> bool:
         try:
             explicit = getattr(settings.DATASET, "type", None)
             if explicit is not None and str(explicit).lower() == "timeseries":
@@ -53,12 +53,28 @@ class FamilyDefaults:
         return _is_timeseries_hint(settings)
 
     @staticmethod
-    def default_datamodule_class_for(settings: GeneralSettings):
+    def default_datamodule_class_for(settings: Any) -> Any:
+        """Get default datamodule class for the given settings.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            Default datamodule class for the detected dataset family.
+        """
         family = FamilyDefaults.resolve_family(settings)
         return FamilyDefaults.default_datamodule_class_for_family(family)
 
     @staticmethod
-    def default_wrapper_class_for(settings: GeneralSettings):
+    def default_wrapper_class_for(settings: Any) -> Any:
+        """Get default wrapper class for the given settings.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            Default wrapper class for the detected dataset family.
+        """
         family = FamilyDefaults.resolve_family(settings)
         return FamilyDefaults.default_wrapper_class_for_family(family)
 
@@ -98,7 +114,15 @@ class FamilyDefaults:
         return DatasetFamily.FLEXIBLE
 
     @staticmethod
-    def resolve_family(settings: GeneralSettings) -> DatasetFamily:
+    def resolve_family(settings: Any) -> DatasetFamily:
+        """Resolve dataset family from settings.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            Detected DatasetFamily enum value.
+        """
         try:
             explicit = getattr(settings.DATASET, "type", None)
             if isinstance(explicit, DatasetFamily):
@@ -120,7 +144,15 @@ class FamilyDefaults:
         return DatasetFamily.FLEXIBLE
 
     @staticmethod
-    def default_datamodule_class_for_family(family: DatasetFamily):
+    def default_datamodule_class_for_family(family: DatasetFamily) -> Any:
+        """Get default datamodule class for the given dataset family.
+
+        Args:
+            family: Dataset family to get default for.
+
+        Returns:
+            Default datamodule class.
+        """
         match family:
             case DatasetFamily.GRAPH:
                 from dlkit.core.datamodules.graph import GraphDataModule
@@ -136,7 +168,15 @@ class FamilyDefaults:
                 return InMemoryModule
 
     @staticmethod
-    def default_wrapper_class_for_family(family: DatasetFamily):
+    def default_wrapper_class_for_family(family: DatasetFamily) -> Any:
+        """Get default wrapper class for the given dataset family.
+
+        Args:
+            family: Dataset family to get default for.
+
+        Returns:
+            Default wrapper class.
+        """
         match family:
             case DatasetFamily.GRAPH:
                 from dlkit.core.models.wrappers.graph import GraphLightningWrapper

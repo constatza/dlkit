@@ -101,11 +101,13 @@ class DatasetSettings(ComponentSettings):
     root: DirectoryPath | None = Field(
         default=None, description="Root directory of the dataset", alias="root_dir"
     )
-    # Flexible entries only: lists of Feature/Target settings (mutable for runtime updates)
-    features: list[FeatureType] = Field(
-        default_factory=list, description="Flexible feature entries"
+    # Flexible entries only: tuples of Feature/Target settings (immutable for consistency)
+    features: tuple[FeatureType, ...] = Field(
+        default=(), description="Flexible feature entries"
     )
-    targets: list[TargetType] = Field(default_factory=list, description="Flexible target entries")
+    targets: tuple[TargetType, ...] = Field(
+        default=(), description="Flexible target entries"
+    )
 
     split: IndexSplitSettings = Field(
         default_factory=IndexSplitSettings, description="Index split configuration"

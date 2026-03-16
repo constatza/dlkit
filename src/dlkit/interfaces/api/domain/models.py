@@ -131,7 +131,7 @@ class InferenceResult:
         duration_seconds: Total inference time in seconds
     """
 
-    model_state: ModelState
+    model_state: ModelState | None
     predictions: Any
     metrics: dict[str, Any] | None
     duration_seconds: float

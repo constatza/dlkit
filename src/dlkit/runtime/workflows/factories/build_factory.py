@@ -13,10 +13,8 @@ from pathlib import Path
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from loguru import logger
 
-from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
     TrainingWorkflowConfig,
-    InferenceWorkflowConfig,
     OptimizationWorkflowConfig,
 )
 from dlkit.tools.config.core.context import BuildContext
@@ -47,9 +45,7 @@ from .feature_dependencies import (
 from .model_detection import detect_model_type, ModelType, requires_shape_spec
 
 # Type alias for settings that can be passed to build strategies
-WorkflowSettings = (
-    GeneralSettings | TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig
-)
+WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -91,9 +87,9 @@ class IBuildStrategy:
             path_override_context,
         )
 
-        precision_strategy = settings.SESSION.get_precision_strategy() if settings.SESSION else None
+        precision_strategy = settings.SESSION.get_precision_strategy()
         ctx = get_current_path_context()
-        raw_root = getattr(settings.SESSION, "root_dir", None) if settings.SESSION else None
+        raw_root = settings.SESSION.root_dir
         session_root_dir = coerce_root_dir_to_absolute(raw_root)
         needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
 
@@ -250,7 +246,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             registry.register_entries({e.name: e for e in entry_configs})
 
         # Detect model type using ABC-based detection
-        model_type = detect_model_type(settings.MODEL, settings)
+        model_type = detect_model_type(settings.MODEL)
 
         # Get appropriate shape specification if required
         shape_summary: ShapeSummary | None = None
@@ -592,13 +588,7 @@ class BuildFactory:
             FlexibleBuildStrategy(),
         ]
 
-    def _validate_settings(
-        self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
-    ) -> None:
+    def _validate_settings(self, settings: WorkflowSettings) -> None:
         """Validate settings completeness before building components.
 
         This uses workflow-specific completeness validators that check:
@@ -618,21 +608,14 @@ class BuildFactory:
         # Use the new completeness validators
         validate_config_complete(settings)
 
-    def build_components(
-        self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
-    ) -> BuildComponents:
+    def build_components(self, settings: WorkflowSettings) -> BuildComponents:
         """Build runtime components with pre-build validation.
 
         Validates settings completeness first (ensures all required sections present),
         then selects and executes appropriate build strategy.
 
         Args:
-            settings: Workflow config (TrainingWorkflowConfig, InferenceWorkflowConfig,
-                     OptimizationWorkflowConfig) or legacy GeneralSettings
+            settings: Workflow config (TrainingWorkflowConfig or OptimizationWorkflowConfig)
 
         Returns:
             BuildComponents: Validated and constructed runtime components
@@ -654,13 +637,7 @@ class BuildFactory:
 class GraphBuildStrategy(IBuildStrategy):
     """Build strategy for graph (PyG) datasets and models."""
 
-    def can_handle(
-        self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
-    ) -> bool:
+    def can_handle(self, settings: WorkflowSettings) -> bool:
         try:
             ds = settings.DATASET
             dm = settings.DATAMODULE
@@ -788,13 +765,7 @@ class GraphBuildStrategy(IBuildStrategy):
 class TimeSeriesBuildStrategy(IBuildStrategy):
     """Build strategy for time series / forecasting datasets and models."""
 
-    def can_handle(
-        self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
-    ) -> bool:
+    def can_handle(self, settings: WorkflowSettings) -> bool:
         try:
             ds = settings.DATASET
             dm = settings.DATAMODULE
@@ -875,7 +846,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         entry_configs: tuple[DataEntry, ...] = ()
 
         # Detect model type using ABC-based detection
-        model_type = detect_model_type(settings.MODEL, settings)
+        model_type = detect_model_type(settings.MODEL)
 
         # Get appropriate shape specification if required
         shape_summary: ShapeSummary | None = None

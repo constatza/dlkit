@@ -22,7 +22,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.inference.api import load_model
-from dlkit.runtime.workflows.factories.build_factory import BuildFactory
+from dlkit.runtime.workflows.factories.inference_data_factory import build_inference_datamodule
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -71,7 +71,7 @@ def _run_inference_impl(
     try:
         # Load configuration first to resolve optional checkpoint
         console.print(f"📖 Loading configuration from: {config_path}")
-        settings = load_config(config_path, root_dir=root_dir, workflow_type="training")
+        settings = load_config(config_path, root_dir=root_dir, workflow_type="inference")
 
         # Resolve checkpoint: CLI argument wins; otherwise, use config [MODEL].checkpoint
         effective_checkpoint: Path | None = checkpoint
@@ -135,11 +135,12 @@ def _run_inference_impl(
                 predictor._model_state.feature_names if predictor._model_state is not None else ()
             )
 
-            factory = BuildFactory()
-            components = factory.build_components(settings)
-            datamodule = components.datamodule
-            datamodule.setup("predict")
-            loader = datamodule.predict_dataloader()
+            datamodule = build_inference_datamodule(settings) if settings.has_batch_inference_config else None
+            if datamodule is not None:
+                datamodule.setup("predict")
+                loader = datamodule.predict_dataloader()
+            else:
+                loader = []
 
             import torch as _torch
 
