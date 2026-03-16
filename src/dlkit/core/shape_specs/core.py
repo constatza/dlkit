@@ -262,7 +262,7 @@ class ShapeSpec(IShapeSpec):
         return f"ShapeSpec(data={self._data!r})"
 
 
-class GraphShapeSpec(IShapeSpec):
+class GraphShapeSpec:
     """Shape specification for graph neural networks.
 
     Graph networks have special requirements:
@@ -314,10 +314,6 @@ class GraphShapeSpec(IShapeSpec):
     def model_family(self) -> str:
         """Get the model family this shape spec is designed for."""
         return self._data.model_family.value
-
-    def get_shape_data(self) -> ShapeData:
-        """Get the underlying shape data."""
-        return self._data
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize graph shape data via standard serializer."""

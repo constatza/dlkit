@@ -37,8 +37,8 @@ class CheckpointShapeLoader:
             ValueError: If checkpoint cannot be loaded
 
         Note:
-            Only supports v2.0+ checkpoints with 'dlkit_metadata'. Legacy checkpoints
-            are no longer supported.
+            Checkpoints must include ``dlkit_metadata``. Legacy checkpoints are
+            no longer supported.
         """
         checkpoint_path = Path(checkpoint_path)
 
@@ -51,23 +51,14 @@ class CheckpointShapeLoader:
         except Exception as e:
             raise ValueError(f"Failed to load checkpoint: {e}") from e
 
-        # Only support dlkit_metadata format (v2.0+)
         if "dlkit_metadata" not in checkpoint:
             raise ValueError(
                 "Checkpoint missing 'dlkit_metadata'. This checkpoint uses a legacy format "
-                "that is no longer supported. Please re-train your model with the current "
-                "version of dlkit to generate a compatible checkpoint."
+                "that is no longer supported. Please re-train your model to generate "
+                "a compatible checkpoint."
             )
 
         metadata = checkpoint["dlkit_metadata"]
-
-        # Validate version
-        version = metadata.get("version")
-        if version != "2.0":
-            raise ValueError(
-                f"Unsupported checkpoint version '{version}'. Only version '2.0' is supported. "
-                "Please re-train your model with the current version of dlkit."
-            )
 
         if "shape_spec" not in metadata:
             return None

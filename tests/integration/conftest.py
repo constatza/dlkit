@@ -168,13 +168,18 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
     """
     checkpoint_path = tmp_path / "model.ckpt"
 
+    # Build the model to get the correct state dict keys
+    from dlkit.core.models.nn.ffnn import ConstantWidthFFNN
+
+    _model = ConstantWidthFFNN(
+        in_features=FEATURE_SIZE,
+        out_features=TARGET_SIZE,
+        hidden_size=FEATURE_SIZE,
+        num_layers=1,
+    )
     checkpoint_payload = {
-        "state_dict": {
-            "linear.weight": torch.randn(TARGET_SIZE, FEATURE_SIZE),
-            "linear.bias": torch.zeros(TARGET_SIZE),
-        },
+        "state_dict": {f"model.{k}": v for k, v in _model.state_dict().items()},
         "dlkit_metadata": {
-            "version": "2.0",
             "model_family": "dlkit_nn",
             "wrapper_type": "StandardLightningWrapper",
             "shape_summary": {
@@ -188,7 +193,6 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                     "hidden_size": FEATURE_SIZE,
                     "num_layers": 1,
                 },
-                "class_name": "ModelComponentSettings",
             },
             "entry_configs": [
                 {"name": "x", "class_name": "Feature"},

@@ -1,8 +1,4 @@
-"""Enhanced serialization system with versioning and migration support.
-
-This module provides versioned serialization for shape specifications with
-automatic migration between different format versions.
-"""
+"""Enhanced serialization system with compatibility support."""
 
 from __future__ import annotations
 
@@ -39,7 +35,6 @@ class SerializationMetadata:
     version: SerializationVersion
     format: SerializationFormat
     created_at: str
-    dlkit_version: Optional[str] = None
     checksum: Optional[str] = None
     migration_history: tuple[str, ...] = field(default_factory=tuple)
 
@@ -62,7 +57,6 @@ class SerializedShape:
                 "version": self.metadata.version.value,
                 "format": self.metadata.format.value,
                 "created_at": self.metadata.created_at,
-                "dlkit_version": self.metadata.dlkit_version,
                 "checksum": self.metadata.checksum,
                 "migration_history": self.metadata.migration_history,
             },
@@ -77,7 +71,6 @@ class SerializedShape:
             version=SerializationVersion(metadata_dict.get("version", "v3")),
             format=SerializationFormat(metadata_dict.get("format", "json")),
             created_at=metadata_dict.get("created_at", datetime.now().isoformat()),
-            dlkit_version=metadata_dict.get("dlkit_version"),
             checksum=metadata_dict.get("checksum"),
             migration_history=metadata_dict.get("migration_history", []),
         )
@@ -256,6 +249,13 @@ class V1LegacySerializer(ShapeFormatSerializer):
         shape_type = data.get("_type")
         shape_data_raw = data.get("data")
 
+        if shape_data_raw is None:
+            return ShapeData(
+                entries=entries,
+                model_family=ModelFamily.EXTERNAL,
+                source=ShapeSource.LEGACY_CHECKPOINT,
+            )
+
         if shape_type == "dict":
             for key, dims in shape_data_raw.items():
                 entries[key] = ShapeEntry(name=key, dimensions=tuple(dims))
@@ -312,9 +312,8 @@ class ShapeFormatMigrator:
             version=current_version,
             format=serialized_shape.metadata.format,
             created_at=datetime.now().isoformat(),
-            dlkit_version=serialized_shape.metadata.dlkit_version,
             migration_history=serialized_shape.metadata.migration_history
-            + [f"migrated_from_{serialized_shape.metadata.version.value}"],
+            + (f"migrated_from_{serialized_shape.metadata.version.value}",),
         )
 
         return SerializedShape(metadata=new_metadata, data=new_data)
@@ -400,7 +399,6 @@ class VersionedShapeSerializer:
             version=SerializationVersion.V3_MODERN,
             format=self._format,
             created_at=datetime.now().isoformat(),
-            dlkit_version="2.0.0",  # Version would come from package metadata
         )
 
         return SerializedShape(metadata=metadata, data=data)
@@ -467,7 +465,7 @@ class VersionedShapeSerializer:
             return json.dumps(serialized.to_dict(), indent=2)
         elif self._format == SerializationFormat.MSGPACK:
             try:
-                import msgpack
+                import msgpack  # type: ignore[import-untyped]
 
                 return msgpack.packb(serialized.to_dict()).decode("latin1")
             except ImportError:
@@ -488,7 +486,7 @@ class VersionedShapeSerializer:
             data = json.loads(serialized_string)
         elif self._format == SerializationFormat.MSGPACK:
             try:
-                import msgpack
+                import msgpack  # type: ignore[import-untyped]
 
                 data = msgpack.unpackb(serialized_string.encode("latin1"), raw=False)
             except ImportError:
@@ -498,7 +496,7 @@ class VersionedShapeSerializer:
 
         return self.deserialize(data)
 
-    def get_supported_versions(self) -> List[SerializationVersion]:
+    def get_supported_versions(self) -> list[SerializationVersion]:
         """Get list of supported serialization versions.
 
         Returns:
