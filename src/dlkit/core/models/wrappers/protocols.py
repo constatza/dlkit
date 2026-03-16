@@ -11,6 +11,7 @@ ProcessingLightningWrapper architecture:
 
 from typing import Any, Protocol, runtime_checkable
 
+import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from torch import Tensor
@@ -158,5 +159,117 @@ class IFittableBatchTransformer(IBatchTransformer, Protocol):
 
         Returns:
             True if all transforms are fitted or there are no fittable transforms.
+        """
+        ...
+
+
+@runtime_checkable
+class IPredictionStrategy(Protocol):
+    """Single responsibility: encapsulate predict_step logic.
+
+    Strategies replace the hardcoded ``predict_step`` in the base wrapper,
+    allowing discriminative and generative inference to coexist without
+    modifying the training loop.
+
+    Standard models inject ``DiscriminativePredictionStrategy``.
+    Generative models inject ``ODEPredictionStrategy`` (or equivalent).
+    """
+
+    def predict(
+        self,
+        model: nn.Module,
+        batch: Any,
+        generator: torch.Generator | None,
+    ) -> TensorDict:
+        """Run inference and return a structured output TensorDict.
+
+        Args:
+            model: PyTorch model to invoke.
+            batch: Input TensorDict from the dataloader.
+            generator: Optional RNG (for reproducible generation).
+
+        Returns:
+            TensorDict with at minimum ``"predictions"``, ``"targets"``,
+            and ``"latents"`` keys.
+        """
+        ...
+
+
+@runtime_checkable
+class IConfigurablePredictionStrategy(IPredictionStrategy, Protocol):
+    """IPredictionStrategy that also exposes shape configuration for ODE-based strategies."""
+
+    def configure_shape(self, data_shape: tuple[int, ...]) -> None:
+        """Set the per-sample data shape for noise generation.
+
+        Args:
+            data_shape: Spatial dimensions (excluding batch), e.g. ``(3, 32, 32)``.
+        """
+        ...
+
+    @property
+    def data_shape(self) -> tuple[int, ...] | None:
+        """Per-sample data shape, or None if not yet configured.
+
+        Returns:
+            Shape tuple or None.
+        """
+        ...
+
+    @property
+    def n_steps(self) -> int:
+        """Number of ODE integration steps.
+
+        Returns:
+            Integer step count.
+        """
+        ...
+
+
+@runtime_checkable
+class IBatchTransform(Protocol):
+    """Single-call coupled supervision transform applied per batch.
+
+    Unlike ``IBatchTransformer`` (which applies per-slot normalisation chains),
+    ``IBatchTransform`` implements *coupled* multi-tensor operations that span
+    features and targets together — e.g. flow matching supervision builders
+    that sample noise, time, and compute velocity targets in one call.
+
+    The generator argument enables reproducible stochastic transforms.
+    """
+
+    def __call__(
+        self,
+        batch: TensorDict,
+        generator: torch.Generator | None,
+    ) -> TensorDict:
+        """Apply the coupled transform to a batch.
+
+        Args:
+            batch: Input TensorDict.
+            generator: Optional RNG for reproducibility.
+
+        Returns:
+            Transformed TensorDict (may be mutated in place or a new object).
+        """
+        ...
+
+
+@runtime_checkable
+class IGeneratorFactory(Protocol):
+    """Single responsibility: produce (or withhold) a ``torch.Generator`` per batch.
+
+    Injected into the wrapper so training and validation reproducibility
+    strategies are swappable without modifying the training loop.
+    """
+
+    def __call__(self, batch_idx: int) -> torch.Generator | None:
+        """Return a generator for this batch, or None to use global RNG.
+
+        Args:
+            batch_idx: Current batch index.
+
+        Returns:
+            A seeded ``torch.Generator``, or ``None``.
         """
         ...

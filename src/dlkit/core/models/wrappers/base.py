@@ -6,6 +6,8 @@ is a pure Lightning coordinator.
 """
 
 from abc import abstractmethod
+from collections.abc import Sequence
+from functools import reduce
 from typing import Any, cast
 
 from loguru import logger
@@ -29,6 +31,9 @@ from dlkit.core.models.wrappers.protocols import (
     IMetricsUpdater,
     IBatchTransformer,
     IFittableBatchTransformer,
+    IBatchTransform,
+    IGeneratorFactory,
+    IPredictionStrategy,
 )
 from dlkit.core.models.wrappers.components import WrapperCheckpointMetadata
 
@@ -297,6 +302,10 @@ class ProcessingLightningWrapper(LightningModule):
         scheduler_settings: Any = None,
         predict_target_key: str,
         checkpoint_metadata: WrapperCheckpointMetadata | None = None,
+        prediction_strategy: IPredictionStrategy,
+        batch_transforms: Sequence[IBatchTransform] = (),
+        train_generator_factory: IGeneratorFactory | None = None,
+        val_generator_factory: IGeneratorFactory | None = None,
     ) -> None:
         """Initialize the wrapper with injected protocol objects.
 
@@ -310,6 +319,15 @@ class ProcessingLightningWrapper(LightningModule):
             scheduler_settings: Scheduler configuration settings (optional).
             predict_target_key: Target entry name whose chain is inverted at predict time.
             checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
+            prediction_strategy: Strategy that implements predict_step logic.
+                Standard models use ``DiscriminativePredictionStrategy``; generative
+                models use ``ODEPredictionStrategy``.
+            batch_transforms: Sequence of coupled supervision transforms applied per batch
+                before the per-slot batch_transformer chains. Empty by default (no-op).
+            train_generator_factory: Produces a generator per training batch for
+                reproducible stochastic transforms. Defaults to NullGeneratorFactory (global RNG).
+            val_generator_factory: Produces a generator per val/test batch. Defaults to
+                NullGeneratorFactory (global RNG).
         """
         super().__init__()
 
@@ -322,6 +340,14 @@ class ProcessingLightningWrapper(LightningModule):
         self.scheduler = scheduler_settings
         self._predict_target_key = predict_target_key
         self._checkpoint_metadata = checkpoint_metadata
+        self._prediction_strategy = prediction_strategy
+        self._batch_transforms: tuple[IBatchTransform, ...] = tuple(batch_transforms)
+
+        from dlkit.core.models.wrappers.generator_factories import NullGeneratorFactory
+
+        _null = NullGeneratorFactory()
+        self._train_generator_factory: IGeneratorFactory = train_generator_factory or _null
+        self._val_generator_factory: IGeneratorFactory = val_generator_factory or _null
 
         # Entry configs for subclass access (e.g. graph wrapper target name)
         self._entry_configs: tuple[Any, ...] = (
@@ -372,15 +398,57 @@ class ProcessingLightningWrapper(LightningModule):
         logger.info("Finished transform fitting.")
 
     # =========================================================================
+    # Batch Transform Helpers
+    # =========================================================================
+
+    def _apply_batch_transforms(
+        self,
+        batch: Any,
+        generator: "torch.Generator | None",
+    ) -> Any:
+        """Apply coupled supervision transforms in sequence.
+
+        Each ``IBatchTransform`` in ``self._batch_transforms`` is called with
+        the batch and generator, the result piped to the next transform via
+        ``reduce``.  An empty sequence is a no-op.
+
+        Args:
+            batch: Input TensorDict.
+            generator: Optional RNG for stochastic transforms.
+
+        Returns:
+            Transformed TensorDict (identity when no transforms configured).
+        """
+        if not self._batch_transforms:
+            return batch
+        return reduce(lambda b, t: t(b, generator), self._batch_transforms, batch)
+
+    def _compute_loss(self, predictions: Any, batch: Any) -> "torch.Tensor":
+        """Compute scalar loss from predictions and batch.
+
+        Delegates to ``self._loss_computer`` by default. Subclasses can
+        override this method to implement custom loss logic (e.g.
+        ``FlowMatchingWrapper`` targets ``batch["targets"]["ut"]`` directly).
+
+        Args:
+            predictions: Model output tensor.
+            batch: Enriched TensorDict with features, targets, and predictions.
+
+        Returns:
+            Scalar loss tensor.
+        """
+        return self._loss_computer.compute(predictions, batch)
+
+    # =========================================================================
     # Lightning Step Methods (delegate to protocols)
     # =========================================================================
 
     def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Training step: transform → invoke → loss → log.
+        """Training step: coupled-transforms → chain-transforms → invoke → loss → log.
 
-        The model invoker enriches *batch* in-place with a ``"predictions"``
-        key (and optionally latent keys).  The loss computer reads
-        ``batch["predictions"]`` as its first argument.
+        Applies coupled supervision transforms (``_batch_transforms``) first,
+        then per-slot normalisation chains (``_batch_transformer``), then
+        invokes the model and computes the loss.
 
         Args:
             batch: TensorDict batch from dataset.
@@ -389,15 +457,17 @@ class ProcessingLightningWrapper(LightningModule):
         Returns:
             Dictionary containing the training loss.
         """
+        gen = self._train_generator_factory(batch_idx)
+        batch = self._apply_batch_transforms(batch, gen)
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
-        loss = self._loss_computer.compute(batch["predictions"], batch)
+        loss = self._compute_loss(batch["predictions"], batch)
         batch_size = _batch_size_of(batch["predictions"])
         self._log_stage_outputs("train", loss, batch_size=batch_size)
         return {"loss": loss}
 
     def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Validation step: transform → invoke → loss → metrics → log.
+        """Validation step: coupled-transforms → chain-transforms → invoke → loss → metrics → log.
 
         Args:
             batch: TensorDict batch from dataset.
@@ -406,16 +476,18 @@ class ProcessingLightningWrapper(LightningModule):
         Returns:
             Dictionary containing validation loss.
         """
+        gen = self._val_generator_factory(batch_idx)
+        batch = self._apply_batch_transforms(batch, gen)
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
-        val_loss = self._loss_computer.compute(batch["predictions"], batch)
+        val_loss = self._compute_loss(batch["predictions"], batch)
         batch_size = _batch_size_of(batch["predictions"])
         self._metrics_updater.update(batch["predictions"], batch, stage="val")
         self._log_stage_outputs("val", val_loss, batch_size=batch_size)
         return {"val_loss": val_loss}
 
     def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Test step: transform → invoke → loss → metrics → log.
+        """Test step: coupled-transforms → chain-transforms → invoke → loss → metrics → log.
 
         Args:
             batch: TensorDict batch from dataset.
@@ -424,9 +496,11 @@ class ProcessingLightningWrapper(LightningModule):
         Returns:
             Dictionary containing test loss.
         """
+        gen = self._val_generator_factory(batch_idx)
+        batch = self._apply_batch_transforms(batch, gen)
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)
-        test_loss = self._loss_computer.compute(batch["predictions"], batch)
+        test_loss = self._compute_loss(batch["predictions"], batch)
         batch_size = _batch_size_of(batch["predictions"])
         self._metrics_updater.update(batch["predictions"], batch, stage="test")
         self._log_stage_outputs("test", test_loss, batch_size=batch_size)
@@ -435,10 +509,9 @@ class ProcessingLightningWrapper(LightningModule):
     def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
         """Prediction step returning a TensorDict with predictions, targets and latents.
 
-        Clones targets before transforming so the output always carries the
-        original (untransformed) ground truth.  The model invoker writes
-        ``"predictions"`` (and optionally latent keys) into the enriched batch;
-        any ``"latents"`` key present is forwarded as-is.
+        When ``_prediction_strategy`` is set (e.g. for generative models), the
+        entire predict logic is delegated to the strategy object.  Otherwise
+        the legacy discriminative path is used (backward compatible).
 
         Args:
             batch: TensorDict batch from dataset.
@@ -448,33 +521,8 @@ class ProcessingLightningWrapper(LightningModule):
             TensorDict with keys ``"predictions"``, ``"targets"``, and
             ``"latents"`` (zero-size ``(B, 0)`` sentinel when absent).
         """
-        original_targets = batch["targets"].clone()
-        transformed_batch = self._batch_transformer.transform(batch)
-        enriched_batch = self._model_invoker.invoke(self.model, transformed_batch)
-
-        predictions: Tensor | TensorDict = enriched_batch["predictions"]
-        predictions = self._batch_transformer.inverse_transform_predictions(
-            predictions, self._predict_target_key
-        )
-
-        batch_size = _batch_size_of(predictions)
-
-        raw_latents = enriched_batch.get("latents", None)
-        latents: Tensor | TensorDict
-        if raw_latents is not None:
-            latents = raw_latents
-        else:
-            latents = torch.zeros(
-                batch_size,
-                0,
-                dtype=_leaf_dtype(predictions),
-                device=_leaf_device(predictions),
-            )
-
-        return TensorDict(
-            {"predictions": predictions, "targets": original_targets, "latents": latents},
-            batch_size=[batch_size],
-        )
+        gen = self._val_generator_factory(batch_idx)
+        return self._prediction_strategy.predict(self.model, batch, gen)
 
     @staticmethod
     def collect_targets(predict_outputs: list[Any]) -> list[Any]:

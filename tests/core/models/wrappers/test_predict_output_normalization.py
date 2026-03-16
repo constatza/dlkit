@@ -350,6 +350,7 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
         RoutedLossComputer,
         RoutedMetricsUpdater,
     )
+    from dlkit.core.models.wrappers.prediction_strategies import DiscriminativePredictionStrategy
     from tensordict import TensorDict
 
     class _FixedInvoker:
@@ -376,14 +377,23 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     optimizer_settings = MagicMock()
     optimizer_settings.lr = 1e-3
 
+    batch_transformer = NamedBatchTransformer({}, {})
+    invoker = _FixedInvoker()
+    prediction_strategy = DiscriminativePredictionStrategy(
+        model_invoker=invoker,
+        batch_transformer=batch_transformer,
+        predict_target_key="y",
+    )
+
     return _MinimalWrapper(
         model=nn.Linear(2, 1),
-        model_invoker=_FixedInvoker(),
+        model_invoker=invoker,
         loss_computer=_LossComputer(),
         metrics_updater=_MetricsUpdater(),
-        batch_transformer=NamedBatchTransformer({}, {}),
+        batch_transformer=batch_transformer,
         optimizer_settings=optimizer_settings,
         predict_target_key="y",
+        prediction_strategy=prediction_strategy,
     )
 
 
