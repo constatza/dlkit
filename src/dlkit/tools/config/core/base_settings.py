@@ -165,15 +165,10 @@ class ComponentSettings(BasicSettings):
 
     This replaces the old ClassSettings but removes the build() method
     to follow SOLID principles. Object construction is now handled by factories.
-
-    Args:
-        name: Name/class reference for the component
-        module_path: Module path for dynamic imports
+    Subclasses can declare their own name/module_path fields as needed.
     """
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
-    name: str | type | Callable[..., Any] | None = None
-    module_path: str | None = None
 
     def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Serialize component settings, excluding meta fields.

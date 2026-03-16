@@ -1,26 +1,26 @@
-"""Override manager for applying runtime parameter overrides to GeneralSettings."""
+"""Override manager for applying runtime parameter overrides to settings objects."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.core.base_settings import BasicSettings
 
 
-class BasicOverrideManager:
-    """Manager for applying basic runtime overrides to GeneralSettings.
+class BasicOverrideManager[T: BasicSettings]:
+    """Manager for applying basic runtime overrides to settings objects.
 
     This class handles the proper application of runtime parameter overrides
-    to Pydantic GeneralSettings objects using model_copy() to maintain
+    to Pydantic settings objects using model_copy() to maintain
     immutability and type safety.
     """
 
     def apply_overrides(
         self,
-        base_settings: GeneralSettings,
+        base_settings: T,
         **overrides: Any,
-    ) -> GeneralSettings:
+    ) -> T:
         """Apply runtime overrides to base settings using Pydantic model_copy().
 
         Args:
@@ -61,9 +61,9 @@ class BasicOverrideManager:
 
     def _apply_environment_path_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         overrides: dict[str, Any],
-    ) -> GeneralSettings:
+    ) -> Any:
         """Apply path-related overrides via path context.
 
         This method sets up a path override context that will be used by
@@ -78,8 +78,8 @@ class BasicOverrideManager:
             GeneralSettings: Settings object (unchanged, context set for thread)
         """
         from dlkit.interfaces.api.overrides.path_context import (
-            set_path_context,
             PathOverrideContext,
+            set_path_context,
         )
 
         # Collect path overrides
@@ -115,9 +115,9 @@ class BasicOverrideManager:
 
     def _apply_model_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         overrides: dict[str, Any],
-    ) -> GeneralSettings:
+    ) -> Any:
         """Apply model and checkpoint overrides."""
         if "checkpoint_path" not in overrides or overrides["checkpoint_path"] is None:
             return settings
@@ -131,9 +131,9 @@ class BasicOverrideManager:
 
     def _apply_training_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         overrides: dict[str, Any],
-    ) -> GeneralSettings:
+    ) -> Any:
         """Apply training-related overrides using flattened structure."""
         training_overrides = {
             k: v
@@ -205,15 +205,14 @@ class BasicOverrideManager:
 
     def _apply_mlflow_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         overrides: dict[str, Any],
-    ) -> GeneralSettings:
+    ) -> Any:
         """Apply MLflow-related overrides using flattened structure."""
         mlflow_overrides = {
             k: v
             for k, v in overrides.items()
-            if k in ["experiment_name", "run_name", "register_model", "tags"]
-            and v is not None
+            if k in ["experiment_name", "run_name", "register_model", "tags"] and v is not None
         }
 
         if not mlflow_overrides or not settings.MLFLOW:
@@ -237,9 +236,9 @@ class BasicOverrideManager:
 
     def _apply_optuna_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         overrides: dict[str, Any],
-    ) -> GeneralSettings:
+    ) -> Any:
         """Apply Optuna-related overrides using flattened structure."""
         optuna_overrides = {
             k: v
@@ -291,7 +290,7 @@ class BasicOverrideManager:
 
     def validate_overrides(
         self,
-        settings: GeneralSettings,
+        settings: Any,
         **overrides: Any,
     ) -> list[str]:
         """Validate runtime overrides against base settings.
@@ -329,21 +328,17 @@ class BasicOverrideManager:
         # Validate MLflow overrides require MLflow config section (ignore None values)
         mlflow_overrides = [
             k
-            for k in overrides.keys()
+            for k in overrides
             if k in ["experiment_name", "run_name", "register_model", "tags"]
             and overrides[k] is not None
         ]
         if mlflow_overrides:
             if not settings.MLFLOW:
-                errors.append(
-                    "MLflow overrides require an [MLFLOW] section in configuration"
-                )
+                errors.append("MLflow overrides require an [MLFLOW] section in configuration")
 
         # Validate Optuna overrides require Optuna plugin (ignore None values)
         optuna_overrides = [
-            k
-            for k in overrides.keys()
-            if k in ["trials", "study_name"] and overrides[k] is not None
+            k for k in overrides if k in ["trials", "study_name"] and overrides[k] is not None
         ]
         if optuna_overrides:
             if not (settings.OPTUNA and settings.OPTUNA.enabled):

@@ -10,8 +10,6 @@ from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import InferenceResult
 from dlkit.interfaces.api.services import InferenceService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 from .base import BaseCommand
 
@@ -51,7 +49,7 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
     def validate_input(
         self,
         input_data: InferenceCommandInput,
-        settings: InferenceWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: InferenceWorkflowConfig,
     ) -> None:
         """Validate inference command input.
 
@@ -92,7 +90,7 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
     def execute(
         self,
         input_data: InferenceCommandInput,
-        settings: InferenceWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: InferenceWorkflowConfig,
         **kwargs: Any,
     ) -> InferenceResult:
         """Execute inference command.
@@ -119,7 +117,7 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
 
             # Execute inference
             checkpoint_path = overrides.get("checkpoint_path", Path(input_data.checkpoint_path))
-            return self.inference_service.execute_inference(settings, checkpoint_path)
+            return self.inference_service.infer(settings, checkpoint_path)
 
         except WorkflowError:
             raise

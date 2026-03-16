@@ -21,7 +21,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 from loguru import logger
-from tensordict import TensorDict
+from tensordict import TensorDict, NestedKey
 from tensordict.nn import TensorDictModule
 from torch import Tensor
 from torchmetrics import Metric
@@ -192,13 +192,13 @@ class TensorDictModelInvoker:
         self._td_module = TensorDictModule(_dispatch, in_keys=all_in_keys, out_keys=self._out_keys)
 
     @property
-    def _in_keys(self) -> list[str | tuple[str, ...]]:
+    def _in_keys(self) -> list[NestedKey]:
         """All input keys passed to TensorDictModule (positional + kwarg values).
 
         Returns:
             List of nested key paths in the order ``TensorDictModule`` extracts them.
         """
-        return self._td_module.in_keys  # type: ignore[return-value]
+        return self._td_module.in_keys
 
     def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:
         """Invoke *model* and return *batch* enriched with output keys.
