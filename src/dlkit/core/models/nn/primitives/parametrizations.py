@@ -111,11 +111,12 @@ class Symmetric(nn.Module):
 class SPD(nn.Module):
     """Parametrize a square matrix as symmetric positive definite.
 
-    Uses a lower-Cholesky factor with softplus-activated diagonal to ensure
-    positive definiteness.
+    Expects a symmetric input matrix and rewrites only its diagonal to make
+    the result strictly diagonally dominant with a positive diagonal. By the
+    Gershgorin circle theorem this yields a symmetric positive-definite matrix.
 
     Attributes:
-        min_diag (float): Positive floor added to each Cholesky diagonal element.
+        min_diag (float): Positive floor added to the diagonal slack.
     """
 
     def __init__(self, min_diag: float = 1e-4) -> None:
@@ -131,52 +132,62 @@ class SPD(nn.Module):
         """Return an SPD matrix.
 
         Args:
-            x: Unconstrained square matrix of shape ``(n, n)``.
+            x: Symmetric square matrix of shape ``(n, n)``.
 
         Returns:
             Symmetric positive-definite matrix of the same shape.
 
         Raises:
-            ValueError: If *x* is not a square 2-D tensor.
+            ValueError: If *x* is not a square symmetric 2-D tensor.
         """
         _validate_square_matrix(x, "x")
-        l = torch.tril(x)
-        diag_raw = torch.diagonal(l, dim1=-2, dim2=-1)
-        diag_pos = F.softplus(diag_raw) + self.min_diag
-        l = l - torch.diag_embed(diag_raw) + torch.diag_embed(diag_pos)
-        return l @ l.transpose(-1, -2)
+        if not torch.allclose(x, x.transpose(-1, -2)):
+            raise ValueError("x must be symmetric")
+
+        diag_raw = torch.diagonal(x, dim1=-2, dim2=-1)
+        off_diag = x - torch.diag_embed(diag_raw)
+        row_sum = off_diag.abs().sum(dim=-1)
+        diag_pos = F.softplus(diag_raw) + row_sum + self.min_diag
+        return off_diag + torch.diag_embed(diag_pos)
 
     def right_inverse(self, w: torch.Tensor) -> torch.Tensor:
         """Return one valid preimage of an SPD matrix.
 
-        Raises ``NotImplementedError`` when *w* is not positive-definite so
-        that PyTorch's parametrize machinery falls back to treating the current
-        raw parameter as the identity (the effective weight is ``forward(raw)``
-        regardless).  This is the intended signal — see PyTorch docs for
-        ``register_parametrization``.
+        Raises ``NotImplementedError`` when *w* is not representable by this
+        diagonally-dominant parametrization so that PyTorch's parametrize
+        machinery falls back to treating the current raw parameter as the
+        identity.
 
         Args:
             w: Symmetric positive-definite matrix of shape ``(n, n)``.
 
         Returns:
-            Lower-triangular representative in unconstrained space.
+            Symmetric preimage whose diagonal stores the unconstrained slack.
 
         Raises:
             ValueError: If *w* is not a square 2-D tensor.
-            NotImplementedError: If *w* is not positive-definite (Cholesky fails).
+            NotImplementedError: If *w* is not representable by this SPD family.
         """
         _validate_square_matrix(w, "w")
-        try:
-            l = torch.linalg.cholesky(w)
-        except RuntimeError as exc:
+        if not torch.allclose(w, w.transpose(-1, -2)):
             raise NotImplementedError(
-                "SPD.right_inverse requires a positive-definite matrix; "
-                f"Cholesky failed: {exc}"
-            ) from exc
-        diag_pos = torch.diagonal(l, dim1=-2, dim2=-1)
-        safe = (diag_pos - self.min_diag).clamp(min=_SOFTPLUS_INV_CLAMP)
+                "SPD.right_inverse requires a symmetric matrix in the "
+                "diagonally-dominant SPD image."
+            )
+
+        diag = torch.diagonal(w, dim1=-2, dim2=-1)
+        off_diag = w - torch.diag_embed(diag)
+        row_sum = off_diag.abs().sum(dim=-1)
+        slack = diag - row_sum - self.min_diag
+        if torch.any(slack <= 0):
+            raise NotImplementedError(
+                "SPD.right_inverse requires a symmetric matrix in the "
+                "strictly diagonally-dominant SPD image."
+            )
+
+        safe = slack.clamp(min=_SOFTPLUS_INV_CLAMP)
         diag_raw = _inverse_softplus(safe)
-        return torch.tril(l, diagonal=-1) + torch.diag_embed(diag_raw)
+        return off_diag + torch.diag_embed(diag_raw)
 
 
 class PositiveRowScale(nn.Module):

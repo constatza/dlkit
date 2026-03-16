@@ -76,7 +76,11 @@ def register_spd(
     Returns:
         The same *module*, mutated in place.
     """
-    return _register_parametrizations(module, tensor_name, [SPD(min_diag=min_diag)])
+    return _register_parametrizations(
+        module,
+        tensor_name,
+        [Symmetric(), SPD(min_diag=min_diag)],
+    )
 
 
 def register_symmetric_factorized(
@@ -141,6 +145,7 @@ def register_spd_factorized(
         module,
         tensor_name,
         [
+            Symmetric(),
             SPD(min_diag=min_diag),
             PositiveSandwichScale(size=size, mean=mean, std=std),
         ],
@@ -238,7 +243,7 @@ class SPDLinear(nn.Linear):
             in_features: Input feature size.
             out_features: Output feature size.
             bias: Whether to include a bias term.
-            min_diag: Positive diagonal floor for the Cholesky decomposition.
+            min_diag: Positive diagonal slack floor for SPD enforcement.
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
@@ -403,7 +408,7 @@ class SPDFactorizedLinear(nn.Linear):
             in_features: Input feature size.
             out_features: Output feature size.
             bias: Whether to include a bias term.
-            min_diag: Positive diagonal floor for the Cholesky decomposition.
+            min_diag: Positive diagonal slack floor for SPD enforcement.
             mean: Mean for log-scale initialisation (``0.0`` → unit scale).
             std: Standard deviation for log-scale initialisation.
             device: Optional device for weight initialisation.

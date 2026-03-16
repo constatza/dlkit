@@ -35,11 +35,20 @@ def symmetric_matrix(square_base: torch.Tensor) -> torch.Tensor:
 
 @pytest.fixture
 def spd_matrix() -> torch.Tensor:
-    """Fixed 3×3 symmetric positive-definite matrix."""
+    """Fixed 3×3 symmetric positive-definite matrix outside the new SPD image."""
     return torch.tensor(
         [[2.0, 1.0, 0.0], [1.0, 2.0, 1.0], [0.0, 1.0, 2.0]],
         dtype=torch.float32,
     )
+
+
+@pytest.fixture
+def representable_spd_matrix(
+    spd_parametrization: SPD,
+    symmetric_matrix: torch.Tensor,
+) -> torch.Tensor:
+    """Matrix produced by the SPD parametrization itself."""
+    return spd_parametrization(symmetric_matrix)
 
 
 @pytest.fixture
@@ -217,44 +226,50 @@ class TestSPD:
     def test_forward_produces_symmetric_matrix(
         self,
         spd_parametrization: SPD,
-        square_base: torch.Tensor,
+        symmetric_matrix: torch.Tensor,
     ) -> None:
         """forward() must produce a symmetric matrix."""
-        result = spd_parametrization(square_base)
+        result = spd_parametrization(symmetric_matrix)
         assert torch.allclose(result, result.T, atol=1e-6)
 
     def test_forward_produces_positive_definite_matrix(
         self,
         spd_parametrization: SPD,
-        square_base: torch.Tensor,
+        symmetric_matrix: torch.Tensor,
     ) -> None:
         """forward() must produce a matrix with all positive eigenvalues."""
-        result = spd_parametrization(square_base)
+        result = spd_parametrization(symmetric_matrix)
         eigvals = torch.linalg.eigvalsh(result)
         assert torch.all(eigvals > 0.0)
 
     def test_right_inverse_round_trips(
         self,
         spd_parametrization: SPD,
-        spd_matrix: torch.Tensor,
+        representable_spd_matrix: torch.Tensor,
     ) -> None:
-        """forward(right_inverse(W)) must equal W for any SPD matrix W."""
-        preimage = spd_parametrization.right_inverse(spd_matrix)
+        """forward(right_inverse(W)) must equal W for any representable SPD matrix W."""
+        preimage = spd_parametrization.right_inverse(representable_spd_matrix)
         result = spd_parametrization(preimage)
-        assert torch.allclose(result, spd_matrix, atol=1e-5)
+        assert torch.allclose(result, representable_spd_matrix, atol=1e-5)
 
     def test_right_inverse_no_nan_near_min_diag(
         self,
         spd_parametrization: SPD,
     ) -> None:
-        """right_inverse() must not produce NaN when diagonal ≈ min_diag."""
-        # Construct an SPD matrix whose Cholesky diagonal is very close to min_diag.
-        eye = torch.eye(3) * (spd_parametrization.min_diag + 1e-6)
-        # Make it positive-definite by adding a larger diagonal.
-        w = eye + 0.1 * torch.eye(3)
+        """right_inverse() must not produce NaN when diagonal slack ≈ min_diag."""
+        w = torch.eye(3) * (spd_parametrization.min_diag + 1e-6)
         result = spd_parametrization.right_inverse(w)
         assert not torch.any(torch.isnan(result))
         assert not torch.any(torch.isinf(result))
+
+    def test_right_inverse_rejects_non_representable_spd_matrix(
+        self,
+        spd_parametrization: SPD,
+        spd_matrix: torch.Tensor,
+    ) -> None:
+        """right_inverse() must reject SPD matrices outside the diagonal-dominant image."""
+        with pytest.raises(NotImplementedError, match="diagonally-dominant SPD image"):
+            spd_parametrization.right_inverse(spd_matrix)
 
     def test_forward_raises_on_non_square(
         self,
@@ -264,6 +279,16 @@ class TestSPD:
         """forward() must raise ValueError for a non-square matrix."""
         with pytest.raises(ValueError, match="square"):
             spd_parametrization(rectangular_matrix)
+
+    def test_forward_raises_on_non_symmetric(
+        self,
+        spd_parametrization: SPD,
+        square_base: torch.Tensor,
+    ) -> None:
+        """forward() must reject non-symmetric inputs."""
+        with pytest.raises(ValueError, match="symmetric"):
+            spd_parametrization(square_base)
+
 
 
 # ---------------------------------------------------------------------------
