@@ -32,7 +32,7 @@ def _validate_batch_key(v: str) -> str:
     return v
 
 
-class LossInputRef(BasicSettings, frozen=True):
+class LossInputRef(BasicSettings):
     """Maps a loss function kwarg to a TensorDict key in the batch.
 
     Attributes:
@@ -49,7 +49,7 @@ class LossInputRef(BasicSettings, frozen=True):
         return _validate_batch_key(v)
 
 
-class MetricInputRef(BasicSettings, frozen=True):
+class MetricInputRef(BasicSettings):
     """Maps a metric function kwarg to a TensorDict key in the batch.
 
     Attributes:
@@ -176,8 +176,19 @@ class ModelComponentSettings(ComponentSettings, HyperParameterSettings):
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
 
-    name: str | type | Callable[..., Any] | None = Field(..., description="Model namespace path")
-    module_path: str | None = Field(default="dlkit.core.models.nn", description="Module path to the model")
+    # TODO: refactor architecture — ComponentSettings.name is Optional[...] but
+    # ModelComponentSettings always requires a name. Fix by splitting ComponentSettings
+    # into NamedComponentSettings and AnonymousComponentSettings.
+    name: str | type | Callable[..., Any] | None = Field(
+        ...,
+        description="Model namespace path",
+        json_schema_extra={"dlkit_init_kwarg": False},
+    )
+    module_path: str | None = Field(
+        default="dlkit.core.models.nn",
+        description="Module path to the model",
+        json_schema_extra={"dlkit_init_kwarg": False},
+    )
 
     # Checkpoint for inference (NOT for training resume)
     checkpoint: Path | str | None = Field(
@@ -186,6 +197,7 @@ class ModelComponentSettings(ComponentSettings, HyperParameterSettings):
             "Checkpoint path for inference workflows (model weights only). "
             "For resuming training, use TRAINING.resume_from_checkpoint instead."
         ),
+        json_schema_extra={"dlkit_init_kwarg": False},
     )
 
     # Model architecture hyperparameters
@@ -282,3 +294,33 @@ class WrapperComponentSettings(ComponentSettings):
             bool: True if metrics are specified
         """
         return len(self.metrics) > 0
+
+
+def extract_init_kwargs(settings: "ModelComponentSettings") -> dict[str, Any]:
+    """Extract constructor kwargs from model settings using whitelist tag.
+
+    Includes only fields NOT tagged with ``dlkit_init_kwarg=False`` in their
+    ``json_schema_extra``. Excludes ``None`` values.
+
+    This replaces the fragile exclusion-list approach with a single source of
+    truth on the field definition itself.
+
+    Args:
+        settings: Model configuration settings.
+
+    Returns:
+        Dict of kwargs suitable for passing to the model constructor.
+
+    Example:
+        >>> settings = ModelComponentSettings(name="MyModel", hidden_size=128)
+        >>> extract_init_kwargs(settings)
+        {"hidden_size": 128}   # name/module_path/checkpoint excluded
+    """
+    excluded_fields = {
+        name
+        for name, field_info in type(settings).model_fields.items()
+        if isinstance(field_info.json_schema_extra, dict)
+        and field_info.json_schema_extra.get("dlkit_init_kwarg") is False
+    }
+    all_fields = settings.model_dump()
+    return {k: v for k, v in all_fields.items() if k not in excluded_fields and v is not None}

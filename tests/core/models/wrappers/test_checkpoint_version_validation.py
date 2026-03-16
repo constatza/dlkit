@@ -1,4 +1,4 @@
-"""Test checkpoint version validation in ProcessingLightningWrapper."""
+"""Test checkpoint persistence in ProcessingLightningWrapper."""
 
 import pytest
 import torch
@@ -30,7 +30,6 @@ def patch_factory(monkeypatch):
     def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _DummyModel()
-        # For loss/metrics/optimizer/scheduler
         return lambda a, b: torch.nn.functional.mse_loss(a, b)
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
@@ -65,7 +64,7 @@ def dummy_entry_configs():
     return (Feature("x", value=torch.zeros(4, 1)),)
 
 
-def test_checkpoint_save_includes_version(
+def test_checkpoint_save_includes_metadata(
     patch_factory,
     dummy_wrapper_settings,
     dummy_model_settings,
@@ -73,7 +72,7 @@ def test_checkpoint_save_includes_version(
     dummy_entry_configs,
     tmp_path: Path,
 ):
-    """Test that saved checkpoints include version field."""
+    """Test that saved checkpoints include dlkit_metadata."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
@@ -81,14 +80,11 @@ def test_checkpoint_save_includes_version(
         entry_configs=dummy_entry_configs,
     )
 
-    # Create a checkpoint dict
     checkpoint = {}
     wrapper.on_save_checkpoint(checkpoint)
 
-    # Verify version field exists
     assert "dlkit_metadata" in checkpoint
-    assert "version" in checkpoint["dlkit_metadata"]
-    assert checkpoint["dlkit_metadata"]["version"] == "2.0"
+    assert "wrapper_type" in checkpoint["dlkit_metadata"]
 
 
 def test_checkpoint_load_rejects_missing_metadata(
@@ -106,7 +102,6 @@ def test_checkpoint_load_rejects_missing_metadata(
         entry_configs=dummy_entry_configs,
     )
 
-    # Create a legacy checkpoint without dlkit_metadata
     checkpoint = {
         "state_dict": {},
         "hyper_parameters": {},
@@ -116,14 +111,14 @@ def test_checkpoint_load_rejects_missing_metadata(
         wrapper.on_load_checkpoint(checkpoint)
 
 
-def test_checkpoint_load_rejects_missing_version(
+def test_checkpoint_load_accepts_legacy_checkpoint(
     patch_factory,
     dummy_wrapper_settings,
     dummy_model_settings,
     dummy_shape_spec,
     dummy_entry_configs,
 ):
-    """Test that loading a checkpoint without version field raises ValueError."""
+    """Test that older checkpoints are accepted via normalization."""
     wrapper = StandardLightningWrapper(
         settings=dummy_wrapper_settings,
         model_settings=dummy_model_settings,
@@ -131,74 +126,21 @@ def test_checkpoint_load_rejects_missing_version(
         entry_configs=dummy_entry_configs,
     )
 
-    # Create a checkpoint with dlkit_metadata but no version
     checkpoint = {
         "state_dict": {},
         "dlkit_metadata": {
             "model_family": "dlkit_nn",
             "wrapper_type": "StandardLightningWrapper",
+            "model_settings": {
+                "name": "_DummyModel",
+                "module_path": "tests.core.models.wrappers.test_checkpoint_version_validation",
+                "params": {"hidden_size": 64},
+                "class_name": "ModelComponentSettings",
+            },
         },
     }
 
-    with pytest.raises(ValueError, match="missing 'version' field"):
-        wrapper.on_load_checkpoint(checkpoint)
-
-
-def test_checkpoint_load_rejects_unsupported_version(
-    patch_factory,
-    dummy_wrapper_settings,
-    dummy_model_settings,
-    dummy_shape_spec,
-    dummy_entry_configs,
-):
-    """Test that loading a checkpoint with unsupported version raises ValueError."""
-    wrapper = StandardLightningWrapper(
-        settings=dummy_wrapper_settings,
-        model_settings=dummy_model_settings,
-        shape_spec=dummy_shape_spec,
-        entry_configs=dummy_entry_configs,
-    )
-
-    # Create a checkpoint with an old version
-    checkpoint = {
-        "state_dict": {},
-        "dlkit_metadata": {
-            "version": "1.0",
-            "model_family": "dlkit_nn",
-            "wrapper_type": "StandardLightningWrapper",
-        },
-    }
-
-    with pytest.raises(ValueError, match="Unsupported checkpoint version '1.0'"):
-        wrapper.on_load_checkpoint(checkpoint)
-
-
-def test_checkpoint_load_accepts_supported_version(
-    patch_factory,
-    dummy_wrapper_settings,
-    dummy_model_settings,
-    dummy_shape_spec,
-    dummy_entry_configs,
-):
-    """Test that loading a checkpoint with version 2.0 succeeds."""
-    wrapper = StandardLightningWrapper(
-        settings=dummy_wrapper_settings,
-        model_settings=dummy_model_settings,
-        shape_spec=dummy_shape_spec,
-        entry_configs=dummy_entry_configs,
-    )
-
-    # Create a valid v2.0 checkpoint
-    checkpoint = {
-        "state_dict": {},
-        "dlkit_metadata": {
-            "version": "2.0",
-            "model_family": "dlkit_nn",
-            "wrapper_type": "StandardLightningWrapper",
-        },
-    }
-
-    # Should not raise
+    # Should not raise — migration handles old format transparently
     wrapper.on_load_checkpoint(checkpoint)
 
 
@@ -217,15 +159,10 @@ def test_checkpoint_save_is_pure(
         entry_configs=dummy_entry_configs,
     )
 
-    # Capture initial entry_configs reference
     initial_entry_configs = wrapper.get_entry_configs()
 
-    # Save checkpoint
     checkpoint = {}
     wrapper.on_save_checkpoint(checkpoint)
 
-    # Verify entry_configs reference hasn't changed (no mutation)
     assert wrapper.get_entry_configs() == initial_entry_configs
-
-    # Verify checkpoint was populated
     assert "dlkit_metadata" in checkpoint

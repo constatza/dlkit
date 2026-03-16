@@ -7,8 +7,10 @@ external constructor API stable while the base class uses pure protocol injectio
 
 from __future__ import annotations
 
+from functools import reduce
 from typing import TYPE_CHECKING, Any
 
+import torch
 from torch import Tensor
 from torch.nn import Identity
 
@@ -31,6 +33,7 @@ from dlkit.core.models.wrappers.components import (
     _build_invoker_from_entries,
     _classify_feature_entries,
 )
+from dlkit.core.models.wrappers.protocols import IFittableBatchTransformer
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
 
@@ -341,6 +344,14 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             prediction_strategy=prediction_strategy,
         )
 
+        # Store protocol objects for use in _run_step and other methods
+        self._model_invoker = model_invoker
+        self._loss_computer = loss_computer
+        self._batch_transformer = batch_transformer
+        self._prediction_strategy = prediction_strategy
+        self._train_generator_factory = self._train_generator_factory
+        self._val_generator_factory = self._val_generator_factory
+
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the model.
 
@@ -351,6 +362,98 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             Model output tensor.
         """
         return self.model(x)
+
+    # =========================================================================
+    # Standard-Specific Hooks and Methods
+    # =========================================================================
+
+    def configure_callbacks(self) -> list[Any]:
+        """Register lifecycle callbacks for this wrapper.
+
+        Returns a ``TransformFittingCallback`` when the batch transformer
+        implements ``IFittableBatchTransformer``, so Lightning automatically
+        fits transforms before the first training epoch.
+
+        Returns:
+            List of Lightning Callbacks to attach to the Trainer.
+        """
+        from dlkit.core.models.wrappers.callbacks import TransformFittingCallback
+
+        if isinstance(self._batch_transformer, IFittableBatchTransformer):
+            return [TransformFittingCallback(self._batch_transformer)]
+        return []
+
+    def _apply_batch_transforms(
+        self,
+        batch: Any,
+        generator: "torch.Generator | None",
+    ) -> Any:
+        """Apply coupled supervision transforms in sequence.
+
+        Each ``IBatchTransform`` in ``self._batch_transforms`` is called with
+        the batch and generator, the result piped to the next transform via
+        ``reduce``.  An empty sequence is a no-op.
+
+        Args:
+            batch: Input TensorDict.
+            generator: Optional RNG for stochastic transforms.
+
+        Returns:
+            Transformed TensorDict (identity when no transforms configured).
+        """
+        if not self._batch_transforms:
+            return batch
+        return reduce(lambda b, t: t(b, generator), self._batch_transforms, batch)
+
+    def _compute_loss(self, predictions: Any, batch: Any) -> "Tensor":
+        """Compute scalar loss from predictions and batch.
+
+        Delegates to ``self._loss_computer`` by default. Subclasses can
+        override this method to implement custom loss logic (e.g.
+        ``FlowMatchingWrapper`` targets ``batch["targets"]["ut"]`` directly).
+
+        Args:
+            predictions: Model output tensor.
+            batch: Enriched TensorDict with features, targets, and predictions.
+
+        Returns:
+            Scalar loss tensor.
+        """
+        return self._loss_computer.compute(predictions, batch)
+
+    # =========================================================================
+    # Template Method Implementation
+    # =========================================================================
+
+    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+        """Execute one forward+loss step.
+
+        Implements the template method from the base class. Applies batch transforms,
+        applies per-slot transforms, invokes the model, and computes loss.
+
+        Args:
+            batch: Input batch from dataset.
+            batch_idx: Index of the batch.
+            stage: Stage identifier ('train', 'val', 'test').
+
+        Returns:
+            Tuple of (loss, batch_size, enriched_batch).
+        """
+        from dlkit.core.models.wrappers.base import _batch_size_of
+
+        gen = (self._train_generator_factory if stage == "train" else self._val_generator_factory)(
+            batch_idx
+        )
+        batch = self._apply_batch_transforms(batch, gen)
+        batch = self._batch_transformer.transform(batch)
+        batch = self._model_invoker.invoke(self.model, batch)
+        loss = self._compute_loss(batch["predictions"], batch)
+        batch_size = _batch_size_of(batch["predictions"])
+        return loss, batch_size, batch
+
+    # =========================================================================
+    # Checkpoint Customization
+    # =========================================================================
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Augment checkpoint with target_names metadata.

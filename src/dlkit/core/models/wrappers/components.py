@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, cast, runtime_checkable
 from collections.abc import Callable
 
 import torch
@@ -32,6 +32,38 @@ from dlkit.core.training.transforms.base import (
     InvertibleTransform,
 )
 from dlkit.tools.config.components.model_components import LossInputRef, MetricInputRef
+
+
+@runtime_checkable
+class IBatchNamespaceSpec(Protocol):
+    """Declares the TensorDict namespace keys used for features and targets.
+
+    Inject a custom implementation to support non-standard batch layouts.
+    The default is ``StandardBatchNamespace`` (``"features"`` / ``"targets"``).
+    """
+
+    @property
+    def feature_namespace(self) -> str:
+        """Namespace key for feature tensors in the batch TensorDict."""
+        ...
+
+    @property
+    def target_namespace(self) -> str:
+        """Namespace key for target tensors in the batch TensorDict."""
+        ...
+
+
+@dataclass(frozen=True)
+class StandardBatchNamespace:
+    """Default batch namespace using ``"features"`` and ``"targets"`` keys.
+
+    Attributes:
+        feature_namespace: Key for feature tensors (default ``"features"``).
+        target_namespace: Key for target tensors (default ``"targets"``).
+    """
+
+    feature_namespace: str = "features"
+    target_namespace: str = "targets"
 
 
 def _parse_key(key: str) -> tuple[str, str]:
@@ -87,9 +119,9 @@ class ModelOutputSpec:
     """
 
     prediction_key: str = "predictions"
-    latent_keys: tuple[str | tuple[str, str], ...] = ()
+    latent_keys: tuple[str | tuple[str, ...], ...] = ()
 
-    def all_out_keys(self) -> list[str | tuple[str, str]]:
+    def all_out_keys(self) -> list[str | tuple[str, ...]]:
         """Return all TensorDictModule out_keys in positional order.
 
         Returns:
@@ -139,15 +171,15 @@ class TensorDictModelInvoker:
 
     def __init__(
         self,
-        in_keys: list[str | tuple[str, str]],
+        in_keys: list[str | tuple[str, ...]],
         output_spec: ModelOutputSpec | None = None,
-        kwarg_in_keys: dict[str, str | tuple[str, str]] | None = None,
+        kwarg_in_keys: dict[str, str | tuple[str, ...]] | None = None,
     ) -> None:
         self._output_spec = output_spec or ModelOutputSpec()
         self._out_keys = self._output_spec.all_out_keys()
         n_pos: int = len(in_keys)
         kwarg_names: list[str] = list((kwarg_in_keys or {}).keys())
-        all_in_keys: list[str | tuple[str, str]] = in_keys + list((kwarg_in_keys or {}).values())
+        all_in_keys: list[str | tuple[str, ...]] = in_keys + list((kwarg_in_keys or {}).values())
         self._model_cell: list[nn.Module | None] = [None]
 
         cell = self._model_cell
@@ -160,7 +192,7 @@ class TensorDictModelInvoker:
         self._td_module = TensorDictModule(_dispatch, in_keys=all_in_keys, out_keys=self._out_keys)
 
     @property
-    def _in_keys(self) -> list[str | tuple[str, str]]:
+    def _in_keys(self) -> list[str | tuple[str, ...]]:
         """All input keys passed to TensorDictModule (positional + kwarg values).
 
         Returns:
@@ -266,8 +298,8 @@ def _build_invoker_from_entries(
     """
     positional, kwarg_map = _classify_feature_entries(feature_entries)
     positional.sort(key=lambda x: x[0])
-    positional_in_keys: list[str | tuple[str, str]] = [("features", name) for _, name in positional]
-    kwarg_in_keys: dict[str, str | tuple[str, str]] = {
+    positional_in_keys: list[str | tuple[str, ...]] = [("features", name) for _, name in positional]
+    kwarg_in_keys: dict[str, str | tuple[str, ...]] = {
         kw: ("features", entry_name) for kw, entry_name in kwarg_map.items()
     }
 
@@ -284,17 +316,34 @@ def _build_invoker_from_entries(
     )
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LossRoute:
+    """Pre-parsed, typed routing command for a loss function invocation.
+
+    All string parsing happens once at construction time; ``compute()`` uses
+    only direct TensorDict key lookups — no per-batch string manipulation.
+
+    Attributes:
+        loss_fn: The loss function callable.
+        target_route: Pre-parsed ``(namespace, entry_name)`` tuple for the main target.
+        extra_routes: Ordered tuple of ``(kwarg_name, (namespace, entry_name))`` for
+            additional loss function keyword arguments.
+    """
+
+    loss_fn: Callable
+    target_route: tuple[str, str]
+    extra_routes: tuple[tuple[str, tuple[str, str]], ...] = ()
+
+
 class RoutedLossComputer:
     """Routes batch keys to loss function kwargs per LossComponentSettings.
 
     Computes loss by extracting the configured target from the batch and
-    passing any extra inputs as keyword arguments.
+    passing any extra inputs as keyword arguments. All key parsing is
+    performed once at construction time via ``LossRoute``.
 
     Attributes:
-        _loss_fn: The loss function callable.
-        _target_ns: Target namespace ('targets').
-        _target_name: Target entry name.
-        _extra: Extra input refs for additional kwargs.
+        _route: Pre-parsed loss routing command.
     """
 
     def __init__(
@@ -312,10 +361,16 @@ class RoutedLossComputer:
             default_target_key: Name of first target entry (used when target_key is None).
             extra_inputs: Extra kwargs to route from batch.
         """
-        self._loss_fn = loss_fn
         effective_key = target_key or f"targets.{default_target_key}"
-        self._target_ns, self._target_name = _parse_key(effective_key)
-        self._extra = extra_inputs
+        target_route = _parse_key(effective_key)
+        extra_routes: tuple[tuple[str, tuple[str, str]], ...] = tuple(
+            (ref.arg, _parse_key(ref.key)) for ref in extra_inputs
+        )
+        self._route = LossRoute(
+            loss_fn=loss_fn,
+            target_route=target_route,
+            extra_routes=extra_routes,
+        )
 
     def compute(self, predictions: Tensor, batch: Any) -> Tensor:
         """Compute loss from predictions and named batch.
@@ -327,9 +382,9 @@ class RoutedLossComputer:
         Returns:
             Scalar loss tensor.
         """
-        target = batch[self._target_ns, self._target_name].to(dtype=predictions.dtype)
-        extra_kwargs = {ref.arg: batch[_parse_key(ref.key)] for ref in self._extra}
-        return self._loss_fn(predictions, target, **extra_kwargs)
+        target = batch[self._route.target_route].to(dtype=predictions.dtype)
+        extra_kwargs = {kwarg: batch[route] for kwarg, route in self._route.extra_routes}
+        return self._route.loss_fn(predictions, target, **extra_kwargs)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -357,6 +412,7 @@ class RoutedMetricsUpdater:
 
     Attributes:
         _routes: Dict mapping stage ('val', 'test') to list of MetricRoute.
+        _parsed_extra: Pre-parsed extra input routes for fast lookup during update.
     """
 
     def __init__(
@@ -374,6 +430,19 @@ class RoutedMetricsUpdater:
             "val": val_routes,
             "test": test_routes,
         }
+        # Pre-parse extra input routes once at construction time
+        self._parsed_extra: dict[str, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]] = {
+            stage: [
+                (
+                    r.metric,
+                    r.target_ns,
+                    r.target_name,
+                    [(ref.arg, _parse_key(ref.key)) for ref in r.extra_inputs],
+                )
+                for r in routes
+            ]
+            for stage, routes in self._routes.items()
+        }
 
     def update(self, predictions: Tensor, batch: Any, stage: str) -> None:
         """Update metrics for the given stage.
@@ -383,10 +452,10 @@ class RoutedMetricsUpdater:
             batch: TensorDict containing features and targets.
             stage: Stage identifier ('val' or 'test').
         """
-        for route in self._routes.get(stage, []):
-            target = batch[route.target_ns, route.target_name].to(dtype=predictions.dtype)
-            extra = {ref.arg: batch[_parse_key(ref.key)] for ref in route.extra_inputs}
-            route.metric.update(predictions, target, **extra)
+        for metric, target_ns, target_name, extra_routes in self._parsed_extra.get(stage, []):
+            target = batch[target_ns, target_name].to(dtype=predictions.dtype)
+            extra = {kwarg: batch[route] for kwarg, route in extra_routes}
+            metric.update(predictions, target, **extra)
 
     def compute(self, stage: str) -> dict[str, Any]:
         """Compute accumulated metric values for the given stage.
@@ -409,6 +478,17 @@ class RoutedMetricsUpdater:
             route.metric.reset()
 
 
+@runtime_checkable
+class _FittableFromDataloader(Protocol):
+    """Transform chain that supports dataloader-based fitting."""
+
+    def fit_from_dataloader(
+        self,
+        dataloader: Any,
+        extractor: Callable[..., Any],
+    ) -> None: ...
+
+
 class NamedBatchTransformer(nn.Module):
     """Applies named transform chains per entry key.
 
@@ -420,22 +500,26 @@ class NamedBatchTransformer(nn.Module):
     Attributes:
         _feature_chains: ModuleDict mapping feature entry names to transform chains.
         _target_chains: ModuleDict mapping target entry names to transform chains.
+        _ns: Batch namespace specification (defaults to StandardBatchNamespace).
     """
 
     def __init__(
         self,
         feature_chains: dict[str, nn.Module],
         target_chains: dict[str, nn.Module],
+        namespace_spec: IBatchNamespaceSpec | None = None,
     ) -> None:
         """Initialize with named transform chain dicts.
 
         Args:
             feature_chains: Dict mapping feature entry names to transform chains.
             target_chains: Dict mapping target entry names to transform chains.
+            namespace_spec: Batch namespace specification; defaults to StandardBatchNamespace.
         """
         super().__init__()
         self._feature_chains = nn.ModuleDict(feature_chains)
         self._target_chains = nn.ModuleDict(target_chains)
+        self._ns: IBatchNamespaceSpec = namespace_spec or StandardBatchNamespace()
 
     def transform(self, batch: Any) -> Any:
         """Apply transforms to all feature and target entries in the batch.
@@ -454,7 +538,9 @@ class NamedBatchTransformer(nn.Module):
         """
         from tensordict import TensorDict
 
-        batch_feature_keys = set(batch["features"].keys())
+        fn = self._ns.feature_namespace
+        tn = self._ns.target_namespace
+        batch_feature_keys = set(batch[fn].keys())
         new_features: dict[str, Tensor] = {}
 
         # Apply registered chains (authoritative order)
@@ -464,14 +550,14 @@ class NamedBatchTransformer(nn.Module):
                     f"Feature '{k}' required by transform chain is missing from batch. "
                     f"Available: {sorted(batch_feature_keys)}"
                 )
-            new_features[k] = self._feature_chains[k](batch["features", k])
+            new_features[k] = self._feature_chains[k](batch[fn, k])
 
         # Pass through keys with no chain (context features etc.)
         for k in batch_feature_keys:
             if k not in new_features:
-                new_features[k] = batch["features", k]
+                new_features[k] = batch[fn, k]
 
-        batch_target_keys = set(batch["targets"].keys())
+        batch_target_keys = set(batch[tn].keys())
         new_targets: dict[str, Tensor] = {}
 
         for k in self._target_chains:
@@ -480,16 +566,16 @@ class NamedBatchTransformer(nn.Module):
                     f"Target '{k}' required by transform chain is missing from batch. "
                     f"Available: {sorted(batch_target_keys)}"
                 )
-            new_targets[k] = self._target_chains[k](batch["targets", k])
+            new_targets[k] = self._target_chains[k](batch[tn, k])
 
         for k in batch_target_keys:
             if k not in new_targets:
-                new_targets[k] = batch["targets", k]
+                new_targets[k] = batch[tn, k]
 
         return TensorDict(
             {
-                "features": TensorDict(new_features, batch_size=batch.batch_size),
-                "targets": TensorDict(new_targets, batch_size=batch.batch_size),
+                fn: TensorDict(new_features, batch_size=batch.batch_size),
+                tn: TensorDict(new_targets, batch_size=batch.batch_size),
             },
             batch_size=batch.batch_size,
         )
@@ -550,8 +636,8 @@ class NamedBatchTransformer(nn.Module):
                     chain.__class__.__name__,
                 )
 
-                if hasattr(chain, "fit_from_dataloader"):
-                    chain.fit_from_dataloader(
+                if isinstance(chain, _FittableFromDataloader):
+                    cast(_FittableFromDataloader, chain).fit_from_dataloader(
                         dataloader,
                         lambda batch, ns=namespace, key=entry_name: batch[ns, key],
                     )

@@ -40,6 +40,9 @@ class _ConcreteWrapper(ProcessingLightningWrapper):
     def forward(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[override]
         raise NotImplementedError
 
+    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+        raise NotImplementedError
+
 
 @pytest.fixture
 def wrapped_model() -> _ConcreteWrapper:
