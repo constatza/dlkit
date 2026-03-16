@@ -198,7 +198,8 @@ class NormScaledSymmetricLinear(NormScaledFFNN):
     """NormScaledFFNN backed by a SymmetricLinear layer.
 
     Args:
-        features: Number of input (and output) features.
+        in_features: Number of input features.
+        out_features: Number of output features.
         bias: Whether to include a bias term.
         norm: Vector norm type to use.
         eps_gain: Epsilon gain multiplier.
@@ -208,14 +209,19 @@ class NormScaledSymmetricLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
         eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
     ) -> None:
         super().__init__(
-            base_model=SymmetricLinear(features, bias=bias),
+            base_model=SymmetricLinear(
+                in_features=in_features,
+                out_features=out_features,
+                bias=bias,
+            ),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
@@ -226,7 +232,8 @@ class NormScaledSPDLinear(NormScaledFFNN):
     """NormScaledFFNN backed by an SPDLinear layer.
 
     Args:
-        features: Number of input (and output) features.
+        in_features: Number of input features.
+        out_features: Number of output features.
         bias: Whether to include a bias term.
         min_diag: Positive diagonal floor for the Cholesky decomposition.
         norm: Vector norm type to use.
@@ -237,7 +244,8 @@ class NormScaledSPDLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         min_diag: float = 1e-4,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
@@ -245,7 +253,12 @@ class NormScaledSPDLinear(NormScaledFFNN):
         keep_stats: bool = False,
     ) -> None:
         super().__init__(
-            base_model=SPDLinear(features, bias=bias, min_diag=min_diag),
+            base_model=SPDLinear(
+                in_features=in_features,
+                out_features=out_features,
+                bias=bias,
+                min_diag=min_diag,
+            ),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
@@ -279,7 +292,13 @@ class NormScaledFactorizedLinear(NormScaledFFNN):
         keep_stats: bool = False,
     ) -> None:
         super().__init__(
-            base_model=FactorizedLinear(in_features, out_features, bias=bias, mean=mean, std=std),
+            base_model=FactorizedLinear(
+                in_features=in_features,
+                out_features=out_features,
+                bias=bias,
+                mean=mean,
+                std=std,
+            ),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
@@ -290,7 +309,8 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
     """NormScaledFFNN backed by a SymmetricFactorizedLinear layer.
 
     Args:
-        features: Number of input (and output) features.
+        in_features: Number of input features.
+        out_features: Number of output features.
         bias: Whether to include a bias term.
         mean: Mean for log-scale initialisation.
         std: Standard deviation for log-scale initialisation.
@@ -302,7 +322,8 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         mean: float = 0.0,
         std: float = 0.1,
@@ -311,7 +332,13 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
         keep_stats: bool = False,
     ) -> None:
         super().__init__(
-            base_model=SymmetricFactorizedLinear(features, bias=bias, mean=mean, std=std),
+            base_model=SymmetricFactorizedLinear(
+                in_features=in_features,
+                out_features=out_features,
+                bias=bias,
+                mean=mean,
+                std=std,
+            ),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
@@ -322,7 +349,8 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
     """NormScaledFFNN backed by an SPDFactorizedLinear layer.
 
     Args:
-        features: Number of input (and output) features.
+        in_features: Number of input features.
+        out_features: Number of output features.
         bias: Whether to include a bias term.
         min_diag: Positive diagonal floor for the Cholesky decomposition.
         mean: Mean for log-scale initialisation.
@@ -335,7 +363,8 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         min_diag: float = 1e-4,
         mean: float = 0.0,
@@ -345,7 +374,14 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
         keep_stats: bool = False,
     ) -> None:
         super().__init__(
-            base_model=SPDFactorizedLinear(features, bias=bias, min_diag=min_diag, mean=mean, std=std),
+            base_model=SPDFactorizedLinear(
+                in_features=in_features,
+                out_features=out_features,
+                bias=bias,
+                min_diag=min_diag,
+                mean=mean,
+                std=std,
+            ),
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
