@@ -22,8 +22,8 @@ class ValidationResult:
     """Result of shape validation operation."""
 
     is_valid: bool
-    errors: tuple[str, ...] | Iterable[str] = field(default_factory=tuple)
-    warnings: tuple[str, ...] | Iterable[str] = field(default_factory=tuple)
+    errors: tuple[str, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "errors", tuple(self.errors))
@@ -45,7 +45,7 @@ class ValidationResult:
     @classmethod
     def failure(cls, errors: Iterable[str]) -> ValidationResult:
         """Create failed validation result."""
-        return cls(is_valid=False, errors=errors)
+        return cls(is_valid=False, errors=tuple(errors))
 
 
 class ShapeValidator:

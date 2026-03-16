@@ -126,7 +126,7 @@ class OrSpecification(ShapeSpecification):
         if left_result.is_valid or right_result.is_valid:
             # At least one passed - combine warnings but no errors
             return ValidationResult(
-                is_valid=True, errors=[], warnings=left_result.warnings + right_result.warnings
+                is_valid=True, errors=(), warnings=left_result.warnings + right_result.warnings
             )
         else:
             # Both failed - combine all errors and warnings

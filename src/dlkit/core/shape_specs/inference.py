@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from contextlib import suppress
+from typing import Any, Dict, List, Optional, cast
 from dataclasses import dataclass
 
 from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
@@ -30,7 +31,7 @@ class InferenceContext:
     model_settings: Any = None
     entry_configs: Optional[Dict[str, Any]] = None
     model_family: Optional[ModelFamily] = None
-    shape_factory: Optional[Any] = None  # ShapeSystemFactory - avoid circular import
+    shape_factory: Any = None  # ShapeSystemFactory - avoid circular import
 
     def __post_init__(self):
         """Initialize default factory if not provided."""
@@ -118,22 +119,17 @@ class CheckpointMetadataStrategy(ShapeInferenceStrategy):
         Returns:
             ShapeData from checkpoint metadata or None if extraction fails
         """
-        try:
+        if context.checkpoint_path is None:
+            return None
+        with suppress(Exception):
             import torch
 
             checkpoint = torch.load(context.checkpoint_path, map_location="cpu", weights_only=False)
-
-            # Try enhanced metadata first
             if "dlkit_metadata" in checkpoint and "shape_spec" in checkpoint["dlkit_metadata"]:
-                shape_data = context.shape_factory.get_serializer().deserialize(
+                return context.shape_factory.get_serializer().deserialize(
                     checkpoint["dlkit_metadata"]["shape_spec"]
                 )
-                return shape_data
-
-            return None
-
-        except Exception:
-            return None
+        return None
 
     def get_priority(self) -> int:
         """Highest priority - enhanced metadata is most reliable."""
@@ -191,7 +187,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
 
     def _is_graph_sample(self, sample: Any) -> bool:
         Data, Batch = self._pyg_types()
-        if Data is None:
+        if Data is None or Batch is None:
             return False
         if isinstance(sample, (Data, Batch)):
             return True
@@ -203,7 +199,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
 
     def _extract_graph_sample(self, sample: Any):
         Data, Batch = self._pyg_types()
-        if Data is None:
+        if Data is None or Batch is None:
             return None
         if isinstance(sample, (Data, Batch)):
             return sample
@@ -223,23 +219,23 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
         shapes: Dict[str, tuple[int, ...]] = {}
 
         x = getattr(graph, "x", None)
-        if hasattr(x, "shape") and x.shape:
+        if x is not None and hasattr(x, "shape") and x.shape:
             feature_dim = int(x.shape[-1]) if len(x.shape) > 1 else int(x.shape[0])
             if feature_dim > 0:
                 shapes["x"] = (feature_dim,)
 
         edge_attr = getattr(graph, "edge_attr", None)
-        if hasattr(edge_attr, "shape") and edge_attr.shape:
+        if edge_attr is not None and hasattr(edge_attr, "shape") and edge_attr.shape:
             attr_dim = int(edge_attr.shape[-1]) if len(edge_attr.shape) > 1 else 1
             if attr_dim > 0:
                 shapes["edge_attr"] = (attr_dim,)
 
         edge_weight = getattr(graph, "edge_weight", None)
-        if hasattr(edge_weight, "shape") and edge_weight.shape:
+        if edge_weight is not None and hasattr(edge_weight, "shape") and edge_weight.shape:
             shapes["edge_weight"] = (1,)
 
         y = getattr(graph, "y", None)
-        if hasattr(y, "shape") and y.shape:
+        if y is not None and hasattr(y, "shape") and y.shape:
             if y.ndim == 0:
                 shapes["y"] = (1,)
             elif y.ndim == 1:
@@ -309,6 +305,8 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
 
     def _sample_dataset_shapes(self, dataset: Any) -> Dict[str, tuple[int, ...]] | None:
         """Sample dataset to extract shape information."""
+        from torch import Tensor
+
         try:
             sample = dataset[0]
         except Exception:
@@ -316,52 +314,34 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
 
         shapes: Dict[str, tuple[int, ...]] = {}
 
-        try:
+        with suppress(ImportError):
             from tensordict import TensorDictBase
 
             if isinstance(sample, TensorDictBase) and "features" in sample and "targets" in sample:
-                for i, key in enumerate(sample["features"].keys()):
-                    tensor = sample["features"][key]
-                    if hasattr(tensor, "shape"):
+                feat_td = cast(TensorDictBase, sample["features"])
+                targ_td = cast(TensorDictBase, sample["targets"])
+                for i, key in enumerate(feat_td.keys()):
+                    tensor = feat_td[key]
+                    if isinstance(tensor, Tensor):
                         shapes[f"x{i}" if i > 0 else "x"] = tuple(int(d) for d in tensor.shape)
-                for i, key in enumerate(sample["targets"].keys()):
-                    tensor = sample["targets"][key]
-                    if hasattr(tensor, "shape"):
+                for i, key in enumerate(targ_td.keys()):
+                    tensor = targ_td[key]
+                    if isinstance(tensor, Tensor):
                         shapes[f"y{i}" if i > 0 else "y"] = tuple(int(d) for d in tensor.shape)
                 return shapes if shapes else None
-        except ImportError:
-            pass
 
-        if isinstance(sample, dict):
-            # Dict-based dataset: extract shapes for each key
-            for name, tensor in sample.items():
-                if hasattr(tensor, "shape"):
-                    try:
+        match sample:
+            case dict():
+                for name, tensor in sample.items():
+                    if isinstance(tensor, Tensor):
                         shapes[name] = tuple(int(d) for d in tensor.shape)
-                    except Exception:
-                        continue
-        elif isinstance(sample, (tuple, list)) and len(sample) >= 1:
-            # Tuple/list dataset: assume (x, y) pattern
-            try:
-                x_item = sample[0]
-                if hasattr(x_item, "shape"):
-                    shapes["x"] = tuple(int(d) for d in x_item.shape)
-            except Exception:
-                pass
-
-            if len(sample) > 1:
-                try:
-                    y_item = sample[1]
-                    if hasattr(y_item, "shape"):
-                        shapes["y"] = tuple(int(d) for d in y_item.shape)
-                except Exception:
-                    pass
-        elif hasattr(sample, "shape"):
-            # Single tensor: assume input
-            try:
+            case list() | tuple():
+                if len(sample) >= 1 and isinstance(sample[0], Tensor):
+                    shapes["x"] = tuple(int(d) for d in sample[0].shape)
+                if len(sample) > 1 and isinstance(sample[1], Tensor):
+                    shapes["y"] = tuple(int(d) for d in sample[1].shape)
+            case _ if isinstance(sample, Tensor):
                 shapes["x"] = tuple(int(d) for d in sample.shape)
-            except Exception:
-                pass
 
         return shapes if shapes else None
 

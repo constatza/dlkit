@@ -53,7 +53,6 @@ class CheckpointInfo:
         checkpoint_path: Path to the checkpoint file.
         has_dlkit_metadata: Whether dlkit_metadata is present.
         has_hyper_parameters: Whether hyper_parameters is present.
-        version: Version string from metadata (None if not present).
         model_family: Model family from metadata (None if not present).
         wrapper_type: Wrapper type from metadata (None if not present).
         has_shape_spec: Whether shape_spec is present.
@@ -64,7 +63,6 @@ class CheckpointInfo:
     checkpoint_path: Path
     has_dlkit_metadata: bool
     has_hyper_parameters: bool
-    version: str | None = None
     model_family: str | None = None
     wrapper_type: str | None = None
     has_shape_spec: bool = False
@@ -75,77 +73,70 @@ class CheckpointInfo:
 def extract_state_dict(checkpoint: dict[str, Any]) -> dict[str, Any]:
     """Extract state dict from checkpoint with automatic prefix stripping.
 
+    Reads ``checkpoint["state_dict"]`` and strips the ``"model."`` prefix
+    that Lightning adds when saving ``LightningModule`` state.
+
     Args:
-        checkpoint: Loaded checkpoint dictionary
+        checkpoint: Loaded checkpoint dictionary.
 
     Returns:
-        State dict with 'model.' prefix stripped if present
+        State dict with ``"model."`` prefix stripped from all keys that carry it.
     """
-    # Extract raw state dict
-    if "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-    elif "model_state_dict" in checkpoint:
-        state_dict = checkpoint["model_state_dict"]
-    else:
-        state_dict = checkpoint
+    if not isinstance(checkpoint, dict):
+        return checkpoint
+
+    state_dict = checkpoint.get("state_dict", checkpoint)
 
     if not isinstance(state_dict, dict):
         return state_dict
 
-    # Check if 'model.' prefix exists
-    has_prefix = any(k.startswith("model.") for k in state_dict.keys())
+    if not any(k.startswith("model.") for k in state_dict):
+        return state_dict
 
-    if has_prefix:
-        logger.info("Stripping 'model.' prefix from state dict keys")
-        return {
-            k.replace("model.", "", 1) if k.startswith("model.") else k: v
-            for k, v in state_dict.items()
-        }
-
-    return state_dict
+    logger.info("Stripping 'model.' prefix from state dict keys")
+    return {
+        k.replace("model.", "", 1) if k.startswith("model.") else k: v
+        for k, v in state_dict.items()
+    }
 
 
 def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings:
     """Extract model settings from checkpoint metadata.
 
     Args:
-        checkpoint: Loaded checkpoint dictionary
+        checkpoint: Loaded checkpoint dictionary.
 
     Returns:
-        ModelComponentSettings reconstructed from checkpoint
+        ModelComponentSettings reconstructed from checkpoint.
 
     Raises:
-        WorkflowError: If model settings cannot be extracted
+        WorkflowError: If model settings cannot be extracted.
     """
-    # Try enhanced metadata first
-    if "dlkit_metadata" in checkpoint and "model_settings" in checkpoint["dlkit_metadata"]:
-        try:
-            settings_data = checkpoint["dlkit_metadata"]["model_settings"]
-            return ModelComponentSettings.model_validate(settings_data)
-        except Exception as e:
-            raise WorkflowError(
-                f"Failed to deserialize model settings from enhanced metadata: {e}",
-                {"has_dlkit_metadata": "true"},
-            ) from e
+    if "dlkit_metadata" not in checkpoint:
+        raise WorkflowError("Checkpoint missing 'dlkit_metadata'.")
+    if "model_settings" not in checkpoint["dlkit_metadata"]:
+        raise WorkflowError("Checkpoint 'dlkit_metadata' missing 'model_settings'.")
 
-    # Try legacy hyper_parameters
-    if "hyper_parameters" in checkpoint and "model_settings" in checkpoint["hyper_parameters"]:
-        try:
-            settings_data = checkpoint["hyper_parameters"]["model_settings"]
-            return ModelComponentSettings.model_validate(settings_data)
-        except Exception as e:
-            raise WorkflowError(
-                f"Failed to deserialize model settings from legacy checkpoint: {e}",
-                {"has_hyper_parameters": "true"},
-            ) from e
+    try:
+        from dlkit.core.models.wrappers.checkpoint_dto import normalize_checkpoint_metadata
 
-    raise WorkflowError(
-        "Cannot extract model settings: Checkpoint missing both enhanced metadata and hyper_parameters",
-        {
-            "has_dlkit_metadata": str("dlkit_metadata" in checkpoint),
-            "has_hyper_parameters": str("hyper_parameters" in checkpoint),
-        },
-    )
+        metadata = normalize_checkpoint_metadata(checkpoint["dlkit_metadata"])
+        settings_data = metadata["model_settings"]
+
+        # Flat DTO format: reconstruct from resolved_init_kwargs to avoid DTO-specific
+        # fields (resolved_init_kwargs, all_hyperparams) leaking into the model constructor.
+        if "resolved_init_kwargs" in settings_data:
+            name = settings_data.get("name") or ""
+            module_path = settings_data.get("module_path") or "dlkit.core.models.nn"
+            init_kwargs = settings_data.get("resolved_init_kwargs") or {}
+            reconstructed = {"name": name, "module_path": module_path, **init_kwargs}
+            return ModelComponentSettings.model_validate(reconstructed)
+
+        return ModelComponentSettings.model_validate(settings_data)
+    except WorkflowError:
+        raise
+    except Exception as e:
+        raise WorkflowError(f"Failed to deserialize model settings: {e}") from e
 
 
 def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
@@ -201,47 +192,57 @@ def build_model_from_checkpoint(
     # Extract model settings
     model_settings = extract_model_settings(checkpoint)
 
-    # Extract and prepare state dict
-    state_dict = extract_state_dict(checkpoint)
+    # Extract and prepare state dict.
+    # Extract only model-prefixed keys for strict loading against the bare model class.
+    # Wrapper-level keys (_batch_transformer, etc.) are discarded.
+    raw_sd = checkpoint.get("state_dict", checkpoint)
+    if isinstance(raw_sd, dict) and any(k.startswith("model.") for k in raw_sd):
+        state_dict = {k[len("model."):]: v for k, v in raw_sd.items() if k.startswith("model.")}
+    else:
+        state_dict = raw_sd if isinstance(raw_sd, dict) else {}
     checkpoint_dtype = detect_checkpoint_dtype(state_dict)
 
-    # shape_spec may be a ShapeSummary (from new format) or None
-    shape_summary = shape_spec if shape_spec is not None else None
-    logger.info(f"Building model with shape summary: {shape_summary}")
+    logger.info(f"Building model with shape summary: {shape_spec}")
 
     # Resolve model class — use directly if already a type, else import
     if isinstance(model_settings.name, type):
         model_cls = model_settings.name
     else:
+        class_name = model_settings.name
+        module_path = model_settings.module_path
+        if not isinstance(class_name, str) or not module_path:
+            raise WorkflowError(
+                f"Cannot resolve model class: name={class_name!r}, module_path={module_path!r}"
+            )
         try:
-            module = importlib.import_module(model_settings.module_path)
-            model_cls = getattr(module, model_settings.name)
+            module = importlib.import_module(module_path)
+            model_cls = getattr(module, class_name)
         except (ImportError, AttributeError) as e:
             raise WorkflowError(
-                f"Failed to import model class {model_settings.module_path}.{model_settings.name}: {e}"
+                f"Failed to import model class {module_path}.{class_name}: {e}"
             ) from e
 
-    # Build model using pure factory (tries in_features, in_channels, then kwargs-only)
-    # _serialize_model_settings nests hyperparams under 'params'; unpack them here.
-    if hasattr(model_settings, "model_dump"):
-        all_fields = model_settings.model_dump()
-        excluded = {"name", "module_path", "checkpoint", "class_name"}
-        params_nested = all_fields.pop("params", None) or {}
-        hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
-        hyperparams.update(params_nested)
-    else:
-        hyperparams = {}
-    model = _build_model(model_cls, shape_summary, hyperparams)
+    # Extract init kwargs using whitelist tag (no exclusion list needed)
+    from dlkit.tools.config.components.model_components import extract_init_kwargs
+    hyperparams = extract_init_kwargs(model_settings)
+    model = _build_model(model_cls, shape_spec, hyperparams)
 
     # Convert model to checkpoint dtype BEFORE loading weights
     # This prevents precision loss during state dict loading
     logger.info(f"Converting model to checkpoint dtype: {checkpoint_dtype}")
     model = model.to(dtype=checkpoint_dtype)
 
-    # Load state dict
+    # Load state dict (strict=True to catch weight drift between save and load)
     try:
-        model.load_state_dict(state_dict, strict=False)
+        model.load_state_dict(state_dict, strict=True)
         logger.info("Successfully loaded model weights from checkpoint")
+    except RuntimeError as e:
+        # Re-raise with clear key listing for easier debugging
+        raise WorkflowError(
+            f"State dict mismatch loading {type(model).__name__}: {e}. "
+            "If intentional partial loading is required, call load_state_dict(strict=False) directly.",
+            {"model_type": type(model).__name__},
+        ) from e
     except Exception as e:
         raise WorkflowError(
             f"Failed to load state dict into model: {e}", {"model_type": type(model).__name__}
@@ -367,7 +368,6 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
 
     has_dlkit_metadata = "dlkit_metadata" in checkpoint
     has_hyper_parameters = "hyper_parameters" in checkpoint
-    version = None
     model_family = None
     wrapper_type = None
     has_shape_spec = False
@@ -377,7 +377,6 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
     # Extract dlkit metadata if present
     if has_dlkit_metadata:
         metadata = checkpoint["dlkit_metadata"]
-        version = metadata.get("version")
         model_family = metadata.get("model_family")
         wrapper_type = metadata.get("wrapper_type")
         has_shape_spec = "shape_summary" in metadata
@@ -392,7 +391,6 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
         checkpoint_path=checkpoint_path,
         has_dlkit_metadata=has_dlkit_metadata,
         has_hyper_parameters=has_hyper_parameters,
-        version=version,
         model_family=model_family,
         wrapper_type=wrapper_type,
         has_shape_spec=has_shape_spec,

@@ -49,7 +49,11 @@ from .serialization import (
     ShapeFormatMigrator,
 )
 from .checkpoint_loader import CheckpointShapeLoader
-from .simple_inference import ShapeSummary, infer_shapes_from_dataset
+from .simple_inference import (
+    ShapeSummary,
+    infer_shapes_from_dataset,
+    infer_post_transform_shapes,
+)
 
 __all__ = [
     # Core interfaces and implementations
@@ -100,4 +104,5 @@ __all__ = [
     # Simple inference system
     "ShapeSummary",
     "infer_shapes_from_dataset",
+    "infer_post_transform_shapes",
 ]

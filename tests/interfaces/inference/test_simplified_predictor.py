@@ -34,7 +34,7 @@ class TestCheckpointLoading:
         # Create simple checkpoint
         checkpoint_path = tmp_path / "model.ckpt"
         model = torch.nn.Linear(10, 5)
-        checkpoint = {"state_dict": model.state_dict(), "dlkit_metadata": {"version": "2.0"}}
+        checkpoint = {"state_dict": model.state_dict(), "dlkit_metadata": {}}
         torch.save(checkpoint, checkpoint_path)
 
         # Load checkpoint
@@ -88,7 +88,6 @@ class TestCheckpointLoading:
         checkpoint = {
             "state_dict": model.state_dict(),
             "dlkit_metadata": {
-                "version": "2.0",
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
@@ -113,7 +112,7 @@ class TestCheckpointLoading:
         model = torch.nn.Linear(10, 5)
         checkpoint = {
             "state_dict": model.state_dict(),
-            "dlkit_metadata": {"version": "2.0", "model_family": "ffnn"},
+            "dlkit_metadata": {"model_family": "ffnn"},
         }
         torch.save(checkpoint, checkpoint_path)
 
@@ -121,7 +120,6 @@ class TestCheckpointLoading:
 
         # Test dataclass attributes (not dict subscripting)
         assert info.has_dlkit_metadata is True
-        assert info.version == "2.0"
         assert info.model_family == "ffnn"
 
 
@@ -136,7 +134,6 @@ class TestBuildModelFromCheckpoint:
         checkpoint = {
             "state_dict": model.state_dict(),
             "dlkit_metadata": {
-                "version": "2.0",
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
@@ -165,7 +162,6 @@ class TestBuildModelFromCheckpoint:
         checkpoint = {
             "state_dict": model.state_dict(),
             "dlkit_metadata": {
-                "version": "2.0",
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
@@ -197,7 +193,6 @@ class TestCheckpointPredictor:
         checkpoint = {
             "state_dict": model.state_dict(),
             "dlkit_metadata": {
-                "version": "2.0",
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
@@ -309,7 +304,6 @@ class TestLoadPredictorAPI:
         checkpoint = {
             "state_dict": model.state_dict(),
             "dlkit_metadata": {
-                "version": "2.0",
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",

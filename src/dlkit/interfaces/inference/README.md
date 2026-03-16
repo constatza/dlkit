@@ -5,6 +5,9 @@ Stateful checkpoint predictor — load once, predict many times.
 No configuration files required. All model settings, shapes, and transform chains are
 reconstructed automatically from the checkpoint.
 
+Inference requires checkpoints with `dlkit_metadata`. Legacy checkpoints without
+that metadata block are no longer supported.
+
 Inference is now separate from the unified workflow executor: use `load_model()`
 for checkpoint inference, and keep `train()`, `optimize()`, or `execute()` for
 training-family workflows only.
@@ -40,6 +43,9 @@ predictor.unload()
 | `validate_checkpoint()` | function | Check checkpoint integrity without loading |
 | `get_checkpoint_info()` | function | Extract metadata without loading the model |
 | `PredictorNotLoadedError` | exception | Raised when `predict()` called before `load()` |
+
+`CheckpointInfo` exposes metadata presence, `model_family`, and `wrapper_type`.
+It no longer includes a checkpoint `version` field.
 
 ---
 
@@ -125,6 +131,10 @@ Transform chains are reconstructed from the checkpoint's `state_dict`, including
 fitted `MinMaxScaler`/`StandardScaler` statistics and any pre-fitted `PCA`
 components saved at training time. Inference does not fit missing transform state.
 
+Model reconstruction uses normalized checkpoint metadata and strict weight loading:
+only `model.*` weights are loaded into the rebuilt model, and key mismatches fail
+fast instead of being ignored.
+
 ---
 
 ## Context Manager
@@ -181,7 +191,7 @@ assert info.valid_format and info.has_state_dict
 
 # Inspect metadata
 meta = get_checkpoint_info("model.ckpt")
-print(meta.version, meta.model_family)
+print(meta.model_family, meta.wrapper_type)
 ```
 
 ---

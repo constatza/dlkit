@@ -23,7 +23,11 @@ from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.core.datatypes.split import IndexSplit
 from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
-from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset, ShapeSummary
+from dlkit.core.shape_specs.simple_inference import (
+    infer_shapes_from_dataset,
+    infer_post_transform_shapes,
+    ShapeSummary,
+)
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
 from dlkit.tools.config.components.model_components import WrapperComponentSettings
 from dlkit.tools.config.data_entries import (
@@ -80,6 +84,7 @@ class IBuildStrategy:
         Returns:
             Constructed runtime components.
         """
+        import contextlib
         from dlkit.interfaces.api.domain.precision import precision_override
         from dlkit.interfaces.api.overrides.path_context import (
             get_current_path_context,
@@ -92,7 +97,8 @@ class IBuildStrategy:
         session_root_dir = coerce_root_dir_to_absolute(raw_root)
         needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
 
-        with precision_override(precision_strategy):
+        precision_ctx = precision_override(precision_strategy) if precision_strategy is not None else contextlib.nullcontext()
+        with precision_ctx:
             if needs_path_context:
                 with path_override_context({"root_dir": session_root_dir}):
                     return self._build_core(settings)
@@ -250,12 +256,16 @@ class FlexibleBuildStrategy(IBuildStrategy):
         shape_summary: ShapeSummary | None = None
         if requires_shape_spec(model_type):
             try:
-                shape_summary = infer_shapes_from_dataset(dataset)
+                shape_summary = infer_post_transform_shapes(
+                    dataset, selected_features, selected_targets
+                )
             except (ValueError, IndexError) as exc:
                 raise ValueError(
                     f"Shape inference failed for '{settings.MODEL.name}'. "
                     "Ensure dataset.__getitem__ returns a nested TensorDict with "
-                    "'features' and 'targets'."
+                    "'features' and 'targets'. If transforms are applied, ensure all "
+                    "transforms have registered shape inference functions or specify "
+                    "explicit model init_kwargs (e.g., in_features=...)."
                 ) from exc
 
         # Build wrapper settings with training optimizer/scheduler/loss/metrics configuration
@@ -390,7 +400,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         from dlkit.core.models.nn.generative.functions.solvers import euler_step, heun_step
         from dlkit.tools.config.components.model_components import WrapperComponentSettings
         from dlkit.tools.config.data_entries import Feature, Target
-        from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+        from dlkit.core.shape_specs.simple_inference import infer_post_transform_shapes
 
         gen_cfg = settings.GENERATIVE
         x1_key: str = getattr(gen_cfg, "x1_key", "x1")
@@ -450,7 +460,9 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         # Infer data shape for ODE strategy configuration
         shape_summary = None
         try:
-            shape_summary = infer_shapes_from_dataset(dataset)
+            shape_summary = infer_post_transform_shapes(
+                dataset, selected_features, selected_targets
+            )
         except Exception:
             pass
 

@@ -3,7 +3,7 @@
 DLKit provides a thin, typed workflow layer on top of PyTorch and Lightning with:
 - Flattened, typed configuration models (Pydantic) and a single TOML loader
 - Strategy-based training (vanilla, MLflow) and hyperparameter optimization (Optuna)
-- Simple dataset/datamodule factories with TensorDict-based shape inference
+- Simple dataset/datamodule factories with post-transform shape inference for shape-aware models
 - A small CLI to create/validate configs and run workflows
 
 ## Installation
@@ -302,7 +302,7 @@ target_y = result.to_numpy(("targets", "y"))        # nested key path
 
 ## Inference
 
-DLKit loads models from checkpoints with automatic transform handling and precision inference. **No configuration files are required** - everything needed is extracted from the checkpoint metadata.
+DLKit loads models from checkpoints with automatic transform handling and precision inference. **No configuration files are required** - everything needed is extracted from normalized checkpoint metadata.
 
 ### Load Model Once, Use Many Times
 
@@ -329,6 +329,8 @@ predictor.unload()
 ```
 
 **Why this is faster**: The checkpoint is loaded from disk once. All subsequent operations use the cached model in memory - no redundant I/O.
+
+**Checkpoint contract**: inference requires `dlkit_metadata`; checkpoints without it are not supported. Model settings are normalized from checkpoint metadata, only `model.*` weights are loaded into the reconstructed model, and state-dict mismatches fail fast.
 
 ### Direct Model Access
 
@@ -463,7 +465,7 @@ targets = [
 
 ### How Transforms Are Fitted and Applied
 
-**Fitting Phase** (`on_fit_start()` - before first training step):
+**Fitting Phase** (`configure_callbacks()` registers a pre-fit callback before the first training step):
 1. Builds `TransformChain` per named entry (features and targets)
 2. Fits each chain using a **streaming multi-pass dataloader flow** (no full `torch.cat` buffering)
 3. Incremental transforms (`MinMaxScaler`, `StandardScaler`) accumulate fit state batch-by-batch
@@ -660,7 +662,7 @@ DLKit automatically saves enhanced metadata with every checkpoint, enabling shap
 - **Shape specifications**: Input/output tensor shapes inferred from training data
 - **Transform configurations**: Feature and target transform chains for automatic application
 - **Entry configurations**: Dataset entry mappings for proper data handling
-- **Backward compatibility**: Legacy checkpoints still supported with fallback inference
+- **Metadata contract**: `dlkit_metadata` is required and no checkpoint `version` field is stored
 
 This enhanced format eliminates the need to manually specify shapes or model configurations during inference.
 
@@ -820,7 +822,11 @@ output = predictor.predict(x=already_normalized_data)
 - **Inference**: Predictors automatically load and apply saved transforms
   - Feature transforms applied before model forward pass
   - Inverse target transforms applied to predictions after model forward pass
-- **Config-free**: No manual configuration needed - everything restored from checkpoint
+- **Config-free**: No manual configuration needed - everything restored from checkpoint metadata
+
+For shape-aware models, build-time shape resolution now propagates dataset shapes
+through configured transform chains, so constructor args reflect post-transform
+tensor shapes instead of only raw dataset shapes.
 
 ### Notes
 
