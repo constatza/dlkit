@@ -361,6 +361,13 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
         def forward(self, *args: Any, **kwargs: Any) -> Tensor:
             return torch.zeros(bs, 1)
 
+        def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+            from dlkit.core.models.wrappers.base import _batch_size_of
+            batch = self._model_invoker.invoke(self.model, batch)
+            loss = self._loss_computer.compute(batch["predictions"], batch)
+            batch_size = _batch_size_of(batch["predictions"])
+            return loss, batch_size, batch
+
     loss_fn = torch.nn.MSELoss()
 
     class _LossComputer:

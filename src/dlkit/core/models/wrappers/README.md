@@ -17,11 +17,12 @@ StandardLightningWrapper.__init__
   ├─► IMetricsUpdater─ RoutedMetricsUpdater    (per-metric routing, no MetricCollection.update)
   └─► IBatchTransformer NamedBatchTransformer  (named ModuleDict chains)
         │
-        └─► IFittableBatchTransformer (fit() called on on_fit_start)
+        └─► IFittableBatchTransformer (fit() wired via configure_callbacks())
 
 ProcessingLightningWrapper (base)
-  training_step():  transform → invoke → compute_loss → log
-  validation_step: transform → invoke → compute_loss → update_metrics → log
+  _run_step():      abstract template hook implemented by each wrapper family
+  training_step():  _run_step → log
+  validation_step: _run_step → update_metrics → log
   predict_step():  capture raw targets → transform → invoke → inverse_transform → TensorDict
 ```
 
@@ -32,6 +33,8 @@ ProcessingLightningWrapper (base)
 | `protocols.py` | SOLID protocols (ISP-compliant interfaces) |
 | `components.py` | Concrete protocol implementations |
 | `base.py` | `ProcessingLightningWrapper` — pure Lightning coordinator |
+| `callbacks.py` | Lifecycle callbacks such as transform fitting |
+| `checkpoint_dto.py` | Checkpoint metadata normalization helpers |
 | `standard.py` | `StandardLightningWrapper` — tensor/TensorDict workflows |
 | `graph.py` | `GraphLightningWrapper` — PyG Data/Batch workflows |
 | `timeseries.py` | `TimeSeriesLightningWrapper` — tuple-batch workflows |
@@ -260,8 +263,9 @@ _batch_transformer._feature_chains.x.transforms.0._fitted   # StandardScaler
 _batch_transformer._feature_chains.x.transforms.1._fitted   # PCA
 ```
 
-Fittable transforms are fitted automatically during `on_fit_start` using a streaming
-multi-pass dataloader flow (no full `torch.cat` buffering):
+Fittable transforms are fitted automatically through
+`StandardLightningWrapper.configure_callbacks()` using a streaming multi-pass
+dataloader flow (no full `torch.cat` buffering):
 
 - Incremental-capable transforms (currently `StandardScaler`, `MinMaxScaler`) are
   fitted batch-by-batch.
@@ -278,9 +282,13 @@ DLKit checkpoints store a `dlkit_metadata` dict alongside the standard Lightning
 
 ```python
 checkpoint["dlkit_metadata"] = {
-    "version": "2.0",
     "wrapper_type": "StandardLightningWrapper",
-    "model_settings": {"name": "LinearNet", "module_path": "...", "params": {...}},
+    "model_settings": {
+        "name": "LinearNet",
+        "module_path": "...",
+        "resolved_init_kwargs": {...},
+        "all_hyperparams": {...},
+    },
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
     "feature_names": ["x"],          # model-input entries in dispatch order (for inference)
@@ -289,6 +297,10 @@ checkpoint["dlkit_metadata"] = {
     "target_names": ["y"],
 }
 ```
+
+`dlkit_metadata` no longer carries a checkpoint `version` field. Loaders require
+the metadata block itself and normalize older `model_settings` payloads into the
+flat DTO shape above before reconstruction.
 
 `feature_names` is used by `CheckpointPredictor` to map positional args in
 `predictor.predict(tensor0, tensor1)` to the correct feature transform chain and

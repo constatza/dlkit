@@ -26,9 +26,6 @@ from dlkit.core.models.wrappers.components import (
     NamedBatchTransformer,
     RoutedMetricsUpdater,
     WrapperCheckpointMetadata,
-    _NullModelInvoker,
-    _NullLossComputer,
-    _NullMetricsUpdater,
 )
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
@@ -106,6 +103,13 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             shape_summary=shape_summary,
         )
 
+        # Create minimal protocol objects (graph overrides all step methods)
+        from dlkit.core.models.wrappers.components import (
+            _NullModelInvoker,
+            _NullLossComputer,
+            _NullMetricsUpdater,
+        )
+
         _null_transformer = NamedBatchTransformer({}, {})
         _null_invoker = _NullModelInvoker()
         _prediction_strategy = DiscriminativePredictionStrategy(
@@ -175,6 +179,30 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             Model output tensor.
         """
         return self.model(x, edge_index, edge_attr)
+
+    # =========================================================================
+    # Template Method Implementation
+    # =========================================================================
+
+    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+        """Execute one forward+loss step for graph data.
+
+        Graph data is not enriched into a TensorDict; this method is provided
+        for API compatibility but should never be called since all step methods
+        are overridden.
+
+        Args:
+            batch: PyG Data or Batch (not used).
+            batch_idx: Batch index (not used).
+            stage: Stage identifier (not used).
+
+        Raises:
+            NotImplementedError: Always, since this should not be called.
+        """
+        raise NotImplementedError(
+            "GraphLightningWrapper overrides all step methods directly. "
+            "_run_step should never be called."
+        )
 
     # =========================================================================
     # Step overrides: PyG Data/Batch → model directly
