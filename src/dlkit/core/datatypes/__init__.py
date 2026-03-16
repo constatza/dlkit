@@ -7,7 +7,7 @@ from .base import (
     StrHyperparameter,
     Hyperparameter,
 )
-# Lightweight, Pydantic v2-first URL/path types (security-light)
+# Lightweight, Pydantic-first URL/path types (security-light)
 from .tilde_expansion import expand_tilde_in_value
 from .urls import (
     HttpUrl as MLflowServerUri,
@@ -15,7 +15,7 @@ from .urls import (
     CloudStorageUri,
 )
 
-# Simple Pydantic v2 Annotated shortcuts (ignore security risks by design)
+# Simple Pydantic Annotated shortcuts (ignore security risks by design)
 # - Expand '~' early, defer all other validation to downstream consumers.
 SimpleTildePath = Annotated[
     str,

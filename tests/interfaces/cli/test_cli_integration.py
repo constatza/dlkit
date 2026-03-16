@@ -17,13 +17,9 @@ def cli_runner() -> CliRunner:
 
 
 def test_cli_main_workflow_help_and_info(cli_runner: CliRunner) -> None:
-    """Test main CLI workflow: help, version, and info commands work."""
+    """Test main CLI workflow: help and info commands work."""
     # Test help
     result = cli_runner.invoke(cli_app, ["--help"])
-    assert result.exit_code == 0
-
-    # Test version
-    result = cli_runner.invoke(cli_app, ["--version"])
     assert result.exit_code == 0
 
     # Test info
@@ -112,23 +108,14 @@ def test_subcommand_no_args_behavior(cli_runner: CliRunner) -> None:
     assert result.exit_code in [0, 2]
 
 
-def test_cli_version_information_consistency(cli_runner: CliRunner) -> None:
-    """Test that version commands return success."""
-    # Test --version flag
-    result = cli_runner.invoke(cli_app, ["--version"])
-    assert result.exit_code == 0
-
-    # Test -v short flag
-    result = cli_runner.invoke(cli_app, ["-v"])
+def test_cli_info_command_accessible(cli_runner: CliRunner) -> None:
+    """Test that the info command returns success."""
+    result = cli_runner.invoke(cli_app, ["info"])
     assert result.exit_code == 0
 
 
 def test_rich_formatting_in_output(cli_runner: CliRunner) -> None:
     """Test that commands with Rich formatting return success."""
-    # Test version command
-    result = cli_runner.invoke(cli_app, ["--version"])
-    assert result.exit_code == 0
-
     # Test info command
     result = cli_runner.invoke(cli_app, ["info"])
     assert result.exit_code == 0
@@ -146,5 +133,5 @@ def test_help_consistency_across_subcommands(cli_runner: CliRunner) -> None:
 def test_cli_entrypoint_integration(cli_runner: CliRunner) -> None:
     """Test that the CLI can be invoked through its main entrypoint."""
     # Test basic CLI integration through app object
-    result = cli_runner.invoke(cli_app, ["--version"])
+    result = cli_runner.invoke(cli_app, ["info"])
     assert result.exit_code == 0

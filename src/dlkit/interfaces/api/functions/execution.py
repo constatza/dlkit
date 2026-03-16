@@ -89,7 +89,7 @@ def execute(
         >>> result = execute(
         ...     settings,
         ...     checkpoint_path="resume.ckpt",
-        ...     tags={"team": "ml", "version": "v3"},
+        ...     tags={"team": "ml", "release": "spring"},
         ...     hooks=TrackingHooks(
         ...         on_run_created=lambda run_id, uri: print(f"Run: {run_id}"),
         ...     ),

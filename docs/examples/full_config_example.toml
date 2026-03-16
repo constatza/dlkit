@@ -379,7 +379,7 @@ val_ratio = 0.15                    # Alias: val
 enabled = false
 # Experiment/run naming
 experiment_name = "MyExperiment"
-# run_name = "experiment-v1"
+# run_name = "experiment-alpha"
 
 # Register trained models in MLflow Model Registry
 register_model = false
@@ -498,7 +498,7 @@ num_layers = [2, 8]
 # Not used by core DLKit; useful for custom scripts and tools.
 
 # [EXTRAS]
-# experiment_version = "v2.1"
+# experiment_label = "spring-experiment"
 # custom_flag = true
 # preprocessing_config = "configs/preprocess.yaml"
 # notes = "Testing new architecture with dropout"

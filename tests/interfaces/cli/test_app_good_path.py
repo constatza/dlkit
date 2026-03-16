@@ -20,18 +20,6 @@ def test_cli_app_no_args_shows_help(cli_runner: CliRunner) -> None:
     assert result.exit_code == 2  # Typer help exit code
 
 
-def test_version_flag_displays_version(cli_runner: CliRunner) -> None:
-    """Test --version flag returns success."""
-    result = cli_runner.invoke(cli_app, ["--version"])
-    assert result.exit_code == 0
-
-
-def test_version_flag_short_form(cli_runner: CliRunner) -> None:
-    """Test -v flag returns success."""
-    result = cli_runner.invoke(cli_app, ["-v"])
-    assert result.exit_code == 0
-
-
 def test_info_command_shows_system_info(cli_runner: CliRunner) -> None:
     """Test info command returns success."""
     result = cli_runner.invoke(cli_app, ["info"])

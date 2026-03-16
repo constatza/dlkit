@@ -42,7 +42,7 @@ class PredictorConfig:
 class ModelState:
     """Model state container.
 
-    Simplified from previous version - no state machine, just data.
+    Simplified from the earlier design - no state machine, just data.
     Holds loaded model and associated metadata.
 
     Attributes:

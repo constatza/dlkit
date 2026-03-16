@@ -1,6 +1,6 @@
 """Secure URI and path types built with Pydantic‑only validators.
 
-This module re‑exports focused, Pydantic v2 Annotated types for MLflow
+This module re‑exports focused, Pydantic Annotated types for MLflow
 backends, artifact destinations, tracking URLs, and secure local paths.
 """
 

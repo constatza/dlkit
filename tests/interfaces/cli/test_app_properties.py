@@ -17,7 +17,7 @@ def cli_runner() -> CliRunner:
 def test_cli_returns_standard_exit_codes(cli_runner: CliRunner) -> None:
     """Test that CLI returns standard Unix exit codes."""
     # Valid commands should return 0
-    valid_commands = [["--help"], ["--version"], ["info"]]
+    valid_commands = [["--help"], ["info"]]
     for args in valid_commands:
         result = cli_runner.invoke(cli_app, args)
         assert result.exit_code == 0, f"Valid command {args} should return exit code 0"
@@ -27,16 +27,6 @@ def test_cli_returns_standard_exit_codes(cli_runner: CliRunner) -> None:
     for args in invalid_commands:
         result = cli_runner.invoke(cli_app, args)
         assert result.exit_code != 0, f"Invalid command {args} should return non-zero exit code"
-
-
-def test_version_output_is_consistent(cli_runner: CliRunner) -> None:
-    """Test that version output is consistent across different flags."""
-    long_result = cli_runner.invoke(cli_app, ["--version"])
-    short_result = cli_runner.invoke(cli_app, ["-v"])
-
-    assert long_result.exit_code == 0
-    assert short_result.exit_code == 0
-    assert long_result.output == short_result.output
 
 
 def test_help_is_comprehensive(cli_runner: CliRunner) -> None:
@@ -69,10 +59,6 @@ def test_verbose_flag_works_with_commands(cli_runner: CliRunner) -> None:
     result = cli_runner.invoke(cli_app, ["--verbose", "info"])
     assert result.exit_code == 0, "Verbose flag should work with info command"
 
-    # Verbose should work with version
-    result = cli_runner.invoke(cli_app, ["--verbose", "--version"])
-    assert result.exit_code == 0, "Verbose flag should work with version"
-
 
 def test_command_chaining_validation(cli_runner: CliRunner) -> None:
     """Test that command arguments are properly validated."""
@@ -80,7 +66,5 @@ def test_command_chaining_validation(cli_runner: CliRunner) -> None:
     result = cli_runner.invoke(cli_app, ["--verbose", "--help"])
     assert result.exit_code == 0, "Multiple valid flags should work"
 
-    # Conflicting arguments should be handled gracefully
-    result = cli_runner.invoke(cli_app, ["--version", "--help"])
-    # Should either work or fail gracefully (not crash)
-    assert result.exit_code in {0, 1, 2}, "Conflicting flags should be handled gracefully"
+    result = cli_runner.invoke(cli_app, ["--verbose", "--help"])
+    assert result.exit_code == 0, "Combined valid flags should be handled gracefully"

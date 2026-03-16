@@ -1,7 +1,7 @@
 """Pydantic‑only URL and path types for DLKit.
 
 Design goals:
-- Use Pydantic v2 primitives only (Url, UrlConstraints, Before/AfterValidator).
+- Use Pydantic primitives only (Url, UrlConstraints, Before/AfterValidator).
 - Handle both remote URLs and local paths without urllib/httpx.
 - Provide scheme‑specific Annotated types and composite MLflow types.
 - Centralize strict tilde expansion and local path security checks.
