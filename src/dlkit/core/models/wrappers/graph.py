@@ -31,6 +31,7 @@ from dlkit.core.models.wrappers.components import (
     _NullMetricsUpdater,
 )
 from .base import ProcessingLightningWrapper, _build_model_from_settings
+from .prediction_strategies import DiscriminativePredictionStrategy
 
 
 class GraphLightningWrapper(ProcessingLightningWrapper):
@@ -105,17 +106,26 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             shape_summary=shape_summary,
         )
 
+        _null_transformer = NamedBatchTransformer({}, {})
+        _null_invoker = _NullModelInvoker()
+        _prediction_strategy = DiscriminativePredictionStrategy(
+            model_invoker=_null_invoker,
+            batch_transformer=_null_transformer,
+            predict_target_key="",
+        )
+
         # super().__init__() must be called before assigning any nn.Module attributes
         super().__init__(
             model=model,
-            model_invoker=_NullModelInvoker(),
+            model_invoker=_null_invoker,
             loss_computer=_NullLossComputer(),
             metrics_updater=_NullMetricsUpdater(),
-            batch_transformer=NamedBatchTransformer({}, {}),
+            batch_transformer=_null_transformer,
             optimizer_settings=settings.optimizer,
             scheduler_settings=getattr(settings, "scheduler", None),
             predict_target_key="",
             checkpoint_metadata=checkpoint_metadata,
+            prediction_strategy=_prediction_strategy,
         )
 
         # Assign nn.Module attributes AFTER super().__init__()

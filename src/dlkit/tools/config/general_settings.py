@@ -15,6 +15,7 @@ from .training_settings import TrainingSettings as TrainingConfig
 from .components.model_components import ModelComponentSettings
 from .extras_settings import ExtrasSettings
 from .paths_settings import PathsSettings
+from .generative_settings import GenerativeSettings
 
 
 class GeneralSettings(BasicSettings):
@@ -34,6 +35,7 @@ class GeneralSettings(BasicSettings):
     - TRAINING: Core training settings
     - PATHS: Standardized paths with automatic resolution (optional)
     - EXTRAS: Free-form user-defined helper settings (ignored by core)
+    - GENERATIVE: Generative algorithm configuration (optional)
 
     Preserved Nesting (Library-Specific Only):
     - TRAINING.trainer: PyTorch Lightning trainer settings
@@ -48,6 +50,7 @@ class GeneralSettings(BasicSettings):
         TRAINING: Core training configuration with nested library settings
         PATHS: Optional standardized paths with automatic resolution
         EXTRAS: Arbitrary user-defined values for custom scripts/tools
+        GENERATIVE: Optional generative algorithm configuration
     """
 
     # Core infrastructure settings
@@ -90,6 +93,13 @@ class GeneralSettings(BasicSettings):
     EXTRAS: ExtrasSettings | None = Field(
         default=None,
         description="Optional free-form helper options for user scripts; ignored by core",
+    )
+    # Optional generative algorithm configuration
+    GENERATIVE: GenerativeSettings | None = Field(
+        default=None,
+        description="Optional generative algorithm configuration. "
+        "When present, selects a generative build strategy. "
+        "Supported algorithms: 'flow_matching', 'cnf'.",
     )
 
     @model_validator(mode="after")

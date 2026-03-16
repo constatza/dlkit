@@ -86,6 +86,9 @@ from .dataloader_settings import DataloaderSettings
 from .transform_settings import TransformSettings
 from .extras_settings import ExtrasSettings
 
+# Generative algorithm settings
+from .generative_settings import GenerativeSettings, FlowMatchingSettings, CNFSettings
+
 __all__ = [
     # Main settings
     "GeneralSettings",
@@ -133,4 +136,8 @@ __all__ = [
     "DataloaderSettings",
     "TransformSettings",
     "ExtrasSettings",
+    # Generative algorithm settings
+    "GenerativeSettings",
+    "FlowMatchingSettings",
+    "CNFSettings",
 ]

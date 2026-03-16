@@ -32,6 +32,7 @@ from dlkit.core.models.wrappers.components import (
     _classify_feature_entries,
 )
 from .base import ProcessingLightningWrapper, _build_model_from_settings
+from .prediction_strategies import DiscriminativePredictionStrategy
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
@@ -321,6 +322,12 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             output_spec=output_spec,
         )
 
+        prediction_strategy = DiscriminativePredictionStrategy(
+            model_invoker=model_invoker,
+            batch_transformer=batch_transformer,
+            predict_target_key=predict_target_key,
+        )
+
         super().__init__(
             model=model,
             model_invoker=model_invoker,
@@ -331,6 +338,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             scheduler_settings=getattr(settings, "scheduler", None),
             predict_target_key=predict_target_key,
             checkpoint_metadata=checkpoint_metadata,
+            prediction_strategy=prediction_strategy,
         )
 
     def forward(self, x: Tensor) -> Tensor:

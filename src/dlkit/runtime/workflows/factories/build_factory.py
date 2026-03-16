@@ -308,6 +308,261 @@ class FlexibleBuildStrategy(IBuildStrategy):
 # Shape inference now handled by dlkit.runtime.workflows.shape_inference module
 
 
+class GenerativeBuildStrategy(IBuildStrategy):
+    """Abstract base for all generative build strategies.
+
+    Handles settings that have a ``GENERATIVE`` section. Subclasses specialize
+    per algorithm (flow matching, CNF, etc.) by overriding ``can_handle``
+    and ``_build_core``.
+    """
+
+    def can_handle(self, settings: WorkflowSettings) -> bool:
+        """Return True when GENERATIVE section is present.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            True if GENERATIVE settings are configured.
+        """
+        try:
+            return getattr(settings, "GENERATIVE", None) is not None
+        except Exception:
+            return False
+
+
+class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
+    """Build strategy for flow matching generative models.
+
+    Constructs:
+    - Dataset from ``x1`` entries (model_input=False)
+    - ``FlowMatchingSupervisionBuilder`` injected as ``batch_transforms``
+    - Model invoker reading ``(xt, t)`` from features
+    - ``FlowMatchingWrapper`` with velocity MSE loss
+    - ``ODEPredictionStrategy`` for generation
+
+    Args:
+        None
+    """
+
+    def can_handle(self, settings: WorkflowSettings) -> bool:
+        """Return True when algorithm == 'flow_matching'.
+
+        Args:
+            settings: Workflow configuration settings.
+
+        Returns:
+            True if generative.algorithm is 'flow_matching'.
+        """
+        if not super().can_handle(settings):
+            return False
+        try:
+            return getattr(settings.GENERATIVE, "algorithm", None) == "flow_matching"
+        except Exception:
+            return False
+
+    def _build_core(self, settings: WorkflowSettings) -> BuildComponents:
+        """Build flow matching components.
+
+        Args:
+            settings: Workflow configuration settings with GENERATIVE section.
+
+        Returns:
+            Constructed runtime components.
+        """
+        from pathlib import Path
+
+        from dlkit.core.datasets.flexible import FlexibleDataset
+        from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
+        from dlkit.core.models.nn.generative.samplers.time import UniformTimeSampler
+        from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
+        from dlkit.core.models.wrappers.components import (
+            ModelOutputSpec,
+            NamedBatchTransformer,
+            RoutedLossComputer,
+            RoutedMetricsUpdater,
+            TensorDictModelInvoker,
+            WrapperCheckpointMetadata,
+        )
+        from dlkit.core.models.wrappers.flowmatching import FlowMatchingWrapper
+        from dlkit.core.models.wrappers.generator_factories import DeterministicGeneratorFactory
+        from dlkit.core.models.wrappers.prediction_strategies import ODEPredictionStrategy
+        from dlkit.core.models.nn.generative.functions.solvers import euler_step, heun_step
+        from dlkit.tools.config.components.model_components import WrapperComponentSettings
+        from dlkit.tools.config.data_entries import Feature, Target
+        from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+
+        gen_cfg = settings.GENERATIVE
+        x1_key: str = getattr(gen_cfg, "x1_key", "x1")
+        n_inference_steps: int = getattr(gen_cfg, "n_inference_steps", 100)
+        solver_name: str = getattr(gen_cfg, "solver", "euler")
+        val_seed: int = getattr(gen_cfg, "val_seed", 42)
+
+        mode = (
+            "inference"
+            if (settings.SESSION and getattr(settings.SESSION, "inference", False))
+            else "training"
+        )
+        try:
+            from dlkit.tools.io.locations import root as _root
+            cfg_dir = _root()
+        except Exception:
+            cfg_dir = Path.cwd()
+        context = BuildContext(mode=mode, working_directory=cfg_dir)
+
+        # Build dataset (x1 entries have model_input=False, so they flow through normally)
+        ds_settings = settings.DATASET
+        configured_features: tuple[DataEntry, ...] = tuple(
+            getattr(ds_settings, "features", ()) or ()
+        )
+        configured_targets: tuple[DataEntry, ...] = tuple(
+            getattr(ds_settings, "targets", ()) or ()
+        )
+        selected_features = configured_features
+        selected_targets = configured_targets
+
+        dataset = FlexibleDataset(
+            features=selected_features,
+            targets=selected_targets,
+            memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
+        )
+
+        from dlkit.core.datatypes.split import IndexSplit
+        from dlkit.tools.io.split_provider import get_or_create_split
+
+        split_cfg = settings.DATASET.split
+        index_split: IndexSplit = get_or_create_split(
+            num_samples=len(dataset),
+            test_ratio=split_cfg.test_ratio,
+            val_ratio=split_cfg.val_ratio,
+            session_name=settings.SESSION.name,
+            explicit_filepath=split_cfg.filepath,
+        )
+
+        dm_context = context.with_overrides(
+            dataset=dataset,
+            split=index_split,
+            dataloader=settings.DATAMODULE.dataloader,
+        )
+        from lightning.pytorch import LightningDataModule as _LDM
+        datamodule: _LDM = FactoryProvider.create_component(settings.DATAMODULE, dm_context)
+
+        # Infer data shape for ODE strategy configuration
+        shape_summary = None
+        try:
+            shape_summary = infer_shapes_from_dataset(dataset)
+        except Exception:
+            pass
+
+        # Build model
+        model_settings = settings.MODEL
+        from dlkit.core.models.wrappers.base import _build_model_from_settings
+        model = _build_model_from_settings(model_settings, shape_summary)
+
+        # Build supervision builder
+        supervision_builder = FlowMatchingSupervisionBuilder(
+            x1_key=x1_key,
+            time_sampler=UniformTimeSampler(),
+            noise_sampler=GaussianNoiseSampler(),
+        )
+
+        # Build model invoker for (xt, t) → model(xt, t)
+        output_spec = ModelOutputSpec()
+        model_invoker = TensorDictModelInvoker(
+            in_keys=[("features", "xt"), ("features", "t")],
+            output_spec=output_spec,
+        )
+
+        # Build empty batch transformer (no per-slot chains needed by default)
+        batch_transformer = NamedBatchTransformer({}, {})
+
+        # RoutedLossComputer routes predictions against batch["targets"]["ut"].
+        # Loss function is configurable via TRAINING.loss_function (defaults to MSE).
+        from dlkit.core.models.wrappers.components import MetricRoute
+        loss_fn = FactoryProvider.create_component(
+            settings.TRAINING.loss_function, BuildContext(mode="training")
+        )
+        loss_spec = settings.TRAINING.loss_function
+        loss_computer = RoutedLossComputer(
+            loss_fn=loss_fn,
+            target_key=getattr(loss_spec, "target_key", None),
+            default_target_key="ut",
+            extra_inputs=tuple(getattr(loss_spec, "extra_inputs", ()) or ()),
+        )
+        metrics_updater = RoutedMetricsUpdater(val_routes=[], test_routes=[])
+
+        # Build ODE prediction strategy
+        solver_fn = euler_step if solver_name == "euler" else heun_step
+        ode_strategy = ODEPredictionStrategy(
+            x0_sampler=GaussianNoiseSampler(),
+            solver=solver_fn,
+            n_steps=n_inference_steps,
+        )
+
+        # Build checkpoint metadata
+        entry_configs: tuple[DataEntry, ...] = tuple([*selected_features, *selected_targets])
+        from dlkit.tools.config.components.model_components import WrapperComponentSettings as _WCS
+        wrapper_settings = _WCS(
+            optimizer=settings.TRAINING.optimizer,
+            loss_function=settings.TRAINING.loss_function,
+        )
+        checkpoint_metadata = WrapperCheckpointMetadata(
+            model_settings=model_settings,
+            wrapper_settings=wrapper_settings,
+            entry_configs=entry_configs,
+            feature_names=(x1_key,),
+            predict_target_key="ut",
+            shape_summary=shape_summary,
+            output_spec=output_spec,
+        )
+
+        # Build generator factories
+        val_gen_factory = DeterministicGeneratorFactory(base_seed=val_seed)
+
+        # Build trainer
+        trainer = None
+        if (
+            settings.SESSION
+            and not getattr(settings.SESSION, "inference", False)
+            and settings.TRAINING
+        ):
+            trn_cfg = settings.TRAINING.trainer
+            try:
+                from dlkit.tools.io import locations
+                if getattr(trn_cfg, "default_root_dir", None) is None:
+                    trn_cfg = trn_cfg.model_copy(
+                        update={"default_root_dir": locations.lightning_work_dir()}
+                    )
+            except Exception:
+                pass
+            trainer = trn_cfg.build(session=settings.SESSION)
+
+        # Assemble FlowMatchingWrapper
+        model_wrapper = FlowMatchingWrapper(
+            model=model,
+            model_invoker=model_invoker,
+            loss_computer=loss_computer,
+            metrics_updater=metrics_updater,
+            batch_transformer=batch_transformer,
+            optimizer_settings=settings.TRAINING.optimizer,
+            scheduler_settings=getattr(settings.TRAINING, "scheduler", None),
+            predict_target_key="ut",
+            checkpoint_metadata=checkpoint_metadata,
+            ode_prediction_strategy=ode_strategy,
+            supervision_builder=supervision_builder,
+            val_generator_factory=val_gen_factory,
+        )
+
+
+        return BuildComponents(
+            model=model_wrapper,
+            datamodule=datamodule,
+            trainer=trainer,
+            shape_spec=shape_summary,
+            meta={"dataset_type": "flow_matching"},
+        )
+
+
 class BuildFactory:
     """Factory that selects an appropriate build strategy and constructs components.
 
@@ -317,8 +572,9 @@ class BuildFactory:
     """
 
     def __init__(self, strategies: list[IBuildStrategy] | None = None) -> None:
-        # Order: graph -> timeseries -> flexible (fallback)
+        # Order: flow_matching -> graph -> timeseries -> flexible (fallback)
         self._strategies = strategies or [
+            FlowMatchingBuildStrategy(),
             GraphBuildStrategy(),
             TimeSeriesBuildStrategy(),
             FlexibleBuildStrategy(),
