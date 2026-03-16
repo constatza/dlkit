@@ -56,13 +56,13 @@ def rectangular_linear() -> nn.Linear:
 @pytest.fixture
 def symmetric_linear() -> SymmetricLinear:
     """SymmetricLinear layer of size 4."""
-    return SymmetricLinear(4, bias=False)
+    return SymmetricLinear(in_features=4, out_features=4, bias=False)
 
 
 @pytest.fixture
 def spd_linear() -> SPDLinear:
     """SPDLinear layer of size 4."""
-    return SPDLinear(4, bias=False, min_diag=1e-4)
+    return SPDLinear(in_features=4, out_features=4, bias=False, min_diag=1e-4)
 
 
 @pytest.fixture
@@ -74,13 +74,18 @@ def factorized_linear() -> FactorizedLinear:
 @pytest.fixture
 def symmetric_factorized_linear() -> SymmetricFactorizedLinear:
     """SymmetricFactorizedLinear layer of size 4."""
-    return SymmetricFactorizedLinear(4, bias=False)
+    return SymmetricFactorizedLinear(in_features=4, out_features=4, bias=False)
 
 
 @pytest.fixture
 def spd_factorized_linear() -> SPDFactorizedLinear:
     """SPDFactorizedLinear layer of size 4."""
-    return SPDFactorizedLinear(4, bias=False, min_diag=1e-4)
+    return SPDFactorizedLinear(
+        in_features=4,
+        out_features=4,
+        bias=False,
+        min_diag=1e-4,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +207,11 @@ class TestSymmetricLinear:
         """Input and output features must be equal."""
         assert symmetric_linear.in_features == symmetric_linear.out_features
 
+    def test_rejects_non_square_dimensions(self) -> None:
+        """SymmetricLinear must reject non-square weights."""
+        with pytest.raises(ValueError, match="requires a square weight matrix"):
+            SymmetricLinear(in_features=4, out_features=3)
+
     def test_forward_produces_correct_output_shape(
         self,
         symmetric_linear: SymmetricLinear,
@@ -237,6 +247,11 @@ class TestSPDLinear:
         """SPDLinear must register the weight parametrization."""
         assert parametrize.is_parametrized(spd_linear, "weight")
 
+    def test_rejects_non_square_dimensions(self) -> None:
+        """SPDLinear must reject non-square weights."""
+        with pytest.raises(ValueError, match="requires a square weight matrix"):
+            SPDLinear(in_features=4, out_features=3)
+
     def test_forward_produces_correct_output_shape(
         self,
         spd_linear: SPDLinear,
@@ -267,6 +282,11 @@ class TestFactorizedLinear:
     ) -> None:
         """weight property must return a (out_features, in_features) tensor."""
         assert factorized_linear.weight.shape == (3, 2)
+
+    def test_tracks_standard_linear_dimensions(self, factorized_linear: FactorizedLinear) -> None:
+        """FactorizedLinear should expose standard Linear dimension attributes."""
+        assert factorized_linear.in_features == 2
+        assert factorized_linear.out_features == 3
 
     def test_base_weight_has_correct_shape(
         self,
@@ -355,6 +375,11 @@ class TestSymmetricFactorizedLinear:
         """Must register weight parametrization."""
         assert parametrize.is_parametrized(symmetric_factorized_linear, "weight")
 
+    def test_rejects_non_square_dimensions(self) -> None:
+        """SymmetricFactorizedLinear must reject non-square weights."""
+        with pytest.raises(ValueError, match="requires a square weight matrix"):
+            SymmetricFactorizedLinear(in_features=4, out_features=3)
+
     def test_forward_produces_correct_output_shape(
         self,
         symmetric_factorized_linear: SymmetricFactorizedLinear,
@@ -400,6 +425,11 @@ class TestSPDFactorizedLinear:
     ) -> None:
         """Must register weight parametrization."""
         assert parametrize.is_parametrized(spd_factorized_linear, "weight")
+
+    def test_rejects_non_square_dimensions(self) -> None:
+        """SPDFactorizedLinear must reject non-square weights."""
+        with pytest.raises(ValueError, match="requires a square weight matrix"):
+            SPDFactorizedLinear(in_features=4, out_features=3)
 
     def test_forward_produces_correct_output_shape(
         self,

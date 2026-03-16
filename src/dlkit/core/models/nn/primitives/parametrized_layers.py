@@ -152,6 +152,29 @@ def register_spd_factorized(
 # ---------------------------------------------------------------------------
 
 
+def _validate_square_features(
+    *,
+    layer_name: str,
+    in_features: int,
+    out_features: int,
+) -> None:
+    """Validate the square shape required by constrained linear layers.
+
+    Args:
+        layer_name: Name used in validation errors.
+        in_features: Standard PyTorch input feature argument.
+        out_features: Standard PyTorch output feature argument.
+
+    Raises:
+        ValueError: If the resolved dimensions are not square.
+    """
+    if in_features != out_features:
+        raise ValueError(
+            f"{layer_name} requires a square weight matrix, got "
+            f"in_features={in_features}, out_features={out_features}."
+        )
+
+
 class SymmetricLinear(nn.Linear):
     """Linear layer whose weight is constrained to be symmetric.
 
@@ -161,7 +184,8 @@ class SymmetricLinear(nn.Linear):
 
     def __init__(
         self,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         *,
         device: torch.device | str | None = None,
@@ -170,14 +194,20 @@ class SymmetricLinear(nn.Linear):
         """Initialize the symmetric linear layer.
 
         Args:
-            features: Input (and output) feature size.
+            in_features: Input feature size.
+            out_features: Output feature size.
             bias: Whether to include a bias term.
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
+        _validate_square_features(
+            layer_name=type(self).__name__,
+            in_features=in_features,
+            out_features=out_features,
+        )
         super().__init__(
-            in_features=features,
-            out_features=features,
+            in_features=in_features,
+            out_features=out_features,
             bias=bias,
             device=device,
             dtype=dtype,
@@ -194,7 +224,8 @@ class SPDLinear(nn.Linear):
 
     def __init__(
         self,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         *,
         min_diag: float = 1e-4,
@@ -204,15 +235,21 @@ class SPDLinear(nn.Linear):
         """Initialize the SPD linear layer.
 
         Args:
-            features: Input (and output) feature size.
+            in_features: Input feature size.
+            out_features: Output feature size.
             bias: Whether to include a bias term.
             min_diag: Positive diagonal floor for the Cholesky decomposition.
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
+        _validate_square_features(
+            layer_name=type(self).__name__,
+            in_features=in_features,
+            out_features=out_features,
+        )
         super().__init__(
-            in_features=features,
-            out_features=features,
+            in_features=in_features,
+            out_features=out_features,
             bias=bias,
             device=device,
             dtype=dtype,
@@ -260,6 +297,10 @@ class FactorizedLinear(nn.Module):
             dtype: Optional dtype for parameter initialisation.
         """
         super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self._log_scale_mean = float(mean)
+        self._log_scale_std = float(std)
         factory = {"device": device, "dtype": dtype}
         self.base_weight = nn.Parameter(
             torch.empty(out_features, in_features, **factory)
@@ -267,8 +308,12 @@ class FactorizedLinear(nn.Module):
         self.log_scale = nn.Parameter(torch.empty(out_features, **factory))
         self.bias = nn.Parameter(torch.empty(out_features, **factory)) if bias else None
 
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Initialize parameters for the factorized linear layer."""
         nn.init.kaiming_uniform_(self.base_weight, a=0.0)
-        nn.init.normal_(self.log_scale, mean=mean, std=std)
+        nn.init.normal_(self.log_scale, mean=self._log_scale_mean, std=self._log_scale_std)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
@@ -298,7 +343,8 @@ class SymmetricFactorizedLinear(nn.Linear):
 
     def __init__(
         self,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         *,
         mean: float = 0.0,
@@ -309,21 +355,27 @@ class SymmetricFactorizedLinear(nn.Linear):
         """Initialize the symmetric factorized linear layer.
 
         Args:
-            features: Input (and output) feature size.
+            in_features: Input feature size.
+            out_features: Output feature size.
             bias: Whether to include a bias term.
             mean: Mean for log-scale initialisation (``0.0`` → unit scale).
             std: Standard deviation for log-scale initialisation.
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
+        _validate_square_features(
+            layer_name=type(self).__name__,
+            in_features=in_features,
+            out_features=out_features,
+        )
         super().__init__(
-            in_features=features,
-            out_features=features,
+            in_features=in_features,
+            out_features=out_features,
             bias=bias,
             device=device,
             dtype=dtype,
         )
-        register_symmetric_factorized(self, size=features, mean=mean, std=std)
+        register_symmetric_factorized(self, size=in_features, mean=mean, std=std)
 
 
 class SPDFactorizedLinear(nn.Linear):
@@ -335,7 +387,8 @@ class SPDFactorizedLinear(nn.Linear):
 
     def __init__(
         self,
-        features: int,
+        in_features: int,
+        out_features: int,
         bias: bool = False,
         *,
         min_diag: float = 1e-4,
@@ -347,7 +400,8 @@ class SPDFactorizedLinear(nn.Linear):
         """Initialize the SPD factorized linear layer.
 
         Args:
-            features: Input (and output) feature size.
+            in_features: Input feature size.
+            out_features: Output feature size.
             bias: Whether to include a bias term.
             min_diag: Positive diagonal floor for the Cholesky decomposition.
             mean: Mean for log-scale initialisation (``0.0`` → unit scale).
@@ -355,11 +409,22 @@ class SPDFactorizedLinear(nn.Linear):
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
+        _validate_square_features(
+            layer_name=type(self).__name__,
+            in_features=in_features,
+            out_features=out_features,
+        )
         super().__init__(
-            in_features=features,
-            out_features=features,
+            in_features=in_features,
+            out_features=out_features,
             bias=bias,
             device=device,
             dtype=dtype,
         )
-        register_spd_factorized(self, size=features, min_diag=min_diag, mean=mean, std=std)
+        register_spd_factorized(
+            self,
+            size=in_features,
+            min_diag=min_diag,
+            mean=mean,
+            std=std,
+        )
