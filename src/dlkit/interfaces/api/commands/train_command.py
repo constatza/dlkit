@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import TrainingResult
 from dlkit.interfaces.api.services import TrainingService
@@ -14,8 +13,10 @@ from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_ma
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
+from dlkit.tools.utils.logging_config import get_logger
 from .base import BaseCommand
 
+logger = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TrainCommandInput:
@@ -72,13 +73,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
                 validation_errors = self.override_manager.validate_overrides(settings, **overrides)
                 if validation_errors:
                     error_msg = f"Override validation failed: {'; '.join(validation_errors)}"
-                    logger.error(
-                        "{}",
-                        error_msg,
-                        command="train",
-                        validation_errors=validation_errors,
-                        overrides=overrides,
-                    )
+                    logger.error("{}", error_msg)
                     raise WorkflowError(
                         error_msg,
                         {"command": "train", "validation_errors": "; ".join(validation_errors)},
@@ -87,13 +82,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             raise
         except Exception as e:
             error_msg = f"Input validation failed: {str(e)}"
-            logger.error(
-                "{}",
-                error_msg,
-                command="train",
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
+            logger.error("{}", error_msg)
             raise WorkflowError(error_msg, {"command": "train", "error": str(e)}) from e
 
     def execute(
@@ -116,9 +105,9 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             WorkflowError: On execution failure
         """
         try:
-            logger.info(
-                "Starting training command execution",
-                has_checkpoint=input_data.checkpoint_path is not None,
+            logger.debug(
+                "Starting training command execution (has_checkpoint={})",
+                input_data.checkpoint_path is not None,
             )
 
             # Validate input
@@ -127,37 +116,26 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             # Build and apply overrides
             overrides = self._build_overrides_dict(input_data)
             if overrides:
-                logger.debug("Applying training overrides", overrides=overrides)
+                logger.debug("Applying {} training overrides", len(overrides))
                 settings = self.override_manager.apply_overrides(settings, **overrides)
 
             # Execute training
             checkpoint = overrides.get("checkpoint_path") if overrides else None
             result = self.training_service.execute_training(settings, checkpoint)
 
-            logger.info(
-                "Training command completed successfully",
-                duration_seconds=getattr(result, "duration_seconds", None),
+            logger.debug(
+                "Training command completed in {} seconds",
+                getattr(result, "duration_seconds", None),
             )
 
             return result
 
         except WorkflowError as e:
-            logger.error(
-                "Training execution failed: {}",
-                e.message,
-                command="train",
-                context=e.context,
-            )
+            logger.error("Training execution failed: {}", e.message)
             raise
         except Exception as e:
             error_msg = f"Training execution failed: {str(e)}"
-            logger.error(
-                "{}",
-                error_msg,
-                command="train",
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
+            logger.error("{}", error_msg)
             raise WorkflowError(
                 error_msg, {"command": "train", "error_type": type(e).__name__}
             ) from e

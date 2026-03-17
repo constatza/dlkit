@@ -49,9 +49,6 @@ class TestOverrideIntegration:
         assert input_data.run_name is None
         assert input_data.additional_overrides == {}
 
-        # This demonstrates that ALL OVERRIDES ARE NONE BY DEFAULT
-        print("✓ All override fields are None by default")
-
     def test_settings_values_preserved_when_no_overrides(
         self, sample_settings: GeneralSettings
     ) -> None:
@@ -74,11 +71,6 @@ class TestOverrideIntegration:
             result.DATAMODULE.dataloader.batch_size
             == sample_settings.DATAMODULE.dataloader.batch_size
         )  # 16
-
-        # This demonstrates that SETTINGS VALUES TAKE PRECEDENCE WHEN NO OVERRIDES
-        print(
-            f"✓ Settings values preserved: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.dataloader.batch_size}"
-        )
 
     def test_overrides_applied_when_values_provided(self, sample_settings: GeneralSettings) -> None:
         """Test that overrides are applied when values are provided."""
@@ -113,11 +105,6 @@ class TestOverrideIntegration:
         assert result.DATAMODULE.dataloader.batch_size == 64  # Changed from 16
         assert float(result.TRAINING.optimizer.lr) == pytest.approx(0.01)  # New value
 
-        # This demonstrates that OVERRIDES WORK WHEN VALUES ARE PROVIDED
-        print(
-            f"✓ Overrides applied: epochs={result.TRAINING.epochs}, batch_size={result.DATAMODULE.dataloader.batch_size}, lr={float(result.TRAINING.optimizer.lr)}"
-        )
-
     def test_partial_overrides_preserve_non_overridden_values(
         self, sample_settings: GeneralSettings
     ) -> None:
@@ -141,11 +128,6 @@ class TestOverrideIntegration:
             result.DATAMODULE.dataloader.batch_size
             == sample_settings.DATAMODULE.dataloader.batch_size
         )  # Preserved (16)
-
-        # This demonstrates PARTIAL OVERRIDES WORK CORRECTLY
-        print(
-            f"✓ Partial override: epochs={result.TRAINING.epochs} (changed), batch_size={result.DATAMODULE.dataloader.batch_size} (preserved)"
-        )
 
     def test_none_values_explicitly_ignored(self, sample_settings: GeneralSettings) -> None:
         """Test that explicitly passing None values are ignored."""
@@ -174,26 +156,12 @@ class TestOverrideIntegration:
         )  # Preserved
         assert float(result.TRAINING.optimizer.lr) == pytest.approx(50)  # Changed
 
-        # This demonstrates NONE VALUES ARE PROPERLY IGNORED
-        print(
-            f"✓ None values ignored: only learning_rate changed to {float(result.TRAINING.optimizer.lr)}"
-        )
-
 
 def test_override_workflow_summary() -> None:
     """Summary test showing the complete override workflow."""
-    print("\n" + "=" * 80)
-    print("OVERRIDE SYSTEM BEHAVIOR SUMMARY")
-    print("=" * 80)
-    print("1. ✓ All override fields are None by default in command inputs")
-    print("2. ✓ Settings values take precedence when no overrides are specified")
-    print("3. ✓ Override system works correctly when values are provided")
-    print("4. ✓ Partial overrides preserve non-overridden values")
-    print("5. ✓ None values are explicitly ignored in override processing")
-    print("6. ✓ Validation ignores None values and validates only real overrides")
-    print("=" * 80)
-    print("The override system correctly implements the requirement:")
-    print("- Overrides are None by default")
-    print("- Settings values take precedence unless user specifies a value")
-    print("- All real defaults are inside Pydantic settings objects")
-    print("=" * 80)
+    input_data = TrainCommandInput()
+    assert input_data.mlflow is False
+    assert input_data.epochs is None
+    assert input_data.batch_size is None
+    assert input_data.learning_rate is None
+    assert input_data.additional_overrides == {}

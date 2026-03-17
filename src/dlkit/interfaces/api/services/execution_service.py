@@ -106,11 +106,7 @@ class ExecutionService:
             self._ensure_not_inference(settings)
             detection = self._detect_workflow(settings)
 
-            logger.info(
-                f"Detected workflow: {detection.workflow_type}",
-                reasoning=detection.reasoning,
-                optuna_enabled=detection.optuna_enabled,
-            )
+            logger.info("Detected workflow '{}'", detection.workflow_type)
 
             if detection.workflow_type == "optimization":
                 return self._execute_optimization(

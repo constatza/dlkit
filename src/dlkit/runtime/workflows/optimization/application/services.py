@@ -75,10 +75,10 @@ class StudyManager:
             Created study
         """
         logger.info(
-            "Creating optimization study",
-            study_name=study_name,
-            direction=direction.value,
-            target_trials=target_trials,
+            "Creating optimization study '{}' (direction={}, trials={})",
+            study_name,
+            direction.value,
+            target_trials,
         )
 
         try:
@@ -92,15 +92,15 @@ class StudyManager:
             )
 
             logger.info(
-                "Study created successfully",
-                study_id=study.study_id,
-                study_name=study.study_name,
+                "Created optimization study '{}' ({})",
+                study.study_name,
+                study.study_id,
             )
 
             return study
 
         except Exception as e:
-            logger.error("Failed to create study", error=str(e))
+            logger.error("Failed to create study '{}': {}", study_name, e)
             raise WorkflowError(
                 f"Study creation failed: {e}", {"stage": "study_creation", "study_name": study_name}
             ) from e
@@ -140,10 +140,10 @@ class StudyManager:
         self._repository.save_study(study)
 
         logger.info(
-            "Study completed",
-            study_id=study_id,
-            total_trials=len(study.trials),
-            successful_trials=len(study.successful_trials),
+            "Study '{}' completed with {}/{} successful trials",
+            study_id,
+            len(study.successful_trials),
+            len(study.trials),
         )
 
 
@@ -186,12 +186,7 @@ class TrialExecutor:
             TrialPrunedException: If trial should be pruned
             TrialFailedException: If trial execution fails
         """
-        logger.info(
-            "Executing optimization trial",
-            trial_id=trial.trial_id,
-            trial_number=trial.trial_number,
-            hyperparameters=hyperparameters,
-        )
+        logger.info("Starting optimization trial {}", trial.trial_number)
 
         try:
             # Apply hyperparameters to base settings
@@ -207,29 +202,19 @@ class TrialExecutor:
             )
 
             logger.info(
-                "Trial executed successfully",
-                trial_id=trial.trial_id,
-                trial_number=trial.trial_number,
-                objective_value=self._extract_objective_value(training_result),
+                "Completed optimization trial {} with objective {}",
+                trial.trial_number,
+                self._extract_objective_value(training_result),
             )
 
             return training_result
 
         except TrialPrunedException:
-            logger.info(
-                "Trial pruned",
-                trial_id=trial.trial_id,
-                trial_number=trial.trial_number,
-            )
+            logger.info("Pruned optimization trial {}", trial.trial_number)
             raise
 
         except Exception as e:
-            logger.error(
-                "Trial execution failed",
-                trial_id=trial.trial_id,
-                trial_number=trial.trial_number,
-                error=str(e),
-            )
+            logger.error("Optimization trial {} failed: {}", trial.trial_number, e)
             raise TrialFailedException(f"Trial execution failed: {e}") from e
 
     def _apply_hyperparameters(
@@ -254,7 +239,7 @@ class TrialExecutor:
                 updated_model = base_settings.MODEL.model_copy(update=hyperparameters)
                 return base_settings.model_copy(update={"MODEL": updated_model})
         except Exception as e:
-            logger.warning("Failed to apply hyperparameters", error=str(e))
+            logger.warning("Failed to apply hyperparameters: {}", e)
 
         return base_settings
 
@@ -318,7 +303,7 @@ class TrialExecutor:
                 )
 
         except Exception as e:
-            logger.warning(f"Failed to disable checkpoints: {e}")
+            logger.warning("Failed to disable checkpoints: {}", e)
 
     def _inject_mlflow_logger(self, components: BuildComponents, trial_context: Any) -> None:
         """Inject MLflow epoch logger callback for metric logging during optimization.
@@ -346,11 +331,12 @@ class TrialExecutor:
                 trainer.callbacks = []
             trainer.callbacks.append(epoch_logger)
             logger.debug(
-                f"Injected MLflowEpochLogger callback for optimization trial (run_id={getattr(run_context, 'run_id', 'unknown')})"
+                "Injected MLflow epoch logger for run '{}'",
+                getattr(run_context, "run_id", "unknown"),
             )
 
         except Exception as e:
-            logger.warning(f"Failed to inject MLflow epoch logger for trial: {e}")
+            logger.warning("Failed to inject MLflow epoch logger for trial: {}", e)
 
     def _extract_objective_value(self, training_result: TrainingResult) -> float:
         """Extract objective value from training result.
@@ -440,10 +426,10 @@ class OptimizationOrchestrator:
             WorkflowError: If optimization fails
         """
         logger.info(
-            "Starting optimization workflow",
-            study_name=study_name,
-            n_trials=n_trials,
-            direction=direction.value,
+            "Starting optimization workflow '{}' (direction={}, trials={})",
+            study_name,
+            direction.value,
+            n_trials,
         )
 
         try:
@@ -467,7 +453,7 @@ class OptimizationOrchestrator:
             return self._execute_without_tracking(study, base_settings)
 
         except Exception as e:
-            logger.error("Optimization workflow failed", error=str(e))
+            logger.error("Optimization workflow '{}' failed: {}", study_name, e)
             raise WorkflowError(
                 f"Optimization failed: {e}",
                 {"stage": "optimization_orchestration", "study_name": study_name},
@@ -573,9 +559,8 @@ class OptimizationOrchestrator:
                     study, study_context
                 ) as retrain_context:
                     logger.info(
-                        "Retraining with best hyperparameters",
-                        best_trial_number=best_trial.trial_number,
-                        best_hyperparameters=best_trial.hyperparameters,
+                        "Retraining best trial {}",
+                        best_trial.trial_number,
                     )
 
                     # Execute best retrain with retrain context for metric logging
@@ -749,11 +734,11 @@ class OptimizationOrchestrator:
                 self._optuna_trials = {}
             self._optuna_trials[trial.trial_id] = optuna_trial
 
-            logger.debug(f"Sampled hyperparameters from Optuna: {hyperparameters}")
+            logger.debug("Sampled {} hyperparameters from Optuna", len(hyperparameters))
             return hyperparameters
 
         except Exception as e:
-            logger.warning(f"Failed to sample hyperparameters from Optuna: {e}", exc_info=True)
+            logger.warning("Failed to sample hyperparameters from Optuna: {}", e)
 
         return {}
 
@@ -771,7 +756,7 @@ class OptimizationOrchestrator:
         # Get the Optuna trial and study
         optuna_trial = getattr(self, "_optuna_trials", {}).get(trial.trial_id)
         if not optuna_trial:
-            logger.warning(f"No Optuna trial found for {trial.trial_id}, skipping study.tell()")
+            logger.warning("No Optuna trial found for {}; skipping study.tell()", trial.trial_id)
             return
 
         optuna_study = None
@@ -781,7 +766,7 @@ class OptimizationOrchestrator:
                 optuna_study = repo._study_mapping.get(study.study_id)
 
         if not optuna_study:
-            logger.warning(f"No Optuna study found for {study.study_id}, skipping study.tell()")
+            logger.warning("No Optuna study found for {}; skipping study.tell()", study.study_id)
             return
 
         try:
@@ -799,8 +784,10 @@ class OptimizationOrchestrator:
             # Report to Optuna
             optuna_study.tell(optuna_trial, objective_value, state=optuna_state)
             logger.debug(
-                f"Reported trial {trial.trial_number} to Optuna: value={objective_value}, state={state}"
+                "Reported trial {} to Optuna with state '{}'",
+                trial.trial_number,
+                state,
             )
 
         except Exception as e:
-            logger.warning(f"Failed to report trial to Optuna: {e}")
+            logger.warning("Failed to report trial to Optuna: {}", e)

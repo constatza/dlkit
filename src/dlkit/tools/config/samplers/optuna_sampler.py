@@ -64,7 +64,7 @@ class OptunaSettingsSampler:
             return self._apply_sampled_parameters(base_settings, sampled_params)
 
         except Exception as e:
-            logger.warning("Failed to sample hyperparameters", error=str(e), exc_info=True)
+            logger.warning("Failed to sample hyperparameters: {}", e)
             return base_settings
 
     def _sample_model_parameters(self, trial: Any) -> dict[str, Any]:
@@ -83,13 +83,13 @@ class OptunaSettingsSampler:
                 try:
                     value = self._get_optuna_suggestion(trial, param_path, range_spec)
                     sampled_params[param_path] = value
-                    logger.debug(f"Sampled {param_path}={value} from range {range_spec}")
+                    logger.debug("Sampled parameter '{}'", param_path)
                 except Exception as e:
-                    logger.warning(f"Failed to sample {param_path}", error=str(e))
+                    logger.warning("Failed to sample '{}': {}", param_path, e)
             else:
                 # Use concrete value if not a range specification
                 sampled_params[param_path] = range_spec
-                logger.debug(f"Using concrete value {param_path}={range_spec}")
+                logger.debug("Using concrete value for '{}'", param_path)
 
         return sampled_params
 
@@ -116,13 +116,11 @@ class OptunaSettingsSampler:
             # Return new settings with updated MODEL
             result = base_settings.model_copy(update={"MODEL": updated_model})
 
-            logger.debug("Successfully applied sampled parameters to MODEL", params=sampled_params)
+            logger.debug("Applied {} sampled parameters to MODEL", len(sampled_params))
             return result
 
         except Exception as e:
-            logger.warning(
-                "Failed to apply sampled parameters", error=str(e), params=sampled_params
-            )
+            logger.warning("Failed to apply sampled parameters: {}", e)
             return base_settings
 
     def _is_range_specification(self, spec: Any) -> bool:

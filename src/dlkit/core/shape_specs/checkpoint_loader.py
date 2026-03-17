@@ -11,8 +11,12 @@ from pathlib import Path
 
 import torch
 
+from dlkit.tools.utils.logging_config import get_logger
+
 from .core import IShapeSpec, create_shape_spec
 from .serialization import VersionedShapeSerializer, SerializedShape
+
+logger = get_logger(__name__)
 
 
 class CheckpointShapeLoader:
@@ -77,7 +81,7 @@ class CheckpointShapeLoader:
             shapes = {name: entry.dimensions for name, entry in shape_data.entries.items()}
             return create_shape_spec(shapes)
         except Exception as e:
-            print(f"Warning: Could not deserialize shape specification: {e}")
+            logger.warning("Could not deserialize shape specification: {}", e)
             return None
 
     @staticmethod

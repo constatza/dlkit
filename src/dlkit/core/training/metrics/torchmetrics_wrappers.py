@@ -67,7 +67,8 @@ class NormalizedVectorNormError(Metric):
         >>>
         >>> metric.update(preds, target)
         >>> error = metric.compute()
-        >>> print(f"Error: {error:.4f}")
+        >>> float(error) >= 0
+        True
         >>>
         >>> # Use in MetricCollection
         >>> metrics = MetricCollection([

@@ -74,21 +74,12 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
                 exclude_value_entries=True,
             )
 
-            logger.info(
-                "Best configuration saved to TOML",
-                config_path=str(config_path),
-                study_name=study.study_name,
-                trial_number=trial_number,
-            )
+            logger.info("Saved best configuration to TOML at {}", config_path)
 
             return str(config_path)
 
         except Exception as e:
-            logger.warning(
-                "Failed to save best configuration",
-                error=str(e),
-                study_name=study.study_name,
-            )
+            logger.warning("Failed to save best configuration for '{}': {}", study.study_name, e)
             return None
 
 
@@ -143,20 +134,15 @@ class JSONConfigurationPersister(IConfigurationPersistence):
             with open(config_path, "w") as f:
                 json.dump(config_dict, f, indent=2, default=str)
 
-            logger.info(
-                "Best configuration saved to JSON",
-                config_path=str(config_path),
-                study_name=study.study_name,
-                trial_number=trial_number,
-            )
+            logger.info("Saved best configuration to JSON at {}", config_path)
 
             return str(config_path)
 
         except Exception as e:
             logger.warning(
-                "Failed to save best configuration to JSON",
-                error=str(e),
-                study_name=study.study_name,
+                "Failed to save best JSON configuration for '{}': {}",
+                study.study_name,
+                e,
             )
             return None
 
@@ -216,9 +202,9 @@ class FileSystemConfigurationPersister(IConfigurationPersistence):
         persister = self._persisters.get(self.file_format)
         if not persister:
             logger.warning(
-                "Unsupported configuration format",
-                format=self.file_format,
-                supported_formats=list(self._persisters.keys()),
+                "Unsupported configuration format '{}' (supported: {})",
+                self.file_format,
+                ", ".join(sorted(self._persisters.keys())),
             )
             return None
 
@@ -237,7 +223,7 @@ class FileSystemConfigurationPersister(IConfigurationPersistence):
                     return str(new_path)
                 return result
             except Exception as e:
-                logger.warning("Failed to save to custom directory", error=str(e))
+                logger.warning("Failed to save to custom directory: {}", e)
                 return None
         else:
             return persister.save_best_configuration(study, configuration)

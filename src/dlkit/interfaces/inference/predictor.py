@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Protocol, Self
 
 import torch
-from loguru import logger
 from tensordict import TensorDict
 
 from dlkit.core.models.wrappers.base import _unpack_model_output
@@ -18,11 +17,14 @@ from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.precision import precision_override
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.utils.logging_config import get_logger
 
 from .config import PredictorConfig, ModelState
 from .loading import load_checkpoint, build_model_from_checkpoint
 from .shapes import infer_shape_specification
 from .transforms import load_transforms_from_checkpoint
+
+logger = get_logger(__name__)
 
 
 class PredictorError(WorkflowError):
@@ -125,7 +127,7 @@ class CheckpointPredictor(IPredictor):
             WorkflowError: If loading fails
         """
         if self._loaded:
-            logger.info("Predictor already loaded")
+            logger.debug("Predictor already loaded")
             return self
 
         logger.info(f"Loading predictor from {self._config.checkpoint_path}")
@@ -134,20 +136,20 @@ class CheckpointPredictor(IPredictor):
         checkpoint = load_checkpoint(self._config.checkpoint_path)
 
         # Infer shape specification
-        logger.info("Inferring shape specification")
+        logger.debug("Inferring shape specification")
         shape_spec = infer_shape_specification(checkpoint, dataset=None)
 
         # Build and load model
-        logger.info("Building model from checkpoint")
+        logger.debug("Building model from checkpoint")
         model = build_model_from_checkpoint(checkpoint, shape_spec)
 
         # Load transforms (separated by type)
-        logger.info("Loading fitted transforms")
+        logger.debug("Loading fitted transforms")
         feature_transforms, target_transforms = load_transforms_from_checkpoint(checkpoint)
 
         # Place model on device
         device = self._resolve_device()
-        logger.info(f"Moving model to device: {device}")
+        logger.debug("Moving model to device: {}", device)
         model = model.to(device)
 
         # Ensure eval mode
@@ -173,10 +175,14 @@ class CheckpointPredictor(IPredictor):
 
         # Infer precision from model
         self._inferred_precision = self._precision_service.infer_precision_from_model(model)
-        logger.info(f"Inferred precision from model: {self._inferred_precision}")
 
         self._loaded = True
-        logger.info("Predictor loaded successfully")
+        logger.info(
+            "Predictor loaded: checkpoint='{}' device='{}' precision='{}'",
+            self._config.checkpoint_path,
+            device,
+            self._inferred_precision,
+        )
 
         return self
 
@@ -340,7 +346,7 @@ class CheckpointPredictor(IPredictor):
         if self._model_state is not None:
             # Move to CPU and delete to free GPU memory
             if self._model_state.device != "cpu":
-                logger.info("Moving model to CPU before unload")
+                logger.debug("Moving model to CPU before unload")
                 self._model_state.model.cpu()
 
             self._model_state = None
@@ -356,7 +362,7 @@ class CheckpointPredictor(IPredictor):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        logger.info("Predictor unloaded")
+        logger.debug("Predictor unloaded")
 
     def _resolve_device(self) -> str:
         """Resolve device specification to actual device string.

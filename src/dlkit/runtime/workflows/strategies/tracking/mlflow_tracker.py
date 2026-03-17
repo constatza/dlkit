@@ -106,9 +106,11 @@ class MLflowTracker(IExperimentTracker):
             # Resources cleaned up here
             ```
         """
-        logger.debug(f"MLflowTracker.__enter__ called - config={self._mlflow_config is not None}")
+        import os
 
-        if self._mlflow_config:
+        logger.debug("MLflow tracker entering (configured={})", self._mlflow_config is not None)
+
+        if self._mlflow_config or os.getenv("MLFLOW_TRACKING_URI"):
             try:
                 # Create ExitStack for managing nested context managers
                 self._exit_stack = ExitStack()
@@ -128,10 +130,10 @@ class MLflowTracker(IExperimentTracker):
                 resource_manager = MLflowResourceManager(self._mlflow_config)
                 self._resource_manager = self._exit_stack.enter_context(resource_manager)
 
-                logger.info("MLflow resources initialized")
+                logger.debug("MLflow resources initialized")
 
             except Exception as e:
-                logger.error(f"Failed to initialize MLflow resources: {e}")
+                logger.error("Failed to initialize MLflow resources: {}", e)
                 # Cleanup via ExitStack
                 if self._exit_stack:
                     self._exit_stack.__exit__(None, None, None)
@@ -167,20 +169,20 @@ class MLflowTracker(IExperimentTracker):
             # Cleanup still happens
             ```
         """
-        logger.info(f"MLflowTracker.__exit__ called - exc_type: {exc_type}, exc_val: {exc_val}")
+        logger.debug("MLflowTracker.__exit__ called - exc_type: {}, exc_val: {}", exc_type, exc_val)
         if self._exit_stack:
             try:
-                logger.info("MLflowTracker: Cleaning up MLflow resources via ExitStack")
+                logger.debug("MLflowTracker: Cleaning up MLflow resources via ExitStack")
                 self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
-                logger.info("MLflowTracker: ExitStack cleanup completed")
+                logger.debug("MLflowTracker: ExitStack cleanup completed")
             except Exception as e:
-                logger.warning(f"Failed to cleanup MLflow resources: {e}")
+                logger.warning("Failed to clean up MLflow resources: {}", e)
             finally:
                 self._exit_stack = None
                 self._resource_manager = None
         self._tracking_uri = None
         self._mlflow_config = None
-        logger.info("MLflowTracker.__exit__ completed")
+        logger.debug("MLflowTracker.__exit__ completed")
 
     @contextmanager
     def create_run(
@@ -437,7 +439,7 @@ class MLflowTracker(IExperimentTracker):
             run_context.set_tag("dataset_source_count", str(len(sources)))
             run_context.set_tag("dataset_fingerprint", fingerprint)
         except Exception as e:
-            logger.warning(f"Failed to log dataset manifest artifact: {e}")
+            logger.warning("Failed to log dataset manifest artifact: {}", e)
 
     def setup_mlflow_config(
         self,
@@ -466,8 +468,8 @@ class MLflowTracker(IExperimentTracker):
             tracker = MLflowTracker()
 
             # Just stores config - no resource initialization yet
-            url, status = tracker.setup_mlflow_config(settings.MLFLOW)
-            print(f"Tracking URI: {url}")  # May be None
+            result = tracker.setup_mlflow_config(settings.MLFLOW)
+            result.tracking_uri  # May be None
 
             # Resources initialized here
             with tracker:
@@ -475,12 +477,16 @@ class MLflowTracker(IExperimentTracker):
                     run.log_metrics({"loss": 0.5})
             ```
         """
+        import os
+
         self._root_dir = self._determine_root_dir(root_dir)
         self._mlflow_config = mlflow_config
         self._tracking_uri = None
 
-        # Skip setup if disabled or no config provided
-        if self.disable_autostart or not mlflow_config:
+        env_uri = os.getenv("MLFLOW_TRACKING_URI")
+
+        # Skip setup if disabled or neither config nor env var is present
+        if self.disable_autostart or (not mlflow_config and not env_uri):
             logger.debug("MLflow not configured or autostart disabled")
             return TrackingSetupResult(tracking_uri=None, resolved_artifact_uri=None, is_local=False)
 

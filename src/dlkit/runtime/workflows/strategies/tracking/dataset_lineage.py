@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+import warnings
 
 import numpy as np
 import torch
@@ -265,18 +266,24 @@ class EntryStructuredDatasetLoggingStrategy:
             return False
 
         try:
-            mlflow_dataset = mlflow.data.from_numpy(
-                features=payload.features,
-                targets=payload.targets,
-                name=dataset_name,
-                source=dataset_source,
-            )
-            run_context.log_dataset(
-                mlflow_dataset,
-                context="training",
-                tags=tags if tags else None,
-            )
-            logger.info("Logged structured entry-based dataset '{}' to MLflow", dataset_name)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The specified dataset source can be interpreted in multiple ways:.*",
+                    category=UserWarning,
+                )
+                mlflow_dataset = mlflow.data.from_numpy(
+                    features=payload.features,
+                    targets=payload.targets,
+                    name=dataset_name,
+                    source=dataset_source,
+                )
+                run_context.log_dataset(
+                    mlflow_dataset,
+                    context="training",
+                    tags=tags if tags else None,
+                )
+            logger.debug("Logged structured entry-based dataset '{}' to MLflow", dataset_name)
             return True
         except Exception as exc:
             logger.warning("Failed to log entry-based dataset to MLflow: {}", exc)
@@ -313,17 +320,23 @@ class TabularStructuredDatasetLoggingStrategy:
             if dataframe is None:
                 return False
 
-            mlflow_dataset = mlflow.data.from_pandas(
-                dataframe,
-                name=dataset_name,
-                source=dataset_source,
-            )
-            run_context.log_dataset(
-                mlflow_dataset,
-                context="training",
-                tags=tags if tags else None,
-            )
-            logger.info("Logged structured tabular dataset '{}' to MLflow", dataset_name)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The specified dataset source can be interpreted in multiple ways:.*",
+                    category=UserWarning,
+                )
+                mlflow_dataset = mlflow.data.from_pandas(
+                    dataframe,
+                    name=dataset_name,
+                    source=dataset_source,
+                )
+                run_context.log_dataset(
+                    mlflow_dataset,
+                    context="training",
+                    tags=tags if tags else None,
+                )
+            logger.debug("Logged structured tabular dataset '{}' to MLflow", dataset_name)
             return True
         except Exception as exc:
             logger.warning("Failed to log tabular dataset to MLflow: {}", exc)

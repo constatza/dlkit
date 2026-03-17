@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+import warnings
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
-from loguru import logger
 
 from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
@@ -14,8 +15,29 @@ from dlkit.tools.config.core.updater import update_settings
 from dlkit.core.training.metrics.collect import collect_metrics
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import ITrainingExecutor
+
+logger = get_logger(__name__)
+
+
+@contextmanager
+def _suppress_training_runtime_warnings():
+    """Suppress known framework warnings that add noise during successful runs."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*weights_only.*", category=UserWarning)
+        warnings.filterwarnings(
+            "ignore",
+            message="The '.*_dataloader' does not have many workers.*",
+            category=UserWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
+            category=UserWarning,
+        )
+        yield
 
 
 class VanillaExecutor(ITrainingExecutor):
@@ -53,7 +75,11 @@ class VanillaExecutor(ITrainingExecutor):
             # Log precision information for debugging
             precision_service = get_precision_service()
             precision_info = precision_service.get_precision_info(settings.SESSION)
-            logger.info(f"Training with precision configuration: {precision_info}")
+            logger.debug(
+                "Training precision strategy='{}' torch_dtype='{}'",
+                precision_info.get("strategy"),
+                precision_info.get("torch_dtype"),
+            )
 
             # Apply automatic learning rate tuning if configured
             self._apply_lr_tuning(trainer, model, datamodule, settings)
@@ -63,7 +89,8 @@ class VanillaExecutor(ITrainingExecutor):
 
             # Core training execution
             # Use weights_only=False for dlkit checkpoints which may contain custom classes
-            trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+            with _suppress_training_runtime_warnings():
+                trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
             # Optional post-training steps (best effort)
             predictions = self._run_optional_steps(trainer, model, datamodule)
@@ -134,14 +161,14 @@ class VanillaExecutor(ITrainingExecutor):
                     optimizer_lr = getattr(getattr(model, "optimizer", None), "lr", None)
                     if optimizer_lr == suggested_lr:
                         lr_handled = True
-                        logger.info(f"Updated model learning rate to {suggested_lr}")
+                        logger.info("Learning rate tuned to {}", suggested_lr)
                 except Exception:
                     lr_handled = False
 
             # Fallback to optimizer settings update when attribute path not available or ineffective
             if not lr_handled and hasattr(model, "optimizer") and hasattr(model.optimizer, "lr"):
                 model.optimizer = update_settings(model.optimizer, {"lr": suggested_lr})
-                logger.info(f"Updated optimizer learning rate to {suggested_lr}")
+                logger.info("Learning rate tuned to {}", suggested_lr)
                 lr_handled = True
 
             if not lr_handled:
@@ -173,12 +200,14 @@ class VanillaExecutor(ITrainingExecutor):
         """
         predictions = None
         try:
-            predictions = trainer.predict(model, datamodule=datamodule)
+            with _suppress_training_runtime_warnings():
+                predictions = trainer.predict(model, datamodule=datamodule)
         except Exception as e:
             logger.debug(f"Post-training predict step failed (non-fatal): {e}")
 
         try:
-            trainer.test(model, datamodule=datamodule)
+            with _suppress_training_runtime_warnings():
+                trainer.test(model, datamodule=datamodule)
         except Exception as e:
             logger.debug(f"Post-training test step failed (non-fatal): {e}")
 

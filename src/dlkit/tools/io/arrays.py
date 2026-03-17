@@ -58,14 +58,20 @@ def _load_npz(path: Path | str, array_key: str | None = None, **kwargs) -> np.nd
     return npz[array_key]
 
 
+def _load_torch_array(path: Path | str, **kwargs) -> object:
+    """Load a torch-backed array payload with explicit checkpoint semantics."""
+    kwargs.setdefault("weights_only", False)
+    return torch.load(path, **kwargs)
+
+
 # Frozen, immutable loader map, typed as a Mapping
 _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType({
     ".npz": _load_npz,
     ".npy": np.load,
     ".txt": np.loadtxt,
     ".csv": np.loadtxt,
-    ".pt": torch.load,
-    ".pth": torch.load,
+    ".pt": _load_torch_array,
+    ".pth": _load_torch_array,
 })
 # ──────────────────────────────────────────────────────────────────────────────
 

@@ -14,12 +14,14 @@ if TYPE_CHECKING:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 import torch
-from loguru import logger
 
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.utils.logging_config import get_logger
 
 from .shapes import infer_shape_specification
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -93,7 +95,7 @@ def extract_state_dict(checkpoint: dict[str, Any]) -> dict[str, Any]:
     if not any(k.startswith("model.") for k in state_dict):
         return state_dict
 
-    logger.info("Stripping 'model.' prefix from state dict keys")
+    logger.debug("Stripping 'model.' prefix from state dict keys")
     return {
         k.replace("model.", "", 1) if k.startswith("model.") else k: v
         for k, v in state_dict.items()
@@ -156,7 +158,7 @@ def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
             torch.float32,
             torch.float64,
         ):
-            logger.info(f"Detected checkpoint dtype: {value.dtype}")
+            logger.debug("Detected checkpoint dtype: {}", value.dtype)
             return value.dtype
 
     # Default to float32
@@ -202,7 +204,7 @@ def build_model_from_checkpoint(
         state_dict = raw_sd if isinstance(raw_sd, dict) else {}
     checkpoint_dtype = detect_checkpoint_dtype(state_dict)
 
-    logger.info(f"Building model with shape summary: {shape_spec}")
+    logger.debug("Building model with shape summary: {}", shape_spec)
 
     # Resolve model class — use directly if already a type, else import
     if isinstance(model_settings.name, type):
@@ -229,13 +231,13 @@ def build_model_from_checkpoint(
 
     # Convert model to checkpoint dtype BEFORE loading weights
     # This prevents precision loss during state dict loading
-    logger.info(f"Converting model to checkpoint dtype: {checkpoint_dtype}")
+    logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
 
     # Load state dict (strict=True to catch weight drift between save and load)
     try:
         model.load_state_dict(state_dict, strict=True)
-        logger.info("Successfully loaded model weights from checkpoint")
+        logger.debug("Successfully loaded model weights from checkpoint")
     except RuntimeError as e:
         # Re-raise with clear key listing for easier debugging
         raise WorkflowError(
@@ -273,7 +275,7 @@ def load_checkpoint(checkpoint_path: Path | str) -> dict[str, Any]:
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
     try:
-        logger.info(f"Loading checkpoint from {checkpoint_path}")
+        logger.debug("Loading checkpoint from {}", checkpoint_path)
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
         if not isinstance(checkpoint, dict):

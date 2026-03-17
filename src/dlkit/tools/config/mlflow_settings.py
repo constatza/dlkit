@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import warnings
-
 from pydantic import Field
 from pydantic import model_validator
 
+from dlkit.tools.utils.logging_config import get_logger
+
 from .core.base_settings import BasicSettings
+
+logger = get_logger(__name__)
 
 
 class MLflowSettings(BasicSettings):
@@ -81,11 +83,8 @@ class MLflowSettings(BasicSettings):
     def warn_missing_model_name(self) -> "MLflowSettings":
         """Warn when model registration is enabled but no name is configured."""
         if self.register_model and not self.registered_model_name:
-            warnings.warn(
-                "MLflow model registration is enabled but 'registered_model_name' is not set. "
-                "The model class name will be used as fallback, which may cause name clashes. "
-                "Set 'registered_model_name' explicitly to avoid this.",
-                UserWarning,
-                stacklevel=2,
+            logger.warning(
+                "MLflow model registration is enabled without 'registered_model_name'; "
+                "falling back to the model class name."
             )
         return self

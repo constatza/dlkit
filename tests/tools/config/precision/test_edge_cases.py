@@ -67,7 +67,6 @@ class TestPrecisionEdgeCases:
 
     def test_precision_with_corrupted_data(self, corrupted_data_file):
         """Test precision handling with corrupted data files."""
-        print("\n=== Testing Precision with Corrupted Data ===")
 
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
 
@@ -76,11 +75,9 @@ class TestPrecisionEdgeCases:
             with pytest.raises(Exception):  # Could be various errors depending on loader
                 load_array(corrupted_data_file)
 
-        print("✅ Corrupted data handling works correctly")
 
     def test_precision_memory_pressure(self, tmp_path):
         """Test precision behavior under memory pressure."""
-        print("\n=== Testing Precision under Memory Pressure ===")
 
         # Create large dataset
         large_data = torch.randn(1000, 1000, dtype=torch.float64)
@@ -110,11 +107,9 @@ class TestPrecisionEdgeCases:
         finally:
             large_file.unlink(missing_ok=True)
 
-        print("✅ Memory pressure handling works correctly")
 
     def test_precision_with_broken_models(self):
         """Test precision handling with models that fail during precision application."""
-        print("\n=== Testing Precision with Broken Models ===")
 
         in_features, out_features = 10, 5
 
@@ -128,11 +123,9 @@ class TestPrecisionEdgeCases:
             normal_model = BrokenModel(in_features, out_features, break_on_precision=False)
         assert next(normal_model.parameters()).dtype == torch.float16
 
-        print("✅ Broken model handling works correctly")
 
     def test_precision_service_singleton_behavior(self):
         """Test precision service singleton behavior under stress."""
-        print("\n=== Testing Precision Service Singleton ===")
 
         # Test that multiple calls return the same service
         service1 = get_precision_service()
@@ -162,11 +155,9 @@ class TestPrecisionEdgeCases:
         # All services should be the same instance
         assert all(service is services[0] for service in services)
 
-        print("✅ Precision service singleton behavior works correctly")
 
     def test_precision_context_stress_testing(self):
         """Stress test precision context with rapid changes."""
-        print("\n=== Stress Testing Precision Context ===")
 
         strategies = list(PrecisionStrategy)
         results = []
@@ -197,11 +188,9 @@ class TestPrecisionEdgeCases:
         for i, expected, actual in results:
             assert expected == actual
 
-        print("✅ Precision context stress testing passed")
 
     def test_precision_with_invalid_session_data(self):
         """Test precision handling with invalid session configurations."""
-        print("\n=== Testing Invalid Session Configurations ===")
 
         # Test with mock broken session
         class BrokenSession:
@@ -215,11 +204,9 @@ class TestPrecisionEdgeCases:
         precision = service.resolve_precision(broken_session)
         assert precision == PrecisionStrategy.FULL_32
 
-        print("✅ Invalid session handling works correctly")
 
     def test_precision_dtype_conversion_edge_cases(self):
         """Test edge cases in dtype conversion."""
-        print("\n=== Testing Dtype Conversion Edge Cases ===")
 
         service = get_precision_service()
 
@@ -237,11 +224,9 @@ class TestPrecisionEdgeCases:
             lightning_precision = service.get_lightning_precision(None, strategy)
             assert isinstance(lightning_precision, (str, int))
 
-        print("✅ Dtype conversion edge cases handled correctly")
 
     def test_precision_with_empty_and_none_inputs(self, tmp_path):
         """Test precision handling with empty and None inputs."""
-        print("\n=== Testing Empty and None Inputs ===")
 
         # Create empty tensor file
         empty_data = torch.empty(0, 5, dtype=torch.float32)
@@ -263,11 +248,9 @@ class TestPrecisionEdgeCases:
         finally:
             empty_file.unlink(missing_ok=True)
 
-        print("✅ Empty and None input handling works correctly")
 
     def test_precision_lightning_compatibility(self):
         """Test Lightning precision string compatibility."""
-        print("\n=== Testing Lightning Precision Compatibility ===")
 
         # Test all known Lightning precision formats
         lightning_precisions = [
@@ -300,11 +283,9 @@ class TestPrecisionEdgeCases:
                 # Some precisions might not be supported, that's OK
                 pass
 
-        print("✅ Lightning precision compatibility works correctly")
 
     def test_precision_with_extremely_nested_contexts(self):
         """Test precision with deeply nested context overrides."""
-        print("\n=== Testing Extremely Nested Contexts ===")
 
         strategies = [
             PrecisionStrategy.FULL_32,
@@ -333,11 +314,9 @@ class TestPrecisionEdgeCases:
         assert len(results) == 1
         assert results[0] == strategies[-1]
 
-        print("✅ Extremely nested contexts work correctly")
 
     def test_precision_resource_cleanup(self, tmp_path):
         """Test proper resource cleanup during precision operations."""
-        print("\n=== Testing Resource Cleanup ===")
 
         # Create multiple temporary files
         files = []
@@ -374,11 +353,9 @@ class TestPrecisionEdgeCases:
             for file_path in files:
                 file_path.unlink(missing_ok=True)
 
-        print("✅ Resource cleanup works correctly")
 
     def test_precision_service_thread_local_isolation(self):
         """Test thread-local isolation in precision service."""
-        print("\n=== Testing Thread-Local Isolation ===")
 
         results = {}
         errors = []
@@ -443,5 +420,3 @@ class TestPrecisionEdgeCases:
             strategy = result["strategy"]
             assert result["resolved"] == strategy
             assert result["dtype"] == expected_dtypes[strategy]
-
-        print("✅ Thread-local isolation works correctly")

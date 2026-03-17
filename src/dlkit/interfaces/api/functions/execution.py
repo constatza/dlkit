@@ -83,7 +83,8 @@ def execute(
         >>> # Training with MLflow (auto-detected from settings)
         >>> settings = load_settings("training_config.toml")
         >>> result = execute(settings, epochs=50, batch_size=32)
-        >>> print(f"Run ID: {result.mlflow_run_id}")
+        >>> result.mlflow_run_id is not None
+        True
         >>>
         >>> # With hooks
         >>> result = execute(
@@ -91,7 +92,7 @@ def execute(
         ...     checkpoint_path="resume.ckpt",
         ...     tags={"team": "ml", "release": "spring"},
         ...     hooks=TrackingHooks(
-        ...         on_run_created=lambda run_id, uri: print(f"Run: {run_id}"),
+        ...         on_run_created=lambda run_id, uri: None,
         ...     ),
         ... )
         >>>

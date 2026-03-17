@@ -47,7 +47,7 @@ class IRunContext(ABC):
         Example:
             ```python
             with tracker.create_run("exp") as run:
-                print(f"Run ID: {run.run_id}")
+                run.run_id is not None
             ```
         """
         raise NotImplementedError

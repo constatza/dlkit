@@ -134,24 +134,3 @@ class TestBuildContextFunctionality:
         assert context.get_override("key2") == 42
         assert context.get_override("missing") is None
         assert context.get_override("missing", "default") == "default"
-
-
-if __name__ == "__main__":
-    # Run basic functionality test
-    print("Testing BasicSettings...")
-    test_basic = MockBasicSettingsFunctionality()
-    test_basic.test_basic_settings_creation()
-    test_basic.test_component_settings_creation()
-    test_basic.test_component_settings_get_init_kwargs()
-    test_basic.test_hyperparameter_settings_sample()
-    test_basic.test_hyperparameter_settings_concrete_passthrough()
-    print("✓ BasicSettings tests passed")
-
-    print("Testing BuildContext...")
-    test_context = TestBuildContextFunctionality()
-    test_context.test_build_context_creation()
-    test_context.test_build_context_with_overrides()
-    test_context.test_build_context_get_override()
-    print("✓ BuildContext tests passed")
-
-    print("All core tests passed! ✓")

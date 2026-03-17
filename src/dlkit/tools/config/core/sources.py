@@ -95,7 +95,7 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
             if root_dir is not None:
                 return Path(root_dir).resolve()
         except Exception as exc:
-            logger.debug("Could not read path context for root_dir resolution: {}", exc)
+            logger.warning("Could not read path context for root_dir resolution: {}", exc)
 
         if isinstance(session_data, dict):
             candidate = session_data.get("root_dir")

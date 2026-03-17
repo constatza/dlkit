@@ -1,8 +1,6 @@
-"""Centralized logging configuration for DLKit using loguru.
+"""Centralized logging configuration for DLKit using loguru only."""
 
-This module provides structured logging configuration with environment variable
-control for debug logging and appropriate criticality levels for different components.
-"""
+from __future__ import annotations
 
 import os
 import sys
@@ -11,37 +9,8 @@ from typing import Any
 
 from loguru import logger
 
-
-def _suppress_third_party_logging() -> None:
-    """Suppress noisy third-party library logs using loguru interception.
-
-    Intercepts standard library logging calls from third-party libraries
-    (Alembic migrations, SQLAlchemy queries, Werkzeug HTTP logs) and filters
-    them to WARNING level to reduce noise.
-    """
-    import logging
-
-    # Intercept standard library logging and route through loguru
-    class InterceptHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            # Get corresponding loguru level
-            try:
-                level = logger.level(record.levelname).name
-            except ValueError:
-                level = record.levelno
-
-            # Find caller
-            frame, depth = logging.currentframe(), 2
-            while frame and frame.f_code.co_filename == logging.__file__:
-                frame = frame.f_back
-                depth += 1
-
-            logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
-
-    # Set up interception for noisy third-party loggers
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
-    for logger_name in ["alembic", "sqlalchemy", "werkzeug", "urllib3", "mlflow"]:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
+_VALID_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_CURRENT_LOG_LEVEL = "INFO"
 
 
 def configure_logging(
@@ -57,21 +26,12 @@ def configure_logging(
         debug_enabled: Whether to enable debug logging (overrides env vars)
         format_type: Format type ('structured' for JSON-like, 'simple' for human-readable)
     """
-    # Remove default handler
+    global _CURRENT_LOG_LEVEL
+
     logger.remove()
-
-    # Determine log level
-    if level is None:
-        from dlkit.tools.config.environment import env as _env
-        level = _env.log_level.upper()
-
-    # Determine debug mode
-    if debug_enabled is None:
-        debug_enabled = _is_debug_enabled()
-
-    # Override level if debug is enabled
-    if debug_enabled and level == "INFO":
-        level = "DEBUG"
+    resolved_level = get_effective_log_level(level=level, debug_enabled=debug_enabled)
+    _CURRENT_LOG_LEVEL = resolved_level
+    debug_mode = resolved_level == "DEBUG"
 
     # Configure format based on type
     if format_type == "structured":
@@ -94,39 +54,65 @@ def configure_logging(
     logger.add(
         sys.stderr,
         format=format_str,
-        level=level,
+        level=resolved_level,
         colorize=True,
-        backtrace=True,
-        diagnose=True,
+        backtrace=debug_mode,
+        diagnose=debug_mode,
         filter=_debug_filter,
     )
 
-    # Add file handler for errors if not in debug mode
-    if not debug_enabled:
-        from dlkit.tools.config.environment import env as _env
-        default_log_file = _get_default_log_file_path()
-        log_file = _env.log_file or str(default_log_file)
-        logger.add(
-            log_file,
-            format=(
-                "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-                "{level: <8} | "
-                "{name}:{function}:{line} | "
-                "{message} | "
-                "{extra}"
-            ),
-            level="WARNING",
-            rotation="10 MB",
-            retention="7 days",
-            compression="gz",
-        )
+    from dlkit.tools.config.environment import DLKitEnvironment
 
-    # Suppress noisy third-party library logs
-    _suppress_third_party_logging()
+    env = DLKitEnvironment()
+    default_log_file = _get_default_log_file_path()
+    log_file = env.log_file or str(default_log_file)
+    logger.add(
+        log_file,
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+            "{level: <8} | "
+            "{name}:{function}:{line} | "
+            "{message} | "
+            "{extra}"
+        ),
+        level=resolved_level,
+        rotation="10 MB",
+        retention="7 days",
+        compression="gz",
+        colorize=False,
+        backtrace=debug_mode,
+        diagnose=debug_mode,
+    )
 
-    # Configure logger with minimal default context
-    # Note: "service" tag removed as it's redundant in single-service applications
     logger.configure(extra={})
+
+
+def normalize_log_level(level: str | None) -> str:
+    """Normalize a log level string to a valid Loguru level name."""
+    if level is None:
+        from dlkit.tools.config.environment import DLKitEnvironment
+
+        candidate = DLKitEnvironment().log_level
+    else:
+        candidate = level
+
+    normalized = str(candidate).strip().upper()
+    if normalized not in _VALID_LEVELS:
+        raise ValueError(
+            f"Invalid log level '{candidate}'. Expected one of: {', '.join(_VALID_LEVELS)}."
+        )
+    return normalized
+
+
+def get_effective_log_level(
+    *,
+    level: str | None = None,
+    debug_enabled: bool | None = None,
+) -> str:
+    """Resolve the effective log level after env and debug overrides."""
+    resolved_level = normalize_log_level(level)
+    debug_mode = debug_enabled if debug_enabled is not None else _is_debug_enabled(resolved_level)
+    return "DEBUG" if debug_mode else resolved_level
 
 
 def _get_default_log_file_path() -> Path:
@@ -141,35 +127,32 @@ def _get_default_log_file_path() -> Path:
     return env.get_log_file_path()
 
 
-def _is_debug_enabled() -> bool:
-    """Check if debug logging is enabled via environment variables.
-
-    Debug mode is enabled when:
-    - DLKIT_LOG_LEVEL is set to "DEBUG"
-    - Running in pytest (PYTEST_CURRENT_TEST is set)
-    """
-    # Auto-enable debug in tests
+def _is_debug_enabled(resolved_level: str | None = None) -> bool:
+    """Check if debug logging is enabled via effective level or test context."""
     if os.getenv("PYTEST_CURRENT_TEST"):
         return True
 
-    # Check explicit log level
-    from dlkit.tools.config.environment import env as _env
-    return _env.log_level.upper() == "DEBUG"
+    return normalize_log_level(resolved_level) == "DEBUG"
+
+
+def should_enable_progress_bar(
+    *,
+    level: str | None = None,
+    debug_enabled: bool | None = None,
+) -> bool:
+    """Return whether end-user training progress should be visible."""
+    return get_effective_log_level(level=level, debug_enabled=debug_enabled) in {"DEBUG", "INFO"}
 
 
 def _debug_filter(record: Any) -> bool:
     """Filter debug messages based on debug mode and module origin."""
-    # Always show non-debug messages
     if record["level"].name != "DEBUG":
         return True
 
-    # Check if debug mode is enabled
-    if not _is_debug_enabled():
-        # If debug is not enabled, suppress all debug messages
+    if _CURRENT_LOG_LEVEL != "DEBUG":
         return False
 
-    # In debug mode, only show debug messages from dlkit modules
-    module_name = record.get("name", "")
+    module_name = record["extra"].get("module") or record.get("name", "")
     return module_name.startswith("dlkit") or module_name == "__main__"
 
 

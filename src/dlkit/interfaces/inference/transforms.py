@@ -9,9 +9,11 @@ from __future__ import annotations
 from typing import Any
 
 import torch
-from loguru import logger
 
 from dlkit.core.training.transforms.chain import TransformChain
+from dlkit.tools.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_transforms_from_checkpoint(
@@ -47,7 +49,7 @@ def load_transforms_from_checkpoint(
     )
 
     if has_named:
-        logger.info(
+        logger.debug(
             "Loading transforms from named ModuleDict format "
             "(_batch_transformer._feature_chains / _batch_transformer._target_chains)"
         )
@@ -58,7 +60,7 @@ def load_transforms_from_checkpoint(
             "_batch_transformer._target_chains", state_dict, entry_configs_dict
         )
     else:
-        logger.info("No fitted transforms found in checkpoint")
+        logger.debug("No fitted transforms found in checkpoint")
 
     return feature_transforms, target_transforms
 
@@ -200,8 +202,10 @@ def _reconstruct_transform_chain(
             except Exception as e:
                 logger.warning(f"Could not register buffer {key}: {e}")
 
-        logger.info(
-            f"Loaded transform chain for '{entry_name}' with {len(chain.transforms)} transforms"
+        logger.debug(
+            "Loaded transform chain for '{}' with {} transforms",
+            entry_name,
+            len(chain.transforms),
         )
         return chain
 
