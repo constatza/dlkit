@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,6 +13,11 @@ from loguru import logger
 
 _VALID_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 _CURRENT_LOG_LEVEL = "INFO"
+_MLFLOW_SQLITE_BOOTSTRAP_LOGGERS = (
+    "alembic.runtime.migration",
+    "alembic.runtime.plugins",
+    "mlflow.store.db.utils",
+)
 
 
 def configure_logging(
@@ -39,8 +46,7 @@ def configure_logging(
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<level>{message}</level> | "
-            "{extra}"
+            "<level>{message}</level>"
         )
     else:
         format_str = (
@@ -72,8 +78,7 @@ def configure_logging(
             "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
-            "{message} | "
-            "{extra}"
+            "{message}"
         ),
         level=resolved_level,
         rotation="10 MB",
@@ -142,6 +147,36 @@ def should_enable_progress_bar(
 ) -> bool:
     """Return whether end-user training progress should be visible."""
     return get_effective_log_level(level=level, debug_enabled=debug_enabled) in {"DEBUG", "INFO"}
+
+
+@contextmanager
+def suppress_third_party_loggers(
+    logger_names: tuple[str, ...],
+    *,
+    level: int = logging.WARNING,
+):
+    """Temporarily raise third-party stdlib logger levels.
+
+    This is intentionally narrow and exists only for muting third-party
+    bootstrap chatter that does not respect DLKit's Loguru configuration.
+    """
+    original_levels: list[tuple[logging.Logger, int]] = []
+    try:
+        for logger_name in logger_names:
+            target_logger = logging.getLogger(logger_name)
+            original_levels.append((target_logger, target_logger.level))
+            target_logger.setLevel(level)
+        yield
+    finally:
+        for target_logger, original_level in reversed(original_levels):
+            target_logger.setLevel(original_level)
+
+
+@contextmanager
+def suppress_mlflow_sqlite_bootstrap_logs():
+    """Suppress Alembic/MLflow DB bootstrap chatter for local SQLite setup."""
+    with suppress_third_party_loggers(_MLFLOW_SQLITE_BOOTSTRAP_LOGGERS):
+        yield
 
 
 def _debug_filter(record: Any) -> bool:
