@@ -63,15 +63,13 @@ def local_host_alive() -> bool:
 
 
 def resolve_tracking_uri() -> str:
-    """Resolve MLflow tracking URI with env -> localhost probe -> sqlite fallback."""
-    env_uri = os.getenv("MLFLOW_TRACKING_URI")
-    if env_uri:
-        return _normalize_tracking_uri(env_uri)
+    """Resolve MLflow tracking URI via backend selection.
 
-    if local_host_alive():
-        return _LOCAL_MLFLOW_URL
-
-    return _normalize_tracking_uri(locations.mlruns_backend_uri())
+    Delegates to :func:`~dlkit.runtime.workflows.strategies.tracking.backend.select_backend`
+    for consistent backend selection logic.
+    """
+    from dlkit.runtime.workflows.strategies.tracking.backend import select_backend
+    return select_backend().tracking_uri()
 
 
 def resolve_artifact_uri(tracking_uri: str) -> str | None:
@@ -138,21 +136,22 @@ def _tcp_port_open(host: str, port: int) -> bool:
 
 
 def _looks_like_mlflow(base_url: str) -> bool:
-    """Confirm the service at base_url is MLflow by probing a canonical REST endpoint.
+    """Confirm the service at base_url is MLflow by probing the /health endpoint.
 
-    Uses the unambiguous ``/api/2.0/mlflow/experiments/list`` path instead of generic
-    heuristics so that any non-MLflow service on port 5000 is not mistakenly accepted.
+    Uses ``/health`` (present in MLflow 2.x and 3.x), which returns HTTP 200 with
+    body ``"OK"``.  The old ``/api/2.0/mlflow/experiments/list`` was removed in
+    MLflow 3.x.
 
     Args:
         base_url: Base URL of the service to probe (e.g. ``"http://127.0.0.1:5000"``).
 
     Returns:
-        True only when the canonical MLflow experiments endpoint returns HTTP 200.
+        True only when the MLflow health endpoint returns HTTP 200.
     """
     try:
-        url = f"{base_url}/api/2.0/mlflow/experiments/list"
+        url = f"{base_url}/health"
         req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=1.0) as resp:  # noqa: S310 - controlled localhost probe
+        with request.urlopen(req, timeout=1.0) as resp:  # noqa: S310
             return resp.status == 200
     except Exception:
         return False

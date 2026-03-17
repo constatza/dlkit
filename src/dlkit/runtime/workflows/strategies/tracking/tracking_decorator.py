@@ -97,12 +97,27 @@ class TrackingDecorator(ITrainingExecutor):
         """
         # Configure the tracker before entering its context
         logger.debug("Setting up tracking")
-        tracking_setup = self._setup_tracking(settings)
-        tracking_uri = tracking_setup[0] if tracking_setup is not None else None
+        self._setup_tracking(settings)
 
         # Use tracker as context manager for proper resource management
         logger.info("Starting training with MLflow tracking")
         with self._tracker:  # type: ignore[attr-defined]
+            # Get tracking URI after __enter__ activates the backend
+            tracking_uri = (
+                self._tracker.get_tracking_uri()
+                if hasattr(self._tracker, "get_tracking_uri")
+                else None
+            )
+            is_local = (
+                self._tracker.is_local()
+                if hasattr(self._tracker, "is_local")
+                else False
+            )
+            if tracking_uri:
+                if is_local:
+                    logger.info("Using local file-backed MLflow tracking URI: {}", tracking_uri)
+                else:
+                    logger.info("Using MLflow server tracking URI: {}", tracking_uri)
             logger.debug("Executing training with tracking")
             result = self._execute_with_tracking(components, settings, tracking_uri)
             logger.debug("Training completed, exiting tracker context")
@@ -199,17 +214,14 @@ class TrackingDecorator(ITrainingExecutor):
     def _setup_tracking(
         self,
         settings: GeneralSettings,
-    ) -> tuple[str | None, bool] | None:
+    ) -> None:
         """Setup tracking configuration.
 
-        Delegates to tracker's setup method if available (LSP-compliant via Protocol),
-        using ConfigAccessor for type-safe settings access.
+        Delegates to tracker's configure() if available (LSP-compliant via Protocol).
+        No return value — use get_tracking_uri() after __enter__ instead.
 
         Args:
             settings: Global settings
-
-        Returns:
-            Resolved tracking URI, if available.
         """
         accessor = ConfigAccessor(settings)
         mlflow_config = accessor.get_mlflow_config()
@@ -217,24 +229,13 @@ class TrackingDecorator(ITrainingExecutor):
         if isinstance(self._tracker, ITrackingSetup):
             root_dir = accessor.get_session_root_dir()
             try:
-                result = self._tracker.setup_mlflow_config(mlflow_config, root_dir=root_dir)
+                self._tracker.configure(mlflow_config, root_dir=root_dir)
             except TypeError as exc:
-                # Fall back for trackers that have not yet adopted the root_dir kwarg
                 if "unexpected keyword argument 'root_dir'" in str(exc):
                     logger.debug("Tracker does not support root_dir parameter, using fallback")
-                    result = self._tracker.setup_mlflow_config(mlflow_config)
+                    self._tracker.configure(mlflow_config)
                 else:
                     raise
-            tracking_uri = result.tracking_uri if hasattr(result, "tracking_uri") else result[0]
-            is_local = bool(getattr(result, "is_local", False))
-            if tracking_uri:
-                if is_local:
-                    logger.info("Using local file-backed MLflow tracking URI: {}", tracking_uri)
-                else:
-                    logger.info("Using MLflow server tracking URI: {}", tracking_uri)
-            return tracking_uri, is_local
-
-        return None
 
     def _extract_run_config(self, settings: GeneralSettings) -> dict:
         """Extract run configuration from settings including merged tags.

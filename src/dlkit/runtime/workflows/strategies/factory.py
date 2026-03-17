@@ -45,13 +45,14 @@ class ExecutionStrategyFactory:
         # Start with core vanilla executor
         executor: ITrainingExecutor = VanillaExecutor()
 
-        # Use real tracker when MLFLOW section is present, null tracker otherwise
-        if self._has_mlflow_config(settings):
+        # Use real tracker when MLFLOW section is present or MLFLOW_TRACKING_URI env var is set
+        if self._has_mlflow_config_or_env(settings):
             from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
+            from dlkit.runtime.workflows.strategies.tracking.uri_resolver import local_host_alive
 
             tracker = MLflowTracker(
                 disable_autostart=False,
-                skip_health_checks=False,
+                probe=local_host_alive,
             )
         else:
             from dlkit.runtime.workflows.strategies.tracking import NullTracker
@@ -88,10 +89,11 @@ class ExecutionStrategyFactory:
                     MLflowTrackingAdapter,
                 )
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
+                from dlkit.runtime.workflows.strategies.tracking.uri_resolver import local_host_alive
 
                 mlflow_tracker = MLflowTracker(
                     disable_autostart=False,
-                    skip_health_checks=False,
+                    probe=local_host_alive,
                 )
 
                 mlflow_config = getattr(settings, "MLFLOW", None)
@@ -130,6 +132,24 @@ class ExecutionStrategyFactory:
         ``enabled`` flag is needed.
         """
         return bool(getattr(settings, "MLFLOW", None))
+
+    def _has_mlflow_config_or_env(self, settings: GeneralSettings) -> bool:
+        """Check if MLflow should be activated for training.
+
+        Activates when the ``[MLFLOW]`` config section exists, when the
+        standard ``MLFLOW_TRACKING_URI`` environment variable is set, or when
+        a local MLflow server is detected at the default address.  The local
+        probe only runs when neither config nor env var is present (short-circuit).
+        """
+        import os
+
+        from dlkit.runtime.workflows.strategies.tracking.uri_resolver import local_host_alive
+
+        env_uri = os.getenv("MLFLOW_TRACKING_URI")
+        has_user_http_uri = bool(
+            env_uri and (env_uri.startswith("http://") or env_uri.startswith("https://"))
+        )
+        return self._has_mlflow_config(settings) or has_user_http_uri or local_host_alive()
 
     def _is_optuna_enabled(self, settings: GeneralSettings) -> bool:
         """Check if Optuna optimization is enabled in settings."""

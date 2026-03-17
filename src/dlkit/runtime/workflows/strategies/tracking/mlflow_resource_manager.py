@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import threading
-
 import os
+import threading
 
 import mlflow
 from mlflow import MlflowClient
 
-from dlkit.runtime.workflows.strategies.tracking.uri_resolver import (
-    parse_mlflow_scheme,
-    resolve_mlflow_uris,
+from dlkit.runtime.workflows.strategies.tracking.backend import (
+    LocalSqliteBackend,
+    RemoteServerBackend,
+    TrackingBackend,
 )
+from dlkit.runtime.workflows.strategies.tracking.uri_resolver import parse_mlflow_scheme
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.io import url_resolver
-from dlkit.tools.utils.logging_config import get_logger
+from dlkit.tools.utils.logging_config import (
+    get_logger,
+    suppress_mlflow_sqlite_bootstrap_logs,
+)
 
 from .mlflow_client_factory import MLflowClientFactory
 
@@ -35,15 +39,20 @@ class MLflowResourceState:
     stack_lock: threading.Lock = field(default_factory=threading.Lock)
     experiment_id: str | None = None
     cleanup_callbacks: list[Any] = field(default_factory=list)
-    tracking_uri: str | None = None
-    artifact_uri: str | None = None
 
 
 class MLflowResourceManager:
     """Centralized MLflow client/run resource manager."""
 
-    def __init__(self, mlflow_config: MLflowSettings | None = None):
+    def __init__(self, mlflow_config: MLflowSettings | None, backend: TrackingBackend):
+        """Initialize with MLflow config and pre-selected backend.
+
+        Args:
+            mlflow_config: Optional MLflow settings.
+            backend: Pre-selected tracking backend (from select_backend()).
+        """
         self._config = mlflow_config
+        self._backend = backend
         self._state = MLflowResourceState()
         self._is_initialized = False
 
@@ -55,6 +64,9 @@ class MLflowResourceManager:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        with self._state.stack_lock:
+            if self._state.active_run_stack:
+                logger.warning("Non-empty run stack at cleanup: {}", self._state.active_run_stack)
         self._cleanup_all_resources()
         self._is_initialized = False
 
@@ -63,47 +75,38 @@ class MLflowResourceManager:
 
         ensure_mlflow_defaults()
 
-        resolved = resolve_mlflow_uris()
-        self._state.tracking_uri = resolved.tracking_uri
-        self._state.artifact_uri = resolved.artifact_uri
+        tracking_uri = self._backend.tracking_uri()
+        artifact_uri = self._backend.artifact_uri()
 
-        self._ensure_local_storage_if_needed(resolved.tracking_uri, resolved.artifact_uri)
-        self._set_global_tracking_uri(resolved.tracking_uri)
+        self._ensure_local_storage_if_needed(artifact_uri)
 
-        self._state.client = MLflowClientFactory.create_client(tracking_uri=resolved.tracking_uri)
-        if not MLflowClientFactory.validate_client_connectivity(self._state.client):
-            logger.warning("MLflow client connectivity validation failed")
+        with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
+            self._state.client = MLflowClientFactory.create_client(
+                tracking_uri=tracking_uri
+            )
+            if not MLflowClientFactory.validate_client_connectivity(self._state.client):
+                logger.warning("MLflow client connectivity validation failed")
 
-    def _ensure_local_storage_if_needed(self, tracking_uri: str, artifact_uri: str | None) -> None:
-        match parse_mlflow_scheme(tracking_uri):
-            case "sqlite":
-                db_path = self._sqlite_db_path(tracking_uri)
+    def _ensure_local_storage_if_needed(self, artifact_uri: str | None) -> None:
+        match self._backend:
+            case LocalSqliteBackend(db_path=db_path):
                 db_path.parent.mkdir(parents=True, exist_ok=True)
-            case "http" | "https":
+            case _:
                 pass
-            case unexpected:
-                raise ValueError(f"Unsupported tracking scheme: {unexpected}")
 
         if artifact_uri and artifact_uri.startswith("file://"):
             artifact_path = url_resolver.resolve_local_uri(artifact_uri, Path.cwd())
             artifact_path.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def _sqlite_db_path(uri: str) -> Path:
-        return url_resolver.resolve_local_uri(uri, Path.cwd())
-
-    def _set_global_tracking_uri(self, uri: str) -> None:
-        current_uri = self._state.tracking_uri
-        if current_uri and current_uri != uri:
-            msg = (
-                f"Attempting to change global tracking URI from {current_uri} to {uri}. "
-                "This indicates inconsistent MLflow resource state."
-            )
-            raise RuntimeError(msg)
-        mlflow.set_tracking_uri(uri)
-        self._state.tracking_uri = uri
-
     def get_client(self) -> MlflowClient:
+        """Return the initialized MLflow client.
+
+        Returns:
+            Active MlflowClient instance.
+
+        Raises:
+            RuntimeError: If not initialized or client unavailable.
+        """
         if not self._is_initialized:
             raise RuntimeError("Resource manager not initialized - use as context manager")
         if self._state.client is None:
@@ -111,8 +114,14 @@ class MLflowResourceManager:
         return self._state.client
 
     def get_tracking_uri(self) -> str | None:
-        """Get currently resolved tracking URI."""
-        return self._state.tracking_uri
+        """Return the backend's tracking URI.
+
+        Returns:
+            Tracking URI string or None if not initialized.
+        """
+        if not self._is_initialized:
+            return None
+        return self._backend.tracking_uri()
 
     @contextmanager
     def create_run(
@@ -122,17 +131,38 @@ class MLflowResourceManager:
         nested: bool = False,
         tags: dict[str, str] | None = None,
     ):
+        """Create a scoped MLflow run context.
+
+        Sets tracking URI for the duration of the run only and restores it
+        on exit. For SQLite backends the URI is cleared; for HTTP backends
+        the user-configured URI is preserved.
+
+        Args:
+            experiment_name: Experiment to associate the run with.
+            run_name: Optional run name.
+            nested: If True, creates a child run under the current parent.
+            tags: Optional tags to attach.
+
+        Yields:
+            ClientBasedRunContext: Active run context.
+
+        Raises:
+            RuntimeError: If not initialized.
+        """
         if not self._is_initialized:
             raise RuntimeError("Resource manager not initialized")
 
-        self._validate_stack_consistency()
         client = self.get_client()
         exp_name = experiment_name or "DLKit"
-        experiment_id = MLflowClientFactory.get_or_create_experiment(
-            client,
-            exp_name,
-            self._state.artifact_uri,
-        )
+        tracking_uri = self._backend.tracking_uri()
+        artifact_uri = self._backend.artifact_uri()
+
+        with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
+            experiment_id = MLflowClientFactory.get_or_create_experiment(
+                client,
+                exp_name,
+                artifact_uri,
+            )
         self._state.experiment_id = experiment_id
 
         parent_run_id = None
@@ -150,53 +180,63 @@ class MLflowResourceManager:
         if tags:
             start_kwargs["tags"] = tags
 
-        with mlflow.start_run(**start_kwargs) as active_run:
-            run_id = active_run.info.run_id
-            with self._state.stack_lock:
-                self._state.active_run_stack.append(run_id)
+        # Scoped tracking URI — set only for the duration of this run
+        mlflow.set_tracking_uri(tracking_uri)
+        try:
+            with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
+                with mlflow.start_run(**start_kwargs) as active_run:
+                    run_id = active_run.info.run_id
+                    with self._state.stack_lock:
+                        self._state.active_run_stack.append(run_id)
 
-            try:
-                from .mlflow_run_context import ClientBasedRunContext
+                    try:
+                        from .mlflow_run_context import ClientBasedRunContext
 
-                yield ClientBasedRunContext(client, run_id)
-            finally:
-                with self._state.stack_lock:
-                    if self._state.active_run_stack and self._state.active_run_stack[-1] == run_id:
-                        self._state.active_run_stack.pop()
+                        yield ClientBasedRunContext(client, run_id, tracking_uri=tracking_uri)
+                    finally:
+                        with self._state.stack_lock:
+                            if self._state.active_run_stack and self._state.active_run_stack[-1] == run_id:
+                                self._state.active_run_stack.pop()
+        finally:
+            self._restore_tracking_uri_if_last_run()
 
-        self._validate_stack_consistency()
+    def _restore_tracking_uri_if_last_run(self) -> None:
+        """Restore or clear tracking URI only when the outermost run exits.
+
+        Prevents nested runs from clearing the URI while a parent run is still
+        active and needs it to communicate with the MLflow store.
+        """
+        with self._state.stack_lock:
+            still_active = bool(self._state.active_run_stack)
+        if still_active:
+            return
+        match self._backend:
+            case RemoteServerBackend(uri=uri):
+                os.environ["MLFLOW_TRACKING_URI"] = uri
+            case _:
+                mlflow.set_tracking_uri(None)
 
     def add_cleanup_callback(self, callback: Any) -> None:
+        """Register a cleanup callback to run on context exit.
+
+        Args:
+            callback: Zero-argument callable invoked during cleanup.
+        """
         self._state.cleanup_callbacks.append(callback)
 
-    def _validate_stack_consistency(self) -> None:
-        global_active = mlflow.active_run()
-        with self._state.stack_lock:
-            match (bool(self._state.active_run_stack), bool(global_active)):
-                case (False, False):
-                    return
-                case (True, True):
-                    internal_active = self._state.active_run_stack[-1]
-                    global_run_id = global_active.info.run_id
-                    if internal_active != global_run_id:
-                        logger.warning(
-                            f"Stack desynchronization: internal={internal_active} "
-                            f"global={global_run_id}"
-                        )
-                case _:
-                    logger.warning(
-                        "Stack desynchronization: "
-                        f"internal_depth={len(self._state.active_run_stack)} "
-                        f"global_present={bool(global_active)}"
-                    )
+    @staticmethod
+    def _sqlite_bootstrap_log_suppressed(scheme: str):
+        if scheme == "sqlite":
+            return suppress_mlflow_sqlite_bootstrap_logs()
+        return nullcontext()
 
     def _get_state_snapshot(self) -> dict[str, Any]:
-        """Get current state snapshot for debugging and tests."""
+        """Return current state snapshot for debugging and tests."""
         with self._state.stack_lock:
             global_run = mlflow.active_run()
             return {
                 "initialized": self._is_initialized,
-                "tracking_uri": self._state.tracking_uri,
+                "tracking_uri": self._backend.tracking_uri() if self._is_initialized else None,
                 "client_exists": self._state.client is not None,
                 "active_run_stack": list(self._state.active_run_stack),
                 "stack_depth": len(self._state.active_run_stack),
@@ -231,19 +271,24 @@ class MLflowResourceManager:
 
     @staticmethod
     def reset_global_state() -> None:
+        """Reset MLflow global state.
+
+        Clears active runs and resets the tracking URI.
+        Preserves user-configured HTTP/HTTPS URIs; clears SQLite URIs
+        (which were set by this manager and should not leak).
+        """
         try:
             try:
                 mlflow.end_run()
             except Exception:
                 pass
-            # set_tracking_uri(None) in MLflow 3.x removes MLFLOW_TRACKING_URI from
-            # os.environ when mlflow previously set it.  Preserve the env var so that
-            # any code running after this reset still uses the correct tracking backend.
-            _saved_uri = os.environ.get("MLFLOW_TRACKING_URI")
-            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
-            if _saved_uri is not None:
-                os.environ["MLFLOW_TRACKING_URI"] = _saved_uri
             if hasattr(mlflow, "_active_run_stack"):
                 mlflow._active_run_stack.clear()  # type: ignore[attr-defined]
+            # Only preserve HTTP/HTTPS URIs — those are user-configured remote servers.
+            # SQLite URIs were set by this manager and should be cleared.
+            saved = os.environ.get("MLFLOW_TRACKING_URI")
+            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
+            if saved and (saved.startswith("http://") or saved.startswith("https://")):
+                os.environ["MLFLOW_TRACKING_URI"] = saved
         except Exception as e:  # pragma: no cover - best-effort safety
             logger.warning("Failed to reset MLflow global state: {}", e)

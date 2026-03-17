@@ -600,9 +600,9 @@ class NullTracker(IExperimentTracker):
 class ITrackingSetup(Protocol):
     """Optional protocol for trackers that support external configuration setup."""
 
-    def setup_mlflow_config(
+    def configure(
         self, mlflow_config: Any, *, root_dir: Any = None
-    ) -> Any: ...
+    ) -> None: ...
 
 
 @runtime_checkable
