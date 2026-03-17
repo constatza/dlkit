@@ -7,7 +7,6 @@ the configured root directory.
 
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import numpy as np
@@ -114,50 +113,48 @@ def test_splits_saved_to_session_root_dir(
         assert settings.SESSION.root_dir is not None
         assert Path(settings.SESSION.root_dir).resolve() == custom_root.resolve()
 
-        # Mock test environment detection to test production behavior
-        with patch("dlkit.tools.io.locations._is_test_environment", return_value=False):
-            # Get or create a split
-            split = get_or_create_split(
-                num_samples=100,
-                test_ratio=0.15,
-                val_ratio=0.15,
-                session_name=settings.SESSION.name,
+        # Get or create a split
+        split = get_or_create_split(
+            num_samples=100,
+            test_ratio=0.15,
+            val_ratio=0.15,
+            session_name=settings.SESSION.name,
+        )
+
+        # Verify split was created
+        assert len(split.train) > 0
+        assert len(split.validation) > 0
+        assert len(split.test) > 0
+
+        # Verify splits directory uses SESSION.root_dir
+        expected_splits_dir = (custom_root / "output" / "splits").resolve()
+        actual_splits_dir = splits_dir().resolve()
+
+        assert actual_splits_dir == expected_splits_dir, (
+            f"Splits directory mismatch!\n"
+            f"Expected: {expected_splits_dir}\n"
+            f"Actual: {actual_splits_dir}\n"
+            f"SESSION.root_dir: {settings.SESSION.root_dir}"
+        )
+
+        # Verify split file was actually created in the correct location
+        # Note: filename now includes num_samples to prevent stale cache bugs
+        split_file = expected_splits_dir / f"{settings.SESSION.name}_100_split.json"
+        assert split_file.exists(), (
+            f"Split file not found at expected location: {split_file}\n"
+            f"Checked in: {expected_splits_dir}"
+        )
+
+        # Verify it's NOT in CWD (the bug we're fixing)
+        cwd_split_file = (
+            Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
+        )
+        if cwd_split_file.exists() and cwd_split_file.resolve() != split_file.resolve():
+            pytest.fail(
+                f"Split file incorrectly saved to CWD!\n"
+                f"CWD location: {cwd_split_file}\n"
+                f"Expected location: {split_file}"
             )
-
-            # Verify split was created
-            assert len(split.train) > 0
-            assert len(split.validation) > 0
-            assert len(split.test) > 0
-
-            # Verify splits directory uses SESSION.root_dir
-            expected_splits_dir = (custom_root / "output" / "splits").resolve()
-            actual_splits_dir = splits_dir().resolve()
-
-            assert actual_splits_dir == expected_splits_dir, (
-                f"Splits directory mismatch!\n"
-                f"Expected: {expected_splits_dir}\n"
-                f"Actual: {actual_splits_dir}\n"
-                f"SESSION.root_dir: {settings.SESSION.root_dir}"
-            )
-
-            # Verify split file was actually created in the correct location
-            # Note: filename now includes num_samples to prevent stale cache bugs
-            split_file = expected_splits_dir / f"{settings.SESSION.name}_100_split.json"
-            assert split_file.exists(), (
-                f"Split file not found at expected location: {split_file}\n"
-                f"Checked in: {expected_splits_dir}"
-            )
-
-            # Verify it's NOT in CWD (the bug we're fixing)
-            cwd_split_file = (
-                Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
-            )
-            if cwd_split_file.exists() and cwd_split_file.resolve() != split_file.resolve():
-                pytest.fail(
-                    f"Split file incorrectly saved to CWD!\n"
-                    f"CWD location: {cwd_split_file}\n"
-                    f"Expected location: {split_file}"
-                )
 
     finally:
         # Restore original env var
@@ -190,30 +187,28 @@ def test_splits_respect_session_root_without_session_name(
         # Use default session name
         session_name = "dlkit-session"  # Default value
 
-        # Mock test environment detection to test production behavior
-        with patch("dlkit.tools.io.locations._is_test_environment", return_value=False):
-            # Get or create a split
-            split = get_or_create_split(
-                num_samples=100,
-                test_ratio=0.15,
-                val_ratio=0.15,
-                session_name=session_name,
-            )
+        # Get or create a split
+        split = get_or_create_split(
+            num_samples=100,
+            test_ratio=0.15,
+            val_ratio=0.15,
+            session_name=session_name,
+        )
 
-            # Verify splits directory uses SESSION.root_dir (NOT CWD)
-            expected_splits_dir = (custom_root / "output" / "splits").resolve()
-            actual_splits_dir = splits_dir().resolve()
+        # Verify splits directory uses SESSION.root_dir (NOT CWD)
+        expected_splits_dir = (custom_root / "output" / "splits").resolve()
+        actual_splits_dir = splits_dir().resolve()
 
-            assert actual_splits_dir == expected_splits_dir, (
-                f"Splits directory should use SESSION.root_dir even with default session name!\n"
-                f"Expected: {expected_splits_dir}\n"
-                f"Actual: {actual_splits_dir}"
-            )
+        assert actual_splits_dir == expected_splits_dir, (
+            f"Splits directory should use SESSION.root_dir even with default session name!\n"
+            f"Expected: {expected_splits_dir}\n"
+            f"Actual: {actual_splits_dir}"
+        )
 
-            # Verify split file exists in correct location
-            # Note: filename now includes num_samples
-            split_file = expected_splits_dir / f"{session_name}_100_split.json"
-            assert split_file.exists(), f"Split file not found: {split_file}"
+        # Verify split file exists in correct location
+        # Note: filename now includes num_samples
+        split_file = expected_splits_dir / f"{session_name}_100_split.json"
+        assert split_file.exists(), f"Split file not found: {split_file}"
 
     finally:
         # Restore original env var
@@ -243,30 +238,28 @@ def test_multiple_splits_with_different_sessions(
         session_names = ["session-a", "session-b", "session-c"]
         expected_splits_dir = (custom_root / "output" / "splits").resolve()
 
-        # Mock test environment detection to test production behavior
-        with patch("dlkit.tools.io.locations._is_test_environment", return_value=False):
-            for session_name in session_names:
-                split = get_or_create_split(
-                    num_samples=100,
-                    test_ratio=0.15,
-                    val_ratio=0.15,
-                    session_name=session_name,
-                )
-
-                # Verify split file exists in correct location
-                # Note: filename now includes num_samples
-                split_file = expected_splits_dir / f"{session_name}_100_split.json"
-                assert split_file.exists(), (
-                    f"Split file for session '{session_name}' not found at: {split_file}"
-                )
-
-            # Verify ALL splits are in SESSION.root_dir, not scattered in CWD
-            assert expected_splits_dir.exists()
-            split_files = list(expected_splits_dir.glob("*_split.json"))
-            assert len(split_files) >= len(session_names), (
-                f"Not all split files found in {expected_splits_dir}. "
-                f"Expected at least {len(session_names)}, found {len(split_files)}"
+        for session_name in session_names:
+            split = get_or_create_split(
+                num_samples=100,
+                test_ratio=0.15,
+                val_ratio=0.15,
+                session_name=session_name,
             )
+
+            # Verify split file exists in correct location
+            # Note: filename now includes num_samples
+            split_file = expected_splits_dir / f"{session_name}_100_split.json"
+            assert split_file.exists(), (
+                f"Split file for session '{session_name}' not found at: {split_file}"
+            )
+
+        # Verify ALL splits are in SESSION.root_dir, not scattered in CWD
+        assert expected_splits_dir.exists()
+        split_files = list(expected_splits_dir.glob("*_split.json"))
+        assert len(split_files) >= len(session_names), (
+            f"Not all split files found in {expected_splits_dir}. "
+            f"Expected at least {len(session_names)}, found {len(split_files)}"
+        )
 
     finally:
         # Restore original env var

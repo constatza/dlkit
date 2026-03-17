@@ -8,7 +8,6 @@ This test suite verifies the three-layer defense-in-depth approach:
 
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -161,14 +160,12 @@ def test_split_path_respects_session_root_dir(test_config_with_session_root: Pat
 
         session_root = Path(settings.SESSION.root_dir)
 
-        # Mock test environment detection to return False (test production behavior)
-        with patch("dlkit.tools.io.locations._is_test_environment", return_value=False):
-            # Get splits directory
-            splits_path = splits_dir()
+        # Get splits directory
+        splits_path = splits_dir()
 
-            # Verify splits_dir uses SESSION.root_dir
-            expected_path = (session_root / "output" / "splits").resolve()
-            assert splits_path.resolve() == expected_path
+        # Verify splits_dir uses SESSION.root_dir
+        expected_path = (session_root / "output" / "splits").resolve()
+        assert splits_path.resolve() == expected_path
 
     finally:
         # Restore original env var
@@ -192,14 +189,12 @@ def test_output_path_respects_session_root_dir(test_config_with_session_root: Pa
 
         session_root = Path(settings.SESSION.root_dir)
 
-        # Mock test environment detection to return False (test production behavior)
-        with patch("dlkit.tools.io.locations._is_test_environment", return_value=False):
-            # Get output path
-            output_path = output("checkpoints")
+        # Get output path
+        output_path = output("checkpoints")
 
-            # Verify output uses SESSION.root_dir
-            expected_path = (session_root / "output" / "checkpoints").resolve()
-            assert output_path.resolve() == expected_path
+        # Verify output uses SESSION.root_dir
+        expected_path = (session_root / "output" / "checkpoints").resolve()
+        assert output_path.resolve() == expected_path
 
     finally:
         # Restore original env var
