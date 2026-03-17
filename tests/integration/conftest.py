@@ -399,9 +399,8 @@ def mlflow_settings(
     minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> GeneralSettings:
     """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
-    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+    import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
 
-    # Start with base training settings
     base_settings = _make_settings(
         data_dir=minimal_dataset["data_dir"],
         output_dir=tmp_path / "outputs",
@@ -410,15 +409,14 @@ def mlflow_settings(
         epochs=EPOCHS,
     )
 
-    # Configure MLflow infrastructure via env vars.
-    manager = BasicOverrideManager()
-    mlruns_dir = tmp_path / "mlruns"
-    mlruns_dir.mkdir(parents=True, exist_ok=True)
-    tracking_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
+    # Route mlruns_backend_uri() to tmp_path and force SQLite (no server probe).
+    # SQLite env vars are ignored by resolve_tracking_uri(), so we monkeypatch the
+    # two mechanisms that actually control which backend is used.
     mlartifacts_dir = tmp_path / "mlartifacts"
     mlartifacts_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
+    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
+
     from dlkit.tools.config.mlflow_settings import MLflowSettings
 
     mlflow_cfg = MLflowSettings(experiment_name="test_experiment")

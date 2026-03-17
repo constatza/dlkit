@@ -11,6 +11,11 @@ import mlflow
 import pytest
 
 import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
+from dlkit.runtime.workflows.strategies.tracking.backend import (
+    LocalServerBackend,
+    LocalSqliteBackend,
+    RemoteServerBackend,
+)
 from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import (
     MLflowClientFactory,
 )
@@ -50,6 +55,21 @@ def test_resolve_tracking_uri_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPat
     assert resolved.endswith("mlflow.db")
 
 
+def test_resolve_tracking_uri_ignores_stale_sqlite_env_var(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:///stale/old/path/mlflow.db")
+    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False, raising=True)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.locations.mlruns_backend_uri",
+        lambda: f"sqlite:///{tmp_path}/mlflow.db",
+    )
+
+    resolved = uri_resolver.resolve_tracking_uri()
+    assert "stale" not in resolved
+    assert str(tmp_path) in resolved
+
+
 def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
     with pytest.raises(ValueError, match="Unsupported MLflow tracking URI scheme"):
         uri_resolver.parse_mlflow_scheme("ftp://example.com/mlflow")
@@ -72,10 +92,9 @@ def test_create_run_preserves_nested_parent_child_structure(
     tmp_path: Path,
 ) -> None:
     settings = MLflowSettings(experiment_name="exp")
-    manager = MLflowResourceManager(settings)
     db_path = tmp_path / "mlruns" / "mlflow.db"
-    tracking_uri = url_resolver.build_uri(db_path, scheme="sqlite")
-    artifact_uri = url_resolver.build_uri(db_path.parent / "artifacts", scheme="file")
+    backend = LocalSqliteBackend(db_path=db_path)
+    manager = MLflowResourceManager(settings, backend)
 
     mock_client = Mock()
     monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
@@ -84,14 +103,6 @@ def test_create_run_preserves_nested_parent_child_structure(
         MLflowClientFactory,
         "get_or_create_experiment",
         lambda *_args, **_kwargs: "exp-123",
-    )
-    monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.resolve_mlflow_uris",
-        lambda: uri_resolver.ResolvedMlflowUris(
-            tracking_uri=tracking_uri,
-            artifact_uri=artifact_uri,
-            scheme="sqlite",
-        ),
     )
 
     start_run = MagicMock()
@@ -127,15 +138,95 @@ def test_create_run_preserves_nested_parent_child_structure(
     assert child_call["parent_run_id"] == "parent-run"
 
 
-def test_reset_global_state_preserves_tracking_uri_env_var(
+def test_reset_global_state_clears_sqlite_tracking_uri(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """SQLite URIs should NOT be preserved by reset_global_state (they were manager-owned)."""
     tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "env-preserve.db", scheme="sqlite")
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     mlflow.set_tracking_uri(tracking_uri)
 
     MLflowResourceManager.reset_global_state()
 
-    assert os.environ.get("MLFLOW_TRACKING_URI") == tracking_uri
-    assert mlflow.get_tracking_uri() == tracking_uri
+    # SQLite URI should be cleared (not preserved) since it was manager-set
+    assert os.environ.get("MLFLOW_TRACKING_URI") != tracking_uri
+
+
+def test_reset_global_state_preserves_http_tracking_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTP URIs should be preserved by reset_global_state (user-configured)."""
+    http_uri = "http://mlflow.example.com:5000"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", http_uri)
+    mlflow.set_tracking_uri(http_uri)
+
+    MLflowResourceManager.reset_global_state()
+
+    assert os.environ.get("MLFLOW_TRACKING_URI") == http_uri
+
+
+def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = MLflowSettings(experiment_name="exp")
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    backend = LocalSqliteBackend(db_path=db_path)
+    manager = MLflowResourceManager(settings, backend)
+
+    mock_client = Mock()
+    suppression_calls: list[str] = []
+
+    class _SuppressionContext:
+        def __enter__(self):
+            suppression_calls.append("enter")
+            return None
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            suppression_calls.append("exit")
+            return False
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
+    monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda _c: True)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
+        lambda: _SuppressionContext(),
+    )
+
+    with manager:
+        pass
+
+    assert suppression_calls == ["enter", "exit"]
+
+
+def test_initialize_resources_skips_bootstrap_suppression_for_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = MLflowSettings(experiment_name="exp")
+    backend = LocalServerBackend()
+    manager = MLflowResourceManager(settings, backend)
+
+    mock_client = Mock()
+    suppression_calls: list[str] = []
+
+    class _SuppressionContext:
+        def __enter__(self):
+            suppression_calls.append("enter")
+            return None
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            suppression_calls.append("exit")
+            return False
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
+    monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda _c: True)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
+        lambda: _SuppressionContext(),
+    )
+
+    with manager:
+        pass
+
+    assert suppression_calls == []

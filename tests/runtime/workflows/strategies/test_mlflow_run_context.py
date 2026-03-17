@@ -12,7 +12,7 @@ from dlkit.runtime.workflows.strategies.tracking.mlflow_run_context import Clien
 
 
 def test_log_model_uses_pytorch_flavor_for_torch_modules() -> None:
-    context = ClientBasedRunContext(client=Mock(), run_id="run-1")
+    context = ClientBasedRunContext(client=Mock(), run_id="run-1", tracking_uri="sqlite:///test.db")
 
     with patch("mlflow.pytorch.log_model") as mocked_log_model:
         uri = context.log_model(
@@ -27,7 +27,7 @@ def test_log_model_uses_pytorch_flavor_for_torch_modules() -> None:
 
 
 def test_log_model_uses_sklearn_flavor_for_estimators() -> None:
-    context = ClientBasedRunContext(client=Mock(), run_id="run-2")
+    context = ClientBasedRunContext(client=Mock(), run_id="run-2", tracking_uri="sqlite:///test.db")
 
     with patch("mlflow.sklearn.log_model") as mocked_log_model:
         uri = context.log_model(
@@ -42,7 +42,7 @@ def test_log_model_uses_sklearn_flavor_for_estimators() -> None:
 
 
 def test_log_model_prefers_mlflow_returned_model_uri() -> None:
-    context = ClientBasedRunContext(client=Mock(), run_id="run-5")
+    context = ClientBasedRunContext(client=Mock(), run_id="run-5", tracking_uri="sqlite:///test.db")
 
     with patch("mlflow.pytorch.log_model") as mocked_log_model:
         mocked_log_model.return_value = SimpleNamespace(model_uri="models:/m-12345")
@@ -62,7 +62,7 @@ def test_get_latest_model_version_returns_numeric_max() -> None:
         SimpleNamespace(version="11"),
         SimpleNamespace(version="7"),
     ]
-    context = ClientBasedRunContext(client=client, run_id="run-3")
+    context = ClientBasedRunContext(client=client, run_id="run-3", tracking_uri="sqlite:///test.db")
 
     latest = context.get_latest_model_version("MyModel")
 
@@ -77,7 +77,7 @@ def test_get_latest_model_version_can_filter_by_run_id() -> None:
         SimpleNamespace(version="11", run_id="other-run", source="s3://bucket/model"),
         SimpleNamespace(version="7", run_id="run-3", source="s3://bucket/model"),
     ]
-    context = ClientBasedRunContext(client=client, run_id="run-3")
+    context = ClientBasedRunContext(client=client, run_id="run-3", tracking_uri="sqlite:///test.db")
 
     latest = context.get_latest_model_version("MyModel", run_id="run-3")
 
@@ -90,7 +90,7 @@ def test_get_latest_model_version_can_filter_by_artifact_path() -> None:
         SimpleNamespace(version="2", run_id="run-3", source="s3://bucket/other_artifact"),
         SimpleNamespace(version="4", run_id="run-3", source="s3://bucket/model"),
     ]
-    context = ClientBasedRunContext(client=client, run_id="run-3")
+    context = ClientBasedRunContext(client=client, run_id="run-3", tracking_uri="sqlite:///test.db")
 
     latest = context.get_latest_model_version(
         "MyModel",
@@ -103,7 +103,7 @@ def test_get_latest_model_version_can_filter_by_artifact_path() -> None:
 
 def test_set_model_alias_delegates_to_client() -> None:
     client = Mock()
-    context = ClientBasedRunContext(client=client, run_id="run-4")
+    context = ClientBasedRunContext(client=client, run_id="run-4", tracking_uri="sqlite:///test.db")
 
     context.set_model_alias("MyModel", "latest", 5)
 
@@ -116,7 +116,7 @@ def test_set_model_alias_delegates_to_client() -> None:
 
 def test_set_model_version_tag_delegates_to_client() -> None:
     client = Mock()
-    context = ClientBasedRunContext(client=client, run_id="run-6")
+    context = ClientBasedRunContext(client=client, run_id="run-6", tracking_uri="sqlite:///test.db")
 
     context.set_model_version_tag("MyModel", 5, "dataset.name", "dataset_A")
 
@@ -130,7 +130,7 @@ def test_set_model_version_tag_delegates_to_client() -> None:
 
 def test_log_dataset_converts_to_mlflow_entity_and_adds_context_tag() -> None:
     client = Mock()
-    context = ClientBasedRunContext(client=client, run_id="run-7")
+    context = ClientBasedRunContext(client=client, run_id="run-7", tracking_uri="sqlite:///test.db")
 
     dataset_entity = Mock()
     dataset = Mock()

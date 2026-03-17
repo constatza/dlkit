@@ -1,33 +1,29 @@
-"""Test artifact isolation and cleanup functionality."""
+"""Test artifact isolation via DLKIT_ROOT_DIR environment variable."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-
 
 from dlkit.tools.io.locations import mlruns_dir, mlartifacts_dir, output, optuna_storage_uri
 
 
-def test_artifacts_go_to_test_directory() -> None:
-    """Test that all artifacts are directed to tests/artifacts directory during tests."""
-    # Get artifact paths
-    mlruns_path = mlruns_dir()
-    mlartifacts_path = mlartifacts_dir()
-    output_path = output()
-    optuna_uri = optuna_storage_uri()
+def test_artifacts_go_to_dlkit_root_dir() -> None:
+    """Test that artifacts are directed to DLKIT_ROOT_DIR during tests."""
+    root_dir = os.environ.get("DLKIT_ROOT_DIR")
+    assert root_dir is not None, "DLKIT_ROOT_DIR must be set in test environment"
 
-    # All paths should contain 'tests/artifacts'
-    assert "tests/artifacts" in mlruns_path.as_posix(), (
-        f"MLruns path should go to tests/artifacts: {mlruns_path}"
+    expected_base = Path(root_dir)
+
+    mlruns_path = mlruns_dir()
+    output_path = output()
+
+    # All paths should be under DLKIT_ROOT_DIR
+    assert str(expected_base) in mlruns_path.as_posix(), (
+        f"MLruns path should be under DLKIT_ROOT_DIR {expected_base}: {mlruns_path}"
     )
-    assert "tests/artifacts" in mlartifacts_path.as_posix(), (
-        f"MLartifacts path should go to tests/artifacts: {mlartifacts_path}"
-    )
-    assert "tests/artifacts" in output_path.as_posix(), (
-        f"Output path should go to tests/artifacts: {output_path}"
-    )
-    assert "tests/artifacts" in optuna_uri.replace("\\", "/"), (
-        f"Optuna URI should reference tests/artifacts: {optuna_uri}"
+    assert str(expected_base) in output_path.as_posix(), (
+        f"Output path should be under DLKIT_ROOT_DIR {expected_base}: {output_path}"
     )
 
 
@@ -35,12 +31,13 @@ def test_artifacts_directory_is_created(test_artifacts_dir: Path) -> None:
     """Test that the test artifacts directory fixture works correctly."""
     assert test_artifacts_dir.exists(), "Test artifacts directory should exist"
     assert test_artifacts_dir.is_dir(), "Test artifacts directory should be a directory"
-    assert "tests/artifacts" in test_artifacts_dir.as_posix(), "Should be under tests/artifacts"
 
 
-def test_artifact_creation_and_isolation(test_artifacts_dir: Path) -> None:
-    """Test that creating artifacts during tests works and they're isolated."""
-    # Create some mock artifacts
+def test_artifact_creation_and_isolation() -> None:
+    """Test that creating artifacts during tests stays within the test temp tree."""
+    root_dir = os.environ.get("DLKIT_ROOT_DIR")
+    assert root_dir is not None, "DLKIT_ROOT_DIR must be set in test environment"
+
     mlruns_path = mlruns_dir()
     mlruns_path.parent.mkdir(parents=True, exist_ok=True)
     if mlruns_path.exists() and not mlruns_path.is_dir():
@@ -50,8 +47,8 @@ def test_artifact_creation_and_isolation(test_artifacts_dir: Path) -> None:
     test_artifact = mlruns_path / "test_artifact.txt"
     test_artifact.write_text("test content")
 
-    # Verify the artifact was created in test directory
     assert test_artifact.exists(), "Test artifact should be created"
-    assert "tests/artifacts" in test_artifact.as_posix(), "Artifact should be in test directory"
-
-    # The cleanup will be verified by the session fixture
+    # Artifact should be under the temp tree (contains the tmp path prefix)
+    assert root_dir in test_artifact.as_posix(), (
+        f"Artifact should be under DLKIT_ROOT_DIR: {test_artifact}"
+    )

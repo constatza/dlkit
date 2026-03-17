@@ -66,19 +66,27 @@ def mlflow_test_settings():
 
 
 @pytest.fixture
-def mlflow_resource_manager(mlflow_test_settings) -> Generator[MLflowResourceManager, None, None]:
+def mlflow_resource_manager(mlflow_test_settings, tmp_path: Path) -> Generator[MLflowResourceManager, None, None]:
     """Provide a properly managed MLflow resource manager for testing.
 
     This fixture ensures proper setup and cleanup of MLflow resources.
     """
-    with MLflowResourceManager(mlflow_test_settings) as manager:
+    from dlkit.runtime.workflows.strategies.tracking.backend import LocalSqliteBackend
+
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    backend = LocalSqliteBackend(db_path=db_path)
+    with MLflowResourceManager(mlflow_test_settings, backend) as manager:
         yield manager
 
 
 @pytest.fixture
-def mock_mlflow_resource_manager(mock_mlflow_client, mlflow_test_settings):
+def mock_mlflow_resource_manager(mock_mlflow_client, mlflow_test_settings, tmp_path: Path):
     """Provide a mocked MLflow resource manager for unit testing."""
-    manager = MLflowResourceManager(mlflow_test_settings)
+    from dlkit.runtime.workflows.strategies.tracking.backend import LocalSqliteBackend
+
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    backend = LocalSqliteBackend(db_path=db_path)
+    manager = MLflowResourceManager(mlflow_test_settings, backend)
 
     # Mock the client creation to return our mock
     original_create_client = MLflowClientFactory.create_client
@@ -98,7 +106,7 @@ def isolated_mlflow_tracker():
     from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
     # Create tracker with autostart disabled for testing
-    tracker = MLflowTracker(disable_autostart=True, skip_health_checks=True)
+    tracker = MLflowTracker(disable_autostart=True)
 
     try:
         yield tracker
