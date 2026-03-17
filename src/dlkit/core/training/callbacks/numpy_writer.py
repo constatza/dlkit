@@ -4,10 +4,12 @@ from pathlib import Path
 import numpy as np
 import torch
 from lightning.pytorch import Callback, LightningModule, Trainer
-from loguru import logger
 from pydantic import DirectoryPath, validate_call
 
 from dlkit.tools.io.url_utils import get_url_path
+from dlkit.tools.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class NumpyWriter(Callback):
@@ -26,19 +28,33 @@ class NumpyWriter(Callback):
 
         Args:
             output_dir (str): Directory path where the aggregated predictions will be saved.
+                When ``None`` the directory is resolved lazily in ``on_predict_start``.
         """
         super().__init__()
         self.output_dir = output_dir
         self._use_mlflow = False
 
-        if self.output_dir is None:
-            self.output_dir, self._use_mlflow = self._resolve_default_output_dir()
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
         # This dictionary will accumulate predictions across batches.
         # The keys are strings and values are lists of torch.Tensor.
         self._predictions: dict[str, list[torch.Tensor]] = {}
         self._filenames: Sequence[str] = filenames
+
+    def on_predict_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Resolve the output directory lazily when prediction starts.
+
+        Deferred resolution ensures that ``MLflow.active_run()`` is checked at
+        the right time (inside a run context) rather than at object construction.
+
+        Args:
+            trainer: The current Trainer instance.
+            pl_module: The Lightning module.
+        """
+        if self.output_dir is None:
+            self.output_dir, self._use_mlflow = self._resolve_default_output_dir()
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def on_predict_batch_end(
         self,
@@ -70,7 +86,7 @@ class NumpyWriter(Callback):
         elif isinstance(outputs, torch.Tensor):
             self._store_predictions(self._filenames[0], outputs)
         else:
-            logger.error(f"Unexpected output type in NumpyWriter: {type(outputs)}")
+            logger.error("Unexpected output type in NumpyWriter: {}", type(outputs))
 
     def on_predict_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """At the end of prediction, concatenate accumulated outputs for each key and write them to disk.
@@ -101,10 +117,9 @@ class NumpyWriter(Callback):
                     if current_run is not None:
                         mlflow.log_artifact(str(output_path), artifact_path="predictions")
 
-                logger.debug(f"Successfully saved output: {output_path}")
+                logger.debug("Saved prediction output {}", output_path)
             except OSError as e:
-                logger.error(f"Failed to save: {output_path}")
-                logger.error(f"Error: {e}")
+                logger.error("Failed to save prediction output {}: {}", output_path, e)
                 continue
 
     def _store_predictions(self, key: str, value: torch.Tensor) -> None:
@@ -115,7 +130,7 @@ class NumpyWriter(Callback):
             value (torch.Tensor): The prediction tensor to store.
         """
         if not isinstance(value, torch.Tensor):
-            logger.warning(f"Output for key '{key}' is not a torch.Tensor; skipping.")
+            logger.warning("Output for key '{}' is not a torch.Tensor; skipping", key)
             return
         if key not in self._predictions:
             self._predictions[key] = []
@@ -127,9 +142,9 @@ class NumpyWriter(Callback):
 
         Checks whether an MLflow run is currently active. If so, returns the
         run's local artifact directory so that prediction arrays are written
-        alongside other run artifacts. Falls back to ``<cwd>/predictions``
-        when no run is active or when the artifact URI is not a local
-        ``file://`` path.
+        alongside other run artifacts. Falls back to ``predictions_dir()``
+        (the standard DLKit output location) when no run is active or when the
+        artifact URI is not a local ``file://`` path.
 
         Returns:
             tuple[Path, bool]: A ``(path, use_mlflow)`` pair where ``use_mlflow``
@@ -143,15 +158,17 @@ class NumpyWriter(Callback):
             directory. This method guards against that side-effect by checking
             ``mlflow.active_run()`` before calling ``get_artifact_uri()``.
         """
+        from dlkit.tools.io.locations import predictions_dir
+
         try:
             import mlflow
 
             if mlflow.active_run() is None:
-                return Path.cwd() / "predictions", False
+                return predictions_dir(), False
             artifact_uri = mlflow.get_artifact_uri()
             if artifact_uri and artifact_uri.startswith("file://"):
                 return Path(get_url_path(artifact_uri).lstrip("/")), True
         except Exception:
             pass
 
-        return Path.cwd() / "predictions", False
+        return predictions_dir(), False

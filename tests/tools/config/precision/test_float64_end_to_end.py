@@ -201,7 +201,6 @@ class TestFloat64EndToEnd:
 
     def test_complete_pipeline_float64(self, sample_data, model_shape):
         """Test complete training pipeline with float64 precision."""
-        print("\n=== Testing Complete Float64 Pipeline ===")
 
         # 1. Setup session with float64
         session = SessionSettings(precision="double", seed=42)
@@ -244,11 +243,6 @@ class TestFloat64EndToEnd:
             if param.grad is not None:
                 assert param.grad.dtype == torch.float64, f"Gradient for {name} should be float64"
 
-        print(f"✅ Input: {input_data.dtype}")
-        print(f"✅ Model weights: {next(model.parameters()).dtype}")
-        print(f"✅ Predictions: {predictions.dtype}")
-        print(f"✅ Loss: {loss.dtype}")
-        print(f"✅ Gradients: {next(model.parameters()).grad.dtype}")
 
     def test_precision_service_float64(self):
         """Test precision service with float64."""

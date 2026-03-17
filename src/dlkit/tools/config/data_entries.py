@@ -1079,13 +1079,13 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
             raise ValueError("AutoencoderTarget must have 'feature_ref' specified")
 
         if self.transforms:
-            import warnings
+            from dlkit.tools.utils.logging_config import get_logger
 
-            warnings.warn(
-                f"AutoencoderTarget '{self.name}' has transforms specified, but these "
-                f"will be derived from feature_ref '{self.feature_ref}'. "
-                f"Manual transforms specification will be ignored.",
-                UserWarning,
+            get_logger(__name__).warning(
+                "AutoencoderTarget '{}' ignores manual transforms because feature_ref='{}' "
+                "derives them automatically.",
+                self.name,
+                self.feature_ref,
             )
 
         return self

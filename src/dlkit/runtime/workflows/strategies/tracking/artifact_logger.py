@@ -5,8 +5,6 @@ Single Responsibility: Log checkpoints, models, and user-defined artifacts to ML
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 import re
@@ -28,6 +26,87 @@ TAG_LOGGED_MODEL_URI = "mlflow_logged_model_uri"
 TAG_LOGGED_MODEL_ARTIFACT_PATH = "mlflow_logged_model_artifact_path"
 TAG_MODEL_CLASS = "mlflow_model_class"
 TAG_MODEL_REGISTRATION_ENABLED = "mlflow_model_registration_enabled"
+
+
+def _resolve_artifact_store_base() -> Path | None:
+    """Return the local artifact store base for the active MLflow run, or None.
+
+    Returns:
+        Absolute path to the run's artifact root when the artifact URI uses
+        a local ``file://`` scheme, otherwise ``None``.
+    """
+    try:
+        import mlflow
+
+        if mlflow.active_run() is None:
+            return None
+        artifact_uri = mlflow.get_artifact_uri()
+        if not artifact_uri or not artifact_uri.startswith("file://"):
+            return None
+
+        from dlkit.tools.io.url_utils import get_url_path
+
+        raw_path = get_url_path(artifact_uri).lstrip("/")
+        candidate = Path("/" + raw_path) if not Path(raw_path).is_absolute() else Path(raw_path)
+        return candidate.resolve()
+    except Exception:
+        return None
+
+
+def _is_inside(path: Path, base: Path) -> bool:
+    """Return True if ``path`` is located inside ``base``.
+
+    Args:
+        path: The path to test.
+        base: The candidate parent directory.
+
+    Returns:
+        ``True`` when ``path`` is a descendant of ``base``.
+    """
+    try:
+        path.resolve().relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _log_or_skip_checkpoint(
+    run_context: Any,
+    ckpt_path: Path,
+    artifact_base: Path | None,
+    artifact_dir: str,
+) -> None:
+    """Log a checkpoint to MLflow, skipping if it is already inside the artifact store.
+
+    For local artifact stores, checkpoints that were written directly into the
+    store (by ``MlflowCheckpointRouter``) are skipped to avoid redundant work.
+
+    For remote backends the checkpoint is uploaded and then the local copy is
+    removed to free disk space.
+
+    Args:
+        run_context: Active ``IRunContext`` for logging.
+        ckpt_path: Path to the checkpoint file.
+        artifact_base: Local artifact store root (``None`` for remote backends).
+        artifact_dir: Sub-path within the artifact store for uploaded files.
+    """
+    if artifact_base is not None:
+        # Local file:// backend
+        if _is_inside(ckpt_path, artifact_base):
+            logger.debug(
+                "Skipping checkpoint already in artifact store: {}",
+                ckpt_path,
+            )
+            return
+        run_context.log_artifact(ckpt_path, artifact_dir)
+    else:
+        # Remote backend: upload then remove local copy
+        run_context.log_artifact(ckpt_path, artifact_dir)
+        try:
+            ckpt_path.unlink()
+            logger.debug("Removed local checkpoint after upload: {}", ckpt_path)
+        except OSError as exc:
+            logger.warning("Could not remove local checkpoint {}: {}", ckpt_path, exc)
 
 
 def _resolve_model_class_name(model: Any) -> str:
@@ -121,15 +200,17 @@ class ArtifactLogger:
             best = getattr(ckpt_cb, "best_model_path", None)
             last = getattr(ckpt_cb, "last_model_path", None)
 
+            artifact_base = _resolve_artifact_store_base()
+
             if best:
-                run_context.log_artifact(Path(best), "checkpoints")
-                logger.debug(f"Logged best checkpoint: {best}")
+                _log_or_skip_checkpoint(run_context, Path(best), artifact_base, "checkpoints")
+                logger.debug("Logged best checkpoint {}", best)
             if last and last != best:
-                run_context.log_artifact(Path(last), "checkpoints")
-                logger.debug(f"Logged last checkpoint: {last}")
+                _log_or_skip_checkpoint(run_context, Path(last), artifact_base, "checkpoints")
+                logger.debug("Logged last checkpoint {}", last)
 
         except Exception as e:
-            logger.warning(f"Failed to log checkpoints: {e}")
+            logger.warning("Failed to log checkpoints: {}", e)
 
     def maybe_register_model(
         self,
@@ -153,7 +234,7 @@ class ArtifactLogger:
             )
 
             if not model_uri:
-                logger.warning(f"Model registration skipped for '{model_name}': no model URI")
+                logger.warning("Model registration skipped for '{}': no model URI", model_name)
                 return
 
             self._set_logged_model_tags(
@@ -180,7 +261,7 @@ class ArtifactLogger:
                     )
 
         except Exception as e:
-            logger.warning(f"Failed to register model: {e}")
+            logger.warning("Failed to register model '{}': {}", model_name, e)
             return None
 
     def finalize_model_registration(
@@ -249,7 +330,7 @@ class ArtifactLogger:
         if version is None:
             version = run_context.get_latest_model_version(model_name)
         if version is None:
-            logger.warning(f"Model registration incomplete for '{model_name}': no version found")
+            logger.warning("Model registration incomplete for '{}': no version found", model_name)
             return
 
         self._apply_aliases(run_context, model_name, version, aliases=aliases)
@@ -289,7 +370,7 @@ class ArtifactLogger:
             self._log_user_file_artifacts(accessor, run_context)
             self._log_user_toml_artifacts(accessor, run_context)
         except Exception as e:
-            logger.warning(f"Failed to log user-defined artifacts/params: {e}")
+            logger.warning("Failed to log user-defined artifacts or params: {}", e)
 
     def _find_checkpoint_callback(self, trainer: Any) -> Any | None:
         """Find ModelCheckpoint callback in trainer.
@@ -313,7 +394,7 @@ class ArtifactLogger:
                 candidates = [c for c in trainer.callbacks if isinstance(c, ModelCheckpoint)]
                 return candidates[0] if candidates else None
             except ImportError as e:
-                logger.warning(f"Failed to import ModelCheckpoint: {e}")
+                logger.warning("Failed to import ModelCheckpoint: {}", e)
                 return None
 
         return None
@@ -410,11 +491,11 @@ class ArtifactLogger:
             try:
                 safe_params[key] = str(value) if value is not None else ""
             except Exception as e:
-                logger.warning(f"Skipping non-serializable param '{key}': {e}")
+                logger.warning("Skipping non-serializable param '{}': {}", key, e)
 
         if safe_params:
             run_context.log_params(safe_params)
-            logger.debug(f"Logged {len(safe_params)} custom params from EXTRAS.mlflow_params")
+            logger.debug("Logged {} custom params from EXTRAS.mlflow_params", len(safe_params))
 
     def _log_user_file_artifacts(
         self,
@@ -437,11 +518,11 @@ class ArtifactLogger:
                 if path.exists() and path.is_file():
                     artifact_dir = str(path.parent) if path.parent != Path(".") else ""
                     run_context.log_artifact(path, artifact_dir=artifact_dir)
-                    logger.debug(f"Logged artifact: {artifact_path}")
+                    logger.debug("Logged artifact {}", artifact_path)
                 else:
-                    logger.warning(f"Artifact not found or not a file: {artifact_path}")
+                    logger.warning("Artifact not found or not a file: {}", artifact_path)
             except Exception as e:
-                logger.warning(f"Failed to log artifact '{artifact_path}': {e}")
+                logger.warning("Failed to log artifact '{}': {}", artifact_path, e)
 
     def _log_user_toml_artifacts(
         self,
@@ -450,7 +531,8 @@ class ArtifactLogger:
     ) -> None:
         """Log user-defined dicts as TOML artifacts from EXTRAS.mlflow_artifacts_toml.
 
-        Converts dict values to TOML files and logs them to MLflow.
+        Converts dict values to TOML strings and logs them via ``log_text``
+        (no temporary files).
 
         Args:
             accessor: Configuration accessor
@@ -460,30 +542,17 @@ class ArtifactLogger:
         if not artifacts_toml:
             return
 
-        from dlkit.tools.io.config import write_config
+        from dlkit.tools.io.config import serialize_config_to_string
 
         for name, data_dict in artifacts_toml.items():
             try:
                 if not isinstance(data_dict, dict):
-                    logger.warning(f"Skipping non-dict TOML artifact: {name}")
+                    logger.warning("Skipping non-dict TOML artifact '{}'", name)
                     continue
 
-                # Create temporary TOML file
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".toml", delete=False, prefix=f"{name}_"
-                ) as temp_file:
-                    temp_path = Path(temp_file.name)
-
-                # Write dict to TOML
-                write_config(data_dict, temp_path, exclude_none=True)
-
-                # Log the TOML file
-                run_context.log_artifact(temp_path, artifact_dir="config")
-
-                # Clean up temp file
-                os.unlink(temp_path)
-
-                logger.debug(f"Logged TOML artifact: {name}.toml → config/")
+                toml_str = serialize_config_to_string(data_dict, exclude_none=True)
+                run_context.log_text(toml_str, f"config/{name}.toml")
+                logger.debug("Logged TOML artifact {}.toml", name)
 
             except Exception as e:
-                logger.warning(f"Failed to log TOML artifact '{name}': {e}")
+                logger.warning("Failed to log TOML artifact '{}': {}", name, e)

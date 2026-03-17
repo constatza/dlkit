@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import warnings
 
 from lightning.pytorch.tuner import Tuner
-from loguru import logger
+
+from dlkit.tools.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from lightning.pytorch import LightningDataModule, LightningModule, Trainer
@@ -46,9 +50,12 @@ class LRTuner:
             RuntimeError: If tuner fails to suggest a learning rate
         """
         logger.info("Starting automatic learning rate tuning...")
-        logger.info(
-            f"LR tuner config: min_lr={settings.min_lr}, max_lr={settings.max_lr}, "
-            f"num_training={settings.num_training}, mode={settings.mode}"
+        logger.debug(
+            "LR tuner config: min_lr={} max_lr={} num_training={} mode={}",
+            settings.min_lr,
+            settings.max_lr,
+            settings.num_training,
+            settings.mode,
         )
 
         # Import torch.serialization for safe globals registration
@@ -62,18 +69,25 @@ class LRTuner:
         # Run learning rate finder with safe globals context for PyTorch 2.6+
         # This allows LR finder to save/restore checkpoints with dlkit config classes
         with torch.serialization.safe_globals(safe_classes):
-            lr_finder = tuner.lr_find(
-                model,
-                datamodule=datamodule,
-                min_lr=settings.min_lr,
-                max_lr=settings.max_lr,
-                num_training=settings.num_training,
-                mode=settings.mode,
-                early_stop_threshold=settings.early_stop_threshold,
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*weights_only.*", category=UserWarning)
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
+                    category=UserWarning,
+                )
+                lr_finder = tuner.lr_find(
+                    model,
+                    datamodule=datamodule,
+                    min_lr=settings.min_lr,
+                    max_lr=settings.max_lr,
+                    num_training=settings.num_training,
+                    mode=settings.mode,
+                    early_stop_threshold=settings.early_stop_threshold,
+                )
 
-            # Get suggested learning rate
-            suggested_lr = lr_finder.suggestion()
+                # Get suggested learning rate
+                suggested_lr = lr_finder.suggestion()
 
         if suggested_lr is None:
             raise RuntimeError(

@@ -53,7 +53,7 @@ class OptimizationStrategy(IOptimizationStrategy):
         Raises:
             WorkflowError: If optimization fails
         """
-        logger.info("Executing optimization with clean architecture")
+        logger.debug("Executing optimization with clean architecture")
         start_time = time.time()
 
         try:
@@ -78,16 +78,16 @@ class OptimizationStrategy(IOptimizationStrategy):
             api_result = self._convert_to_api_result(domain_result, start_time)
 
             logger.info(
-                "Clean optimization completed successfully",
-                total_trials=domain_result.total_trials,
-                successful_trials=domain_result.successful_trials,
-                best_objective_value=domain_result.best_objective_value,
+                "Optimization completed with {}/{} successful trials; best objective={}",
+                domain_result.successful_trials,
+                domain_result.total_trials,
+                domain_result.best_objective_value,
             )
 
             return api_result
 
         except Exception as e:
-            logger.error("Clean optimization failed", error=str(e))
+            logger.error("Optimization failed: {}", e)
             raise WorkflowError(
                 f"Clean optimization failed: {e}",
                 {"stage": "clean_optimization", "settings": str(settings)},

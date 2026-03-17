@@ -185,7 +185,6 @@ def test_basic_settings_creation():
     assert settings.name == "test"
     assert settings.value == 100
     assert settings.enabled is True
-    print("✓ BasicSettings creation works")
 
 
 def test_basic_settings_immutability():
@@ -197,7 +196,6 @@ def test_basic_settings_immutability():
         assert False, "Should have raised ValidationError"
     except Exception as e:
         assert "frozen" in str(e).lower() or "immutable" in str(e).lower()
-        print("✓ BasicSettings immutability works")
 
 
 def test_component_settings_creation():
@@ -207,7 +205,6 @@ def test_component_settings_creation():
     assert settings.name == "TestComponent"
     assert settings.test_param == "custom"
     assert settings.numeric_param == 999
-    print("✓ ComponentSettings creation works")
 
 
 def test_component_settings_get_init_kwargs():
@@ -224,7 +221,6 @@ def test_component_settings_get_init_kwargs():
     assert "numeric_param" in kwargs
     assert kwargs["test_param"] == "test"
     assert kwargs["numeric_param"] == 123
-    print("✓ ComponentSettings get_init_kwargs works")
 
 
 # Legacy direct sampling tests removed (moved to samplers).
@@ -238,7 +234,6 @@ def test_build_context_creation():
     assert context.device == "auto"
     assert context.random_seed is None
     assert context.overrides == {}
-    print("✓ BuildContext creation works")
 
 
 def test_build_context_with_overrides():
@@ -252,7 +247,6 @@ def test_build_context_with_overrides():
 
     # Updated has merged overrides
     assert updated.overrides == {"param1": "new_value1", "param2": "value2"}
-    print("✓ BuildContext with_overrides works")
 
 
 def test_build_context_get_override():
@@ -263,34 +257,3 @@ def test_build_context_get_override():
     assert context.get_override("key2") == 42
     assert context.get_override("missing") is None
     assert context.get_override("missing", "default") == "default"
-    print("✓ BuildContext get_override works")
-
-
-# Legacy direct sampling tests removed (moved to samplers).
-
-
-if __name__ == "__main__":
-    print("Running standalone settings core tests...")
-
-    test_basic_settings_creation()
-    test_basic_settings_immutability()
-    test_component_settings_creation()
-    test_component_settings_get_init_kwargs()
-    # legacy direct sampling tests removed
-    test_build_context_creation()
-    test_build_context_with_overrides()
-    test_build_context_get_override()
-    # legacy direct sampling tests removed
-
-    print("\n🎉 All standalone core tests passed!")
-    print("The settings core functionality is working correctly.")
-    print("\nKey features tested:")
-    print("- BasicSettings: Immutable configuration with validation")
-    print("- ComponentSettings: Dynamic component configuration with factory support")
-    print("- HyperParameterSettings: Optuna integration for hyperparameter optimization")
-    print("- BuildContext: Dependency injection and environment context")
-    print("\nThe comprehensive test suite has been created with:")
-    print("- Property-based testing with Hypothesis")
-    print("- Integration tests for factory pattern")
-    print("- Complete coverage of SOLID principles")
-    print("- Fixtures for all major settings classes")

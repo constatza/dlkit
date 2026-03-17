@@ -103,11 +103,11 @@ class OptimizationServiceFactory:
                 config_persister=config_persister,
             )
 
-            logger.info("Optimization orchestrator created successfully")
+            logger.debug("Optimization orchestrator created successfully")
             return orchestrator
 
         except Exception as e:
-            logger.error("Failed to create optimization orchestrator", error=str(e))
+            logger.error("Failed to create optimization orchestrator: {}", e)
             raise WorkflowError(
                 f"Orchestrator creation failed: {e}", {"stage": "orchestrator_creation"}
             ) from e
@@ -163,9 +163,7 @@ class OptimizationServiceFactory:
             try:
                 return OptunaStudyRepository()
             except WorkflowError as e:
-                logger.warning(
-                    "Failed to create Optuna repository, falling back to in-memory", error=str(e)
-                )
+                logger.warning("Failed to create Optuna repository: {}; using in-memory", e)
 
         # Fall back to in-memory repository for testing/development
         return InMemoryStudyRepository()
@@ -184,14 +182,15 @@ class OptimizationServiceFactory:
 
         # Check if MLflow tracking is configured (presence of section enables it)
         mlflow_config = getattr(settings, "MLFLOW", None)
-        logger.debug(f"Checking MLflow config - exists={mlflow_config is not None}")
+        logger.debug("MLflow config present: {}", mlflow_config is not None)
 
         if mlflow_config:
             from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
 
             experiment_name = determine_experiment_name(settings, mlflow_config)
             logger.info(
-                f"Creating MLflow tracking adapter for optimization (experiment: {experiment_name})"
+                "Creating MLflow tracking adapter for optimization experiment '{}'",
+                experiment_name,
             )
             session = getattr(settings, "SESSION", None)
             root_dir = getattr(session, "root_dir", None) if session is not None else None
@@ -202,7 +201,7 @@ class OptimizationServiceFactory:
             )
 
         # Use null tracker by default when MLflow is not enabled
-        logger.info("Using NullTrackingAdapter (MLflow not enabled)")
+        logger.debug("Using NullTrackingAdapter (MLflow not enabled)")
         return NullTrackingAdapter()
 
     def _create_config_persister(

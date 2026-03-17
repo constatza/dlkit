@@ -7,6 +7,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, TypeVar, cast, overload, TYPE_CHECKING
 import sys
+import warnings
 import torch
 
 from pydantic import BaseModel
@@ -71,7 +72,7 @@ def _sync_session_root_to_environment(settings: Any) -> None:
         # Non-fatal - path resolution will fall back to CWD if this fails
         from loguru import logger
 
-        logger.debug(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
+        logger.warning(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
 
 
 # Type variable for BaseModel subclasses used throughout the module
@@ -431,9 +432,15 @@ def serialize_config_to_string(
         TOML-formatted string representation of the config.
     """
     if isinstance(config, BaseModel):
-        data = config.model_dump(
-            by_alias=by_alias, exclude_none=exclude_none, exclude_unset=exclude_unset
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Pydantic serializer warnings:.*",
+                category=UserWarning,
+            )
+            data = config.model_dump(
+                by_alias=by_alias, exclude_none=exclude_none, exclude_unset=exclude_unset
+            )
     else:
         data = dict(config)
 
@@ -489,7 +496,7 @@ def write_config(
         exclude_value_entries=exclude_value_entries,
         sort_sections=sort_sections,
     )
-    output_path.write_text(toml_str)
+    output_path.write_text(toml_str, encoding="utf-8")
     return output_path
 
 
@@ -703,7 +710,8 @@ def get_available_sections(config_path: Path | str) -> list[str]:
 
     Example:
         >>> sections = get_available_sections("config.toml")
-        >>> print(f"Available sections: {sections}")
+        >>> isinstance(sections, list)
+        True
     """
     config_path = Path(config_path)
     if not config_path.exists():

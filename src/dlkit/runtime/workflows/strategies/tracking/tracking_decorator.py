@@ -97,7 +97,8 @@ class TrackingDecorator(ITrainingExecutor):
         """
         # Configure the tracker before entering its context
         logger.debug("Setting up tracking")
-        tracking_uri = self._setup_tracking(settings)
+        tracking_setup = self._setup_tracking(settings)
+        tracking_uri = tracking_setup[0] if tracking_setup is not None else None
 
         # Use tracker as context manager for proper resource management
         logger.info("Starting training with MLflow tracking")
@@ -130,9 +131,14 @@ class TrackingDecorator(ITrainingExecutor):
             # Get run configuration (includes merged tags)
             logger.debug("Extracting run config")
             run_config = self._extract_run_config(settings)
+            logger.info(
+                "Creating MLflow run '{}' in experiment '{}'",
+                run_config.get("run_name") or "<auto>",
+                run_config.get("experiment_name") or "DLKit",
+            )
 
             # Execute training within tracking context
-            logger.debug(f"Creating MLflow run with config: {run_config}")
+            logger.debug("Creating MLflow run")
             pending_registration = None
             enriched_result = None
             with self._tracker.create_run(**run_config) as run_context:
@@ -150,8 +156,8 @@ class TrackingDecorator(ITrainingExecutor):
                 self._log_tracking_metadata(run_context, tracking_uri)
                 self._log_configuration(components, settings, run_context)
 
-                # Inject MLflow logger into trainer for automatic metric logging
-                self._inject_mlflow_logger(components, run_context, settings)
+                # Inject MLflow callbacks into trainer
+                self._inject_mlflow_callbacks(components, run_context, settings)
 
                 # Execute core training
                 result = self._executor.execute(components, settings)
@@ -187,13 +193,13 @@ class TrackingDecorator(ITrainingExecutor):
             return enriched_result
 
         except Exception as e:
-            logger.error(f"TrackingDecorator: Exception caught: {type(e).__name__}: {e}")
+            logger.error("Tracking failed: {}", e)
             raise_error("Training with tracking failed", e, stage="tracking")  # type: ignore[return-value]
 
     def _setup_tracking(
         self,
         settings: GeneralSettings,
-    ) -> str | None:
+    ) -> tuple[str | None, bool] | None:
         """Setup tracking configuration.
 
         Delegates to tracker's setup method if available (LSP-compliant via Protocol),
@@ -219,7 +225,14 @@ class TrackingDecorator(ITrainingExecutor):
                     result = self._tracker.setup_mlflow_config(mlflow_config)
                 else:
                     raise
-            return result.tracking_uri if hasattr(result, "tracking_uri") else result[0]
+            tracking_uri = result.tracking_uri if hasattr(result, "tracking_uri") else result[0]
+            is_local = bool(getattr(result, "is_local", False))
+            if tracking_uri:
+                if is_local:
+                    logger.info("Using local file-backed MLflow tracking URI: {}", tracking_uri)
+                else:
+                    logger.info("Using MLflow server tracking URI: {}", tracking_uri)
+            return tracking_uri, is_local
 
         return None
 
@@ -315,18 +328,18 @@ class TrackingDecorator(ITrainingExecutor):
             if isinstance(self._tracker, IDatasetLogger):
                 self._tracker.log_dataset_to_run(components.datamodule, run_context, settings)
         except Exception as e:
-            logger.warning(f"Failed to log dataset: {e}")
+            logger.warning("Failed to log dataset: {}", e)
 
-    def _inject_mlflow_logger(
+    def _inject_mlflow_callbacks(
         self,
         components: BuildComponents,
         run_context: IRunContext,
         settings: GeneralSettings,
     ) -> None:
-        """Inject MLflow epoch logger callback for metric logging with epochs as x-axis.
+        """Inject MLflow callbacks into trainer.
 
-        Creates and adds MLflowEpochLogger callback to trainer for automatic
-        metric logging during training.
+        Injects ``MLflowEpochLogger`` so metrics are logged with epoch numbers
+        as the x-axis during training.
 
         Args:
             components: Build components
@@ -339,19 +352,16 @@ class TrackingDecorator(ITrainingExecutor):
                 logger.debug("No trainer found in components")
                 return
 
-            # Create callback that logs metrics with epoch numbers instead of steps
             from dlkit.core.training.callbacks import MLflowEpochLogger
 
-            epoch_logger = MLflowEpochLogger(run_context)
-
-            # Add callback to trainer
             if not hasattr(trainer, "callbacks"):
                 trainer.callbacks = []
-            trainer.callbacks.append(epoch_logger)
-            logger.debug(f"Injected MLflowEpochLogger callback (run_id={run_context.run_id})")
+
+            trainer.callbacks.append(MLflowEpochLogger(run_context))
+            logger.debug("Injected MLflow epoch logger for run '{}'", run_context.run_id)
 
         except Exception as e:
-            logger.warning(f"Failed to inject MLflow epoch logger: {e}")
+            logger.warning("Failed to inject MLflow epoch logger: {}", e)
 
     def _should_use_nested_runs(self) -> bool:
         """Determine if nested runs should be used based on existing MLflow run context.
@@ -366,5 +376,5 @@ class TrackingDecorator(ITrainingExecutor):
             active_run = mlflow.active_run()
             return active_run is not None
         except Exception as e:
-            logger.warning(f"Failed to check for active MLflow run: {e}")
+            logger.warning("Failed to check for active MLflow run: {}", e)
             return False

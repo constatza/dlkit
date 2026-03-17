@@ -3,6 +3,8 @@
 Single function to handle all error raising with automatic logging and context.
 """
 
+from __future__ import annotations
+
 import inspect
 import uuid
 
@@ -83,22 +85,17 @@ def raise_error(
         except Exception:
             final_message = message
 
-    # Log the error once with all context
-    log_data = {
-        "error_message": message,
-        "correlation_id": correlation_id,
-        "component": component,
-        "operation": operation,
-    }
-
+    # Keep the log line flat. The exception chain already preserves detail.
     if original_error:
-        log_data["original_error"] = str(original_error)
-        log_data["original_error_type"] = type(original_error).__name__
         _error_logger.error(
-            f"Error in {component}.{operation}: {message}", **log_data, exc_info=True
+            "Error in {}.{}: {}: {}",
+            component,
+            operation,
+            message,
+            original_error,
         )
     else:
-        _error_logger.error(f"Error in {component}.{operation}: {message}", **log_data)
+        _error_logger.error("Error in {}.{}: {}", component, operation, message)
 
     # Raise the appropriate exception
     if original_error:

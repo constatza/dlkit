@@ -49,7 +49,7 @@ class ExecutionSelector:
             features.append("vanilla training")
 
         feature_str = " + ".join(features)
-        logger.info(f"Creating executor with: {feature_str}")
+        logger.info("Creating executor with {}", feature_str)
 
         # Use factory to create composed executor based on settings
         return self._factory.create_executor(settings, hooks=hooks)  # type: ignore[arg-type]
@@ -72,7 +72,7 @@ class ExecutionSelector:
             features.append("vanilla training (adapted)")
 
         feature_str = " + ".join(features)
-        logger.info(f"Creating optimization strategy with: {feature_str}")
+        logger.info("Creating optimization strategy with {}", feature_str)
 
         # Use factory to create composed optimization strategy based on settings
         return self._factory.create_optimization_strategy(settings)

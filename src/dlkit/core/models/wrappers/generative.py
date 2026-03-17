@@ -37,7 +37,7 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
     def on_fit_start(self) -> None:
         """Fit the batch transformer if it implements IFittableBatchTransformer."""
         from dlkit.core.models.wrappers.protocols import IFittableBatchTransformer
-        from loguru import logger
+        from dlkit.tools.utils.logging_config import get_logger
 
         if not isinstance(self._batch_transformer, IFittableBatchTransformer):
             return
@@ -51,9 +51,10 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
             return
 
         loader = dm.train_dataloader()
-        logger.info("Starting transform fitting from training dataloader.")
+        logger = get_logger(__name__)
+        logger.debug("Starting transform fitting from training dataloader.")
         self._batch_transformer.fit(loader)
-        logger.info("Finished transform fitting.")
+        logger.debug("Finished transform fitting.")
 
     def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
         """Execute one forward+loss step for generative models.

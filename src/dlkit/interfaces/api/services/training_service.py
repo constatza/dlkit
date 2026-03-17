@@ -52,7 +52,7 @@ class TrainingService:
                 if root_from_cfg and not (ctx and getattr(ctx, "root_dir", None)):
                     overrides["root_dir"] = root_from_cfg
             except Exception as e:
-                logger.debug(f"Failed to extract root_dir from settings (non-fatal): {e}")
+                logger.warning(f"Failed to extract root_dir from settings (non-fatal): {e}")
 
             # Establish path context for the training run
             # Directories are created lazily when files are actually written

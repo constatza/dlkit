@@ -336,10 +336,8 @@ def _setup_test_artifacts_cleanup():  # noqa: D401
     if tests_artifacts_dir.exists():
         try:
             shutil.rmtree(tests_artifacts_dir)
-            print(f"\n✓ Cleaned up test artifacts from {tests_artifacts_dir}")
-        except OSError as e:
-            # Log warning but don't fail tests due to cleanup issues
-            print(f"\n⚠ Warning: Could not clean up test artifacts: {e}")
+        except OSError:
+            pass
 
 
 def _get_test_artifacts_dir() -> Path:

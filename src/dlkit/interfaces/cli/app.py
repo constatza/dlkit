@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import sys
-import os
 
 import typer
+from loguru import logger as loguru_logger
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from dlkit.tools.utils.logging_config import configure_logging, get_logger
+from dlkit.tools.utils.logging_config import configure_logging, get_effective_log_level, get_logger
 from .commands import optimize, config, convert
 from .commands import train as train
 from .commands import predict as predict
@@ -49,8 +49,8 @@ def main(
     ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", help="Enable verbose output"),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
-    log_level: str = typer.Option(
-        "INFO", "--log-level", help="Set logging level (DEBUG, INFO, WARNING, ERROR)"
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Set logging level (DEBUG, INFO, WARNING, ERROR)"
     ),
 ) -> None:
     """DLKit - Deep Learning Toolkit with modern architecture.
@@ -60,21 +60,23 @@ def main(
     """
     # Configure logging first, before other logic
     debug_enabled = debug or verbose
-    log_level_final = "DEBUG" if debug_enabled else log_level.upper()
+    log_level_final = get_effective_log_level(level=log_level, debug_enabled=debug_enabled)
 
     try:
         configure_logging(
-            level=log_level_final,
+            level=log_level,
             debug_enabled=debug_enabled,
             format_type="simple" if not debug_enabled else "structured",
         )
         logger.debug(
-            "DLKit CLI initialized", debug_enabled=debug_enabled, log_level=log_level_final
+            "DLKit CLI initialized with level '{}' (debug_enabled={})",
+            log_level_final,
+            debug_enabled,
         )
     except Exception as e:
-        # Fallback if logging configuration fails
-        print(f"Warning: Logging configuration failed: {e}")
-        pass
+        loguru_logger.remove()
+        loguru_logger.add(sys.stderr, level="WARNING")
+        loguru_logger.warning("Logging configuration failed: {}", e)
 
     # If no subcommand was invoked and no special flags, show help
     if ctx.invoked_subcommand is None:

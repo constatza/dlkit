@@ -4,7 +4,6 @@ Provides convenient factory methods for creating the appropriate wrapper type
 based on model characteristics and explicit type requests.
 """
 
-import warnings
 from typing import Any
 
 from torch import nn
@@ -16,10 +15,13 @@ from dlkit.tools.config import (
     WrapperComponentSettings,
 )
 from dlkit.tools.config.data_entries import DataEntry
+from dlkit.tools.utils.logging_config import get_logger
 from .base import ProcessingLightningWrapper
 from .standard import StandardLightningWrapper
 from .graph import GraphLightningWrapper
 from .timeseries import TimeSeriesLightningWrapper
+
+logger = get_logger(__name__)
 
 
 class WrapperFactory:
@@ -190,10 +192,10 @@ class WrapperFactory:
 
             return "standard"
 
-        except Exception:
-            warnings.warn(
-                "Could not build model for wrapper type detection, defaulting to 'standard'",
-                UserWarning,
+        except Exception as exc:
+            logger.warning(
+                "Could not build model for wrapper type detection; defaulting to 'standard': {}",
+                exc,
             )
             return "standard"
 

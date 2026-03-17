@@ -14,6 +14,27 @@ from dlkit.tools.io.index import load_split_indices, save_split_indices
 from dlkit.tools.io.locations import splits_dir
 
 
+def _log_split_to_mlflow(split_file: Path) -> None:
+    """Log a split file to the active MLflow run as a best-effort side effect.
+
+    Only fires when ``mlflow.active_run()`` returns a live run. Silently
+    swallows all exceptions so split generation is never blocked by tracking
+    failures.
+
+    Args:
+        split_file: Path to the split JSON file to log.
+    """
+    try:
+        import mlflow
+
+        if mlflow.active_run() is None:
+            return
+        mlflow.log_artifact(str(split_file), artifact_path="splits")
+        logger.debug(f"Logged split file to MLflow: {split_file}")
+    except Exception as exc:
+        logger.warning(f"Could not log split to MLflow (non-fatal): {exc}")
+
+
 def get_or_create_split(
     *,
     num_samples: int,
@@ -78,6 +99,7 @@ def get_or_create_split(
     try:
         save_split_indices(index_split, split_file)
         logger.info(f"Saved split indices to {split_file}")
+        _log_split_to_mlflow(split_file)
     except Exception as e:
         logger.warning(f"Failed to save split to {split_file}: {e}")
 

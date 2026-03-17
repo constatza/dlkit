@@ -88,8 +88,10 @@ class MLflowTrackingAdapter(IExperimentTracker):
 
     def __enter__(self):
         """Enter context and initialize MLflow tracker using ExitStack."""
-        logger.info(
-            f"MLflowTrackingAdapter.__enter__ called - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}"
+        logger.debug(
+            "MLflow tracking adapter entering (settings={}, tracker={})",
+            self._mlflow_settings is not None,
+            self._tracker is not None,
         )
 
         if self._mlflow_settings and self._tracker:
@@ -106,16 +108,18 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 )
                 self._tracker = self._exit_stack.enter_context(self._tracker)
 
-                logger.info("MLflow tracking adapter context entered successfully")
+                logger.debug("MLflow tracking adapter context entered successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize MLflow tracker: {e}")
+                logger.error("Failed to initialize MLflow tracker: {}", e)
                 if self._exit_stack:
                     self._exit_stack.__exit__(None, None, None)
                     self._exit_stack = None
                 raise
         else:
-            logger.warning(
-                f"Skipping MLflow initialization - settings={self._mlflow_settings is not None}, tracker={self._tracker is not None}"
+            logger.debug(
+                "Skipping MLflow initialization (settings={}, tracker={})",
+                self._mlflow_settings is not None,
+                self._tracker is not None,
             )
 
         return self
@@ -127,9 +131,9 @@ class MLflowTrackingAdapter(IExperimentTracker):
             try:
                 logger.debug("Cleaning up MLflow tracker via ExitStack")
                 self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
-                logger.info("MLflow tracking adapter context exited")
+                logger.debug("MLflow tracking adapter context exited")
             except Exception as e:
-                logger.warning(f"Failed to exit tracker context: {e}")
+                logger.warning("Failed to exit tracker context: {}", e)
             finally:
                 self._exit_stack = None
         return False
@@ -138,11 +142,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
     def create_study_run(self, study: Study):
         """Create parent run for optimization study using existing MLflowTracker."""
         self._ensure_mlflow_available("study_run_creation")
-        logger.info(
-            "Creating MLflow study run",
-            study_id=study.study_id,
-            study_name=study.study_name,
-        )
+        logger.info("Creating MLflow study run '{}' ({})", study.study_name, study.study_id)
 
         experiment_name = self._get_experiment_name()
         run_name = self._get_run_name_from_study(study)
@@ -157,7 +157,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 yield study_context
 
         except Exception as e:
-            logger.error("Failed to create study run", error=str(e))
+            logger.error("Failed to create study run '{}': {}", study.study_name, e)
             raise WorkflowError(
                 f"Study run creation failed: {e}",
                 {"stage": "study_run_creation", "study_id": study.study_id},
@@ -167,11 +167,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
     def create_trial_run(self, trial: Trial, parent_context: IStudyRunContext):
         """Create nested run for individual trial."""
         self._ensure_mlflow_available("trial_run_creation")
-        logger.info(
-            "Creating MLflow trial run",
-            trial_id=trial.trial_id,
-            trial_number=trial.trial_number,
-        )
+        logger.info("Creating MLflow trial run {}", trial.trial_number)
 
         experiment_name = self._get_experiment_name()
 
@@ -185,7 +181,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 yield trial_context
 
         except Exception as e:
-            logger.error("Failed to create trial run", error=str(e))
+            logger.error("Failed to create trial run {}: {}", trial.trial_number, e)
             raise WorkflowError(
                 f"Trial run creation failed: {e}",
                 {"stage": "trial_run_creation", "trial_id": trial.trial_id},
@@ -202,11 +198,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 {"stage": "best_retrain_creation", "study_id": study.study_id},
             )
 
-        logger.info(
-            "Creating MLflow best retrain run",
-            study_id=study.study_id,
-            best_trial_number=best_trial.trial_number,
-        )
+        logger.info("Creating MLflow best-retrain run for trial {}", best_trial.trial_number)
 
         experiment_name = self._get_experiment_name()
 
@@ -220,7 +212,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 yield retrain_context
 
         except Exception as e:
-            logger.error("Failed to create best retrain run", error=str(e))
+            logger.error("Failed to create best retrain run for study '{}': {}", study.study_id, e)
             raise WorkflowError(
                 f"Best retrain run creation failed: {e}",
                 {"stage": "best_retrain_creation", "study_id": study.study_id},
@@ -311,7 +303,7 @@ class MLflowStudyRunContext(IStudyRunContext):
             logger.debug("Study metadata logged to MLflow")
 
         except Exception as e:
-            logger.warning("Failed to log study metadata", error=str(e))
+            logger.warning("Failed to log study metadata: {}", e)
 
     def log_study_summary(self, result: OptimizationResult) -> None:
         """Log final study summary."""
@@ -339,7 +331,7 @@ class MLflowStudyRunContext(IStudyRunContext):
             logger.debug("Study summary logged to MLflow")
 
         except Exception as e:
-            logger.warning("Failed to log study summary", error=str(e))
+            logger.warning("Failed to log study summary: {}", e)
 
     def log_best_trial_settings(self, settings: Any) -> None:
         """Log best trial settings as TOML artifact with special naming.
@@ -375,7 +367,7 @@ class MLflowStudyRunContext(IStudyRunContext):
                     os.unlink(temp_path)
 
         except Exception as e:
-            logger.warning("Failed to log best trial settings", error=str(e))
+            logger.warning("Failed to log best trial settings: {}", e)
 
 
 class MLflowTrialRunContext(ITrialRunContext):
@@ -411,13 +403,10 @@ class MLflowTrialRunContext(ITrialRunContext):
             # NOTE: trial_state is NOT logged as a parameter because it changes during execution
             # State information should be logged as tags or tracked separately
 
-            logger.debug(
-                "Trial hyperparameters logged to MLflow",
-                trial_number=self._trial.trial_number,
-            )
+            logger.debug("Trial {} hyperparameters logged to MLflow", self._trial.trial_number)
 
         except Exception as e:
-            logger.warning("Failed to log trial hyperparameters", error=str(e))
+            logger.warning("Failed to log trial hyperparameters: {}", e)
 
     def log_trial_settings(self, settings: Any) -> None:
         """Log trial settings as TOML artifact.
@@ -445,8 +434,8 @@ class MLflowTrialRunContext(ITrialRunContext):
                 # Log TOML file as artifact
                 self._run_context.log_artifact(temp_path, artifact_dir="")
                 logger.debug(
-                    "Trial settings logged as TOML artifact",
-                    trial_number=self._trial.trial_number,
+                    "Trial {} settings logged as TOML artifact",
+                    self._trial.trial_number,
                 )
             finally:
                 # Clean up temp file
@@ -454,7 +443,7 @@ class MLflowTrialRunContext(ITrialRunContext):
                     os.unlink(temp_path)
 
         except Exception as e:
-            logger.warning("Failed to log trial settings", error=str(e))
+            logger.warning("Failed to log trial settings: {}", e)
 
     def log_model_hyperparameters(self, settings: Any) -> None:
         """Log model hyperparameters from settings.MODEL.
@@ -480,13 +469,12 @@ class MLflowTrialRunContext(ITrialRunContext):
             if prefixed_hparams:
                 self._run_context.log_params(prefixed_hparams)
                 logger.debug(
-                    "Model hyperparameters logged to MLflow",
-                    trial_number=self._trial.trial_number,
-                    hparam_count=len(prefixed_hparams),
+                    "Trial {} model hyperparameters logged to MLflow",
+                    self._trial.trial_number,
                 )
 
         except Exception as e:
-            logger.warning("Failed to log model hyperparameters", error=str(e))
+            logger.warning("Failed to log model hyperparameters: {}", e)
 
     def log_trial_metrics(self, metrics: dict[str, Any]) -> None:
         """Log trial metrics."""
@@ -512,14 +500,10 @@ class MLflowTrialRunContext(ITrialRunContext):
                     "trial_duration_seconds": self._trial.duration_seconds
                 })
 
-            logger.debug(
-                "Trial metrics logged to MLflow",
-                trial_number=self._trial.trial_number,
-                metrics_count=len(numeric_metrics),
-            )
+            logger.debug("Trial {} metrics logged to MLflow", self._trial.trial_number)
 
         except Exception as e:
-            logger.warning("Failed to log trial metrics", error=str(e))
+            logger.warning("Failed to log trial metrics: {}", e)
 
     def log_trial_artifacts(self, artifacts: dict[str, Any]) -> None:
         """Log trial artifacts."""
@@ -536,14 +520,10 @@ class MLflowTrialRunContext(ITrialRunContext):
                     temp_path.write_text(str(artifact_path))
                     self._run_context.log_artifact(temp_path, artifact_dir="")
 
-            logger.debug(
-                "Trial artifacts logged to MLflow",
-                trial_number=self._trial.trial_number,
-                artifacts_count=len(artifacts),
-            )
+            logger.debug("Trial {} artifacts logged to MLflow", self._trial.trial_number)
 
         except Exception as e:
-            logger.warning("Failed to log trial artifacts", error=str(e))
+            logger.warning("Failed to log trial artifacts: {}", e)
 
 
 class NullTrackingAdapter(IExperimentTracker):

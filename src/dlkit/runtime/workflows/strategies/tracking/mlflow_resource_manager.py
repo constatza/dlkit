@@ -63,11 +63,6 @@ class MLflowResourceManager:
 
         ensure_mlflow_defaults()
 
-        if not self._config:
-            logger.debug("MLflow not configured, creating default client")
-            self._state.client = MLflowClientFactory.create_client()
-            return
-
         resolved = resolve_mlflow_uris()
         self._state.tracking_uri = resolved.tracking_uri
         self._state.artifact_uri = resolved.artifact_uri
@@ -217,7 +212,7 @@ class MLflowResourceManager:
                     try:
                         self._state.client.set_terminated(run_id, status="FINISHED")
                     except Exception as e:  # pragma: no cover - best-effort safety
-                        logger.warning(f"Failed to terminate active run {run_id}: {e}")
+                        logger.warning("Failed to terminate active run {}: {}", run_id, e)
                 self._state.active_run_stack.clear()
 
         try:
@@ -229,7 +224,7 @@ class MLflowResourceManager:
             try:
                 callback()
             except Exception as e:  # pragma: no cover - best-effort safety
-                logger.warning(f"Cleanup callback failed: {e}")
+                logger.warning("Cleanup callback failed: {}", e)
 
         self.reset_global_state()
         self._state = MLflowResourceState()
@@ -251,4 +246,4 @@ class MLflowResourceManager:
             if hasattr(mlflow, "_active_run_stack"):
                 mlflow._active_run_stack.clear()  # type: ignore[attr-defined]
         except Exception as e:  # pragma: no cover - best-effort safety
-            logger.warning(f"Failed to reset MLflow global state: {e}")
+            logger.warning("Failed to reset MLflow global state: {}", e)

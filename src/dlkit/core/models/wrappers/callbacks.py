@@ -65,6 +65,6 @@ class TransformFittingCallback(Callback):
         if dm is None or not hasattr(dm, "train_dataloader"):
             return
         loader = dm.train_dataloader()
-        logger.info("Starting transform fitting from training dataloader.")
+        logger.debug("Starting transform fitting from training dataloader.")
         self._batch_transformer.fit(loader)
-        logger.info("Finished transform fitting.")
+        logger.debug("Finished transform fitting.")

@@ -83,7 +83,6 @@ class TestComprehensivePrecision:
 
     def test_end_to_end_training_workflow_precision(self, sample_datasets):
         """Test complete training workflow with precision control."""
-        print("\n=== Testing End-to-End Training Workflow ===")
 
         # Setup session with mixed precision
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
@@ -114,11 +113,9 @@ class TestComprehensivePrecision:
         output = model(input_data[:10])
         assert output.dtype == torch.float16
 
-        print(f"✅ Input: {input_data.dtype}, Model: {model_dtype}, Output: {output.dtype}")
 
     def test_precision_override_workflow(self, sample_datasets):
         """Test precision override scenarios in realistic workflows."""
-        print("\n=== Testing Precision Override Workflows ===")
 
         # Default session
         session = SessionSettings(precision=PrecisionStrategy.FULL_32)
@@ -148,11 +145,9 @@ class TestComprehensivePrecision:
             model_dtype = next(model_high_precision.parameters()).dtype
             assert model_dtype == torch.float64
 
-        print("✅ All precision override workflows working correctly")
 
     def test_multi_threaded_precision_isolation(self, sample_datasets):
         """Test precision isolation across multiple threads."""
-        print("\n=== Testing Multi-threaded Precision Isolation ===")
 
         results = {}
         errors = []
@@ -221,11 +216,9 @@ class TestComprehensivePrecision:
             assert result["data_dtype"] == expected_dtype
             assert result["model_dtype"] == expected_dtype
 
-        print("✅ Multi-threaded precision isolation working correctly")
 
     def test_trainer_settings_lightning_integration(self):
         """Test complete TrainerSettings integration with Lightning precision."""
-        print("\n=== Testing TrainerSettings Lightning Integration ===")
 
         # Test with session precision
         _session = SessionSettings(precision=PrecisionStrategy.MIXED_BF16)
@@ -251,11 +244,9 @@ class TestComprehensivePrecision:
         trainer_settings_explicit = TrainerSettings(precision="32")
         assert trainer_settings_explicit.precision == "32"
 
-        print("✅ TrainerSettings Lightning integration working correctly")
 
     def test_error_recovery_and_fallbacks(self, sample_datasets):
         """Test error recovery and fallback mechanisms."""
-        print("\n=== Testing Error Recovery and Fallbacks ===")
 
         # Test DataEntry fallback when precision service fails
         feature = Feature(name="test", path=sample_datasets["float32"])
@@ -278,11 +269,9 @@ class TestComprehensivePrecision:
             data = load_array(sample_datasets["float32"], dtype=torch.float32)
             assert data.dtype == torch.float32
 
-        print("✅ Error recovery and fallbacks working correctly")
 
     def test_memory_optimization_scenarios(self, sample_datasets):
         """Test memory optimization scenarios with different precision strategies."""
-        print("\n=== Testing Memory Optimization Scenarios ===")
 
         shape = {"x": (20,), "y": (10,)}
 
@@ -315,11 +304,9 @@ class TestComprehensivePrecision:
         assert next(models[PrecisionStrategy.MIXED_16].parameters()).dtype == torch.float16
         assert next(models[PrecisionStrategy.FULL_64].parameters()).dtype == torch.float64
 
-        print("✅ Memory optimization scenarios working correctly")
 
     def test_numerical_stability_edge_cases(self, sample_datasets):
         """Test numerical stability with different precision strategies."""
-        print("\n=== Testing Numerical Stability Edge Cases ===")
 
         # Test with very small and very large numbers
         small_data = torch.tensor([1e-8, 1e-10, 1e-12], dtype=torch.float64)
@@ -359,11 +346,9 @@ class TestComprehensivePrecision:
             small_file.unlink(missing_ok=True)
             large_file.unlink(missing_ok=True)
 
-        print("✅ Numerical stability edge cases handled correctly")
 
     def test_production_pipeline_integration(self, sample_datasets):
         """Test complete production pipeline integration."""
-        print("\n=== Testing Production Pipeline Integration ===")
 
         # Simulate production pipeline with multiple precision requirements
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
@@ -410,11 +395,9 @@ class TestComprehensivePrecision:
             assert validation_input.dtype == torch.float64
             assert validation_output.dtype == torch.float64
 
-        print("✅ Production pipeline integration working correctly")
 
     def test_concurrent_precision_operations(self, sample_datasets):
         """Test concurrent precision operations under load."""
-        print("\n=== Testing Concurrent Precision Operations ===")
 
         def precision_worker(worker_id, datasets):
             """Worker function for concurrent testing."""
@@ -474,11 +457,9 @@ class TestComprehensivePrecision:
             assert result["model_dtype"] == expected_dtype
             assert result["output_dtype"] == expected_dtype
 
-        print("✅ Concurrent precision operations working correctly")
 
     def test_precision_configuration_validation(self):
         """Test precision configuration validation and compatibility."""
-        print("\n=== Testing Precision Configuration Validation ===")
 
         _service = get_precision_service()
 
@@ -504,5 +485,3 @@ class TestComprehensivePrecision:
 
             resolved_dtype = _service.get_torch_dtype(session)
             assert resolved_dtype == torch_dtype
-
-        print("✅ Precision configuration validation working correctly")

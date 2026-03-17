@@ -62,7 +62,8 @@ def generate_template(
     Example:
         >>> from dlkit.interfaces.api import generate_template
         >>> template = generate_template("training")
-        >>> print(template)
+        >>> isinstance(template, str)
+        True
     """
     input_data = GenerateTemplateCommandInput(template_type=template_type)
 
@@ -91,7 +92,8 @@ def validate_template(
         >>> from dlkit.interfaces.api import generate_template, validate_template
         >>> template = generate_template("training")
         >>> result = validate_template(template)
-        >>> print(f"Valid: {result['is_valid']}")
+        >>> result["is_valid"]
+        True
     """
     input_data = ValidateTemplateCommandInput(
         template_content=template_content, template_type=template_type

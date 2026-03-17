@@ -170,12 +170,7 @@ class TestTrainCommandGoodPath:
             patch("dlkit.interfaces.cli.commands.train.present_training_result"),
         ):
             result = cli_runner.invoke(cli_app, ["train", "--mlflow", str(config_path)])
-
-            if result.exit_code != 0:
-                print(f"STDOUT: {result.stdout}")
-                print(f"STDERR: {getattr(result, 'stderr', 'N/A')}")
-                print(f"Exception: {result.exception}")
-            assert result.exit_code == 0
+            assert result.exit_code == 0, result.output
             mock_validate.assert_called_once_with(mock_settings)
             mock_train.assert_called_once()
 

@@ -33,7 +33,7 @@ class CommandRegistry:
             name: Command identifier
             command_class: Command implementation class
         """
-        logger.debug("Registering command", command_name=name, command_class=command_class.__name__)
+        logger.debug("Registering command '{}' with {}", name, command_class.__name__)
         return replace(self, commands={**self.commands, name: command_class})
 
     def get(self, name: str) -> type[BaseCommand[Any, Any]] | None:
@@ -73,7 +73,7 @@ class CommandDispatcher:
             name: Command identifier
             command_class: Command implementation class
         """
-        logger.debug("Registering command in dispatcher", command_name=name)
+        logger.debug("Registering command '{}' in dispatcher", name)
         self.registry = self.registry.register(name, command_class)
 
     def execute(
@@ -93,16 +93,16 @@ class CommandDispatcher:
         Raises:
             WorkflowError: On execution failure
         """
-        logger.info(f"Executing command: {command_name}")
+        logger.debug(f"Executing command: {command_name}")
         try:
             # Look up command
             command_class = self.registry.get(command_name)
             if command_class is None:
                 available_commands = self.registry.list_commands()
                 logger.error(
-                    "Command not found in registry",
-                    command=command_name,
-                    available_commands=available_commands,
+                    "Command '{}' not found. Available commands: {}",
+                    command_name,
+                    ", ".join(available_commands),
                 )
                 raise_error(
                     f"Unknown command: {command_name}. Available: {', '.join(available_commands)}"
@@ -110,22 +110,21 @@ class CommandDispatcher:
 
             # Create command instance
             logger.debug(
-                "Creating command instance",
-                command=command_name,
-                command_class=command_class.__name__,
-                input_type=type(input_data).__name__,
+                "Creating command '{}' with handler {}",
+                command_name,
+                command_class.__name__,
             )
             command_instance = command_class(command_name)
 
             # Execute command
-            logger.info("Starting command execution", command=command_name)
+            logger.debug("Starting command '{}'", command_name)
             result = command_instance.execute(input_data, settings, **kwargs)
 
             # Log successful execution
-            logger.info(
-                "Command executed successfully",
-                command=command_name,
-                result_type=type(result).__name__,
+            logger.debug(
+                "Command '{}' completed with result type {}",
+                command_name,
+                type(result).__name__,
             )
 
             return result

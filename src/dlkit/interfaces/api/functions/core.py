@@ -77,7 +77,8 @@ def train(
         >>> validate_config(settings, dry_build=True)
         True
         >>> result = train(settings, mlflow=True, epochs=20, batch_size=64)
-        >>> print(result.metrics)
+        >>> bool(result.metrics)
+        True
     """
     input_data = TrainCommandInput(
         mlflow=mlflow,

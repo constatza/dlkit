@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import Callback, ModelSummary
+from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger
 from pydantic import DirectoryPath, Field
 
@@ -10,7 +10,9 @@ from .core.base_settings import ComponentSettings
 from .core import BuildContext, FactoryProvider
 
 # Import moved to method level to avoid circular imports
-from loguru import logger as loguru_logger
+from dlkit.tools.utils.logging_config import get_logger, should_enable_progress_bar
+
+loguru_logger = get_logger(__name__)
 
 
 class CallbackSettings(ComponentSettings):
@@ -96,11 +98,11 @@ class TrainerSettings(ComponentSettings):
         from dlkit.tools.config.session_settings import SessionSettings
 
         # Build callbacks via factory
-        callbacks: list[Callback] = [ModelSummary(max_depth=2)]
+        callbacks: list[Callback] = []
         for callback in self.callbacks:
             cb = FactoryProvider.create_component(callback, BuildContext(mode="training"))
             callbacks.append(cb)
-            loguru_logger.info(f"Added callback: {callback.name}")
+            loguru_logger.debug("Added trainer callback '{}'", callback.name)
 
         # Build logger via factory if configured
         if self.logger.name:
@@ -119,9 +121,11 @@ class TrainerSettings(ComponentSettings):
             # Use session precision strategy if not explicitly set
             # Pass session as provider so precision service can read session.precision
             lightning_precision = precision_service.get_lightning_precision(provider=session)
-            loguru_logger.info(f"Using session precision strategy: {lightning_precision}")
+            loguru_logger.debug("Using session precision strategy: {}", lightning_precision)
         else:
-            loguru_logger.info(f"Using explicit trainer precision: {lightning_precision}")
+            loguru_logger.debug("Using explicit trainer precision: {}", lightning_precision)
+
+        enable_progress_bar = should_enable_progress_bar()
 
         # Build Trainer via factory with explicit overrides
         return FactoryProvider.create_component(
@@ -132,6 +136,8 @@ class TrainerSettings(ComponentSettings):
                     "callbacks": callbacks,
                     "logger": lightning_logger,
                     "precision": lightning_precision,
+                    "enable_model_summary": False,
+                    "enable_progress_bar": enable_progress_bar,
                 },
             ),
         )
