@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.core.datatypes.base import FloatHyperparameter, StrHyperparameter
+from dlkit.core.datatypes.base import FloatHyperparameter, PositiveFloatHyperparameter, StrHyperparameter
 from .core.base_settings import ComponentSettings, HyperParameterSettings
 
 
@@ -12,7 +12,7 @@ class OptimizerSettings(ComponentSettings, HyperParameterSettings):
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
     name: StrHyperparameter = Field(default="AdamW", description="Optimizer name")
     module_path: str | None = Field(default="torch.optim", description="Module path to the optimizer")
-    lr: FloatHyperparameter = Field(
+    lr: PositiveFloatHyperparameter = Field(
         default=1e-3, description="Learning rate", alias="learning_rate"
     )
     weight_decay: FloatHyperparameter = Field(default=0.0, description="Optional weight decay")

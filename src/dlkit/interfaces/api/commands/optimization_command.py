@@ -21,12 +21,8 @@ class OptimizationCommandInput:
     """Input dataflow for optimization command."""
 
     trials: int | None = None  # Override default should be None
-    mlflow: bool = False
     checkpoint_path: Path | str | None = None
     root_dir: Path | str | None = None
-    # Basic overrides
-    output_dir: Path | str | None = None
-    data_dir: Path | str | None = None
     # Optuna overrides
     study_name: str | None = None
     # MLflow overrides
@@ -69,13 +65,6 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
             WorkflowError: On validation failure
         """
         try:
-            # Validate trials count
-            if input_data.trials <= 0:
-                raise WorkflowError(
-                    f"Trials must be positive, got: {input_data.trials}",
-                    {"command": "optimize", "error": "invalid_trials_count"},
-                )
-
             # Build overrides dictionary
             overrides = self._build_overrides_dict(input_data)
 
@@ -126,7 +115,7 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
             # Execute optimization
             checkpoint = overrides.get("checkpoint_path") if overrides else None
             return self.optimization_service.execute_optimization(
-                settings, input_data.trials, checkpoint
+                settings, input_data.trials or 100, checkpoint
             )
 
         except WorkflowError:
@@ -153,8 +142,6 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
         return OverrideNormalizer.build_overrides_dict(
             checkpoint_path=input_data.checkpoint_path,
             root_dir=input_data.root_dir,
-            output_dir=input_data.output_dir,
-            data_dir=input_data.data_dir,
             trials=input_data.trials if input_data.trials != 100 else None,
             study_name=input_data.study_name,
             experiment_name=input_data.experiment_name,

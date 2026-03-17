@@ -344,7 +344,17 @@ def iter_validated_updates(
                         ),
                     )
                 case _:
-                    adapter = TypeAdapter(field_info.annotation)
+                    # Rebuild annotated type to include field-level constraints
+                    # (e.g. PositiveInt = Annotated[int, Gt(0)]).
+                    # field_info.annotation is the raw type; field_info.metadata
+                    # carries constraints like Gt/Ge that TypeAdapter needs.
+                    if field_info.metadata:
+                        from typing import Annotated
+
+                        annotation = Annotated[tuple([field_info.annotation, *field_info.metadata])]
+                    else:
+                        annotation = field_info.annotation
+                    adapter = TypeAdapter(annotation)
                     yield field_name, adapter.validate_python(patch_value)
 
         elif allows_extras:
