@@ -22,12 +22,8 @@ logger = get_logger(__name__)
 class TrainCommandInput:
     """Input dataflow for train command."""
 
-    mlflow: bool = False
     checkpoint_path: Path | str | None = None
     root_dir: Path | str | None = None
-    # Basic overrides
-    output_dir: Path | str | None = None
-    data_dir: Path | str | None = None
     # Training overrides
     epochs: int | None = None
     batch_size: int | None = None
@@ -154,11 +150,9 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             Dictionary of non-None overrides with paths normalized to Path objects
         """
         # Use shared normalizer for path normalization and None-filtering
-        overrides = OverrideNormalizer.build_overrides_dict(
+        return OverrideNormalizer.build_overrides_dict(
             checkpoint_path=input_data.checkpoint_path,
             root_dir=input_data.root_dir,
-            output_dir=input_data.output_dir,
-            data_dir=input_data.data_dir,
             epochs=input_data.epochs,
             batch_size=input_data.batch_size,
             learning_rate=input_data.learning_rate,
@@ -166,8 +160,3 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             run_name=input_data.run_name,
             additional_overrides=input_data.additional_overrides,
         )
-
-        # Always include mlflow boolean since it's always meaningful
-        overrides["mlflow"] = input_data.mlflow
-
-        return overrides

@@ -123,6 +123,11 @@ def _run_training_impl(
             for msg in override_messages:
                 console.print(f"  • {msg}")
 
+        # --mlflow flag: ensure an [MLFLOW] section exists in settings.
+        # The API has no boolean toggle — MLflow is enabled by config presence.
+        if mlflow and not settings.MLFLOW:  # type: ignore[attr-defined]
+            settings = settings.patch({"MLFLOW": {}})  # type: ignore[attr-defined]
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -131,11 +136,8 @@ def _run_training_impl(
             task = progress.add_task("Training in progress...", total=None)
             training_result = api_train(
                 settings,
-                mlflow=mlflow,
                 checkpoint_path=checkpoint,
                 root_dir=root_dir,
-                output_dir=output_dir,
-                data_dir=data_dir,
                 epochs=epochs,
                 batch_size=batch_size,
                 learning_rate=learning_rate,

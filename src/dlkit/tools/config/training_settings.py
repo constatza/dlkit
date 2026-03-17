@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, PositiveInt
 
 from .core.base_settings import BasicSettings
 from .trainer_settings import TrainerSettings
@@ -59,7 +59,7 @@ class TrainingSettings(BasicSettings):
     )
 
     # Core training parameters (flattened)
-    epochs: int = Field(default=100, description="Number of training epochs")
+    epochs: PositiveInt = Field(default=100, description="Number of training epochs")
     patience: int = Field(default=10, description="Early stopping patience")
     monitor_metric: str = Field(
         default="val_loss", description="Metric to monitor for early stopping"

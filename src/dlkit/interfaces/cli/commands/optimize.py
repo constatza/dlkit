@@ -73,6 +73,10 @@ def _run_optimization_impl(
         if root_dir:
             console.print(f"  Root dir: {root_dir}")
 
+        # --mlflow flag: ensure an [MLFLOW] section exists in settings.
+        if mlflow and not settings.MLFLOW:  # type: ignore[attr-defined]
+            settings = settings.patch({"MLFLOW": {}})  # type: ignore[attr-defined]
+
         # Execute optimization
         with Progress(
             SpinnerColumn(),
@@ -84,12 +88,8 @@ def _run_optimization_impl(
             optimization_result = api_optimize(
                 settings,
                 trials=trials,
-                mlflow=mlflow,
                 study_name=study_name,
                 root_dir=root_dir,
-                # Pass MLflow experiment/run names if MLflow is configured
-                experiment_name=settings.MLFLOW.experiment_name if settings.MLFLOW else None,
-                run_name=settings.MLFLOW.run_name if settings.MLFLOW else None,
             )
             progress.remove_task(task)
 
