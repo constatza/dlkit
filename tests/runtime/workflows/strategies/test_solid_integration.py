@@ -50,8 +50,13 @@ def build_components():
     )
 
 
-def test_single_responsibility_principle_integration(build_components):
+def test_single_responsibility_principle_integration(build_components, monkeypatch):
     """Test that each component has a single, focused responsibility."""
+    # Ensure no local MLflow server is detected and no env var set
+    import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
+    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+
     factory = ExecutionStrategyFactory()
 
     # Factory creates TrackingDecorator with NullTracker when no features enabled
@@ -92,7 +97,9 @@ def test_open_closed_principle_integration(build_components):
         mock_run_context = Mock()
         mock_tracker.create_run.return_value.__enter__ = Mock(return_value=mock_run_context)
         mock_tracker.create_run.return_value.__exit__ = Mock(return_value=None)
-        mock_tracker.setup_mlflow_config.return_value = (None, None)
+        mock_tracker.configure = Mock()
+        mock_tracker.get_tracking_uri = Mock(return_value=None)
+        mock_tracker.is_local = Mock(return_value=False)
 
         executor = factory.create_executor(mlflow_settings)
 

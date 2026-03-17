@@ -7,6 +7,7 @@ import shutil
 import socket
 import sys as _sys
 import traceback as _traceback
+import unittest.mock
 
 _cwd = os.path.abspath(".")
 _target = os.path.join(_cwd, "mlflow.db")
@@ -379,6 +380,19 @@ def test_artifacts_dir() -> Path:
     artifacts_dir = _get_test_artifacts_dir()
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     return artifacts_dir
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _block_mlflow_host_probe():
+    """Prevent tests from making TCP connections to detect a real MLflow server.
+
+    Tests that need specific local_host_alive behavior can override via monkeypatch.
+    """
+    with unittest.mock.patch(
+        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",
+        return_value=False,
+    ):
+        yield
 
 
 # Import MLflow test fixtures

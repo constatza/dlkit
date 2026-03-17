@@ -40,8 +40,10 @@ def _resolve_effective_model_name(model: Any) -> str:
     return type(model).__name__
 
 
-def _expected_tracking_uri() -> str:
-    """Resolve tracking URI used by tests (env-first, then current MLflow URI)."""
+def _expected_tracking_uri(result: Any | None = None) -> str:
+    """Resolve tracking URI used by tests (result-first, then env, then current MLflow URI)."""
+    if result is not None and getattr(result, "mlflow_tracking_uri", None):
+        return result.mlflow_tracking_uri
     from_env = os.getenv("MLFLOW_TRACKING_URI")
     if from_env:
         return from_env
@@ -249,7 +251,6 @@ class TestMLflowTrainingIntegration:
         tmp_path: Path,
     ) -> None:
         """Real E2E check: register model, resolve aliases, and load by name/version."""
-        tracking_uri = _expected_tracking_uri()
         unique_suffix = uuid4().hex[:8]
 
         mlflow_cfg = mlflow_settings.MLFLOW
@@ -266,6 +267,7 @@ class TestMLflowTrainingIntegration:
         )
 
         result = dlkit.train(settings_with_registration)
+        tracking_uri = _expected_tracking_uri(result)
         assert result.model_state is not None
         model_name = _resolve_effective_model_name(result.model_state.model)
 
@@ -349,7 +351,6 @@ class TestMLflowTrainingIntegration:
         tmp_path: Path,
     ) -> None:
         """Real E2E check: unregistered runs still support model lookup/load via runs:/."""
-        tracking_uri = _expected_tracking_uri()
         unique_suffix = uuid4().hex[:8]
 
         mlflow_cfg = mlflow_settings.MLFLOW
@@ -365,6 +366,7 @@ class TestMLflowTrainingIntegration:
         )
 
         result = dlkit.train(settings_without_registration)
+        tracking_uri = _expected_tracking_uri(result)
         assert result.model_state is not None
         model_name = _resolve_effective_model_name(result.model_state.model)
 

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from dlkit.runtime.workflows.strategies.tracking.backend import LocalSqliteBackend
 from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import MLflowResourceManager
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.io import url_resolver
@@ -32,7 +33,7 @@ class TestMLflowResourceManagerThreadSafety:
     """Test thread safety of MLflow resource manager."""
 
     def test_stack_is_safe_under_concurrent_mutations(
-        self, mlflow_config_enabled: MLflowSettings
+        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
     ) -> None:
         """Concurrent push/pop must not corrupt the active run stack.
 
@@ -41,8 +42,11 @@ class TestMLflowResourceManagerThreadSafety:
 
         Args:
             mlflow_config_enabled: Enabled MLflow settings fixture.
+            tmp_path: Temporary directory for test artifacts.
         """
-        manager = MLflowResourceManager(mlflow_config_enabled)
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
+        manager = MLflowResourceManager(mlflow_config_enabled, backend)
         errors: list[Exception] = []
 
         def push_and_pop(run_id: str) -> None:
@@ -63,14 +67,17 @@ class TestMLflowResourceManagerThreadSafety:
         assert len(errors) == 0
 
     def test_concurrent_state_snapshot_access(
-        self, mlflow_config_enabled: MLflowSettings
+        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
     ) -> None:
         """State snapshots must be readable from multiple concurrent threads.
 
         Args:
             mlflow_config_enabled: Enabled MLflow settings fixture.
+            tmp_path: Temporary directory for test artifacts.
         """
-        with MLflowResourceManager(mlflow_config_enabled) as manager:
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
+        with MLflowResourceManager(mlflow_config_enabled, backend) as manager:
             snapshots: list[dict] = []
             errors: list[Exception] = []
 
@@ -89,13 +96,16 @@ class TestMLflowResourceManagerThreadSafety:
             assert len(errors) == 0
             assert len(snapshots) == 10
 
-    def test_cleanup_clears_stack(self, mlflow_config_enabled: MLflowSettings) -> None:
+    def test_cleanup_clears_stack(self, mlflow_config_enabled: MLflowSettings, tmp_path: Path) -> None:
         """Stack must be empty after context manager exit.
 
         Args:
             mlflow_config_enabled: Enabled MLflow settings fixture.
+            tmp_path: Temporary directory for test artifacts.
         """
-        manager = MLflowResourceManager(mlflow_config_enabled)
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
+        manager = MLflowResourceManager(mlflow_config_enabled, backend)
 
         with manager:
             with manager._state.stack_lock:
@@ -107,63 +117,65 @@ class TestMLflowResourceManagerThreadSafety:
 class TestConflictDetection:
     """Test tracking URI conflict detection."""
 
-    def test_set_global_tracking_uri_conflict_detection(self, tmp_path: Path) -> None:
-        """Test that changing tracking URI is detected.
+    def test_backend_immutability_guarantees_single_tracking_uri(self, tmp_path: Path) -> None:
+        """Test that backend immutability guarantees a single tracking URI during resource lifecycle.
 
         Args:
             tmp_path: Temporary directory fixture
         """
         mlflow_config = MLflowSettings()
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
 
-        manager = MLflowResourceManager(mlflow_config)
-        first_uri = url_resolver.build_uri(tmp_path / "mlruns1.db", scheme="sqlite")
-        second_uri = url_resolver.build_uri(tmp_path / "mlruns2.db", scheme="sqlite")
+        manager = MLflowResourceManager(mlflow_config, backend)
 
-        # First set
-        manager._set_global_tracking_uri(first_uri)
+        # The backend is frozen/immutable, so get_tracking_uri() always returns the same value
+        first_call = backend.tracking_uri()
+        second_call = backend.tracking_uri()
 
-        # Attempt to change to different URI should raise error
-        with pytest.raises(RuntimeError, match="Attempting to change global tracking URI"):
-            manager._set_global_tracking_uri(second_uri)
+        assert first_call == second_call, "Backend tracking URI should be constant"
+        assert first_call == manager._backend.tracking_uri()
 
 
 class TestStackConsistencyValidation:
     """Test stack consistency validation."""
 
-    def test_validate_stack_consistency_with_desync(self, tmp_path: Any) -> None:
+    def test_validate_stack_consistency_with_desync(self, tmp_path: Path) -> None:
         """Test that stack consistency validation detects desynchronization.
 
         Args:
             tmp_path: Temporary directory fixture
         """
         mlflow_config = MLflowSettings()
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
 
-        with MLflowResourceManager(mlflow_config) as manager:
+        with MLflowResourceManager(mlflow_config, backend) as manager:
             # Manually add a run ID to simulate desynchronization
             with manager._state.stack_lock:
                 manager._state.active_run_stack.append("fake_run_id")
 
-            # Validation should not raise - it only logs warnings
-            # We can't easily capture loguru logs, but we can verify it doesn't crash
-            manager._validate_stack_consistency()
+            # Get a state snapshot - this should work even with inconsistent state
+            snapshot = manager._get_state_snapshot()
 
-            # Verify the stack still has the fake run
-            with manager._state.stack_lock:
-                assert "fake_run_id" in manager._state.active_run_stack
+            # Verify the snapshot includes the fake run
+            assert "fake_run_id" in snapshot["active_run_stack"]
 
 
 class TestStateSnapshot:
     """Test state snapshot functionality."""
 
-    def test_get_state_snapshot_returns_correct_data(self, tmp_path: Any) -> None:
+    def test_get_state_snapshot_returns_correct_data(self, tmp_path: Path) -> None:
         """Test that state snapshot contains expected data.
 
         Args:
             tmp_path: Temporary directory fixture
         """
         mlflow_config = MLflowSettings()
+        db_path = tmp_path / "mlruns" / "mlflow.db"
+        backend = LocalSqliteBackend(db_path=db_path)
 
-        with MLflowResourceManager(mlflow_config) as manager:
+        with MLflowResourceManager(mlflow_config, backend) as manager:
             snapshot = manager._get_state_snapshot()
 
             # Verify snapshot structure

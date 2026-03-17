@@ -21,8 +21,13 @@ def factory():
     return ExecutionStrategyFactory()
 
 
-def test_factory_creates_vanilla_executor_by_default(factory):
+def test_factory_creates_vanilla_executor_by_default(factory, monkeypatch):
     """Test that factory creates tracking decorator with null tracker when no features are enabled."""
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.factory.ExecutionStrategyFactory._has_mlflow_config_or_env",
+        lambda self, s: False,
+    )
     settings = GeneralSettings()  # No MLFLOW or OPTUNA
 
     executor = factory.create_executor(settings)
@@ -30,7 +35,7 @@ def test_factory_creates_vanilla_executor_by_default(factory):
     # Factory now always returns TrackingDecorator (null object pattern)
     assert isinstance(executor, TrackingDecorator)
     assert isinstance(executor._executor, VanillaExecutor)
-    # Verify it uses NullTracker when MLflow is disabled
+    # Verify it uses NullTracker when MLflow is disabled (no section AND no env var)
     from dlkit.runtime.workflows.strategies.tracking.interfaces import NullTracker
 
     assert isinstance(executor._tracker, NullTracker)
@@ -51,8 +56,13 @@ def test_factory_creates_tracking_decorator_for_mlflow(factory):
     assert isinstance(executor._executor, VanillaExecutor)
 
 
-def test_factory_creates_optimization_decorator_for_optuna(factory):
+def test_factory_creates_optimization_decorator_for_optuna(factory, monkeypatch):
     """Test that factory creates tracking decorator even when only Optuna is enabled."""
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",
+        lambda: False,
+    )
     settings = GeneralSettings(
         OPTUNA=OptunaSettings(enabled=True, n_trials=10, direction="minimize")
     )
@@ -64,7 +74,7 @@ def test_factory_creates_optimization_decorator_for_optuna(factory):
     assert isinstance(executor, TrackingDecorator)
     # Verify it wraps a VanillaExecutor
     assert isinstance(executor._executor, VanillaExecutor)
-    # Should use NullTracker since MLflow is not enabled
+    # Should use NullTracker since MLflow is not enabled (no section AND no env var)
     from dlkit.runtime.workflows.strategies.tracking.interfaces import NullTracker
 
     assert isinstance(executor._tracker, NullTracker)
@@ -117,6 +127,23 @@ def test_factory_mlflow_detection_logic(factory):
 
     # MLflow enabled case
     assert factory._has_mlflow_config(GeneralSettings(MLFLOW=MLflowSettings()))
+
+
+def test_factory_detects_local_mlflow_server(factory, monkeypatch):
+    """Test that factory creates MLflowTracker when a local server is running."""
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.setattr(
+        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",
+        lambda: True,
+    )
+    settings = GeneralSettings()  # No MLFLOW section, no env var
+
+    executor = factory.create_executor(settings)
+
+    assert isinstance(executor, TrackingDecorator)
+    from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
+
+    assert isinstance(executor._tracker, MLflowTracker)
 
 
 def test_factory_optuna_detection_logic(factory):

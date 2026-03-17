@@ -265,8 +265,11 @@ def test_tracking_decorator_tracking_uri_tagging(
 
     # Mock tracker with server info capabilities
     class MockMLflowTracker(MockExperimentTracker):
-        def setup_mlflow_config(self, mlflow_config):
-            return "http://localhost:5000", {"running": True, "response_time": 0.1}
+        def configure(self, mlflow_config: Any, *, root_dir: Any = None) -> None:
+            pass
+
+        def get_tracking_uri(self) -> str:
+            return "http://localhost:5000"
 
     tracker = MockMLflowTracker()
     decorator = TrackingDecorator(mock_executor, tracker)
@@ -319,12 +322,7 @@ def test_tracking_decorator_result_enrichment(
 ):
     """Test that results are enriched with tracking metadata."""
 
-    # Mock tracker to simulate MLflow enrichment
-    class EnrichingTracker(MockExperimentTracker):
-        def setup_mlflow_config(self, mlflow_config):
-            return "http://localhost:5000", {"running": True, "response_time": 0.05}
-
-    tracker = EnrichingTracker()
+    tracker = MockExperimentTracker()
     decorator = TrackingDecorator(mock_executor, tracker)
 
     result = decorator.execute(build_components, mlflow_settings)
