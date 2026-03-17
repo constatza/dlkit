@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 from torch.nn.utils import parametrize
 
 from dlkit.core.models.nn.primitives.parametrizations import (
@@ -65,6 +65,7 @@ def register_spd(
     tensor_name: str = "weight",
     *,
     min_diag: float = 1e-4,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
 ) -> nn.Module:
     """Register hard SPD structure on a module tensor.
 
@@ -72,6 +73,8 @@ def register_spd(
         module: Target module.
         tensor_name: Name of the tensor to parametrize.
         min_diag: Positive diagonal floor forwarded to :class:`SPD`.
+        pos_fn: Element-wise positive activation used in the SPD diagonal
+            enforcement (default: softplus).
 
     Returns:
         The same *module*, mutated in place.
@@ -79,7 +82,7 @@ def register_spd(
     return _register_parametrizations(
         module,
         tensor_name,
-        [Symmetric(), SPD(min_diag=min_diag)],
+        [Symmetric(), SPD(min_diag=min_diag, pos_fn=pos_fn)],
     )
 
 
@@ -124,6 +127,7 @@ def register_spd_factorized(
     min_diag: float = 1e-4,
     mean: float = 0.0,
     std: float = 0.1,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
 ) -> nn.Module:
     """Register SPD structure followed by an SPD-preserving sandwich factorization.
 
@@ -137,6 +141,8 @@ def register_spd_factorized(
         min_diag: Positive diagonal floor forwarded to :class:`SPD`.
         mean: Mean for log-scale initialisation (``0.0`` → unit scale).
         std: Standard deviation for log-scale initialisation.
+        pos_fn: Element-wise positive activation used in the SPD diagonal
+            enforcement (default: softplus).
 
     Returns:
         The same *module*, mutated in place.
@@ -146,7 +152,7 @@ def register_spd_factorized(
         tensor_name,
         [
             Symmetric(),
-            SPD(min_diag=min_diag),
+            SPD(min_diag=min_diag, pos_fn=pos_fn),
             PositiveSandwichScale(size=size, mean=mean, std=std),
         ],
     )
@@ -234,6 +240,7 @@ class SPDLinear(nn.Linear):
         bias: bool = False,
         *,
         min_diag: float = 1e-4,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -244,6 +251,8 @@ class SPDLinear(nn.Linear):
             out_features: Output feature size.
             bias: Whether to include a bias term.
             min_diag: Positive diagonal slack floor for SPD enforcement.
+            pos_fn: Element-wise positive activation for diagonal enforcement
+                (default: softplus).
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
@@ -259,7 +268,7 @@ class SPDLinear(nn.Linear):
             device=device,
             dtype=dtype,
         )
-        register_spd(self, min_diag=min_diag)
+        register_spd(self, min_diag=min_diag, pos_fn=pos_fn)
 
 
 class FactorizedLinear(nn.Module):
@@ -287,6 +296,7 @@ class FactorizedLinear(nn.Module):
         *,
         mean: float = 0.0,
         std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -298,6 +308,8 @@ class FactorizedLinear(nn.Module):
             bias: Whether to include a bias term.
             mean: Mean for log-scale initialisation (``0.0`` → unit scale).
             std: Standard deviation for log-scale initialisation.
+            pos_fn: Element-wise function mapping log-scale to positive scale
+                factors (default: exp). Alternatives: softplus, relu+ε, etc.
             device: Optional device for parameter initialisation.
             dtype: Optional dtype for parameter initialisation.
         """
@@ -306,6 +318,7 @@ class FactorizedLinear(nn.Module):
         self.out_features = out_features
         self._log_scale_mean = float(mean)
         self._log_scale_std = float(std)
+        self._pos_fn = pos_fn
         factory = {"device": device, "dtype": dtype}
         self.base_weight = nn.Parameter(
             torch.empty(out_features, in_features, **factory)
@@ -324,8 +337,8 @@ class FactorizedLinear(nn.Module):
 
     @property
     def weight(self) -> torch.Tensor:
-        """Effective weight ``diag(exp(log_scale)) @ base_weight``."""
-        return torch.exp(self.log_scale).unsqueeze(1) * self.base_weight
+        """Effective weight ``diag(pos_fn(log_scale)) @ base_weight``."""
+        return self._pos_fn(self.log_scale).unsqueeze(1) * self.base_weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the factorized linear transformation.
@@ -399,6 +412,7 @@ class SPDFactorizedLinear(nn.Linear):
         min_diag: float = 1e-4,
         mean: float = 0.0,
         std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -411,6 +425,8 @@ class SPDFactorizedLinear(nn.Linear):
             min_diag: Positive diagonal slack floor for SPD enforcement.
             mean: Mean for log-scale initialisation (``0.0`` → unit scale).
             std: Standard deviation for log-scale initialisation.
+            pos_fn: Element-wise positive activation for SPD diagonal enforcement
+                (default: softplus).
             device: Optional device for weight initialisation.
             dtype: Optional dtype for weight initialisation.
         """
@@ -432,4 +448,5 @@ class SPDFactorizedLinear(nn.Linear):
             min_diag=min_diag,
             mean=mean,
             std=std,
+            pos_fn=pos_fn,
         )

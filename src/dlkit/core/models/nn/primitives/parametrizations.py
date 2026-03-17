@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 # Minimum argument passed to _inverse_softplus to avoid log(0) / NaN.
@@ -119,14 +121,22 @@ class SPD(nn.Module):
         min_diag (float): Positive floor added to the diagonal slack.
     """
 
-    def __init__(self, min_diag: float = 1e-4) -> None:
+    def __init__(
+        self,
+        min_diag: float = 1e-4,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+    ) -> None:
         """Initialize the SPD parametrization.
 
         Args:
             min_diag: Positive diagonal floor for numerical stability.
+            pos_fn: Element-wise function mapping reals to positives (default: softplus).
+                The ``right_inverse`` always uses the softplus inverse; it yields an
+                approximate initialization when a non-default ``pos_fn`` is supplied.
         """
         super().__init__()
         self.min_diag = float(min_diag)
+        self._pos_fn = pos_fn
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Return an SPD matrix.
@@ -147,7 +157,7 @@ class SPD(nn.Module):
         diag_raw = torch.diagonal(x, dim1=-2, dim2=-1)
         off_diag = x - torch.diag_embed(diag_raw)
         row_sum = off_diag.abs().sum(dim=-1)
-        diag_pos = F.softplus(diag_raw) + row_sum + self.min_diag
+        diag_pos = self._pos_fn(diag_raw) + row_sum + self.min_diag
         return off_diag + torch.diag_embed(diag_pos)
 
     def right_inverse(self, w: torch.Tensor) -> torch.Tensor:

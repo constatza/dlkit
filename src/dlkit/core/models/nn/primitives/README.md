@@ -217,3 +217,97 @@ class MyModel(TransformMixin, LightningModule):
 - `settings.shape.x` must be defined (feature shape)
 - `settings.shape.y` must be defined for non-autoencoder models
 - For autoencoders (`settings.is_autoencoder=True`), target chain reuses feature chain
+
+---
+
+## Parametrized Linear Layers
+
+All layers live in `parametrized_layers.py`. Constrained layers use PyTorch's
+`torch.nn.utils.parametrize` machinery unless noted.
+
+### Layer Reference
+
+| Layer | Formula | Square required | Constraint |
+|---|---|---|---|
+| `SymmetricLinear` | `W = W^T` | Yes | Hard (parametrize) |
+| `SPDLinear` | SPD via Gershgorin | Yes | Hard (parametrize) |
+| `SPDFactorizedLinear` | `W = D @ SPD(A) @ D` | Yes | Hard (parametrize) |
+| `FactorizedLinear` | `W = diag(pos_fn(s)) @ A` | No | Modelling choice (plain Module) |
+| `SymmetricFactorizedLinear` | `W = D @ Sym(A) @ D` | Yes | Hard (parametrize) |
+
+### `SPDLinear`
+
+Chained parametrizations: `Symmetric → SPD`. The `SPD` module rewrites only the
+diagonal to enforce strict diagonal dominance:
+
+```
+diag(W) = pos_fn(diag(A)) + row_sum(|off-diag(A)|) + min_diag
+```
+
+By the Gershgorin circle theorem all eigenvalues are positive → W is SPD.
+
+**Key parameters**:
+- `min_diag` (float, default `1e-4`): positive floor on each diagonal entry.
+- `pos_fn` (callable, default `F.softplus`): element-wise reals→positives.
+
+### `SPDFactorizedLinear`
+
+Chained parametrizations: `Symmetric → SPD → PositiveSandwichScale`. Adds a
+learnable per-dimension sandwich scale `D = diag(exp(s))` that preserves SPD.
+
+**Additional parameters**:
+- `mean`, `std`: initialisation of the log-scale `s`.
+- `pos_fn`: forwarded to the `SPD` stage.
+
+### `FactorizedLinear`
+
+Plain `nn.Module` (no `parametrize`). Stores `base_weight` and `log_scale`
+separately for a flat, transparent state dict.
+
+**Key parameters**:
+- `mean`, `std`: initialisation of `log_scale`.
+- `pos_fn` (callable, default `torch.exp`): maps `log_scale` to positive row
+  scales. Alternatives: `F.softplus`, `lambda x: F.relu(x) + 1e-6`.
+
+### Configuring `pos_fn`
+
+```python
+import torch
+import torch.nn.functional as F
+from dlkit.core.models.nn.primitives import SPDLinear, FactorizedLinear
+
+# Default: softplus (smooth, non-saturating)
+SPDLinear(16, 16)
+
+# Exponential (sharper gradient near zero)
+SPDLinear(16, 16, pos_fn=torch.exp)
+
+# Bounded alternative
+SPDLinear(16, 16, pos_fn=lambda x: F.relu(x) + 1e-4)
+
+# FactorizedLinear default: exp
+FactorizedLinear(16, 32)
+
+# FactorizedLinear with softplus
+FactorizedLinear(16, 32, pos_fn=F.softplus)
+```
+
+### Parametrization Modules
+
+| Class | Effect |
+|---|---|
+| `Symmetric` | `X → triu(X) + triu(X,1)^T` |
+| `SPD` | Replaces diagonal to enforce strict diagonal dominance |
+| `PositiveRowScale` | `W = diag(exp(s)) @ A`, `s` owns its parameter |
+| `PositiveColumnScale` | `W = A @ diag(exp(s))`, `s` owns its parameter |
+| `PositiveSandwichScale` | `W = D @ A @ D`, `D = diag(exp(s))` |
+| `PositiveScalarScale` | `W = exp(s) * A`, scalar `s` |
+
+### Registration Helpers
+
+```python
+register_symmetric(module, tensor_name="weight")
+register_spd(module, tensor_name="weight", *, min_diag=1e-4, pos_fn=F.softplus)
+register_symmetric_factorized(module, size, *, mean=0.0, std=0.1)
+register_spd_factorized(module, size, *, min_diag=1e-4, mean=0.0, std=0.1, pos_fn=F.softplus)
+```
