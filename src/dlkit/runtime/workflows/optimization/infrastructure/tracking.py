@@ -77,14 +77,15 @@ class MLflowTrackingAdapter(IExperimentTracker):
             try:
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 
-                self._tracker = MLflowTracker(
-                    disable_autostart=False,
-                    skip_health_checks=False,
-                )
+                self._tracker = MLflowTracker(disable_autostart=False)
             except ImportError as e:
                 raise WorkflowError(
                     f"MLflowTracker not available: {e}", {"stage": "tracking_initialization"}
                 ) from e
+
+        # Configure tracker if settings provided
+        if self._mlflow_settings and self._tracker:
+            self._tracker.configure(self._mlflow_settings, root_dir=self._root_dir)
 
     def __enter__(self):
         """Enter context and initialize MLflow tracker using ExitStack."""
@@ -100,12 +101,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 self._exit_stack = ExitStack()
                 self._exit_stack.__enter__()
 
-                # Configure and enter tracker context using ExitStack
-                logger.debug("Configuring and entering MLflow tracker context")
-                self._tracker.setup_mlflow_config(
-                    self._mlflow_settings,
-                    root_dir=self._root_dir,
-                )
+                logger.debug("Entering MLflow tracker context")
                 self._tracker = self._exit_stack.enter_context(self._tracker)
 
                 logger.debug("MLflow tracking adapter context entered successfully")

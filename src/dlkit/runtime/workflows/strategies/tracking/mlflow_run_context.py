@@ -20,15 +20,17 @@ class ClientBasedRunContext(IRunContext):
     by using explicit client instances for all operations.
     """
 
-    def __init__(self, client: MlflowClient, run_id: str):
-        """Initialize run context with client and run ID.
+    def __init__(self, client: MlflowClient, run_id: str, *, tracking_uri: str):
+        """Initialize run context with client, run ID, and tracking URI.
 
         Args:
             client: MLflow client instance
             run_id: Active run ID for logging operations
+            tracking_uri: Tracking URI for this run (for documentation/debugging)
         """
         self._client = client
         self._run_id = run_id
+        self._tracking_uri = tracking_uri
 
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """Log metrics using MLflow client.
