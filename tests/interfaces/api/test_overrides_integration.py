@@ -37,11 +37,8 @@ class TestOverrideIntegration:
         # Create command input with no arguments - all should default to None
         input_data = TrainCommandInput()
 
-        # Verify all override fields are None/False by default
-        assert input_data.mlflow is False  # Boolean field defaults to False
+        # Verify all override fields are None by default
         assert input_data.checkpoint_path is None
-        assert input_data.output_dir is None
-        assert input_data.data_dir is None
         assert input_data.epochs is None
         assert input_data.batch_size is None
         assert input_data.learning_rate is None
@@ -58,9 +55,9 @@ class TestOverrideIntegration:
         # Create input with no overrides (all None)
         input_data = TrainCommandInput()
 
-        # Build overrides dict - should only contain mlflow default
+        # Build overrides dict - should be empty (all None inputs)
         overrides = train_command._build_overrides_dict(input_data)
-        assert overrides == {"mlflow": False}  # Only mlflow boolean, all other values were None
+        assert overrides == {}
 
         # Apply empty overrides - should preserve original settings
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
@@ -81,10 +78,6 @@ class TestOverrideIntegration:
             epochs=100,  # Override from default 50
             batch_size=64,  # Override from default 16
             learning_rate=0.01,  # New value
-            mlflow=True,  # Enable MLflow
-            # Other fields remain None (not overridden)
-            checkpoint_path=None,
-            output_dir=None,
         )
 
         # Build overrides dict - should only contain non-None values
@@ -93,7 +86,6 @@ class TestOverrideIntegration:
             "epochs": 100,
             "batch_size": 64,
             "learning_rate": 0.01,
-            "mlflow": True,
         }
         assert overrides == expected_overrides
 
@@ -118,7 +110,7 @@ class TestOverrideIntegration:
         )
 
         overrides = train_command._build_overrides_dict(input_data)
-        assert overrides == {"epochs": 200, "mlflow": False}  # epochs + mlflow default
+        assert overrides == {"epochs": 200}
 
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
 
@@ -141,10 +133,7 @@ class TestOverrideIntegration:
         )
 
         overrides = train_command._build_overrides_dict(input_data)
-        assert overrides == {
-            "learning_rate": 50,
-            "mlflow": False,
-        }  # None values filtered out, mlflow included
+        assert overrides == {"learning_rate": 50}
 
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
 
@@ -160,7 +149,6 @@ class TestOverrideIntegration:
 def test_override_workflow_summary() -> None:
     """Summary test showing the complete override workflow."""
     input_data = TrainCommandInput()
-    assert input_data.mlflow is False
     assert input_data.epochs is None
     assert input_data.batch_size is None
     assert input_data.learning_rate is None

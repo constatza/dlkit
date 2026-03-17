@@ -46,9 +46,12 @@ class TestNumpyWriterBasic:
         writer = NumpyWriter(output_dir=output_dir)
         assert writer.output_dir == output_dir
 
-    def test_init_without_output_dir(self, tmp_path: Path) -> None:
-        """Test initialization without output directory."""
+    def test_init_without_output_dir(self, tmp_path: Path, mock_trainer: Mock, mock_module: Mock) -> None:
+        """Test initialization without output directory uses lazy resolution on predict start."""
         writer = NumpyWriter()
+        # output_dir is None until on_predict_start resolves it lazily
+        assert writer.output_dir is None
+        writer.on_predict_start(mock_trainer, mock_module)
         assert "predictions" in str(writer.output_dir)
 
     def test_dict_batch_end(
