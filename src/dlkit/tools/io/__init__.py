@@ -31,6 +31,7 @@ from .sparse import (
     validate_sparse_pack,
 )
 from .tables import read_table
+from .writers import IWriter, JsonWriter, TomlWriter, WriterFactory, YamlWriter
 
 __all__ = [
     # High-level config loading API
@@ -63,4 +64,10 @@ __all__ = [
     "register_manifest_schema",
     "SparseFormat",
     "SparseFeature",
+    # Writers
+    "IWriter",
+    "TomlWriter",
+    "JsonWriter",
+    "YamlWriter",
+    "WriterFactory",
 ]
