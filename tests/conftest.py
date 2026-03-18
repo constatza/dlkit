@@ -1,30 +1,20 @@
 from __future__ import annotations
 
+# Bootstrap: ensure MLflow never defaults to sqlite:///mlflow.db in the project
+# root. pytest_configure() will replace this with a proper session-level path.
+import os as _os
+if "MLFLOW_TRACKING_URI" not in _os.environ:
+    _os.environ["MLFLOW_TRACKING_URI"] = (
+        f"sqlite:////tmp/dlkit_test_{_os.getpid()}_bootstrap.db"
+    )
+del _os
+
 from pathlib import Path
 import pathlib
 import os
 import shutil
 import socket
-import sys as _sys
-import traceback as _traceback
 import unittest.mock
-
-_cwd = os.path.abspath(".")
-_target = os.path.join(_cwd, "mlflow.db")
-
-_orig_os_open = os.open
-_orig_os_makedirs = os.makedirs
-
-def _traced_os_open(path, flags, *a, **kw):
-    resolved = os.path.abspath(str(path)) if not os.path.isabs(str(path)) else str(path)
-    if resolved == _target:
-        _sys.stderr.write("\n=== os.open mlflow.db: " + resolved + " ===\n")
-        _traceback.print_stack(file=_sys.stderr, limit=20)
-        _sys.stderr.write("=== END ===\n\n")
-        _sys.stderr.flush()
-    return _orig_os_open(path, flags, *a, **kw)
-
-os.open = _traced_os_open
 
 from _pytest.tmpdir import TempPathFactory
 import pytest

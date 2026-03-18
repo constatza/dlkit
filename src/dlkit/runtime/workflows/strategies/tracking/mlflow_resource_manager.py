@@ -205,6 +205,15 @@ class MLflowResourceManager:
 
         Prevents nested runs from clearing the URI while a parent run is still
         active and needs it to communicate with the MLflow store.
+
+        Note:
+            In MLflow 3.x, ``mlflow.set_tracking_uri(None)`` does **not** fall
+            back to the ``MLFLOW_TRACKING_URI`` environment variable — it resets
+            the internal state to the CWD-relative default (``sqlite:///mlflow.db``),
+            which would create a stray DB in the project root.  For non-remote
+            backends we therefore call ``mlflow.set_tracking_uri(env_uri)`` with
+            the current env-var value so all subsequent ``get_tracking_uri()``
+            calls remain pointed at the correct isolated path.
         """
         with self._state.stack_lock:
             still_active = bool(self._state.active_run_stack)
@@ -213,8 +222,13 @@ class MLflowResourceManager:
         match self._backend:
             case RemoteServerBackend(uri=uri):
                 os.environ["MLFLOW_TRACKING_URI"] = uri
+                mlflow.set_tracking_uri(uri)
             case _:
-                mlflow.set_tracking_uri(None)
+                # In MLflow 3.x set_tracking_uri(None) ignores the env var and
+                # defaults to the CWD-relative mlflow.db. Use the env var value
+                # so subsequent mlflow.get_tracking_uri() calls stay isolated.
+                env_uri = os.environ.get("MLFLOW_TRACKING_URI")
+                mlflow.set_tracking_uri(env_uri)  # type: ignore[arg-type]
 
     def add_cleanup_callback(self, callback: Any) -> None:
         """Register a cleanup callback to run on context exit.
@@ -273,9 +287,17 @@ class MLflowResourceManager:
     def reset_global_state() -> None:
         """Reset MLflow global state.
 
-        Clears active runs and resets the tracking URI.
-        Preserves user-configured HTTP/HTTPS URIs; clears SQLite URIs
-        (which were set by this manager and should not leak).
+        Ends any active runs, clears the run stack, and resets the tracking URI
+        to the current ``MLFLOW_TRACKING_URI`` env-var value (if set).
+
+        Note:
+            In MLflow 3.x, ``mlflow.set_tracking_uri(None)`` does **not** fall
+            back to the ``MLFLOW_TRACKING_URI`` environment variable — it resets
+            the internal state to the CWD-relative default (``sqlite:///mlflow.db``),
+            which would create a stray DB in the project root.  We therefore
+            re-apply the env-var URI explicitly so any code running after this
+            call (e.g. fixture teardowns, ``autolog``) continues using the
+            correct isolated path.
         """
         try:
             try:
@@ -284,11 +306,14 @@ class MLflowResourceManager:
                 pass
             if hasattr(mlflow, "_active_run_stack"):
                 mlflow._active_run_stack.clear()  # type: ignore[attr-defined]
-            # Only preserve HTTP/HTTPS URIs — those are user-configured remote servers.
-            # SQLite URIs were set by this manager and should be cleared.
+            # In MLflow 3.x, set_tracking_uri(None) ignores the env var and
+            # defaults to the CWD-relative mlflow.db. Use the env var value so
+            # the isolation URI set by fixtures is preserved after reset.
             saved = os.environ.get("MLFLOW_TRACKING_URI")
-            mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
-            if saved and (saved.startswith("http://") or saved.startswith("https://")):
+            if saved:
+                mlflow.set_tracking_uri(saved)
                 os.environ["MLFLOW_TRACKING_URI"] = saved
+            else:
+                mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
         except Exception as e:  # pragma: no cover - best-effort safety
             logger.warning("Failed to reset MLflow global state: {}", e)

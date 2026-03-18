@@ -1,5 +1,6 @@
 """Pytest fixtures for MLflow resource management and test isolation."""
 
+import os
 import mlflow
 import pytest
 from pathlib import Path
@@ -23,21 +24,44 @@ def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None, None, None]
     the tracking store without a URI would create that file in the project
     root.  We redirect the default to an isolated per-test path in
     ``tmp_path`` so all artifacts stay inside pytest's temporary tree.
+
+    Both ``mlflow.set_tracking_uri`` and ``os.environ["MLFLOW_TRACKING_URI"]``
+    are set so that ``select_backend()`` (which honours SQLite env vars) also
+    resolves to the isolated path.
+
+    Note:
+        In MLflow 3.x, ``mlflow.set_tracking_uri(None)`` does **not** fall back
+        to the ``MLFLOW_TRACKING_URI`` environment variable — it resets the
+        internal state to the CWD-relative default (``sqlite:///mlflow.db``),
+        which would create a stray DB in the project root.  This fixture
+        therefore manages both the internal MLflow URI and the env var together,
+        and re-pins them after every ``reset_global_state()`` call.
     """
     isolation_uri = f"sqlite:///{(tmp_path / 'mlflow_isolation.db').as_posix()}"
+    _original_uri = os.environ.get("MLFLOW_TRACKING_URI")
 
-    # Pin URI first so end_run() in reset_global_state uses the safe path,
-    # then reset (end_run + clear stack), then re-pin after reset clears the URI.
+    # Setup: pin env var + internal URI, reset any stale state, re-pin.
+    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
     mlflow.set_tracking_uri(isolation_uri)
     MLflowResourceManager.reset_global_state()
+    # reset_global_state() now preserves the env var, but re-pin to be explicit.
+    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
     mlflow.set_tracking_uri(isolation_uri)
 
     yield
 
-    # Same order on teardown: pin → reset → re-pin
+    # Teardown: same order — pin → reset → re-pin.
+    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
     mlflow.set_tracking_uri(isolation_uri)
     MLflowResourceManager.reset_global_state()
+    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
     mlflow.set_tracking_uri(isolation_uri)
+
+    # Restore original env state.
+    if _original_uri is None:
+        os.environ.pop("MLFLOW_TRACKING_URI", None)
+    else:
+        os.environ["MLFLOW_TRACKING_URI"] = _original_uri
 
 
 @pytest.fixture

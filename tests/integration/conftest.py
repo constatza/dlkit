@@ -409,9 +409,15 @@ def mlflow_settings(
         epochs=EPOCHS,
     )
 
-    # Route mlruns_backend_uri() to tmp_path and force SQLite (no server probe).
-    # SQLite env vars are ignored by resolve_tracking_uri(), so we monkeypatch the
-    # two mechanisms that actually control which backend is used.
+    # Route select_backend() to a per-test isolated SQLite DB and suppress the
+    # local-server probe. Setting MLFLOW_TRACKING_URI to a sqlite:/// URI is now
+    # honoured by select_backend(), so both the env var and the probe must be set.
+    mlruns_dir = tmp_path / "mlruns"
+    mlruns_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv(
+        "MLFLOW_TRACKING_URI",
+        f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}",
+    )
     mlartifacts_dir = tmp_path / "mlartifacts"
     mlartifacts_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())

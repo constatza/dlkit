@@ -55,19 +55,16 @@ def test_resolve_tracking_uri_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPat
     assert resolved.endswith("mlflow.db")
 
 
-def test_resolve_tracking_uri_ignores_stale_sqlite_env_var(
+def test_resolve_tracking_uri_honours_sqlite_env_var(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:///stale/old/path/mlflow.db")
+    """select_backend() now respects sqlite:/// MLFLOW_TRACKING_URI env vars."""
+    sqlite_uri = f"sqlite:///{(tmp_path / 'explicit.db').as_posix()}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", sqlite_uri)
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False, raising=True)
-    monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.locations.mlruns_backend_uri",
-        lambda: f"sqlite:///{tmp_path}/mlflow.db",
-    )
 
     resolved = uri_resolver.resolve_tracking_uri()
-    assert "stale" not in resolved
-    assert str(tmp_path) in resolved
+    assert resolved == sqlite_uri
 
 
 def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
@@ -138,19 +135,19 @@ def test_create_run_preserves_nested_parent_child_structure(
     assert child_call["parent_run_id"] == "parent-run"
 
 
-def test_reset_global_state_clears_sqlite_tracking_uri(
+def test_reset_global_state_preserves_sqlite_tracking_uri(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """SQLite URIs should NOT be preserved by reset_global_state (they were manager-owned)."""
+    """SQLite URIs in env are now preserved by reset_global_state to avoid CWD leak."""
     tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "env-preserve.db", scheme="sqlite")
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     mlflow.set_tracking_uri(tracking_uri)
 
     MLflowResourceManager.reset_global_state()
 
-    # SQLite URI should be cleared (not preserved) since it was manager-set
-    assert os.environ.get("MLFLOW_TRACKING_URI") != tracking_uri
+    # SQLite URI must be preserved so the isolation URI set by fixtures is never lost.
+    assert os.environ.get("MLFLOW_TRACKING_URI") == tracking_uri
 
 
 def test_reset_global_state_preserves_http_tracking_uri(
