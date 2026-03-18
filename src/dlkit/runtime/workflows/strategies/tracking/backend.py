@@ -98,9 +98,18 @@ def select_backend(
     """Select the appropriate tracking backend.
 
     Selection logic:
-    1. Explicit HTTP/HTTPS ``MLFLOW_TRACKING_URI`` env var → ``RemoteServerBackend``
+    1. ``MLFLOW_TRACKING_URI`` env var (HTTP/HTTPS or ``sqlite:///``) → typed backend
     2. Local server probe succeeds → ``LocalServerBackend``
     3. Fallback → ``LocalSqliteBackend`` derived from locations
+
+    Note:
+        SQLite URIs in ``MLFLOW_TRACKING_URI`` are honoured explicitly here
+        because ``mlflow.set_tracking_uri(None)`` in MLflow 3.x resets the
+        internal state to the CWD-relative default (``sqlite:///mlflow.db``)
+        rather than re-reading the env var.  Without this branch, the env-var
+        isolation set up by test fixtures would be silently ignored and every
+        ``reset_global_state()`` call could leak a ``mlflow.db`` into the
+        project root.
 
     Args:
         probe: Callable returning True if a local MLflow server is reachable.
@@ -115,8 +124,12 @@ def select_backend(
         probe = local_host_alive
 
     env_uri = os.getenv("MLFLOW_TRACKING_URI")
-    if env_uri and (env_uri.startswith("http://") or env_uri.startswith("https://")):
-        return RemoteServerBackend(uri=env_uri.strip().rstrip("/"))
+    if env_uri:
+        if env_uri.startswith("http://") or env_uri.startswith("https://"):
+            return RemoteServerBackend(uri=env_uri.strip().rstrip("/"))
+        if env_uri.startswith("sqlite:///"):
+            db_path = url_resolver.resolve_local_uri(env_uri, Path.cwd())
+            return LocalSqliteBackend(db_path=db_path)
 
     if probe():
         return LocalServerBackend()
