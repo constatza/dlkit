@@ -12,6 +12,19 @@ from typing import Any
 from loguru import logger
 
 _VALID_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_ENV_ENABLED = "1"
+_ENV_DISABLED = "0"
+_LOG_ROTATION_SIZE = "10 MB"
+_LOG_RETENTION_PERIOD = "7 days"
+_LOG_COMPRESSION_FORMAT = "gz"
+
+
+def _backtrace_enabled() -> bool:
+    return os.getenv("DLKIT_LOG_BACKTRACE", _ENV_DISABLED) == _ENV_ENABLED
+
+
+def _diagnose_enabled() -> bool:
+    return os.getenv("DLKIT_LOG_DIAGNOSE", _ENV_DISABLED) == _ENV_ENABLED
 _CURRENT_LOG_LEVEL = "INFO"
 _MLFLOW_SQLITE_BOOTSTRAP_LOGGERS = (
     "alembic.runtime.migration",
@@ -38,7 +51,6 @@ def configure_logging(
     logger.remove()
     resolved_level = get_effective_log_level(level=level, debug_enabled=debug_enabled)
     _CURRENT_LOG_LEVEL = resolved_level
-    debug_mode = resolved_level == "DEBUG"
 
     # Configure format based on type
     if format_type == "structured":
@@ -62,8 +74,8 @@ def configure_logging(
         format=format_str,
         level=resolved_level,
         colorize=True,
-        backtrace=debug_mode,
-        diagnose=debug_mode,
+        backtrace=_backtrace_enabled(),
+        diagnose=_diagnose_enabled(),
         filter=_debug_filter,
     )
 
@@ -81,12 +93,12 @@ def configure_logging(
             "{message}"
         ),
         level=resolved_level,
-        rotation="10 MB",
-        retention="7 days",
-        compression="gz",
+        rotation=_LOG_ROTATION_SIZE,
+        retention=_LOG_RETENTION_PERIOD,
+        compression=_LOG_COMPRESSION_FORMAT,
         colorize=False,
-        backtrace=debug_mode,
-        diagnose=debug_mode,
+        backtrace=_backtrace_enabled(),
+        diagnose=_diagnose_enabled(),
     )
 
     logger.configure(extra={})

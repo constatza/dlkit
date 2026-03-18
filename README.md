@@ -699,6 +699,19 @@ DLKit uses an environment-based path system with automatic resolution and option
 - Test runs: when running under pytest, outputs are routed to `tests/artifacts/` automatically.
 - API overrides: `train(..., output_dir=..., data_dir=...)` set a temporary path context for that call without mutating settings.
 
+## Logging Debug Modes
+
+Two opt-in environment variables control loguru's advanced traceback features. Both default to `0` (off):
+
+| Variable | Effect |
+|---|---|
+| `DLKIT_LOG_BACKTRACE=1` | Enable loguru's extended call-chain display in captured exceptions |
+| `DLKIT_LOG_DIAGNOSE=1` | Enable loguru's local-variable dump inside tracebacks |
+
+These are intentionally off by default. `DLKIT_LOG_DIAGNOSE=1` in particular can flood output with full tensor/array reprs when an exception is captured. They are only relevant when code uses `logger.exception()`, `logger.catch()`, or `sys.excepthook` — none of which DLKit uses by default.
+
+The log level is controlled separately via `[SESSION].log_level` in your config or the `DLKIT_LOG_LEVEL` env var.
+
 ### Optional PATHS Section
 
 You can now optionally include a `[PATHS]` section for standardized paths with automatic resolution:

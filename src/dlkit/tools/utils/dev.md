@@ -16,6 +16,7 @@ Key architectural decisions:
 - Minimal dependencies - utilities are leaf nodes in dependency graph
 - Cross-platform compatibility (Path-based, OS-aware logic)
 - Test environment detection for debug logging auto-enable
+- Loguru `backtrace` and `diagnose` are **opt-in via env vars** (`DLKIT_LOG_BACKTRACE`, `DLKIT_LOG_DIAGNOSE`), not tied to debug mode
 
 ## Module Structure
 
@@ -38,6 +39,8 @@ Key architectural decisions:
 | `get_mro_keys()` | Function | Extract parameter names from class MRO | `tuple[dict, dict]` |
 | `split_module_path()` | Function | Split module:obj path notation | `tuple[str | None, str]` |
 | `_is_debug_enabled()` | Function | Check if debug logging enabled | `bool` |
+| `_backtrace_enabled()` | Function | Read `DLKIT_LOG_BACKTRACE` env var | `bool` |
+| `_diagnose_enabled()` | Function | Read `DLKIT_LOG_DIAGNOSE` env var | `bool` |
 | `_debug_filter()` | Function | Filter debug messages by module origin | `bool` |
 | `_suppress_third_party_logging()` | Function | Suppress noisy third-party logs | `None` |
 | `_get_default_log_file_path()` | Function | Get default log file path | `Path` |
@@ -199,7 +202,29 @@ configure_logging(format_type="simple")
 
 ---
 
-### Component 5: `recommended_uvicorn_workers()`
+### Component 5: Logging Debug Modes (env vars)
+
+**Purpose**: Two opt-in environment variables gate loguru's advanced traceback features. Both default to `0` (off) and are independent of the log level.
+
+| Variable | Effect |
+|---|---|
+| `DLKIT_LOG_BACKTRACE=1` | Enable loguru's extended call-chain display in captured exceptions |
+| `DLKIT_LOG_DIAGNOSE=1` | Enable loguru's local-variable dump inside tracebacks |
+
+**Why opt-in**: `diagnose=True` dumps every local variable (including full tensors/arrays) when loguru captures an exception. Under pytest, `debug_mode` was always `True`, causing output floods. Neither feature is load-bearing in the current codebase — DLKit does not use `logger.exception()`, `logger.catch()`, or `sys.excepthook`.
+
+**Example**:
+```bash
+# See local variables in tracebacks (verbose — avoid in CI)
+DLKIT_LOG_DIAGNOSE=1 dlkit train config.toml
+
+# See extended call chains (useful for debugging deeply nested calls)
+DLKIT_LOG_BACKTRACE=1 uv run python script.py
+```
+
+---
+
+### Component 6: `recommended_uvicorn_workers()`
 
 **Purpose**: Calculate optimal worker count for Uvicorn/Gunicorn servers using standard (2 * cores) + 1 heuristic.
 
@@ -221,7 +246,7 @@ uvicorn.run(app, host="0.0.0.0", port=8000, workers=workers)
 
 ---
 
-### Component 6: Third-Party Log Suppression
+### Component 7: Third-Party Log Suppression
 
 **Purpose**: Suppress noisy third-party library logs using loguru interception and filtering.
 
