@@ -77,12 +77,12 @@ def test_norm_scaled_linear_ffnn_rejects_integer_inputs():
 
 @pytest.fixture
 def norm_scaled_symmetric_linear() -> NormScaledSymmetricLinear:
-    return NormScaledSymmetricLinear(in_features=4, out_features=4)
+    return NormScaledSymmetricLinear(features=4)
 
 
 @pytest.fixture
 def norm_scaled_spd_linear() -> NormScaledSPDLinear:
-    return NormScaledSPDLinear(in_features=4, out_features=4)
+    return NormScaledSPDLinear(features=4)
 
 
 @pytest.fixture
@@ -92,12 +92,12 @@ def norm_scaled_factorized_linear() -> NormScaledFactorizedLinear:
 
 @pytest.fixture
 def norm_scaled_symmetric_factorized_linear() -> NormScaledSymmetricFactorizedLinear:
-    return NormScaledSymmetricFactorizedLinear(in_features=4, out_features=4)
+    return NormScaledSymmetricFactorizedLinear(features=4)
 
 
 @pytest.fixture
 def norm_scaled_spd_factorized_linear() -> NormScaledSPDFactorizedLinear:
-    return NormScaledSPDFactorizedLinear(in_features=4, out_features=4)
+    return NormScaledSPDFactorizedLinear(features=4)
 
 
 # ---------------------------------------------------------------------------
@@ -118,10 +118,6 @@ class TestNormScaledSymmetricLinear:
         out_scaled = norm_scaled_symmetric_linear(x * scale)
         assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
 
-    def test_rejects_non_square_dimensions(self) -> None:
-        with pytest.raises(ValueError, match="requires a square weight matrix"):
-            NormScaledSymmetricLinear(in_features=4, out_features=3)
-
 
 class TestNormScaledSPDLinear:
     def test_forward_shape(self, norm_scaled_spd_linear: NormScaledSPDLinear) -> None:
@@ -135,10 +131,6 @@ class TestNormScaledSPDLinear:
         out_base = norm_scaled_spd_linear(x)
         out_scaled = norm_scaled_spd_linear(x * scale)
         assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
-
-    def test_rejects_non_square_dimensions(self) -> None:
-        with pytest.raises(ValueError, match="requires a square weight matrix"):
-            NormScaledSPDLinear(in_features=4, out_features=3)
 
 
 class TestNormScaledFactorizedLinear:
@@ -172,10 +164,6 @@ class TestNormScaledSymmetricFactorizedLinear:
         out_scaled = norm_scaled_symmetric_factorized_linear(x * scale)
         assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
 
-    def test_rejects_non_square_dimensions(self) -> None:
-        with pytest.raises(ValueError, match="requires a square weight matrix"):
-            NormScaledSymmetricFactorizedLinear(in_features=4, out_features=3)
-
 
 class TestNormScaledSPDFactorizedLinear:
     def test_forward_shape(self, norm_scaled_spd_factorized_linear: NormScaledSPDFactorizedLinear) -> None:
@@ -189,7 +177,3 @@ class TestNormScaledSPDFactorizedLinear:
         out_base = norm_scaled_spd_factorized_linear(x)
         out_scaled = norm_scaled_spd_factorized_linear(x * scale)
         assert torch.allclose(out_scaled, out_base * scale, atol=1e-5)
-
-    def test_rejects_non_square_dimensions(self) -> None:
-        with pytest.raises(ValueError, match="requires a square weight matrix"):
-            NormScaledSPDFactorizedLinear(in_features=4, out_features=3)
