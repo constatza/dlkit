@@ -48,7 +48,7 @@ class ConstantWidthSPDFFNN(ConstantWidthParametricFFNN):
         super().__init__(
             size=size,
             num_layers=num_layers,
-            layer_factory=lambda n: SPDLinear(n, n, bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            layer_factory=lambda n: SPDLinear(n, bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             residual=residual,
             activation=activation,
             normalize=normalize,
@@ -92,7 +92,7 @@ class ConstantWidthSPDFactorizedFFNN(ConstantWidthParametricFFNN):
             size=size,
             num_layers=num_layers,
             layer_factory=lambda n: SPDFactorizedLinear(
-                n, n, bias=bias, min_diag=min_diag, mean=mean, std=std, pos_fn=pos_fn
+                n, bias=bias, min_diag=min_diag, mean=mean, std=std, pos_fn=pos_fn
             ),
             residual=residual,
             activation=activation,
@@ -181,7 +181,7 @@ class EmbeddedSPDFFNN(EmbeddedParametricFFNN):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            layer_factory=lambda n: SPDLinear(n, n, bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            layer_factory=lambda n: SPDLinear(n, bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             residual=residual,
             activation=activation,
             normalize=normalize,
@@ -231,7 +231,7 @@ class EmbeddedSPDFactorizedFFNN(EmbeddedParametricFFNN):
             hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=lambda n: SPDFactorizedLinear(
-                n, n, bias=bias, min_diag=min_diag, mean=mean, std=std, pos_fn=pos_fn
+                n, bias=bias, min_diag=min_diag, mean=mean, std=std, pos_fn=pos_fn
             ),
             residual=residual,
             activation=activation,

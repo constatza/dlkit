@@ -198,8 +198,7 @@ class NormScaledSymmetricLinear(NormScaledFFNN):
     """NormScaledFFNN backed by a SymmetricLinear layer.
 
     Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
+        features: Square matrix dimension.
         bias: Whether to include a bias term.
         norm: Vector norm type to use.
         eps_gain: Epsilon gain multiplier.
@@ -209,8 +208,7 @@ class NormScaledSymmetricLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        in_features: int,
-        out_features: int,
+        features: int,
         bias: bool = False,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
         eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
@@ -218,8 +216,7 @@ class NormScaledSymmetricLinear(NormScaledFFNN):
     ) -> None:
         super().__init__(
             base_model=SymmetricLinear(
-                in_features=in_features,
-                out_features=out_features,
+                features=features,
                 bias=bias,
             ),
             norm=norm,
@@ -232,8 +229,7 @@ class NormScaledSPDLinear(NormScaledFFNN):
     """NormScaledFFNN backed by an SPDLinear layer.
 
     Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
+        features: Square matrix dimension.
         bias: Whether to include a bias term.
         min_diag: Positive diagonal slack floor for SPD enforcement.
         norm: Vector norm type to use.
@@ -244,8 +240,7 @@ class NormScaledSPDLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        in_features: int,
-        out_features: int,
+        features: int,
         bias: bool = False,
         min_diag: float = 1e-4,
         norm: str = NormScaledFFNN.DEFAULT_NORM,
@@ -254,8 +249,7 @@ class NormScaledSPDLinear(NormScaledFFNN):
     ) -> None:
         super().__init__(
             base_model=SPDLinear(
-                in_features=in_features,
-                out_features=out_features,
+                features=features,
                 bias=bias,
                 min_diag=min_diag,
             ),
@@ -309,8 +303,7 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
     """NormScaledFFNN backed by a SymmetricFactorizedLinear layer.
 
     Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
+        features: Square matrix dimension.
         bias: Whether to include a bias term.
         mean: Mean for log-scale initialisation.
         std: Standard deviation for log-scale initialisation.
@@ -322,8 +315,7 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        in_features: int,
-        out_features: int,
+        features: int,
         bias: bool = False,
         mean: float = 0.0,
         std: float = 0.1,
@@ -333,8 +325,7 @@ class NormScaledSymmetricFactorizedLinear(NormScaledFFNN):
     ) -> None:
         super().__init__(
             base_model=SymmetricFactorizedLinear(
-                in_features=in_features,
-                out_features=out_features,
+                features=features,
                 bias=bias,
                 mean=mean,
                 std=std,
@@ -349,8 +340,7 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
     """NormScaledFFNN backed by an SPDFactorizedLinear layer.
 
     Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
+        features: Square matrix dimension.
         bias: Whether to include a bias term.
         min_diag: Positive diagonal slack floor for SPD enforcement.
         mean: Mean for log-scale initialisation.
@@ -363,8 +353,7 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
     def __init__(
         self,
         *,
-        in_features: int,
-        out_features: int,
+        features: int,
         bias: bool = False,
         min_diag: float = 1e-4,
         mean: float = 0.0,
@@ -375,8 +364,7 @@ class NormScaledSPDFactorizedLinear(NormScaledFFNN):
     ) -> None:
         super().__init__(
             base_model=SPDFactorizedLinear(
-                in_features=in_features,
-                out_features=out_features,
+                features=features,
                 bias=bias,
                 min_diag=min_diag,
                 mean=mean,
