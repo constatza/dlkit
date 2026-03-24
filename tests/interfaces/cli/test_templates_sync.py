@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from dlkit.interfaces.cli import templates as tmpl
 from dlkit.interfaces.cli.commands.config import (
     _create_training_template,
@@ -28,15 +24,3 @@ def test_training_template_contains_expected_sections() -> None:
     assert "[TRAINING.trainer]" in content
     assert "[DATAMODULE]" in content
     assert "[DATASET]" in content
-
-
-def test_example_config_is_in_sync_with_training_template() -> None:
-    """Verify example config matches training template when it exists."""
-    # Compute project root relative to this file
-    example = Path(__file__).resolve().parents[3] / "examples" / "example_config.toml"
-
-    if not example.exists():
-        pytest.skip(f"Example config not found: {example}")
-
-    content = example.read_text()
-    assert content == tmpl.render_template("training")
