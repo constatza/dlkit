@@ -14,7 +14,7 @@ Architecture Principles:
 - SOLID compliant: Workflow-specific configs (SRP), extensible via inheritance (OCP)
 - Type-safe: Optional[T] makes programmatic injection explicit
 - Fail-fast: Pydantic validates immediately, completeness validators before build
-- Immutable: All updates via model_copy(update={...})
+- Immutable: Public updates use ``patch()`` / ``update_with()`` to produce new instances
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
 from .training_settings import TrainingSettings as TrainingConfig
 from .components.model_components import ModelComponentSettings
-from .extras_settings import ExtrasSettings
 from .paths_settings import PathsSettings
 
 
@@ -62,9 +61,7 @@ class TrainingWorkflowConfig(BasicSettings):
         config = TrainingWorkflowConfig.model_validate(toml_dict)
 
         # Inject sections programmatically (also validated eagerly)
-        config = config.model_copy(
-            update={"DATASET": DatasetSettings(features=(...), targets=(...))}
-        )
+        config = config.patch({"DATASET": DatasetSettings(features=(...), targets=(...))})
 
         # Validate completeness before building
         validate_training_config_complete(config)  # Raises if sections missing

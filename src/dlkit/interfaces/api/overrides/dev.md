@@ -1,7 +1,7 @@
 # Overrides Module
 
 ## Overview
-The overrides module provides runtime parameter override management for DLKit API, enabling users to modify configuration without editing TOML files. Implements thread-local path context for clean API overrides and maintains immutability through Pydantic's `model_copy()`.
+The overrides module provides runtime parameter override management for DLKit API, enabling users to modify configuration without editing TOML files. Implements thread-local path context for clean API overrides and maintains immutability through `BasicSettings.patch()`.
 
 ## Architecture & Design Patterns
 - **Immutability**: Settings never mutated - always copied with overrides
@@ -9,7 +9,7 @@ The overrides module provides runtime parameter override management for DLKit AP
 - **Context Manager Protocol**: Path overrides applied within context scope
 - **Separation of Concerns**: Path overrides separate from settings overrides
 - **Type Safety**: All overrides validated and type-checked
-- **Pydantic Integration**: Uses `model_copy()` for type-safe updates
+- **Settings API Integration**: Uses `BasicSettings.patch()` for type-safe updates
 
 ## Module Structure
 
@@ -66,7 +66,7 @@ if errors:
 ```
 
 **Implementation Notes**:
-- Uses `model_copy(update=...)` for immutable updates
+- Uses `BasicSettings.patch()` for immutable updates
 - Path overrides set thread-local context via `set_path_context()`
 - Training overrides update both top-level and nested fields for consistency
 - Validates numeric parameters are positive

@@ -594,12 +594,8 @@ from dlkit.tools.io import load_config, write_config
 settings = load_config("original.toml")
 
 # Modify settings (create new instance due to frozen=True)
-updated_settings = settings.model_copy(update={
-    "TRAINING": settings.TRAINING.model_copy(update={
-        "trainer": settings.TRAINING.trainer.model_copy(update={
-            "max_epochs": 200
-        })
-    })
+updated_settings = settings.patch({
+    "TRAINING.trainer.max_epochs": 200
 })
 
 # Save modified configuration

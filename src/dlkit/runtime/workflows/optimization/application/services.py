@@ -236,8 +236,8 @@ class TrialExecutor:
         try:
             if base_settings.MODEL and hyperparameters:
                 # Apply hyperparameters to model settings
-                updated_model = base_settings.MODEL.model_copy(update=hyperparameters)
-                return base_settings.model_copy(update={"MODEL": updated_model})
+                updated_model = base_settings.MODEL.patch(hyperparameters)
+                return base_settings.patch({"MODEL": updated_model})
         except Exception as e:
             logger.warning("Failed to apply hyperparameters: {}", e)
 
@@ -622,9 +622,7 @@ class OptimizationOrchestrator:
                 # Update trial with results
                 trial = replace(
                     trial,
-                    objective_value=self._trial_executor._extract_objective_value(
-                        training_result
-                    ),
+                    objective_value=self._trial_executor._extract_objective_value(training_result),
                     training_result=training_result,
                     state=TrialState.COMPLETE,
                     completed_at=datetime.now(),
@@ -723,7 +721,7 @@ class OptimizationOrchestrator:
             from dlkit.tools.config.samplers.optuna_sampler import create_settings_sampler
 
             settings_sampler = create_settings_sampler(optuna_config)
-            sampled_settings = settings_sampler.sample(optuna_trial, base_settings)
+            settings_sampler.sample(optuna_trial, base_settings)
 
             # Extract ALL sampled hyperparameters from optuna_trial.params
             # These are the actual sampled values from Optuna's suggest methods

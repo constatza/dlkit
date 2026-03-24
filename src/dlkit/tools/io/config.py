@@ -5,7 +5,7 @@ from dataclasses import asdict, is_dataclass
 from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, TypeVar, cast, overload, TYPE_CHECKING
+from typing import Any, cast, overload, TYPE_CHECKING
 import sys
 import warnings
 import torch
@@ -75,10 +75,6 @@ def _sync_session_root_to_environment(settings: Any) -> None:
         logger.warning(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
 
 
-# Type variable for BaseModel subclasses used throughout the module
-T = TypeVar("T", bound=BaseModel)
-
-
 class ConfigSectionError(ValueError):
     """Raised when a config section is missing or invalid."""
 
@@ -103,9 +99,6 @@ class ConfigValidationError(ValueError):
 
 
 # Section mapping registry: Maps between Pydantic model classes and TOML section names
-T = TypeVar("T", bound=BaseModel)
-
-
 _SECTION_MAPPING: dict[type[BaseModel], str] = {}
 _SECTION_NAME_MAPPING: dict[str, type[BaseModel]] = {}
 _DEFAULT_SECTION_NAME_MAPPING: dict[str, type[BaseModel]] = {}
@@ -500,7 +493,6 @@ def write_config(
     return output_path
 
 
-
 def _resolve_section_models(
     section_configs: Mapping[str, type[BaseModel] | None] | Sequence[str],
 ) -> dict[str, type[BaseModel]]:
@@ -616,7 +608,7 @@ def load_sections_config(
 
 
 @overload
-def load_section_config(
+def load_section_config[T: BaseModel](
     config_path: Path | str,
     model_class: type[T],
     section_name: str | None = None,
@@ -631,7 +623,7 @@ def load_section_config(
 ) -> BaseModel: ...
 
 
-def load_section_config(
+def load_section_config[T: BaseModel](
     config_path: Path | str,
     model_class: type[T] | None = None,
     section_name: str | None = None,
@@ -718,6 +710,7 @@ def get_available_sections(config_path: Path | str) -> list[str]:
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     import tomllib
+
     with open(config_path, "rb") as f:
         return list(tomllib.load(f).keys())
 
@@ -752,7 +745,7 @@ def load_training_config_eager(config_path: Path | str) -> "TrainingWorkflowConf
         config = load_training_config_eager("config.toml")
 
         # Inject optional sections programmatically
-        config = config.model_copy(update={"DATASET": DatasetSettings(features=(...))})
+        config = config.patch({"DATASET": DatasetSettings(features=(...))})
 
         # Validate completeness before build
         from dlkit.tools.config.validators import validate_training_config_complete

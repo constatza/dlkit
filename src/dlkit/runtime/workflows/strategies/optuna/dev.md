@@ -201,7 +201,7 @@ final_result = train_model(final_settings)
 - Optional storage backend for study persistence (`OPTUNA.storage`)
 - `load_if_exists=True` enables resuming studies when storage configured
 - Settings sampling delegated to `SettingsSampler` following SRP
-- `apply_best_params()` uses Pydantic `model_copy()` for immutable updates
+- `apply_best_params()` uses immutable settings patching
 - Best-effort configuration building - silent failures with None returns
 
 **Seed Propagation Strategy**:
@@ -486,7 +486,7 @@ except optuna.exceptions.OptunaError as e:
 - Study persistence enables incremental optimization across runs
 - Sampler/pruner built once per study, not per trial
 - Settings sampling creates new settings objects (immutable pattern)
-- Best params application uses shallow copy via `model_copy()`
+- Best params application creates a new settings object via patching
 - No global state - optimizer instances are stateless and thread-safe
 
 ## Future Improvements / TODOs

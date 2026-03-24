@@ -642,7 +642,7 @@ from dlkit.interfaces.api import train
 cfg = load_settings("base_config.toml")
 
 # Inject DATASET section
-cfg = cfg.model_copy(update={
+cfg = cfg.patch({
     "DATASET": DatasetSettings(
         name="FlexibleDataset",
         features=(Feature(name="x", path="/data/features.npy"),),
@@ -661,7 +661,7 @@ import numpy as np
 features = np.random.randn(1000, 10).astype("float32")
 labels = np.random.randn(1000, 1).astype("float32")
 
-cfg = cfg.model_copy(update={
+cfg = cfg.patch({
     "DATASET": DatasetSettings(
         name="FlexibleDataset",
         features=(Feature(name="x", value=features),),
@@ -685,8 +685,8 @@ datasets = [
 base_cfg = load_settings("base_config.toml")
 
 for name, data_dir in datasets:
-    cfg = base_cfg.model_copy(update={
-        "SESSION": base_cfg.SESSION.model_copy(update={"name": name}),
+    cfg = base_cfg.patch({
+        "SESSION.name": name,
         "DATASET": DatasetSettings(
             name="FlexibleDataset",
             features=(Feature(name="x", path=str(data_dir / "features.npy")),),
@@ -699,12 +699,13 @@ for name, data_dir in datasets:
 
 ### Updating nested settings
 
-`update_settings()` deep-merges changes into an existing settings object in-place:
+`update_settings()` deep-merges changes into an existing settings object and returns a new
+validated instance:
 
 ```python
 from dlkit.tools.config.core.updater import update_settings
 
-update_settings(cfg, {
+cfg = update_settings(cfg, {
     "TRAINING": {
         "optimizer": {"lr": 5e-4, "weight_decay": 1e-5}
     },

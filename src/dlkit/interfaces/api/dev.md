@@ -77,7 +77,7 @@ The `dlkit.interfaces.api` module provides DLKit's public API layer, implementin
 ### 5. Override Management
 - Runtime parameter overrides without mutating settings
 - Thread-local path context for API flexibility
-- Immutable settings updated via `model_copy()`
+- Immutable settings updated via `patch()`
 - Override validation before application
 
 ## Quick Start Guide

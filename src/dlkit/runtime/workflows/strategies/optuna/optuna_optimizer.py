@@ -133,8 +133,8 @@ class OptunaOptimizer(IHyperparameterOptimizer):
         """
         try:
             if base_settings.MODEL is not None and best_params:
-                best_model = base_settings.MODEL.model_copy(update=best_params)
-                return base_settings.model_copy(update={"MODEL": best_model})
+                best_model = base_settings.MODEL.patch(best_params)
+                return base_settings.patch({"MODEL": best_model})
         except Exception:
             pass
         return base_settings
