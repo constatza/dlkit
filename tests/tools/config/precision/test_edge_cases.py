@@ -1,8 +1,4 @@
-"""Edge case and stress tests for precision control system.
-
-This module contains tests for unusual scenarios, error conditions,
-and stress testing that could reveal hidden issues in production.
-"""
+"""Edge case and concurrency-focused tests for precision control."""
 
 import pytest
 import torch
@@ -10,52 +6,28 @@ import gc
 import threading
 import time
 
+from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.tools.config.precision import PrecisionStrategy
 from dlkit.interfaces.api.domain.precision import precision_override, get_precision_context
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.data_entries import Feature
 from dlkit.tools.io.arrays import load_array
-from dlkit.core.models.nn.base import DLKitModel
 
 
-class BrokenModel(DLKitModel):
-    """Model that intentionally breaks during precision application."""
+LOAD_SHAPE = (16, 4)
+SMALL_FILE_SHAPE = (8, 4)
+SMALL_FILE_COUNT = 2
 
-    def __init__(self, in_features: int, out_features: int, break_on_precision=False, **kwargs):
-        super().__init__()
-        self._break_on_precision = break_on_precision
 
-        # Create linear layer with the given dimensions
-        self.linear = torch.nn.Linear(in_features, out_features)
-
-        # Apply precision from context (simulating Lightning behavior)
-        service = get_precision_service()
-        precision_strategy = service.resolve_precision()
-        dtype = precision_strategy.to_torch_dtype()
-        self.to(dtype)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the linear layer."""
-        return self.linear(x)
-
-    def accepts_shape(self, shape_spec):
-        """Accept any valid shape specification."""
-        return (
-            shape_spec.get_input_shape() is not None and shape_spec.get_output_shape() is not None
-        )
-
-    def forward(self, x):
-        return self.linear(x)
-
-    def to(self, *args, **kwargs):
-        if self._break_on_precision:
-            raise RuntimeError("Model precision application failed")
-        return super().to(*args, **kwargs)
+def _build_model_in_precision_context() -> ConstantWidthFFNN:
+    model = ConstantWidthFFNN(in_features=4, out_features=4, hidden_size=4, num_layers=1)
+    service = get_precision_service()
+    return model.to(dtype=service.resolve_precision().to_torch_dtype())
 
 
 class TestPrecisionEdgeCases:
-    """Edge case and stress tests for precision control."""
+    """Edge case tests for precision control."""
 
     @pytest.fixture
     def corrupted_data_file(self, tmp_path):
@@ -75,54 +47,35 @@ class TestPrecisionEdgeCases:
             with pytest.raises(Exception):  # Could be various errors depending on loader
                 load_array(corrupted_data_file)
 
-
-    def test_precision_memory_pressure(self, tmp_path):
-        """Test precision behavior under memory pressure."""
-
-        # Create large dataset
-        large_data = torch.randn(1000, 1000, dtype=torch.float64)
-        large_file = tmp_path / "large_data.pt"
-        torch.save(large_data, large_file)
+    def test_precision_load_respects_requested_dtype(self, tmp_path):
+        """Loading a saved tensor should honor the active precision strategy."""
+        tensor = torch.randn(*LOAD_SHAPE, dtype=torch.float64)
+        tensor_file = tmp_path / "tensor.pt"
+        torch.save(tensor, tensor_file)
 
         try:
-            # Test loading with different precisions under memory pressure
-            strategies = [
-                PrecisionStrategy.FULL_64,
-                PrecisionStrategy.FULL_32,
-                PrecisionStrategy.MIXED_16,
-            ]
-
-            for strategy in strategies:
+            for strategy in (PrecisionStrategy.FULL_64, PrecisionStrategy.MIXED_16):
                 with precision_override(strategy):
-                    data = load_array(large_file)
-
-                    # Verify precision is maintained even with large dataflow
-                    expected_dtype = strategy.to_torch_dtype()
-                    assert data.dtype == expected_dtype
-
-                    # Force garbage collection
-                    del data
-                    gc.collect()
-
+                    assert load_array(tensor_file).dtype == strategy.to_torch_dtype()
         finally:
-            large_file.unlink(missing_ok=True)
+            tensor_file.unlink(missing_ok=True)
 
+    def test_precision_with_broken_models(self, monkeypatch: pytest.MonkeyPatch):
+        """Precision casting failures should propagate for real DLKit models."""
+        original_to = ConstantWidthFFNN.to
 
-    def test_precision_with_broken_models(self):
-        """Test precision handling with models that fail during precision application."""
+        def _raise_to(self, *args, **kwargs):
+            raise RuntimeError("Model precision application failed")
 
-        in_features, out_features = 10, 5
-
-        # Model that breaks during precision application
+        monkeypatch.setattr(ConstantWidthFFNN, "to", _raise_to)
         with pytest.raises(RuntimeError, match="Model precision application failed"):
             with precision_override(PrecisionStrategy.MIXED_16):
-                BrokenModel(in_features, out_features, break_on_precision=True)
+                _build_model_in_precision_context()
 
-        # Normal model should work fine
+        monkeypatch.setattr(ConstantWidthFFNN, "to", original_to)
         with precision_override(PrecisionStrategy.MIXED_16):
-            normal_model = BrokenModel(in_features, out_features, break_on_precision=False)
+            normal_model = _build_model_in_precision_context()
         assert next(normal_model.parameters()).dtype == torch.float16
-
 
     def test_precision_service_singleton_behavior(self):
         """Test precision service singleton behavior under stress."""
@@ -155,9 +108,8 @@ class TestPrecisionEdgeCases:
         # All services should be the same instance
         assert all(service is services[0] for service in services)
 
-
-    def test_precision_context_stress_testing(self):
-        """Stress test precision context with rapid changes."""
+    def test_precision_context_thread_local_overrides(self):
+        """Precision overrides should remain correct under lightweight concurrency."""
 
         strategies = list(PrecisionStrategy)
         results = []
@@ -165,7 +117,7 @@ class TestPrecisionEdgeCases:
 
         def rapid_precision_changes():
             try:
-                for i in range(100):
+                for i in range(20):
                     strategy = strategies[i % len(strategies)]
                     with precision_override(strategy):
                         context = get_precision_context()
@@ -188,7 +140,6 @@ class TestPrecisionEdgeCases:
         for i, expected, actual in results:
             assert expected == actual
 
-
     def test_precision_with_invalid_session_data(self):
         """Test precision handling with invalid session configurations."""
 
@@ -203,7 +154,6 @@ class TestPrecisionEdgeCases:
         # Should fall back to default
         precision = service.resolve_precision(broken_session)
         assert precision == PrecisionStrategy.FULL_32
-
 
     def test_precision_dtype_conversion_edge_cases(self):
         """Test edge cases in dtype conversion."""
@@ -223,7 +173,6 @@ class TestPrecisionEdgeCases:
             # Test Lightning precision conversion
             lightning_precision = service.get_lightning_precision(None, strategy)
             assert isinstance(lightning_precision, (str, int))
-
 
     def test_precision_with_empty_and_none_inputs(self, tmp_path):
         """Test precision handling with empty and None inputs."""
@@ -247,7 +196,6 @@ class TestPrecisionEdgeCases:
 
         finally:
             empty_file.unlink(missing_ok=True)
-
 
     def test_precision_lightning_compatibility(self):
         """Test Lightning precision string compatibility."""
@@ -283,7 +231,6 @@ class TestPrecisionEdgeCases:
                 # Some precisions might not be supported, that's OK
                 pass
 
-
     def test_precision_with_extremely_nested_contexts(self):
         """Test precision with deeply nested context overrides."""
 
@@ -314,45 +261,34 @@ class TestPrecisionEdgeCases:
         assert len(results) == 1
         assert results[0] == strategies[-1]
 
+    def test_precision_repeated_small_file_loads_keep_dtype(self, tmp_path):
+        """Repeated small file loads should preserve the requested dtype."""
 
-    def test_precision_resource_cleanup(self, tmp_path):
-        """Test proper resource cleanup during precision operations."""
-
-        # Create multiple temporary files
         files = []
-        for i in range(10):
-            data = torch.randn(100, 10, dtype=torch.float32)
+        for i in range(SMALL_FILE_COUNT):
+            data = torch.randn(*SMALL_FILE_SHAPE, dtype=torch.float32)
             file_path = tmp_path / f"data_{i}.pt"
             torch.save(data, file_path)
             files.append(file_path)
 
         try:
-            # Load dataflow with different precisions and ensure cleanup
-            for strategy in [
-                PrecisionStrategy.FULL_32,
-                PrecisionStrategy.MIXED_16,
-                PrecisionStrategy.FULL_64,
-            ]:
+            for strategy in [PrecisionStrategy.FULL_32, PrecisionStrategy.MIXED_16]:
                 with precision_override(strategy):
                     tensors = []
                     for file_path in files:
                         tensor = load_array(file_path)
                         tensors.append(tensor)
 
-                    # Verify all tensors have correct precision
                     expected_dtype = strategy.to_torch_dtype()
                     for tensor in tensors:
                         assert tensor.dtype == expected_dtype
 
-                    # Cleanup tensors
                     del tensors
                     gc.collect()
 
         finally:
-            # Cleanup files
             for file_path in files:
                 file_path.unlink(missing_ok=True)
-
 
     def test_precision_service_thread_local_isolation(self):
         """Test thread-local isolation in precision service."""

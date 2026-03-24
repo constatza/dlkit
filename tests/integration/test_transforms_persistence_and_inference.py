@@ -4,45 +4,27 @@ from pathlib import Path
 from typing import Any
 
 import dlkit
-
 import numpy as np
 import torch
 import pytest
 from lightning.pytorch import Trainer
-from torch import nn, Tensor
+from torch import Tensor
 
 from dlkit.core.datasets.flexible import FlexibleDataset
 from dlkit.core.datamodules.array import InMemoryModule
 from dlkit.core.datatypes.split import IndexSplit
+from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
+from dlkit.core.models.wrappers.functions import apply_inverse_chain
+from dlkit.core.models.wrappers.standard import StandardLightningWrapper
 from dlkit.tools.config.components.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.transform_settings import TransformSettings
-from dlkit.core.models.wrappers.standard import StandardLightningWrapper
-from dlkit.core.models.wrappers.functions import apply_inverse_chain
-from dlkit.core.models.nn.base import DLKitModel
 
-
-class IdentityHead(DLKitModel):
-    """Simple identity model that maps x -> y shape.
-
-    Uses plain in_features/out_features constructor args per PyTorch convention.
-    """
-
-    def __init__(self, *, in_features: int, out_features: int):
-        super().__init__()
-        self.last_x: Tensor | None = None
-        self.proj = nn.Linear(in_features, out_features, bias=False)
-        with torch.no_grad():
-            if in_features == out_features:
-                self.proj.weight.copy_(torch.eye(in_features))
-
-    def forward(self, x: Tensor) -> Tensor:
-        # Record input to verify direct transform application
-        self.last_x = x.detach()
-        return self.proj(x)
+MODEL_MODULE_PATH = "dlkit.core.models.nn.ffnn.simple"
+MODEL_NAME = "ConstantWidthFFNN"
 
 
 def _make_data(
@@ -103,18 +85,51 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[Feature | Target, ...]:
 def _build_wrapper(entry_cfgs: tuple[Feature | Target, ...]) -> StandardLightningWrapper:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
-    model_settings = ModelComponentSettings(name=IdentityHead, module_path="tests.helpers")
+    model_settings = ModelComponentSettings(
+        name=MODEL_NAME,
+        module_path=MODEL_MODULE_PATH,
+        hidden_size=4,
+        num_layers=1,
+    )
     wrapper_settings = WrapperComponentSettings()
 
     # x/y shapes provided by FlexibleDataset are 1D (feature dimension = 4)
     shape_summary = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
 
-    return StandardLightningWrapper(
+    wrapper = StandardLightningWrapper(
         settings=wrapper_settings,
         model_settings=model_settings,
         shape_summary=shape_summary,
         entry_configs=entry_cfgs,
     )
+    _configure_identity_ffnn(wrapper.model)
+    return wrapper
+
+
+def _configure_identity_ffnn(model: ConstantWidthFFNN) -> None:
+    with torch.no_grad():
+        model.embedding_layer.weight.copy_(torch.eye(4))
+        model.embedding_layer.bias.zero_()
+        model.regression_layer.weight.copy_(torch.eye(4))
+        model.regression_layer.bias.zero_()
+
+
+def _capture_forward_input(model: torch.nn.Module) -> tuple[dict[str, Tensor], Any]:
+    state: dict[str, Tensor] = {}
+
+    def _hook(
+        _module: torch.nn.Module,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> None:
+        if args:
+            tensor = args[0]
+        else:
+            tensor = kwargs["x"]
+        state["last_x"] = tensor.detach().clone()
+
+    handle = model.register_forward_pre_hook(_hook, with_kwargs=True)
+    return state, handle
 
 
 def _basic_trainer() -> Trainer:
@@ -191,14 +206,23 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     loaded = StandardLightningWrapper.load_from_checkpoint(
         str(ckpt_path),
         settings=WrapperComponentSettings(),
-        model_settings=ModelComponentSettings(name=IdentityHead, module_path="tests.helpers"),
+        model_settings=ModelComponentSettings(
+            name=MODEL_NAME,
+            module_path=MODEL_MODULE_PATH,
+            hidden_size=4,
+            num_layers=1,
+        ),
         shape_summary=ShapeSummary(in_shapes=((4,),), out_shapes=((4,),)),
         entry_configs=entries,
         strict=False,
     )
+    captured, hook = _capture_forward_input(loaded.model)
 
     # Predict
-    preds = trainer.predict(loaded, datamodule=dm)
+    try:
+        preds = trainer.predict(loaded, datamodule=dm)
+    finally:
+        hook.remove()
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
     # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
@@ -216,8 +240,8 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     assert torch.allclose(inv_pred, raw_y, atol=1e-6)
 
     # Assert: direct transforms applied exactly via wrapper's named chain
-    assert loaded.model.last_x is not None
-    x_in = loaded.model.last_x
+    assert "last_x" in captured
+    x_in = captured["last_x"]
     raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
     expected_x_in = loaded._batch_transformer._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
@@ -364,7 +388,11 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     rewrapped.load_state_dict(state, strict=False)
 
     # Predict
-    preds = trainer.predict(rewrapped, datamodule=dm)
+    captured, hook = _capture_forward_input(rewrapped.model)
+    try:
+        preds = trainer.predict(rewrapped, datamodule=dm)
+    finally:
+        hook.remove()
     assert isinstance(preds, list) and len(preds) > 0
     batch_out = preds[0]
     # Standard format: TensorDict with 'predictions' and 'targets' (and optional 'latents')
@@ -381,8 +409,8 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     assert torch.allclose(inv_pred, raw_y, atol=1e-6)
 
     # Verify direct transform applied exactly via wrapper’s named chain
-    assert rewrapped.model.last_x is not None
-    x_in = rewrapped.model.last_x
+    assert "last_x" in captured
+    x_in = captured["last_x"]
     raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
     expected_x_in = rewrapped._batch_transformer._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)

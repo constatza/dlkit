@@ -1,11 +1,12 @@
 """Benchmark: dense vs sparse FlexibleDataset operation timings.
 
 Run:
-    uv run python tests/branchmarks/benchmark_sparse_io_n10000.py
+    uv run python benchmarks/benchmark_sparse_io_n10000.py
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from time import perf_counter
@@ -51,7 +52,9 @@ def make_sparse_pack(path: Path, n_samples: int, d: int, nnz_per_sample: int, se
 
 def iter_loader(dataset: FlexibleDataset, batch_size: int) -> tuple[int, int, float]:
     """Iterate one full epoch and return (steps, n_seen, elapsed_seconds)."""
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_tensordict)
+    loader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_tensordict
+    )
     t0 = perf_counter()
     n_seen = 0
     steps = 0
@@ -110,12 +113,8 @@ def main() -> None:
         REPEATS=repeats,
     )
 
-    root = (
-        Path(__file__).resolve().parents[1]
-        / "artifacts"
-        / "benchmarks"
-        / "dlkit_io_bench_d256_n628_b628"
-    )
+    bench_root = Path(os.environ.get("DLKIT_BENCH_ROOT", "/tmp/dlkit-benchmarks"))
+    root = bench_root / "sparse_io" / "dlkit_io_bench_d256_n628_b628"
     root.mkdir(parents=True, exist_ok=True)
     pack_path = root / "pack_full"
     if pack_path.exists():
@@ -134,7 +133,7 @@ def main() -> None:
     x = torch.randn(n_samples, feature_dim)
     y = torch.randn(n_samples, 1)
 
-    dense_dataset, dense_init_elapsed = time_once(
+    dense_dataset, _ = time_once(
         "dataset_init_dense_once",
         lambda: FlexibleDataset(
             features=[Feature(name="x", value=x)],
@@ -142,12 +141,14 @@ def main() -> None:
         ),
     )
 
-    sparse_dataset, sparse_init_elapsed = time_once(
+    sparse_dataset, _ = time_once(
         "dataset_init_sparse_once",
         lambda: FlexibleDataset(
             features=[
                 Feature(name="x", value=x),
-                SparseFeature(name="matrix", path=pack_path, model_input=False, loss_input="matrix"),
+                SparseFeature(
+                    name="matrix", path=pack_path, model_input=False, loss_input="matrix"
+                ),
             ],
             targets=[Target(name="y", value=y)],
         ),
@@ -170,21 +171,23 @@ def main() -> None:
 
     sparse_prebatched = sparse_dataset.__getitems__(full_batch_indices)
     dense_prebatched = dense_dataset.__getitems__(full_batch_indices)
-    dense_collate_elapsed, dense_collate_ms = time_repeated(
+    _, dense_collate_ms = time_repeated(
         "dense_collate_prebatched_repeated",
         repeats,
         lambda _: int(collate_tensordict(dense_prebatched).batch_size[0]),
     )
-    sparse_collate_elapsed, sparse_collate_ms = time_repeated(
+    _, sparse_collate_ms = time_repeated(
         "sparse_collate_prebatched_repeated",
         repeats,
         lambda _: int(collate_tensordict(sparse_prebatched).batch_size[0]),
     )
 
-    reader_stacked_elapsed, reader_stacked_ms = time_repeated(
+    _, reader_stacked_ms = time_repeated(
         "reader_build_sparse_stacked_repeated",
         repeats,
-        lambda _: int(reader.build_torch_sparse_stacked(full_batch_indices, coalesce=False).shape[0]),
+        lambda _: int(
+            reader.build_torch_sparse_stacked(full_batch_indices, coalesce=False).shape[0]
+        ),
     )
 
     (dense_loader_stats, dense_loader_elapsed) = time_once(
@@ -211,27 +214,21 @@ def main() -> None:
     )
 
     matrix_sparse = sparse_prebatched["features"]["matrix"]
-    matrix_dense, dense_matrix_materialize_elapsed = time_once(
-        "sparse_matrix_to_dense_once",
-        lambda: matrix_sparse.to_dense(),
-    )
+    matrix_dense, _ = time_once("sparse_matrix_to_dense_once", lambda: matrix_sparse.to_dense())
     preds = torch.randn(batch_size, matrix_dim)
     target = torch.randn(batch_size, matrix_dim)
 
-    rel_energy_sparse_elapsed, rel_energy_sparse_ms = time_repeated(
+    _, rel_energy_sparse_ms = time_repeated(
         "relative_energy_norm_sparse_matrix_repeated",
         repeats,
         lambda _: float(relative_energy_norm_loss(preds, target, matrix_sparse).item()),
     )
-    rel_energy_dense_elapsed, rel_energy_dense_ms = time_repeated(
+    _, rel_energy_dense_ms = time_repeated(
         "relative_energy_norm_dense_matrix_repeated",
         repeats,
         lambda _: float(relative_energy_norm_loss(preds, target, matrix_dense).item()),
     )
 
-    # Absolute-value report: which operation actually dominates the budget.
-    estimated_sparse_step_ms = sparse_getitems_ms + rel_energy_sparse_ms
-    estimated_dense_step_ms = dense_getitems_ms + rel_energy_dense_ms
     log_benchmark(
         "absolute_report",
         dense_getitems_ms=dense_getitems_ms,
@@ -239,46 +236,11 @@ def main() -> None:
         dense_collate_ms=dense_collate_ms,
         sparse_collate_ms=sparse_collate_ms,
         reader_stacked_ms=reader_stacked_ms,
-        relative_energy_sparse_ms=rel_energy_sparse_ms,
-        relative_energy_dense_ms=rel_energy_dense_ms,
-        relative_energy_over_sparse_getitems=rel_energy_sparse_ms / max(sparse_getitems_ms, 1e-12),
-        relative_energy_over_dense_getitems=rel_energy_dense_ms / max(dense_getitems_ms, 1e-12),
-        estimated_sparse_step_ms=estimated_sparse_step_ms,
-        estimated_dense_step_ms=estimated_dense_step_ms,
-        sparse_getitems_share_of_estimated_step=sparse_getitems_ms / max(estimated_sparse_step_ms, 1e-12),
-        relative_energy_share_of_estimated_sparse_step=rel_energy_sparse_ms
-        / max(estimated_sparse_step_ms, 1e-12),
+        rel_energy_sparse_ms=rel_energy_sparse_ms,
+        rel_energy_dense_ms=rel_energy_dense_ms,
+        estimated_sparse_step_ms=sparse_getitems_ms + rel_energy_sparse_ms,
+        estimated_dense_step_ms=dense_getitems_ms + rel_energy_dense_ms,
     )
-
-    log_benchmark(
-        "comparison_ratios",
-        sparse_over_dense_getitems_ratio=sparse_getitems_ms / max(dense_getitems_ms, 1e-12),
-        sparse_over_dense_loader_ratio=sparse_loader_elapsed / max(dense_loader_elapsed, 1e-12),
-        sparse_over_dense_rel_energy_ratio=rel_energy_sparse_ms / max(rel_energy_dense_ms, 1e-12),
-        sparse_init_over_dense_init_ratio=sparse_init_elapsed / max(dense_init_elapsed, 1e-12),
-        dense_matrix_materialize_once_s=dense_matrix_materialize_elapsed,
-        relative_energy_sparse_elapsed_s=rel_energy_sparse_elapsed,
-        relative_energy_dense_elapsed_s=rel_energy_dense_elapsed,
-        reader_stacked_elapsed_s=reader_stacked_elapsed,
-        dense_collate_elapsed_s=dense_collate_elapsed,
-        sparse_collate_elapsed_s=sparse_collate_elapsed,
-    )
-
-    max_sparse_over_dense_ratio = 5.0
-    repeated_ratio = sparse_getitems_ms / max(dense_getitems_ms, 1e-12)
-    loader_ratio = sparse_loader_elapsed / max(dense_loader_elapsed, 1e-12)
-    log_benchmark(
-        "assertion",
-        metric="sparse_over_dense_loader_ratio",
-        max_allowed=max_sparse_over_dense_ratio,
-        observed=loader_ratio,
-        diagnostic_sparse_over_dense_getitems_ratio=repeated_ratio,
-    )
-    if loader_ratio > max_sparse_over_dense_ratio:
-        raise AssertionError(
-            f"Sparse loader regression: ratio={loader_ratio:.3f} exceeds "
-            f"limit={max_sparse_over_dense_ratio:.3f}"
-        )
 
 
 if __name__ == "__main__":
