@@ -29,9 +29,7 @@ jobs:
         run: uv sync --dev
 
       - name: Run pytest
-        run: |
-          set -o pipefail
-          uv run pytest tests --maxfail=1 --disable-warnings -vv
+        run: uv run pytest tests --maxfail=1 --disable-warnings -vv
 
   test-windows:
     runs-on: windows-latest
@@ -53,6 +51,4 @@ jobs:
 
       - name: Run pytest
         shell: bash
-        run: |
-          set -o pipefail
-          uv run pytest tests --maxfail=1 --disable-warnings -vv
+        run: uv run pytest tests --maxfail=1 --disable-warnings -vv
