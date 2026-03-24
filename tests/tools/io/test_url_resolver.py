@@ -61,9 +61,9 @@ def test_normalize_uri_matrix(root: Path, tmp_path: Path) -> None:
     # Should preserve the absolute path
     assert str(abs_db.as_posix()) in norm_sqlite_abs
 
-    # Test relative sqlite URI
+    # Test relative sqlite URI — URIs always use forward slashes regardless of platform
     norm_sqlite_rel = url_resolver.normalize_uri("sqlite:///mlruns/db.sqlite", root)
-    assert "mlruns/db.sqlite" in norm_sqlite_rel or "mlruns\\db.sqlite" in norm_sqlite_rel
+    assert "mlruns/db.sqlite" in norm_sqlite_rel
 
     # Test absolute file URI
     abs_file = tmp_path / "data"

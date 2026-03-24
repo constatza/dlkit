@@ -29,6 +29,51 @@ from .mlflow_client_factory import MLflowClientFactory
 
 logger = get_logger(__name__)
 
+_sqlite_wal_listener_registered = False
+
+
+def _register_sqlite_wal_listener() -> None:
+    """Register a one-time SQLAlchemy event listener that sets WAL mode and busy timeout
+    on every new SQLite connection opened in this process.
+
+    On Windows, SQLite uses mandatory file locks. When MLflow's global API
+    (mlflow.start_run) and a MlflowClient both hold connections to the same
+    SQLite file at the same time — which happens during nested optimization runs
+    — a write from one connection blocks indefinitely waiting for the other.
+    WAL (Write-Ahead Logging) mode allows concurrent reads alongside the single
+    writer, eliminating the deadlock. busy_timeout=30000 is a safety net for
+    any residual lock contention (e.g. checkpoint operations).
+
+    WAL mode is stored in the SQLite file header and is therefore persistent
+    across reconnects. busy_timeout is connection-level and must be set on
+    every new connection, which the SQLAlchemy event listener handles.
+
+    This function is idempotent; calling it multiple times registers the
+    listener only once.
+    """
+    global _sqlite_wal_listener_registered
+    if _sqlite_wal_listener_registered:
+        return
+    try:
+        import sqlite3
+
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        @event.listens_for(Engine, "connect")
+        def _set_sqlite_wal_pragma(dbapi_connection: Any, connection_record: Any) -> None:
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                try:
+                    dbapi_connection.execute("PRAGMA journal_mode=WAL")
+                    dbapi_connection.execute("PRAGMA busy_timeout=30000")
+                except Exception:
+                    pass
+
+        _sqlite_wal_listener_registered = True
+        logger.debug("Registered SQLite WAL mode listener for all SQLAlchemy connections")
+    except Exception as e:
+        logger.warning("Failed to register SQLite WAL mode listener: {}", e)
+
 
 @dataclass(slots=True)
 class MLflowResourceState:
@@ -74,6 +119,7 @@ class MLflowResourceManager:
         from dlkit.tools.config.environment import ensure_mlflow_defaults
 
         ensure_mlflow_defaults()
+        _register_sqlite_wal_listener()
 
         tracking_uri = self._backend.tracking_uri()
         artifact_uri = self._backend.artifact_uri()

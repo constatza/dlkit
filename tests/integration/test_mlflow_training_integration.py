@@ -312,7 +312,7 @@ class TestMLflowTrainingIntegration:
         parsed_uri = urlparse(artifact_uri)
         artifact_path = Path(url2pathname(parsed_uri.path))
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
-        assert str(tmp_path) in str(artifact_path)
+        assert artifact_path.is_relative_to(tmp_path)
 
         root_artifacts = client.list_artifacts(run_info.run_id)
         artifact_paths = {a.path for a in root_artifacts}
@@ -385,7 +385,7 @@ class TestMLflowTrainingIntegration:
         parsed_uri = urlparse(artifact_uri)
         artifact_path = Path(url2pathname(parsed_uri.path))
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
-        assert str(tmp_path) in str(artifact_path)
+        assert artifact_path.is_relative_to(tmp_path)
 
         root_artifacts = client.list_artifacts(run_info.run_id)
         artifact_paths = {a.path for a in root_artifacts}
