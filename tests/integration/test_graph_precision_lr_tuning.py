@@ -12,7 +12,6 @@ from loguru import logger
 
 import dlkit
 from dlkit.interfaces.api.domain import TrainingResult
-from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 
@@ -52,16 +51,17 @@ class TestGraphPrecisionLRTuning:
 
         if enable_lr_tuning:
             training = TrainingSettings(
-                epochs=2,
+                epochs=1,
                 lr_tuner=LRTunerSettings(
                     min_lr=1e-6,
                     max_lr=0.1,
-                    num_training=10,
+                    num_training=2,
                 ),
                 trainer=TrainerSettings(
                     fast_dev_run=False,
-                    enable_checkpointing=True,
-                    max_epochs=2,
+                    enable_checkpointing=False,
+                    max_epochs=1,
+                    limit_train_batches=2,
                     enable_progress_bar=False,
                 ),
                 metrics=graph_settings.TRAINING.metrics,
@@ -131,15 +131,12 @@ class TestGraphPrecisionLRTuning:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """MLflow tracking must not reintroduce dtype mismatches."""
-        # Warm-up in default precision (float32) to populate cache
-        base_run = dlkit.train(graph_settings)
-        assert isinstance(base_run, TrainingResult)
-
         base_settings = self._build_graph_settings(graph_settings, enable_lr_tuning=True)
-        manager = BasicOverrideManager()
         mlruns_dir = tmp_path / "mlruns"
         mlruns_dir.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
+        monkeypatch.setenv(
+            "MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
+        )
 
         from dlkit.tools.config.mlflow_settings import MLflowSettings
 

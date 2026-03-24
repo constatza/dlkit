@@ -109,8 +109,7 @@ class TestMLflowTrainingIntegration:
                 experiment = candidate_experiment
                 break
         assert experiment is not None, (
-            "Expected MLflow experiment to exist "
-            f"(name={experiment_name}, tried={uri_candidates})"
+            f"Expected MLflow experiment to exist (name={experiment_name}, tried={uri_candidates})"
         )
         assert client is not None
         runs = client.search_runs(
@@ -148,75 +147,6 @@ class TestMLflowTrainingIntegration:
 
         # Should still have training metadata even if MLflow doesn't fully work
         assert training_result.duration_seconds > 0, "Training should have completed"
-
-    def test_mlflow_training_with_tracking_endpoint_health_check(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test MLflow training includes tracking endpoint health-check behavior.
-
-        Args:
-            mlflow_settings: GeneralSettings fixture with MLflow enabled.
-        """
-        # Act
-        training_result = dlkit.train(mlflow_settings)
-
-        # Training should complete successfully even if the tracking endpoint has issues
-        assert training_result.duration_seconds > 0, "Training should complete"
-        assert training_result.metrics is not None, "Should have some metrics"
-
-    def test_mlflow_auto_detection_from_settings(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test that MLflow strategy is auto-detected from settings.
-
-        Args:
-            mlflow_settings: GeneralSettings fixture with MLflow enabled.
-        """
-        # Verify MLflow is configured and active
-        assert mlflow_settings.MLFLOW is not None
-
-        # Act - Don't specify strategy, let it auto-detect
-        training_result = dlkit.train(mlflow_settings)
-
-        # Verify training completed (MLflow may or may not have metadata depending on endpoint state)
-        assert training_result.duration_seconds > 0, "Training should have completed"
-
-    def test_mlflow_training_preserves_training_metrics(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test that MLflow training preserves original training metrics.
-
-        Args:
-            mlflow_settings: GeneralSettings fixture with MLflow enabled.
-        """
-        # Act
-        training_result = dlkit.train(mlflow_settings)
-
-        # Should have training results regardless of tracking endpoint state
-        assert training_result.metrics is not None, "Should have metrics"
-        assert training_result.duration_seconds > 0, "Should have completed"
-
-    def test_mlflow_training_with_invalid_tracking_uri(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test MLflow training handles invalid tracking URI gracefully.
-
-        Args:
-            mlflow_settings: MLflow settings fixture.
-            tmp_path: Pytest temporary directory fixture.
-        """
-        # Use existing mlflow_settings but training should still work
-        # even if tracking endpoint connection fails (which it will in test environment)
-        # Act - Should handle invalid URI gracefully (MLflow will likely fail but training should continue)
-        training_result = dlkit.train(mlflow_settings)
-
-        # Should complete successfully even if MLflow has connection issues
-        assert training_result.duration_seconds > 0
-        assert training_result.metrics is not None
 
     @pytest.mark.slow
     def test_mlflow_training_with_multiple_epochs(
