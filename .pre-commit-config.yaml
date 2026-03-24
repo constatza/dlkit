@@ -14,8 +14,19 @@ repos:
 
   - repo: local
     hooks:
-      - id: sync-templates
-        name: Sync DLKit templates/examples
-        entry: python scripts/sync_templates.py --write
+      - id: act-linux
+        name: "act: test-linux (py3.13)"
+        entry: python scripts/run_act.py --job test-linux --matrix python-version:3.13
         language: system
         pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+
+      - id: act-windows
+        name: "act: test-windows"
+        entry: python scripts/run_act.py --job test-windows
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+

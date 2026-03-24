@@ -2,20 +2,42 @@ name: Test
 
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  test-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/astral-sh/uv:python${{ matrix.python-version }}-bookworm-slim
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
         python-version: ["3.13", "3.14"]
-        extra: ["",  "gpu"]
-        exclude:
-          - os: macos-latest
-            extra: gpu
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Cache uv artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: linux-uv-python-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: linux-uv-python-${{ matrix.python-version }}-
+
+      - name: Synchronize dependencies
+        run: uv sync --dev
+
+      - name: Run pytest
+        run: |
+          set -o pipefail
+          uv run pytest tests --maxfail=1 --disable-warnings -vv
+
+  test-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -23,24 +45,11 @@ jobs:
           enable-cache: true
           version: latest
 
-      - name: Cache uv artifacts
-        uses: actions/cache@v3
-        continue-on-error: true
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-python-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Set up Python
+        run: uv python install 3.14
 
       - name: Synchronize dependencies
-        shell: bash
-        run: |
-          if [[ "${{ matrix.extra }}" != "" ]]; then
-            uv sync --dev --extra ${{ matrix.extra }}
-          else
-            uv sync --dev
-          fi
+        run: uv sync --dev
 
       - name: Run pytest
         shell: bash
