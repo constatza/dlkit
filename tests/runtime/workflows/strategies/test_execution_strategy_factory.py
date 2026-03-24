@@ -129,8 +129,8 @@ def test_factory_mlflow_detection_logic(factory):
     assert factory._has_mlflow_config(GeneralSettings(MLFLOW=MLflowSettings()))
 
 
-def test_factory_detects_local_mlflow_server(factory, monkeypatch):
-    """Test that factory creates MLflowTracker when a local server is running."""
+def test_factory_activates_mlflow_when_local_probe_is_mocked_true(factory, monkeypatch):
+    """Test MLflow activation from a mocked localhost probe without real server I/O."""
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.setattr(
         "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",

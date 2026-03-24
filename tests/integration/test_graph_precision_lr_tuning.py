@@ -123,30 +123,3 @@ class TestGraphPrecisionLRTuning:
         dataset = self._load_dataset(modified_settings)
         sample = dataset[0]
         assert sample.x.dtype == torch.float64
-
-    def test_graph_model_float64_lr_tuning_with_mlflow_tracking(
-        self,
-        graph_settings: GeneralSettings,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """MLflow tracking must not reintroduce dtype mismatches."""
-        base_settings = self._build_graph_settings(graph_settings, enable_lr_tuning=True)
-        mlruns_dir = tmp_path / "mlruns"
-        mlruns_dir.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv(
-            "MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
-        )
-
-        from dlkit.tools.config.mlflow_settings import MLflowSettings
-
-        mlflow_cfg = MLflowSettings(experiment_name=f"graph_precision_mlflow_{tmp_path.name}")
-        tracked_settings = base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
-
-        tracked_result = dlkit.train(tracked_settings)
-        assert isinstance(tracked_result, TrainingResult)
-
-        dataset = self._load_dataset(tracked_settings)
-        sample = dataset[0]
-        assert sample.x.dtype == torch.float64
-        logger.info("Graph sample dtype after MLflow float64 run: {}", sample.x.dtype)

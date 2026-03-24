@@ -29,7 +29,6 @@ from dlkit import (
     load_logged_model,
 )
 from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
-from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
 
 
@@ -50,129 +49,9 @@ def _expected_tracking_uri(result: Any | None = None) -> str:
     return mlflow.get_tracking_uri()
 
 
-def _candidate_tracking_uris(metrics: dict[str, Any]) -> tuple[str, ...]:
-    """Build tracking URI candidates in priority order without duplicates."""
-    primary = _expected_tracking_uri()
-    metric_uri = metrics.get("mlflow_tracking_uri")
-    if metric_uri and metric_uri != primary:
-        return (primary, metric_uri)
-    return (primary,)
-
-
 @pytest.mark.slow
 class TestMLflowTrainingIntegration:
-    """Integration tests for MLflow-enabled training workflows."""
-
-    def test_complete_mlflow_training_pipeline(
-        self,
-        mlflow_settings: GeneralSettings,
-        expected_training_metrics: dict[str, Any],
-    ) -> None:
-        """Test complete MLflow training workflow from settings to results.
-
-        This test exercises the full pipeline:
-        1. Settings configuration with MLflow enabled
-        2. Component building via BuildFactory
-        3. MLflow strategy execution with run tracking
-        4. Result collection with MLflow metadata
-
-        Args:
-            mlflow_settings: GeneralSettings fixture with MLflow enabled.
-            expected_training_metrics: Expected metrics structure fixture.
-        """
-        # Act
-        training_result = dlkit.train(mlflow_settings)
-        assert isinstance(training_result, TrainingResult)
-
-        # Assert - Check required metrics are present
-        assert training_result.metrics is not None
-        assert training_result.duration_seconds > 0
-
-        # Assert - Verify some metrics were logged (fast_dev_run may not log all metrics)
-        # In fast_dev_run mode, only validation metrics are typically logged
-        metrics = training_result.metrics
-        assert len(metrics) > 0, "Expected some metrics to be logged"
-
-        # Verify MLflow run was created
-        uri_candidates = _candidate_tracking_uris(metrics if isinstance(metrics, dict) else {})
-        # Use same logic as tracking system: MLFLOW.experiment_name → SESSION.name
-        from dlkit.runtime.workflows.strategies.tracking.naming import determine_experiment_name
-
-        experiment_name = determine_experiment_name(mlflow_settings, mlflow_settings.MLFLOW)
-        experiment = None
-        client = None
-        for candidate_uri in uri_candidates:
-            candidate_client = MlflowClient(tracking_uri=candidate_uri)
-            candidate_experiment = candidate_client.get_experiment_by_name(experiment_name)
-            if candidate_experiment is not None:
-                client = candidate_client
-                experiment = candidate_experiment
-                break
-        assert experiment is not None, (
-            f"Expected MLflow experiment to exist (name={experiment_name}, tried={uri_candidates})"
-        )
-        assert client is not None
-        runs = client.search_runs(
-            [experiment.experiment_id],
-            order_by=["attributes.start_time DESC"],
-            max_results=1,
-        )
-        assert runs, "Expected at least one MLflow run"
-
-        # Since MLflow may not work in test env, comment out specific MLflow assertions
-        # expected_mlflow_keys = ["mlflow_run_id", "mlflow_experiment_id", "mlflow_tracking_uri"]
-        # for key in expected_mlflow_keys:
-        #     if key in metrics:
-        #         assert metrics[key] is not None, f"{key} should have a value"
-
-        # At least verify training produced some results
-        assert training_result.duration_seconds > 0, "Training should have taken some time"
-
-    def test_mlflow_training_with_model_registration_disabled(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test MLflow training without model registration.
-
-        Args:
-            mlflow_settings: GeneralSettings fixture with MLflow enabled.
-        """
-        mlflow_cfg = mlflow_settings.MLFLOW
-        disabled_settings = mlflow_settings.model_copy(
-            update={"MLFLOW": mlflow_cfg.model_copy(update={"register_model": False})}
-        )
-
-        # Act
-        training_result = dlkit.train(disabled_settings)
-
-        # Should still have training metadata even if MLflow doesn't fully work
-        assert training_result.duration_seconds > 0, "Training should have completed"
-
-    @pytest.mark.slow
-    def test_mlflow_training_with_multiple_epochs(
-        self,
-        mlflow_settings: GeneralSettings,
-    ) -> None:
-        """Test MLflow training with multiple real epochs.
-
-        Uses max_epochs=2, limit_train_batches=2 instead of fast_dev_run so that
-        the multi-epoch code path is actually exercised and metrics are logged.
-
-        Args:
-            mlflow_settings: MLflow settings fixture.
-        """
-        training = mlflow_settings.TRAINING
-        trainer = training.trainer.model_copy(
-            update={"fast_dev_run": False, "max_epochs": 2, "limit_train_batches": 2}
-        )
-        multi_epoch_settings = mlflow_settings.model_copy(
-            update={"TRAINING": training.model_copy(update={"trainer": trainer})}
-        )
-
-        training_result = dlkit.train(multi_epoch_settings)
-
-        assert training_result.duration_seconds > 0
-        assert training_result.metrics is not None
+    """Integration tests for MLflow behaviors not already covered by the sqlite smoke."""
 
     @pytest.mark.slow
     def test_mlflow_training_registers_model_and_supports_registry_lookup(

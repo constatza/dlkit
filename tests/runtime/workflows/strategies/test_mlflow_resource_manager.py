@@ -14,7 +14,6 @@ import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
 from dlkit.runtime.workflows.strategies.tracking.backend import (
     LocalServerBackend,
     LocalSqliteBackend,
-    RemoteServerBackend,
 )
 from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import (
     MLflowClientFactory,
@@ -34,7 +33,9 @@ def test_resolve_tracking_uri_prefers_env_var(monkeypatch: pytest.MonkeyPatch) -
     assert resolved == "https://mlflow.company.local"
 
 
-def test_resolve_tracking_uri_uses_localhost_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_tracking_uri_uses_mocked_localhost_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: True, raising=True)
 
