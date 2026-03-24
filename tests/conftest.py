@@ -1,12 +1,12 @@
 from __future__ import annotations
+# ruff: noqa: E402
 
 # Bootstrap: ensure MLflow never defaults to sqlite:///mlflow.db in the project
 # root. pytest_configure() will replace this with a proper session-level path.
 import os as _os
+
 if "MLFLOW_TRACKING_URI" not in _os.environ:
-    _os.environ["MLFLOW_TRACKING_URI"] = (
-        f"sqlite:////tmp/dlkit_test_{_os.getpid()}_bootstrap.db"
-    )
+    _os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:////tmp/dlkit_test_{_os.getpid()}_bootstrap.db"
 del _os
 
 from pathlib import Path
@@ -21,7 +21,9 @@ import pytest
 
 from dlkit.tools.io import load_config
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.environment import env as global_environment
+from dlkit.tools.registry.public import _reset_for_tests as _reset_component_registry_for_tests
 
 _ORIGINAL_HOME_ENV = os.environ.get("HOME")
 _ORIGINAL_DLKIT_ROOT_DIR = os.environ.get("DLKIT_ROOT_DIR")
@@ -227,27 +229,13 @@ def pytest_unconfigure(config):
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: D401
-    """Skip network-dependent tests in restricted sandboxes.
-
-    We conservatively skip entire modules that require real sockets/HTTP:
-    - tests/integration/test_mlflow_server_integration.py
-    - tests/integration/test_server_lifecycle.py
-    Additionally, any test marked `slow` is skipped by default when network is
-    restricted.
-    """
-    if not _network_restricted():
-        return
-
+    """Skip slow socket-dependent cases in restricted sandboxes."""
     skip_net = pytest.mark.skip(reason="Network/sockets not permitted in sandbox")
+    network_restricted = _network_restricted()
     for item in items:
-        path = str(item.fspath)
-        if path.endswith("test_mlflow_server_integration.py") or path.endswith(
-            "test_server_lifecycle.py"
+        if network_restricted and any(
+            mark.name == "slow" for mark in getattr(item, "iter_markers", lambda: [])()
         ):
-            item.add_marker(skip_net)
-            continue
-        # Also skip tests explicitly marked slow in restricted environments
-        if any(mark.name == "slow" for mark in getattr(item, "iter_markers", lambda: [])()):
             item.add_marker(skip_net)
 
 
@@ -262,14 +250,20 @@ def _fake_socket_when_restricted():  # noqa: D401
         def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
             self._host = "127.0.0.1"
             self._port = 0
+            self._path: str | None = None
 
         def setsockopt(self, *args, **kwargs):
             return None
 
         def bind(self, address):
-            host, port = address
-            self._host = host or "127.0.0.1"
-            self._port = int(port) if int(port) != 0 else 50000
+            if isinstance(address, tuple):
+                host, port = address
+                self._host = host or "127.0.0.1"
+                self._port = int(port) if int(port) != 0 else 50000
+                self._path = None
+                return None
+
+            self._path = str(address)
             return None
 
         def listen(self, backlog):
@@ -277,6 +271,8 @@ def _fake_socket_when_restricted():  # noqa: D401
             return None
 
         def getsockname(self):
+            if self._path is not None:
+                return self._path
             return (self._host, self._port)
 
         def close(self):
@@ -289,6 +285,10 @@ def _fake_socket_when_restricted():  # noqa: D401
             return False
 
     def _factory(family=-1, type=-1, proto=-1, fileno=None):
+        if family == socket.AF_UNIX:
+            if fileno is not None:
+                return _real(family, type, proto, fileno=fileno)
+            return _real(family, type, proto)
         return _FakeSocket(family, type, proto)
 
     socket.socket = _factory  # type: ignore[assignment]
@@ -374,10 +374,7 @@ def test_artifacts_dir() -> Path:
 
 @pytest.fixture(autouse=True, scope="session")
 def _block_mlflow_host_probe():
-    """Prevent tests from making TCP connections to detect a real MLflow server.
-
-    Tests that need specific local_host_alive behavior can override via monkeypatch.
-    """
+    """Prevent tests from attaching to any real localhost MLflow server."""
     with unittest.mock.patch(
         "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",
         return_value=False,
@@ -385,15 +382,17 @@ def _block_mlflow_host_probe():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_global_component_state():
+    """Reset global component registries and factory singletons between tests."""
+    previous_factory_registry = FactoryProvider._instance  # type: ignore[attr-defined]
+    FactoryProvider._instance = None  # type: ignore[attr-defined]
+    _reset_component_registry_for_tests()
+    try:
+        yield
+    finally:
+        _reset_component_registry_for_tests()
+        FactoryProvider._instance = previous_factory_registry  # type: ignore[attr-defined]
+
+
 # Import MLflow test fixtures
-from tests.fixtures.mlflow_fixtures import (
-    mlflow_global_state_isolation,
-    mock_mlflow_client,
-    mlflow_test_settings,
-    mlflow_resource_manager,
-    mock_mlflow_resource_manager,
-    isolated_mlflow_tracker,
-    process_leak_detector,
-    thread_leak_detector,
-    resource_leak_detection,
-)

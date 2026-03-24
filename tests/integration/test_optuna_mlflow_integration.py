@@ -1,28 +1,25 @@
-"""Integration tests for combined Optuna + MLflow workflows.
+"""Integration tests for the distinct Optuna/MLflow seams worth keeping.
 
-This module tests that when both Optuna and MLflow are enabled:
-1. The high-level optimize() API works correctly
-2. MLflow tracking lifecycle is properly managed
-3. Nested run structure works (parent study + trial runs + best run)
-4. Tracking cleanup happens correctly
-
-These are true integration tests that test real behavior using high-level APIs.
+These tests keep one sqlite-backed combined workflow and one optuna-only smoke.
+Server lifecycle and HTTP-backed behavior are intentionally not covered here.
 """
 
 from __future__ import annotations
 
+import os
 
 import pytest
+from mlflow.tracking import MlflowClient
 
 import dlkit
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
-from tests.test_timeouts import FAST_TEST_TIMEOUT, MEDIUM_TEST_TIMEOUT
+from tests._timeout_constants import FAST_TEST_TIMEOUT
 
 
 @pytest.fixture
 def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch):
-    """Create settings with both Optuna and MLflow enabled (fast file:// tracking).
+    """Create settings with both Optuna and MLflow enabled via isolated sqlite tracking.
 
     Uses sqlite tracking for speed and deterministic isolation.
     """
@@ -37,7 +34,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
     monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
-    # Enable both MLflow (file:// for speed) and Optuna
+    # Enable both MLflow and Optuna with tiny sqlite-backed stores.
     # Use unique experiment name per test to prevent conflicts
     settings_with_overrides = manager.apply_overrides(
         training_settings,
@@ -70,25 +67,34 @@ class TestOptunaMLflowOptimization:
 
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_combined_settings_optimization(self, combined_settings):
-        """Test optimize() API with combined optuna+mlflow settings (file:// tracking)."""
-        # Should successfully create and execute optimization workflow
+        """Combined Optuna+MLflow workflow should persist multiple MLflow runs."""
         result = dlkit.optimize(combined_settings)
 
-        # Verify basic result structure
         assert result is not None
         assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
+        assert result.best_trial is not None
+
+        client = MlflowClient(tracking_uri=os.environ["MLFLOW_TRACKING_URI"])
+        experiment = client.get_experiment_by_name(combined_settings.MLFLOW.experiment_name)
+        assert experiment is not None
+
+        runs = client.search_runs(
+            [experiment.experiment_id],
+            order_by=["attributes.start_time DESC"],
+            max_results=10,
+        )
+        assert len(runs) >= 2
 
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_optuna_only_optimization(self, optuna_only_settings):
-        """Test optimize() API with optuna-only settings."""
-        # Should successfully create and execute optimization workflow
+        """Optuna-only optimization should succeed without MLflow persistence."""
         result = dlkit.optimize(optuna_only_settings)
 
-        # Verify basic result structure
         assert result is not None
         assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
+        assert result.best_trial is not None
 
     def test_no_optimization_raises_error(self):
         """Test that optimize() raises error when optimization not enabled."""
@@ -100,52 +106,6 @@ class TestOptunaMLflowOptimization:
             dlkit.optimize(settings)
 
         assert "OPTUNA is not enabled" in str(exc_info.value)
-
-
-class TestTrackingBehavior:
-    """Test combined optimization behavior with MLflow tracking enabled."""
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optimization_handles_tracking_metadata(self, combined_settings):
-        """Test that optimize() API runs correctly with tracking enabled."""
-        # Should successfully run with proper message handling
-        result = dlkit.optimize(combined_settings)
-
-        # Verify successful completion
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-    @pytest.mark.timeout(MEDIUM_TEST_TIMEOUT)
-    def test_combined_vs_optuna_only_workflows(self, combined_settings, optuna_only_settings):
-        """Test that both combined and optuna-only workflows work via optimize() API."""
-        # Both should work through the high-level API
-        combined_result = dlkit.optimize(combined_settings)
-        assert combined_result is not None
-        assert combined_result.duration_seconds >= 0
-
-        optuna_result = dlkit.optimize(optuna_only_settings)
-        assert optuna_result is not None
-        assert optuna_result.duration_seconds >= 0
-
-
-class TestNestedRunStructure:
-    """Test that nested MLflow run structure capability is available."""
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optimization_supports_nested_runs(self, combined_settings):
-        """Test that optimize() API properly supports nested MLflow runs."""
-        # Should successfully execute with nested run structure
-        result = dlkit.optimize(combined_settings)
-
-        # Verify successful completion
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-        # Nested run structure is handled internally:
-        # 1. Parent run for study
-        # 2. Nested runs for each trial
-        # 3. Nested run for best retrain
-        # This is all managed by the optimize() API
 
 
 class TestBackwardCompatibility:
@@ -163,20 +123,14 @@ class TestBackwardCompatibility:
         assert "OPTUNA is not enabled" in str(exc_info.value)
 
 
-class TestArchitecturalConsistency:
-    """Test that the architecture is consistent and follows SOLID principles."""
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_null_object_pattern_through_apis(self):
-        """Test that null object pattern works through high-level APIs."""
-        # Settings with MLflow disabled should still work
-        settings_no_mlflow = GeneralSettings(
-            OPTUNA=OptunaSettings(
-                enabled=True, n_trials=1, direction="minimize", study_name="test_study"
-            )
+def test_null_object_pattern_through_apis() -> None:
+    """Optimization without MLflow should still work through the high-level API."""
+    settings_no_mlflow = GeneralSettings(
+        OPTUNA=OptunaSettings(
+            enabled=True, n_trials=1, direction="minimize", study_name="test_study"
         )
+    )
 
-        # Should work without MLflow (null object pattern handles this internally)
-        result = dlkit.optimize(settings_no_mlflow)
-        assert result is not None
-        assert result.duration_seconds >= 0
+    result = dlkit.optimize(settings_no_mlflow)
+    assert result is not None
+    assert result.duration_seconds >= 0

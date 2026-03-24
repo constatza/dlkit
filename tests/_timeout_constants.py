@@ -1,0 +1,18 @@
+"""Centralized timeout configuration for integration tests."""
+
+from __future__ import annotations
+
+import os
+
+
+TIMEOUT_MULTIPLIER = float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0"))
+
+_FAST_BASE = 30
+_MEDIUM_BASE = 60
+_SLOW_BASE = 120
+_VERY_SLOW_BASE = 180
+
+FAST_TEST_TIMEOUT = int(_FAST_BASE * TIMEOUT_MULTIPLIER)
+MEDIUM_TEST_TIMEOUT = int(_MEDIUM_BASE * TIMEOUT_MULTIPLIER)
+SLOW_TEST_TIMEOUT = int(_SLOW_BASE * TIMEOUT_MULTIPLIER)
+VERY_SLOW_TEST_TIMEOUT = int(_VERY_SLOW_BASE * TIMEOUT_MULTIPLIER)

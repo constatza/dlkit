@@ -6,6 +6,7 @@ maintainable test dataflow management.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import torch
@@ -42,6 +43,22 @@ class TestBasicIntegration:
         assert training_result.duration_seconds > 0
         if training_result.metrics:
             assert isinstance(training_result.metrics, dict)
+
+        from mlflow.tracking import MlflowClient
+        from dlkit.runtime.workflows.strategies.tracking.naming import determine_experiment_name
+
+        tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
+        client = MlflowClient(tracking_uri=tracking_uri)
+        experiment_name = determine_experiment_name(mlflow_settings, mlflow_settings.MLFLOW)
+        experiment = client.get_experiment_by_name(experiment_name)
+        assert experiment is not None
+
+        runs = client.search_runs(
+            [experiment.experiment_id],
+            order_by=["attributes.start_time DESC"],
+            max_results=1,
+        )
+        assert runs
 
     def test_double_precision_training(self, double_precision_settings: GeneralSettings) -> None:
         """Regression test: double precision training must not crash on TensorDict batches.

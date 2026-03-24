@@ -645,4 +645,4 @@ def integration_test_timeout() -> int:
     Returns:
         Maximum time allowed for integration tests to complete.
     """
-    return 10  # Reasonable timeout for integration tests with real server startup
+    return 10  # Reasonable timeout for tiny sqlite-backed integration runs
