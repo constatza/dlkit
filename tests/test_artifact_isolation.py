@@ -19,10 +19,11 @@ def test_artifacts_go_to_dlkit_root_dir() -> None:
     output_path = output()
 
     # All paths should be under DLKIT_ROOT_DIR
-    assert str(expected_base) in mlruns_path.as_posix(), (
+    # Use as_posix() on both sides to avoid backslash/forward-slash mismatch on Windows
+    assert expected_base.as_posix() in mlruns_path.as_posix(), (
         f"MLruns path should be under DLKIT_ROOT_DIR {expected_base}: {mlruns_path}"
     )
-    assert str(expected_base) in output_path.as_posix(), (
+    assert expected_base.as_posix() in output_path.as_posix(), (
         f"Output path should be under DLKIT_ROOT_DIR {expected_base}: {output_path}"
     )
 
@@ -49,6 +50,6 @@ def test_artifact_creation_and_isolation() -> None:
 
     assert test_artifact.exists(), "Test artifact should be created"
     # Artifact should be under the temp tree (contains the tmp path prefix)
-    assert root_dir in test_artifact.as_posix(), (
+    assert Path(root_dir).as_posix() in test_artifact.as_posix(), (
         f"Artifact should be under DLKIT_ROOT_DIR: {test_artifact}"
     )

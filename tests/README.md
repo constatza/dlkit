@@ -17,12 +17,16 @@ This is a hard rule for all filesystem assertions:
 - Use `tmp_path` for temporary files and directories.
 - Use `Path` joins for expected filesystem locations.
 - Use `url_resolver.build_uri(...)`, `url_resolver.normalize_uri(...)`, or `url_resolver.resolve_local_uri(...)` for URI expectations.
+- Use `Path.is_relative_to(base)` to assert a path is under a directory.
+- When a string containment check on paths is unavoidable, normalize both sides with `.as_posix()` first: `Path(x).as_posix() in Path(y).as_posix()`.
 
 ## Anti-Patterns
 
 - `assert uri == "file:///tmp/..."`
 - `assert path == Path("/tmp/...")` in a cross-platform test
 - Manual slicing/parsing of `file://` or `sqlite://` strings inside tests
+- `assert str(some_path) in other_string` — `str(Path)` on Windows returns backslashes; use `is_relative_to()` or `.as_posix()` on both sides.
+- `assert "foo/bar" in s or "foo\\bar" in s` — normalize instead of branching on separators.
 
 ## Scope Boundaries Are Mandatory
 

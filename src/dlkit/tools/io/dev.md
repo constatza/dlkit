@@ -672,6 +672,15 @@ except Exception as e:
 - `tmp_path` (pytest built-in): Temporary paths for test files
 - Custom config fixtures in `tests/conftest.py`
 
+### Cross-Platform Path Assertions
+`str(Path(...))` on Windows returns backslashes; `.as_posix()` always returns forward slashes. Tests that mix the two in containment or equality checks will fail on Windows even when paths are correct.
+
+Rules:
+- Use `artifact_path.is_relative_to(base)` instead of `str(base) in str(artifact_path)`.
+- When string containment is unavoidable: `Path(x).as_posix() in Path(y).as_posix()`.
+- URI strings (`file://`, `sqlite://`) from `url_resolver` always use forward slashes — compare against `.as_posix()`, never against `str(Path(...))`.
+- Never write `"foo/bar" in s or "foo\\\\bar" in s`; normalize before comparing.
+
 ## Performance Considerations
 - Partial TOML parsing minimizes overhead for section-based loading
 - Path resolution cached during config load (single computation per path)

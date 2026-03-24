@@ -190,15 +190,7 @@ class EntryNumpyPayloadBuilder:
             if not isinstance(name, str) or not name:
                 continue
 
-            try:
-                value = self._resolve_entry_value(entry, name)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to materialize data entry '{}' for lineage dataset payload: {}",
-                    name,
-                    exc,
-                )
-                continue
+            value = self._resolve_entry_value(entry, name)
 
             if value is None:
                 continue
@@ -212,6 +204,8 @@ class EntryNumpyPayloadBuilder:
             if path is None:
                 return None
             path_obj = Path(path)
+            if path_obj.is_dir():
+                return None  # directory-based formats (e.g. sparse packs) cannot be materialized
             if path_obj.suffix.lower() == ".npz":
                 return load_array(path_obj, array_key=name)
             return load_array(path_obj)
