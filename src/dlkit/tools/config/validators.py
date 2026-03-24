@@ -55,7 +55,7 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
     Example:
         ```python
         config = TrainingWorkflowConfig.model_validate(toml_dict)
-        config = config.model_copy(update={"DATASET": dataset_settings})
+        config = config.patch({"DATASET": dataset_settings})
 
         # Validate before building
         validate_training_config_complete(config)  # Raises if incomplete

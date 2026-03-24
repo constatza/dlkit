@@ -114,7 +114,7 @@ class OptunaSettingsSampler:
             updated_model = patch_model(base_settings.MODEL, sampled_params)
 
             # Return new settings with updated MODEL
-            result = base_settings.model_copy(update={"MODEL": updated_model})
+            result = base_settings.patch({"MODEL": updated_model})
 
             logger.debug("Applied {} sampled parameters to MODEL", len(sampled_params))
             return result

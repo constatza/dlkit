@@ -166,7 +166,7 @@ print(f"Best checkpoint: {result.checkpoint_path}")
 
 **Implementation Notes**:
 - Validates overrides before applying them using `override_manager`
-- Applies overrides to settings via `model_copy()` for immutability
+- Applies overrides to settings via `BasicSettings.patch()` for immutability
 - Checkpoint path extracted from overrides for service call
 - Comprehensive logging at info level for execution tracking
 - Error context includes command name for debugging
@@ -616,7 +616,7 @@ except WorkflowError as e:
 
 ## Performance Considerations
 - Commands are stateless - no memory retained between executions
-- Settings copied via `model_copy()` for immutability (small overhead)
+- Settings patched immutably via `BasicSettings.patch()` (small overhead)
 - Override validation happens before expensive operations
 - Dry build optional for faster validation when not needed
 - Command registry uses dict lookup (O(1) complexity)

@@ -342,7 +342,7 @@ best_result = executor.execute_trial(
 
 **Implementation Notes**:
 - Uses `VanillaExecutor` for actual training execution
-- Applies hyperparameters to base settings via `model_copy()`
+- Applies hyperparameters to base settings via immutable patching
 - Disables `ModelCheckpoint` callbacks for exploratory trials
 - Injects `MLflowEpochLogger` when trial context provided
 - Extracts objective value from common metric keys (val_loss, loss, etc.)
