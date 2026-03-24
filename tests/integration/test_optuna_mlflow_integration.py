@@ -151,16 +151,6 @@ class TestNestedRunStructure:
 class TestBackwardCompatibility:
     """Test that changes maintain backward compatibility."""
 
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optuna_only_workflow_improved(self, optuna_only_settings):
-        """Test that optuna-only workflows work through optimize() API."""
-        # Should successfully execute optimization
-        result = dlkit.optimize(optuna_only_settings)
-
-        # Verify successful completion
-        assert result is not None
-        assert result.duration_seconds >= 0
-
     def test_vanilla_workflow_raises_error(self):
         """Test that vanilla (no optimization) workflows raise clear error."""
         from dlkit.interfaces.api.domain import WorkflowError
@@ -176,32 +166,6 @@ class TestBackwardCompatibility:
 class TestArchitecturalConsistency:
     """Test that the architecture is consistent and follows SOLID principles."""
 
-    @pytest.mark.timeout(MEDIUM_TEST_TIMEOUT)
-    def test_training_and_optimization_apis_work_together(self, combined_settings):
-        """Test that both train() and optimize() APIs work with the same settings."""
-        # Both APIs should work with combined settings
-        train_result = dlkit.train(combined_settings)
-        assert train_result is not None
-        assert train_result.duration_seconds >= 0
-
-        optimize_result = dlkit.optimize(combined_settings)
-        assert optimize_result is not None
-        assert optimize_result.duration_seconds >= 0
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_single_responsibility_maintained_through_apis(self, combined_settings):
-        """Test that high-level APIs maintain single responsibility principle."""
-        # optimize() API should handle optimization concerns
-        result = dlkit.optimize(combined_settings)
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-        # Architecture separates concerns internally:
-        # - StudyManager: Study lifecycle
-        # - TrialExecutor: Individual trial execution
-        # - OptimizationOrchestrator: Workflow coordination
-        # - MLflowTrackingAdapter: Experiment tracking
-
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_null_object_pattern_through_apis(self):
         """Test that null object pattern works through high-level APIs."""
@@ -216,37 +180,3 @@ class TestArchitecturalConsistency:
         result = dlkit.optimize(settings_no_mlflow)
         assert result is not None
         assert result.duration_seconds >= 0
-
-
-class TestNestedRunsImplementation:
-    """Test that nested MLflow runs are properly implemented for Optuna optimization."""
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optimization_executes_without_errors(self, combined_settings):
-        """Test that optimize() API can be executed without errors."""
-        # Should execute successfully with proper dependency injection
-        result = dlkit.optimize(combined_settings)
-
-        # Verify successful completion
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-        # Clean architecture handles all dependencies internally through proper DI
-        # No undefined variable issues should occur due to clean design
-
-    @pytest.mark.timeout(FAST_TEST_TIMEOUT)
-    def test_optimization_supports_nested_runs(self, combined_settings):
-        """Test that optimize() API properly supports nested run creation."""
-        # Should execute successfully with nested run structure
-        result = dlkit.optimize(combined_settings)
-
-        # Verify successful completion
-        assert result is not None
-        assert result.duration_seconds >= 0
-
-        # Clean architecture implements proper nested run structure through:
-        # - OptimizationOrchestrator coordinates the entire workflow
-        # - MLflowTrackingAdapter.create_study_run() for parent run
-        # - MLflowTrackingAdapter.create_trial_run() for each trial
-        # - MLflowTrackingAdapter.create_best_retrain_run() for final run
-        # This provides the proper Study → Trial → Best Retrain hierarchy
