@@ -5,19 +5,22 @@ Single Responsibility: Log checkpoints, models, and user-defined artifacts to ML
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
 import re
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
 from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 
 from .config_accessor import ConfigAccessor
 from .interfaces import IExperimentTracker, IRunContext
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -155,7 +158,7 @@ class ArtifactLogger:
     def log_training_artifacts(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         run_context: IRunContext,
     ) -> PendingModelRegistration | None:
         """Log all training artifacts (checkpoints and optional model registration).
@@ -214,11 +217,12 @@ class ArtifactLogger:
 
     def maybe_register_model(
         self,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         components: BuildComponents,
         run_context: IRunContext,
     ) -> PendingModelRegistration | None:
         """Log model artifact and optionally register it in MLflow model registry."""
+        model_name: str = ""
         try:
             accessor = ConfigAccessor(settings)
             configured_name = accessor.get_registered_model_name()
@@ -235,7 +239,7 @@ class ArtifactLogger:
 
             if not model_uri:
                 logger.warning("Model registration skipped for '{}': no model URI", model_name)
-                return
+                return None
 
             self._set_logged_model_tags(
                 run_context=run_context,
@@ -348,7 +352,7 @@ class ArtifactLogger:
 
     def log_user_artifacts(
         self,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         run_context: IRunContext,
         result: TrainingResult,
     ) -> None:
@@ -440,7 +444,7 @@ class ArtifactLogger:
 
     def _resolve_aliases(
         self,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         accessor: ConfigAccessor,
     ) -> tuple[str, ...]:
         _ = settings
@@ -449,7 +453,7 @@ class ArtifactLogger:
 
     def _resolve_version_tags(
         self,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         accessor: ConfigAccessor,
     ) -> dict[str, str]:
         _ = settings

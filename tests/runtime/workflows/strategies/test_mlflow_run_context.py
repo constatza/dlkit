@@ -134,7 +134,7 @@ def test_log_dataset_converts_to_mlflow_entity_and_adds_context_tag() -> None:
 
     dataset_entity = Mock()
     dataset = Mock()
-    dataset._to_mlflow_entity.return_value = dataset_entity  # noqa: SLF001
+    dataset._to_mlflow_entity.return_value = dataset_entity
 
     context.log_dataset(dataset, context="training", tags={"split": "train"})
 

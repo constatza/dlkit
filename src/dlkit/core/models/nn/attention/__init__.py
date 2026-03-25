@@ -1,8 +1,8 @@
 from .basic import SelfAttentionBlock
-from .transformer import TransformerEncoderBlock, TransformerDecoderBlock
+from .transformer import TransformerDecoderBlock, TransformerEncoderBlock
 
 __all__ = [
     "SelfAttentionBlock",
-    "TransformerEncoderBlock",
     "TransformerDecoderBlock",
+    "TransformerEncoderBlock",
 ]

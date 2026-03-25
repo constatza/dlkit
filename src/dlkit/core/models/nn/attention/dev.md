@@ -102,11 +102,7 @@ from dlkit.core.models.nn.attention import TransformerEncoderBlock
 import torch
 
 # Create transformer encoder with 3 layers
-encoder = TransformerEncoderBlock(
-    embed_dim=128,
-    num_heads=8,
-    num_layers=3
-)
+encoder = TransformerEncoderBlock(embed_dim=128, num_heads=8, num_layers=3)
 
 # Process temporal sequence
 x = torch.randn(16, 128, 50)  # (batch, channels, timesteps)
@@ -145,11 +141,7 @@ from dlkit.core.models.nn.attention import TransformerDecoderBlock
 import torch
 
 # Create transformer decoder
-decoder = TransformerDecoderBlock(
-    embed_dim=128,
-    num_heads=8,
-    num_layers=3
-)
+decoder = TransformerDecoderBlock(embed_dim=128, num_heads=8, num_layers=3)
 
 # Self-attention mode (autoregressive)
 x = torch.randn(16, 128, 50)
@@ -176,6 +168,7 @@ from dlkit.core.models.nn.attention import SelfAttentionBlock
 import torch
 import torch.nn as nn
 
+
 class TemporalFeatureExtractor(nn.Module):
     def __init__(self, channels: int, num_heads: int = 4):
         super().__init__()
@@ -190,6 +183,7 @@ class TemporalFeatureExtractor(nn.Module):
         x = self.output(x)  # Final projection
         return x
 
+
 # Usage
 model = TemporalFeatureExtractor(channels=64, num_heads=8)
 x = torch.randn(32, 64, 100)
@@ -202,18 +196,15 @@ from dlkit.core.models.nn.attention import TransformerEncoderBlock, TransformerD
 import torch
 import torch.nn as nn
 
+
 class Seq2SeqTransformer(nn.Module):
     def __init__(self, embed_dim: int = 128, num_heads: int = 8, num_layers: int = 4):
         super().__init__()
         self.encoder = TransformerEncoderBlock(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            num_layers=num_layers
+            embed_dim=embed_dim, num_heads=num_heads, num_layers=num_layers
         )
         self.decoder = TransformerDecoderBlock(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            num_layers=num_layers
+            embed_dim=embed_dim, num_heads=num_heads, num_layers=num_layers
         )
 
     def forward(self, src: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
@@ -222,6 +213,7 @@ class Seq2SeqTransformer(nn.Module):
         # Decode target sequence with encoder memory
         output = self.decoder(tgt, memory=memory)
         return output
+
 
 # Usage
 model = Seq2SeqTransformer()
@@ -236,12 +228,12 @@ from dlkit.core.models.nn.attention import SelfAttentionBlock
 import torch
 import torch.nn as nn
 
+
 class DeepAttentionNetwork(nn.Module):
     def __init__(self, embed_dim: int, num_layers: int = 3):
         super().__init__()
         self.layers = nn.ModuleList([
-            SelfAttentionBlock(embed_dim=embed_dim, num_heads=4)
-            for _ in range(num_layers)
+            SelfAttentionBlock(embed_dim=embed_dim, num_heads=4) for _ in range(num_layers)
         ])
         self.norms = nn.ModuleList([
             nn.LayerNorm([embed_dim, 100])  # Assuming timesteps=100
@@ -253,6 +245,7 @@ class DeepAttentionNetwork(nn.Module):
             # Residual connection + layer norm
             x = norm(x + attention(x))
         return x
+
 
 # Usage
 model = DeepAttentionNetwork(embed_dim=64, num_layers=6)

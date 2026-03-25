@@ -8,12 +8,12 @@ from unittest.mock import Mock, patch
 import pytest
 
 from dlkit.interfaces.api.domain import TrainingResult
-from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
-from dlkit.runtime.workflows.strategies.core import VanillaExecutor, ITrainingExecutor
-from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
 
 # OptimizationDecorator removed - use clean architecture tests instead
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.runtime.workflows.strategies.core import ITrainingExecutor, VanillaExecutor
+from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
+from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
@@ -53,7 +53,8 @@ def build_components():
 def test_single_responsibility_principle_integration(build_components, monkeypatch):
     """Test that each component has a single, focused responsibility."""
     # Ensure no local MLflow server is detected and no env var set
-    import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
+    from dlkit.runtime.workflows.strategies.tracking import uri_resolver
+
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
 
@@ -142,8 +143,8 @@ def test_liskov_substitution_principle_integration(build_components):
 def test_interface_segregation_principle_integration():
     """Test that interfaces are focused and not bloated."""
     from dlkit.runtime.workflows.strategies.core.interfaces import ITrainingExecutor
-    from dlkit.runtime.workflows.strategies.tracking.interfaces import IExperimentTracker
     from dlkit.runtime.workflows.strategies.optuna.interfaces import IHyperparameterOptimizer
+    from dlkit.runtime.workflows.strategies.tracking.interfaces import IExperimentTracker
 
     # ITrainingExecutor should only have execute method
     training_methods = [method for method in dir(ITrainingExecutor) if not method.startswith("_")]
@@ -193,7 +194,7 @@ def test_dependency_inversion_principle_integration(build_components):
 
 def test_pure_solid_architecture_integration(build_components):
     """Test that pure SOLID architecture works without backward compatibility."""
-    from dlkit.runtime.workflows.strategies import VanillaExecutor, ExecutionStrategyFactory
+    from dlkit.runtime.workflows.strategies import ExecutionStrategyFactory, VanillaExecutor
 
     settings = GeneralSettings()
 

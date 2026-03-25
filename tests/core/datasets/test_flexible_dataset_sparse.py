@@ -5,13 +5,22 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
-import numpy as np
-import pytest
 import torch
+from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
 from dlkit.core.datasets.flexible import FlexibleDataset, collate_tensordict
 from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
+
+
+def _expect_tensor(value: object) -> torch.Tensor:
+    assert isinstance(value, torch.Tensor)
+    return value
+
+
+def _expect_tensordict(value: object) -> TensorDictBase:
+    assert isinstance(value, TensorDictBase)
+    return value
 
 
 def test_flexible_dataset_sparse_collation(sparse_collation_pack: dict[str, Any]) -> None:
@@ -32,7 +41,7 @@ def test_flexible_dataset_sparse_collation(sparse_collation_pack: dict[str, Any]
 
     loader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=collate_tensordict)
     batch = next(iter(loader))
-    sparse_batch = batch["features"]["matrix"]
+    sparse_batch = _expect_tensor(_expect_tensordict(batch["features"])["matrix"])
 
     assert sparse_batch.shape == (2, dim, dim)
     assert sparse_batch.is_sparse
@@ -64,7 +73,9 @@ def test_dataloader_uses_stacked_sparse_builder_for_non_shared_pack(
         dataset = FlexibleDataset(
             features=[
                 Feature(name="x", value=torch.randn(n_samples, 2)),
-                SparseFeature(name="matrix", path=pack_path, model_input=False, loss_input="matrix"),
+                SparseFeature(
+                    name="matrix", path=pack_path, model_input=False, loss_input="matrix"
+                ),
             ],
             targets=[Target(name="y", value=torch.randn(n_samples, 1))],
         )
@@ -109,7 +120,7 @@ def test_flexible_dataset_shared_sparse_pack_broadcasts(
     )
 
     for idx in range(n_samples):
-        matrix = dataset[idx]["features"]["matrix"]
+        matrix = _expect_tensor(_expect_tensordict(dataset[idx]["features"])["matrix"])
         assert matrix.is_sparse
         assert torch.allclose(matrix.to_dense(), torch.from_numpy(shared).to(dtype=matrix.dtype))
 
@@ -130,14 +141,16 @@ def test_shared_sparse_pack_reads_sparse_on_demand_per_item(
         dataset = FlexibleDataset(
             features=[
                 Feature(name="x", value=torch.randn(n_samples, 2)),
-                SparseFeature(name="matrix", path=pack_path, model_input=False, loss_input="matrix"),
+                SparseFeature(
+                    name="matrix", path=pack_path, model_input=False, loss_input="matrix"
+                ),
             ],
             targets=[Target(name="y", value=torch.randn(n_samples, 1))],
         )
         # Sparse tensors are no longer pre-materialized at init time.
         assert mocked_build_sparse.call_count == 0
-        _ = dataset[0]["features"]["matrix"]
-        _ = dataset[1]["features"]["matrix"]
+        _ = _expect_tensor(_expect_tensordict(dataset[0]["features"])["matrix"])
+        _ = _expect_tensor(_expect_tensordict(dataset[1]["features"])["matrix"])
 
     assert mocked_build_sparse.call_count == 2
 
@@ -169,8 +182,8 @@ def test_flexible_dataset_sparse_feature_denormalize_applies_scale(
         targets=[Target(name="y", value=torch.randn(n_samples, 1))],
     )
 
-    base = base_dataset[0]["features"]["matrix"].to_dense()
-    denorm = denorm_dataset[0]["features"]["matrix"].to_dense()
+    base = _expect_tensor(_expect_tensordict(base_dataset[0]["features"])["matrix"]).to_dense()
+    denorm = _expect_tensor(_expect_tensordict(denorm_dataset[0]["features"])["matrix"]).to_dense()
     assert torch.allclose(denorm, base * sparse_scaled_pack["scale"])
 
 
@@ -191,7 +204,7 @@ def test_flexible_dataset_auto_detects_sparse_pack_from_path_feature(
     )
 
     for idx in range(n_samples):
-        matrix = dataset[idx]["features"]["matrix"]
+        matrix = _expect_tensor(_expect_tensordict(dataset[idx]["features"])["matrix"])
         assert matrix.is_sparse
         assert torch.allclose(
             matrix.to_dense(), torch.from_numpy(matrices[idx]).to(dtype=matrix.dtype)

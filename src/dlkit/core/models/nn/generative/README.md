@@ -43,6 +43,7 @@ from tensordict import TensorDict
 from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
 from dlkit.core.models.nn.generative.functions.solvers import euler_step, integrate
 
+
 # 1. Build a tiny velocity model: input is (xt, t) concatenated -> velocity
 class VelocityNet(nn.Module):
     def __init__(self, dim: int) -> None:
@@ -50,8 +51,9 @@ class VelocityNet(nn.Module):
         self.net = nn.Sequential(nn.Linear(dim + 1, 64), nn.SiLU(), nn.Linear(64, dim))
 
     def forward(self, xt: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        t_col = t.unsqueeze(-1)          # (B, 1)
+        t_col = t.unsqueeze(-1)  # (B, 1)
         return self.net(torch.cat([xt, t_col], dim=-1))
+
 
 dim = 8
 model = VelocityNet(dim)
@@ -64,14 +66,16 @@ builder = FlowMatchingSupervisionBuilder(x1_key="x1")
 x1 = torch.randn(32, dim)
 batch = TensorDict({"features": TensorDict({"x1": x1}, batch_size=[32])}, batch_size=[32])
 
-batch = builder(batch)               # injects xt, t into features; ut into targets
-xt = batch["features"]["xt"]         # (32, dim)
-t  = batch["features"]["t"]          # (32,)
-ut = batch["targets"]["ut"]          # (32, dim)  — supervision signal
+batch = builder(batch)  # injects xt, t into features; ut into targets
+xt = batch["features"]["xt"]  # (32, dim)
+t = batch["features"]["t"]  # (32,)
+ut = batch["targets"]["ut"]  # (32, dim)  — supervision signal
 
 v_pred = model(xt, t)
 loss = torch.nn.functional.mse_loss(v_pred, ut)
-optimizer.zero_grad(); loss.backward(); optimizer.step()
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
 
 # 4. Inference — integrate from x0 ~ N(0, I) to x1 using Euler solver
 x0 = torch.randn(4, dim)
@@ -110,6 +114,7 @@ with the right signature is accepted automatically — no registration required.
 import torch
 from torch import Tensor
 
+
 class LogitNormalTimeSampler:
     """Sample times from a logit-normal distribution (used in SD3 / Flux)."""
 
@@ -122,7 +127,8 @@ class LogitNormalTimeSampler:
         generator: torch.Generator | None = None,
     ) -> Tensor:
         u = torch.randn(batch_size, device=device, dtype=dtype, generator=generator)
-        return torch.sigmoid(u)   # logit-normal -> (0, 1)
+        return torch.sigmoid(u)  # logit-normal -> (0, 1)
+
 
 from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
 

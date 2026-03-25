@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from dlkit.tools.io.path_normalizers import (
     canonicalize_file_path,
     normalize_file_uri,

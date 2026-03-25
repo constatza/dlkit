@@ -188,7 +188,7 @@ class TestPathFields:
     def test_path_fields_contains_expected_keys(self) -> None:
         """PATH_FIELDS should contain all known path keys."""
         expected = {"checkpoint_path", "root_dir", "output_dir", "data_dir"}
-        assert OverrideNormalizer.PATH_FIELDS == expected
+        assert expected == OverrideNormalizer.PATH_FIELDS
 
     def test_path_fields_is_frozen(self) -> None:
         """PATH_FIELDS should be immutable."""

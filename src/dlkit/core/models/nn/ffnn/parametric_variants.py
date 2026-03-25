@@ -2,9 +2,8 @@ from collections.abc import Callable
 from typing import Literal
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.nn.ffnn.parametric import (
     ConstantWidthParametricFFNN,

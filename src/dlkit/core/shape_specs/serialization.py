@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
-from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
+from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
 
 class SerializationFormat(Enum):
@@ -35,7 +35,7 @@ class SerializationMetadata:
     version: SerializationVersion
     format: SerializationFormat
     created_at: str
-    checksum: Optional[str] = None
+    checksum: str | None = None
     migration_history: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
@@ -48,9 +48,9 @@ class SerializedShape:
     """Container for serialized shape data with metadata."""
 
     metadata: SerializationMetadata
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
         return {
             "metadata": {
@@ -64,7 +64,7 @@ class SerializedShape:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> SerializedShape:
+    def from_dict(cls, data: dict[str, Any]) -> SerializedShape:
         """Create from dictionary."""
         metadata_dict = data.get("metadata", {})
         metadata = SerializationMetadata(
@@ -81,7 +81,7 @@ class ShapeFormatSerializer(ABC):
     """Abstract base class for format-specific serializers."""
 
     @abstractmethod
-    def serialize(self, shape_data: ShapeData) -> Dict[str, Any]:
+    def serialize(self, shape_data: ShapeData) -> dict[str, Any]:
         """Serialize shape data to dictionary.
 
         Args:
@@ -93,7 +93,7 @@ class ShapeFormatSerializer(ABC):
         ...
 
     @abstractmethod
-    def deserialize(self, data: Dict[str, Any]) -> ShapeData:
+    def deserialize(self, data: dict[str, Any]) -> ShapeData:
         """Deserialize dictionary to shape data.
 
         Args:
@@ -113,7 +113,7 @@ class ShapeFormatSerializer(ABC):
 class V3ModernSerializer(ShapeFormatSerializer):
     """Modern serializer for V3 format (current)."""
 
-    def serialize(self, shape_data: ShapeData) -> Dict[str, Any]:
+    def serialize(self, shape_data: ShapeData) -> dict[str, Any]:
         """Serialize shape data using V3 format.
 
         Args:
@@ -134,7 +134,7 @@ class V3ModernSerializer(ShapeFormatSerializer):
             "schema_version": "3.0",
         }
 
-    def deserialize(self, data: Dict[str, Any]) -> ShapeData:
+    def deserialize(self, data: dict[str, Any]) -> ShapeData:
         """Deserialize V3 format to shape data.
 
         Args:
@@ -164,7 +164,7 @@ class V3ModernSerializer(ShapeFormatSerializer):
 class V2EnhancedSerializer(ShapeFormatSerializer):
     """Serializer for V2 enhanced metadata format."""
 
-    def serialize(self, shape_data: ShapeData) -> Dict[str, Any]:
+    def serialize(self, shape_data: ShapeData) -> dict[str, Any]:
         """Serialize shape data using V2 format.
 
         Args:
@@ -181,7 +181,7 @@ class V2EnhancedSerializer(ShapeFormatSerializer):
             "default_output": shape_data.default_output,
         }
 
-    def deserialize(self, data: Dict[str, Any]) -> ShapeData:
+    def deserialize(self, data: dict[str, Any]) -> ShapeData:
         """Deserialize V2 format to shape data.
 
         Args:
@@ -211,7 +211,7 @@ class V2EnhancedSerializer(ShapeFormatSerializer):
 class V1LegacySerializer(ShapeFormatSerializer):
     """Serializer for V1 legacy shape_info format."""
 
-    def serialize(self, shape_data: ShapeData) -> Dict[str, Any]:
+    def serialize(self, shape_data: ShapeData) -> dict[str, Any]:
         """Serialize shape data using V1 legacy format.
 
         Note: This is primarily for testing and migration scenarios.
@@ -227,16 +227,13 @@ class V1LegacySerializer(ShapeFormatSerializer):
             # Single entry - use direct format
             entry = next(iter(shape_data.entries.values()))
             return {"_type": "tuple", "data": list(entry.dimensions)}
-        else:
-            # Multiple entries - use dict format
-            return {
-                "_type": "dict",
-                "data": {
-                    name: list(entry.dimensions) for name, entry in shape_data.entries.items()
-                },
-            }
+        # Multiple entries - use dict format
+        return {
+            "_type": "dict",
+            "data": {name: list(entry.dimensions) for name, entry in shape_data.entries.items()},
+        }
 
-    def deserialize(self, data: Dict[str, Any]) -> ShapeData:
+    def deserialize(self, data: dict[str, Any]) -> ShapeData:
         """Deserialize V1 legacy format to shape data.
 
         Args:
@@ -318,7 +315,7 @@ class ShapeFormatMigrator:
 
         return SerializedShape(metadata=new_metadata, data=new_data)
 
-    def detect_version(self, data: Dict[str, Any]) -> SerializationVersion:
+    def detect_version(self, data: dict[str, Any]) -> SerializationVersion:
         """Auto-detect serialization version from data.
 
         Args:
@@ -370,7 +367,7 @@ class VersionedShapeSerializer:
     def __init__(
         self,
         format: SerializationFormat = SerializationFormat.JSON,
-        migrator: Optional[ShapeFormatMigrator] = None,
+        migrator: ShapeFormatMigrator | None = None,
     ):
         """Initialize versioned serializer.
 
@@ -403,7 +400,7 @@ class VersionedShapeSerializer:
 
         return SerializedShape(metadata=metadata, data=data)
 
-    def deserialize(self, serialized: Union[Dict[str, Any], SerializedShape]) -> ShapeData:
+    def deserialize(self, serialized: dict[str, Any] | SerializedShape) -> ShapeData:
         """Deserialize shape data with automatic version detection and migration.
 
         Args:
@@ -435,7 +432,7 @@ class VersionedShapeSerializer:
         # Deserialize using current format
         return self._current_serializer.deserialize(current_shape.data)
 
-    def deserialize_legacy_format(self, legacy_data: Dict[str, Any]) -> Optional[ShapeData]:
+    def deserialize_legacy_format(self, legacy_data: dict[str, Any]) -> ShapeData | None:
         """Deserialize legacy shape_info format.
 
         Args:
@@ -463,7 +460,7 @@ class VersionedShapeSerializer:
 
         if self._format == SerializationFormat.JSON:
             return json.dumps(serialized.to_dict(), indent=2)
-        elif self._format == SerializationFormat.MSGPACK:
+        if self._format == SerializationFormat.MSGPACK:
             try:
                 import msgpack  # type: ignore[import-untyped]
 

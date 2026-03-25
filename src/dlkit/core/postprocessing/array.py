@@ -6,8 +6,8 @@ simple dict-of-tensors patterns that are common in batch predictions.
 
 from __future__ import annotations
 
-from typing import Any
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -164,13 +164,14 @@ def to_plot_data(
     if isinstance(preds, Mapping):
         result: dict[str, Any] = {}
         for k, v in preds.items():
+            key = str(k)
             if isinstance(v, list):
                 try:
-                    result[k] = stack_batches(v, mode="stack")
+                    result[key] = stack_batches(v, mode="stack")
                 except NotStackableError:
-                    result[k] = stack_batches(v, mode="list")
+                    result[key] = stack_batches(v, mode="list")
             else:
-                result[k] = to_numpy(v)
+                result[key] = to_numpy(v)
         # Add targets if provided
         if targets is not None:
             if isinstance(targets, Mapping):

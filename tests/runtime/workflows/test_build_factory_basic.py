@@ -11,7 +11,6 @@ from tensordict import TensorDict
 from dlkit.core.shape_specs.simple_inference import ShapeSummary
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 from dlkit.runtime.workflows.factories.model_detection import ModelType
-from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.components.model_components import (
     LossComponentSettings,
     LossInputRef,
@@ -19,13 +18,14 @@ from dlkit.tools.config.components.model_components import (
     MetricInputRef,
     ModelComponentSettings,
 )
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.config.training_settings import TrainingSettings
-from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.datamodule_settings import DataModuleSettings
+from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.tools.config.general_settings import GeneralSettings
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.config.training_settings import TrainingSettings
 
 
 class _FakeDataset:
@@ -83,7 +83,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     settings = _make_min_settings(batch_sample, inference=True, ckpt=tmp_checkpoint)
 
     # Patch FactoryProvider.create_component to return our fakes
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             return _FakeDataset(settings.__dict__["_test_sample"])  # type: ignore[index]
         if s is settings.DATAMODULE:
@@ -100,7 +100,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
 
     captured_shape_summary: dict[str, Any] = {}
 
-    def _capture_wrapper(*_, **kwargs):  # noqa: ANN001
+    def _capture_wrapper(*_, **kwargs):
         captured_shape_summary["summary"] = kwargs.get("shape_summary")
         return _FakeModel()
 
@@ -142,7 +142,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         TRAINING=TrainingSettings(),
     )
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             return _FakeDataset(graph_sample)
         if s is settings.DATAMODULE:
@@ -156,7 +156,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         lambda *_: ModelType.GRAPH,
     )
 
-    def _capture_graph_wrapper(*_, **kwargs):  # noqa: ANN001
+    def _capture_graph_wrapper(*_, **kwargs):
         return _FakeModel()
 
     monkeypatch.setattr(
@@ -186,7 +186,7 @@ def test_build_factory_selects_timeseries_strategy(
         TRAINING=TrainingSettings(),
     )
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             return _FakeDataset(ts_sample)
         if s is settings.DATAMODULE:
@@ -202,7 +202,7 @@ def test_build_factory_selects_timeseries_strategy(
 
     captured_spec: dict[str, Any] = {}
 
-    def _capture_timeseries_wrapper(*_, **kwargs):  # noqa: ANN001
+    def _capture_timeseries_wrapper(*_, **kwargs):
         captured_spec["summary"] = kwargs.get("shape_summary")
         return _FakeModel()
 
@@ -255,7 +255,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     # Monkey patch to capture wrapper creation
     monkeypatch.setattr(WrapperComponentSettings, "__init__", _capture_wrapper_init)
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             return _FakeDataset(sample)
         if s is settings.DATAMODULE:
@@ -345,7 +345,7 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     captured: dict[str, Any] = {}
 
     class _CapturedFlexibleDataset:
-        def __init__(self, *, features, targets=None, memmap_cache_dir=None):  # noqa: ANN001
+        def __init__(self, *, features, targets=None, memmap_cache_dir=None):
             captured["features"] = list(features)
             captured["targets"] = list(targets or ())
             captured["memmap_cache_dir"] = memmap_cache_dir
@@ -365,7 +365,7 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
                 batch_size=[],
             )
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -425,7 +425,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             captured["features"] = list(ctx.overrides["features"])
             captured["targets"] = list(ctx.overrides["targets"])
@@ -482,7 +482,9 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
-        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        MODEL=ModelComponentSettings(
+            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
         TRAINING=TrainingSettings(),
@@ -490,7 +492,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
             captured["dataset_target_names"] = [entry.name for entry in ctx.overrides["targets"]]
@@ -499,7 +501,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
             return _FakeDataModule()
         return _FakeModel()
 
-    def _capture_wrapper(*_, **kwargs):  # noqa: ANN001
+    def _capture_wrapper(*_, **kwargs):
         captured["entry_config_names"] = [e.name for e in kwargs.get("entry_configs", ())]
         return _FakeModel()
 
@@ -548,7 +550,9 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
-        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        MODEL=ModelComponentSettings(
+            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
         TRAINING=training,
@@ -556,7 +560,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
             return _FakeDataset({"x": np.zeros((2,))})
@@ -609,7 +613,9 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
-        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        MODEL=ModelComponentSettings(
+            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
         TRAINING=training,
@@ -617,7 +623,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
             return _FakeDataset({"x": np.zeros((2,))})
@@ -658,16 +664,20 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
-        MODEL=ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint),
+        MODEL=ModelComponentSettings(
+            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
         TRAINING=TrainingSettings(),
     )
-    settings.DATASET.__dict__["targets"] = [types.SimpleNamespace(name="recon", feature_ref="matrix")]
+    settings.DATASET.__dict__["targets"] = [
+        types.SimpleNamespace(name="recon", feature_ref="matrix")
+    ]
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
             return _FakeDataset({"x": np.zeros((2,))})
@@ -725,7 +735,7 @@ def test_build_factory_handles_none_scheduler_correctly(
 
     monkeypatch.setattr(WrapperComponentSettings, "__init__", _capture_wrapper_init)
 
-    def _fake_create_component(s, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
             return _FakeDataset(sample)
         if s is settings.DATAMODULE:

@@ -12,19 +12,16 @@ build factory, keeping the test focused and independent of configuration loading
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.nn.generative.functions.solvers import euler_step
 from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
-from dlkit.core.models.nn.generative.samplers.time import UniformTimeSampler
 from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
 from dlkit.core.models.wrappers.components import (
     ModelOutputSpec,

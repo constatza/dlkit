@@ -74,10 +74,7 @@ with tracker:
         epoch_logger = MLflowEpochLogger(run_context)
 
         # Add to trainer callbacks
-        trainer = Trainer(
-            max_epochs=10,
-            callbacks=[epoch_logger]
-        )
+        trainer = Trainer(max_epochs=10, callbacks=[epoch_logger])
 
         # Metrics automatically logged with epoch numbers
         trainer.fit(model, datamodule)
@@ -130,18 +127,19 @@ predictions = trainer.predict(model, datamodule)
 
 # Scenario 2: Multiple outputs with custom filenames
 writer = NumpyWriter(
-    output_dir=Path("./results"),
-    filenames=("reconstructions", "latent_codes", "attention_weights")
+    output_dir=Path("./results"), filenames=("reconstructions", "latent_codes", "attention_weights")
 )
+
 
 # Model returns dict in predict_step
 class MyModel(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         return {
             "output1": reconstructions,  # Saved as reconstructions.npy
-            "output2": latent_codes,     # Saved as latent_codes.npy
-            "output3": attention         # Saved as attention_weights.npy
+            "output2": latent_codes,  # Saved as latent_codes.npy
+            "output3": attention,  # Saved as attention_weights.npy
         }
+
 
 trainer = Trainer(callbacks=[writer])
 trainer.predict(model, datamodule)
@@ -216,10 +214,7 @@ epoch_logger = MLflowEpochLogger(run_context)
 numpy_writer = NumpyWriter(output_dir=Path("./predictions"))
 
 # Training with metric logging
-trainer = Trainer(
-    max_epochs=10,
-    callbacks=[epoch_logger]
-)
+trainer = Trainer(max_epochs=10, callbacks=[epoch_logger])
 trainer.fit(model, datamodule)
 
 # Prediction with output saving
@@ -252,11 +247,7 @@ with tracker:
         logger_callback = MLflowEpochLogger(run_context)
 
         # Train with automatic metric logging
-        trainer = Trainer(
-            max_epochs=50,
-            callbacks=[logger_callback],
-            log_every_n_steps=10
-        )
+        trainer = Trainer(max_epochs=50, callbacks=[logger_callback], log_every_n_steps=10)
 
         trainer.fit(model, datamodule)
         # Metrics logged to MLflow with epoch numbers
@@ -271,10 +262,7 @@ import numpy as np
 
 # Configure prediction writer
 output_dir = Path("./experiment_outputs/predictions")
-writer = NumpyWriter(
-    output_dir=output_dir,
-    filenames=("reconstructions", "encodings")
-)
+writer = NumpyWriter(output_dir=output_dir, filenames=("reconstructions", "encodings"))
 
 # Run inference
 trainer = Trainer(callbacks=[writer])
@@ -298,16 +286,12 @@ from lightning.pytorch import Trainer
 with tracker.create_run("training") as run_context:
     epoch_logger = MLflowEpochLogger(run_context)
 
-    trainer = Trainer(
-        max_epochs=100,
-        callbacks=[epoch_logger]
-    )
+    trainer = Trainer(max_epochs=100, callbacks=[epoch_logger])
     trainer.fit(model, datamodule)
 
 # Prediction phase
 numpy_writer = NumpyWriter(
-    output_dir=Path("./predictions"),
-    filenames=("predictions", "uncertainties")
+    output_dir=Path("./predictions"), filenames=("predictions", "uncertainties")
 )
 
 predict_trainer = Trainer(callbacks=[numpy_writer])
@@ -320,6 +304,7 @@ from dlkit.core.training.callbacks import NumpyWriter
 import lightning.pytorch as pl
 import torch
 
+
 class MultiOutputModel(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         x, _ = batch
@@ -328,16 +313,12 @@ class MultiOutputModel(pl.LightningModule):
         attention = self.get_attention_weights(x)
 
         # Return as dict - keys match filenames
-        return {
-            "reconstructed": reconstructed,
-            "latent": latent,
-            "attention": attention
-        }
+        return {"reconstructed": reconstructed, "latent": latent, "attention": attention}
+
 
 # Configure writer with matching filenames
 writer = NumpyWriter(
-    output_dir=Path("./outputs"),
-    filenames=("reconstructed", "latent", "attention")
+    output_dir=Path("./outputs"), filenames=("reconstructed", "latent", "attention")
 )
 
 trainer = Trainer(callbacks=[writer])
@@ -374,6 +355,7 @@ try:
     trainer.fit(model, datamodule)
 except Exception:
     pass  # Error logged, training continues
+
 
 # Robust callback initialization
 def create_callbacks(output_dir: Path | None, run_context: Any | None):

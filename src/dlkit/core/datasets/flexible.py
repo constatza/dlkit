@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
 import numpy as np
 import torch
@@ -43,6 +43,27 @@ from .base import BaseDataset, register_dataset
 if TYPE_CHECKING:
     from tensordict import TensorDict
     from tensordict.base import TensorDictBase
+
+
+type _TensorMap = dict[str, Tensor]
+
+
+def _build_nested_tensordict(
+    feature_tensors: _TensorMap,
+    target_tensors: _TensorMap,
+    *,
+    batch_size: list[int],
+) -> TensorDict:
+    """Build a nested TensorDict from typed feature and target tensor maps."""
+    from tensordict import TensorDict
+
+    return TensorDict(
+        {
+            "features": TensorDict(cast(Any, feature_tensors), batch_size=batch_size),
+            "targets": TensorDict(cast(Any, target_tensors), batch_size=batch_size),
+        },
+        batch_size=batch_size,
+    )
 
 
 class BatchComplianceError(ValueError):
@@ -131,7 +152,10 @@ def _normalize_entries(
             if item.is_placeholder():
                 raise PlaceholderNotResolvedError(str(item.name or "unknown"))
             assert item.name is not None, "Non-placeholder entry must have name"
-            result[item.name] = (item.value, item.name)  # type: ignore[assignment]
+            result[item.name] = (
+                cast("Path | Tensor | np.ndarray | SparseSourceBinding", item.value),
+                item.name,
+            )
 
         # SparseFeature: open sparse pack reader
         elif isinstance(item, SparseFeature):
@@ -160,7 +184,10 @@ def _normalize_entries(
             if item.is_placeholder():
                 raise PlaceholderNotResolvedError(str(item.name or "unknown"))
             assert item.name is not None, "Non-placeholder entry must have name"
-            resolved_path = Path(item.path)  # type: ignore[arg-type]
+            assert item.path is not None, (
+                "PathBasedEntry must have a path for non-placeholder entry"
+            )
+            resolved_path = Path(item.path)
             if is_sparse_pack_dir(resolved_path):
                 result[item.name] = (
                     SparseSourceBinding(
@@ -627,9 +654,10 @@ def _resolve_n_and_materialize_sparse(
                     perf_counter() - materialize_start,
                 )
             else:
-                feat_tensors[name] = torch.stack(
-                    [_load_sparse_tensor(reader, i, denormalize=binding.denormalize) for i in range(n)]
-                )
+                feat_tensors[name] = torch.stack([
+                    _load_sparse_tensor(reader, i, denormalize=binding.denormalize)
+                    for i in range(n)
+                ])
                 logger.debug(
                     "Sparse in-memory materialization feature='{}' mode=per_sample n_total={} "
                     "elapsed_s={:.4f}",
@@ -701,7 +729,7 @@ def _inject_sparse_features(
             denormalize=binding.denormalize,
             coalesce=False,
         )
-        sample["features"][name] = sparse_tensor
+        sample["features", name] = sparse_tensor
     return sample
 
 
@@ -730,7 +758,7 @@ def _inject_sparse_features_batch(
         return batch
 
     for name, binding in sparse_bindings.items():
-        batch["features"][name] = _build_sparse_feature_batch(
+        batch["features", name] = _build_sparse_feature_batch(
             sample_indices=sample_indices,
             binding=binding,
         )
@@ -762,8 +790,6 @@ def _assemble_dataset_tensordict(
         BatchComplianceError: If any tensor is scalar, sizes disagree, or N < 1.
         ValueError: If no tensors are provided.
     """
-    from tensordict import TensorDict
-
     all_tensors = {**feat_tensors, **targ_tensors}
     for tensor in all_tensors.values():
         if tensor.dim() == 0:
@@ -786,15 +812,9 @@ def _assemble_dataset_tensordict(
     if n < 1:
         raise BatchComplianceError("Entries must contain at least one sample (N >= 1).")
 
-    feature_batch = {name: feat_tensors[name] for name in feat_names}
-    target_batch = {name: targ_tensors[name] for name in targ_names}
-    td = TensorDict(
-        {
-            "features": TensorDict(feature_batch, batch_size=[n]),
-            "targets": TensorDict(target_batch, batch_size=[n]),
-        },
-        batch_size=[n],
-    )
+    feature_batch: _TensorMap = {name: feat_tensors[name] for name in feat_names}
+    target_batch: _TensorMap = {name: targ_tensors[name] for name in targ_names}
+    td = _build_nested_tensordict(feature_batch, target_batch, batch_size=[n])
     return td, n
 
 
@@ -846,23 +866,23 @@ def _build_memmap_cache(
         BatchComplianceError: If feature/target sample counts disagree.
         ValueError: If N cannot be inferred from available entries.
     """
-    from tensordict import TensorDict
-
     features_dir = cache_dir / "features"
     targets_dir = cache_dir / "targets"
     for d in (cache_dir, features_dir, targets_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     meta: dict[str, dict[str, Any]] = {"features": {}, "targets": {}}
-    feat_tensors: dict[str, Any] = {}
-    targ_tensors: dict[str, Any] = {}
+    feat_tensors: _TensorMap = {}
+    targ_tensors: _TensorMap = {}
     sparse_feat_bindings: dict[str, SparseSourceBinding] = {}
 
     # First pass: write dense feature entries; collect sparse bindings for later.
     for name, (source, array_key) in feat_map.items():
         match source:
             case Path():
-                mmt = _write_entry_to_memmap(name, source, array_key, features_dir, dtype, chunk_size)
+                mmt = _write_entry_to_memmap(
+                    name, source, array_key, features_dir, dtype, chunk_size
+                )
                 feat_tensors[name] = mmt
                 meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
             case SparseSourceBinding():
@@ -886,13 +906,7 @@ def _build_memmap_cache(
     with open(cache_dir / "meta.json", "w") as f:
         json.dump(meta, f)
 
-    return TensorDict(
-        {
-            "features": TensorDict(feat_tensors, batch_size=[n]),
-            "targets": TensorDict(targ_tensors, batch_size=[n]),
-        },
-        batch_size=[n],
-    )
+    return _build_nested_tensordict(feat_tensors, targ_tensors, batch_size=[n])
 
 
 def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
@@ -904,8 +918,6 @@ def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
     Returns:
         TensorDict: Dataset TensorDict backed by memory-mapped files.
     """
-    from tensordict import TensorDict
-
     with open(cache_dir / "meta.json") as f:
         meta = json.load(f)
 
@@ -919,13 +931,7 @@ def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
 
     feat_tensors, n = _load_group("features", cache_dir / "features")
     targ_tensors, _ = _load_group("targets", cache_dir / "targets")
-    return TensorDict(
-        {
-            "features": TensorDict(feat_tensors, batch_size=[n]),
-            "targets": TensorDict(targ_tensors, batch_size=[n]),
-        },
-        batch_size=[n],
-    )
+    return _build_nested_tensordict(feat_tensors, targ_tensors, batch_size=[n])
 
 
 def _load_or_build_memmap(
@@ -950,10 +956,7 @@ def _load_or_build_memmap(
     Returns:
         TensorDict: Dataset TensorDict backed by memory-mapped files.
     """
-    all_maps: dict[str, tuple[Path | SparseSourceBinding, str | None]] = {
-        **feat_map,  # type: ignore[arg-type]
-        **targ_map,
-    }
+    all_maps: dict[str, tuple[Path | SparseSourceBinding, str | None]] = {**feat_map, **targ_map}
     fingerprint = _compute_source_fingerprint(all_maps, dtype)
     stored_fp = _read_cache_fingerprint(cache_dir)
 
@@ -973,7 +976,7 @@ def _load_or_build_memmap(
 
 
 @register_dataset
-class FlexibleDataset(BaseDataset):
+class FlexibleDataset(BaseDataset["TensorDict"]):
     """Dataset that loads an arbitrary set of feature and target files.
 
     Entries are provided as DataEntry objects created via Feature() or Target()
@@ -1067,9 +1070,11 @@ class FlexibleDataset(BaseDataset):
         if memmap_cache_dir is not None:
             _validate_memmap_entries({**feat_map, **targ_map})
             dtype = _get_source_dtype()
+            _feat = cast("dict[str, tuple[Path | SparseSourceBinding, str | None]]", feat_map)
+            _targ = cast("dict[str, tuple[Path, str | None]]", targ_map)
             self._dataset_td = _load_or_build_memmap(
-                feat_map,  # type: ignore[arg-type]
-                targ_map,  # type: ignore[arg-type]
+                _feat,
+                _targ,
                 Path(memmap_cache_dir),
                 dtype,
                 memmap_chunk_size,
@@ -1104,7 +1109,7 @@ class FlexibleDataset(BaseDataset):
         """
         return self._length
 
-    def __getitem__(self, idx: int) -> TensorDict:
+    def __getitem__(self, idx: SupportsIndex) -> TensorDict:  # ty: ignore[invalid-method-override]
         """Get sample at index.
 
         Args:
@@ -1113,8 +1118,8 @@ class FlexibleDataset(BaseDataset):
         Returns:
             TensorDict with feature and target nested TensorDicts (batch_size=[])
         """
-        sample_index = _normalize_index(idx, self._length)
-        sample = self._dataset_td[sample_index]
+        sample_index = _normalize_index(int(idx), self._length)
+        sample = cast("TensorDict", self._dataset_td[sample_index])
         return _inject_sparse_features(
             sample,
             sample_index=sample_index,
@@ -1131,7 +1136,7 @@ class FlexibleDataset(BaseDataset):
             raise ValueError("indices must be non-empty")
 
         sample_indices = _normalize_indices(indices, self._length)
-        batch = self._dataset_td[sample_indices]
+        batch = cast("TensorDict", self._dataset_td[sample_indices])
         return _inject_sparse_features_batch(
             batch,
             sample_indices=sample_indices,
@@ -1155,14 +1160,15 @@ def collate_tensordict(batch: list[TensorDictBase] | TensorDictBase) -> TensorDi
         BatchComplianceError: If stacked batch size does not match expected count
             when list collation is used.
     """
-    from tensordict import TensorDictBase, stack as td_stack
+    from tensordict import TensorDictBase
+    from tensordict import stack as td_stack
 
     if isinstance(batch, TensorDictBase):
-        return batch
+        return cast("TensorDict", batch)
 
     result = td_stack(batch, dim=0)
     if result.batch_size[0] != len(batch):
         raise BatchComplianceError(
             f"Collated batch size {result.batch_size[0]} does not match expected {len(batch)}."
         )
-    return result
+    return cast("TensorDict", result)

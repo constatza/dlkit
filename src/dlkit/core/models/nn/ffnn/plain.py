@@ -1,8 +1,7 @@
-from collections.abc import Sequence, Callable
+from collections.abc import Callable, Sequence
 from typing import Literal
 
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.models.nn.primitives import DenseBlock

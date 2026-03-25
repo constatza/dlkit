@@ -6,15 +6,22 @@ precision strategy resolution across all DLKit components.
 
 from __future__ import annotations
 
-import torch
-from typing import Any
+from typing import Any, Protocol, cast
 
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+import torch
+
 from dlkit.interfaces.api.domain.precision import (
-    PrecisionProvider,
     PrecisionContext,
+    PrecisionProvider,
     get_global_precision_context,
 )
+from dlkit.tools.config.precision.strategy import PrecisionStrategy
+
+
+class _PrecisionAware(Protocol):
+    _precision_dtype: torch.dtype
+    _precision_applied: bool
+    _effective_precision_strategy: object
 
 
 class PrecisionService:
@@ -81,7 +88,7 @@ class PrecisionService:
         if provider is not None:
             try:
                 return provider.get_precision_strategy()
-            except (AttributeError, NotImplementedError, RuntimeError):
+            except AttributeError, NotImplementedError, RuntimeError:
                 # Provider doesn't support precision or is broken, continue to next priority
                 pass
 
@@ -226,11 +233,11 @@ class PrecisionService:
 
         # Sync precision metadata for DLKit models that track effective precision
         if hasattr(model, "_precision_dtype"):
-            model._precision_dtype = target_dtype  # type: ignore[attr-defined]
+            cast(_PrecisionAware, model)._precision_dtype = target_dtype
         if hasattr(model, "_precision_applied"):
-            model._precision_applied = True  # type: ignore[attr-defined]
+            cast(_PrecisionAware, model)._precision_applied = True
         if hasattr(model, "_effective_precision_strategy"):
-            model._effective_precision_strategy = precision  # type: ignore[attr-defined]
+            cast(_PrecisionAware, model)._effective_precision_strategy = precision
 
         return model
 
@@ -301,7 +308,7 @@ class PrecisionService:
 
             return dtype_to_strategy.get(param_dtype)
 
-        except (StopIteration, AttributeError):
+        except StopIteration, AttributeError:
             return None
 
     def __repr__(self) -> str:

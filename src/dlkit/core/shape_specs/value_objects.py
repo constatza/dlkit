@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Tuple
 
 
 class ModelFamily(Enum):
@@ -45,7 +44,7 @@ class ShapeEntry:
     """
 
     name: str
-    dimensions: Tuple[int, ...]
+    dimensions: tuple[int, ...]
 
     def __post_init__(self) -> None:
         """Validate shape entry invariants."""
@@ -87,7 +86,7 @@ class ShapeData:
         default_output: Optional explicit default output key
     """
 
-    entries: Dict[str, ShapeEntry]
+    entries: dict[str, ShapeEntry]
     model_family: ModelFamily
     source: ShapeSource
     default_input: str | None = None
@@ -128,7 +127,7 @@ class ShapeData:
         """Get shape entry by name, returning None if not found."""
         return self.entries.get(name)
 
-    def get_dimensions(self, name: str) -> Tuple[int, ...] | None:
+    def get_dimensions(self, name: str) -> tuple[int, ...] | None:
         """Get dimensions for entry by name, returning None if not found."""
         entry = self.entries.get(name)
         return entry.dimensions if entry else None

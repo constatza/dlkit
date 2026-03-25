@@ -9,7 +9,7 @@ nested MLflow run structure for Optuna optimization:
 
 from __future__ import annotations
 
-from contextlib import contextmanager, ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -19,15 +19,15 @@ except ImportError:  # pragma: no cover - exercised via indirect tests
     mlflow = None  # type: ignore[assignment]
 
 from dlkit.interfaces.api.domain import WorkflowError
-from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.optimization.domain import (
-    Study,
-    Trial,
-    OptimizationResult,
     IExperimentTracker,
     IStudyRunContext,
     ITrialRunContext,
+    OptimizationResult,
+    Study,
+    Trial,
 )
+from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -245,7 +245,6 @@ class MLflowTrackingAdapter(IExperimentTracker):
 
     def _ensure_mlflow_available(self, stage: str) -> None:
         """Raise an informative error when MLflow is not installed."""
-
         if mlflow is None:
             raise WorkflowError(
                 "MLflow is required for tracking but is not installed",
@@ -336,10 +335,11 @@ class MLflowStudyRunContext(IStudyRunContext):
             settings: GeneralSettings object for the best trial
         """
         try:
-            from dlkit.tools.io.config import write_config
-            from pathlib import Path
             import os
             import tempfile
+            from pathlib import Path
+
+            from dlkit.tools.io.config import write_config
 
             # Create temporary TOML file with unset values excluded
             with tempfile.NamedTemporaryFile(
@@ -411,10 +411,11 @@ class MLflowTrialRunContext(ITrialRunContext):
             settings: GeneralSettings object for this trial
         """
         try:
-            from dlkit.tools.io.config import write_config
-            from pathlib import Path
             import os
             import tempfile
+            from pathlib import Path
+
+            from dlkit.tools.io.config import write_config
 
             # Create temporary TOML file with unset values excluded
             with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as temp_file:
@@ -480,7 +481,7 @@ class MLflowTrialRunContext(ITrialRunContext):
             for key, value in metrics.items():
                 try:
                     numeric_metrics[key] = float(value)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     # Log non-numeric as parameters
                     self._run_context.log_params({f"metric_{key}": str(value)})
 
@@ -562,15 +563,12 @@ class NullStudyRunContext(IStudyRunContext):
 
     def log_study_metadata(self, study: Study) -> None:
         """No-op study metadata logging."""
-        pass
 
     def log_study_summary(self, result: OptimizationResult) -> None:
         """No-op study summary logging."""
-        pass
 
     def log_best_trial_settings(self, settings: Any) -> None:
         """No-op best trial settings logging."""
-        pass
 
 
 class NullTrialRunContext(ITrialRunContext):
@@ -578,20 +576,15 @@ class NullTrialRunContext(ITrialRunContext):
 
     def log_trial_hyperparameters(self, hyperparameters: dict[str, Any]) -> None:
         """No-op hyperparameters logging."""
-        pass
 
     def log_trial_metrics(self, metrics: dict[str, Any]) -> None:
         """No-op metrics logging."""
-        pass
 
     def log_trial_artifacts(self, artifacts: dict[str, Any]) -> None:
         """No-op artifacts logging."""
-        pass
 
     def log_trial_settings(self, settings: Any) -> None:
         """No-op trial settings logging."""
-        pass
 
     def log_model_hyperparameters(self, settings: Any) -> None:
         """No-op model hyperparameters logging."""
-        pass

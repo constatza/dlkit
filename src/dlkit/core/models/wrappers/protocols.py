@@ -12,9 +12,8 @@ ProcessingLightningWrapper architecture:
 from typing import Any, Protocol, runtime_checkable
 
 import torch
-import torch.nn as nn
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
 
 @runtime_checkable

@@ -6,8 +6,6 @@ principles and properly implements context manager protocols.
 
 from contextlib import AbstractContextManager
 
-import pytest
-
 from dlkit.runtime.workflows.optimization.domain import IExperimentTracker
 from dlkit.runtime.workflows.optimization.infrastructure import (
     MLflowTrackingAdapter,
@@ -93,8 +91,9 @@ class TestSingleResponsibility:
 
     def test_optimization_strategy_does_not_manage_context(self):
         """OptimizationStrategy does not contain context management logic."""
-        from dlkit.runtime.workflows.optimization.strategy import OptimizationStrategy
         import inspect
+
+        from dlkit.runtime.workflows.optimization.strategy import OptimizationStrategy
 
         source = inspect.getsource(OptimizationStrategy.execute_optimization)
 
@@ -113,8 +112,9 @@ class TestSingleResponsibility:
 
     def test_optimization_service_manages_context(self):
         """OptimizationService is the single owner of tracker context lifecycle."""
-        from dlkit.interfaces.api.services.optimization_service import OptimizationService
         import inspect
+
+        from dlkit.interfaces.api.services.optimization_service import OptimizationService
 
         source = inspect.getsource(OptimizationService.execute_optimization)
 
@@ -130,8 +130,9 @@ class TestDependencyInversion:
 
     def test_factory_does_not_enter_context(self):
         """OptimizationServiceFactory returns uninitialized trackers."""
-        from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
         import inspect
+
+        from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
 
         # Check _create_experiment_tracker method
         source = inspect.getsource(OptimizationServiceFactory._create_experiment_tracker)
@@ -149,7 +150,6 @@ class TestInterfaceSegregation:
 
     def test_protocol_defines_context_manager_contract(self):
         """IExperimentTracker explicitly declares context manager requirement."""
-        import inspect
 
         # Get the protocol's docstring
         doc = IExperimentTracker.__doc__ or ""

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import polars as pl
 
 
@@ -29,10 +30,9 @@ def read_table(file_path: str, **read_kwargs) -> pl.DataFrame:
     if ext == ".csv":
         # Read CSV via Polars
         return pl.read_csv(file_path, **read_kwargs)
-    elif ext in {".parquet", ".pq"}:
+    if ext in {".parquet", ".pq"}:
         # Read Parquet via Polars
         return pl.read_parquet(file_path, **read_kwargs)
-    else:
-        raise ValueError(
-            f"Unsupported file extension '{ext}'. Supported extensions: .csv, .parquet, .pq"
-        )
+    raise ValueError(
+        f"Unsupported file extension '{ext}'. Supported extensions: .csv, .parquet, .pq"
+    )

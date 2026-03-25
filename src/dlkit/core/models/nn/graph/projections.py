@@ -7,8 +7,8 @@ concerns so they can be reused across different network variants.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, TypeVar
 
 from torch import nn
 from torch_geometric import nn as gnn
@@ -17,8 +17,8 @@ ActivationFactory = Callable[[], nn.Module] | type[nn.Module] | nn.Module
 
 __all__ = [
     "LinearProjection",
-    "StackedProjection",
     "SkipProjection",
+    "StackedProjection",
 ]
 
 

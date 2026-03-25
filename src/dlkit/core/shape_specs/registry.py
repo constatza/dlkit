@@ -7,7 +7,7 @@ detection with an extensible system that follows the Open/Closed principle.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Type
+from typing import Any
 
 
 def _string_attribute(settings: Any, name: str) -> str | None:
@@ -197,8 +197,8 @@ class ClassBasedDetector(ModelFamilyDetector):
             model_class = self._import_class(class_path)
 
             # Import base classes for checking
-            from dlkit.core.models.nn.graph.base import BaseGraphNetwork
             from dlkit.core.models.nn.base import DLKitModel
+            from dlkit.core.models.nn.graph.base import BaseGraphNetwork
 
             # Check inheritance (most specific first)
             if issubclass(model_class, BaseGraphNetwork):
@@ -245,7 +245,7 @@ class ModelFamilyRegistry:
 
     def __init__(self):
         """Initialize registry with default detectors."""
-        self._detectors: Dict[ModelFamily, List[ModelFamilyDetector]] = {}
+        self._detectors: dict[ModelFamily, list[ModelFamilyDetector]] = {}
         self._register_default_detectors()
 
     def register_detector(self, detector: ModelFamilyDetector) -> None:
@@ -289,7 +289,7 @@ class ModelFamilyRegistry:
         # If no detector matches, default to EXTERNAL
         return ModelFamily.EXTERNAL
 
-    def get_detectors_for_family(self, family: ModelFamily) -> List[ModelFamilyDetector]:
+    def get_detectors_for_family(self, family: ModelFamily) -> list[ModelFamilyDetector]:
         """Get all detectors registered for a specific family.
 
         Args:
@@ -330,7 +330,7 @@ class ModelFamilyRegistryFactory:
         return ModelFamilyRegistry()
 
     @staticmethod
-    def create_custom_registry(detectors: List[ModelFamilyDetector]) -> ModelFamilyRegistry:
+    def create_custom_registry(detectors: list[ModelFamilyDetector]) -> ModelFamilyRegistry:
         """Create registry with custom detectors.
 
         Args:

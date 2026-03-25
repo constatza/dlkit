@@ -7,8 +7,8 @@ They model the proper Optuna Study → Trial hierarchy for clean architecture.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -94,7 +94,7 @@ class Study:
     study_id: str
     study_name: str
     direction: OptimizationDirection
-    trials: tuple[Trial, ...] | list[Trial] = field(default_factory=tuple)
+    trials: tuple[Trial, ...] = field(default_factory=tuple)
     created_at: datetime = field(default_factory=datetime.now)
     completed_at: datetime | None = None
     target_trials: int = 100
@@ -123,8 +123,7 @@ class Study:
 
         if self.direction == OptimizationDirection.MINIMIZE:
             return min(successful, key=lambda t: t.objective_value or float("inf"))
-        else:
-            return max(successful, key=lambda t: t.objective_value or float("-inf"))
+        return max(successful, key=lambda t: t.objective_value or float("-inf"))
 
     @property
     def best_hyperparameters(self) -> dict[str, Any]:
@@ -259,5 +258,3 @@ class TrialPrunedException(Exception):
 
 class TrialFailedException(Exception):
     """Exception raised when a trial execution fails."""
-
-    pass

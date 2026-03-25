@@ -5,17 +5,17 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, Field
 
+from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.paths_settings import PathsSettings
 from dlkit.tools.io.config import (
-    load_section_config,
-    load_sections_config,
-    check_section_exists,
-    get_available_sections,
-    reset_section_mappings,
     ConfigSectionError,
     ConfigValidationError,
+    check_section_exists,
+    get_available_sections,
+    load_section_config,
+    load_sections_config,
+    reset_section_mappings,
 )
-from dlkit.tools.config.paths_settings import PathsSettings
-from dlkit.tools.config.components.model_components import ModelComponentSettings
 
 
 @pytest.fixture(autouse=True)

@@ -8,9 +8,12 @@ from typing import Any
 from uuid import uuid4
 
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
-def determine_experiment_name(settings: GeneralSettings, mlflow_config: Any = None) -> str:
+def determine_experiment_name(settings: _WorkflowSettings, mlflow_config: Any = None) -> str:
     """Determine experiment name using priority chain with guard clauses.
 
     Priority: MLFLOW.experiment_name → SESSION.name (with default "dlkit-session")
@@ -35,7 +38,7 @@ def determine_experiment_name(settings: GeneralSettings, mlflow_config: Any = No
     return settings.SESSION.name
 
 
-def determine_study_name(settings: GeneralSettings, optuna_config: Any) -> str:
+def determine_study_name(settings: _WorkflowSettings, optuna_config: Any) -> str:
     """Determine study name using priority chain with guard clauses.
 
     The study name is used as the MLflow parent run name. Explicit configuration
@@ -66,12 +69,11 @@ def determine_study_name(settings: GeneralSettings, optuna_config: Any) -> str:
 
 def _generate_random_run_name() -> str:
     """Generate MLflow-style random run name with graceful fallback."""
-
     try:
         name_utils = import_module("mlflow.utils.name_utils")
         generator = getattr(name_utils, "_generate_random_name", None)
         if callable(generator):
-            return generator()
+            return str(generator())
     except Exception:
         # Last resort: use simple UUID fragment to avoid collisions
         return f"dlkit-run-{uuid4().hex[:8]}"

@@ -30,16 +30,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-import torch
-
 # Note: dlkit high-level APIs (train/infer/optimize) not used due to shape inference gap
 # This satisfies architectural test while documenting the limitation
 import dlkit  # noqa: F401 - imported to satisfy architectural test
-from dlkit.core.shape_specs import CheckpointShapeLoader, create_shape_spec, ModelFamily
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.components.model_components import ModelComponentSettings
-from dlkit.tools.config.trainer_settings import CallbackSettings, TrainerSettings
+from dlkit.core.shape_specs import ModelFamily, create_shape_spec
 
 
 class TestGraphWorkflowIntegration:
@@ -113,9 +107,10 @@ class TestGraphWorkflowIntegration:
         - GraphInput type alias is used
         - Type hints are correct for all methods
         """
-        from dlkit.core.models.wrappers.graph import GraphLightningWrapper
-        from dlkit.core.datatypes.networks import GraphInput
         import inspect
+
+        from dlkit.core.datatypes.networks import GraphInput
+        from dlkit.core.models.wrappers.graph import GraphLightningWrapper
 
         # Check forward signature (decomposed tensor API)
         forward_sig = inspect.signature(GraphLightningWrapper.forward)

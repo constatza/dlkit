@@ -9,9 +9,12 @@ from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import IExperimentTracker, IRunContext
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -37,7 +40,7 @@ class ResultEnricher:
     def enrich_result(
         self,
         result: TrainingResult,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         tracking_uri: str | None = None,
         run_context: IRunContext | None = None,
     ) -> TrainingResult:
@@ -56,10 +59,6 @@ class ResultEnricher:
         Returns:
             New TrainingResult with enriched fields and metrics
         """
-        if not isinstance(result, TrainingResult):
-            logger.warning(f"Cannot enrich non-TrainingResult: {type(result)}")
-            return result  # type: ignore[return-value]
-
         try:
             enriched = dict(getattr(result, "metrics", {}) or {})
 
@@ -68,7 +67,7 @@ class ResultEnricher:
 
             if run_id:
                 enriched["mlflow_run_id"] = run_id
-                logger.debug(f"Enriched result with run_id={run_id}")
+                logger.debug("Enriched result with run_id=%s", run_id)
             else:
                 logger.debug("No active MLflow run for enrichment")
 
@@ -88,7 +87,7 @@ class ResultEnricher:
             )
 
         except Exception as e:
-            logger.warning(f"Failed to enrich result: {e}")
+            logger.warning("Failed to enrich result: %s", e)
             return result
 
     def _resolve_run_id(self, run_context: IRunContext | None) -> str | None:
@@ -112,7 +111,7 @@ class ResultEnricher:
             if run:
                 return run.info.run_id
         except Exception as e:
-            logger.warning(f"Failed to get MLflow run_id from global state: {e}")
+            logger.warning("Failed to get MLflow run_id from global state: %s", e)
 
         return None
 
@@ -129,7 +128,7 @@ class ResultEnricher:
             if run:
                 enriched["mlflow_experiment_id"] = run.info.experiment_id
         except Exception as e:
-            logger.warning(f"Failed to add MLflow experiment_id: {e}")
+            logger.warning("Failed to add MLflow experiment_id: %s", e)
 
     def _resolve_tracking_uri(self, tracking_uri: str | None) -> str | None:
         """Resolve tracking URI preferring explicit value over global state.
@@ -148,5 +147,5 @@ class ResultEnricher:
             current_uri = mlflow.get_tracking_uri()
             return current_uri or None
         except Exception as e:
-            logger.warning(f"Failed to get MLflow tracking URI: {e}")
+            logger.warning("Failed to get MLflow tracking URI: %s", e)
             return None

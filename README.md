@@ -1,6 +1,8 @@
 # DLKit
 
-A typed, configuration-driven training and inference toolkit built on PyTorch and Lightning.
+A typed, configuration-driven training and inference toolkit built on
+[PyTorch](https://pytorch.org/) and
+[Lightning](https://lightning.ai/docs/pytorch/stable/).
 
 ## Table of Contents
 
@@ -23,9 +25,12 @@ A typed, configuration-driven training and inference toolkit built on PyTorch an
 
 ## What is DLKit
 
-DLKit wraps PyTorch Lightning with a typed TOML configuration layer. You describe your
-experiment in a single config file; DLKit wires up the dataset, model, optimizer, trainer,
-transforms, and (optionally) MLflow tracking or Optuna hyperparameter search.
+DLKit wraps [PyTorch](https://pytorch.org/) and
+[Lightning](https://lightning.ai/docs/pytorch/stable/) with a typed TOML configuration
+layer. You describe your experiment in a single config file; DLKit wires up the
+dataset, model, optimizer, trainer, transforms, and optionally
+[MLflow](https://mlflow.org/) tracking or
+[Optuna](https://optuna.org/) hyperparameter search.
 
 Key features:
 
@@ -41,7 +46,9 @@ Key features:
 
 ## Installation
 
-Requires **Python 3.12+**.
+Requires **Python 3.14+**.
+
+Install [uv](https://docs.astral.sh/uv/) first, then add DLKit:
 
 ```bash
 uv add git+https://github.com/constatza/dlkit
@@ -52,8 +59,6 @@ For GPU support:
 ```bash
 uv sync --extra gpu
 ```
-
-For [uv installation instructions](https://docs.astral.sh/uv), see the official docs.
 
 ---
 
@@ -76,8 +81,8 @@ from dlkit.tools.io import load_settings
 cfg = load_settings("examples/minimal_e2e/config.toml")
 result = train(cfg, epochs=3)
 
-print(result.metrics)           # val_loss, etc.
-print(result.artifacts)         # {"best_checkpoint": Path(...)}
+print(result.metrics)  # val_loss, etc.
+print(result.artifacts)  # {"best_checkpoint": Path(...)}
 ```
 
 ### Predict from checkpoint
@@ -199,7 +204,7 @@ result = train(
     epochs=50,
     batch_size=32,
     learning_rate=5e-4,
-    experiment_name="MyExp",   # overrides [MLFLOW].experiment_name
+    experiment_name="MyExp",  # overrides [MLFLOW].experiment_name
     run_name="run1",
 )
 ```
@@ -207,23 +212,23 @@ result = train(
 ### TrainingResult fields
 
 ```python
-result.metrics           # dict — val_loss and other logged metrics
-result.artifacts         # dict[str, Path] — best_checkpoint, last_checkpoint
-result.mlflow_run_id     # str | None
+result.metrics  # dict — val_loss and other logged metrics
+result.artifacts  # dict[str, Path] — best_checkpoint, last_checkpoint
+result.mlflow_run_id  # str | None
 result.mlflow_tracking_uri
 result.duration_seconds
 
 # Stacked predictions from the final epoch (TensorDict | None)
 stacked = result.stacked
 if stacked is not None:
-    preds   = stacked["predictions"]
+    preds = stacked["predictions"]
     targets = stacked["targets"]
     latents = stacked["latents"]
 
 # Convert to NumPy
 arrays = result.to_numpy()
 pred_np = result.to_numpy("predictions")
-y_np    = result.to_numpy(("targets", "y"))   # nested key path
+y_np = result.to_numpy(("targets", "y"))  # nested key path
 ```
 
 ### Runtime overrides
@@ -256,16 +261,16 @@ import torch
 
 predictor = load_model(
     "checkpoints/model.ckpt",
-    device="auto",            # "auto" | "cpu" | "cuda" | "mps"
-    apply_transforms=True,    # Apply saved feature/target transforms (default)
-    batch_size=128,           # Optional batch size override
+    device="auto",  # "auto" | "cpu" | "cuda" | "mps"
+    apply_transforms=True,  # Apply saved feature/target transforms (default)
+    batch_size=128,  # Optional batch size override
 )
 
 # predict() mirrors model.forward() — pass tensors as positional or keyword args
-output = predictor.predict(x=torch.randn(32, 10))          # → Tensor
-output = predictor.predict(torch.randn(32, 10))            # positional
-output = predictor.predict(x=x_t, edge_attr=ea_t)         # multi-input
-recon, mu, logvar = predictor.predict(x=x_t)              # multi-output (e.g. VAE)
+output = predictor.predict(x=torch.randn(32, 10))  # → Tensor
+output = predictor.predict(torch.randn(32, 10))  # positional
+output = predictor.predict(x=x_t, edge_attr=ea_t)  # multi-input
+recon, mu, logvar = predictor.predict(x=x_t)  # multi-output (e.g. VAE)
 
 predictor.unload()  # Free GPU memory when done
 ```
@@ -289,10 +294,10 @@ with load_model("model.ckpt", device="cuda") as predictor:
 
 ```python
 predictor = load_model("model.ckpt")
-model = predictor.model          # Standard nn.Module
+model = predictor.model  # Standard nn.Module
 
 with torch.no_grad():
-    output = model(x)            # Standard forward pass
+    output = model(x)  # Standard forward pass
 
 # Inspect, fine-tune, or export as normal PyTorch
 for name, param in model.named_parameters():
@@ -375,11 +380,12 @@ version_entity = dlkit.register_logged_model(
 )
 version = int(version_entity.version)
 
-dlkit.set_registered_model_alias("MyModel", alias="production", version=version,
-                                  tracking_uri=result.mlflow_tracking_uri)
-dlkit.set_registered_model_version_tags("MyModel", version=version,
-                                         tags={"dataset": "v2"},
-                                         tracking_uri=result.mlflow_tracking_uri)
+dlkit.set_registered_model_alias(
+    "MyModel", alias="production", version=version, tracking_uri=result.mlflow_tracking_uri
+)
+dlkit.set_registered_model_version_tags(
+    "MyModel", version=version, tags={"dataset": "v2"}, tracking_uri=result.mlflow_tracking_uri
+)
 ```
 
 Declarative aliases and tags are also supported in TOML:
@@ -458,8 +464,8 @@ from dlkit.tools.io import load_settings
 cfg = load_settings("config_with_optuna.toml")
 result = optimize(cfg, trials=50, study_name="my_study")
 
-print(result.best_trial)           # Optuna FrozenTrial
-print(result.training_result)      # TrainingResult from the best trial
+print(result.best_trial)  # Optuna FrozenTrial
+print(result.training_result)  # TrainingResult from the best trial
 print(result.study_summary)
 print(result.duration_seconds)
 ```
@@ -604,6 +610,7 @@ output = predictor.predict(x=normalized_data)
 
 # Manual access to transform chains
 from dlkit.interfaces.inference.transforms import load_transforms_from_checkpoint
+
 feature_chains, target_chains = load_transforms_from_checkpoint("model.ckpt")
 ```
 
@@ -705,14 +712,13 @@ validated instance:
 ```python
 from dlkit.tools.config.core.updater import update_settings
 
-cfg = update_settings(cfg, {
-    "TRAINING": {
-        "optimizer": {"lr": 5e-4, "weight_decay": 1e-5}
+cfg = update_settings(
+    cfg,
+    {
+        "TRAINING": {"optimizer": {"lr": 5e-4, "weight_decay": 1e-5}},
+        "DATAMODULE": {"dataloader": {"batch_size": 128}},
     },
-    "DATAMODULE": {
-        "dataloader": {"batch_size": 128}
-    },
-})
+)
 ```
 
 ---
@@ -750,17 +756,17 @@ them in configs without fully qualified paths.
 ```python
 from dlkit import register_model, register_dataset, register_loss, register_metric
 
+
 @register_model(name="MyNet", aliases=["my_net"])
-class MyNet(torch.nn.Module):
-    ...
+class MyNet(torch.nn.Module): ...
+
 
 @register_dataset(name="ToyDataset")
-class ToyDataset(torch.utils.data.Dataset):
-    ...
+class ToyDataset(torch.utils.data.Dataset): ...
+
 
 @register_loss(name="mae", aliases=["l1"])
-class MAELoss(torch.nn.Module):
-    ...
+class MAELoss(torch.nn.Module): ...
 ```
 
 Then reference by name in config:
@@ -777,8 +783,7 @@ Use `use=True` to force selection without a config name:
 
 ```python
 @register_model(use=True)
-class MyNet(torch.nn.Module):
-    ...
+class MyNet(torch.nn.Module): ...
 ```
 
 Resolution order: `use=True` override → registered name/alias → dotted import path.
@@ -833,3 +838,15 @@ captured — use only when debugging.
 ## Contributing
 
 Bug reports and contributions are welcome at <https://github.com/constatza/dlkit/issues>.
+
+### Contributor Setup
+
+For local development, install [uv](https://docs.astral.sh/uv/) and
+[prek](https://github.com/j178/prek) first, then sync the pinned dev toolchain and
+install the git hooks:
+
+```bash
+uv sync --dev
+uv tool install prek
+prek install -t pre-commit -t pre-push
+```

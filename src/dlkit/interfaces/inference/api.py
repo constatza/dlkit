@@ -11,13 +11,13 @@ from pathlib import Path
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 from .config import PredictorConfig
-from .predictor import CheckpointPredictor
 from .loading import (
-    validate_checkpoint,
-    get_checkpoint_info,
-    CheckpointValidationResult,
     CheckpointInfo,
+    CheckpointValidationResult,
+    get_checkpoint_info,
+    validate_checkpoint,
 )
+from .predictor import CheckpointPredictor
 
 
 def load_model(
@@ -92,9 +92,9 @@ def load_model(
 
 # Re-export functions and dataclasses
 __all__ = [
+    "CheckpointInfo",
+    "CheckpointValidationResult",
+    "get_checkpoint_info",
     "load_model",
     "validate_checkpoint",
-    "get_checkpoint_info",
-    "CheckpointValidationResult",
-    "CheckpointInfo",
 ]

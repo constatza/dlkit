@@ -1,10 +1,11 @@
 from functools import wraps
+from typing import cast
 
 import torch
 from loguru import logger
 
 from .base import Transform
-from .errors import TransformNotFittedError, InvalidTransformConfigurationError, ShapeMismatchError
+from .errors import InvalidTransformConfigurationError, TransformNotFittedError
 
 
 def reshaper2d(func):
@@ -17,10 +18,9 @@ def reshaper2d(func):
         shape = data.shape
         if len(shape) < 2:
             return func(*args)
-        else:
-            data = data.reshape(-1, data.shape[-1])
-            processed = func(*args[:-1], data)
-            return processed.reshape((-1,) + shape[1:-1] + processed.shape[1:])
+        data = data.reshape(-1, data.shape[-1])
+        processed = func(*args[:-1], data)
+        return processed.reshape((-1,) + shape[1:-1] + processed.shape[1:])
 
     return wrapper
 
@@ -125,7 +125,7 @@ class PCA(Transform):
 
         self.fitted = True
         logger.info(
-            f"PCA total explained variance ratio: {self.total_explained_variance.item():.4e}"
+            f"PCA total explained variance ratio: {cast(torch.Tensor, self.total_explained_variance).item():.4e}"
         )
 
     def _load_from_state_dict(
@@ -164,11 +164,11 @@ class PCA(Transform):
         )
 
     @reshaper2d
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Project the input data onto the principal components.
 
         Args:
-            data: Input data of shape (..., n_features).
+            x: Input data of shape (..., n_features).
 
         Returns:
             Projected data of shape (..., n_components).
@@ -179,10 +179,12 @@ class PCA(Transform):
         if not self.fitted:
             raise TransformNotFittedError("PCA")
 
+        mean = cast(torch.Tensor, self.mean)
+        components = cast(torch.Tensor, self.components)
         # Center the data using the stored mean
-        data_centered = data - self.mean
+        data_centered = x - mean
         # Project onto principal components
-        projected = torch.matmul(data_centered, self.components.T)
+        projected = torch.matmul(data_centered, components.T)
 
         return projected
 
@@ -206,8 +208,8 @@ class PCA(Transform):
             raise TransformNotFittedError("PCA")
 
         device = projected.device
-        mean = self.mean.to(device)
-        components = self.components.to(device)
+        mean = cast(torch.Tensor, self.mean).to(device)
+        components = cast(torch.Tensor, self.components).to(device)
 
         # Reconstruct: approximate inverse of PCA projection
         reconstructed = torch.matmul(projected, components) + mean

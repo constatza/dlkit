@@ -8,17 +8,17 @@ This module tests the discriminated union architecture for generative algorithms
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
 
+from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.generative_settings import (
-    FlowMatchingSettings,
     CNFSettings,
+    FlowMatchingSettings,
     GenerativeSettings,
 )
-from dlkit.tools.config.general_settings import GeneralSettings
 
 
 class TestFlowMatchingSettings:
@@ -55,12 +55,12 @@ class TestFlowMatchingSettings:
     def test_flow_matching_invalid_path_type(self) -> None:
         """Test FlowMatchingSettings rejects invalid path_type."""
         with pytest.raises(ValidationError):
-            FlowMatchingSettings(path_type="invalid")  # type: ignore
+            FlowMatchingSettings(path_type=cast(Any, "invalid"))
 
     def test_flow_matching_invalid_solver(self) -> None:
         """Test FlowMatchingSettings rejects invalid solver."""
         with pytest.raises(ValidationError):
-            FlowMatchingSettings(solver="rk45")  # type: ignore
+            FlowMatchingSettings(solver=cast(Any, "rk45"))
 
     def test_flow_matching_serialization(self) -> None:
         """Test FlowMatchingSettings serialization and deserialization."""
@@ -112,12 +112,12 @@ class TestCNFSettings:
     def test_cnf_invalid_solver(self) -> None:
         """Test CNFSettings rejects invalid solver."""
         with pytest.raises(ValidationError):
-            CNFSettings(solver="invalid")  # type: ignore
+            CNFSettings(solver=cast(Any, "invalid"))
 
     def test_cnf_invalid_divergence(self) -> None:
         """Test CNFSettings rejects invalid divergence."""
         with pytest.raises(ValidationError):
-            CNFSettings(divergence="trace")  # type: ignore
+            CNFSettings(divergence=cast(Any, "trace"))
 
     def test_cnf_serialization(self) -> None:
         """Test CNFSettings serialization and deserialization."""

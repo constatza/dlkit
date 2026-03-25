@@ -5,17 +5,15 @@ Composes: prepare (ops) -> build (factory) -> execute (strategy) -> finalize.
 
 from __future__ import annotations
 
-
-from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult
+from dlkit.interfaces.api.domain import OptimizationResult, TrainingResult
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
-    TrainingWorkflowConfig,
-    InferenceWorkflowConfig,
     OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
 )
-from dlkit.tools.utils.logging_config import get_logger
 from dlkit.tools.utils.error_handling import raise_error
+from dlkit.tools.utils.logging_config import get_logger
 
 from .factories.build_factory import BuildFactory
 from .strategies.factory import ExecutionStrategyFactory
@@ -31,10 +29,7 @@ class ExecutionSelector:
 
     def select(
         self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         explicit: str | None = None,
         hooks: TrackingHooks | None = None,
     ):
@@ -52,14 +47,11 @@ class ExecutionSelector:
         logger.info("Creating executor with {}", feature_str)
 
         # Use factory to create composed executor based on settings
-        return self._factory.create_executor(settings, hooks=hooks)  # type: ignore[arg-type]
+        return self._factory.create_executor(settings, hooks=hooks)
 
     def select_optimization(
         self,
-        settings: GeneralSettings
-        | TrainingWorkflowConfig
-        | InferenceWorkflowConfig
-        | OptimizationWorkflowConfig,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ):
         """Create optimization strategy using SOLID factory composition."""
         # Log what features are detected
@@ -100,8 +92,6 @@ class Orchestrator:
                 raise_error(
                     "Inference mode active: training, MLflow and Optuna are suspended. Use inference service instead."
                 )
-                # This line is never reached but helps type checker understand the flow
-                return  # type: ignore[unreachable]
 
             # Build runtime components
             logger.debug("Building runtime components")
@@ -134,8 +124,6 @@ class Orchestrator:
             if settings.SESSION and getattr(settings.SESSION, "inference", False):
                 logger.warning("Optimization requested but inference mode is active")
                 raise_error("Inference mode active: optimization suspended.")
-                # This line is never reached but helps type checker understand the flow
-                return  # type: ignore[unreachable]
 
             # Use factory pattern for proper strategy composition
             optimization_strategy = self._selector.select_optimization(settings)

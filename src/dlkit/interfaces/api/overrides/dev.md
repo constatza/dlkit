@@ -52,14 +52,14 @@ new_settings = basic_override_manager.apply_overrides(
     checkpoint_path=Path("./model.ckpt"),
     epochs=100,
     batch_size=32,
-    mlflow_host="localhost"
+    mlflow_host="localhost",
 )
 
 # Validate before applying
 errors = basic_override_manager.validate_overrides(
     settings,
     epochs=-10,  # Invalid
-    checkpoint_path=Path("./missing.ckpt")  # Doesn't exist
+    checkpoint_path=Path("./missing.ckpt"),  # Doesn't exist
 )
 if errors:
     print(f"Validation errors: {errors}")
@@ -143,12 +143,7 @@ from dlkit.tools.config import GeneralSettings
 settings = GeneralSettings.from_toml("config.toml")
 
 # Apply overrides via API
-result = train(
-    settings,
-    epochs=50,
-    batch_size=64,
-    output_dir="./experiment_1"
-)
+result = train(settings, epochs=50, batch_size=64, output_dir="./experiment_1")
 ```
 
 ### Path Context Management
@@ -156,10 +151,7 @@ result = train(
 from dlkit.interfaces.api.overrides import path_override_context
 
 # Temporary path overrides
-with path_override_context({
-    "root_dir": "./experiment",
-    "output_dir": "./experiment/output"
-}):
+with path_override_context({"root_dir": "./experiment", "output_dir": "./experiment/output"}):
     result = train(settings)
     # All paths resolved relative to overrides
 
@@ -172,9 +164,7 @@ from dlkit.interfaces.api.overrides import basic_override_manager
 
 # Validate before execution
 errors = basic_override_manager.validate_overrides(
-    settings,
-    epochs=epochs,
-    checkpoint_path=checkpoint_path
+    settings, epochs=epochs, checkpoint_path=checkpoint_path
 )
 
 if errors:

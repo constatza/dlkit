@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 from collections.abc import Callable
 from inspect import isclass
+from typing import Any, cast
 
+from dlkit.tools.utils.general import import_object, kwargs_compatible_with
 
-from dlkit.tools.utils.general import kwargs_compatible_with, import_object
-from .context import BuildContext
 from .base_settings import ComponentSettings
+from .context import BuildContext
 
 
 class ComponentFactory[T](ABC):
@@ -31,7 +31,6 @@ class ComponentFactory[T](ABC):
         Returns:
             T: The created component instance
         """
-        pass
 
 
 class DefaultComponentFactory[T](ComponentFactory[T]):
@@ -59,20 +58,19 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
 
         # If an already-constructed instance is provided, return it directly (bypass construction)
         if not isclass(target) and not callable(target):
-            return target  # type: ignore[return-value]
+            return cast(T, target)
 
         if isclass(target):
             init_kwargs = self._prepare_init_kwargs(settings, context, target)
-            return target(**init_kwargs)  # type: ignore[return-value]
-        elif callable(target):
+            return cast(T, target(**init_kwargs))
+        if callable(target):
             # Handle function/callable targets: return the callable itself
             # rather than invoking it here. Many callables (e.g., loss functions)
             # require runtime tensors as positional arguments.
-            return target  # type: ignore[return-value]
-        else:
-            raise TypeError(
-                f"Resolved target must be a class, callable, or instance, got {type(target)}"
-            )
+            return cast(T, target)
+        raise TypeError(
+            f"Resolved target must be a class, callable, or instance, got {type(target)}"
+        )
 
     def _resolve_class(
         self, settings: ComponentSettings, context: BuildContext
@@ -114,11 +112,10 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
             if _isclass(resolved) or callable(resolved):
                 return resolved
             raise TypeError(f"Resolved target must be a class or callable, got {type(resolved)}")
-        elif isinstance(target, type) or callable(target):
+        if isinstance(target, type) or callable(target):
             return target
-        else:
-            # Allow passing already constructed instances (object) as name
-            return target  # type: ignore[return-value]
+        # Allow passing already constructed instances (object) as name
+        return cast("type[T] | Callable[..., object]", target)
 
     @staticmethod
     def _infer_kind_from_settings(settings: ComponentSettings) -> str | None:
@@ -129,12 +126,12 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         try:
             # Import locally to avoid circular imports at module import time
             from dlkit.tools.config.components.model_components import (
-                ModelComponentSettings,
                 LossComponentSettings,
                 MetricComponentSettings,
+                ModelComponentSettings,
             )
-            from dlkit.tools.config.dataset_settings import DatasetSettings
             from dlkit.tools.config.datamodule_settings import DataModuleSettings
+            from dlkit.tools.config.dataset_settings import DatasetSettings
 
             if isinstance(settings, ModelComponentSettings):
                 return "model"
@@ -186,7 +183,7 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
 
         # For classes that accept **kwargs, allow context overrides to pass through
         # For classes that don't, filter overrides as well
-        from inspect import signature, Parameter
+        from inspect import Parameter, signature
 
         accepts_var_keyword = False
         if isclass(cls):
@@ -208,9 +205,8 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         if accepts_var_keyword:
             # Class accepts **kwargs, allow all context overrides
             return final_kwargs
-        else:
-            # Class doesn't accept **kwargs, filter everything
-            return kwargs_compatible_with(cls, **final_kwargs)
+        # Class doesn't accept **kwargs, filter everything
+        return kwargs_compatible_with(cls, **final_kwargs)
 
 
 class ComponentRegistry:
@@ -302,6 +298,26 @@ class FactoryProvider:
         """
         registry = cls.get_registry()
         registry.register_factory(settings_type, factory)
+
+    @classmethod
+    def reset_for_testing(cls) -> ComponentRegistry | None:
+        """Save and reset singleton state for test isolation.
+
+        Returns:
+            ComponentRegistry | None: Previous registry state to pass to restore_for_testing.
+        """
+        saved = cls._instance
+        cls._instance = None
+        return saved
+
+    @classmethod
+    def restore_for_testing(cls, saved: ComponentRegistry | None) -> None:
+        """Restore singleton state saved by reset_for_testing.
+
+        Args:
+            saved: Registry state returned by reset_for_testing.
+        """
+        cls._instance = saved
 
 
 # Import here to avoid circular imports

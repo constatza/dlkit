@@ -5,22 +5,23 @@ edge cases, and complete workflow integration that might not be
 covered in individual component tests.
 """
 
-import pytest
-import torch
 import threading
 import time
-from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from unittest.mock import patch
 
-from dlkit.tools.config.precision import PrecisionStrategy
-from dlkit.interfaces.api.domain.precision import precision_override
-from dlkit.interfaces.api.services.precision_service import get_precision_service
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.trainer_settings import TrainerSettings
-from dlkit.tools.io.arrays import load_array
+import pytest
+import torch
+
 from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.shape_specs import create_shape_spec
+from dlkit.interfaces.api.domain.precision import precision_override
+from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.config.trainer_settings import TrainerSettings
+from dlkit.tools.io.arrays import load_array
 
 
 class ProductionTestModel(DLKitModel):
@@ -113,7 +114,6 @@ class TestComprehensivePrecision:
         output = model(input_data[:10])
         assert output.dtype == torch.float16
 
-
     def test_precision_override_workflow(self, sample_datasets):
         """Test precision override scenarios in realistic workflows."""
 
@@ -144,7 +144,6 @@ class TestComprehensivePrecision:
             model_high_precision = ProductionTestModel(shape)
             model_dtype = next(model_high_precision.parameters()).dtype
             assert model_dtype == torch.float64
-
 
     def test_multi_threaded_precision_isolation(self, sample_datasets):
         """Test precision isolation across multiple threads."""
@@ -216,7 +215,6 @@ class TestComprehensivePrecision:
             assert result["data_dtype"] == expected_dtype
             assert result["model_dtype"] == expected_dtype
 
-
     def test_trainer_settings_lightning_integration(self):
         """Test complete TrainerSettings integration with Lightning precision."""
 
@@ -244,7 +242,6 @@ class TestComprehensivePrecision:
         trainer_settings_explicit = TrainerSettings(precision="32")
         assert trainer_settings_explicit.precision == "32"
 
-
     def test_error_recovery_and_fallbacks(self, sample_datasets):
         """Test error recovery and fallback mechanisms."""
 
@@ -268,7 +265,6 @@ class TestComprehensivePrecision:
             # Should work with explicit dtype
             data = load_array(sample_datasets["float32"], dtype=torch.float32)
             assert data.dtype == torch.float32
-
 
     def test_memory_optimization_scenarios(self, sample_datasets):
         """Test memory optimization scenarios with different precision strategies."""
@@ -303,7 +299,6 @@ class TestComprehensivePrecision:
         assert next(models[PrecisionStrategy.FULL_32].parameters()).dtype == torch.float32
         assert next(models[PrecisionStrategy.MIXED_16].parameters()).dtype == torch.float16
         assert next(models[PrecisionStrategy.FULL_64].parameters()).dtype == torch.float64
-
 
     def test_numerical_stability_edge_cases(self, sample_datasets):
         """Test numerical stability with different precision strategies."""
@@ -345,7 +340,6 @@ class TestComprehensivePrecision:
             # Cleanup
             small_file.unlink(missing_ok=True)
             large_file.unlink(missing_ok=True)
-
 
     def test_production_pipeline_integration(self, sample_datasets):
         """Test complete production pipeline integration."""
@@ -394,7 +388,6 @@ class TestComprehensivePrecision:
             assert validation_data.dtype == torch.float64
             assert validation_input.dtype == torch.float64
             assert validation_output.dtype == torch.float64
-
 
     def test_concurrent_precision_operations(self, sample_datasets):
         """Test concurrent precision operations under load."""
@@ -456,7 +449,6 @@ class TestComprehensivePrecision:
             assert result["data_dtype"] == expected_dtype
             assert result["model_dtype"] == expected_dtype
             assert result["output_dtype"] == expected_dtype
-
 
     def test_precision_configuration_validation(self):
         """Test precision configuration validation and compatibility."""

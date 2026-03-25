@@ -28,7 +28,7 @@ class TestPredictorAPIImports:
 
     def test_import_utilities(self):
         """Test importing utility functions."""
-        from dlkit.interfaces.inference import validate_checkpoint, get_checkpoint_info
+        from dlkit.interfaces.inference import get_checkpoint_info, validate_checkpoint
 
         assert callable(validate_checkpoint)
         assert callable(get_checkpoint_info)

@@ -6,25 +6,22 @@ from pathlib import Path
 from typing import Any, cast
 
 from dlkit.interfaces.api.domain import (
-    TrainingResult,
     OptimizationResult,
+    TrainingResult,
 )
 from dlkit.interfaces.api.services.execution_service import ExecutionService
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import (
-    TrainingWorkflowConfig,
     OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
 )
 
 
 def execute(
     settings: (
-        TrainingWorkflowConfig
-        | OptimizationWorkflowConfig
-        | GeneralSettings
-        | BaseSettingsProtocol
+        TrainingWorkflowConfig | OptimizationWorkflowConfig | GeneralSettings | BaseSettingsProtocol
     ),
     checkpoint_path: Path | str | None = None,
     root_dir: Path | str | None = None,

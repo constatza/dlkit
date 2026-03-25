@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult
-from dlkit.tools.config import GeneralSettings
+from dlkit.interfaces.api.domain import OptimizationResult, TrainingResult
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
+# Settings union accepted by training and optimization strategies
+WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class ITrainingExecutor(ABC):
     """Core training execution interface - single responsibility."""
 
     @abstractmethod
-    def execute(self, components: BuildComponents, settings: GeneralSettings) -> TrainingResult:
+    def execute(self, components: BuildComponents, settings: WorkflowSettings) -> TrainingResult:
         """Execute training and return TrainingResult, or raise WorkflowError.
 
         Args:
@@ -38,7 +42,7 @@ class IOptimizationStrategy(ABC):
     """
 
     @abstractmethod
-    def execute_optimization(self, settings: GeneralSettings) -> OptimizationResult:
+    def execute_optimization(self, settings: WorkflowSettings) -> OptimizationResult:
         """Execute optimization workflow.
 
         Args:

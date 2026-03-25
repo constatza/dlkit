@@ -22,12 +22,9 @@ Internal helpers are also exported for independent unit testing.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, TypeAdapter
-
-M = TypeVar("M", bound=BaseModel)
-
 
 # ---------------------------------------------------------------------------
 # Pure helpers
@@ -65,7 +62,7 @@ def split_overrides(
     if not overrides:
         return {}, {}
 
-    is_dotted_key = lambda k: isinstance(k, str) and (sep in k)  # noqa: E731
+    is_dotted_key = lambda k: isinstance(k, str) and (sep in k)
 
     dotted = {k: v for k, v in overrides.items() if is_dotted_key(k)}
     nested = {k: v for k, v in overrides.items() if not is_dotted_key(k)}
@@ -284,6 +281,7 @@ def compile_mixed_overrides(
             return dict(nested)
         case (True, True):
             return strict_merge_patches(compiled, nested)
+    raise AssertionError("unreachable")
 
 
 # ---------------------------------------------------------------------------
@@ -348,12 +346,7 @@ def iter_validated_updates(
                     # (e.g. PositiveInt = Annotated[int, Gt(0)]).
                     # field_info.annotation is the raw type; field_info.metadata
                     # carries constraints like Gt/Ge that TypeAdapter needs.
-                    if field_info.metadata:
-                        from typing import Annotated
-
-                        annotation = Annotated[tuple([field_info.annotation, *field_info.metadata])]
-                    else:
-                        annotation = field_info.annotation
+                    annotation = field_info.rebuild_annotation()
                     adapter = TypeAdapter(annotation)
                     yield field_name, adapter.validate_python(patch_value)
 
@@ -365,7 +358,7 @@ def iter_validated_updates(
             raise KeyError(f"Unknown field {field_name!r} for {model.__class__.__name__}")
 
 
-def apply_patch(model: M, patch: Mapping[str, Any], *, revalidate: bool = True) -> M:
+def apply_patch[M: BaseModel](model: M, patch: Mapping[str, Any], *, revalidate: bool = True) -> M:
     """Apply a nested patch to a Pydantic model, returning a **new** instance.
 
     Prevents Pydantic v2 "dict pollution" by validating patch values *before*
@@ -388,10 +381,10 @@ def apply_patch(model: M, patch: Mapping[str, Any], *, revalidate: bool = True) 
         pydantic.ValidationError: On invalid patched values or revalidation failure.
     """
     if not patch:
-        return cast(M, model.model_copy(deep=True))
+        return model.model_copy(deep=True)
 
     updates = dict(iter_validated_updates(model, patch, revalidate=revalidate))
-    new_model = cast(M, model.model_copy(update=updates, deep=True))
+    new_model = model.model_copy(update=updates, deep=True)
 
     if not revalidate:
         return new_model
@@ -401,7 +394,7 @@ def apply_patch(model: M, patch: Mapping[str, Any], *, revalidate: bool = True) 
     return cast(M, validated)
 
 
-def patch_model(
+def patch_model[M: BaseModel](
     model: M,
     overrides: Mapping[str, Any],
     *,
@@ -425,8 +418,7 @@ def patch_model(
         pydantic.ValidationError: On type mismatches.
     """
     if not overrides:
-        return cast(M, model.model_copy(deep=True))
+        return model.model_copy(deep=True)
 
     patch = compile_mixed_overrides(overrides, sep=sep)
     return apply_patch(model, patch, revalidate=revalidate)
-

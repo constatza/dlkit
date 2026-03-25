@@ -7,14 +7,16 @@ pure configuration without build methods, following SOLID principles.
 from __future__ import annotations
 
 from typing import Any
+
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from dlkit.tools.config.components.model_components import (
-    ModelComponentSettings,
-    MetricComponentSettings,
     LossComponentSettings,
+    MetricComponentSettings,
+    ModelComponentSettings,
     WrapperComponentSettings,
 )
 
@@ -179,7 +181,7 @@ class TestModelComponentSettings:
 
     def test_supports_type_name(self) -> None:
         """Test ModelComponentSettings supports type objects as component names."""
-        import torch.nn as nn
+        from torch import nn
 
         class TestModel(nn.Module):
             def __init__(self):

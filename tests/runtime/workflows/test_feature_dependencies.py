@@ -33,9 +33,7 @@ def test_collect_feature_dependencies_captures_all_dependency_sources(tmp_path) 
         Target(name="y", path=y_path),
         AutoencoderTarget(name="recon", feature_ref="matrix", path=y_path),
     )
-    loss_spec = LossComponentSettings(
-        extra_inputs=(LossInputRef(arg="m", key="features.matrix"),)
-    )
+    loss_spec = LossComponentSettings(extra_inputs=(LossInputRef(arg="m", key="features.matrix"),))
     metric_specs = (
         MetricComponentSettings(extra_inputs=(MetricInputRef(arg="m", key="features.matrix"),)),
     )

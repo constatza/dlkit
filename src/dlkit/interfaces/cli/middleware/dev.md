@@ -115,10 +115,7 @@ except ConfigurationError as e:
 from dlkit.interfaces.api.domain.errors import ConfigurationError
 from dlkit.interfaces.cli.middleware.error_handler import _get_error_suggestions
 
-error = ConfigurationError(
-    "Invalid TOML syntax",
-    context={"config_path": "config.toml"}
-)
+error = ConfigurationError("Invalid TOML syntax", context={"config_path": "config.toml"})
 
 suggestions = _get_error_suggestions(error)
 # Returns:
@@ -313,7 +310,7 @@ error.context = {
     "config_path": "/path/to/config.toml",
     "plugin": "optuna",
     "strategy": "mlflow",
-    "available_modes": ["training", "inference"]
+    "available_modes": ["training", "inference"],
 }
 ```
 

@@ -13,9 +13,9 @@ import pytest
 
 from dlkit.tools.config.data_entries import (
     Feature,
-    Target,
     PathFeature,
     PathTarget,
+    Target,
 )
 
 

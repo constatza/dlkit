@@ -56,52 +56,49 @@ Examples:
 # ============================================================================
 
 from .compat import (
-    MeanSquaredError,
     MeanAbsoluteError,
-    MeanSquaredLogError,
     MeanAbsolutePercentageError,
+    MeanSquaredError,
+    MeanSquaredLogError,
     R2Score,
-)
-
-# ============================================================================
-# CUSTOM TORCHMETRICS WRAPPERS (our specialized metrics)
-# ============================================================================
-
-from .torchmetrics_wrappers import (
-    NormalizedVectorNormError,
-    TemporalDerivativeError,
-    AbsoluteVectorNormError,
-    EnergyNormError,
-    RelativeEnergyNormError,
 )
 
 # ============================================================================
 # FUNCTIONAL INTERFACE (for advanced users)
 # ============================================================================
-
 from .functional import (
     # Type aliases
     AggregatorFn,
+    apply_aggregation,
+    compute_energy_norm,
     # Composable primitives
     compute_error_vectors,
+    # Energy norm primitives
+    compute_quadratic_form,
+    # Temporal metrics
+    compute_temporal_derivative,
     compute_vector_norm,
-    safe_divide,
-    apply_aggregation,
-    # Vector metrics
-    normalized_vector_norm_error,
+    first_derivative_error,
     normalized_l1_error,
     normalized_l2_error,
     normalized_linf_error,
-    # Energy norm primitives
-    compute_quadratic_form,
-    compute_energy_norm,
-    # Temporal metrics
-    compute_temporal_derivative,
-    temporal_derivative_error,
-    first_derivative_error,
+    # Vector metrics
+    normalized_vector_norm_error,
+    safe_divide,
     second_derivative_error,
+    temporal_derivative_error,
 )
 
+# ============================================================================
+# CUSTOM TORCHMETRICS WRAPPERS (our specialized metrics)
+# ============================================================================
+from .torchmetrics_wrappers import (
+    AbsoluteVectorNormError,
+    EnergyNormError,
+    NormalizedVectorNormError,
+    RelativeEnergyNormError,
+    TemporalDerivativeError,
+)
 
 # ============================================================================
 # PUBLIC API

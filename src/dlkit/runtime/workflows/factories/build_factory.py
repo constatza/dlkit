@@ -7,45 +7,50 @@ This replaces the legacy build_model_state() flow with a SOLID factory.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from pathlib import Path
+from typing import Any, cast
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from loguru import logger
 
-from dlkit.tools.config.workflow_configs import (
-    TrainingWorkflowConfig,
-    OptimizationWorkflowConfig,
-)
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.core.datatypes.split import IndexSplit
-from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
+from dlkit.core.models.wrappers.factories import WrapperFactory
 from dlkit.core.shape_specs.simple_inference import (
-    infer_shapes_from_dataset,
-    infer_post_transform_shapes,
     ShapeSummary,
+    infer_post_transform_shapes,
+    infer_shapes_from_dataset,
 )
 from dlkit.runtime.workflows.entry_registry import DataEntryRegistry
+from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
+from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.components.model_components import WrapperComponentSettings
+from dlkit.tools.config.core.context import BuildContext
+from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.data_entries import (
     DataEntry,
     Feature,
+    FeatureType,
     Target,
+    TargetType,
     convert_to_tensor_entries,
 )
-from dlkit.core.models.wrappers.factories import WrapperFactory
-from dlkit.tools.io.split_provider import get_or_create_split
+from dlkit.tools.config.workflow_configs import (
+    InferenceWorkflowConfig,
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
 from dlkit.tools.io.paths import coerce_root_dir_to_absolute
+from dlkit.tools.io.split_provider import get_or_create_split
+
 from .feature_dependencies import (
     collect_feature_dependencies,
     select_required_features,
     validate_feature_selection,
 )
-from .model_detection import detect_model_type, ModelType, requires_shape_spec
+from .model_detection import detect_model_type, requires_shape_spec
 
 # Type alias for settings that can be passed to build strategies
-WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -81,6 +86,7 @@ class IBuildStrategy:
             Constructed runtime components.
         """
         import contextlib
+
         from dlkit.interfaces.api.domain.precision import precision_override
         from dlkit.interfaces.api.overrides.path_context import (
             get_current_path_context,
@@ -93,7 +99,11 @@ class IBuildStrategy:
         session_root_dir = coerce_root_dir_to_absolute(raw_root)
         needs_path_context = (not ctx or not ctx.root_dir) and session_root_dir
 
-        precision_ctx = precision_override(precision_strategy) if precision_strategy is not None else contextlib.nullcontext()
+        precision_ctx = (
+            precision_override(precision_strategy)
+            if precision_strategy is not None
+            else contextlib.nullcontext()
+        )
         with precision_ctx:
             if needs_path_context:
                 with path_override_context({"root_dir": session_root_dir}):
@@ -146,7 +156,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
 
         # Build dataset with legacy compatibility for SupervisedArrayDataset x/y
         ds_settings = settings.DATASET
-        configured_features: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "features", ()) or ())
+        configured_features: tuple[DataEntry, ...] = tuple(
+            getattr(ds_settings, "features", ()) or ()
+        )
         configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
         feature_dependencies = collect_feature_dependencies(
             configured_features,
@@ -164,7 +176,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
         dropped_feature_names = [
             entry.name
             for entry in configured_features
-            if isinstance(entry.name, str) and entry.name and entry.name not in selected_feature_names
+            if isinstance(entry.name, str)
+            and entry.name
+            and entry.name not in selected_feature_names
         ]
         dependency_reasons = {
             name: sorted(reasons)
@@ -200,12 +214,14 @@ class FlexibleBuildStrategy(IBuildStrategy):
                 else:
                     # Build from flexible entries - precision handled by context
                     dataset = FlexibleDataset(
-                        features=selected_features,
-                        targets=selected_targets,
+                        features=cast(tuple[FeatureType, ...], selected_features),
+                        targets=cast(tuple[TargetType, ...], selected_targets),
                         memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
                     )
         # Default factory construction
         if dataset is None:
+            if ds_settings is None:
+                raise ValueError("DATASET settings are required but not configured")
             ds_overrides = {
                 "features": selected_features,
                 "targets": selected_targets,
@@ -215,6 +231,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             )
 
         # Get or create split (with caching)
+        assert settings.DATASET is not None, "DATASET settings are required"
         split_cfg = settings.DATASET.split
         index_split: IndexSplit = get_or_create_split(
             num_samples=len(dataset),
@@ -225,6 +242,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
         )
 
         # Build datamodule with overrides (keep original settings object for test patching)
+        assert settings.DATAMODULE is not None, "DATAMODULE settings are required"
         dm_context = context.with_overrides(
             dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
@@ -243,9 +261,10 @@ class FlexibleBuildStrategy(IBuildStrategy):
         # Register entry configs for user access (registry still uses dict)
         if entry_configs:
             registry = DataEntryRegistry.get_instance()
-            registry.register_entries({e.name: e for e in entry_configs})
+            registry.register_entries({e.name: e for e in entry_configs if e.name is not None})
 
         # Detect model type using ABC-based detection
+        assert settings.MODEL is not None, "MODEL settings are required"
         model_type = detect_model_type(settings.MODEL)
 
         # Get appropriate shape specification if required
@@ -265,7 +284,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
                 ) from exc
 
         # Build wrapper settings with training optimizer/scheduler/loss/metrics configuration
-        wrapper_kwargs = {
+        assert settings.TRAINING is not None, "TRAINING settings are required"
+        wrapper_kwargs: dict[str, Any] = {
             "optimizer": settings.TRAINING.optimizer,
             "loss_function": settings.TRAINING.loss_function,
             "metrics": settings.TRAINING.metrics,
@@ -363,7 +383,8 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         if not super().can_handle(settings):
             return False
         try:
-            return getattr(settings.GENERATIVE, "algorithm", None) == "flow_matching"
+            gen = getattr(settings, "GENERATIVE", None)
+            return getattr(gen, "algorithm", None) == "flow_matching"
         except Exception:
             return False
 
@@ -379,6 +400,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         from pathlib import Path
 
         from dlkit.core.datasets.flexible import FlexibleDataset
+        from dlkit.core.models.nn.generative.functions.solvers import euler_step, heun_step
         from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
         from dlkit.core.models.nn.generative.samplers.time import UniformTimeSampler
         from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
@@ -393,12 +415,9 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         from dlkit.core.models.wrappers.flowmatching import FlowMatchingWrapper
         from dlkit.core.models.wrappers.generator_factories import DeterministicGeneratorFactory
         from dlkit.core.models.wrappers.prediction_strategies import ODEPredictionStrategy
-        from dlkit.core.models.nn.generative.functions.solvers import euler_step, heun_step
-        from dlkit.tools.config.components.model_components import WrapperComponentSettings
-        from dlkit.tools.config.data_entries import Feature, Target
         from dlkit.core.shape_specs.simple_inference import infer_post_transform_shapes
 
-        gen_cfg = settings.GENERATIVE
+        gen_cfg = getattr(settings, "GENERATIVE", None)
         x1_key: str = getattr(gen_cfg, "x1_key", "x1")
         n_inference_steps: int = getattr(gen_cfg, "n_inference_steps", 100)
         solver_name: str = getattr(gen_cfg, "solver", "euler")
@@ -411,6 +430,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         )
         try:
             from dlkit.tools.io.locations import root as _root
+
             cfg_dir = _root()
         except Exception:
             cfg_dir = Path.cwd()
@@ -421,21 +441,19 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         configured_features: tuple[DataEntry, ...] = tuple(
             getattr(ds_settings, "features", ()) or ()
         )
-        configured_targets: tuple[DataEntry, ...] = tuple(
-            getattr(ds_settings, "targets", ()) or ()
-        )
+        configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
         selected_features = configured_features
         selected_targets = configured_targets
 
         dataset = FlexibleDataset(
-            features=selected_features,
-            targets=selected_targets,
+            features=cast(tuple[FeatureType, ...], selected_features),
+            targets=cast(tuple[TargetType, ...], selected_targets),
             memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
         )
 
-        from dlkit.core.datatypes.split import IndexSplit
         from dlkit.tools.io.split_provider import get_or_create_split
 
+        assert settings.DATASET is not None, "DATASET settings are required"
         split_cfg = settings.DATASET.split
         index_split: IndexSplit = get_or_create_split(
             num_samples=len(dataset),
@@ -445,12 +463,14 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             explicit_filepath=split_cfg.filepath,
         )
 
+        assert settings.DATAMODULE is not None, "DATAMODULE settings are required"
         dm_context = context.with_overrides(
             dataset=dataset,
             split=index_split,
             dataloader=settings.DATAMODULE.dataloader,
         )
         from lightning.pytorch import LightningDataModule as _LDM
+
         datamodule: _LDM = FactoryProvider.create_component(settings.DATAMODULE, dm_context)
 
         # Infer data shape for ODE strategy configuration
@@ -463,8 +483,10 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             pass
 
         # Build model
+        assert settings.MODEL is not None, "MODEL settings are required"
         model_settings = settings.MODEL
         from dlkit.core.models.wrappers.base import _build_model_from_settings
+
         model = _build_model_from_settings(model_settings, shape_summary)
 
         # Build supervision builder
@@ -486,7 +508,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
 
         # RoutedLossComputer routes predictions against batch["targets"]["ut"].
         # Loss function is configurable via TRAINING.loss_function (defaults to MSE).
-        from dlkit.core.models.wrappers.components import MetricRoute
+        assert settings.TRAINING is not None, "TRAINING settings are required"
         loss_fn = FactoryProvider.create_component(
             settings.TRAINING.loss_function, BuildContext(mode="training")
         )
@@ -508,8 +530,10 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         )
 
         # Build checkpoint metadata
+        assert settings.TRAINING is not None, "TRAINING settings are required"
         entry_configs: tuple[DataEntry, ...] = tuple([*selected_features, *selected_targets])
         from dlkit.tools.config.components.model_components import WrapperComponentSettings as _WCS
+
         wrapper_settings = _WCS(
             optimizer=settings.TRAINING.optimizer,
             loss_function=settings.TRAINING.loss_function,
@@ -537,6 +561,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             trn_cfg = settings.TRAINING.trainer
             try:
                 from dlkit.tools.io import locations
+
                 if getattr(trn_cfg, "default_root_dir", None) is None:
                     trn_cfg = trn_cfg.model_copy(
                         update={"default_root_dir": locations.lightning_work_dir()}
@@ -546,6 +571,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             trainer = trn_cfg.build(session=settings.SESSION)
 
         # Assemble FlowMatchingWrapper
+        assert settings.TRAINING is not None, "TRAINING settings are required"
         model_wrapper = FlowMatchingWrapper(
             model=model,
             model_invoker=model_invoker,
@@ -560,7 +586,6 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             supervision_builder=supervision_builder,
             val_generator_factory=val_gen_factory,
         )
-
 
         return BuildComponents(
             model=model_wrapper,
@@ -605,10 +630,15 @@ class BuildFactory:
         """
         from dlkit.tools.config.validators import validate_config_complete
 
-        # Use the new completeness validators
-        validate_config_complete(settings)
+        # Use the new completeness validators (only for concrete workflow configs)
+        if isinstance(
+            settings, (TrainingWorkflowConfig, InferenceWorkflowConfig, OptimizationWorkflowConfig)
+        ):
+            validate_config_complete(settings)
 
     def build_components(self, settings: WorkflowSettings) -> BuildComponents:
+        # TODO: TYPE — settings.DATASET/MODEL/DATAMODULE typed as X | None but validate_config_complete
+        # above guarantees non-None; consider TypeGuard or a validated-config type to convey this.
         """Build runtime components with pre-build validation.
 
         Validates settings completeness first (ensures all required sections present),
@@ -690,6 +720,7 @@ class GraphBuildStrategy(IBuildStrategy):
         except Exception:
             pass
 
+        assert settings.DATASET is not None, "DATASET settings are required"
         dataset = FactoryProvider.create_component(
             settings.DATASET, context.with_overrides(**ds_overrides)
         )
@@ -702,16 +733,18 @@ class GraphBuildStrategy(IBuildStrategy):
             explicit_filepath=split_cfg.filepath,
         )
 
+        assert settings.DATAMODULE is not None, "DATAMODULE settings are required"
         dm_context = context.with_overrides(
             dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
         # Default to graph-aware datamodule when no explicit datamodule is provided
         dm_settings = settings.DATAMODULE
         try:
-            name = getattr(dm_settings, "name", None)
-            if not name or str(name) == "InMemoryModule":
-                dm_class = FamilyDefaults.default_datamodule_class_for(settings)
-                dm_settings = dm_settings.model_copy(update={"name": dm_class})  # type: ignore[attr-defined]
+            if dm_settings is not None:
+                name = getattr(dm_settings, "name", None)
+                if not name or str(name) == "InMemoryModule":
+                    dm_class = FamilyDefaults.default_datamodule_class_for(settings)
+                    dm_settings = dm_settings.model_copy(update={"name": dm_class})
         except Exception:
             pass
         datamodule: LightningDataModule = FactoryProvider.create_component(dm_settings, dm_context)
@@ -720,7 +753,8 @@ class GraphBuildStrategy(IBuildStrategy):
         entry_configs: tuple[DataEntry, ...] = ()
 
         # Build wrapper with training optimizer/scheduler/loss/metrics configuration
-        wrapper_kwargs = {
+        assert settings.TRAINING is not None, "TRAINING settings are required"
+        wrapper_kwargs: dict[str, Any] = {
             "optimizer": settings.TRAINING.optimizer,
             "loss_function": settings.TRAINING.loss_function,
             "metrics": settings.TRAINING.metrics,
@@ -729,6 +763,7 @@ class GraphBuildStrategy(IBuildStrategy):
             wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
         wrapper_settings = WrapperComponentSettings(**wrapper_kwargs)
 
+        assert settings.MODEL is not None, "MODEL settings are required"
         model: LightningModule = WrapperFactory.create_graph_wrapper(
             model_settings=settings.MODEL,
             settings=wrapper_settings,
@@ -816,6 +851,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
                 ds_overrides["targets"] = resolved_targets
         except Exception:
             pass
+        assert settings.DATASET is not None, "DATASET settings are required"
         dataset = FactoryProvider.create_component(
             settings.DATASET, context.with_overrides(**ds_overrides)
         )
@@ -828,16 +864,18 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             explicit_filepath=split_cfg.filepath,
         )
 
+        assert settings.DATAMODULE is not None, "DATAMODULE settings are required"
         dm_context = context.with_overrides(
             dataset=dataset, split=index_split, dataloader=settings.DATAMODULE.dataloader
         )
         # Default to time-series-aware datamodule when no explicit datamodule is provided
         dm_settings = settings.DATAMODULE
         try:
-            name = getattr(dm_settings, "name", None)
-            if not name or str(name) == "InMemoryModule":
-                dm_class = FamilyDefaults.default_datamodule_class_for(settings)
-                dm_settings = dm_settings.model_copy(update={"name": dm_class})  # type: ignore[attr-defined]
+            if dm_settings is not None:
+                name = getattr(dm_settings, "name", None)
+                if not name or str(name) == "InMemoryModule":
+                    dm_class = FamilyDefaults.default_datamodule_class_for(settings)
+                    dm_settings = dm_settings.model_copy(update={"name": dm_class})
         except Exception:
             pass
         datamodule: LightningDataModule = FactoryProvider.create_component(dm_settings, dm_context)
@@ -846,6 +884,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         entry_configs: tuple[DataEntry, ...] = ()
 
         # Detect model type using ABC-based detection
+        assert settings.MODEL is not None, "MODEL settings are required"
         model_type = detect_model_type(settings.MODEL)
 
         # Get appropriate shape specification if required
@@ -853,14 +892,14 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         if requires_shape_spec(model_type):
             try:
                 shape_summary = infer_shapes_from_dataset(dataset)
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 pass  # Timeseries models may not require strict shape inference
 
         # Decide whether to skip wrapper for PF-style datasets/models
         skip_wrapper = False
         try:
             # Skip when dataset is our PF wrapper
-            from dlkit.core.datasets.timeseries import ForecastingDataset as _FDS  # type: ignore
+            from dlkit.core.datasets.timeseries import ForecastingDataset as _FDS
 
             if isinstance(dataset, _FDS):
                 skip_wrapper = True
@@ -873,7 +912,8 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             if isinstance(model_ref, str):
                 from dlkit.tools.utils.general import import_object as _import
 
-                model_cls = _import(model_ref, fallback_module=settings.MODEL.module_path)
+                fallback_mod: str = settings.MODEL.module_path or ""
+                model_cls = _import(model_ref, fallback_module=fallback_mod)
             elif isinstance(model_ref, type):
                 model_cls = model_ref
             if isinstance(model_cls, type):
@@ -889,7 +929,8 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model: LightningModule = FactoryProvider.create_component(settings.MODEL, context)
         else:
             # Otherwise, use the timeseries wrapper with inferred shape and training optimizer/scheduler/loss/metrics configuration
-            wrapper_kwargs = {
+            assert settings.TRAINING is not None, "TRAINING settings are required"
+            wrapper_kwargs: dict[str, Any] = {
                 "optimizer": settings.TRAINING.optimizer,
                 "loss_function": settings.TRAINING.loss_function,
                 "metrics": settings.TRAINING.metrics,

@@ -5,20 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
-from pydantic import Field, model_validator, ValidationInfo
+from pydantic import Field, ValidationInfo, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from .components.model_components import ModelComponentSettings
 from .core.base_settings import BasicSettings
-from .session_settings import SessionSettings
-from .mlflow_settings import MLflowSettings
-from .optuna_settings import OptunaSettings
+from .data_entries import PathFeature, PathTarget
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .training_settings import TrainingSettings
-from .components.model_components import ModelComponentSettings
 from .extras_settings import ExtrasSettings
+from .mlflow_settings import MLflowSettings
+from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
-from .data_entries import PathFeature, PathTarget
+from .session_settings import SessionSettings
+from .training_settings import TrainingSettings
 
 
 class BaseWorkflowSettings(BasicSettings):
@@ -58,7 +58,7 @@ class BaseWorkflowSettings(BasicSettings):
     _workflow_type: ClassVar[str] = "base"
 
     @model_validator(mode="after")
-    def validate_nested_paths(self, info: ValidationInfo) -> "BaseWorkflowSettings":
+    def validate_nested_paths(self, info: ValidationInfo) -> BaseWorkflowSettings:
         """Validate nested DATASET paths with eager validation.
 
         Pydantic does not automatically propagate validation context to nested models.
@@ -118,8 +118,8 @@ class BaseWorkflowSettings(BasicSettings):
             FileNotFoundError: If the config file does not exist.
             pydantic.ValidationError: If validation fails.
         """
-        from dlkit.tools.config.core.sources import DLKitTomlSource, _read_env_patches
         from dlkit.tools.config.core.patching import patch_model
+        from dlkit.tools.config.core.sources import DLKitTomlSource, _read_env_patches
         from dlkit.tools.io.config import _sync_session_root_to_environment
 
         source = DLKitTomlSource(Path(config_path), sections=sections)

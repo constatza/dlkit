@@ -36,7 +36,7 @@ class ContinuousFlowWrapper(GenerativeLightningWrapper):
     def __init__(
         self,
         *,
-        ode_prediction_strategy: "IConfigurablePredictionStrategy",
+        ode_prediction_strategy: IConfigurablePredictionStrategy,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs, prediction_strategy=ode_prediction_strategy)

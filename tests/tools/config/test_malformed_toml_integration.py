@@ -13,14 +13,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pydantic import ValidationError
 
 from dlkit.tools.io.config import (
-    load_sections_config,
     ConfigValidationError,
+    load_sections_config,
     load_training_config_eager,
 )
-
 
 # ============================================================================
 # Fixtures

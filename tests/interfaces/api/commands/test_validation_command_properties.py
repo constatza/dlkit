@@ -5,7 +5,8 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from dlkit.interfaces.api.commands.validation_command import (
     ValidationCommand,
@@ -13,7 +14,6 @@ from dlkit.interfaces.api.commands.validation_command import (
 )
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.tools.config import GeneralSettings
-
 
 # Hypothesis strategies
 
@@ -195,11 +195,10 @@ def _should_structural_validation_pass(settings: Mock) -> bool:
     if is_inference:
         # Inference mode requires MODEL.checkpoint
         return bool(settings.MODEL.checkpoint)
-    else:
-        # Training mode requires TRAINING section (unless SESSION is None or doesn't exist)
-        if not (settings.SESSION and getattr(settings.SESSION, "inference", False)):
-            return bool(settings.TRAINING)
-        return True
+    # Training mode requires TRAINING section (unless SESSION is None or doesn't exist)
+    if not (settings.SESSION and getattr(settings.SESSION, "inference", False)):
+        return bool(settings.TRAINING)
+    return True
 
 
 @given(

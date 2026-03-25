@@ -208,12 +208,7 @@ train_indices = split.train  # tuple[int, ...]
 from dlkit.core.datatypes import IndexSplit
 
 # Create from explicit indices
-split = IndexSplit(
-    train=(0, 2, 4, 6, 8),
-    validation=(1, 3),
-    test=(5, 7, 9),
-    predict=None
-)
+split = IndexSplit(train=(0, 2, 4, 6, 8), validation=(1, 3), test=(5, 7, 9), predict=None)
 
 # Serialize to dict
 split_dict = split.model_dump()
@@ -311,16 +306,18 @@ from dlkit.core.datatypes.urls import (
     LocalPath,
 )
 
+
 class MLflowConfig(BaseModel):
     tracking_uri: HttpUrl  # "http://localhost:5000"
     backend_store_uri: SQLiteUrl  # "sqlite:///~/mlflow/mlflow.db"
     artifact_location: ArtifactDestination  # "~/mlflow/artifacts" or "s3://bucket/path"
 
+
 # Automatic tilde expansion
 config = MLflowConfig(
     tracking_uri="http://localhost:5000",
     backend_store_uri="sqlite:///~/mlflow.db",
-    artifact_location="~/artifacts"
+    artifact_location="~/artifacts",
 )
 # backend_store_uri expanded to "sqlite:///home/user/mlflow.db"
 # artifact_location expanded to "/home/user/artifacts"
@@ -330,7 +327,7 @@ try:
     bad_config = MLflowConfig(
         tracking_uri="not-a-url",
         backend_store_uri="sqlite:///",  # Empty path
-        artifact_location="~/path"
+        artifact_location="~/path",
     )
 except ValueError as e:
     print(e)  # Validation error details
@@ -387,15 +384,14 @@ SimpleMLflowURI = Annotated[
 from pydantic import BaseModel
 from dlkit.core.datatypes import SimpleTildePath, SimpleMLflowURI
 
+
 class SimpleConfig(BaseModel):
     data_path: SimpleTildePath
     mlflow_uri: SimpleMLflowURI
 
+
 # Tilde expansion happens automatically
-config = SimpleConfig(
-    data_path="~/data/train.csv",
-    mlflow_uri="sqlite:///~/mlflow.db"
-)
+config = SimpleConfig(data_path="~/data/train.csv", mlflow_uri="sqlite:///~/mlflow.db")
 
 print(config.data_path)  # "/home/user/data/train.csv"
 print(config.mlflow_uri)  # "sqlite:///home/user/mlflow.db"
@@ -426,6 +422,7 @@ print(config.mlflow_uri)  # "sqlite:///home/user/mlflow.db"
 ```python
 from dlkit.core.datatypes.dataset import _SubsetDataset
 
+
 # Base dataset
 class MyDataset:
     def __init__(self, data):
@@ -436,6 +433,7 @@ class MyDataset:
 
     def __getitem__(self, i):
         return self.data[i]
+
 
 # Create subset
 dataset = MyDataset([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -461,6 +459,7 @@ print(subset[2])  # 4 (third element in subset)
 from pydantic import BaseModel
 from dlkit.core.datatypes import IntHyperparameter, FloatHyperparameter
 
+
 class ModelConfig(BaseModel):
     # Fixed hyperparameters
     batch_size: IntHyperparameter = 32
@@ -469,6 +468,7 @@ class ModelConfig(BaseModel):
     hidden_size: IntHyperparameter = {"suggest_int": (64, 512)}
     learning_rate: FloatHyperparameter = {"suggest_float": (1e-5, 1e-2)}
 
+
 # Training with fixed values
 config = ModelConfig(batch_size=32, hidden_size=128, learning_rate=0.001)
 
@@ -476,7 +476,7 @@ config = ModelConfig(batch_size=32, hidden_size=128, learning_rate=0.001)
 opt_config = ModelConfig(
     batch_size=32,
     hidden_size={"suggest_int": (64, 512)},
-    learning_rate={"suggest_loguniform": (1e-5, 1e-2)}
+    learning_rate={"suggest_loguniform": (1e-5, 1e-2)},
 )
 ```
 
@@ -489,11 +489,7 @@ from torch.utils.data import DataLoader
 dataset = load_my_dataset()
 
 # Create reproducible split
-splitter = Splitter(
-    num_samples=len(dataset),
-    test_ratio=0.15,
-    val_ratio=0.15
-)
+splitter = Splitter(num_samples=len(dataset), test_ratio=0.15, val_ratio=0.15)
 split = splitter.split()
 
 # Create split dataset
@@ -506,6 +502,7 @@ test_loader = DataLoader(split_dataset.test, batch_size=32)
 
 # Save split for reproducibility
 import json
+
 with open("split.json", "w") as f:
     json.dump(split.model_dump(), f)
 ```
@@ -515,16 +512,18 @@ with open("split.json", "w") as f:
 from pydantic import BaseModel
 from dlkit.core.datatypes import SimpleTildePath, SimpleMLflowURI
 
+
 class MLflowSettings(BaseModel):
     tracking_uri: SimpleMLflowURI
     backend_store_uri: SimpleMLflowURI
     artifact_location: SimpleTildePath
 
+
 # Configuration with tilde expansion
 settings = MLflowSettings(
     tracking_uri="http://localhost:5000",
     backend_store_uri="sqlite:///~/mlflow/mlflow.db",
-    artifact_location="~/mlflow/artifacts"
+    artifact_location="~/mlflow/artifacts",
 )
 
 # Paths automatically expanded
@@ -572,8 +571,10 @@ except ValueError as e:
 # Handle URL validation errors
 from pydantic import BaseModel
 
+
 class Config(BaseModel):
     backend_uri: MLflowBackendUrl
+
 
 try:
     config = Config(backend_uri="invalid://url")

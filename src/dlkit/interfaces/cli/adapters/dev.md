@@ -82,11 +82,7 @@ settings = load_config(Path("config.toml"))
 training_settings = load_config(Path("config.toml"), workflow_type="training")
 
 # With root directory override
-settings = load_config(
-    Path("config.toml"),
-    root_dir=Path("/custom/root"),
-    workflow_type="training"
-)
+settings = load_config(Path("config.toml"), root_dir=Path("/custom/root"), workflow_type="training")
 ```
 
 **Implementation Notes**:
@@ -340,9 +336,7 @@ from dlkit.interfaces.api.domain.errors import ConfigurationError
 try:
     # Load with workflow-specific optimization
     settings = load_config(
-        Path("config.toml"),
-        root_dir=Path("/custom/root"),
-        workflow_type="training"
+        Path("config.toml"), root_dir=Path("/custom/root"), workflow_type="training"
     )
 except ConfigurationError as e:
     console.print(f"[red]Config error: {e.message}[/red]")
@@ -390,6 +384,7 @@ dlkit predict config.toml model.ckpt
 ```python
 # Programmatic verbose display
 import os
+
 os.environ["DLKIT_CLI_VERBOSE"] = "1"
 
 present_inference_result(result, console, save_predictions=True)
@@ -409,8 +404,7 @@ present_inference_result(result, console, save_predictions=True)
 **Error Context**: All `ConfigurationError` exceptions include context dict:
 ```python
 ConfigurationError(
-    message="File not found: config.toml",
-    context={"config_path": "/path/to/config.toml"}
+    message="File not found: config.toml", context={"config_path": "/path/to/config.toml"}
 )
 ```
 

@@ -16,6 +16,7 @@ Notes:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import typer
 from rich.console import Console
@@ -23,6 +24,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.inference.api import load_model
 from dlkit.runtime.workflows.factories.inference_data_factory import build_inference_datamodule
+from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -135,7 +137,11 @@ def _run_inference_impl(
                 predictor._model_state.feature_names if predictor._model_state is not None else ()
             )
 
-            datamodule = build_inference_datamodule(settings) if settings.has_batch_inference_config else None
+            datamodule = (
+                build_inference_datamodule(cast(InferenceWorkflowConfig, settings))
+                if getattr(settings, "has_batch_inference_config", False)
+                else None
+            )
             if datamodule is not None:
                 datamodule.setup("predict")
                 loader = datamodule.predict_dataloader()

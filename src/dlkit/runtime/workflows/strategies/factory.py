@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 
 from .core import ITrainingExecutor, VanillaExecutor
 from .core.interfaces import IOptimizationStrategy
@@ -24,7 +25,7 @@ class ExecutionStrategyFactory:
 
     def create_executor(
         self,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         hooks: TrackingHooks | None = None,
     ) -> ITrainingExecutor:
         """Create composed execution strategy from settings.
@@ -66,7 +67,10 @@ class ExecutionStrategyFactory:
         # This method returns: TrackingDecorator -> VanillaExecutor
         return executor
 
-    def create_optimization_strategy(self, settings: GeneralSettings) -> IOptimizationStrategy:
+    def create_optimization_strategy(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> IOptimizationStrategy:
         """Create optimization strategy from settings.
 
         This method uses the clean domain-driven architecture that properly
@@ -89,7 +93,9 @@ class ExecutionStrategyFactory:
                     MLflowTrackingAdapter,
                 )
                 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
-                from dlkit.runtime.workflows.strategies.tracking.uri_resolver import local_host_alive
+                from dlkit.runtime.workflows.strategies.tracking.uri_resolver import (
+                    local_host_alive,
+                )
 
                 mlflow_tracker = MLflowTracker(
                     disable_autostart=False,
@@ -116,16 +122,18 @@ class ExecutionStrategyFactory:
 
             factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
             return factory.create_optimization_strategy(settings)
-        else:
-            from dlkit.interfaces.api.domain import WorkflowError
+        from dlkit.interfaces.api.domain import WorkflowError
 
-            raise WorkflowError(
-                "Optimization strategy requested but OPTUNA is not enabled. "
-                "Enable OPTUNA in settings or use training strategy instead.",
-                {"stage": "strategy_creation", "optuna_enabled": False},
-            )
+        raise WorkflowError(
+            "Optimization strategy requested but OPTUNA is not enabled. "
+            "Enable OPTUNA in settings or use training strategy instead.",
+            {"stage": "strategy_creation", "optuna_enabled": False},
+        )
 
-    def _has_mlflow_config(self, settings: GeneralSettings) -> bool:
+    def _has_mlflow_config(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> bool:
         """Check if MLflow configuration section is present in settings.
 
         MLflow is enabled whenever the [MLFLOW] section exists — no separate
@@ -133,7 +141,10 @@ class ExecutionStrategyFactory:
         """
         return bool(getattr(settings, "MLFLOW", None))
 
-    def _has_mlflow_config_or_env(self, settings: GeneralSettings) -> bool:
+    def _has_mlflow_config_or_env(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> bool:
         """Check if MLflow should be activated for training.
 
         Activates when the ``[MLFLOW]`` config section exists, when the
@@ -151,7 +162,26 @@ class ExecutionStrategyFactory:
         )
         return self._has_mlflow_config(settings) or has_user_http_uri or local_host_alive()
 
-    def _is_optuna_enabled(self, settings: GeneralSettings) -> bool:
+    def _is_optuna_enabled(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> bool:
         """Check if Optuna optimization is enabled in settings."""
         optuna_config = getattr(settings, "OPTUNA", None)
         return bool(optuna_config and getattr(optuna_config, "enabled", False))
+
+
+def create_execution_strategy(
+    settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    hooks: TrackingHooks | None = None,
+) -> ITrainingExecutor:
+    """Convenience function to create a composed execution strategy.
+
+    Args:
+        settings: Configuration settings with feature flags
+        hooks: Optional functional extension points for tracking lifecycle
+
+    Returns:
+        Composed training executor with requested capabilities
+    """
+    return ExecutionStrategyFactory().create_executor(settings, hooks=hooks)

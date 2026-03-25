@@ -103,11 +103,13 @@ metrics after training.
 from dlkit.core.training.metrics import IMetric, create_metric
 import torch
 
+
 # Type-safe metric usage
 def evaluate_model(metric: IMetric, predictions: Tensor, targets: Tensor) -> float:
     """Evaluate model with any metric implementing IMetric."""
     error = metric.compute(predictions, targets)
     return float(error.item())
+
 
 # Create metrics
 mse = create_metric("mse")
@@ -157,20 +159,18 @@ from dlkit.core.training.metrics.base import BaseMetric
 from torch import Tensor
 import torch
 
+
 class CustomMetric(BaseMetric):
     """Custom metric with specialized error computation."""
 
     def __init__(self, power: float = 2.0, **kwargs):
-        super().__init__(
-            name=f"custom_power_{power}",
-            power=power,
-            **kwargs
-        )
+        super().__init__(name=f"custom_power_{power}", power=power, **kwargs)
 
     def _compute_raw_error(self, predictions: Tensor, targets: Tensor, **kwargs) -> Tensor:
         """Compute error raised to custom power."""
         power = self._params["power"]
         return torch.pow(torch.abs(predictions - targets), power)
+
 
 # Usage
 metric = CustomMetric(power=3.0)
@@ -223,8 +223,8 @@ targets = torch.tensor([[1.1, 1.9], [3.2, 3.8]])
 
 # Different aggregation results
 mean_error = mse_mean(predictions, targets)  # Mean of squared errors
-sum_error = mse_sum(predictions, targets)    # Sum of squared errors
-l2_error = mse_l2(predictions, targets)      # L2 norm of squared errors
+sum_error = mse_sum(predictions, targets)  # Sum of squared errors
+l2_error = mse_l2(predictions, targets)  # L2 norm of squared errors
 
 print(f"Mean: {mean_error:.4f}")
 print(f"Sum: {sum_error:.4f}")
@@ -354,21 +354,13 @@ import torch
 # Create metric for 2D vectors with L2 norm
 metric = create_normalized_vector_norm_error(
     vector_dim=-1,  # Last dimension is vector dimension
-    norm_ord=2,     # L2 norm
-    aggregator="mean"
+    norm_ord=2,  # L2 norm
+    aggregator="mean",
 )
 
 # Sample 2D vector data (each row is a vector)
-predictions = torch.tensor([
-    [1.0, 0.0],
-    [0.0, 2.0],
-    [1.0, 1.0]
-])
-targets = torch.tensor([
-    [1.0, 1.0],
-    [2.0, 0.0],
-    [1.0, 1.0]
-])
+predictions = torch.tensor([[1.0, 0.0], [0.0, 2.0], [1.0, 1.0]])
+targets = torch.tensor([[1.0, 1.0], [2.0, 0.0], [1.0, 1.0]])
 
 # Compute normalized error
 # For each vector: ||pred - target|| / ||target||
@@ -412,10 +404,7 @@ mse = create_metric("mse")
 mae = create_metric("mae")
 
 # Equal weight combination (simple average)
-composite = create_composite_metric(
-    name="mse_mae",
-    metrics=[mse, mae]
-)
+composite = create_composite_metric(name="mse_mae", metrics=[mse, mae])
 
 predictions = torch.tensor([1.0, 2.0, 3.0])
 targets = torch.tensor([1.1, 1.9, 3.1])
@@ -426,9 +415,7 @@ print(f"Combined error: {combined_error:.4f}")
 
 # Weighted combination (70% MSE, 30% MAE)
 weighted_composite = create_composite_metric(
-    name="weighted_error",
-    metrics=[mse, mae],
-    weights=[0.7, 0.3]
+    name="weighted_error", metrics=[mse, mae], weights=[0.7, 0.3]
 )
 
 weighted_error = weighted_composite(predictions, targets)
@@ -473,10 +460,11 @@ from dlkit.core.training.metrics import (
     get_global_metric_registry,
     get_global_metric_factory,
     BaseMetric,
-    create_metric
+    create_metric,
 )
 from torch import Tensor
 import torch
+
 
 # Register custom metric
 class HuberLossMetric(BaseMetric):
@@ -487,9 +475,10 @@ class HuberLossMetric(BaseMetric):
         delta = self._params["delta"]
         error = predictions - targets
         is_small = torch.abs(error) <= delta
-        squared_loss = 0.5 * error ** 2
+        squared_loss = 0.5 * error**2
         linear_loss = delta * (torch.abs(error) - 0.5 * delta)
         return torch.where(is_small, squared_loss, linear_loss)
+
 
 # Register with global registry
 registry = get_global_metric_registry()
@@ -585,9 +574,11 @@ errors = list(map(lambda m: m(predictions, targets), metrics))
 # Or with list comprehension
 errors = [metric(predictions, targets) for metric in metrics]
 
+
 # Higher-order function
 def evaluate_with_metrics(metrics, pred, tgt):
     return {m.name: float(m(pred, tgt)) for m in metrics}
+
 
 results = evaluate_with_metrics(metrics, predictions, targets)
 print(results)  # {'mse': 0.0233, 'mae': 0.1333, 'rmse': 0.1528}
@@ -605,8 +596,8 @@ targets = torch.randn(32, 10, 5)
 # Create metric for feature vectors at each time step
 vector_metric = create_normalized_vector_norm_error(
     vector_dim=-1,  # Features dimension
-    norm_ord=2,     # L2 norm
-    aggregator="mean"
+    norm_ord=2,  # L2 norm
+    aggregator="mean",
 )
 
 # Compute error across all batches and time steps
@@ -625,9 +616,7 @@ regularization_loss = create_metric("mae")
 
 # Combine with 90% reconstruction, 10% regularization
 total_loss = create_composite_metric(
-    name="vae_loss",
-    metrics=[reconstruction_loss, regularization_loss],
-    weights=[0.9, 0.1]
+    name="vae_loss", metrics=[reconstruction_loss, regularization_loss], weights=[0.9, 0.1]
 )
 
 # Use in training loop

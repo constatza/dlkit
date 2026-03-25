@@ -8,6 +8,7 @@ Tests all pure functional metric implementations with focus on:
 """
 
 from functools import partial
+from typing import Any, cast
 
 import pytest
 import torch
@@ -273,7 +274,7 @@ class TestEnergyNormMetrics:
         invalid_matrix = [torch.eye(2, dtype=torch.float64)]
 
         with pytest.raises(ValueError, match="Expected matrix tensor with shape \\(B, D, D\\)"):
-            compute_quadratic_form(vector, invalid_matrix)  # type: ignore[arg-type]
+            compute_quadratic_form(vector, cast(Any, invalid_matrix))
 
     def test_quadratic_form_sparse_per_sample_matches_dense(self):
         """Per-sample (B, D, D) sparse COO path should match dense batch reference."""
@@ -295,13 +296,11 @@ class TestEnergyNormMetrics:
     def test_quadratic_form_sparse_batch_mismatch_fails(self):
         """Sparse batch mismatch should raise ValueError."""
         vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
-        mismatched = torch.stack(
-            [
-                torch.eye(2, dtype=torch.float64),
-                2 * torch.eye(2, dtype=torch.float64),
-                3 * torch.eye(2, dtype=torch.float64),
-            ]
-        ).to_sparse_coo()
+        mismatched = torch.stack([
+            torch.eye(2, dtype=torch.float64),
+            2 * torch.eye(2, dtype=torch.float64),
+            3 * torch.eye(2, dtype=torch.float64),
+        ]).to_sparse_coo()
 
         with pytest.raises(ValueError, match="Batch mismatch"):
             compute_quadratic_form(vector, mismatched)
@@ -512,12 +511,10 @@ class TestUpdateComputeSplit:
         """Relative energy update should support sparse per-sample (B, D, D) matrices."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_batch = torch.tensor(
-            [
-                [[2.0, 0.0], [0.0, 1.0]],
-                [[3.0, 0.2], [0.2, 2.0]],
-            ]
-        )
+        dense_batch = torch.tensor([
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[3.0, 0.2], [0.2, 2.0]],
+        ])
         sparse_batch = dense_batch.to_sparse_coo()
 
         dense = _relative_energy_norm_update(preds, target, dense_batch, eps=1e-8)

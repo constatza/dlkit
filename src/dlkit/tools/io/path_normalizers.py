@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -15,7 +14,6 @@ _FILE_URL_ADAPTER = TypeAdapter(FileUrl)
 
 def canonicalize_file_path(path_str: str) -> str:
     """Return a POSIX-formatted path with consistent drive casing."""
-
     if not path_str:
         return path_str
 
@@ -48,7 +46,6 @@ def canonicalize_file_path(path_str: str) -> str:
 
 def canonicalize_file_uri(uri: str) -> str:
     """Canonicalize a file:// URI for reliable comparison."""
-
     stripped = uri.rstrip("/")
 
     try:
@@ -62,7 +59,6 @@ def canonicalize_file_uri(uri: str) -> str:
 
 def normalize_file_uri(uri: str, root_dir: Path) -> str | None:
     """Normalize file:// URIs relative to a root directory."""
-
     try:
         url = _FILE_URL_ADAPTER.validate_python(uri)
     except ValidationError:
@@ -75,7 +71,6 @@ def normalize_file_uri(uri: str, root_dir: Path) -> str | None:
 
 def resolve_local_path(path_like: str | Path, root_dir: Path) -> Path:
     """Resolve a local path value relative to a root directory."""
-
     if isinstance(path_like, Path):
         candidate = path_like
         canonical = canonicalize_file_path(candidate.as_posix())
@@ -94,7 +89,6 @@ def resolve_local_path(path_like: str | Path, root_dir: Path) -> Path:
 
 def path_to_file_uri(path: Path) -> str:
     """Convert a local Path to a canonical file:// URI."""
-
     resolved = path if path.is_absolute() else path.resolve()
     canonical_path = canonicalize_file_path(resolved.as_posix())
     return f"file://{_path_component_for_file_uri(canonical_path)}"

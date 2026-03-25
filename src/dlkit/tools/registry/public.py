@@ -6,7 +6,6 @@ from typing import Any
 
 from dlkit.tools.registry.base import LockedRegistry
 
-
 # One registry instance per component kind
 _MODELS: LockedRegistry[Any] = LockedRegistry()
 _DATASETS: LockedRegistry[Any] = LockedRegistry()
@@ -97,9 +96,9 @@ def _reset_for_tests() -> None:
 
 
 __all__ = [
-    "register_model",
+    "register_datamodule",
     "register_dataset",
     "register_loss",
     "register_metric",
-    "register_datamodule",
+    "register_model",
 ]

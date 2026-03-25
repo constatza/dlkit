@@ -1,7 +1,6 @@
 import abc
 from typing import Any
 
-
 from dlkit.core.models.nn.base import DLKitModel
 
 

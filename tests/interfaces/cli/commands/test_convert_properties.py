@@ -15,7 +15,6 @@ from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.app import app as cli_app
 
-
 MIN_OPSET = 9
 MAX_OPSET = 20
 

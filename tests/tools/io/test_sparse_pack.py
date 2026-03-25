@@ -128,8 +128,12 @@ def test_batch_builder_returns_correct_sparse_list(
     assert len(batch) == 2
     assert batch[0].is_sparse
     assert batch[1].is_sparse
-    assert torch.allclose(batch[0].to_dense(), torch.from_numpy(dense_matrices[0]).to(batch[0].dtype))
-    assert torch.allclose(batch[1].to_dense(), torch.from_numpy(dense_matrices[2]).to(batch[1].dtype))
+    assert torch.allclose(
+        batch[0].to_dense(), torch.from_numpy(dense_matrices[0]).to(batch[0].dtype)
+    )
+    assert torch.allclose(
+        batch[1].to_dense(), torch.from_numpy(dense_matrices[2]).to(batch[1].dtype)
+    )
 
 
 def test_stacked_builder_returns_correct_sparse_tensor(

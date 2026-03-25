@@ -7,7 +7,6 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 import torch
 from torch import Tensor
 
@@ -102,7 +101,9 @@ def test_uniform_time_sampler_custom_range(batch_size: int) -> None:
     sampler = UniformTimeSampler(t_min=t_min, t_max=t_max)
     gen = torch.Generator()
     gen.manual_seed(_BASE_SEED)
-    result = sampler(batch_size * 64, device=torch.device("cpu"), dtype=torch.float32, generator=gen)
+    result = sampler(
+        batch_size * 64, device=torch.device("cpu"), dtype=torch.float32, generator=gen
+    )
     assert result.min() >= t_min
     assert result.max() <= t_max
 

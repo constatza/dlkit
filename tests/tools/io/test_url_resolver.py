@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-import os
 import pytest
 
 from dlkit.tools.io import url_resolver
 
 
-@pytest.fixture()
+@pytest.fixture
 def root(tmp_path: Path) -> Path:
     return tmp_path
 

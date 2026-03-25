@@ -13,9 +13,7 @@ Covers:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
-import pytest
 import torch
 from torch import Tensor
 
@@ -90,9 +88,7 @@ def test_broadcast_time_dtype_preserved(batch_size: int) -> None:
 # ===========================================================================
 
 
-def test_linear_path_at_t0_equals_x0(
-    x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int
-) -> None:
+def test_linear_path_at_t0_equals_x0(x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int) -> None:
     """linear_path at t=0 returns x0 exactly.
 
     Args:
@@ -105,9 +101,7 @@ def test_linear_path_at_t0_equals_x0(
     assert torch.allclose(result, x0_tensor, atol=_ABS_TOL)
 
 
-def test_linear_path_at_t1_equals_x1(
-    x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int
-) -> None:
+def test_linear_path_at_t1_equals_x1(x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int) -> None:
     """linear_path at t=1 returns x1 exactly.
 
     Args:
@@ -120,9 +114,7 @@ def test_linear_path_at_t1_equals_x1(
     assert torch.allclose(result, x1_tensor, atol=_ABS_TOL)
 
 
-def test_linear_path_shape(
-    x0_tensor: Tensor, x1_tensor: Tensor, time_tensor: Tensor
-) -> None:
+def test_linear_path_shape(x0_tensor: Tensor, x1_tensor: Tensor, time_tensor: Tensor) -> None:
     """linear_path output shape equals input spatial shape.
 
     Args:
@@ -134,9 +126,7 @@ def test_linear_path_shape(
     assert result.shape == x1_tensor.shape
 
 
-def test_linear_path_midpoint(
-    x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int
-) -> None:
+def test_linear_path_midpoint(x0_tensor: Tensor, x1_tensor: Tensor, batch_size: int) -> None:
     """linear_path at t=0.5 returns the midpoint of x0 and x1.
 
     Args:
@@ -155,9 +145,7 @@ def test_linear_path_midpoint(
 # ===========================================================================
 
 
-def test_noise_schedule_path_at_t0(
-    x1_tensor: Tensor, x0_tensor: Tensor, batch_size: int
-) -> None:
+def test_noise_schedule_path_at_t0(x1_tensor: Tensor, x0_tensor: Tensor, batch_size: int) -> None:
     """noise_schedule_path at t=0 returns eps (the noise, here x0_tensor).
 
     At t=0: xt = (1 - 0) * eps + 0 * x1 = eps.
@@ -172,9 +160,7 @@ def test_noise_schedule_path_at_t0(
     assert torch.allclose(result, x0_tensor, atol=_ABS_TOL)
 
 
-def test_noise_schedule_path_at_t1(
-    x1_tensor: Tensor, x0_tensor: Tensor, batch_size: int
-) -> None:
+def test_noise_schedule_path_at_t1(x1_tensor: Tensor, x0_tensor: Tensor, batch_size: int) -> None:
     """noise_schedule_path at t=1 equals sigma_min * eps + x1.
 
     At t=1: xt = (1 - (1 - sigma_min)) * eps + 1 * x1 = sigma_min * eps + x1.
@@ -232,9 +218,7 @@ def test_displacement_target_value(x0_tensor: Tensor, x1_tensor: Tensor) -> None
     assert torch.allclose(result, expected, atol=_ABS_TOL)
 
 
-def test_displacement_target_x0_zero_equals_x1(
-    x0_tensor: Tensor, x1_tensor: Tensor
-) -> None:
+def test_displacement_target_x0_zero_equals_x1(x0_tensor: Tensor, x1_tensor: Tensor) -> None:
     """When x0 is all-zeros, displacement_target returns x1 exactly.
 
     Args:
@@ -346,9 +330,7 @@ def test_heun_step_shape_preserved(batch_size: int, spatial_dim: int) -> None:
     assert result.shape == x.shape
 
 
-def test_heun_step_constant_model_equals_euler(
-    batch_size: int, spatial_dim: int
-) -> None:
+def test_heun_step_constant_model_equals_euler(batch_size: int, spatial_dim: int) -> None:
     """For a constant-velocity model, Heun and Euler give identical results.
 
     When the velocity field is constant (no dependence on x or t), the

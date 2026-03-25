@@ -3,7 +3,6 @@
 All functions are pure: no side effects, no state.
 """
 
-import torch
 from torch import Tensor
 
 from dlkit.core.models.nn.generative.functions.broadcast import broadcast_time

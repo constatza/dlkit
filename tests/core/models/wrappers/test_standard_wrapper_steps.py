@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch import nn
 from tensordict import TensorDict
+from torch import nn
 
 from dlkit.core.models.wrappers.standard import StandardLightningWrapper
 from dlkit.tools.config.components.model_components import (
@@ -18,7 +18,7 @@ from dlkit.tools.config.data_entries import Feature, Target
 
 
 class _Id(nn.Module):
-    def forward(self, x):  # noqa: ANN001
+    def forward(self, x):
         return x
 
 
@@ -37,10 +37,10 @@ def _make_batch(batch_size: int = 2, feat_dim: int = 3) -> TensorDict:
     )
 
 
-def test_standard_wrapper_basic_steps(monkeypatch):  # noqa: ANN001
+def test_standard_wrapper_basic_steps(monkeypatch):
     # Monkeypatch FactoryProvider to return our simple loss/metric dummies.
     # Model building goes through _build_model_from_settings (not FactoryProvider).
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
         return lambda a, b: torch.nn.functional.mse_loss(a, b)
@@ -93,7 +93,7 @@ def _make_wrapper_with_loss(
         captured.update(kwargs)
         return torch.nn.functional.mse_loss(preds, target)
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
         return _kwarg_loss
@@ -136,7 +136,7 @@ def test_loss_input_context_feature_excluded_from_model(monkeypatch: pytest.Monk
     """model_input=False, loss_input='K' entry is not passed to model but is in loss kwargs."""
     captured: dict = {}
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
 
@@ -184,7 +184,7 @@ def test_loss_input_context_feature_excluded_from_model(monkeypatch: pytest.Monk
 def test_duplicate_loss_input_across_entries_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two entries with the same loss_input value raise ValueError at construction."""
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
         return lambda a, b, **kw: torch.nn.functional.mse_loss(a, b)
@@ -209,7 +209,7 @@ def test_duplicate_loss_input_across_entries_raises(monkeypatch: pytest.MonkeyPa
 def test_loss_input_and_extra_inputs_overlap_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Same kwarg in both DataEntry.loss_input and extra_inputs raises ValueError."""
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
         return lambda a, b, **kw: torch.nn.functional.mse_loss(a, b)
@@ -239,7 +239,7 @@ def test_loss_input_and_extra_inputs_non_overlap_merge(monkeypatch: pytest.Monke
     """Non-overlapping loss_input and extra_inputs both appear in the loss call."""
     captured: dict = {}
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
 
@@ -295,7 +295,7 @@ def test_signature_validation_catches_missing_kwarg(monkeypatch: pytest.MonkeyPa
         """Loss with no extra kwargs accepted."""
         return torch.nn.functional.mse_loss(preds, target)
 
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Id()
         return _strict_loss

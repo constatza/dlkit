@@ -12,9 +12,9 @@ from typing import Any
 from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.optimization.domain import (
     IStudyRepository,
+    OptimizationDirection,
     Study,
     Trial,
-    OptimizationDirection,
     TrialState,
 )
 
@@ -97,7 +97,7 @@ class OptunaStudyRepository(IStudyRepository):
                 study_id=study_id,
                 study_name=optuna_study.study_name,
                 direction=direction,
-                trials=[],
+                trials=(),
                 target_trials=target_trials,
                 sampler_config=sampler_config,
                 pruner_config=pruner_config,
@@ -129,7 +129,7 @@ class OptunaStudyRepository(IStudyRepository):
                 study_id=study_id,
                 study_name=optuna_study.study_name,
                 direction=direction,
-                trials=self._convert_optuna_trials(optuna_study.trials),
+                trials=tuple(self._convert_optuna_trials(optuna_study.trials)),
             )
 
             return study
@@ -143,7 +143,6 @@ class OptunaStudyRepository(IStudyRepository):
         """Save study to Optuna storage."""
         # In Optuna, studies are automatically persisted when modified
         # This is a no-op for Optuna but allows other storage implementations
-        pass
 
     def add_trial_to_study(self, study_id: str, trial: Trial) -> None:
         """Add trial to study."""
@@ -156,13 +155,11 @@ class OptunaStudyRepository(IStudyRepository):
         # Convert domain trial to Optuna trial
         # Note: In Optuna, trials are created through the optimization process
         # This method is mainly for testing/domain consistency
-        pass
 
     def update_trial_in_study(self, study_id: str, trial_id: str, **updates) -> None:
         """Update trial in study."""
         # In Optuna, trial updates are handled by the optimization process
         # This is mainly for domain model consistency
-        pass
 
     def get_best_trial(self, study_id: str) -> Trial | None:
         """Get best trial from study."""
@@ -284,7 +281,7 @@ class InMemoryStudyRepository(IStudyRepository):
             study_id=study_id,
             study_name=study_name,
             direction=direction,
-            trials=[],
+            trials=(),
             target_trials=target_trials,
             sampler_config=sampler_config,
             pruner_config=pruner_config,

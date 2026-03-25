@@ -256,20 +256,20 @@ def create_settings_permutations() -> list[dict[str, Any]]:
 
     # Create permutations of missing required sections
     for i in range(len(base_sections)):
-        config = {section: True for section in base_sections}
+        config = dict.fromkeys(base_sections, True)
         config[base_sections[i]] = False  # Missing this section
         config["TRAINING"] = True
         config["inference"] = False
         permutations.append(config)
 
     # Training mode without TRAINING section
-    config = {section: True for section in base_sections}
+    config = dict.fromkeys(base_sections, True)
     config["TRAINING"] = False
     config["inference"] = False
     permutations.append(config)
 
     # Inference mode without checkpoint
-    config = {section: True for section in base_sections}
+    config = dict.fromkeys(base_sections, True)
     config["TRAINING"] = False
     config["inference"] = True
     config["checkpoint"] = False

@@ -4,20 +4,20 @@ This module tests the specification pattern implementation for validation.
 """
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from dlkit.core.shape_specs import (
+    DimensionRangeSpecification,
+    ModelFamily,
+    ModelFamilyCompatibilitySpecification,
+    PositiveDimensionsSpecification,
+    RequiredEntriesSpecification,
     ShapeData,
     ShapeEntry,
-    ModelFamily,
     ShapeSource,
-    ShapeSpecification,
-    ShapeValidationEngine,
     ShapeSpecificationBuilder,
-    RequiredEntriesSpecification,
-    PositiveDimensionsSpecification,
-    ModelFamilyCompatibilitySpecification,
-    DimensionRangeSpecification,
+    ShapeValidationEngine,
     ValidationResult,
 )
 

@@ -14,26 +14,27 @@ import torch
 from torch import Tensor
 from torch.nn import Identity
 
+from dlkit.core.models.wrappers.components import (
+    MetricRoute,
+    ModelOutputSpec,
+    NamedBatchTransformer,
+    RoutedLossComputer,
+    RoutedMetricsUpdater,
+    WrapperCheckpointMetadata,
+    _build_invoker_from_entries,
+    _classify_feature_entries,
+)
+from dlkit.core.models.wrappers.protocols import IFittableBatchTransformer
+from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.tools.config import (
     BuildContext,
     FactoryProvider,
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 from dlkit.tools.config.components.model_components import LossInputRef
-from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.models.wrappers.components import (
-    ModelOutputSpec,
-    NamedBatchTransformer,
-    RoutedLossComputer,
-    RoutedMetricsUpdater,
-    MetricRoute,
-    WrapperCheckpointMetadata,
-    _build_invoker_from_entries,
-    _classify_feature_entries,
-)
-from dlkit.core.models.wrappers.protocols import IFittableBatchTransformer
+from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
 
@@ -114,7 +115,7 @@ def _validate_extra_inputs_against_signature(
 
     try:
         sig = inspect.signature(loss_fn)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return  # Uninspectable — skip validation
     params = sig.parameters
     accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
@@ -246,7 +247,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        shape_summary: "ShapeSummary | None" = None,
+        shape_summary: ShapeSummary | None = None,
         **kwargs: Any,
     ) -> None:
         """Build protocols from settings and initialise the base wrapper.
@@ -386,7 +387,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     def _apply_batch_transforms(
         self,
         batch: Any,
-        generator: "torch.Generator | None",
+        generator: torch.Generator | None,
     ) -> Any:
         """Apply coupled supervision transforms in sequence.
 
@@ -405,7 +406,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             return batch
         return reduce(lambda b, t: t(b, generator), self._batch_transforms, batch)
 
-    def _compute_loss(self, predictions: Any, batch: Any) -> "Tensor":
+    def _compute_loss(self, predictions: Any, batch: Any) -> Tensor:
         """Compute scalar loss from predictions and batch.
 
         Delegates to ``self._loss_computer`` by default. Subclasses can

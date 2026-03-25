@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
 from pydantic import (
-    Field,
-    NonNegativeFloat,
-    FilePath,
     DirectoryPath,
-    model_validator,
+    Field,
+    FilePath,
+    NonNegativeFloat,
     ValidationInfo,
+    model_validator,
 )
 
-from .core.base_settings import ComponentSettings, BasicSettings
-from .enums import DatasetFamily
+from .core.base_settings import BasicSettings, StringNamedComponentSettings
 from .data_entries import (
-    Feature,
-    Target,
     FeatureType,
-    TargetType,
     PathFeature,
     PathTarget,
+    TargetType,
 )
+from .enums import DatasetFamily
 
 
 class IndexSplitSettings(BasicSettings):
@@ -71,7 +71,7 @@ class IndexSplitSettings(BasicSettings):
         return (self.train_ratio, self.val_ratio, self.test_ratio)
 
 
-class DatasetSettings(ComponentSettings):
+class DatasetSettings(StringNamedComponentSettings):
     """Top-level Dataset configuration.
 
     Flattened from component architecture to top-level for easier access.
@@ -89,8 +89,10 @@ class DatasetSettings(ComponentSettings):
         split: Index split configuration
     """
 
-    name: str = Field(default="FlexibleDataset", description="Dataset class name")
-    module_path: str = Field(
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default="FlexibleDataset", description="Dataset class name"
+    )
+    module_path: str | None = Field(
         default="dlkit.core.datasets", description="Module path where the dataset class is located"
     )
     # Optional dataset family hint for strategy selection (accepts strings or StrEnum)
@@ -102,12 +104,8 @@ class DatasetSettings(ComponentSettings):
         default=None, description="Root directory of the dataset", alias="root_dir"
     )
     # Flexible entries only: tuples of Feature/Target settings (immutable for consistency)
-    features: tuple[FeatureType, ...] = Field(
-        default=(), description="Flexible feature entries"
-    )
-    targets: tuple[TargetType, ...] = Field(
-        default=(), description="Flexible target entries"
-    )
+    features: tuple[FeatureType, ...] = Field(default=(), description="Flexible feature entries")
+    targets: tuple[TargetType, ...] = Field(default=(), description="Flexible target entries")
 
     split: IndexSplitSettings = Field(
         default_factory=IndexSplitSettings, description="Index split configuration"
@@ -124,7 +122,7 @@ class DatasetSettings(ComponentSettings):
     )
 
     @model_validator(mode="after")
-    def validate_nested_paths(self, info: ValidationInfo) -> "DatasetSettings":
+    def validate_nested_paths(self, info: ValidationInfo) -> DatasetSettings:
         """Validate nested Feature/Target paths with eager validation.
 
         Pydantic does not automatically propagate validation context to nested models.

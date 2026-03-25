@@ -7,7 +7,6 @@ from tensordict import TensorDict
 
 from dlkit.tools.utils import tensordict_to_numpy
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

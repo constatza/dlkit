@@ -1,4 +1,5 @@
 from typing import Any
+
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from dlkit.core.datamodules.base import BaseDataModule

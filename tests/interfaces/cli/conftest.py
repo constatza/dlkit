@@ -1,13 +1,14 @@
 """CLI test fixtures and utilities."""
 
 from __future__ import annotations
-import pytest
-from typer.testing import CliRunner
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock
 from typing import Any
+from unittest.mock import Mock
+
+import pytest
+from typer.testing import CliRunner
 
 # Disable Rich for testing to prevent colors and formatting
 sys.modules.setdefault("rich", Mock())
@@ -409,8 +410,9 @@ def mock_successful_training_result() -> Mock:
     Returns:
         Mock TrainingResult object for testing.
     """
-    from dlkit.interfaces.api.domain import TrainingResult, ModelState
     from pathlib import Path
+
+    from dlkit.interfaces.api.domain import ModelState, TrainingResult
 
     # Create a mock ModelState
     mock_model_state = Mock(spec=ModelState)
@@ -609,8 +611,9 @@ def sample_convert_result() -> Mock:
     Returns:
         Mock ConvertResult object with proper structure.
     """
-    from dlkit.interfaces.api.commands.convert_command import ConvertResult
     from pathlib import Path
+
+    from dlkit.interfaces.api.commands.convert_command import ConvertResult
 
     return ConvertResult(output_path=Path("test_model.onnx"), opset=17, inputs=[(1, 3, 224, 224)])
 

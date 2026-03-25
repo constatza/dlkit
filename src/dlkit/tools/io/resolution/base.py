@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .context import ResolverContext
@@ -28,7 +28,6 @@ class URLResolver(ABC):
         Returns:
             str: Resolved URL string with proper path expansion and validation
         """
-        pass
 
 
 class PathResolver(ABC):
@@ -49,4 +48,3 @@ class PathResolver(ABC):
         Returns:
             Path: Resolved absolute path with proper expansion
         """
-        pass

@@ -4,21 +4,21 @@ This module tests the integration of all components working together
 in realistic scenarios.
 """
 
-import pytest
 from pathlib import Path
-import torch
 from unittest.mock import Mock, patch
 
+import pytest
+import torch
+
 from dlkit.core.shape_specs import (
-    create_shape_spec,
-    ShapeSystemFactory,
     ModelFamily,
-    ShapeSource,
-    ShapeInferenceEngine,
-    VersionedShapeSerializer,
-    SerializationFormat,
     ShapeData,
     ShapeEntry,
+    ShapeInferenceEngine,
+    ShapeSource,
+    ShapeSystemFactory,
+    VersionedShapeSerializer,
+    create_shape_spec,
 )
 from dlkit.tools.config.components.model_components import ModelComponentSettings
 
@@ -217,7 +217,7 @@ class TestFullSystemIntegration:
         try:
             serializer.deserialize({"invalid": "data"})
             assert False, "Should have raised an exception"
-        except (ValueError, KeyError):
+        except ValueError, KeyError:
             pass  # Expected behavior
 
         # Test invalid validation
@@ -228,7 +228,7 @@ class TestFullSystemIntegration:
             source=ShapeSource.TRAINING_DATASET,
         )
 
-        result = validator.validate_collection(invalid_data)
+        validator.validate_collection(invalid_data)
         # Empty data might be valid for some specs, but should trigger warnings
         # The exact behavior depends on the specific validation rules
 

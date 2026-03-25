@@ -155,11 +155,7 @@ settings = load_settings("config.toml", inference=False)  # training
 settings = load_settings("config.toml", sections=["MODEL", "DATASET"])
 
 # Strategy 3: Strict loading (all sections must exist)
-settings = load_settings(
-    "config.toml",
-    sections=["MODEL", "DATASET", "TRAINING"],
-    strict=True
-)
+settings = load_settings("config.toml", sections=["MODEL", "DATASET", "TRAINING"], strict=True)
 ```
 
 **Implementation Notes**:
@@ -248,17 +244,11 @@ from dlkit.tools.config import FactoryProvider, BuildContext
 from dlkit.tools.config.components import ModelComponentSettings
 
 # Create build context
-context = BuildContext(
-    mode="training",
-    device="cuda",
-    random_seed=42
-)
+context = BuildContext(mode="training", device="cuda", random_seed=42)
 
 # Create component using global factory
 model_settings = ModelComponentSettings(
-    name="dlkit.core.models.nn.ffnn.SimpleFFNN",
-    hidden_size=128,
-    num_layers=3
+    name="dlkit.core.models.nn.ffnn.SimpleFFNN", hidden_size=128, num_layers=3
 )
 
 model = FactoryProvider.create_component(model_settings, context)
@@ -266,10 +256,12 @@ model = FactoryProvider.create_component(model_settings, context)
 # Register custom factory for specialized construction
 from dlkit.tools.config.core import ComponentFactory
 
+
 class CustomModelFactory(ComponentFactory):
     def create(self, settings, context):
         # Custom construction logic
         pass
+
 
 FactoryProvider.register_factory(ModelComponentSettings, CustomModelFactory())
 ```
@@ -307,17 +299,11 @@ from pathlib import Path
 
 # Create base context
 context = BuildContext(
-    mode="training",
-    device="cuda:0",
-    random_seed=42,
-    working_directory=Path("/path/to/project")
+    mode="training", device="cuda:0", random_seed=42, working_directory=Path("/path/to/project")
 )
 
 # Add overrides for component construction
-model_context = context.with_overrides(
-    input_dim=784,
-    output_dim=10
-)
+model_context = context.with_overrides(input_dim=784, output_dim=10)
 
 # Access override values
 input_dim = model_context.get_override("input_dim", default=512)
@@ -358,6 +344,7 @@ base_settings = GeneralSettings.from_toml_file("config.toml")
 # Create sampler
 sampler = create_settings_sampler(base_settings.OPTUNA)
 
+
 # In Optuna objective function
 def objective(trial):
     # Sample hyperparameters
@@ -366,6 +353,7 @@ def objective(trial):
     # Use sampled settings for training
     result = train_model(sampled_settings)
     return result.loss
+
 
 # Null sampler when optimization disabled
 null_sampler = create_settings_sampler(None)
@@ -407,20 +395,22 @@ training_settings = loader.load_training_settings("config.toml")
 eval_settings = loader.load_sections(
     "config.toml",
     sections=["MODEL", "DATASET"],
-    strict=False  # ignore missing sections
+    strict=False,  # ignore missing sections
 )
 
 # Custom settings class
 from dlkit.tools.config.workflow_settings import BaseWorkflowSettings
 
+
 class CustomSettings(BaseWorkflowSettings):
     pass
+
 
 custom = loader.load_custom_settings(
     "config.toml",
     CustomSettings,
     required_sections=["MODEL", "DATASET"],
-    optional_sections=["PATHS"]
+    optional_sections=["PATHS"],
 )
 ```
 
@@ -524,18 +514,11 @@ from dlkit.tools.config.components import ModelComponentSettings
 
 # Define model configuration
 model_settings = ModelComponentSettings(
-    name="dlkit.core.models.nn.ffnn.SimpleFFNN",
-    hidden_size=256,
-    num_layers=4,
-    activation="relu"
+    name="dlkit.core.models.nn.ffnn.SimpleFFNN", hidden_size=256, num_layers=4, activation="relu"
 )
 
 # Create build context
-context = BuildContext(
-    mode="training",
-    device="cuda",
-    random_seed=42
-)
+context = BuildContext(mode="training", device="cuda", random_seed=42)
 
 # Construct model using factory
 model = FactoryProvider.create_component(model_settings, context)
@@ -556,6 +539,7 @@ base_settings = GeneralSettings.from_toml_file("config.toml")
 # Create sampler from OPTUNA section
 sampler = create_settings_sampler(base_settings.OPTUNA)
 
+
 # Define Optuna objective
 def objective(trial):
     # Sample hyperparameters
@@ -565,6 +549,7 @@ def objective(trial):
     result = train_model(trial_settings)
 
     return result.val_loss
+
 
 # Run optimization
 study = optuna.create_study(direction="minimize")
@@ -582,7 +567,7 @@ strategy = PrecisionStrategy.MIXED_16
 # Configure PyTorch Lightning Trainer
 trainer_kwargs = {
     "precision": strategy.to_lightning_precision(),  # "16-mixed"
-    "max_epochs": 100
+    "max_epochs": 100,
 }
 
 # Get torch dtype for manual operations

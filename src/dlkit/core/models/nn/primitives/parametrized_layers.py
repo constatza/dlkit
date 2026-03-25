@@ -8,11 +8,10 @@ from torch import Tensor, nn
 from torch.nn.utils import parametrize
 
 from dlkit.core.models.nn.primitives.parametrizations import (
-    PositiveSandwichScale,
     SPD,
+    PositiveSandwichScale,
     Symmetric,
 )
-
 
 # ---------------------------------------------------------------------------
 # Low-level registration helpers
@@ -163,8 +162,6 @@ def register_spd_factorized(
 # ---------------------------------------------------------------------------
 
 
-
-
 class SymmetricLinear(nn.Linear):
     """Linear layer whose weight is constrained to be symmetric.
 
@@ -284,12 +281,13 @@ class FactorizedLinear(nn.Module):
         self._log_scale_mean = float(mean)
         self._log_scale_std = float(std)
         self._pos_fn = pos_fn
-        factory = {"device": device, "dtype": dtype}
         self.base_weight = nn.Parameter(
-            torch.empty(out_features, in_features, **factory)
+            torch.empty(out_features, in_features, device=device, dtype=dtype)
         )
-        self.log_scale = nn.Parameter(torch.empty(out_features, **factory))
-        self.bias = nn.Parameter(torch.empty(out_features, **factory)) if bias else None
+        self.log_scale = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype))
+        self.bias = (
+            nn.Parameter(torch.empty(out_features, device=device, dtype=dtype)) if bias else None
+        )
 
         self.reset_parameters()
 

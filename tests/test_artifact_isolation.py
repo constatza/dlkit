@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dlkit.tools.io.locations import mlruns_dir, mlartifacts_dir, output, optuna_storage_uri
+from dlkit.tools.io.locations import mlruns_dir, output
 
 
 def test_artifacts_go_to_dlkit_root_dir() -> None:

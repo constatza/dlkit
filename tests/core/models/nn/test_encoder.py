@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
-from dlkit.core.models.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
+from dlkit.core.models.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 
 
 @pytest.fixture

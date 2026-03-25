@@ -1,6 +1,6 @@
-from .base import BaseDataModule
 from .array import InMemoryModule
-from .timeseries import TimeSeriesDataModule
+from .base import BaseDataModule
 from .graph import GraphDataModule
+from .timeseries import TimeSeriesDataModule
 
-__all__ = ["InMemoryModule", "TimeSeriesDataModule", "GraphDataModule", "BaseDataModule"]
+__all__ = ["BaseDataModule", "GraphDataModule", "InMemoryModule", "TimeSeriesDataModule"]

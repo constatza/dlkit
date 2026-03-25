@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import torch
+
 import dlkit
 from dlkit.tools.config import GeneralSettings
 
@@ -45,6 +46,7 @@ class TestBasicIntegration:
             assert isinstance(training_result.metrics, dict)
 
         from mlflow.tracking import MlflowClient
+
         from dlkit.runtime.workflows.strategies.tracking.naming import determine_experiment_name
 
         tracking_uri = os.environ["MLFLOW_TRACKING_URI"]

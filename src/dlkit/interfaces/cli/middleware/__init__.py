@@ -8,8 +8,8 @@ from .error_handler import (
 )
 
 __all__ = [
+    "format_validation_error",
     "handle_api_error",
     "handle_keyboard_interrupt",
     "handle_unexpected_error",
-    "format_validation_error",
 ]

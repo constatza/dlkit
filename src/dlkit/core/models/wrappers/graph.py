@@ -7,14 +7,18 @@ for the graph data path.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import Identity
-from torch_geometric.data import Batch as PyGBatch, Data
+from torch_geometric.data import Batch as PyGBatch
+from torch_geometric.data import Data
 from torchmetrics import MetricCollection
 
+from dlkit.core.models.wrappers.components import (
+    NamedBatchTransformer,
+    WrapperCheckpointMetadata,
+)
 from dlkit.tools.config import (
     BuildContext,
     FactoryProvider,
@@ -22,11 +26,7 @@ from dlkit.tools.config import (
     WrapperComponentSettings,
 )
 from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
-from dlkit.core.models.wrappers.components import (
-    NamedBatchTransformer,
-    RoutedMetricsUpdater,
-    WrapperCheckpointMetadata,
-)
+
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
 
@@ -105,9 +105,9 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
 
         # Create minimal protocol objects (graph overrides all step methods)
         from dlkit.core.models.wrappers.components import (
-            _NullModelInvoker,
             _NullLossComputer,
             _NullMetricsUpdater,
+            _NullModelInvoker,
         )
 
         _null_transformer = NamedBatchTransformer({}, {})
@@ -155,11 +155,12 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         Returns:
             Tuple of (x, edge_index, edge_attr) tensors.
         """
-        x: Tensor = batch.x  # type: ignore[attr-defined]
-        edge_index: Tensor = batch.edge_index  # type: ignore[attr-defined]
-        edge_attr: Tensor | None = getattr(batch, "edge_attr", None)
+        graph_batch = cast(Any, batch)
+        x: Tensor = cast(Tensor, graph_batch.x)
+        edge_index: Tensor = cast(Tensor, graph_batch.edge_index)
+        edge_attr: Tensor | None = cast(Tensor | None, getattr(graph_batch, "edge_attr", None))
         if edge_attr is None:
-            edge_attr = getattr(batch, "edge_weight", None)
+            edge_attr = cast(Tensor | None, getattr(graph_batch, "edge_weight", None))
         return x, edge_index, edge_attr
 
     def forward(
@@ -248,7 +249,9 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         target = self._extract_pyg_target(batch, predictions)
         val_loss = self.loss_function(predictions, target)
         metrics = self.val_metrics(predictions, target)
-        self._log_stage_outputs("val", val_loss, metrics if metrics else None, batch_size=predictions.shape[0])
+        self._log_stage_outputs(
+            "val", val_loss, metrics if metrics else None, batch_size=predictions.shape[0]
+        )
         return {"val_loss": val_loss}
 
     def test_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
@@ -270,7 +273,9 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         target = self._extract_pyg_target(batch, predictions)
         test_loss = self.loss_function(predictions, target)
         metrics = self.test_metrics(predictions, target)
-        self._log_stage_outputs("test", test_loss, metrics if metrics else None, batch_size=predictions.shape[0])
+        self._log_stage_outputs(
+            "test", test_loss, metrics if metrics else None, batch_size=predictions.shape[0]
+        )
         return {"test_loss": test_loss}
 
     def predict_step(self, batch: Data | PyGBatch, batch_idx: int) -> Any:

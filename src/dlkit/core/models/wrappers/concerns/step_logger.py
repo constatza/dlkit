@@ -186,4 +186,3 @@ class NullStepLogger:
         Args:
             lr: Learning rate value (ignored).
         """
-        pass

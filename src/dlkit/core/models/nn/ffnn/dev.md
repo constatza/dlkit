@@ -93,7 +93,7 @@ model = FeedForwardNN(
     layers=[256, 128, 64],  # Hidden layers
     activation=torch.nn.functional.relu,
     normalize="batch",
-    dropout=0.3
+    dropout=0.3,
 )
 
 # Forward pass
@@ -156,7 +156,7 @@ model = ConstantWidthFFNN(
     num_layers=4,
     activation=torch.nn.functional.gelu,
     normalize="layer",
-    dropout=0.2
+    dropout=0.2,
 )
 
 # Forward pass
@@ -202,11 +202,7 @@ import torch
 shape_spec = create_shape_spec({"x": (20,), "y": (1,)})
 
 # Linear model with batch normalization
-model = LinearNetwork(
-    unified_shape=shape_spec,
-    normalize="batch",
-    bias=True
-)
+model = LinearNetwork(unified_shape=shape_spec, normalize="batch", bias=True)
 
 # Forward pass
 x = torch.randn(128, 20)
@@ -268,11 +264,7 @@ shape_spec = create_shape_spec({"x": (100,), "y": (100,)})
 
 # L2-norm scaled linear model
 model = NormScaledLinearFFNN(
-    unified_shape=shape_spec,
-    bias=False,
-    norm="l2",
-    eps_gain=10.0,
-    keep_stats=False
+    unified_shape=shape_spec, bias=False, norm="l2", eps_gain=10.0, keep_stats=False
 )
 
 # Forward pass maintains scale consistency
@@ -284,10 +276,7 @@ print(torch.linalg.vector_norm(b, dim=-1))
 print(torch.linalg.vector_norm(x, dim=-1))
 
 # With stats
-model_with_stats = NormScaledLinearFFNN(
-    unified_shape=shape_spec,
-    keep_stats=True
-)
+model_with_stats = NormScaledLinearFFNN(unified_shape=shape_spec, keep_stats=True)
 x, stats = model_with_stats(b)
 print(stats["norm"])  # Contains ||b||_2
 ```
@@ -324,11 +313,7 @@ import torch
 shape_spec = create_shape_spec({"x": (50,), "y": (50,)})
 
 # L1-norm scaled linear model
-model = NormScaledLinearFFNN(
-    unified_shape=shape_spec,
-    bias=True,
-    norm="l1"
-)
+model = NormScaledLinearFFNN(unified_shape=shape_spec, bias=True, norm="l1")
 
 # Solve Ax = b
 b = torch.randn(16, 50)
@@ -377,7 +362,7 @@ model = NormScaledConstantWidthFFNN(
     norm="l2",
     activation=torch.nn.functional.relu,
     normalize="layer",
-    dropout=0.1
+    dropout=0.1,
 )
 
 # Nonlinear system solving with norm consistency
@@ -408,7 +393,7 @@ model = FeedForwardNN(
     layers=[512, 256, 128],
     activation=nn.functional.relu,
     normalize="batch",
-    dropout=0.5
+    dropout=0.5,
 )
 
 # Training loop
@@ -446,16 +431,11 @@ import torch
 shape_spec = create_shape_spec({"x": (20,), "y": (1,)})
 
 # Baseline: simple linear regression
-baseline = LinearNetwork(
-    unified_shape=shape_spec,
-    normalize="batch"
-)
+baseline = LinearNetwork(unified_shape=shape_spec, normalize="batch")
 
 # Compare with deep network
 deep_model = FeedForwardNN(
-    unified_shape=shape_spec,
-    layers=[128, 64, 32],
-    activation=torch.nn.functional.gelu
+    unified_shape=shape_spec, layers=[128, 64, 32], activation=torch.nn.functional.gelu
 )
 
 # Evaluate both
@@ -494,8 +474,9 @@ pinn = NormScaledConstantWidthFFNN(
     num_layers=6,
     norm="l2",  # L2 norm for energy conservation
     activation=torch.nn.functional.tanh,
-    normalize="layer"
+    normalize="layer",
 )
+
 
 # Physics-informed loss
 def physics_loss(model, f, u_true):
@@ -511,14 +492,17 @@ def physics_loss(model, f, u_true):
 
     return data_loss + 0.1 * physics_loss
 
+
 # Training
 optimizer = torch.optim.LBFGS(pinn.parameters(), lr=1.0)
+
 
 def closure():
     optimizer.zero_grad()
     loss = physics_loss(pinn, f_train, u_train)
     loss.backward()
     return loss
+
 
 for epoch in range(100):
     optimizer.step(closure)
@@ -533,11 +517,7 @@ import torch.nn as nn
 
 # Pretrain autoencoder on large unlabeled dataset
 encoder_shape = create_shape_spec({"x": (1000,), "y": (128,)})
-encoder = ConstantWidthFFNN(
-    unified_shape=encoder_shape,
-    hidden_size=256,
-    num_layers=3
-)
+encoder = ConstantWidthFFNN(unified_shape=encoder_shape, hidden_size=256, num_layers=3)
 # ... pretrain encoder ...
 
 # Freeze encoder and add classifier
@@ -545,11 +525,8 @@ for param in encoder.parameters():
     param.requires_grad = False
 
 classifier_shape = create_shape_spec({"x": (128,), "y": (10,)})
-classifier = ConstantWidthFFNN(
-    unified_shape=classifier_shape,
-    hidden_size=64,
-    num_layers=2
-)
+classifier = ConstantWidthFFNN(unified_shape=classifier_shape, hidden_size=64, num_layers=2)
+
 
 # Combined model
 class TransferModel(nn.Module):
@@ -561,6 +538,7 @@ class TransferModel(nn.Module):
     def forward(self, x):
         features = self.encoder(x)
         return self.classifier(features)
+
 
 model = TransferModel(encoder, classifier)
 
@@ -587,20 +565,14 @@ import torch
 
 try:
     # NullShapeSpec rejected
-    model = FeedForwardNN(
-        unified_shape=NullShapeSpec(),
-        layers=[128, 64]
-    )
+    model = FeedForwardNN(unified_shape=NullShapeSpec(), layers=[128, 64])
 except ValueError as e:
     print(f"Invalid shape: {e}")
 
 try:
     # 2D shape rejected (FFNNs need 1D)
     shape_spec = create_shape_spec({"x": (28, 28), "y": (10,)})
-    model = FeedForwardNN(
-        unified_shape=shape_spec,
-        layers=[128]
-    )
+    model = FeedForwardNN(unified_shape=shape_spec, layers=[128])
 except ValueError as e:
     print(f"Invalid dimensions: {e}")
     # Fix: flatten to 1D
@@ -611,7 +583,7 @@ try:
     # Invalid norm type
     model = NormScaledLinearFFNN(
         unified_shape=shape_spec,
-        norm="l3"  # Invalid!
+        norm="l3",  # Invalid!
     )
 except ValueError as e:
     print(f"Invalid norm: {e}")

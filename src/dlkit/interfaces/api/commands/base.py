@@ -5,11 +5,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 
 
-class BaseCommand[TInput, TOutput](ABC):
+class BaseCommand[TInput, TOutput, TSettings: BaseSettingsProtocol](ABC):
     """Abstract base class for all commands.
 
     Implements the Command pattern with:
@@ -27,7 +26,7 @@ class BaseCommand[TInput, TOutput](ABC):
         self.command_name = command_name
 
     @abstractmethod
-    def execute(self, input_data: TInput, settings: BaseSettingsProtocol, **kwargs: Any) -> TOutput:
+    def execute(self, input_data: TInput, settings: TSettings, **kwargs: Any) -> TOutput:
         """Execute the command.
 
         Args:
@@ -43,7 +42,7 @@ class BaseCommand[TInput, TOutput](ABC):
         """
 
     @abstractmethod
-    def validate_input(self, input_data: TInput, settings: BaseSettingsProtocol) -> None:
+    def validate_input(self, input_data: TInput, settings: TSettings) -> None:
         """Validate command input before execution.
 
         Args:

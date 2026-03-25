@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-
 import pytest
 from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.app import app as cli_app
-
 
 # Constants for subcommand testing
 EXPECTED_SUBCOMMANDS = {

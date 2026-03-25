@@ -1,9 +1,9 @@
-from .skip import SkipEncoder1d, SkipDecoder1d
-from .latent import VectorToTensorBlock, TensorToVectorBlock
+from .latent import TensorToVectorBlock, VectorToTensorBlock
+from .skip import SkipDecoder1d, SkipEncoder1d
 
 __all__ = [
-    "SkipEncoder1d",
     "SkipDecoder1d",
-    "VectorToTensorBlock",
+    "SkipEncoder1d",
     "TensorToVectorBlock",
+    "VectorToTensorBlock",
 ]

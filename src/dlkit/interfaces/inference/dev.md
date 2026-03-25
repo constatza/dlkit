@@ -204,7 +204,7 @@ computed on — the primary prediction output.
 into `checkpoint["dlkit_metadata"]`:
 
 ```python
-dlkit_metadata["feature_names"] = list(meta.feature_names)   # from WrapperCheckpointMetadata
+dlkit_metadata["feature_names"] = list(meta.feature_names)  # from WrapperCheckpointMetadata
 dlkit_metadata["predict_target_key"] = meta.predict_target_key
 ```
 
@@ -254,12 +254,10 @@ inferred value — useful for forcing mixed precision on a float32 checkpoint.
 `predictor.predict(**feature_kwargs)`:
 
 ```python
-features_td = batch["features"]    # TensorDict from dataloader
+features_td = batch["features"]  # TensorDict from dataloader
 if feature_names:
     feature_kwargs = {
-        name: features_td[name]
-        for name in feature_names
-        if name in features_td.keys()
+        name: features_td[name] for name in feature_names if name in features_td.keys()
     }
 else:
     # Old checkpoint with no feature_names — use all keys (insertion order)

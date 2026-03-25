@@ -7,14 +7,13 @@ modifying the training loop.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
-import torch.nn as nn
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
-from dlkit.core.models.wrappers.base import _batch_size_of, _leaf_dtype, _leaf_device
+from dlkit.core.models.wrappers.base import _batch_size_of, _leaf_device, _leaf_dtype
 
 if TYPE_CHECKING:
     from dlkit.core.models.wrappers.protocols import IBatchTransformer, IModelInvoker
@@ -36,8 +35,8 @@ class DiscriminativePredictionStrategy:
 
     def __init__(
         self,
-        model_invoker: "IModelInvoker",
-        batch_transformer: "IBatchTransformer",
+        model_invoker: IModelInvoker,
+        batch_transformer: IBatchTransformer,
         predict_target_key: str,
     ) -> None:
         self._model_invoker = model_invoker
@@ -67,7 +66,7 @@ class DiscriminativePredictionStrategy:
         transformed_batch = self._batch_transformer.transform(batch)
         enriched_batch = self._model_invoker.invoke(model, transformed_batch)
 
-        predictions: Tensor | TensorDict = enriched_batch["predictions"]
+        predictions: Tensor | TensorDict = cast(Tensor | TensorDict, enriched_batch["predictions"])
         predictions = self._batch_transformer.inverse_transform_predictions(
             predictions, self._predict_target_key
         )
@@ -181,7 +180,7 @@ class ODEPredictionStrategy:
         first_tensor: Tensor | None = None
         try:
             first_tensor = next(iter(features.values()))
-        except (StopIteration, AttributeError):
+        except StopIteration, AttributeError:
             pass
 
         if first_tensor is not None:

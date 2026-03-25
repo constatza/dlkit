@@ -19,6 +19,7 @@ from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.core.datatypes.secure_uris import SecurePath
+
 from .core.base_settings import BasicSettings
 
 

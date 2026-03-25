@@ -17,9 +17,8 @@ Example:
     >>> # output_shape = (32, 64) - MinMaxScaler preserves shape
 """
 
-from typing import Callable, Any
-import torch
-
+from collections.abc import Callable
+from typing import Any
 
 # Type alias for shape inference functions
 ShapeInferenceFunc = Callable[..., tuple[int, ...]]

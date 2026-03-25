@@ -1,25 +1,24 @@
 """TOML config loader with subsettings support using dynaconf."""
 
+import sys
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, is_dataclass
+from enum import Enum
 from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, cast, overload, TYPE_CHECKING
-import sys
-import warnings
+from typing import TYPE_CHECKING, Any, cast, overload
+
 import torch
-
 from pydantic import BaseModel
-from enum import Enum
-from tomlkit import document, table, dumps
-
+from tomlkit import document, dumps, table
 
 if TYPE_CHECKING:
     from dlkit.tools.config.workflow_configs import (
-        TrainingWorkflowConfig,
         InferenceWorkflowConfig,
         OptimizationWorkflowConfig,
+        TrainingWorkflowConfig,
     )
 
 
@@ -34,9 +33,11 @@ def _sync_session_root_to_environment(settings: Any) -> None:
     """
     try:
         import os
+
+        from loguru import logger
+
         from dlkit.tools.config.environment import env as global_environment
         from dlkit.tools.io.paths import coerce_root_dir_to_absolute
-        from loguru import logger
 
         # Only update if DLKitEnvironment doesn't already have root_dir from env var
         if os.environ.get("DLKIT_ROOT_DIR"):
@@ -106,7 +107,6 @@ _DEFAULT_SECTION_NAME_MAPPING: dict[str, type[BaseModel]] = {}
 
 def _apply_mapping(model_class: type[BaseModel], section_name: str) -> None:
     """Apply a bidirectional mapping between model class and section name."""
-
     _SECTION_MAPPING[model_class] = section_name
     _SECTION_NAME_MAPPING[section_name] = model_class
 
@@ -152,7 +152,6 @@ def get_section_name(model_class: type[BaseModel]) -> str:
 
 def get_model_class_for_section(section_name: str) -> type[BaseModel]:
     """Lookup the Pydantic model class registered for a TOML section name."""
-
     normalized = section_name.upper()
     model_class = _SECTION_NAME_MAPPING.get(normalized)
     if model_class is None:
@@ -166,7 +165,6 @@ def get_model_class_for_section(section_name: str) -> type[BaseModel]:
 
 def _resolve_default_settings_class() -> type[BaseModel] | None:
     """Lazily import GeneralSettings without top-level coupling."""
-
     module_name = "dlkit.tools.config.general_settings"
     module = sys.modules.get(module_name)
 
@@ -183,16 +181,15 @@ def _resolve_default_settings_class() -> type[BaseModel] | None:
 
 def _initialize_default_mappings() -> None:
     """Initialize default section mappings for common settings classes."""
-
     try:
-        from dlkit.tools.config.session_settings import SessionSettings
         from dlkit.tools.config.components.model_components import ModelComponentSettings
-        from dlkit.tools.config.training_settings import TrainingSettings
         from dlkit.tools.config.datamodule_settings import DataModuleSettings
         from dlkit.tools.config.dataset_settings import DatasetSettings
+        from dlkit.tools.config.extras_settings import ExtrasSettings
         from dlkit.tools.config.optuna_settings import OptunaSettings
         from dlkit.tools.config.paths_settings import PathsSettings
-        from dlkit.tools.config.extras_settings import ExtrasSettings
+        from dlkit.tools.config.session_settings import SessionSettings
+        from dlkit.tools.config.training_settings import TrainingSettings
 
         default_pairs: tuple[tuple[str, type[BaseModel]], ...] = (
             ("SESSION", SessionSettings),
@@ -224,7 +221,6 @@ def reset_section_mappings(section_name: str | None = None) -> None:
     Args:
         section_name: Optional section name to reset; resets all when omitted.
     """
-
     if section_name is not None:
         normalized = section_name.upper()
         default_model = _DEFAULT_SECTION_NAME_MAPPING.get(normalized)
@@ -343,9 +339,9 @@ def _to_toml_compatible(value: Any) -> Any:
             return _to_toml_compatible(serialized)
     # Handle pydantic_core Url objects (covers both AnyUrl and Url)
     try:
-        from pydantic_core import Url as _CoreUrl  # type: ignore
+        from pydantic_core import Url as _CoreUrl
 
-        if isinstance(value, _CoreUrl):  # type: ignore[arg-type]
+        if isinstance(value, _CoreUrl):
             return str(value)
     except Exception:
         pass
@@ -497,7 +493,6 @@ def _resolve_section_models(
     section_configs: Mapping[str, type[BaseModel] | None] | Sequence[str],
 ) -> dict[str, type[BaseModel]]:
     """Resolve mapping of section names to model classes using registry defaults."""
-
     if isinstance(section_configs, Mapping):
         items = list(section_configs.items())
     elif isinstance(section_configs, Sequence) and not isinstance(section_configs, (str, bytes)):
@@ -519,7 +514,7 @@ def _resolve_section_models(
                 section_name=raw_name,
                 available_sections=list(_SECTION_NAME_MAPPING.keys()),
             )
-        resolved[section_name] = resolved_model
+        resolved[section_name] = cast("type[BaseModel]", resolved_model)
     return resolved
 
 
@@ -720,7 +715,7 @@ def get_available_sections(config_path: Path | str) -> list[str]:
 # ============================================================================
 
 
-def load_training_config_eager(config_path: Path | str) -> "TrainingWorkflowConfig":
+def load_training_config_eager(config_path: Path | str) -> TrainingWorkflowConfig:
     """Load training config with eager Pydantic validation.
 
     This replaces the lazy loading pattern with eager validation while supporting
@@ -774,7 +769,7 @@ def load_training_config_eager(config_path: Path | str) -> "TrainingWorkflowConf
     return config
 
 
-def load_inference_config_eager(config_path: Path | str) -> "InferenceWorkflowConfig":
+def load_inference_config_eager(config_path: Path | str) -> InferenceWorkflowConfig:
     """Load inference config with eager Pydantic validation.
 
     Args:
@@ -801,7 +796,7 @@ def load_inference_config_eager(config_path: Path | str) -> "InferenceWorkflowCo
     return config
 
 
-def load_optimization_config_eager(config_path: Path | str) -> "OptimizationWorkflowConfig":
+def load_optimization_config_eager(config_path: Path | str) -> OptimizationWorkflowConfig:
     """Load optimization config with eager Pydantic validation.
 
     Args:

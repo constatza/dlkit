@@ -4,9 +4,10 @@ This module tests the core value objects: ShapeEntry and ShapeData.
 """
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
-from dlkit.core.shape_specs import ShapeEntry, ShapeData, ModelFamily, ShapeSource
+from dlkit.core.shape_specs import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
 
 class TestShapeEntry:

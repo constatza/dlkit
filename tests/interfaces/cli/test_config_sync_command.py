@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from typer.testing import CliRunner
 
-from dlkit.interfaces.cli.commands.config import app as config_app
 from dlkit.interfaces.api import generate_template
+from dlkit.interfaces.cli.commands.config import app as config_app
 
 
 def test_sync_templates_write_creates_files(cli_runner: CliRunner, tmp_path: Path) -> None:

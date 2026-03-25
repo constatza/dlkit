@@ -15,27 +15,26 @@ from dlkit.core.models.wrappers.security import configure_checkpoint_loading
 configure_checkpoint_loading()
 
 import torch
-import torch.nn as nn
 from lightning import LightningModule
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
-from dlkit.tools.config import BuildContext, FactoryProvider
-from dlkit.core.models.wrappers.protocols import (
-    IModelInvoker,
-    ILossComputer,
-    IMetricsUpdater,
-    IBatchTransformer,
-    IBatchTransform,
-    IGeneratorFactory,
-    IPredictionStrategy,
-)
 from dlkit.core.models.wrappers.components import WrapperCheckpointMetadata
 from dlkit.core.models.wrappers.concerns import (
-    LightningStepLogger,
-    DLKitCheckpointSerializer,
     ConfigLearningRateManager,
+    DLKitCheckpointSerializer,
+    LightningStepLogger,
 )
+from dlkit.core.models.wrappers.protocols import (
+    IBatchTransform,
+    IBatchTransformer,
+    IGeneratorFactory,
+    ILossComputer,
+    IMetricsUpdater,
+    IModelInvoker,
+    IPredictionStrategy,
+)
+from dlkit.tools.config import BuildContext, FactoryProvider
 
 
 def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
@@ -133,7 +132,7 @@ def _normalize_dict(d: dict[str, Any], context: str, batch_size: int, _depth: in
                 normalized[k] = v
             case _:
                 normalized[k] = _normalize_output(v, f"{context}.{k}", batch_size, _depth)
-    return TensorDict(normalized, batch_size=[batch_size])
+    return TensorDict(cast(Any, normalized), batch_size=[batch_size])
 
 
 def _normalize_sequence(
@@ -259,6 +258,7 @@ def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -
         Instantiated and precision-cast nn.Module.
     """
     import importlib
+
     from dlkit.core.models.factory import build_model
     from dlkit.tools.config.components.model_components import (
         ModelComponentSettings,
@@ -389,7 +389,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.model = self.model.to(dtype=dtype)
-
 
     # =========================================================================
     # Lightning Step Methods (delegate to abstract _run_step)
@@ -578,7 +577,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         self.lr = value
 
-    def configure_optimizers(self):  # type: ignore[override]
+    def configure_optimizers(self):
         """Configure optimizer and scheduler from stored settings."""
         optimizer = FactoryProvider.create_component(
             self.optimizer,
@@ -589,8 +588,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             BuildContext(mode="training", overrides={"optimizer": optimizer}),
         )
         if scheduler is None:
-            return {"optimizer": optimizer}  # type: ignore[return-value]
-        return {  # type: ignore[return-value]
+            return {"optimizer": optimizer}
+        return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,

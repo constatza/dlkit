@@ -15,13 +15,13 @@ from dlkit.tools.config.data_entries import Feature
 
 
 class _IdentityModel(nn.Module):
-    def forward(self, **kwargs):  # noqa: ANN003
+    def forward(self, **kwargs):
         return next(iter(kwargs.values()))
 
 
 @pytest.fixture
-def patch_factory(monkeypatch):  # noqa: ANN001
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+def patch_factory(monkeypatch):
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _IdentityModel()
         return lambda a, b: torch.nn.functional.mse_loss(a, b)
@@ -43,7 +43,7 @@ def _build_wrapper():
     )
 
 
-def test_wrapper_lr_attributes_sync_initial(patch_factory):  # noqa: ANN001
+def test_wrapper_lr_attributes_sync_initial(patch_factory):
     wrapper = _build_wrapper()
 
     assert pytest.approx(1e-3) == wrapper.lr
@@ -52,7 +52,7 @@ def test_wrapper_lr_attributes_sync_initial(patch_factory):  # noqa: ANN001
     assert pytest.approx(1e-3) == wrapper.hparams["learning_rate"]
 
 
-def test_wrapper_lr_attribute_updates_optimizer_settings(patch_factory):  # noqa: ANN001
+def test_wrapper_lr_attribute_updates_optimizer_settings(patch_factory):
     wrapper = _build_wrapper()
 
     wrapper.lr = 5e-4

@@ -38,27 +38,32 @@ from typing import Literal
 
 import torch
 from torch import Tensor
-
-from ._norm_ops import compute_error_norms, compute_relative_norms
-from .metrics.functional import (
-    AggregatorFn,
-    _compute_relative_energy_components,
-    apply_aggregation,
-    compute_error_vectors,
-    compute_vector_norm,
-    compute_energy_norm,
-    safe_divide,
+from torchmetrics.functional.regression import (
+    mean_absolute_error as mae,
+)
+from torchmetrics.functional.regression import (
+    mean_absolute_percentage_error as mape,
 )
 
 # ============================================================================
 # STANDARD REGRESSION LOSSES/METRICS (from torchmetrics.functional)
 # ============================================================================
-
 from torchmetrics.functional.regression import (
     mean_squared_error as mse,
-    mean_absolute_error as mae,
+)
+from torchmetrics.functional.regression import (
     mean_squared_log_error as msle,
-    mean_absolute_percentage_error as mape,
+)
+
+from ._norm_ops import compute_error_norms
+from .metrics.functional import (
+    AggregatorFn,
+    _compute_relative_energy_components,
+    apply_aggregation,
+    compute_energy_norm,
+    compute_error_vectors,
+    compute_vector_norm,
+    safe_divide,
 )
 
 # ============================================================================

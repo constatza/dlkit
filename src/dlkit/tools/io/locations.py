@@ -13,14 +13,16 @@ from dlkit.interfaces.api.overrides.path_context import (
     get_current_path_context,
     resolve_with_context,
 )
-from dlkit.tools.config.environment import DLKitEnvironment, env as global_environment
+from dlkit.tools.config.environment import DLKitEnvironment
+from dlkit.tools.config.environment import env as global_environment
 
 
 def _root_from_context() -> Path | None:
     try:
         ctx = get_current_path_context()
-        if ctx and getattr(ctx, "root_dir", None):
-            return Path(ctx.root_dir).resolve()
+        root_dir = getattr(ctx, "root_dir", None) if ctx else None
+        if root_dir is not None:
+            return Path(root_dir).resolve()
     except Exception:
         return None
     return None

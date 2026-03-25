@@ -14,10 +14,10 @@ see torchmetrics_wrappers.py instead.
 
 # Standard regression metrics from torchmetrics
 from torchmetrics.regression import (
-    MeanSquaredError,
     MeanAbsoluteError,
-    MeanSquaredLogError,
     MeanAbsolutePercentageError,
+    MeanSquaredError,
+    MeanSquaredLogError,
     R2Score,
 )
 

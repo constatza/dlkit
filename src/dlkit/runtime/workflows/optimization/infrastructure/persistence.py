@@ -9,11 +9,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.optimization.domain import (
-    Study,
     IConfigurationPersistence,
+    Study,
 )
+from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,7 +27,6 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
 
     def __init__(self):
         """Initialize TOML persister."""
-        pass
 
     def save_best_configuration(self, study: Study, configuration: dict[str, Any]) -> str | None:
         """Save best configuration to TOML file.
@@ -41,9 +40,9 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
         """
         try:
             # Use environment-based output location
+            from dlkit.tools.config import GeneralSettings
             from dlkit.tools.io import locations
             from dlkit.tools.io.config import write_config
-            from dlkit.tools.config import GeneralSettings
 
             # Create output directory
             config_dir = locations.output("optuna_results")
@@ -91,7 +90,6 @@ class JSONConfigurationPersister(IConfigurationPersistence):
 
     def __init__(self):
         """Initialize JSON persister."""
-        pass
 
     def save_best_configuration(self, study: Study, configuration: dict[str, Any]) -> str | None:
         """Save best configuration to JSON file.
@@ -105,6 +103,7 @@ class JSONConfigurationPersister(IConfigurationPersistence):
         """
         try:
             import json
+
             from dlkit.tools.io import locations
 
             # Create output directory
@@ -119,12 +118,10 @@ class JSONConfigurationPersister(IConfigurationPersistence):
             )
 
             # Convert configuration to JSON-serializable format
-            if hasattr(configuration, "model_dump"):
-                # Pydantic model
+            from pydantic import BaseModel as _BaseModel
+
+            if isinstance(configuration, _BaseModel):
                 config_dict = configuration.model_dump()
-            elif hasattr(configuration, "dict"):
-                # Pydantic model (older version)
-                config_dict = configuration.dict()
             elif isinstance(configuration, dict):
                 config_dict = configuration
             else:

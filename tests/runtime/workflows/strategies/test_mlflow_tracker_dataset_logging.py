@@ -104,7 +104,7 @@ def _make_settings(tmp_path: Path) -> GeneralSettings:
 def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path)
     run_context = _DatasetRunContext()
-    tracker = MLflowTracker(disable_autostart=True )
+    tracker = MLflowTracker(disable_autostart=True)
 
     unsupported_dataset = SimpleNamespace()
     datamodule = SimpleNamespace(dataset=unsupported_dataset)
@@ -125,7 +125,7 @@ def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(tmp_path:
 def test_logs_manifest_only_for_empty_sources_and_unsupported_dataset(tmp_path: Path) -> None:
     settings = GeneralSettings(DATASET=DatasetSettings(name="CustomDataset"))
     run_context = _DatasetRunContext()
-    tracker = MLflowTracker(disable_autostart=True )
+    tracker = MLflowTracker(disable_autostart=True)
 
     datamodule = SimpleNamespace(dataset=SimpleNamespace())
 
@@ -157,7 +157,7 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
         )
     )
     run_context = _DatasetRunContext()
-    tracker = MLflowTracker(disable_autostart=True )
+    tracker = MLflowTracker(disable_autostart=True)
 
     datamodule = SimpleNamespace(dataset=SimpleNamespace())
     tracker.log_dataset_to_run(datamodule, run_context, settings)
@@ -171,7 +171,7 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
 def test_logs_structured_tabular_dataset_when_dataframe_available(tmp_path: Path) -> None:
     settings = GeneralSettings(DATASET=DatasetSettings(name="CustomDataset"))
     run_context = _DatasetRunContext()
-    tracker = MLflowTracker(disable_autostart=True )
+    tracker = MLflowTracker(disable_autostart=True)
 
     tabular_dataset = SimpleNamespace(df=pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
     datamodule = SimpleNamespace(dataset=tabular_dataset)

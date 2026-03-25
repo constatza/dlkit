@@ -8,20 +8,22 @@ This module keeps lineage extraction separate from tracker orchestration:
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
-import warnings
 
 import numpy as np
 import torch
 
 from dlkit.runtime.workflows.selectors.defaults import FamilyDefaults
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.enums import DatasetFamily
 from dlkit.tools.config.data_entries import IPathBased, IValueBased
-from dlkit.tools.io import load_array
+from dlkit.tools.config.enums import DatasetFamily
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -56,7 +58,7 @@ def _as_numpy(value: Any) -> np.ndarray:
     return arr
 
 
-def _collect_entry_sources(settings: GeneralSettings) -> list[str]:
+def _collect_entry_sources(settings: _WorkflowSettings) -> list[str]:
     """Collect source paths from DATASET.features/targets DataEntry objects."""
     sources: list[str] = []
     ds_settings = settings.DATASET
@@ -75,8 +77,9 @@ def _collect_entry_sources(settings: GeneralSettings) -> list[str]:
 class ISourceExtractionStrategy(Protocol):
     """Config-only path extraction strategy."""
 
-    def collect(self, settings: GeneralSettings) -> list[str]:
+    def collect(self, settings: _WorkflowSettings) -> list[str]:
         """Return ordered unique source paths."""
+        ...
 
 
 class GraphConfigSourceStrategy:
@@ -84,7 +87,7 @@ class GraphConfigSourceStrategy:
 
     _FIELDS = ("x", "edge_index", "y")
 
-    def collect(self, settings: GeneralSettings) -> list[str]:
+    def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
         ds_settings = settings.DATASET
         if ds_settings is None:
@@ -99,7 +102,7 @@ class TimeSeriesConfigSourceStrategy:
 
     _FIELDS = ("features_path", "features_file", "data_path", "table_path", "file_path", "path")
 
-    def collect(self, settings: GeneralSettings) -> list[str]:
+    def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
         ds_settings = settings.DATASET
         if ds_settings is None:
@@ -112,7 +115,7 @@ class TimeSeriesConfigSourceStrategy:
 class CustomConfigSourceStrategy:
     """Extract custom lineage source list from DATASET.source_paths."""
 
-    def collect(self, settings: GeneralSettings) -> list[str]:
+    def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
         ds_settings = settings.DATASET
         if ds_settings is None:
@@ -136,7 +139,7 @@ class DatasetSourceCollector:
         self._timeseries = TimeSeriesConfigSourceStrategy()
         self._custom = CustomConfigSourceStrategy()
 
-    def collect(self, settings: GeneralSettings) -> list[str]:
+    def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
         for value in _collect_entry_sources(settings):
             _append_unique_path(sources, value)
@@ -171,7 +174,7 @@ class EntryNumpyPayloadBuilder:
     2) Value-based entries (in-memory arrays/tensors)
     """
 
-    def build(self, settings: GeneralSettings) -> EntryNumpyPayload | None:
+    def build(self, settings: _WorkflowSettings) -> EntryNumpyPayload | None:
         ds_settings = settings.DATASET
         if ds_settings is None:
             return None
@@ -200,6 +203,8 @@ class EntryNumpyPayloadBuilder:
 
     def _resolve_entry_value(self, entry: Any, name: str) -> Any | None:
         if isinstance(entry, IPathBased):
+            from dlkit.tools.io import load_array
+
             path = entry.get_path()
             if path is None:
                 return None
@@ -224,12 +229,13 @@ class IStructuredDatasetLoggingStrategy(Protocol):
         *,
         dataset: Any,
         run_context: Any,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         dataset_name: str,
         dataset_source: str | None,
         tags: dict[str, str],
     ) -> bool:
         """Try logging dataset with this strategy; return True on success."""
+        ...
 
 
 class EntryStructuredDatasetLoggingStrategy:
@@ -243,7 +249,7 @@ class EntryStructuredDatasetLoggingStrategy:
         *,
         dataset: Any,
         run_context: Any,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         dataset_name: str,
         dataset_source: str | None,
         tags: dict[str, str],
@@ -259,6 +265,11 @@ class EntryStructuredDatasetLoggingStrategy:
         if payload is None:
             return False
 
+        from_numpy = getattr(mlflow.data, "from_numpy", None)
+        if from_numpy is None:
+            logger.warning("mlflow.data.from_numpy is not available in this MLflow version")
+            return False
+
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -266,7 +277,7 @@ class EntryStructuredDatasetLoggingStrategy:
                     message="The specified dataset source can be interpreted in multiple ways:.*",
                     category=UserWarning,
                 )
-                mlflow_dataset = mlflow.data.from_numpy(
+                mlflow_dataset = from_numpy(
                     features=payload.features,
                     targets=payload.targets,
                     name=dataset_name,
@@ -292,7 +303,7 @@ class TabularStructuredDatasetLoggingStrategy:
         *,
         dataset: Any,
         run_context: Any,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         dataset_name: str,
         dataset_source: str | None,
         tags: dict[str, str],
@@ -308,6 +319,11 @@ class TabularStructuredDatasetLoggingStrategy:
         if dataframe is None:
             return False
 
+        from_pandas = getattr(mlflow.data, "from_pandas", None)
+        if from_pandas is None:
+            logger.warning("mlflow.data.from_pandas is not available in this MLflow version")
+            return False
+
         try:
             if hasattr(dataframe, "to_pandas"):
                 dataframe = dataframe.to_pandas()
@@ -320,7 +336,7 @@ class TabularStructuredDatasetLoggingStrategy:
                     message="The specified dataset source can be interpreted in multiple ways:.*",
                     category=UserWarning,
                 )
-                mlflow_dataset = mlflow.data.from_pandas(
+                mlflow_dataset = from_pandas(
                     dataframe,
                     name=dataset_name,
                     source=dataset_source,
@@ -354,7 +370,7 @@ class StructuredDatasetLogger:
         *,
         dataset: Any,
         run_context: Any,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         dataset_name: str,
         sources: list[str],
         tags: dict[str, str],

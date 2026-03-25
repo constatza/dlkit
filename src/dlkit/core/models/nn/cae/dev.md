@@ -85,15 +85,12 @@ shape_spec = create_shape_spec({"x": (32, 100)})
 
 # Create autoencoder
 cae = SkipCAE1d(
-    shape_spec=shape_spec,
-    latent_channels=8,
-    latent_width=10,
-    latent_size=64,
-    num_layers=3
+    shape_spec=shape_spec, latent_channels=8, latent_width=10, latent_size=64, num_layers=3
 )
 
 # Encode input to latent space
 import torch
+
 x = torch.randn(16, 32, 100)  # (batch, channels, timesteps)
 latent = cae.encode(x)  # Shape: (16, 64)
 
@@ -158,7 +155,7 @@ cae = SkipCAE1d(
     kernel_size=5,
     activation=torch.nn.functional.relu,
     normalize="batch",
-    dropout=0.2
+    dropout=0.2,
 )
 
 # Process data
@@ -205,6 +202,7 @@ cae = LinearCAE1d(shape_spec=shape_spec, latent_size=64)
 
 # Same interface as SkipCAE1d
 import torch
+
 x = torch.randn(16, 32, 100)
 output = cae(x)
 ```
@@ -263,7 +261,7 @@ vae = VAE1d(
     latent_size=64,
     num_layers=3,
     alpha=1.0,  # Reconstruction weight
-    beta=0.5    # KL divergence weight
+    beta=0.5,  # KL divergence weight
 )
 
 # Encoding returns mu and logvar
@@ -347,7 +345,7 @@ autoencoder = SkipCAE1d(
     latent_size=32,
     num_layers=4,
     normalize="batch",
-    dropout=0.1
+    dropout=0.1,
 )
 
 # Compress data
@@ -377,7 +375,7 @@ denoiser = SkipCAE1d(
     latent_size=128,
     num_layers=3,
     activation=torch.nn.functional.gelu,
-    dropout=0.2  # Regularization
+    dropout=0.2,  # Regularization
 )
 
 # Add noise to clean data
@@ -407,7 +405,7 @@ vae = VAE1d(
     latent_size=64,
     num_layers=3,
     alpha=1.0,  # Reconstruction importance
-    beta=0.1    # Regularization strength
+    beta=0.1,  # Regularization strength
 )
 
 # Training loop
@@ -446,14 +444,11 @@ import torch.nn as nn
 # Load pretrained autoencoder
 shape_spec = create_shape_spec({"x": (64, 200)})
 pretrained_cae = SkipCAE1d(
-    shape_spec=shape_spec,
-    latent_channels=16,
-    latent_width=10,
-    latent_size=128,
-    num_layers=4
+    shape_spec=shape_spec, latent_channels=16, latent_width=10, latent_size=128, num_layers=4
 )
 # Assume pretrained_cae is trained on large unlabeled dataset
 # pretrained_cae.load_state_dict(torch.load("pretrained_cae.pth"))
+
 
 # Use encoder as feature extractor for downstream task
 class DownstreamClassifier(nn.Module):
@@ -473,6 +468,7 @@ class DownstreamClassifier(nn.Module):
         # Classify
         logits = self.classifier(features)
         return logits
+
 
 # Create classifier using pretrained encoder
 classifier = DownstreamClassifier(pretrained_cae.encoder, num_classes=10)
@@ -501,11 +497,7 @@ import torch
 
 try:
     # Missing shape_spec - will fail
-    cae = SkipCAE1d(
-        shape_spec=None,
-        latent_channels=8,
-        latent_size=64
-    )
+    cae = SkipCAE1d(shape_spec=None, latent_channels=8, latent_size=64)
 except ValueError as e:
     print(f"Shape spec required: {e}")
     # Fix: provide shape spec

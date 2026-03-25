@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from dlkit.interfaces.api.domain import OptimizationResult, WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.runtime.workflows.orchestrator import Orchestrator
 from dlkit.interfaces.api.overrides.path_context import (
-    path_override_context,
     get_current_path_context,
+    path_override_context,
 )
+from dlkit.runtime.workflows.orchestrator import Orchestrator
+from dlkit.tools.config import GeneralSettings
 
 if TYPE_CHECKING:
-    from dlkit.runtime.workflows.optimization.strategy import OptimizationStrategy
+    pass
 
 
 class OptimizationService:
@@ -68,10 +68,10 @@ class OptimizationService:
             optimization_strategy = orch._selector.select_optimization(settings)
 
             # Import at runtime to avoid circular dependency with the strategy module
+            from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
             from dlkit.runtime.workflows.optimization.strategy import (
                 OptimizationStrategy as CleanOptimizationStrategy,
             )
-            from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
 
             # Get experiment tracker for service-level context management
             experiment_tracker = None
@@ -115,7 +115,7 @@ class OptimizationService:
             if isinstance(e, WorkflowError):
                 raise
             raise WorkflowError(
-                f"Optimization execution failed: {str(e)}",
+                f"Optimization execution failed: {e!s}",
                 {"service": self.service_name, "error": str(e)},
             )
 
@@ -141,6 +141,6 @@ class OptimizationService:
             return progress_info
         except Exception as e:
             raise WorkflowError(
-                f"Failed to get optimization progress: {str(e)}",
+                f"Failed to get optimization progress: {e!s}",
                 {"service": self.service_name, "study_name": study_name},
             )

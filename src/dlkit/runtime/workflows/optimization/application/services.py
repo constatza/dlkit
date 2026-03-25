@@ -13,25 +13,25 @@ from datetime import datetime
 from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.runtime.workflows.factories.build_factory import BuildComponents, BuildFactory
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
-    TrainingWorkflowConfig,
     OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
 )
 from dlkit.tools.utils.logging_config import get_logger
-from dlkit.runtime.workflows.factories.build_factory import BuildFactory, BuildComponents
 
 from ..domain import (
+    IConfigurationPersistence,
+    IExperimentTracker,
+    IStudyRepository,
+    OptimizationDirection,
+    OptimizationResult,
     Study,
     Trial,
-    OptimizationResult,
-    OptimizationDirection,
-    TrialState,
-    IStudyRepository,
-    IExperimentTracker,
-    IConfigurationPersistence,
-    TrialPrunedException,
     TrialFailedException,
+    TrialPrunedException,
+    TrialState,
 )
 
 logger = get_logger(__name__)
@@ -299,7 +299,7 @@ class TrialExecutor:
 
             if removed_count > 0:
                 logger.debug(
-                    f"Disabled {removed_count} checkpoint callback(s) for optimization trial"
+                    "Disabled %s checkpoint callback(s) for optimization trial", removed_count
                 )
 
         except Exception as e:
@@ -355,7 +355,7 @@ class TrialExecutor:
             if key in training_result.metrics:
                 try:
                     return float(training_result.metrics[key])
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     continue
 
         return 0.0
@@ -394,10 +394,11 @@ class OptimizationOrchestrator:
         self._experiment_tracker = experiment_tracker
         self._config_persister = config_persister
 
+    # TODO: TYPE — union too broad; accept only OptimizationWorkflowConfig
     def execute_optimization(
         self,
         study_name: str,
-        base_settings: GeneralSettings | OptimizationWorkflowConfig,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         n_trials: int,
         direction: OptimizationDirection,
         sampler_config: dict[str, Any] | None = None,
@@ -460,7 +461,9 @@ class OptimizationOrchestrator:
             ) from e
 
     def _execute_with_tracking(
-        self, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
+        self,
+        study: Study,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> OptimizationResult:
         """Execute optimization with experiment tracking.
 
@@ -469,6 +472,8 @@ class OptimizationOrchestrator:
         - Child runs for each trial
         - Final child run for best retrain
         """
+        if self._experiment_tracker is None:
+            return self._execute_without_tracking(study, base_settings)
         with self._experiment_tracker.create_study_run(study) as study_context:
             # Track optimization duration
             start_time = time.time()
@@ -553,6 +558,9 @@ class OptimizationOrchestrator:
             # Retrain with best parameters
             best_trial = study.best_trial
             best_training_result = None
+            best_settings: (
+                GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig | None
+            ) = None
 
             if best_trial:
                 with self._experiment_tracker.create_best_retrain_run(
@@ -604,7 +612,9 @@ class OptimizationOrchestrator:
             return result
 
     def _execute_without_tracking(
-        self, study: Study, base_settings: GeneralSettings | OptimizationWorkflowConfig
+        self,
+        study: Study,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
         # Similar logic but without tracking context managers
@@ -630,7 +640,7 @@ class OptimizationOrchestrator:
 
                 study = study.add_trial(trial)
 
-            except (TrialPrunedException, TrialFailedException):
+            except TrialPrunedException, TrialFailedException:
                 # Handle failed/pruned trials
                 trial = replace(
                     trial,
@@ -683,7 +693,7 @@ class OptimizationOrchestrator:
         self,
         trial: Trial,
         study: Study,
-        base_settings: GeneralSettings | OptimizationWorkflowConfig,
+        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> dict[str, Any]:
         """Sample hyperparameters for a trial using Optuna's suggest methods.
 
@@ -696,11 +706,11 @@ class OptimizationOrchestrator:
             Sampled hyperparameters
         """
         # Get the actual Optuna study from repository via study_manager
-        optuna_study = None
+        optuna_study: Any = None
         if hasattr(self._study_manager, "_repository"):
             repo = self._study_manager._repository
-            if hasattr(repo, "_study_mapping"):
-                optuna_study = repo._study_mapping.get(study.study_id)
+            study_mapping: dict[str, Any] = getattr(repo, "_study_mapping", {})
+            optuna_study = study_mapping.get(study.study_id)
 
         # If we don't have an Optuna study, we can't sample - return empty dict
         if not optuna_study:
@@ -721,6 +731,9 @@ class OptimizationOrchestrator:
             from dlkit.tools.config.samplers.optuna_sampler import create_settings_sampler
 
             settings_sampler = create_settings_sampler(optuna_config)
+            if not isinstance(base_settings, GeneralSettings):
+                logger.warning("Cannot sample hyperparameters without GeneralSettings base config")
+                return {}
             settings_sampler.sample(optuna_trial, base_settings)
 
             # Extract ALL sampled hyperparameters from optuna_trial.params
@@ -757,11 +770,11 @@ class OptimizationOrchestrator:
             logger.warning("No Optuna trial found for {}; skipping study.tell()", trial.trial_id)
             return
 
-        optuna_study = None
+        optuna_study: Any = None
         if hasattr(self._study_manager, "_repository"):
             repo = self._study_manager._repository
-            if hasattr(repo, "_study_mapping"):
-                optuna_study = repo._study_mapping.get(study.study_id)
+            study_mapping_2: dict[str, Any] = getattr(repo, "_study_mapping", {})
+            optuna_study = study_mapping_2.get(study.study_id)
 
         if not optuna_study:
             logger.warning("No Optuna study found for {}; skipping study.tell()", study.study_id)

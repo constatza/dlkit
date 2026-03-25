@@ -23,15 +23,15 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
+from .components.model_components import ModelComponentSettings
 from .core.base_settings import BasicSettings
-from .session_settings import SessionSettings
-from .mlflow_settings import MLflowSettings
-from .optuna_settings import OptunaSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .training_settings import TrainingSettings as TrainingConfig
-from .components.model_components import ModelComponentSettings
+from .mlflow_settings import MLflowSettings
+from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
+from .session_settings import SessionSettings
+from .training_settings import TrainingSettings as TrainingConfig
 
 
 class TrainingWorkflowConfig(BasicSettings):
@@ -134,6 +134,47 @@ class TrainingWorkflowConfig(BasicSettings):
         """Check if MODEL section is present."""
         return self.MODEL is not None
 
+    @property
+    def is_training(self) -> bool:
+        """True when not running in inference mode."""
+        return not bool(self.SESSION and self.SESSION.inference)
+
+    @property
+    def is_inference(self) -> bool:
+        """True when running in inference mode."""
+        return bool(self.SESSION and self.SESSION.inference)
+
+    @property
+    def has_data_config(self) -> bool:
+        """True when both DATAMODULE and DATASET sections are present."""
+        return self.DATAMODULE is not None and self.DATASET is not None
+
+    def get_datamodule_config(self) -> DataModuleSettings:
+        """Return the DATAMODULE configuration section.
+
+        Returns:
+            DataModuleSettings instance.
+
+        Raises:
+            ValueError: If DATAMODULE section is absent.
+        """
+        if self.DATAMODULE is None:
+            raise ValueError("No DATAMODULE configuration available")
+        return self.DATAMODULE
+
+    def get_dataset_config(self) -> DatasetSettings:
+        """Return the DATASET configuration section.
+
+        Returns:
+            DatasetSettings instance.
+
+        Raises:
+            ValueError: If DATASET section is absent.
+        """
+        if self.DATASET is None:
+            raise ValueError("No DATASET configuration available")
+        return self.DATASET
+
 
 class InferenceWorkflowConfig(BasicSettings):
     """Configuration for inference workflows with eager validation.
@@ -199,6 +240,47 @@ class InferenceWorkflowConfig(BasicSettings):
     def has_batch_inference_config(self) -> bool:
         """Check if batch inference config is available."""
         return self.DATAMODULE is not None and self.DATASET is not None
+
+    @property
+    def is_training(self) -> bool:
+        """Always False for inference workflows."""
+        return False
+
+    @property
+    def is_inference(self) -> bool:
+        """Always True for inference workflows."""
+        return True
+
+    @property
+    def has_data_config(self) -> bool:
+        """True when both DATAMODULE and DATASET sections are present."""
+        return self.DATAMODULE is not None and self.DATASET is not None
+
+    def get_datamodule_config(self) -> DataModuleSettings:
+        """Return the DATAMODULE configuration section.
+
+        Returns:
+            DataModuleSettings instance.
+
+        Raises:
+            ValueError: If DATAMODULE section is absent.
+        """
+        if self.DATAMODULE is None:
+            raise ValueError("No DATAMODULE configuration available")
+        return self.DATAMODULE
+
+    def get_dataset_config(self) -> DatasetSettings:
+        """Return the DATASET configuration section.
+
+        Returns:
+            DatasetSettings instance.
+
+        Raises:
+            ValueError: If DATASET section is absent.
+        """
+        if self.DATASET is None:
+            raise ValueError("No DATASET configuration available")
+        return self.DATASET
 
 
 class OptimizationWorkflowConfig(BasicSettings):
@@ -284,3 +366,44 @@ class OptimizationWorkflowConfig(BasicSettings):
     def has_model_config(self) -> bool:
         """Check if MODEL section is present."""
         return self.MODEL is not None
+
+    @property
+    def is_training(self) -> bool:
+        """True when not running in inference mode."""
+        return not bool(self.SESSION and self.SESSION.inference)
+
+    @property
+    def is_inference(self) -> bool:
+        """True when running in inference mode."""
+        return bool(self.SESSION and self.SESSION.inference)
+
+    @property
+    def has_data_config(self) -> bool:
+        """True when both DATAMODULE and DATASET sections are present."""
+        return self.DATAMODULE is not None and self.DATASET is not None
+
+    def get_datamodule_config(self) -> DataModuleSettings:
+        """Return the DATAMODULE configuration section.
+
+        Returns:
+            DataModuleSettings instance.
+
+        Raises:
+            ValueError: If DATAMODULE section is absent.
+        """
+        if self.DATAMODULE is None:
+            raise ValueError("No DATAMODULE configuration available")
+        return self.DATAMODULE
+
+    def get_dataset_config(self) -> DatasetSettings:
+        """Return the DATASET configuration section.
+
+        Returns:
+            DatasetSettings instance.
+
+        Raises:
+            ValueError: If DATASET section is absent.
+        """
+        if self.DATASET is None:
+            raise ValueError("No DATASET configuration available")
+        return self.DATASET

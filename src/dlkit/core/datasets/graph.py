@@ -1,17 +1,18 @@
+from typing import Any
+
 import torch
+from loguru import logger
 from pydantic import FilePath
 from torch import Tensor
-from torch_geometric.data import InMemoryDataset, Data
-from torch_geometric.transforms import GCNNorm
+from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.transforms import BaseTransform, GCNNorm
 from torch_geometric.utils import dense_to_sparse
-from loguru import logger
 
+from dlkit.core.datasets.tensor_utils import ensure2d
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.tools.io import load_array
-from dlkit.core.datasets.tensor_utils import ensure2d
 
-from .base import register_dataset, BaseDataset
-
+from .base import BaseDataset, register_dataset
 
 PROCESSED_FILE_NAMES: list[str] = ["graph_data.pt"]
 
@@ -28,29 +29,40 @@ def build_data_list(
         xi = ensure2d(x[i])
         yi = ensure2d(y[i]) if y is not None else None
 
-        data_kwargs = {
-            "x": xi,
-            "edge_index": edge_index,
-            "edge_attr": edge_attr,
-            "num_nodes": xi.shape[0],
-        }
-        if yi is not None:
-            data_kwargs["y"] = yi
-
-        data_items.append(Data(**data_kwargs))
+        if yi is None:
+            data_items.append(
+                Data(
+                    x=xi,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    num_nodes=int(xi.shape[0]),
+                )
+            )
+        else:
+            data_items.append(
+                Data(
+                    x=xi,
+                    y=yi,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    num_nodes=int(xi.shape[0]),
+                )
+            )
     return data_items
 
 
 @register_dataset
-class GraphDataset(InMemoryDataset, BaseDataset):
+class GraphDataset(InMemoryDataset, BaseDataset[Data]):
     def __init__(
         self,
         x: FilePath,
         edge_index: FilePath,
         y: FilePath | None = None,
         **kwargs,
-    ):
-        self._raw_paths = {"x": x, "edge_index": edge_index, "y": y}
+    ) -> None:
+        self._raw_paths: dict[str, FilePath] = {"x": x, "edge_index": edge_index}
+        if y is not None:
+            self._raw_paths["y"] = y
         precision_service = get_precision_service()
         self._target_dtype = precision_service.get_torch_dtype()
         # Precision is automatically resolved from global precision service
@@ -111,8 +123,9 @@ class GraphDataset(InMemoryDataset, BaseDataset):
         self._apply_precision_to_cached_data()
 
     def get(self, idx: int) -> Data:
-        data = super().get(idx)
-        return self._cast_graph_data_precision(data)
+        from typing import cast as _cast
+
+        return self._cast_graph_data_precision(_cast(Data, super().get(idx)))
 
     # --------------------------------------------------------------------- #
     # Precision utilities
@@ -142,5 +155,18 @@ class GraphDataset(InMemoryDataset, BaseDataset):
 
 
 class ScaledGraphDataset(GraphDataset):
-    def __init__(self, pre_transform=GCNNorm(), **kwargs):
-        super().__init__(pre_transform=pre_transform, **kwargs)
+    def __init__(
+        self,
+        x: FilePath,
+        edge_index: FilePath,
+        y: FilePath | None = None,
+        pre_transform: BaseTransform | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            x=x,
+            edge_index=edge_index,
+            y=y,
+            pre_transform=pre_transform or GCNNorm(),
+            **kwargs,
+        )

@@ -18,8 +18,6 @@ class TransformError(DLKitError):
     Use specific subclasses for different error types when possible.
     """
 
-    pass
-
 
 class TransformNotFittedError(TransformError):
     """Raised when a fittable transform is used before being fitted.
@@ -96,8 +94,6 @@ class TransformApplicationError(TransformError):
         >>> # Raises TransformApplicationError with original error wrapped
     """
 
-    pass
-
 
 class InvalidTransformConfigurationError(TransformError):
     """Raised when transform configuration is invalid.
@@ -105,8 +101,6 @@ class InvalidTransformConfigurationError(TransformError):
     Example:
         >>> PCA(n_components=-5)  # Raises InvalidTransformConfigurationError
     """
-
-    pass
 
 
 class TransformAmbiguityError(TransformError):

@@ -75,6 +75,7 @@ class WorkflowSettingsLoader:
 
         if strict:
             from dlkit.tools.io.config import get_available_sections
+
             available = get_available_sections(config_path)
             missing = [s for s in sections if s not in available]
             if missing:

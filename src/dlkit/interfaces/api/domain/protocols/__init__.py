@@ -1,22 +1,23 @@
 """Domain protocols for clean architecture interfaces."""
 
-from .dependency_protocols import (
-    SettingsProvider,
-    LoggingProvider,
-    CheckpointProvider,
-    ResourceProvider,
-    MetadataProvider,
-    StrategyProvider,
-    OverrideProvider,
-    ConfigurationContext,
-    TrainingContext,
-    InferenceContext,
-    OptimizationContext,
-)
+from abc import abstractmethod
 
 # Define minimal protocols to avoid circular imports
 from typing import Protocol
-from abc import abstractmethod
+
+from .dependency_protocols import (
+    CheckpointProvider,
+    ConfigurationContext,
+    InferenceContext,
+    LoggingProvider,
+    MetadataProvider,
+    OptimizationContext,
+    OverrideProvider,
+    ResourceProvider,
+    SettingsProvider,
+    StrategyProvider,
+    TrainingContext,
+)
 
 
 class ExecutionStrategy(Protocol):

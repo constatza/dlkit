@@ -20,21 +20,19 @@ Tests fail if architectural violations are introduced.
 """
 
 import inspect
-from typing import get_type_hints
 
-import pytest
 import torch
 
 from dlkit.core.training.transforms.base import (
-    Transform,
     FittableTransform,
     InvertibleTransform,
     ShapeAwareTransform,
+    Transform,
 )
-from dlkit.core.training.transforms.minmax import MinMaxScaler
-from dlkit.core.training.transforms.standard import StandardScaler
-from dlkit.core.training.transforms.pca import PCA
 from dlkit.core.training.transforms.chain import TransformChain
+from dlkit.core.training.transforms.minmax import MinMaxScaler
+from dlkit.core.training.transforms.pca import PCA
+from dlkit.core.training.transforms.standard import StandardScaler
 
 
 class TestProtocolBasedArchitecture:
@@ -274,7 +272,7 @@ class TestInvariants:
 
     def test_transforms_are_pytorch_modules(self):
         """All transforms must be PyTorch nn.Module instances."""
-        import torch.nn as nn
+        from torch import nn
 
         transform_instances = [
             MinMaxScaler(dim=0),

@@ -7,33 +7,34 @@ with proper separation of concerns.
 
 from __future__ import annotations
 
-
 from dlkit.interfaces.api.domain import WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.utils.logging_config import get_logger
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
-
-from .domain import (
-    OptimizationDirection,
-    IStudyRepository,
-    IExperimentTracker,
-    IConfigurationPersistence,
-)
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+from dlkit.tools.utils.logging_config import get_logger
 
 from .application import (
+    OptimizationOrchestrator,
     StudyManager,
     TrialExecutor,
-    OptimizationOrchestrator,
 )
-
+from .domain import (
+    IConfigurationPersistence,
+    IExperimentTracker,
+    IStudyRepository,
+    OptimizationDirection,
+)
 from .infrastructure import (
-    OptunaStudyRepository,
     InMemoryStudyRepository,
     MLflowTrackingAdapter,
-    NullTrackingAdapter,
-    TOMLConfigurationPersister,
     NullConfigurationPersister,
+    NullTrackingAdapter,
+    OptunaStudyRepository,
+    TOMLConfigurationPersister,
 )
+
+# Settings union accepted by optimization factory methods
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -72,7 +73,7 @@ class OptimizationServiceFactory:
         self._config_persister_override = config_persister
 
     def create_optimization_orchestrator(
-        self, settings: GeneralSettings
+        self, settings: _WorkflowSettings
     ) -> OptimizationOrchestrator:
         """Create optimization orchestrator with proper dependency injection.
 
@@ -112,7 +113,7 @@ class OptimizationServiceFactory:
                 f"Orchestrator creation failed: {e}", {"stage": "orchestrator_creation"}
             ) from e
 
-    def create_optimization_strategy(self, settings: GeneralSettings):
+    def create_optimization_strategy(self, settings: _WorkflowSettings):
         """Create optimization strategy that implements IOptimizationStrategy.
 
         Args:
@@ -125,7 +126,7 @@ class OptimizationServiceFactory:
 
         return OptimizationStrategy(self, settings)
 
-    def create_study_manager(self, settings: GeneralSettings) -> StudyManager:
+    def create_study_manager(self, settings: _WorkflowSettings) -> StudyManager:
         """Create study manager service.
 
         Args:
@@ -145,7 +146,7 @@ class OptimizationServiceFactory:
         """
         return TrialExecutor(self._build_factory)
 
-    def _create_study_repository(self, settings: GeneralSettings) -> IStudyRepository:
+    def _create_study_repository(self, settings: _WorkflowSettings) -> IStudyRepository:
         """Create study repository based on settings.
 
         Args:
@@ -168,7 +169,7 @@ class OptimizationServiceFactory:
         # Fall back to in-memory repository for testing/development
         return InMemoryStudyRepository()
 
-    def _create_experiment_tracker(self, settings: GeneralSettings) -> IExperimentTracker | None:
+    def _create_experiment_tracker(self, settings: _WorkflowSettings) -> IExperimentTracker | None:
         """Create experiment tracker based on settings.
 
         Args:
@@ -205,7 +206,7 @@ class OptimizationServiceFactory:
         return NullTrackingAdapter()
 
     def _create_config_persister(
-        self, settings: GeneralSettings
+        self, settings: _WorkflowSettings
     ) -> IConfigurationPersistence | None:
         """Create configuration persister based on settings.
 
@@ -233,7 +234,7 @@ class OptimizationServiceFactory:
         return NullConfigurationPersister()
 
     @staticmethod
-    def extract_optimization_config(settings: GeneralSettings) -> dict:
+    def extract_optimization_config(settings: _WorkflowSettings) -> dict:
         """Extract optimization configuration from settings.
 
         Args:

@@ -10,7 +10,6 @@ import pytest
 import torch
 from lightning.pytorch import LightningModule, Trainer
 
-
 # Constants for test configuration
 DEFAULT_BATCH_SIZE = 4
 DEFAULT_FEATURE_SIZE = 10

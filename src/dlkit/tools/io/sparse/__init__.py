@@ -20,8 +20,8 @@ from ._validation import validate_sparse_pack
 register_format(SparseFormat.COO, CooPackCodec(), CooPackReader)
 
 __all__ = [
-    "AbstractSparsePackReader",
     "COO_PACK_SCHEMA",
+    "AbstractSparsePackReader",
     "CooPackCodec",
     "CooPackReader",
     "PackFiles",

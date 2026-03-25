@@ -30,9 +30,7 @@ def _normalize_value_scale(value_scale: float) -> float:
     """
     scale = float(value_scale)
     if not np.isfinite(scale) or scale <= 0.0:
-        raise ValueError(
-            f"Invalid value_scale: {value_scale}. Expected finite value > 0."
-        )
+        raise ValueError(f"Invalid value_scale: {value_scale}. Expected finite value > 0.")
     return scale
 
 
@@ -61,6 +59,7 @@ def _infer_matrix_size(
     rows = int(indices[0].max()) + 1
     cols = int(indices[1].max()) + 1
     return rows, cols
+
 
 # Schema identifiers are explicit and versioned. Add new schema dataclasses for
 # new formats/versions and register them in _MANIFEST_ADAPTERS.

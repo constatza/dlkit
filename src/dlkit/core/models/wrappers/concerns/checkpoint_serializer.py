@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-import torch.nn as nn
+from torch import nn
 
 
 @runtime_checkable
@@ -109,7 +109,7 @@ class DLKitCheckpointSerializer:
             from dlkit.runtime.workflows.factories.model_detection import detect_model_type
 
             if self._checkpoint_metadata is not None:
-                model_type = detect_model_type(self._checkpoint_metadata.model_settings, None)  # type: ignore[arg-type]
+                model_type = detect_model_type(self._checkpoint_metadata.model_settings)
                 return model_type.value
         except Exception:
             pass
@@ -142,7 +142,9 @@ class DLKitCheckpointSerializer:
             elif hasattr(model_settings, "model_dump"):
                 all_fields = model_settings.model_dump()
                 excluded = {"name", "module_path", "checkpoint"}
-                init_kwargs = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
+                init_kwargs = {
+                    k: v for k, v in all_fields.items() if k not in excluded and v is not None
+                }
                 all_hyperparams = all_fields
             else:
                 init_kwargs = {}

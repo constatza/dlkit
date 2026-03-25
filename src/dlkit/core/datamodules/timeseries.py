@@ -4,8 +4,8 @@ from pytorch_forecasting import TimeSeriesDataSet
 from torch.utils.data import DataLoader
 
 from dlkit.core.datamodules.array import InMemoryModule
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.config.dataloader_settings import DataloaderSettings
 
 if TYPE_CHECKING:
     from dlkit.core.datasets.timeseries import ForecastingDataset
@@ -16,7 +16,7 @@ class TimeSeriesDataModule(InMemoryModule):
 
     def __init__(
         self,
-        dataset: "ForecastingDataset",
+        dataset: ForecastingDataset,
         dataloader: DataloaderSettings,
         split: IndexSplit,
     ) -> None:
@@ -41,7 +41,7 @@ class TimeSeriesDataModule(InMemoryModule):
                     # auxiliary columns on empty frames inside pytorch-forecasting.
                     pdf = frame.to_pandas()
                     if len(pdf) == 0:
-                        pdf = self.split_dataset.raw.df.to_pandas()  # type: ignore[attr-defined]
+                        pdf = self.split_dataset.raw.df.to_pandas()
                     return TimeSeriesDataSet.from_dataset(
                         ds,
                         data=pdf,

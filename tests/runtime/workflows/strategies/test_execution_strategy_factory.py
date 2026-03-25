@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-
 import pytest
 
+from dlkit.runtime.workflows.strategies.core import ITrainingExecutor, VanillaExecutor
 from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
-from dlkit.runtime.workflows.strategies.core import VanillaExecutor, ITrainingExecutor
 from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
 
 # OptimizationDecorator removed - tests updated for clean architecture

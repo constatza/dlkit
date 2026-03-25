@@ -1,5 +1,5 @@
-from torch import randperm
 from pydantic import BaseModel
+from torch import randperm
 
 
 class IndexSplit(BaseModel):

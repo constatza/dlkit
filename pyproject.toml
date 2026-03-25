@@ -38,7 +38,6 @@ dependencies = [
 dev = [
     "hypothesis>=6.138.7",
     "prek",
-    "pyright>=1.1.405",
     "pytest<9.0.0,>=8.2.2",
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.14.0",
@@ -113,7 +112,6 @@ filterwarnings = [
 line-length = 100
 target-version = "py314"
 preview = true
-fix = true
 
 [tool.ruff.format]
 quote-style = "double"
@@ -121,12 +119,13 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.ruff.lint]
-extend-select = [
-    "UP", # pyupgrade
-    #    "D", # pydocstyle
+select = [
+    "F",      # pyflakes
+    "I",      # isort
 ]
 
+[tool.ty.environment]
+root = ["src", "tests"]
 
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+[tool.ty.terminal]
+output-format = "concise"

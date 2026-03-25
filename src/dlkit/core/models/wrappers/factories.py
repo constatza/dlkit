@@ -16,9 +16,10 @@ from dlkit.tools.config import (
 )
 from dlkit.tools.config.data_entries import DataEntry
 from dlkit.tools.utils.logging_config import get_logger
+
 from .base import ProcessingLightningWrapper
-from .standard import StandardLightningWrapper
 from .graph import GraphLightningWrapper
+from .standard import StandardLightningWrapper
 from .timeseries import TimeSeriesLightningWrapper
 
 logger = get_logger(__name__)

@@ -1,7 +1,5 @@
-from typing import TypeVar, overload
 from collections.abc import Callable
-
-T = TypeVar("T")
+from typing import cast, overload
 
 
 class Registry[T]:
@@ -11,12 +9,14 @@ class Registry[T]:
         self._registry: dict[str, T] = {}
 
     @overload
-    def register(self, item: T) -> T: ...
+    def register[U](self, item: U, *, name: str | None = None) -> U: ...
 
     @overload
-    def register(self, item: None = None, *, name: str | None = None) -> Callable[[T], T]: ...
+    def register[U](self, item: None = None, *, name: str | None = None) -> Callable[[U], U]: ...
 
-    def register(self, item: T | None = None, *, name: str | None = None) -> Callable[[T], T] | T:
+    def register[U](
+        self, item: U | None = None, *, name: str | None = None
+    ) -> Callable[[U], U] | U:
         """Register an item under `name` or its own __name__ by default.
 
         Usage:
@@ -29,11 +29,11 @@ class Registry[T]:
            registry.register(SomeClass, name="explicit")
         """
 
-        def _do_register(target: T) -> T:
+        def _do_register(target: U) -> U:
             reg_name = name or getattr(target, "__name__", None)
             if reg_name is None:
                 raise ValueError("Cannot infer name for registry key")
-            self._registry[reg_name] = target
+            self._registry[reg_name] = cast(T, target)
             return target
 
         # Direct call: registry.register(SomeClass, name="...")

@@ -1,45 +1,38 @@
+from . import attention, cae, encoder, ffnn, graph, primitives
 from .base import DLKitModel
-
 from .ffnn.linear import LinearNetwork
 from .ffnn.norm_scaled import (
+    NormScaledConstantWidthFFNN,
+    NormScaledFactorizedLinear,
     NormScaledFFNN,
     NormScaledLinearFFNN,
-    NormScaledConstantWidthFFNN,
-    NormScaledSymmetricLinear,
-    NormScaledSPDLinear,
-    NormScaledFactorizedLinear,
-    NormScaledSymmetricFactorizedLinear,
     NormScaledSPDFactorizedLinear,
-)
-from .ffnn.plain import SimpleFeedForwardNN, ConstantWidthSimpleFFNN
-from .ffnn.parametric import (
-    ParametricDenseBlock,
-    ConstantWidthParametricFFNN,
-    EmbeddedParametricFFNN,
-)
-from .ffnn.parametric_variants import (
-    ConstantWidthSPDFFNN,
-    ConstantWidthSPDFactorizedFFNN,
-    ConstantWidthFactorizedFFNN,
-    EmbeddedSPDFFNN,
-    EmbeddedSPDFactorizedFFNN,
-    EmbeddedFactorizedFFNN,
+    NormScaledSPDLinear,
+    NormScaledSymmetricFactorizedLinear,
+    NormScaledSymmetricLinear,
 )
 from .ffnn.norm_scaled_deep import (
-    NormScaledConstantWidthSPDFFNN,
-    NormScaledConstantWidthSPDFactorizedFFNN,
     NormScaledConstantWidthFactorizedFFNN,
-    NormScaledEmbeddedSPDFFNN,
-    NormScaledEmbeddedSPDFactorizedFFNN,
+    NormScaledConstantWidthSPDFactorizedFFNN,
+    NormScaledConstantWidthSPDFFNN,
     NormScaledEmbeddedFactorizedFFNN,
+    NormScaledEmbeddedSPDFactorizedFFNN,
+    NormScaledEmbeddedSPDFFNN,
 )
-
-from . import attention
-from . import cae
-from . import encoder
-from . import ffnn
-from . import graph
-from . import primitives
+from .ffnn.parametric import (
+    ConstantWidthParametricFFNN,
+    EmbeddedParametricFFNN,
+    ParametricDenseBlock,
+)
+from .ffnn.parametric_variants import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSPDFactorizedFFNN,
+    ConstantWidthSPDFFNN,
+    EmbeddedFactorizedFFNN,
+    EmbeddedSPDFactorizedFFNN,
+    EmbeddedSPDFFNN,
+)
+from .ffnn.plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 
 __all__ = [
     "DLKitModel",

@@ -7,8 +7,9 @@ replaces the hardcoded isinstance checks with ABC-based classification.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from collections.abc import Callable
 from enum import Enum
+from typing import Any
 
 
 class ModelType(Enum):
@@ -66,13 +67,13 @@ class ABCModelTypeDetector(IModelTypeDetector):
         """
         model_cls = self._get_model_class(model_settings)
 
-        if model_cls is None:
+        if model_cls is None or not isinstance(model_cls, type):
             return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
         # Check inheritance
         try:
-            from dlkit.core.models.nn.graph.base import BaseGraphNetwork
             from dlkit.core.models.nn.base import DLKitModel
+            from dlkit.core.models.nn.graph.base import BaseGraphNetwork
 
             if issubclass(model_cls, BaseGraphNetwork):
                 return ModelType.GRAPH
@@ -91,7 +92,7 @@ class ABCModelTypeDetector(IModelTypeDetector):
 
         return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
-    def _get_model_class(self, model_settings: Any) -> Type | None:
+    def _get_model_class(self, model_settings: Any) -> type[object] | Callable[..., object] | None:
         """Get the model class from settings.
 
         Args:

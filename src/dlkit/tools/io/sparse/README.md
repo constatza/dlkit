@@ -44,17 +44,17 @@ from dlkit.tools.io.sparse import (
     open_sparse_pack,
     validate_sparse_pack,
     is_sparse_pack_dir,
-    SparseFormat,           # COO, CSR
-    SparseCodec,            # full codec protocol
-    SparseLoader,           # read-only protocol (ISP)
-    SparseWriter,           # write-only protocol (ISP)
-    SparsePackReader,       # structural reader protocol
+    SparseFormat,  # COO, CSR
+    SparseCodec,  # full codec protocol
+    SparseLoader,  # read-only protocol (ISP)
+    SparseWriter,  # write-only protocol (ISP)
+    SparsePackReader,  # structural reader protocol
     AbstractSparsePackReader,  # ABC for concrete readers
-    PackFiles,              # payload filename contract
-    PackManifest,           # typed manifest dataclass
-    CooPackCodec,           # COO codec (read + write)
-    CooPackReader,          # COO reader
-    register_format,        # OCP extension point
+    PackFiles,  # payload filename contract
+    PackManifest,  # typed manifest dataclass
+    CooPackCodec,  # COO codec (read + write)
+    CooPackReader,  # COO reader
+    register_format,  # OCP extension point
     register_manifest_schema,
     COO_PACK_SCHEMA,
 )
@@ -110,7 +110,7 @@ from dlkit.tools.io.sparse import save_sparse_pack, open_sparse_pack, validate_s
 
 pack_path = Path("matrix_pack")
 indices = np.array([[0, 1], [0, 1]], dtype=np.int64)
-values  = np.array([2.0, 3.0], dtype=np.float64)
+values = np.array([2.0, 3.0], dtype=np.float64)
 nnz_ptr = np.array([0, 2], dtype=np.int64)
 
 save_sparse_pack(pack_path, indices, values, nnz_ptr, size=(2, 2))
@@ -142,8 +142,8 @@ reader = open_sparse_pack(pack_path, files=files)
 save_sparse_pack(pack_path, indices, values, nnz_ptr, size=(512, 512), value_scale=10.0)
 
 reader = open_sparse_pack(pack_path)
-A_stored   = reader.build_torch_sparse(0)                     # stored-space
-A_original = reader.build_torch_sparse(0, denormalize=True)   # × 10.0
+A_stored = reader.build_torch_sparse(0)  # stored-space
+A_original = reader.build_torch_sparse(0, denormalize=True)  # × 10.0
 ```
 
 ### Injecting a stub loader (testing)
@@ -151,12 +151,14 @@ A_original = reader.build_torch_sparse(0, denormalize=True)   # × 10.0
 ```python
 from dlkit.tools.io.sparse._coo_pack import CooPackReader
 
+
 class StubLoader:
     def load_arrays(self, path, files=None):
         return indices, values, nnz_ptr
 
     def load_value_scale(self, path, files=None):
         return 1.0
+
 
 reader = CooPackReader(pack_path, loader=StubLoader())
 ```

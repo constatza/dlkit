@@ -5,21 +5,24 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import Mock
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
-from dlkit.interfaces.api.domain import WorkflowError, TrainingResult
+from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.runtime.workflows.strategies.core import VanillaExecutor
 from dlkit.runtime.workflows.strategies.tracking import (
-    TrackingDecorator,
     IExperimentTracker,
     IRunContext,
+    TrackingDecorator,
 )
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class MockRunContext(IRunContext):
@@ -135,14 +138,19 @@ class MockExperimentTracker(IExperimentTracker):
         })
         yield self.run_context
 
-    def log_settings(self, settings: GeneralSettings, run_context: IRunContext) -> None:
+    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
         self.logged_settings.append(settings)
 
     def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: GeneralSettings
+        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
         """Mock model parameter logging."""
-        pass
+
+    def get_tracking_uri(self) -> str | None:
+        return None
+
+    def is_local(self) -> bool:
+        return False
 
 
 @pytest.fixture

@@ -4,4 +4,4 @@ from . import nn
 from .nn.base import DLKitModel
 from .protocols import IAutoencoder, IVariationalAutoencoder
 
-__all__ = ["nn", "DLKitModel", "IAutoencoder", "IVariationalAutoencoder"]
+__all__ = ["DLKitModel", "IAutoencoder", "IVariationalAutoencoder", "nn"]

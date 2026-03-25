@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class ConfigAccessor:
@@ -21,7 +24,7 @@ class ConfigAccessor:
         settings: Global configuration settings
     """
 
-    def __init__(self, settings: GeneralSettings):
+    def __init__(self, settings: _WorkflowSettings):
         """Initialize with global settings.
 
         Args:

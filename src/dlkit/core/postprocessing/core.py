@@ -118,32 +118,28 @@ def summarize(obj: Any) -> dict[str, Any]:
 def _graph_sizes(obj: Any) -> tuple[int | None, int | None]:
     """Best-effort graph size extraction (num_nodes, num_edges)."""
     try:
-        import torch
-
         if isinstance(obj, dict):
-            num_nodes = int(obj.get("num_nodes") or (obj.get("x").shape[0] if "x" in obj else 0))
+            x_val = obj.get("x")
+            num_nodes = int(obj.get("num_nodes") or (x_val.shape[0] if x_val is not None else 0))
             edge_index = obj.get("edge_index")
-            if isinstance(edge_index, torch.Tensor):
+            try:
                 num_edges = int(edge_index.shape[1])
-            else:
-                try:
-                    num_edges = int(edge_index.shape[1])  # type: ignore[attr-defined]
-                except Exception:
-                    num_edges = None
+            except Exception:
+                num_edges = None
             return num_nodes, num_edges
 
         # Attr case
-        if hasattr(obj, "num_nodes") and getattr(obj, "num_nodes") is not None:
-            n = int(getattr(obj, "num_nodes"))
-        elif hasattr(obj, "x") and getattr(obj, "x") is not None:
-            x = getattr(obj, "x")
-            n = int(getattr(x, "shape")[0])
+        if hasattr(obj, "num_nodes") and obj.num_nodes is not None:
+            n = int(obj.num_nodes)
+        elif hasattr(obj, "x") and obj.x is not None:
+            x = obj.x
+            n = int(x.shape[0])
         else:
             n = None
 
         ei = getattr(obj, "edge_index", None)
         if ei is not None:
-            num_edges = int(getattr(ei, "shape")[1])
+            num_edges = int(ei.shape[1])
         else:
             num_edges = None
         return n, num_edges

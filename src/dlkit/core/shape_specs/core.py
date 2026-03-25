@@ -6,10 +6,10 @@ composition to coordinate different shape handling strategies.
 
 from __future__ import annotations
 
-from typing import Dict, Any, Protocol
+from typing import Any, Protocol
 
-from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
-from .strategies import ShapeValidator, ShapeSerializer, ShapeAliasResolver, ValidationResult
+from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator, ValidationResult
+from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
 
 class IShapeSpec(Protocol):
@@ -86,7 +86,7 @@ class IShapeSpec(Protocol):
         """Return the rich shape data representation backing the spec."""
         ...
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize the shape specification into a dictionary payload."""
         ...
 
@@ -194,7 +194,7 @@ class ShapeSpec(IShapeSpec):
         """
         return self._validator.validate_collection(self._data)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize ShapeSpec to dictionary for storage.
 
         Returns:
@@ -203,7 +203,7 @@ class ShapeSpec(IShapeSpec):
         return self._serializer.serialize(self._data)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ShapeSpec":
+    def from_dict(cls, data: dict[str, Any]) -> ShapeSpec:
         """Create ShapeSpec from dictionary representation.
 
         Args:
@@ -315,7 +315,7 @@ class GraphShapeSpec:
         """Get the model family this shape spec is designed for."""
         return self._data.model_family.value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph shape data via standard serializer."""
         serializer = ShapeSerializer()
         return serializer.serialize(self._data)
@@ -344,7 +344,7 @@ class NullShapeSpec(IShapeSpec):
 
     def get_shape_data(self) -> ShapeData:
         """Get the underlying shape data (empty for null spec)."""
-        from .value_objects import ShapeData, ModelFamily, ShapeSource
+        from .value_objects import ModelFamily, ShapeData, ShapeSource
 
         return ShapeData(
             entries={}, model_family=ModelFamily.EXTERNAL, source=ShapeSource.DEFAULT_FALLBACK
@@ -378,7 +378,7 @@ class NullShapeSpec(IShapeSpec):
         """Get the model family this shape spec is designed for."""
         return ModelFamily.EXTERNAL.value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize null spec to empty payload."""
         serializer = ShapeSerializer()
         return serializer.serialize(self.get_shape_data())
@@ -427,7 +427,6 @@ def create_shape_spec(
 
     if model_family == ModelFamily.GRAPH:
         return GraphShapeSpec(shape_data)
-    elif model_family == ModelFamily.EXTERNAL:
+    if model_family == ModelFamily.EXTERNAL:
         return NullShapeSpec()
-    else:
-        return ShapeSpec(shape_data)
+    return ShapeSpec(shape_data)

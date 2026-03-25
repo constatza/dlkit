@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import torch
 from torch import nn
 
@@ -15,7 +14,7 @@ from dlkit.tools.config.data_entries import Feature
 
 
 class _Std(nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D401
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Identity forward."""
         return x
 
@@ -25,7 +24,7 @@ class _Graph(nn.Module):
         return x
 
 
-def test_wrapper_factory_detects_standard(monkeypatch):  # noqa: ANN001
+def test_wrapper_factory_detects_standard(monkeypatch):
     # FactoryProvider.create_component should return a standard-like model
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
     mdl = ModelComponentSettings(
@@ -35,9 +34,9 @@ def test_wrapper_factory_detects_standard(monkeypatch):  # noqa: ANN001
     assert wrapper_type == "standard"
 
 
-def test_wrapper_factory_create_standard_wrapper(monkeypatch):  # noqa: ANN001
+def test_wrapper_factory_create_standard_wrapper(monkeypatch):
     # Patch FactoryProvider for model instantiation inside wrapper base class
-    def _fake_create(settings, ctx: BuildContext):  # noqa: ANN001
+    def _fake_create(settings, ctx: BuildContext):
         if isinstance(settings, ModelComponentSettings):
             return _Std()
         # Return simple objects for loss/metrics/optimizer etc.
@@ -56,7 +55,7 @@ def test_wrapper_factory_create_standard_wrapper(monkeypatch):  # noqa: ANN001
     assert wrapper is not None
 
 
-def test_wrapper_factory_auto_creates_standard(monkeypatch):  # noqa: ANN001
+def test_wrapper_factory_auto_creates_standard(monkeypatch):
     # Detection returns standard; auto path should create standard
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
     mdl = ModelComponentSettings(

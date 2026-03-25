@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from dlkit.tools.config.training_settings import TrainingSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
+from dlkit.tools.config.training_settings import TrainingSettings
 
 
 class TestTrainingSettingsLRTuner:

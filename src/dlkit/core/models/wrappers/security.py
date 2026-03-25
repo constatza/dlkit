@@ -6,7 +6,7 @@ source (our own training code), we disable weights_only for trusted checkpoints.
 """
 
 import os
-from typing import Any
+from typing import Any, cast
 
 
 def configure_checkpoint_loading() -> None:
@@ -46,28 +46,29 @@ def register_dlkit_safe_globals() -> None:
     try:
         import torch.serialization
 
+        from dlkit.tools.config.components.model_components import (
+            LossComponentSettings,
+            MetricComponentSettings,
+            ModelComponentSettings,
+            WrapperComponentSettings,
+        )
+
         # Import all settings classes that may be pickled in checkpoints
         from dlkit.tools.config.core.base_settings import (
             BasicSettings,
             ComponentSettings,
             HyperParameterSettings,
         )
-        from dlkit.tools.config.components.model_components import (
-            WrapperComponentSettings,
-            ModelComponentSettings,
-            LossComponentSettings,
-            MetricComponentSettings,
-        )
-        from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
         from dlkit.tools.config.data_entries import (
+            AutoencoderTarget,
+            Latent,
             PathFeature,
             PathTarget,
+            Prediction,
             ValueFeature,
             ValueTarget,
-            Latent,
-            AutoencoderTarget,
-            Prediction,
         )
+        from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
 
         # Collect all classes to register
         safe_classes: list[type[Any]] = [
@@ -93,9 +94,9 @@ def register_dlkit_safe_globals() -> None:
         ]
 
         # Register all classes as safe for unpickling
-        torch.serialization.add_safe_globals(safe_classes)
+        torch.serialization.add_safe_globals(cast(Any, safe_classes))
 
-    except (ImportError, AttributeError):
+    except ImportError, AttributeError:
         # Older PyTorch versions don't have add_safe_globals - safe to ignore
         # or torch not installed yet
         pass

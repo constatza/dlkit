@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
-from .base import BaseCommand
-from ..services.configuration_service import ConfigurationService, TemplateKind
-from ..domain.errors import ConfigurationError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+
+from ..domain.errors import ConfigurationError
+from ..services.configuration_service import ConfigurationService, TemplateKind
+from .base import BaseCommand
 
 
 class GenerateTemplateCommandInput(BaseModel):
@@ -27,7 +30,7 @@ class GenerateTemplateCommandOutput(BaseModel):
 
 
 class GenerateTemplateCommand(
-    BaseCommand[GenerateTemplateCommandInput, GenerateTemplateCommandOutput]
+    BaseCommand[GenerateTemplateCommandInput, GenerateTemplateCommandOutput, BaseSettingsProtocol]
 ):
     """Command for generating configuration templates.
 
@@ -53,7 +56,6 @@ class GenerateTemplateCommand(
         Raises:
             ConfigurationError: On validation failure
         """
-        # Validate template type
         valid_types = ["training", "inference", "mlflow", "optuna"]
         if input_data.template_type not in valid_types:
             raise ConfigurationError(
@@ -62,7 +64,10 @@ class GenerateTemplateCommand(
             )
 
     def execute(
-        self, input_data: GenerateTemplateCommandInput, settings: BaseSettingsProtocol, **kwargs
+        self,
+        input_data: GenerateTemplateCommandInput,
+        settings: BaseSettingsProtocol,
+        **kwargs: Any,
     ) -> GenerateTemplateCommandOutput:
         """Execute template generation.
 
@@ -78,7 +83,6 @@ class GenerateTemplateCommand(
             ConfigurationError: On template generation failure
         """
         try:
-            # Generate template using service
             template_content = ConfigurationService.generate_template(input_data.template_type)
 
             return GenerateTemplateCommandOutput(
@@ -111,7 +115,7 @@ class ValidateTemplateCommandOutput(BaseModel):
 
 
 class ValidateTemplateCommand(
-    BaseCommand[ValidateTemplateCommandInput, ValidateTemplateCommandOutput]
+    BaseCommand[ValidateTemplateCommandInput, ValidateTemplateCommandOutput, BaseSettingsProtocol]
 ):
     """Command for validating configuration templates.
 
@@ -138,7 +142,10 @@ class ValidateTemplateCommand(
             raise ConfigurationError("Template content cannot be empty")
 
     def execute(
-        self, input_data: ValidateTemplateCommandInput, settings: BaseSettingsProtocol, **kwargs
+        self,
+        input_data: ValidateTemplateCommandInput,
+        settings: BaseSettingsProtocol,
+        **kwargs: Any,
     ) -> ValidateTemplateCommandOutput:
         """Execute template validation.
 
@@ -153,14 +160,12 @@ class ValidateTemplateCommand(
         errors = []
 
         try:
-            # Try to parse as TOML
             import tomlkit
 
             parsed = tomlkit.loads(input_data.template_content)
 
-            # Try to load as GeneralSettings
             try:
-                GeneralSettings(**parsed)
+                GeneralSettings.model_validate(dict(parsed))
             except Exception as e:
                 errors.append(f"Settings validation failed: {e}")
 

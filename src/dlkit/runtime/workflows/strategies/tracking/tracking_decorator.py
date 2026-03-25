@@ -10,6 +10,7 @@ from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.error_handling import raise_error
 from dlkit.tools.utils.logging_config import get_logger
 
@@ -73,7 +74,7 @@ class TrackingDecorator(ITrainingExecutor):
     def execute(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> TrainingResult:
         """Execute training with experiment tracking.
 
@@ -101,18 +102,14 @@ class TrackingDecorator(ITrainingExecutor):
 
         # Use tracker as context manager for proper resource management
         logger.info("Starting training with MLflow tracking")
-        with self._tracker:  # type: ignore[attr-defined]
+        with self._tracker:
             # Get tracking URI after __enter__ activates the backend
             tracking_uri = (
                 self._tracker.get_tracking_uri()
                 if hasattr(self._tracker, "get_tracking_uri")
                 else None
             )
-            is_local = (
-                self._tracker.is_local()
-                if hasattr(self._tracker, "is_local")
-                else False
-            )
+            is_local = self._tracker.is_local() if hasattr(self._tracker, "is_local") else False
             if tracking_uri:
                 if is_local:
                     logger.info("Using local file-backed MLflow tracking URI: {}", tracking_uri)
@@ -123,10 +120,10 @@ class TrackingDecorator(ITrainingExecutor):
             logger.debug("Training completed, exiting tracker context")
             return result
 
-    def _execute_with_tracking(  # noqa: PLR0911
+    def _execute_with_tracking(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Execute training with tracking - separated for SRP compliance.
@@ -142,7 +139,7 @@ class TrackingDecorator(ITrainingExecutor):
         Raises:
             WorkflowError: If training or tracking fails
         """
-        try:  # pyright: ignore[reportReturnType]
+        try:
             # Get run configuration (includes merged tags)
             logger.debug("Extracting run config")
             run_config = self._extract_run_config(settings)
@@ -209,11 +206,11 @@ class TrackingDecorator(ITrainingExecutor):
 
         except Exception as e:
             logger.error("Tracking failed: {}", e)
-            raise_error("Training with tracking failed", e, stage="tracking")  # type: ignore[return-value]
+            raise_error("Training with tracking failed", e, stage="tracking")
 
     def _setup_tracking(
         self,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Setup tracking configuration.
 
@@ -237,7 +234,9 @@ class TrackingDecorator(ITrainingExecutor):
                 else:
                     raise
 
-    def _extract_run_config(self, settings: GeneralSettings) -> dict:
+    def _extract_run_config(
+        self, settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+    ) -> dict:
         """Extract run configuration from settings including merged tags.
 
         Uses ConfigAccessor for type-safe configuration access and
@@ -256,9 +255,7 @@ class TrackingDecorator(ITrainingExecutor):
 
         settings_tags: dict[str, str] = accessor.get_run_tags() or {}
         hooks_tags: dict[str, str] = (
-            self._hooks.extra_tags(settings)
-            if self._hooks and self._hooks.extra_tags
-            else {}
+            self._hooks.extra_tags(settings) if self._hooks and self._hooks.extra_tags else {}
         )
         # hooks win on collision
         merged_tags = {**settings_tags, **hooks_tags}
@@ -289,7 +286,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_configuration(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
         """Log configuration and model parameters.
@@ -313,7 +310,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_dataset_to_run(
         self,
         components: BuildComponents,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
         """Log dataset to MLflow run.
@@ -335,7 +332,7 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         components: BuildComponents,
         run_context: IRunContext,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Inject MLflow callbacks into trainer.
 

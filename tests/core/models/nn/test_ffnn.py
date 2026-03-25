@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
-from dlkit.core.models.nn.ffnn.simple import FeedForwardNN, ConstantWidthFFNN
-from dlkit.core.models.nn.ffnn.linear import LinearNetwork
 from dlkit.core.models.nn.base import DLKitModel
+from dlkit.core.models.nn.ffnn.linear import LinearNetwork
+from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN, FeedForwardNN
 
 
 @pytest.fixture

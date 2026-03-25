@@ -1,22 +1,28 @@
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from dlkit.tools.config.session_settings import SessionSettings
 
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import Callback
-from lightning.pytorch.loggers import Logger
 from pydantic import DirectoryPath, Field
-
-from .core.base_settings import ComponentSettings
-from .core import BuildContext, FactoryProvider
 
 # Import moved to method level to avoid circular imports
 from dlkit.tools.utils.logging_config import get_logger, should_enable_progress_bar
+
+from .core import BuildContext, FactoryProvider
+from .core.base_settings import ComponentSettings
 
 loguru_logger = get_logger(__name__)
 
 
 class CallbackSettings(ComponentSettings):
-    name: str | type | Callable[..., Any] | None = Field(default=None, description="Name of the callback")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default=None, description="Name of the callback"
+    )
     module_path: str | None = Field(
         default="lightning.pytorch.callbacks",
         description="Module path where the callback class is located.",
@@ -24,7 +30,9 @@ class CallbackSettings(ComponentSettings):
 
 
 class LoggerSettings(ComponentSettings):
-    name: str | type | Callable[..., Any] | None = Field(default=None, description="Name of the logger.")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default=None, description="Name of the logger."
+    )
     module_path: str | None = Field(
         default="lightning.pytorch.loggers",
         description="Module path where the logger class is located.",
@@ -45,7 +53,9 @@ class TrainerSettings(ComponentSettings):
         accelerator (Literal["cpu", "cuda"]): Accelerator to use for training. Defaults to "cuda".
     """
 
-    name: str | type | Callable[..., Any] | None = Field(default="Trainer", description="Name of the trainer.")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default="Trainer", description="Name of the trainer."
+    )
     module_path: str | None = Field(
         default="lightning.pytorch",
         description="Module path where the trainer class is located.",
@@ -84,7 +94,7 @@ class TrainerSettings(ComponentSettings):
         description="Lightning precision parameter. If None, uses session precision strategy.",
     )
 
-    def build(self, session: "SessionSettings | None" = None) -> Trainer:
+    def build(self, session: SessionSettings | None = None) -> Trainer:
         """Build PyTorch Lightning Trainer with precision resolution.
 
         Args:
@@ -95,7 +105,6 @@ class TrainerSettings(ComponentSettings):
             Configured PyTorch Lightning Trainer instance.
         """
         # Import here to avoid circular imports
-        from dlkit.tools.config.session_settings import SessionSettings
 
         # Build callbacks via factory
         callbacks: list[Callback] = []

@@ -126,6 +126,7 @@ settings = load_config("config.toml")
 
 # Load with explicit model class
 from dlkit.tools.config import SessionSettings
+
 session = load_config("config.toml", model_class=SessionSettings)
 
 # Load as raw dict
@@ -164,10 +165,9 @@ from dlkit.tools.io import load_sections_config
 from dlkit.tools.config import SessionSettings, ModelComponentSettings
 
 # Load with explicit model classes
-sections = load_sections_config("config.toml", {
-    "SESSION": SessionSettings,
-    "MODEL": ModelComponentSettings
-})
+sections = load_sections_config(
+    "config.toml", {"SESSION": SessionSettings, "MODEL": ModelComponentSettings}
+)
 
 # Load using registered defaults
 sections = load_sections_config("config.toml", ["SESSION", "MODEL", "TRAINING"])
@@ -213,13 +213,7 @@ settings = GeneralSettings.from_toml_file("input.toml")
 output_path = write_config(settings, "output.toml")
 
 # Write with custom options
-write_config(
-    settings,
-    "output.toml",
-    exclude_none=True,
-    exclude_unset=True,
-    sort_sections=True
-)
+write_config(settings, "output.toml", exclude_none=True, exclude_unset=True, sort_sections=True)
 ```
 
 **Implementation Notes**:
@@ -378,10 +372,7 @@ provisioning.ensure_mlflow_local_storage()
 
 **Example**:
 ```python
-from dlkit.tools.io.resolution import (
-    create_default_resolver_system,
-    GenericPathResolver
-)
+from dlkit.tools.io.resolution import create_default_resolver_system, GenericPathResolver
 from pathlib import Path
 
 # Create resolver system
@@ -461,14 +452,14 @@ Moved here from `tools/utils/system_utils.py` to co-locate I/O concerns.
 ```python
 from dlkit.tools.io.paths import mkdir_for_local, normalize_user_path, coerce_root_dir_to_absolute
 
-mkdir_for_local("sqlite:///./mlruns/mlflow.db")      # creates ./mlruns/
-mkdir_for_local("file:///abs/path/data.db")           # creates /abs/path/
+mkdir_for_local("sqlite:///./mlruns/mlflow.db")  # creates ./mlruns/
+mkdir_for_local("file:///abs/path/data.db")  # creates /abs/path/
 
-normalize_user_path("~/runs")                         # → Path(<home>/runs)
-normalize_user_path("relative/run")                   # → Path(<cwd>/relative/run)
+normalize_user_path("~/runs")  # → Path(<home>/runs)
+normalize_user_path("relative/run")  # → Path(<cwd>/relative/run)
 
-coerce_root_dir_to_absolute("/abs/root")              # → Path("/abs/root")
-coerce_root_dir_to_absolute("relative")               # → None (not absolute)
+coerce_root_dir_to_absolute("/abs/root")  # → Path("/abs/root")
+coerce_root_dir_to_absolute("relative")  # → None (not absolute)
 ```
 
 **Implementation Notes**:
@@ -506,12 +497,7 @@ print(f"Train indices: {splits.train}")
 print(f"Val indices: {splits.validation}")
 
 # Create and save new splits
-new_splits = IndexSplit(
-    train=[0, 1, 2, 3, 4],
-    validation=[5, 6],
-    test=[7, 8, 9],
-    predict=None
-)
+new_splits = IndexSplit(train=[0, 1, 2, 3, 4], validation=[5, 6], test=[7, 8, 9], predict=None)
 save_split_indices(new_splits, Path("new_splits.json"))
 ```
 
@@ -594,9 +580,7 @@ from dlkit.tools.io import load_config, write_config
 settings = load_config("original.toml")
 
 # Modify settings (create new instance due to frozen=True)
-updated_settings = settings.patch({
-    "TRAINING.trainer.max_epochs": 200
-})
+updated_settings = settings.patch({"TRAINING.trainer.max_epochs": 200})
 
 # Save modified configuration
 write_config(updated_settings, "modified.toml")
@@ -612,10 +596,12 @@ registry, context = create_default_resolver_system(Path("/custom/root"))
 
 # Use resolver context for path operations
 from dlkit.tools.config.environment import DLKitEnvironment
+
 env = DLKitEnvironment(root_dir="/custom/root")
 
 # All locations functions respect the custom root
 from dlkit.tools.io import locations
+
 custom_output = locations.output("results", env=env)
 ```
 

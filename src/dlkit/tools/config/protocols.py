@@ -6,15 +6,14 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from .session_settings import SessionSettings
+from .components.model_components import ModelComponentSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .components.model_components import ModelComponentSettings
-from .paths_settings import PathsSettings
-from .extras_settings import ExtrasSettings
-from .training_settings import TrainingSettings as TrainingConfig
 from .mlflow_settings import MLflowSettings
 from .optuna_settings import OptunaSettings
+from .paths_settings import PathsSettings
+from .session_settings import SessionSettings
+from .training_settings import TrainingSettings as TrainingConfig
 
 
 @runtime_checkable
@@ -24,16 +23,47 @@ class BaseSettingsProtocol(Protocol):
     This protocol follows ISP by exposing only core sections needed by all workflows.
     Specialized protocols extend this for workflow-specific requirements.
 
-    Note: Core sections are optional to support flexible partial loading scenarios.
+    Note: Core sections are expressed as read-only properties so that subclasses
+    may narrow their declared types (e.g. ``SessionSettings`` instead of
+    ``SessionSettings | None``) without violating protocol invariance.
     """
 
-    # Core sections (optional to support partial loading)
-    SESSION: SessionSettings | None
-    MODEL: ModelComponentSettings | None
-    DATAMODULE: DataModuleSettings | None
-    DATASET: DatasetSettings | None
-    PATHS: PathsSettings | None
-    EXTRAS: ExtrasSettings | None
+    # Core sections expressed as read-only properties for covariant compatibility
+    @property
+    @abstractmethod
+    def SESSION(self) -> SessionSettings | None:
+        """Session control settings."""
+        ...
+
+    @property
+    @abstractmethod
+    def MODEL(self) -> ModelComponentSettings | None:
+        """Model component settings."""
+        ...
+
+    @property
+    @abstractmethod
+    def DATAMODULE(self) -> DataModuleSettings | None:
+        """DataModule settings."""
+        ...
+
+    @property
+    @abstractmethod
+    def DATASET(self) -> DatasetSettings | None:
+        """Dataset settings."""
+        ...
+
+    @property
+    @abstractmethod
+    def PATHS(self) -> PathsSettings | None:
+        """Path override settings."""
+        ...
+
+    @property
+    @abstractmethod
+    def EXTRAS(self) -> object:
+        """Free-form user settings."""
+        ...
 
     @property
     @abstractmethod
@@ -76,9 +106,23 @@ class TrainingSettingsProtocol(BaseSettingsProtocol, Protocol):
     """
 
     # Training-specific sections (TRAINING required, optimization plugins optional)
-    TRAINING: TrainingConfig
-    MLFLOW: MLflowSettings | None
-    OPTUNA: OptunaSettings | None
+    @property
+    @abstractmethod
+    def TRAINING(self) -> TrainingConfig:
+        """Core training configuration."""
+        ...
+
+    @property
+    @abstractmethod
+    def MLFLOW(self) -> MLflowSettings | None:
+        """MLflow experiment tracking configuration."""
+        ...
+
+    @property
+    @abstractmethod
+    def OPTUNA(self) -> OptunaSettings | None:
+        """Optuna hyperparameter optimization configuration."""
+        ...
 
     @property
     @abstractmethod
@@ -130,9 +174,3 @@ class SettingsLoaderProtocol(Protocol):
     def load_training_settings(self, config_path: Path | str) -> TrainingSettingsProtocol:
         """Load settings optimized for training workflows."""
         ...
-
-    # @abstractmethod
-    # def load_inference_settings(self, config_path: Path | str) -> InferenceSettingsProtocol:
-    #     """Load settings optimized for inference workflows."""
-    #     ...
-    # BREAKING CHANGE: Removed - use inference API instead

@@ -1,8 +1,7 @@
 from collections.abc import Callable
 from typing import Literal
 
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.models.nn.primitives import SkipConnection
@@ -94,9 +93,7 @@ class ConstantWidthParametricFFNN(DLKitModel):
                 normalize=normalize,
                 dropout=dropout,
             )
-            blocks.append(
-                SkipConnection(block, layer_type="linear") if residual else block
-            )
+            blocks.append(SkipConnection(block, layer_type="linear") if residual else block)
 
         self.blocks = nn.ModuleList(blocks)
 

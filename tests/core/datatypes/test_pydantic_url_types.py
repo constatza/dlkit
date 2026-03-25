@@ -4,16 +4,16 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from dlkit.core.datatypes.urls import (
-    tilde_expand_strict,
-    local_path_security_check,
-    SQLiteUrl,
-    FileUrl,
-    HttpUrl,
+    ArtifactDestination,
     CloudStorageUrl,
     DatabricksUrl,
-    MLflowBackendUrl,
-    ArtifactDestination,
+    FileUrl,
+    HttpUrl,
     LocalPath,
+    MLflowBackendUrl,
+    SQLiteUrl,
+    local_path_security_check,
+    tilde_expand_strict,
 )
 
 

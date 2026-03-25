@@ -1,8 +1,18 @@
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, Protocol, cast
 
 import torch
-import torch.nn as nn
+from torch import nn
+
+
+class _HasChannels(Protocol):
+    in_channels: int
+    out_channels: int
+
+
+class _HasFeatures(Protocol):
+    in_features: int
+    out_features: int
 
 
 def agg_sum(x_in: torch.Tensor, x_out: torch.Tensor) -> torch.Tensor:
@@ -29,9 +39,11 @@ def _detect_channels(module: nn.Module) -> tuple[int | None, int | None]:
         tuple[int | None, int | None]: (in_channels, out_channels) or (None, None) if not found.
     """
     if hasattr(module, "in_channels") and hasattr(module, "out_channels"):
-        return int(module.in_channels), int(module.out_channels)  # type: ignore[attr-defined]
+        m = cast(_HasChannels, module)
+        return int(m.in_channels), int(m.out_channels)
     if hasattr(module, "in_features") and hasattr(module, "out_features"):
-        return int(module.in_features), int(module.out_features)  # type: ignore[attr-defined]
+        m2 = cast(_HasFeatures, module)
+        return int(m2.in_features), int(m2.out_features)
     return None, None
 
 

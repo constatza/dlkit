@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from dlkit.interfaces.api.domain import ConfigurationError
-from dlkit.tools.config import load_settings, load_sections
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.interfaces.api.overrides.path_context import path_override_context
+from dlkit.tools.config import load_settings
+from dlkit.tools.config.protocols import BaseSettingsProtocol
 
 
 def load_config(
@@ -57,12 +57,12 @@ def load_config(
 
     except ValueError as e:
         raise ConfigurationError(
-            f"Invalid configuration file: {str(e)}",
+            f"Invalid configuration file: {e!s}",
             {"config_path": str(config_path), "error": str(e)},
         )
     except Exception as e:
         raise ConfigurationError(
-            f"Failed to load configuration: {str(e)}",
+            f"Failed to load configuration: {e!s}",
             {"config_path": str(config_path), "error": str(e)},
         )
 
@@ -106,7 +106,7 @@ def validate_config_path(config_path: Path) -> bool:
         )
     except Exception as e:
         raise ConfigurationError(
-            f"Cannot access configuration file: {str(e)}",
+            f"Cannot access configuration file: {e!s}",
             {"config_path": str(config_path), "error": str(e)},
         )
     return True

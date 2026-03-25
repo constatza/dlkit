@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
+
 from dlkit.interfaces.api import execute
+from dlkit.interfaces.api.domain import OptimizationResult, TrainingResult, WorkflowError
 from dlkit.interfaces.api.services.execution_service import (
     ExecutionService,
     WorkflowDetectionResult,
 )
-from dlkit.interfaces.api.domain import TrainingResult, OptimizationResult, WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings

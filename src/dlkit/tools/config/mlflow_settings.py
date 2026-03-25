@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from dlkit.tools.utils.logging_config import get_logger
 
@@ -80,7 +79,7 @@ class MLflowSettings(BasicSettings):
         return data
 
     @model_validator(mode="after")
-    def warn_missing_model_name(self) -> "MLflowSettings":
+    def warn_missing_model_name(self) -> MLflowSettings:
         """Warn when model registration is enabled but no name is configured."""
         if self.register_model and not self.registered_model_name:
             logger.warning(

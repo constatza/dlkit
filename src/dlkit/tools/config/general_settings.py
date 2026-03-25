@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Self
-from pydantic import Field, model_validator, validate_call, FilePath
+from typing import Self, cast
 
+from pydantic import Field, FilePath, model_validator, validate_call
+
+from .components.model_components import ModelComponentSettings
 from .core.base_settings import BasicSettings
-from .session_settings import SessionSettings
-from .mlflow_settings import MLflowSettings
-from .optuna_settings import OptunaSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .training_settings import TrainingSettings as TrainingConfig
-from .components.model_components import ModelComponentSettings
 from .extras_settings import ExtrasSettings
-from .paths_settings import PathsSettings
 from .generative_settings import GenerativeSettings
+from .mlflow_settings import MLflowSettings
+from .optuna_settings import OptunaSettings
+from .paths_settings import PathsSettings
+from .session_settings import SessionSettings
+from .training_settings import TrainingSettings as TrainingConfig
 
 
 class GeneralSettings(BasicSettings):
@@ -135,10 +136,9 @@ class GeneralSettings(BasicSettings):
         try:
             config = load_config(filepath, cls)
             if isinstance(config, cls):
-                return config  # type: ignore[return-value]
-            else:
-                # Handle dict case
-                return cls(**config)  # type: ignore[misc]
+                return cast(Self, config)
+            # Handle dict case
+            return cls.model_validate(config)
 
         except Exception as e:
             raise ValueError(f"Failed to load configuration from {filepath}: {e}") from e

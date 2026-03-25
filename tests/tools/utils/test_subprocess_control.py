@@ -16,7 +16,7 @@ class _Proc:
     def is_running(self) -> bool:
         return self._alive
 
-    def children(self, recursive: bool = True):  # noqa: ANN001
+    def children(self, recursive: bool = True):
         return list(self._children)
 
     def terminate(self) -> None:
@@ -33,10 +33,10 @@ def test_stop_process_tree_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Patch psutil.Process() to return our root proc irrespective of pid
     ps = types.SimpleNamespace()
-    ps.Process = lambda pid: root  # noqa: ARG005
+    ps.Process = lambda pid: root
     ps.NoSuchProcess = Exception
 
-    def _wait_procs(procs, timeout=0.1):  # noqa: ANN001, ARG002
+    def _wait_procs(procs, timeout=0.1):
         # All terminated successfully (gone) and no alive ones
         return (list(procs), [])
 
@@ -55,14 +55,14 @@ def test_stop_process_tree_hard_kill(monkeypatch: pytest.MonkeyPatch) -> None:
 
     ps = types.SimpleNamespace()
     ps.NoSuchProcess = Exception
-    ps.Process = lambda pid: root  # noqa: ARG005
+    ps.Process = lambda pid: root
 
     # first terminate leaves all alive
-    def _wait_terminate(procs, timeout=0.1):  # noqa: ANN001, ARG002
+    def _wait_terminate(procs, timeout=0.1):
         return ([], list(procs))
 
     # kill then removes all
-    def _wait_kill(procs, timeout=0.1):  # noqa: ANN001, ARG002
+    def _wait_kill(procs, timeout=0.1):
         for p in procs:
             p._alive = False
         return (list(procs), [])

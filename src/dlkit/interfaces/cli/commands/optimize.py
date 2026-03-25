@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.api import optimize as api_optimize
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
@@ -53,10 +55,11 @@ def _run_optimization_impl(
     try:
         # Load configuration
         console.print(f"📖 Loading configuration from: {config_path}")
-        settings = load_config(config_path, root_dir=root_dir, output_dir=output_dir)
+        _settings = load_config(config_path, root_dir=root_dir, output_dir=output_dir)
+        settings = _settings if isinstance(_settings, TrainingSettingsProtocol) else None
 
         # Validate Optuna is configured (flattened)
-        if not settings.OPTUNA or not settings.OPTUNA.enabled:
+        if not settings or not settings.OPTUNA or not settings.OPTUNA.enabled:
             console.print(
                 "[red]Optuna plugin must be enabled in configuration for optimization[/red]"
             )
@@ -74,8 +77,8 @@ def _run_optimization_impl(
             console.print(f"  Root dir: {root_dir}")
 
         # --mlflow flag: ensure an [MLFLOW] section exists in settings.
-        if mlflow and not settings.MLFLOW:  # type: ignore[attr-defined]
-            settings = settings.patch({"MLFLOW": {}})  # type: ignore[attr-defined]
+        if mlflow and not getattr(settings, "MLFLOW", None):
+            settings = cast(GeneralSettings, settings).patch({"MLFLOW": {}})
 
         # Execute optimization
         with Progress(
@@ -224,8 +227,8 @@ def plot_study(
         import optuna
         from optuna.visualization import (
             plot_optimization_history,
-            plot_param_importances,
             plot_parallel_coordinate,
+            plot_param_importances,
             plot_slice,
         )
 

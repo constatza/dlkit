@@ -6,12 +6,12 @@ pattern for model family detection and clean dependency injection.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .core import IShapeSpec, create_shape_spec
-from .value_objects import ShapeData, ModelFamily, ShapeSource
 from .registry import ModelFamilyRegistry, ModelFamilyRegistryFactory
-from .strategies import ShapeValidator, ShapeSerializer, ShapeAliasResolver
+from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator
+from .value_objects import ShapeSource
 
 
 class ShapeSystemFactory:
@@ -23,10 +23,10 @@ class ShapeSystemFactory:
 
     def __init__(
         self,
-        model_registry: Optional[ModelFamilyRegistry] = None,
-        validator: Optional[ShapeValidator] = None,
-        serializer: Optional[ShapeSerializer] = None,
-        alias_resolver: Optional[ShapeAliasResolver] = None,
+        model_registry: ModelFamilyRegistry | None = None,
+        validator: ShapeValidator | None = None,
+        serializer: ShapeSerializer | None = None,
+        alias_resolver: ShapeAliasResolver | None = None,
     ):
         """Initialize factory with optional dependencies.
 
@@ -45,7 +45,7 @@ class ShapeSystemFactory:
 
     def create_shape_spec_from_data(
         self,
-        shapes: Dict[str, tuple[int, ...]] | None,
+        shapes: dict[str, tuple[int, ...]] | None,
         model_settings: Any,
         source: ShapeSource = ShapeSource.DEFAULT_FALLBACK,
     ) -> IShapeSpec:
@@ -67,7 +67,7 @@ class ShapeSystemFactory:
 
         return create_shape_spec(shapes=shapes, model_family=model_family, source=source)
 
-    def create_shape_spec_from_serialized(self, serialized_data: Dict[str, Any]) -> IShapeSpec:
+    def create_shape_spec_from_serialized(self, serialized_data: dict[str, Any]) -> IShapeSpec:
         """Create shape specification from serialized data.
 
         Args:
@@ -91,7 +91,7 @@ class ShapeSystemFactory:
         except Exception as e:
             raise ValueError(f"Failed to deserialize shape data: {e}") from e
 
-    def create_shape_spec_from_legacy(self, legacy_data: Dict[str, Any]) -> IShapeSpec | None:
+    def create_shape_spec_from_legacy(self, legacy_data: dict[str, Any]) -> IShapeSpec | None:
         """Create shape specification from legacy checkpoint format.
 
         Args:

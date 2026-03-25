@@ -6,11 +6,11 @@ from pathlib import Path
 
 from pydantic import Field, PositiveInt
 
-from .core.base_settings import BasicSettings
-from .trainer_settings import TrainerSettings
-from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .components.model_components import LossComponentSettings, MetricComponentSettings
+from .core.base_settings import BasicSettings
 from .lr_tuner_settings import LRTunerSettings
+from .optimizer_settings import OptimizerSettings, SchedulerSettings
+from .trainer_settings import TrainerSettings
 
 
 class TrainingSettings(BasicSettings):

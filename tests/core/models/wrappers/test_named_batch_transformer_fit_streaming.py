@@ -32,7 +32,7 @@ def test_named_batch_transformer_fit_streaming_does_not_use_torch_cat(
         _make_batch(torch.tensor([[1.0, 2.0], [3.0, 4.0]])),
     ]
 
-    def _cat_guard(*args, **kwargs):  # noqa: ANN001
+    def _cat_guard(*args, **kwargs):
         raise AssertionError("torch.cat should not be used by streaming fit path")
 
     monkeypatch.setattr("dlkit.core.models.wrappers.components.torch.cat", _cat_guard)

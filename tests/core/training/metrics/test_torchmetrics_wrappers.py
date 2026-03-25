@@ -8,19 +8,28 @@ Tests focus on:
     - Reset functionality
 """
 
+from typing import Any, cast
+
 import pytest
 import torch
-from torch import Tensor
 from torchmetrics import MetricCollection
 
-from dlkit.core.training.metrics.torchmetrics_wrappers import (
-    NormalizedVectorNormError,
-    TemporalDerivativeError,
-)
 from dlkit.core.training.metrics.functional import (
     normalized_vector_norm_error,
     temporal_derivative_error,
 )
+from dlkit.core.training.metrics.torchmetrics_wrappers import (
+    NormalizedVectorNormError,
+    TemporalDerivativeError,
+)
+
+
+def _metric_update(metric: object, preds: torch.Tensor, target: torch.Tensor) -> None:
+    cast(Any, metric).update(preds, target)
+
+
+def _metric_compute(metric: object) -> torch.Tensor:
+    return cast(Any, metric).compute()
 
 
 # ============================================================================
@@ -63,8 +72,8 @@ class TestNormalizedVectorNormError:
         preds, target = simple_2d_vectors
         metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
 
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0  # Scalar
         assert result.item() > 0
@@ -75,14 +84,14 @@ class TestNormalizedVectorNormError:
         metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
 
         # Process as two separate batches
-        metric.update(preds[:1], target[:1])
-        metric.update(preds[1:], target[1:])
-        multi_batch_result = metric.compute()
+        _metric_update(metric, preds[:1], target[:1])
+        _metric_update(metric, preds[1:], target[1:])
+        multi_batch_result = _metric_compute(metric)
 
         # Process as single batch
         metric_single = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
-        metric_single.update(preds, target)
-        single_batch_result = metric_single.compute()
+        _metric_update(metric_single, preds, target)
+        single_batch_result = _metric_compute(metric_single)
 
         assert torch.allclose(multi_batch_result, single_batch_result)
 
@@ -92,8 +101,8 @@ class TestNormalizedVectorNormError:
 
         # TorchMetrics wrapper
         metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
-        metric.update(preds, target)
-        wrapper_result = metric.compute()
+        _metric_update(metric, preds, target)
+        wrapper_result = _metric_compute(metric)
 
         # Functional implementation
         functional_result = normalized_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
@@ -106,8 +115,8 @@ class TestNormalizedVectorNormError:
         metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
 
         # First update
-        metric.update(preds, target)
-        first_result = metric.compute()
+        _metric_update(metric, preds, target)
+        first_result = _metric_compute(metric)
 
         # Reset
         metric.reset()
@@ -117,8 +126,8 @@ class TestNormalizedVectorNormError:
         assert metric.total == 0
 
         # Second update should give same result as first
-        metric.update(preds, target)
-        second_result = metric.compute()
+        _metric_update(metric, preds, target)
+        second_result = _metric_compute(metric)
 
         assert torch.allclose(first_result, second_result)
 
@@ -129,11 +138,11 @@ class TestNormalizedVectorNormError:
         metric_l1 = NormalizedVectorNormError(norm_ord=1)
         metric_l2 = NormalizedVectorNormError(norm_ord=2)
 
-        metric_l1.update(preds, target)
-        metric_l2.update(preds, target)
+        _metric_update(metric_l1, preds, target)
+        _metric_update(metric_l2, preds, target)
 
-        error_l1 = metric_l1.compute()
-        error_l2 = metric_l2.compute()
+        error_l1 = _metric_compute(metric_l1)
+        error_l2 = _metric_compute(metric_l2)
 
         # Both should be positive scalars
         assert error_l1.item() > 0
@@ -147,8 +156,8 @@ class TestNormalizedVectorNormError:
         target = torch.randn(16, 8)
 
         metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0
         assert not torch.isnan(result)
@@ -160,7 +169,7 @@ class TestNormalizedVectorNormError:
         target = torch.tensor([1.1, 1.9, 3.1])
 
         with pytest.raises(ValueError, match="at least 2D"):
-            metric.update(preds, target)
+            _metric_update(metric, preds, target)
 
 
 # ============================================================================
@@ -176,8 +185,8 @@ class TestTemporalDerivativeError:
         preds, target = temporal_sequence_3d
         metric = TemporalDerivativeError(n=1, derivative_dim=1)
 
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0  # Scalar
         assert result.item() >= 0  # Squared error is non-negative
@@ -187,8 +196,8 @@ class TestTemporalDerivativeError:
         preds, target = temporal_sequence_3d
         metric = TemporalDerivativeError(n=2, derivative_dim=1)
 
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0
         assert result.item() >= 0
@@ -199,14 +208,14 @@ class TestTemporalDerivativeError:
         metric = TemporalDerivativeError(n=1, derivative_dim=1)
 
         # Process as two separate batches
-        metric.update(preds[:1], target[:1])
-        metric.update(preds[1:], target[1:])
-        multi_batch_result = metric.compute()
+        _metric_update(metric, preds[:1], target[:1])
+        _metric_update(metric, preds[1:], target[1:])
+        multi_batch_result = _metric_compute(metric)
 
         # Process as single batch
         metric_single = TemporalDerivativeError(n=1, derivative_dim=1)
-        metric_single.update(preds, target)
-        single_batch_result = metric_single.compute()
+        _metric_update(metric_single, preds, target)
+        single_batch_result = _metric_compute(metric_single)
 
         assert torch.allclose(multi_batch_result, single_batch_result)
 
@@ -216,8 +225,8 @@ class TestTemporalDerivativeError:
 
         # TorchMetrics wrapper
         metric = TemporalDerivativeError(n=1, derivative_dim=1)
-        metric.update(preds, target)
-        wrapper_result = metric.compute()
+        _metric_update(metric, preds, target)
+        wrapper_result = _metric_compute(metric)
 
         # Functional implementation
         functional_result = temporal_derivative_error(preds, target, n=1, derivative_dim=1)
@@ -230,8 +239,8 @@ class TestTemporalDerivativeError:
         metric = TemporalDerivativeError(n=1, derivative_dim=1)
 
         # First update
-        metric.update(preds, target)
-        first_result = metric.compute()
+        _metric_update(metric, preds, target)
+        first_result = _metric_compute(metric)
 
         # Reset
         metric.reset()
@@ -241,8 +250,8 @@ class TestTemporalDerivativeError:
         assert metric.total == 0
 
         # Second update
-        metric.update(preds, target)
-        second_result = metric.compute()
+        _metric_update(metric, preds, target)
+        second_result = _metric_compute(metric)
 
         assert torch.allclose(first_result, second_result)
 
@@ -253,7 +262,7 @@ class TestTemporalDerivativeError:
         target = torch.tensor([[1.1, 1.9], [3.1, 3.9]])
 
         with pytest.raises(ValueError, match="3D input"):
-            metric.update(preds, target)
+            _metric_update(metric, preds, target)
 
     def test_insufficient_time_steps_fails(self):
         """Test that T < n+1 raises error."""
@@ -263,7 +272,7 @@ class TestTemporalDerivativeError:
         target = torch.tensor([[[1.1], [1.9]]])
 
         with pytest.raises(ValueError, match="too small"):
-            metric.update(preds, target)
+            _metric_update(metric, preds, target)
 
     def test_larger_sequence(self):
         """Test with larger temporal sequence."""
@@ -271,8 +280,8 @@ class TestTemporalDerivativeError:
         target = torch.randn(8, 20, 5)
 
         metric = TemporalDerivativeError(n=1, derivative_dim=1)
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0
         assert not torch.isnan(result)
@@ -297,14 +306,14 @@ class TestMetricCollectionIntegration:
         metrics = MetricCollection([NormalizedVectorNormError(vector_dim=-1, norm_ord=2)])
 
         # Update and compute
-        metrics.update(preds, target)
-        results = metrics.compute()
+        _metric_update(metrics, preds, target)
+        results = cast(Any, metrics).compute()
 
         # Should return dict with metric results
         assert isinstance(results, dict)
         assert len(results) == 1
         # Get first value
-        result_value = list(results.values())[0]
+        result_value = cast(torch.Tensor, list(results.values())[0])
         assert result_value.item() > 0
 
     def test_multiple_custom_metrics_in_collection(self, simple_2d_vectors):
@@ -317,8 +326,8 @@ class TestMetricCollectionIntegration:
             "norm_l2": NormalizedVectorNormError(norm_ord=2),
         })
 
-        metrics.update(preds, target)
-        results = metrics.compute()
+        _metric_update(metrics, preds, target)
+        results = cast(Any, metrics).compute()
 
         # Should have both metrics
         assert "norm_l1" in results
@@ -335,8 +344,8 @@ class TestMetricCollectionIntegration:
             "accel_error": TemporalDerivativeError(n=2, derivative_dim=1),
         })
 
-        metrics.update(preds, target)
-        results = metrics.compute()
+        _metric_update(metrics, preds, target)
+        results = cast(Any, metrics).compute()
 
         assert "velocity_error" in results
         assert "accel_error" in results
@@ -356,8 +365,8 @@ class TestMetricCollectionIntegration:
             "norm_error": NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
         })
 
-        metrics.update(preds_2d, target_2d)
-        results = metrics.compute()
+        _metric_update(metrics, preds_2d, target_2d)
+        results = cast(Any, metrics).compute()
 
         assert "mse" in results
         assert "norm_error" in results
@@ -371,15 +380,15 @@ class TestMetricCollectionIntegration:
         metrics = MetricCollection([NormalizedVectorNormError(norm_ord=2)])
 
         # First batch
-        metrics.update(preds, target)
-        first_results = metrics.compute()
+        _metric_update(metrics, preds, target)
+        first_results = cast(Any, metrics).compute()
 
         # Reset
         metrics.reset()
 
         # Second batch should give same results
-        metrics.update(preds, target)
-        second_results = metrics.compute()
+        _metric_update(metrics, preds, target)
+        second_results = cast(Any, metrics).compute()
 
         first_value = list(first_results.values())[0]
         second_value = list(second_results.values())[0]
@@ -400,8 +409,8 @@ class TestEdgeCases:
         target = torch.tensor([[0.0, 0.0], [1.0, 0.0]])
 
         metric = NormalizedVectorNormError(eps=1e-8)
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         # Should not be NaN or Inf
         assert not torch.isnan(result)
@@ -413,8 +422,8 @@ class TestEdgeCases:
         target = torch.tensor([[1.1, 1.9, 3.1]])
 
         metric = NormalizedVectorNormError()
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert result.dim() == 0
         assert result.item() > 0
@@ -425,8 +434,8 @@ class TestEdgeCases:
         target = torch.randn(1000, 20)
 
         metric = NormalizedVectorNormError()
-        metric.update(preds, target)
-        result = metric.compute()
+        _metric_update(metric, preds, target)
+        result = _metric_compute(metric)
 
         assert not torch.isnan(result)
         assert not torch.isinf(result)

@@ -1,11 +1,10 @@
 import torch
-from torch_geometric.utils import scatter
 from torch_geometric.transforms import BaseTransform
+from torch_geometric.utils import scatter
 
 
 class SpectralRadiusNorm(BaseTransform):
-    r"""
-    Normalize adjacency by an upper‐bound on its spectral radius.
+    r"""Normalize adjacency by an upper‐bound on its spectral radius.
 
     Given an adjacency matrix \(A\) (implicitly via `edge_index` and
     edge features `E`), compute the induced 1-norm and ∞-norm:
@@ -33,8 +32,7 @@ class SpectralRadiusNorm(BaseTransform):
     """
 
     def forward(self, data):
-        """
-        Args:
+        """Args:
             data (torch_geometric.data.Data): The dataflow object to transform.
 
         Returns:

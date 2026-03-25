@@ -18,7 +18,7 @@ def broadcast_time(t: Tensor, ref: Tensor) -> Tensor:
         same device and dtype as ``t``.
 
     Example:
-        >>> t = torch.rand(4)          # (B,)
+        >>> t = torch.rand(4)  # (B,)
         >>> x = torch.rand(4, 3, 32)  # (B, C, L)
         >>> broadcast_time(t, x).shape
         torch.Size([4, 1, 1])

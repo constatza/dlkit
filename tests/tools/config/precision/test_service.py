@@ -1,12 +1,13 @@
 """Tests for PrecisionService."""
 
-import pytest
-import torch
 from unittest.mock import Mock
 
-from dlkit.tools.config.precision import PrecisionStrategy
+import pytest
+import torch
+
 from dlkit.interfaces.api.domain.precision import PrecisionContext, PrecisionProvider
 from dlkit.interfaces.api.services.precision_service import PrecisionService
+from dlkit.tools.config.precision import PrecisionStrategy
 
 
 class TestPrecisionService:

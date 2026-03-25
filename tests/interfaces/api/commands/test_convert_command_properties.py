@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import Mock, patch
 from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
-from hypothesis import given, strategies as st, assume, settings as hypothesis_settings, HealthCheck
 import torch
+from hypothesis import HealthCheck, assume, given
+from hypothesis import settings as hypothesis_settings
+from hypothesis import strategies as st
 
 from dlkit.interfaces.api.commands.convert_command import (
     ConvertCommand,
@@ -16,13 +17,13 @@ from dlkit.interfaces.api.commands.convert_command import (
     ConvertResult,
 )
 from dlkit.interfaces.api.domain.errors import WorkflowError
+
 from ._helpers import (
+    create_expected_input_names,
     create_shape_spec,
     extract_batch_dimensions,
     validate_tensor_shape_consistency,
-    create_expected_input_names,
 )
-
 
 # Hypothesis strategies for generating test dataflow
 positive_dimensions = st.integers(min_value=1, max_value=1000)
@@ -282,9 +283,7 @@ class TestConvertCommandProperties:
                 "dlkit.interfaces.api.commands.convert_command.WrapperFactory.create_wrapper_from_checkpoint"
             ) as mock_wrapper_factory,
             patch("dlkit.interfaces.api.commands.convert_command.torch.ones") as mock_torch_ones,
-            patch(
-                "dlkit.interfaces.api.commands.convert_command.torch.onnx.export"
-            ) as mock_torch_export,
+            patch("dlkit.interfaces.api.commands.convert_command.torch.onnx.export"),
         ):
             # Setup files and mocks
             checkpoint = tmp_path / "model.ckpt"

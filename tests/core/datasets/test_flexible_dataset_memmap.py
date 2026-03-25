@@ -14,6 +14,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import torch
+from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
 from dlkit.core.datasets.flexible import (
@@ -23,10 +24,19 @@ from dlkit.core.datasets.flexible import (
 )
 from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _expect_tensor(value: object) -> torch.Tensor:
+    assert isinstance(value, torch.Tensor)
+    return value
+
+
+def _expect_tensordict(value: object) -> TensorDictBase:
+    assert isinstance(value, TensorDictBase)
+    return value
 
 
 def _make_dataset(
@@ -65,8 +75,10 @@ def test_memmap_getitem_returns_correct_tensordict_shape(
     """__getitem__ returns a TensorDict with nested features/targets of expected shapes."""
     ds = _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
     sample = ds[0]
-    assert sample["features"]["x"].shape == torch.Size(npy_feature_file["shape"][1:])
-    assert sample["targets"]["y"].shape == torch.Size(npy_target_file["shape"][1:])
+    features = _expect_tensordict(sample["features"])
+    targets = _expect_tensordict(sample["targets"])
+    assert _expect_tensor(features["x"]).shape == torch.Size(npy_feature_file["shape"][1:])
+    assert _expect_tensor(targets["y"]).shape == torch.Size(npy_target_file["shape"][1:])
 
 
 def test_memmap_data_integrity(
@@ -80,8 +92,10 @@ def test_memmap_data_integrity(
         sample = ds[idx]
         expected_x = torch.as_tensor(npy_feature_file["data"][idx])
         expected_y = torch.as_tensor(npy_target_file["data"][idx])
-        torch.testing.assert_close(sample["features"]["x"], expected_x)
-        torch.testing.assert_close(sample["targets"]["y"], expected_y)
+        features = _expect_tensordict(sample["features"])
+        targets = _expect_tensordict(sample["targets"])
+        torch.testing.assert_close(_expect_tensor(features["x"]), expected_x)
+        torch.testing.assert_close(_expect_tensor(targets["y"]), expected_y)
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +164,10 @@ def test_memmap_dataloader_round_trip(
     ds = _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
     loader = DataLoader(ds, batch_size=16, shuffle=False, collate_fn=collate_tensordict)
     batch = next(iter(loader))
-    assert batch["features"]["x"].shape == torch.Size([16, *npy_feature_file["shape"][1:]])
-    assert batch["targets"]["y"].shape == torch.Size([16, *npy_target_file["shape"][1:]])
+    features = _expect_tensordict(batch["features"])
+    targets = _expect_tensordict(batch["targets"])
+    assert _expect_tensor(features["x"]).shape == torch.Size([16, *npy_feature_file["shape"][1:]])
+    assert _expect_tensor(targets["y"]).shape == torch.Size([16, *npy_target_file["shape"][1:]])
 
 
 def test_memmap_multi_worker_dataloader(
@@ -171,7 +187,9 @@ def test_memmap_multi_worker_dataloader(
     try:
         batches = list(loader)
     except PermissionError as exc:
-        pytest.skip(f"Sandbox does not permit multi-worker transport setup: {exc}")
+        raise pytest.skip.Exception(
+            f"Sandbox does not permit multi-worker transport setup: {exc}"
+        ) from exc
     total = sum(b.batch_size[0] for b in batches)
     assert total == len(ds)
 
@@ -195,7 +213,10 @@ def test_memmap_with_npz_source(tmp_path: Path, memmap_cache_dir: Path) -> None:
     )
     assert len(ds) == 50
     sample = ds[0]
-    torch.testing.assert_close(sample["features"]["x"], torch.as_tensor(features[0]))
+    torch.testing.assert_close(
+        _expect_tensor(_expect_tensordict(sample["features"])["x"]),
+        torch.as_tensor(features[0]),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +253,8 @@ def test_inmemory_path_unchanged_when_no_cache_dir(
     assert len(ds) == npy_feature_file["shape"][0]
     sample = ds[0]
     torch.testing.assert_close(
-        sample["features"]["x"], torch.as_tensor(npy_feature_file["data"][0])
+        _expect_tensor(_expect_tensordict(sample["features"])["x"]),
+        torch.as_tensor(npy_feature_file["data"][0]),
     )
 
 
@@ -266,7 +288,7 @@ def test_sparse_feature_densified_in_memmap(
     assert (memmap_cache_dir / "features" / "adj.memmap").exists()
     # Spot-check values at each index
     for idx, mat in enumerate(matrices):
-        actual = ds[idx]["features"]["adj"]
+        actual = _expect_tensor(_expect_tensordict(ds[idx]["features"])["adj"])
         expected = torch.from_numpy(mat).to(actual.dtype)
         torch.testing.assert_close(actual, expected)
 
@@ -286,7 +308,7 @@ def test_sparse_memmap_getitem_returns_dense_tensor(
         memmap_cache_dir=memmap_cache_dir,
     )
 
-    sample = ds[0]["features"]["adj"]
+    sample = _expect_tensor(_expect_tensordict(ds[0]["features"])["adj"])
     assert not sample.is_sparse, "memmap-backed tensor must be dense"
     assert sample.shape == torch.Size([matrices[0].shape[0], matrices[0].shape[1]])
 
@@ -313,7 +335,7 @@ def test_sparse_broadcast_in_memmap(
     assert len(ds) == n
     ref = torch.from_numpy(shared_matrix)
     for idx in range(n):
-        actual = ds[idx]["features"]["adj"]
+        actual = _expect_tensor(_expect_tensordict(ds[idx]["features"])["adj"])
         torch.testing.assert_close(actual, ref.to(actual.dtype))
 
 
@@ -395,8 +417,8 @@ def test_sparse_memmap_denormalize(
     )
 
     for idx, mat in enumerate(matrices):
-        base = ds_base[idx]["features"]["adj"]
-        denorm = ds_denorm[idx]["features"]["adj"]
+        base = _expect_tensor(_expect_tensordict(ds_base[idx]["features"])["adj"])
+        denorm = _expect_tensor(_expect_tensordict(ds_denorm[idx]["features"])["adj"])
         expected = torch.from_numpy(mat * scale).to(base.dtype)
         torch.testing.assert_close(denorm, expected)
         # Also verify base == unscaled

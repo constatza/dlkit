@@ -9,14 +9,14 @@ from torch.nn.utils import parametrize
 
 from dlkit.core.models.nn.primitives.parametrized_layers import (
     FactorizedLinear,
-    register_spd,
-    register_spd_factorized,
-    register_symmetric,
-    register_symmetric_factorized,
     SPDFactorizedLinear,
     SPDLinear,
     SymmetricFactorizedLinear,
     SymmetricLinear,
+    register_spd,
+    register_spd_factorized,
+    register_symmetric,
+    register_symmetric_factorized,
 )
 
 
@@ -33,7 +33,7 @@ def _weight(module: nn.Module) -> torch.Tensor:
     Returns:
         The effective weight tensor.
     """
-    return cast(torch.Tensor, module.weight)  # type: ignore[attr-defined]
+    return cast(torch.Tensor, module.weight)
 
 
 # ---------------------------------------------------------------------------
@@ -380,9 +380,7 @@ class TestSymmetricFactorizedLinear:
         """Gradients must propagate through the factorized symmetric weight."""
         x = torch.randn(2, 4)
         symmetric_factorized_linear(x).sum().backward()
-        assert any(
-            p.grad is not None for p in symmetric_factorized_linear.parameters()
-        )
+        assert any(p.grad is not None for p in symmetric_factorized_linear.parameters())
 
 
 # ---------------------------------------------------------------------------

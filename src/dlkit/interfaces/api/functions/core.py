@@ -6,17 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.interfaces.api.commands import (
-    TrainCommandInput,
     OptimizationCommandInput,
+    TrainCommandInput,
     get_dispatcher,
 )
 from dlkit.interfaces.api.domain import (
-    TrainingResult,
-    InferenceResult,
     OptimizationResult,
+    TrainingResult,
 )
 from dlkit.tools.config.protocols import BaseSettingsProtocol
-from dlkit.tools.config.workflow_settings import TrainingWorkflowSettings
 
 # Inference API removed - use load_model() instead
 # from dlkit import load_model

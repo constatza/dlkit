@@ -8,13 +8,13 @@ the configured root directory.
 import os
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 from dlkit.tools.config import load_settings
-from dlkit.tools.io.split_provider import get_or_create_split
-from dlkit.tools.io.locations import splits_dir
 from dlkit.tools.config.environment import env as global_environment
+from dlkit.tools.io.locations import splits_dir
+from dlkit.tools.io.split_provider import get_or_create_split
 
 
 @pytest.fixture
@@ -146,9 +146,7 @@ def test_splits_saved_to_session_root_dir(
         )
 
         # Verify it's NOT in CWD (the bug we're fixing)
-        cwd_split_file = (
-            Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
-        )
+        cwd_split_file = Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
         if cwd_split_file.exists() and cwd_split_file.resolve() != split_file.resolve():
             pytest.fail(
                 f"Split file incorrectly saved to CWD!\n"
@@ -182,13 +180,13 @@ def test_splits_respect_session_root_without_session_name(
         global_environment.root_dir = None
 
         # Load training settings
-        settings = load_settings(config_path)
+        load_settings(config_path)
 
         # Use default session name
         session_name = "dlkit-session"  # Default value
 
         # Get or create a split
-        split = get_or_create_split(
+        get_or_create_split(
             num_samples=100,
             test_ratio=0.15,
             val_ratio=0.15,
@@ -232,14 +230,14 @@ def test_multiple_splits_with_different_sessions(
         global_environment.root_dir = None
 
         # Load training settings
-        settings = load_settings(config_path)
+        load_settings(config_path)
 
         # Create splits with different session names
         session_names = ["session-a", "session-b", "session-c"]
         expected_splits_dir = (custom_root / "output" / "splits").resolve()
 
         for session_name in session_names:
-            split = get_or_create_split(
+            get_or_create_split(
                 num_samples=100,
                 test_ratio=0.15,
                 val_ratio=0.15,

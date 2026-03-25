@@ -1,8 +1,9 @@
 from pydantic import Field
-from .core.base_settings import ComponentSettings
+
+from .core.base_settings import StringNamedComponentSettings
 
 
-class TransformSettings(ComponentSettings):
+class TransformSettings(StringNamedComponentSettings):
     """Typed configuration for a single transform in a ``TransformChain``.
 
     The settings mirror the arguments passed to the transform component. Use them inside
@@ -20,8 +21,7 @@ class TransformSettings(ComponentSettings):
         ```
     """
 
-    name: str = Field(..., description="Name of the transform class or registry alias.")
-    module_path: str = Field(
+    module_path: str | None = Field(
         default="dlkit.core.training.transforms",
         description="Python module path containing the transform implementation.",
     )

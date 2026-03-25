@@ -23,18 +23,16 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .workflow_configs import (
-        TrainingWorkflowConfig,
         InferenceWorkflowConfig,
         OptimizationWorkflowConfig,
+        TrainingWorkflowConfig,
     )
 
-from .data_entries import PathFeature, PathTarget, PathBasedEntry, ValueBasedEntry
+from .data_entries import PathBasedEntry, PathFeature, PathTarget, ValueBasedEntry
 
 
 class ConfigValidationError(ValueError):
     """Raised when configuration is incomplete or invalid for workflow execution."""
-
-    pass
 
 
 def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
@@ -335,16 +333,16 @@ def validate_config_complete(
         ConfigValidationError: If config is incomplete or invalid
         TypeError: If config type is not recognized
     """
+    from . import GeneralSettings
     from .workflow_configs import (
-        TrainingWorkflowConfig,
         InferenceWorkflowConfig,
         OptimizationWorkflowConfig,
+        TrainingWorkflowConfig,
     )
     from .workflow_settings import (
-        TrainingWorkflowSettings,
         InferenceWorkflowSettings,
+        TrainingWorkflowSettings,
     )
-    from . import GeneralSettings
 
     if isinstance(config, OptimizationWorkflowConfig):
         validate_optimization_config_complete(config)

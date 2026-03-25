@@ -10,13 +10,10 @@ Covers:
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 import torch
-import torch.nn as nn
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.wrappers.components import (
     ModelOutputSpec,
@@ -24,7 +21,6 @@ from dlkit.core.models.wrappers.components import (
     _build_invoker_from_entries,
 )
 from dlkit.tools.config.data_entries import Feature
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

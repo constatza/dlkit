@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, Mock
 import mlflow
 import pytest
 
-import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
+from dlkit.runtime.workflows.strategies.tracking import uri_resolver
 from dlkit.runtime.workflows.strategies.tracking.backend import (
     LocalServerBackend,
     LocalSqliteBackend,
@@ -123,10 +123,9 @@ def test_create_run_preserves_nested_parent_child_structure(
         start_run,
     )
 
-    with manager:
-        with manager.create_run(experiment_name="exp", run_name="study", nested=False):
-            with manager.create_run(experiment_name="exp", run_name="trial-1", nested=True):
-                pass
+    with manager, manager.create_run(experiment_name="exp", run_name="study", nested=False):
+        with manager.create_run(experiment_name="exp", run_name="trial-1", nested=True):
+            pass
 
     parent_call = start_run.call_args_list[0].kwargs
     child_call = start_run.call_args_list[1].kwargs
@@ -179,7 +178,6 @@ def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
     class _SuppressionContext:
         def __enter__(self):
             suppression_calls.append("enter")
-            return None
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             suppression_calls.append("exit")
@@ -211,7 +209,6 @@ def test_initialize_resources_skips_bootstrap_suppression_for_http(
     class _SuppressionContext:
         def __enter__(self):
             suppression_calls.append("enter")
-            return None
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             suppression_calls.append("exit")

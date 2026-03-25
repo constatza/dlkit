@@ -46,7 +46,7 @@ class TransformFittingCallback(Callback):
         super().__init__()
         self._batch_transformer = batch_transformer
 
-    def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Fit the batch transformer if it is fittable and not yet fitted.
 
         Called automatically by Lightning before the first training epoch.

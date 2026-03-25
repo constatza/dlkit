@@ -8,6 +8,11 @@ import torch
 from dlkit.core.training.transforms.pca import PCA
 
 
+def _expect_tensor(value: object) -> torch.Tensor:
+    assert isinstance(value, torch.Tensor)
+    return value
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -113,7 +118,7 @@ class TestPCAGoodPath:
 
         # Mean should be close to actual data mean
         expected_mean = simple_2d_data.mean(dim=0, keepdim=True)
-        assert torch.allclose(pca_2_components.mean, expected_mean, atol=1e-5)
+        assert torch.allclose(_expect_tensor(pca_2_components.mean), expected_mean, atol=1e-5)
 
     def test_fit_computes_explained_variance(
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
@@ -126,11 +131,13 @@ class TestPCAGoodPath:
         assert pca_2_components.total_explained_variance is not None
 
         # Variance should be positive
-        assert torch.all(pca_2_components.explained_variance > 0)
-        assert torch.all(pca_2_components.explained_variance_ratio > 0)
+        explained_variance = _expect_tensor(pca_2_components.explained_variance)
+        explained_variance_ratio = _expect_tensor(pca_2_components.explained_variance_ratio)
+        assert torch.all(explained_variance > 0)
+        assert torch.all(explained_variance_ratio > 0)
 
         # Ratio should be between 0 and 1
-        assert torch.all(pca_2_components.explained_variance_ratio <= 1.0)
+        assert torch.all(explained_variance_ratio <= 1.0)
 
     def test_forward_projects_to_lower_dimension(
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
@@ -172,7 +179,7 @@ class TestPCAGoodPath:
 
         # With highly correlated data, 3 components should capture significant variance
         assert pca.total_explained_variance is not None
-        assert pca.total_explained_variance > 0.5  # At least 50%
+        assert _expect_tensor(pca.total_explained_variance) > 0.5  # At least 50%
 
     def test_multidimensional_data_handling(self, multidim_data: torch.Tensor) -> None:
         """PCA should handle 3D data by reshaping correctly."""
@@ -207,9 +214,10 @@ class TestPCAGoodPath:
 
         components = pca_2_components.components
         assert components is not None
+        components_tensor = _expect_tensor(components)
 
         # Compute inner product matrix
-        inner_products = torch.matmul(components, components.T)
+        inner_products = torch.matmul(components_tensor, components_tensor.T)
 
         # Should be close to identity (orthonormal)
         identity = torch.eye(2)
@@ -275,7 +283,7 @@ class TestPCAEdgeCases:
 
         # Components should match the last dimension size
         assert pca.components is not None
-        assert pca.components.shape[1] == 6  # Last dim of (20, 8, 6)
+        assert _expect_tensor(pca.components).shape[1] == 6  # Last dim of (20, 8, 6)
 
     def test_device_transfer_in_inverse_transform(
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
@@ -305,7 +313,7 @@ class TestPCAProperties:
         pca.fit(simple_2d_data)
 
         assert pca.explained_variance is not None
-        variances = pca.explained_variance
+        variances = _expect_tensor(pca.explained_variance)
 
         # Check monotonically decreasing
         for i in range(len(variances) - 1):
@@ -322,7 +330,7 @@ class TestPCAProperties:
 
         # Should match explained variance
         assert pca.explained_variance is not None
-        assert torch.allclose(proj_var, pca.explained_variance, atol=1e-4)
+        assert torch.allclose(proj_var, _expect_tensor(pca.explained_variance), atol=1e-4)
 
     def test_full_rank_reconstruction_machine_precision(self) -> None:
         """Full-rank PCA should reconstruct with only machine error.
@@ -360,7 +368,7 @@ class TestPCAProperties:
         pca.fit(data)
 
         assert pca.explained_variance_ratio is not None
-        ratios = pca.explained_variance_ratio
+        ratios = _expect_tensor(pca.explained_variance_ratio)
 
         # Each ratio must be in [0, 1]
         assert torch.all(ratios >= 0.0)
@@ -394,7 +402,7 @@ class TestPCAProperties:
 
         # First component should explain most variance
         assert pca.explained_variance_ratio is not None
-        ratios = pca.explained_variance_ratio
+        ratios = _expect_tensor(pca.explained_variance_ratio)
 
         # First should be much larger than second
         assert ratios[0] > ratios[1]

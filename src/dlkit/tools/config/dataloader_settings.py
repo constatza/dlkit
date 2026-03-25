@@ -1,5 +1,7 @@
 import os
+
 from pydantic import Field, PositiveInt
+
 from .core.base_settings import BasicSettings
 
 

@@ -5,15 +5,15 @@ backends, artifact destinations, tracking URLs, and secure local paths.
 """
 
 from typing import Annotated
+
 from pydantic import Field
 
 from .urls import (
-    MLflowBackendUrl,
     ArtifactDestination,
-    MLflowTrackingUrl,
     LocalPath,
+    MLflowBackendUrl,
+    MLflowTrackingUrl,
 )
-
 
 SecureMLflowBackendStoreUri = Annotated[
     MLflowBackendUrl,

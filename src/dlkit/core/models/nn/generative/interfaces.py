@@ -123,7 +123,7 @@ class IFixedStepSolver(Protocol):
 
     def __call__(
         self,
-        model_fn: "IModelFn",
+        model_fn: IModelFn,
         x: Tensor,
         t: float,
         dt: float,

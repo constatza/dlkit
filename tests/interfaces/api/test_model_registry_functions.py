@@ -12,10 +12,10 @@ from dlkit.interfaces.api.functions.model_registry import (
     list_model_versions,
     load_registered_model,
     register_logged_model,
+    search_registered_models,
     set_registered_model_alias,
     set_registered_model_version_tag,
     set_registered_model_version_tags,
-    search_registered_models,
 )
 
 

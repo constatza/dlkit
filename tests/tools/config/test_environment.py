@@ -1,7 +1,6 @@
 """Tests for DLKit environment configuration."""
 
 import os
-import pytest
 
 
 def test_mlflow_retry_defaults_are_set():

@@ -6,9 +6,11 @@ with direct mapping to PyTorch Lightning precision modes.
 
 from __future__ import annotations
 
-import torch
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal, Mapping, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+import torch
 
 if TYPE_CHECKING:
     from typing import Final
@@ -144,7 +146,7 @@ class PrecisionStrategy(StrEnum):
         return memory_factors[self]
 
     @classmethod
-    def get_alias_map(cls) -> Mapping[str, "PrecisionStrategy"]:
+    def get_alias_map(cls) -> Mapping[str, PrecisionStrategy]:
         """Get the comprehensive alias mapping for precision values.
 
         This method returns the authoritative mapping of all supported precision
@@ -258,14 +260,13 @@ class PrecisionStrategy(StrEnum):
         if isinstance(precision, int):
             if precision == 64:
                 return cls.FULL_64
-            elif precision == 32:
+            if precision == 32:
                 return cls.FULL_32
-            elif precision == 16:
+            if precision == 16:
                 return cls.MIXED_16  # Default to mixed for integer 16
-            else:
-                raise ValueError(
-                    f"Invalid Lightning precision integer: {precision}. Supported: 64, 32, 16"
-                )
+            raise ValueError(
+                f"Invalid Lightning precision integer: {precision}. Supported: 64, 32, 16"
+            )
 
         # Handle Lightning string formats (including numeric strings)
         value_str = str(precision).lower().strip()
@@ -311,7 +312,7 @@ class PrecisionStrategy(StrEnum):
 # Authoritative precision alias mapping - single source of truth
 # This mapping is used by from_string() and can be imported by tests
 # ONLY semantic string aliases - no integers, no numeric strings
-_PRECISION_ALIAS_MAP: "Final[Mapping[str, PrecisionStrategy]]" = {
+_PRECISION_ALIAS_MAP: Final[Mapping[str, PrecisionStrategy]] = {
     # Float64/Double precision aliases
     "double": PrecisionStrategy.FULL_64,
     "float64": PrecisionStrategy.FULL_64,

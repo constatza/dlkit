@@ -3,8 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from dlkit.core.postprocessing import is_graph_output, to_plot_data
-from dlkit.core.postprocessing import to_plot_graph_data
+from dlkit.core.postprocessing import is_graph_output, to_plot_data, to_plot_graph_data
 
 
 def test_is_graph_output_with_dict():

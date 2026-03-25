@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, runtime_checkable
-from pydantic import BaseModel
+from typing import Any, Protocol, runtime_checkable
 
-T = TypeVar("T", bound=BaseModel)
+from pydantic import BaseModel
 
 
 @runtime_checkable

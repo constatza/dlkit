@@ -78,6 +78,7 @@ Key architectural decisions:
 ```python
 from dlkit.runtime.workflows.strategies.optuna import IHyperparameterOptimizer, OptunaOptimizer
 
+
 def my_objective(trial):
     # Sample hyperparameters
     lr = trial.suggest_float("learning_rate", 1e-5, 1e-1, log=True)
@@ -87,13 +88,11 @@ def my_objective(trial):
     result = train_with_params(lr, batch_size)
     return result.loss
 
+
 # Type-safe optimizer usage
 optimizer: IHyperparameterOptimizer = OptunaOptimizer()
 result = optimizer.optimize(
-    objective=my_objective,
-    settings=settings,
-    n_trials=50,
-    direction="minimize"
+    objective=my_objective, settings=settings, n_trials=50, direction="minimize"
 )
 
 print(f"Best params: {result.best_params}")
@@ -120,6 +119,7 @@ print(f"Best value: {result.best_value}")
 **Example**:
 ```python
 from dlkit.runtime.workflows.strategies.optuna import IOptimizationResult
+
 
 def analyze_optimization(result: IOptimizationResult):
     print(f"Best trial: {result.trial_number}")
@@ -169,6 +169,7 @@ settings = GeneralSettings.from_toml("config.toml")
 # Initialize optimizer
 optimizer = OptunaOptimizer()
 
+
 # Define objective function using Optuna trial
 def objective(trial):
     # Create sampled settings for this trial
@@ -180,12 +181,10 @@ def objective(trial):
     # Return metric to optimize
     return result.metrics["val_loss"]
 
+
 # Run optimization
 opt_result = optimizer.optimize(
-    objective=objective,
-    settings=settings,
-    n_trials=100,
-    direction="minimize"
+    objective=objective, settings=settings, n_trials=100, direction="minimize"
 )
 
 # Apply best params to settings for final training
@@ -274,6 +273,7 @@ optimizer = OptunaOptimizer()
 executor = VanillaExecutor()
 factory = BuildFactory()
 
+
 # Define objective function
 def objective(trial):
     # Sample hyperparameters for this trial
@@ -286,12 +286,10 @@ def objective(trial):
     # Return metric to minimize
     return result.metrics["val_loss"]
 
+
 # Run optimization
 opt_result = optimizer.optimize(
-    objective=objective,
-    settings=settings,
-    n_trials=50,
-    direction="minimize"
+    objective=objective, settings=settings, n_trials=50, direction="minimize"
 )
 
 # Train final model with best params
@@ -312,13 +310,10 @@ tracker.setup_mlflow_config(settings.MLFLOW)
 
 # Wrap executor with tracking
 executor = VanillaExecutor()
-tracked_executor = TrackingDecorator(
-    executor=executor,
-    tracker=tracker,
-    settings=settings
-)
+tracked_executor = TrackingDecorator(executor=executor, tracker=tracker, settings=settings)
 
 optimizer = OptunaOptimizer()
+
 
 # Objective with nested run tracking
 def objective(trial):
@@ -327,9 +322,7 @@ def objective(trial):
     # Each trial gets its own tracked run
     with tracker:
         with tracker.create_run(
-            experiment_name="hp_search",
-            run_name=f"trial_{trial.number}",
-            nested=True
+            experiment_name="hp_search", run_name=f"trial_{trial.number}", nested=True
         ) as run:
             # Log trial parameters
             run.log_params(trial.params)
@@ -342,6 +335,7 @@ def objective(trial):
             run.log_metrics({"trial_loss": result.metrics["val_loss"]})
 
             return result.metrics["val_loss"]
+
 
 # Run optimization with tracking
 opt_result = optimizer.optimize(objective, settings, n_trials=100)
@@ -414,18 +408,20 @@ result = optimizer.optimize(objective, settings, n_trials=100)
 ```python
 optimizer = OptunaOptimizer()
 
+
 def accuracy_objective(trial):
     sampled_settings = optimizer.create_sampled_settings(settings, trial)
     result = train_model(sampled_settings)
     # Return accuracy to maximize
     return result.metrics["val_accuracy"]
 
+
 # Maximize instead of minimize
 opt_result = optimizer.optimize(
     objective=accuracy_objective,
     settings=settings,
     n_trials=50,
-    direction="maximize"  # Find maximum accuracy
+    direction="maximize",  # Find maximum accuracy
 )
 
 print(f"Best accuracy: {opt_result.best_value}")

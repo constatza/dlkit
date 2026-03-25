@@ -48,7 +48,7 @@ def compute_relative_norms(
         norm_fn=norm_fn,
     )
     target_norms = norm_fn(target)
-    return divide_fn(error_norms, target_norms, eps=eps)
+    return divide_fn(error_norms, target_norms, eps)
 
 
 def compute_state_mean(sum_value: Tensor, total: int | Tensor) -> Tensor:

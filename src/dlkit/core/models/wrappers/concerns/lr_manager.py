@@ -71,7 +71,7 @@ class ConfigLearningRateManager:
         if trainer and getattr(trainer, "optimizers", None):
             try:
                 return float(trainer.optimizers[0].param_groups[0]["lr"])
-            except (KeyError, IndexError, TypeError, ValueError):
+            except KeyError, IndexError, TypeError, ValueError:
                 return None
         return None
 
