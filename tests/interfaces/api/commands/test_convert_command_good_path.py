@@ -91,11 +91,15 @@ def test_validate_input_with_shape_and_batch_size(
     ]
 
     for case in test_cases:
+        shape = case["shape"]
+        batch_size = case["batch_size"]
+        assert isinstance(shape, str)
+        assert isinstance(batch_size, int)
         input_data = ConvertCommandInput(
             checkpoint_path=mock_checkpoint_path,
             output_path=mock_output_path,
-            shape=case["shape"],
-            batch_size=case["batch_size"],
+            shape=shape,
+            batch_size=batch_size,
             opset=17,
         )
 

@@ -355,6 +355,8 @@ class ModelFamilyRegistryFactory:
         Returns:
             ModelFamilyRegistry with class-based detector
         """
-        return ModelFamilyRegistryFactory.create_custom_registry([
-            ClassBasedDetector(),
-        ])
+        return ModelFamilyRegistryFactory.create_custom_registry(
+            [
+                ClassBasedDetector(),
+            ]
+        )

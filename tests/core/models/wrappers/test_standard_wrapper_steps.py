@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -160,7 +162,7 @@ def test_loss_input_context_feature_excluded_from_model(monkeypatch: pytest.Monk
     )
 
     # "K" must not appear in the model invoker's input keys
-    in_keys = wrapper._model_invoker._in_keys
+    in_keys = cast("Any", wrapper._model_invoker)._in_keys
     feature_names = [k[1] if isinstance(k, tuple) else k for k in in_keys]
     assert "K" not in feature_names
     assert "x" in feature_names

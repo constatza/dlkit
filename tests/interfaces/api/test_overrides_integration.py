@@ -18,6 +18,27 @@ from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.training_settings import TrainingSettings
 
 
+def _require_training(settings: GeneralSettings) -> TrainingSettings:
+    """Narrow TRAINING to the configured TrainingSettings instance."""
+    training = settings.TRAINING
+    assert training is not None
+    return training
+
+
+def _require_datamodule(settings: GeneralSettings) -> DataModuleSettings:
+    """Narrow DATAMODULE to the configured DataModuleSettings instance."""
+    datamodule = settings.DATAMODULE
+    assert datamodule is not None
+    return datamodule
+
+
+def _require_numeric_lr(settings: TrainingSettings) -> int | float:
+    """Narrow optimizer.lr to a concrete numeric value for assertions."""
+    lr = settings.optimizer.lr
+    assert isinstance(lr, int | float)
+    return lr
+
+
 @pytest.fixture
 def sample_settings() -> GeneralSettings:
     """Create sample settings for integration test."""
@@ -60,12 +81,15 @@ class TestOverrideIntegration:
 
         # Apply empty overrides - should preserve original settings
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
+        result_training = _require_training(result)
+        sample_training = _require_training(sample_settings)
+        result_datamodule = _require_datamodule(result)
+        sample_datamodule = _require_datamodule(sample_settings)
 
         # Original values should be preserved
-        assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # 50
+        assert result_training.epochs == sample_training.epochs  # 50
         assert (
-            result.DATAMODULE.dataloader.batch_size
-            == sample_settings.DATAMODULE.dataloader.batch_size
+            result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
         )  # 16
 
     def test_overrides_applied_when_values_provided(self, sample_settings: GeneralSettings) -> None:
@@ -90,11 +114,13 @@ class TestOverrideIntegration:
 
         # Apply overrides
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
+        result_training = _require_training(result)
+        result_datamodule = _require_datamodule(result)
 
         # Overridden values should be updated
-        assert result.TRAINING.epochs == 100  # Changed from 50
-        assert result.DATAMODULE.dataloader.batch_size == 64  # Changed from 16
-        assert float(result.TRAINING.optimizer.lr) == pytest.approx(0.01)  # New value
+        assert result_training.epochs == 100  # Changed from 50
+        assert result_datamodule.dataloader.batch_size == 64  # Changed from 16
+        assert float(_require_numeric_lr(result_training)) == pytest.approx(0.01)  # New value
 
     def test_partial_overrides_preserve_non_overridden_values(
         self, sample_settings: GeneralSettings
@@ -112,12 +138,14 @@ class TestOverrideIntegration:
         assert overrides == {"epochs": 200}
 
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
+        result_training = _require_training(result)
+        result_datamodule = _require_datamodule(result)
+        sample_datamodule = _require_datamodule(sample_settings)
 
         # Only epochs should be changed
-        assert result.TRAINING.epochs == 200  # Changed
+        assert result_training.epochs == 200  # Changed
         assert (
-            result.DATAMODULE.dataloader.batch_size
-            == sample_settings.DATAMODULE.dataloader.batch_size
+            result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
         )  # Preserved (16)
 
     def test_none_values_explicitly_ignored(self, sample_settings: GeneralSettings) -> None:
@@ -135,14 +163,17 @@ class TestOverrideIntegration:
         assert overrides == {"learning_rate": 50}
 
         result = train_command.override_manager.apply_overrides(sample_settings, **overrides)
+        result_training = _require_training(result)
+        sample_training = _require_training(sample_settings)
+        result_datamodule = _require_datamodule(result)
+        sample_datamodule = _require_datamodule(sample_settings)
 
         # Only learning_rate should be changed, None values ignored
-        assert result.TRAINING.epochs == sample_settings.TRAINING.epochs  # Preserved
+        assert result_training.epochs == sample_training.epochs  # Preserved
         assert (
-            result.DATAMODULE.dataloader.batch_size
-            == sample_settings.DATAMODULE.dataloader.batch_size
+            result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
         )  # Preserved
-        assert float(result.TRAINING.optimizer.lr) == pytest.approx(50)  # Changed
+        assert float(_require_numeric_lr(result_training)) == pytest.approx(50)  # Changed
 
 
 def test_override_workflow_summary() -> None:

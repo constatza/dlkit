@@ -137,7 +137,7 @@ class TestPrecisionEdgeCases:
         assert not exceptions
 
         # All overrides should have been respected
-        for i, expected, actual in results:
+        for _i, expected, actual in results:
             assert expected == actual
 
     def test_precision_with_invalid_session_data(self):
@@ -352,7 +352,7 @@ class TestPrecisionEdgeCases:
             PrecisionStrategy.FULL_64: torch.float64,
         }
 
-        for thread_id, result in results.items():
+        for _thread_id, result in results.items():
             strategy = result["strategy"]
             assert result["resolved"] == strategy
             assert result["dtype"] == expected_dtypes[strategy]

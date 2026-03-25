@@ -9,6 +9,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -287,4 +289,7 @@ def test_ode_strategy_reproducible_with_seeded_generator(
         r1 = ode_strategy.predict(tiny_model, minimal_batch, generator=gen1)
         r2 = ode_strategy.predict(tiny_model, minimal_batch, generator=gen2)
 
-    assert torch.equal(r1["predictions"], r2["predictions"])
+    assert torch.equal(
+        cast("Tensor", r1["predictions"]),
+        cast("Tensor", r2["predictions"]),
+    )

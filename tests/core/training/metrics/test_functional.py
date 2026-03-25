@@ -65,14 +65,18 @@ def batch_3d_vectors():
 @pytest.fixture
 def temporal_sequence_3d():
     """Temporal sequence with shape (B=2, T=4, D=2)."""
-    preds = torch.tensor([
-        [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
-        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
-    ])
-    target = torch.tensor([
-        [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
-        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
-    ])
+    preds = torch.tensor(
+        [
+            [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
+            [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
+        ]
+    )
+    target = torch.tensor(
+        [
+            [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
+            [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
+        ]
+    )
     return preds, target
 
 
@@ -296,11 +300,13 @@ class TestEnergyNormMetrics:
     def test_quadratic_form_sparse_batch_mismatch_fails(self):
         """Sparse batch mismatch should raise ValueError."""
         vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
-        mismatched = torch.stack([
-            torch.eye(2, dtype=torch.float64),
-            2 * torch.eye(2, dtype=torch.float64),
-            3 * torch.eye(2, dtype=torch.float64),
-        ]).to_sparse_coo()
+        mismatched = torch.stack(
+            [
+                torch.eye(2, dtype=torch.float64),
+                2 * torch.eye(2, dtype=torch.float64),
+                3 * torch.eye(2, dtype=torch.float64),
+            ]
+        ).to_sparse_coo()
 
         with pytest.raises(ValueError, match="Batch mismatch"):
             compute_quadratic_form(vector, mismatched)
@@ -511,10 +517,12 @@ class TestUpdateComputeSplit:
         """Relative energy update should support sparse per-sample (B, D, D) matrices."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_batch = torch.tensor([
-            [[2.0, 0.0], [0.0, 1.0]],
-            [[3.0, 0.2], [0.2, 2.0]],
-        ])
+        dense_batch = torch.tensor(
+            [
+                [[2.0, 0.0], [0.0, 1.0]],
+                [[3.0, 0.2], [0.2, 2.0]],
+            ]
+        )
         sparse_batch = dense_batch.to_sparse_coo()
 
         dense = _relative_energy_norm_update(preds, target, dense_batch, eps=1e-8)

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from dlkit.nn.ffnn import (
+
+from dlkit.core.models.nn.ffnn import (
     NormScaledConstantWidthFFNN,
     NormScaledFactorizedLinear,
     NormScaledLinearFFNN,
@@ -17,10 +18,11 @@ def test_norm_scaled_linear_ffnn_behaves_like_identity():
     module = NormScaledLinearFFNN(in_features=4, out_features=4, bias=False)
 
     with torch.no_grad():
-        module.base_model.weight.copy_(torch.eye(4))
+        module.base_model.weight.copy_(torch.eye(4))  # ty: ignore[call-non-callable]
 
     rhs = torch.randn(3, 4)
-    predicted = module(rhs)
+    predicted = module.forward(rhs)
+    assert isinstance(predicted, torch.Tensor)
     assert torch.allclose(predicted, rhs, atol=1e-6)
 
 
@@ -28,10 +30,10 @@ def test_norm_scaled_linear_ffnn_reports_norm_stats_for_zero_rhs():
     module = NormScaledLinearFFNN(in_features=3, out_features=3, bias=False, keep_stats=True)
 
     with torch.no_grad():
-        module.base_model.weight.copy_(torch.eye(3))
+        module.base_model.weight.copy_(torch.eye(3))  # ty: ignore[call-non-callable]
 
     rhs = torch.zeros(3)
-    predicted, stats = module(rhs)
+    predicted, stats = module.forward(rhs)
 
     assert torch.allclose(predicted, torch.zeros_like(rhs))
     assert "norm" in stats
@@ -61,12 +63,12 @@ def test_norm_scaled_linear_ffnn_rejects_integer_inputs():
     module = NormScaledLinearFFNN(in_features=2, out_features=2, bias=False)
 
     with torch.no_grad():
-        module.base_model.weight.copy_(torch.eye(2))
+        module.base_model.weight.copy_(torch.eye(2))  # ty: ignore[call-non-callable]
 
     rhs = torch.tensor([1, 2], dtype=torch.int32)
 
     with pytest.raises(TypeError, match="Expected floating point tensor"):
-        module(rhs)
+        module.forward(rhs)
 
 
 # ---------------------------------------------------------------------------

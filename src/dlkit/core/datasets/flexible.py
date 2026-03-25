@@ -654,10 +654,12 @@ def _resolve_n_and_materialize_sparse(
                     perf_counter() - materialize_start,
                 )
             else:
-                feat_tensors[name] = torch.stack([
-                    _load_sparse_tensor(reader, i, denormalize=binding.denormalize)
-                    for i in range(n)
-                ])
+                feat_tensors[name] = torch.stack(
+                    [
+                        _load_sparse_tensor(reader, i, denormalize=binding.denormalize)
+                        for i in range(n)
+                    ]
+                )
                 logger.debug(
                     "Sparse in-memory materialization feature='{}' mode=per_sample n_total={} "
                     "elapsed_s={:.4f}",

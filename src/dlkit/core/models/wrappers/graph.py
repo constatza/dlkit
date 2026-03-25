@@ -81,14 +81,18 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         model = _build_model_from_settings(model_settings, shape_summary)
 
         # Build metrics and loss before super() (values only, assigned after super())
-        _val_metrics = MetricCollection([
-            FactoryProvider.create_component(metric, BuildContext(mode="training"))
-            for metric in settings.metrics
-        ])
-        _test_metrics = MetricCollection([
-            FactoryProvider.create_component(metric, BuildContext(mode="training"))
-            for metric in settings.metrics
-        ])
+        _val_metrics = MetricCollection(
+            [
+                FactoryProvider.create_component(metric, BuildContext(mode="training"))
+                for metric in settings.metrics
+            ]
+        )
+        _test_metrics = MetricCollection(
+            [
+                FactoryProvider.create_component(metric, BuildContext(mode="training"))
+                for metric in settings.metrics
+            ]
+        )
         _loss_function = FactoryProvider.create_component(
             settings.loss_function, BuildContext(mode="training")
         )

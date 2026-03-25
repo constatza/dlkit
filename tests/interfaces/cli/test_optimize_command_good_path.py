@@ -160,7 +160,9 @@ class TestOptimizeCommandStructure:
     def test_optimize_command_has_correct_help_metadata(self) -> None:
         """Test that optimize command has correct help and metadata."""
         # Check that the app has the expected configuration
-        assert "optimization" in optimize_app.info.help.lower()
+        help_text = optimize_app.info.help
+        assert help_text is not None
+        assert "optimization" in help_text.lower()
         assert optimize_app.info.no_args_is_help is True
 
 

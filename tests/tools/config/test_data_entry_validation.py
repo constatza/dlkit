@@ -10,6 +10,7 @@ Tests the new hierarchical DataEntry architecture:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -102,7 +103,9 @@ class TestFeatureFactory:
     ):
         """Test Feature with both path and value raises ValueError."""
         with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
-            Feature(name="test", path=tmp_path / "test.npy", value=sample_numpy_array)
+            Feature(  # ty: ignore[no-matching-overload]
+                name="test", path=tmp_path / "test.npy", value=sample_numpy_array
+            )
 
     def test_feature_string_path_converted_to_path_object(self, tmp_path: Path):
         """Test Feature converts string path to Path object."""
@@ -147,7 +150,9 @@ class TestTargetFactory:
     ):
         """Test Target with both path and value raises ValueError."""
         with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
-            Target(name="test", path=tmp_path / "test.npy", value=sample_numpy_array)
+            Target(  # ty: ignore[no-matching-overload]
+                name="test", path=tmp_path / "test.npy", value=sample_numpy_array
+            )
 
     def test_target_has_write_attribute(self, tmp_path: Path, sample_numpy_array: np.ndarray):
         """Test Target preserves write attribute."""
@@ -386,10 +391,14 @@ class TestErrorMessages:
     ):
         """Test factory error messages include entry name."""
         with pytest.raises(ValueError, match="Feature 'my_feature'"):
-            Feature(name="my_feature", path=tmp_path / "test.npy", value=sample_numpy_array)
+            Feature(  # ty: ignore[no-matching-overload]
+                name="my_feature", path=tmp_path / "test.npy", value=sample_numpy_array
+            )
 
         with pytest.raises(ValueError, match="Target 'my_target'"):
-            Target(name="my_target", path=tmp_path / "test.npy", value=sample_numpy_array)
+            Target(  # ty: ignore[no-matching-overload]
+                name="my_target", path=tmp_path / "test.npy", value=sample_numpy_array
+            )
 
 
 # ============================================================================
@@ -597,7 +606,9 @@ class TestDatasetSettingsValuePreservation:
         # Verify dataset works
         assert len(dataset) == 10
         sample = dataset[0]
-        assert len(list(sample["features"].keys())) == 1
-        assert len(list(sample["targets"].keys())) == 1
+        features = cast(object, sample["features"])
+        targets = cast(object, sample["targets"])
+        assert len(list(cast("dict[str, torch.Tensor]", features).keys())) == 1
+        assert len(list(cast("dict[str, torch.Tensor]", targets).keys())) == 1
         assert sample["features", "x"].shape == torch.Size([5])
         assert sample["targets", "y"].shape == torch.Size([1])

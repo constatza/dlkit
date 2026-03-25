@@ -240,9 +240,10 @@ class TestGeneralSettingsIntegration:
         data = original.model_dump()
         restored = GeneralSettings(**data)
 
-        assert restored.GENERATIVE is not None
-        assert restored.GENERATIVE.path_type == "noise_schedule"
-        assert restored.GENERATIVE.solver == "heun"
+        generative = restored.GENERATIVE
+        assert isinstance(generative, FlowMatchingSettings)
+        assert generative.path_type == "noise_schedule"
+        assert generative.solver == "heun"
 
 
 class TestGenerativeSettingsDocstring:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -374,7 +375,9 @@ class TestInitClass:
         assert result is not None
         assert result.required_param == "with_settings"
 
-    def test_init_function_returns_callable(self, mock_function_with_signature: callable) -> None:
+    def test_init_function_returns_callable(
+        self, mock_function_with_signature: Callable[..., object]
+    ) -> None:
         """Test that init_class can handle functions (callables) as well as classes.
 
         Args:

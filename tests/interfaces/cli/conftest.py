@@ -110,7 +110,7 @@ def sample_config_file(tmp_path: Path, sample_config_content: str) -> Path:
 
 
 @pytest.fixture
-def mock_dependencies() -> dict[str, Mock]:
+def mock_dependencies() -> dict[str, Any]:
     """Mock external dependencies for CLI testing.
 
     Returns:
@@ -138,7 +138,7 @@ def mock_dependencies() -> dict[str, Mock]:
 
 
 @pytest.fixture
-def mock_api_functions() -> dict[str, Mock]:
+def mock_api_functions() -> dict[str, Any]:
     """Mock API functions used by CLI commands.
 
     Returns:
@@ -404,7 +404,7 @@ def mock_console() -> Mock:
 
 
 @pytest.fixture
-def mock_successful_training_result() -> Mock:
+def mock_successful_training_result() -> Any:
     """Create mock successful training result.
 
     Returns:
@@ -426,7 +426,7 @@ def mock_successful_training_result() -> Mock:
 
 
 @pytest.fixture
-def mock_successful_inference_result() -> Mock:
+def mock_successful_inference_result() -> Any:
     """Create mock successful inference result.
 
     Returns:
@@ -605,7 +605,7 @@ def mock_settings_factory():
 
 
 @pytest.fixture
-def sample_convert_result() -> Mock:
+def sample_convert_result() -> Any:
     """Create mock ConvertResult for CLI testing.
 
     Returns:

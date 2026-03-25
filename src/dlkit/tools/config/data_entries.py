@@ -326,7 +326,7 @@ class IValueBased(ABC):
         """
 
 
-class IWritable(ABC):
+class IWritable:
     """Capability interface for writable entries.
 
     Marks entries that can save their data during inference.
@@ -346,7 +346,7 @@ class IWritable(ABC):
     # Pure marker interface - implementations provide 'write' attribute
 
 
-class IRuntimeGenerated(ABC):
+class IRuntimeGenerated:
     """Capability interface for runtime-generated entries.
 
     Marks entries created during model execution (Latent, Prediction),
@@ -364,7 +364,7 @@ class IRuntimeGenerated(ABC):
     # Pure marker interface
 
 
-class IFeatureReference(ABC):
+class IFeatureReference:
     """Capability interface for entries that reference features.
 
     Used by AutoencoderTarget to reference a feature for transform inversion.

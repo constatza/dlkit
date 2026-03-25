@@ -256,23 +256,29 @@ class ConfigurationService:
         }
 
         if template_type == "inference":
-            base_comments.update({
-                "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
-            })
+            base_comments.update(
+                {
+                    "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
+                }
+            )
 
         if template_type in ["mlflow", "optuna"]:
-            base_comments.update({
-                "MLFLOW.experiment_name": "MLflow experiment name",
-                "MLFLOW.run_name": "MLflow run name",
-            })
+            base_comments.update(
+                {
+                    "MLFLOW.experiment_name": "MLflow experiment name",
+                    "MLFLOW.run_name": "MLflow run name",
+                }
+            )
 
         if template_type == "optuna":
-            base_comments.update({
-                "OPTUNA.enabled": "Enable Optuna hyperparameter optimization",
-                "OPTUNA.n_trials": "Number of optimization trials to run",
-                "OPTUNA.study_name": "Name for the Optuna study",
-                "OPTUNA.storage": "Database URL for Optuna study storage",
-            })
+            base_comments.update(
+                {
+                    "OPTUNA.enabled": "Enable Optuna hyperparameter optimization",
+                    "OPTUNA.n_trials": "Number of optimization trials to run",
+                    "OPTUNA.study_name": "Name for the Optuna study",
+                    "OPTUNA.storage": "Database URL for Optuna study storage",
+                }
+            )
 
         return base_comments
 

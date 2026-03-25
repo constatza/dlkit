@@ -307,7 +307,7 @@ class TestResolveRootDir:
     def test_resolve_root_dir_with_context_takes_precedence(self, tmp_path: Path) -> None:
         """Test that path_context.root_dir takes highest precedence."""
         ctx = PathContext(root_dir=tmp_path / "context")
-        env = DLKitEnvironment(root_dir=tmp_path / "env")
+        env = DLKitEnvironment(root_dir=(tmp_path / "env").as_posix())
 
         resolved = resolve_root_dir(path_context=ctx, env=env)
 
@@ -317,7 +317,7 @@ class TestResolveRootDir:
     def test_resolve_root_dir_with_env_fallback(self, tmp_path: Path) -> None:
         """Test that env is used when context has no root_dir."""
         ctx = PathContext.empty()
-        env = DLKitEnvironment(root_dir=tmp_path / "env")
+        env = DLKitEnvironment(root_dir=(tmp_path / "env").as_posix())
 
         resolved = resolve_root_dir(path_context=ctx, env=env)
 
@@ -339,7 +339,7 @@ class TestResolveRootDir:
 
     def test_resolve_root_dir_with_none_context(self, tmp_path: Path) -> None:
         """Test resolve_root_dir with None context uses env."""
-        env = DLKitEnvironment(root_dir=tmp_path / "env")
+        env = DLKitEnvironment(root_dir=(tmp_path / "env").as_posix())
 
         resolved = resolve_root_dir(path_context=None, env=env)
 
@@ -406,7 +406,7 @@ class TestResolveComponentPath:
 
     def test_resolve_component_path_with_env_fallback(self, tmp_path: Path) -> None:
         """Test resolve_component_path uses env for root when no context."""
-        env = DLKitEnvironment(root_dir=tmp_path)
+        env = DLKitEnvironment(root_dir=tmp_path.as_posix())
 
         resolved = resolve_component_path("data", env=env)
 
@@ -450,7 +450,7 @@ class TestPathContextIntegration:
     def test_api_workflow_scenario(self, tmp_path: Path) -> None:
         """Test typical API workflow: create context from dict, merge with settings."""
         # Settings from config
-        settings = GeneralSettings(SESSION=SessionSettings(root_dir=tmp_path / "base"))
+        settings = GeneralSettings(SESSION=SessionSettings(root_dir=(tmp_path / "base").as_posix()))
         base_ctx = PathContext.from_settings(settings)
 
         # API overrides
@@ -470,7 +470,7 @@ class TestPathContextIntegration:
         """Test full precedence hierarchy: context > env > cwd."""
         # All three sources
         ctx = PathContext(root_dir=tmp_path / "context")
-        env = DLKitEnvironment(root_dir=tmp_path / "env")
+        env = DLKitEnvironment(root_dir=(tmp_path / "env").as_posix())
 
         # Context wins
         resolved = resolve_root_dir(path_context=ctx, env=env)

@@ -32,6 +32,12 @@ from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
 from dlkit.tools.config import GeneralSettings
 
 
+def _require_mlflow_settings(settings: GeneralSettings):
+    mlflow_settings = settings.MLFLOW
+    assert mlflow_settings is not None
+    return mlflow_settings
+
+
 def _resolve_effective_model_name(model: Any) -> str:
     """Resolve tracked model class name, unwrapping DLKit Lightning wrappers."""
     if isinstance(model, ProcessingLightningWrapper):
@@ -62,7 +68,7 @@ class TestMLflowTrainingIntegration:
         """Real E2E check: register model, resolve aliases, and load by name/version."""
         unique_suffix = uuid4().hex[:8]
 
-        mlflow_cfg = mlflow_settings.MLFLOW
+        mlflow_cfg = _require_mlflow_settings(mlflow_settings)
         mlflow_cfg_updated = mlflow_cfg.model_copy(
             update={
                 "register_model": True,
@@ -162,7 +168,7 @@ class TestMLflowTrainingIntegration:
         """Real E2E check: unregistered runs still support model lookup/load via runs:/."""
         unique_suffix = uuid4().hex[:8]
 
-        mlflow_cfg = mlflow_settings.MLFLOW
+        mlflow_cfg = _require_mlflow_settings(mlflow_settings)
         mlflow_cfg_updated = mlflow_cfg.model_copy(
             update={
                 "register_model": False,

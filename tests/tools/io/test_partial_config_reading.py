@@ -18,6 +18,12 @@ from dlkit.tools.io.config import (
 )
 
 
+def _get_extra_path(settings: PathsSettings, field_name: str) -> str:
+    path = settings.get_path(field_name)
+    assert path is not None
+    return str(path)
+
+
 @pytest.fixture(autouse=True)
 def reset_section_registry():
     """Ensure section mappings are reset before and after each test."""
@@ -133,7 +139,7 @@ class TestLoadSectionConfig:
         paths_config = load_section_config(config_file, section_name="PATHS")
 
         assert isinstance(paths_config, PathsSettings)
-        assert Path(str(paths_config.dataroot)).name == "test_data"
+        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
 
     def test_file_not_found(self):
         """Test handling of missing config file."""
@@ -176,7 +182,8 @@ class TestLoadSectionsConfig:
         assert isinstance(configs["PATHS"], PathsSettings)
         assert isinstance(configs["MODEL"], ModelComponentSettings)
         assert configs["MODEL"].name == "TestModel"
-        assert Path(str(configs["PATHS"].dataroot)).name == "test_data"
+        paths_config = configs["PATHS"]
+        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
 
     def test_load_mixed_section_specs(self, config_file):
         """Mix registry-driven and explicit model mappings."""
@@ -190,7 +197,8 @@ class TestLoadSectionsConfig:
 
         assert isinstance(configs["PATHS"], PathsSettings)
         assert isinstance(configs["MODEL"], ModelComponentSettings)
-        assert Path(str(configs["PATHS"].dataroot)).name == "test_data"
+        paths_config = configs["PATHS"]
+        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
 
     def test_load_with_missing_section(self, config_file):
         """Test loading when one section is missing."""

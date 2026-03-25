@@ -10,6 +10,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -20,7 +22,7 @@ from dlkit.core.models.wrappers.components import (
     TensorDictModelInvoker,
     _build_invoker_from_entries,
 )
-from dlkit.tools.config.data_entries import Feature
+from dlkit.tools.config.data_entries import Feature, FeatureType
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -140,7 +142,7 @@ class TestTensorDictModelInvokerSingleFeature:
         invoker = TensorDictModelInvoker(in_keys=[("features", "x")])
         result = invoker.invoke(model, simple_batch)
         assert "features" in result.keys()
-        assert "x" in result["features"].keys()
+        assert "x" in cast(TensorDict, result["features"]).keys()
 
 
 # ---------------------------------------------------------------------------
@@ -220,8 +222,9 @@ class TestTensorDictModelInvokerMultiOutput:
         assert result["predictions"].shape == (bs, 2)
         # Named latents — NOT "0"/"1"
         assert "latents" in result.keys()
-        assert "mu" in result["latents"].keys()
-        assert "logvar" in result["latents"].keys()
+        latents = cast(TensorDict, result["latents"])
+        assert "mu" in latents.keys()
+        assert "logvar" in latents.keys()
         assert "0" not in result.keys()
         assert "1" not in result.keys()
 
@@ -242,8 +245,9 @@ class TestTensorDictModelInvokerMultiOutput:
             output_spec=vae_output_spec,
         )
         result = invoker.invoke(_VAEModel(), simple_batch)
-        assert result["latents"]["mu"].shape == (bs, 4)
-        assert result["latents"]["logvar"].shape == (bs, 4)
+        latents = cast(TensorDict, result["latents"])
+        assert latents["mu"].shape == (bs, 4)
+        assert latents["logvar"].shape == (bs, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -253,12 +257,12 @@ class TestTensorDictModelInvokerMultiOutput:
 
 class TestBuildInvokerFromEntries:
     @pytest.fixture
-    def feat_x(self) -> Feature:
+    def feat_x(self) -> FeatureType:
         """Feature 'x' with default model_input=True."""
         return Feature("x", value=torch.zeros(4, 3))
 
     @pytest.fixture
-    def feat_z(self) -> Feature:
+    def feat_z(self) -> FeatureType:
         """Feature 'z' with default model_input=True."""
         return Feature("z", value=torch.zeros(4, 5))
 
@@ -437,4 +441,4 @@ class TestBuildInvokerFromEntries:
         invoker = _build_invoker_from_entries([feat_x], output_spec=spec)
         result = invoker.invoke(_Rec(), simple_batch)
         assert "latents" in result.keys()
-        assert "z" in result["latents"].keys()
+        assert "z" in cast(TensorDict, result["latents"]).keys()

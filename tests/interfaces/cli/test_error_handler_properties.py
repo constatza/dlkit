@@ -385,13 +385,15 @@ class TestErrorHandlingProperties:
         assert mock_console.print.call_count == 1
 
     @given(
-        exception_type=st.sampled_from([
-            ValueError,
-            TypeError,
-            AttributeError,
-            KeyError,
-            RuntimeError,
-        ]),
+        exception_type=st.sampled_from(
+            [
+                ValueError,
+                TypeError,
+                AttributeError,
+                KeyError,
+                RuntimeError,
+            ]
+        ),
         message=st.text(min_size=1, max_size=200),
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])

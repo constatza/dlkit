@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -20,7 +20,7 @@ from dlkit.tools.config.components.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
 from dlkit.tools.config.transform_settings import TransformSettings
 
 MODEL_MODULE_PATH = "dlkit.core.models.nn.ffnn.simple"
@@ -72,7 +72,7 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
     return dm
 
 
-def _entry_configs(fx: Path, fy: Path) -> tuple[Feature | Target, ...]:
+def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
     # Apply MinMaxScaler to both x and y; direct for features, inverse for targets at predict
     ts = TransformSettings(
         name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
@@ -82,7 +82,7 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[Feature | Target, ...]:
     return (x, y)
 
 
-def _build_wrapper(entry_cfgs: tuple[Feature | Target, ...]) -> StandardLightningWrapper:
+def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
     model_settings = ModelComponentSettings(
@@ -102,6 +102,7 @@ def _build_wrapper(entry_cfgs: tuple[Feature | Target, ...]) -> StandardLightnin
         shape_summary=shape_summary,
         entry_configs=entry_cfgs,
     )
+    assert isinstance(wrapper.model, ConstantWidthFFNN)
     _configure_identity_ffnn(wrapper.model)
     return wrapper
 
@@ -175,7 +176,8 @@ def predictor_transform_setup(tmp_path_factory: pytest.TempPathFactory) -> dict[
 
     raw_features = torch.from_numpy(X).float()
     raw_targets = torch.from_numpy(Y).float()
-    normalized_features = wrapper._batch_transformer._feature_chains["x"](raw_features)
+    batch_transformer = cast(Any, wrapper._batch_transformer)
+    normalized_features = batch_transformer._feature_chains["x"](raw_features)
 
     return {
         "checkpoint": ckpt_path,
@@ -230,8 +232,9 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
 
     assert isinstance(batch_out, _TensorDict)
     inv_pred = batch_out["predictions"]
-    inv_targ = batch_out["targets"]["y"]
-    assert inv_pred is not None and inv_targ is not None
+    inv_targ = batch_out["targets", "y"]
+    assert isinstance(inv_pred, torch.Tensor)
+    assert isinstance(inv_targ, torch.Tensor)
 
     # Assert: inverse-transformed predictions and targets are in original space (strict)
     raw_batch = next(iter(dm.predict_dataloader()))
@@ -243,7 +246,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     assert "last_x" in captured
     x_in = captured["last_x"]
     raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
-    expected_x_in = loaded._batch_transformer._feature_chains["x"](raw_x)
+    expected_x_in = cast(Any, loaded._batch_transformer)._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
 
 
@@ -362,7 +365,8 @@ def test_manual_inverse_matches_default_path(predictor_transform_setup: dict[str
 
     manual_predictions = _extract_prediction_tensor(manual_result)
     manual_predictions_raw = apply_inverse_chain(
-        manual_predictions, wrapper._batch_transformer._target_chains["y"]
+        manual_predictions,
+        wrapper._batch_transformer._target_chains["y"],
     )
 
     assert torch.allclose(manual_predictions_raw, default_predictions, atol=1e-6)
@@ -400,8 +404,9 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
 
     assert isinstance(batch_out, _TensorDict)
     inv_pred = batch_out["predictions"]
-    inv_targ = batch_out["targets"]["y"]
-    assert inv_pred is not None and inv_targ is not None
+    inv_targ = batch_out["targets", "y"]
+    assert isinstance(inv_pred, torch.Tensor)
+    assert isinstance(inv_targ, torch.Tensor)
 
     raw_batch = next(iter(dm.predict_dataloader()))
     raw_y = raw_batch["targets", "y"]
@@ -412,5 +417,5 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     assert "last_x" in captured
     x_in = captured["last_x"]
     raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
-    expected_x_in = rewrapped._batch_transformer._feature_chains["x"](raw_x)
+    expected_x_in = cast(Any, rewrapped._batch_transformer)._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)

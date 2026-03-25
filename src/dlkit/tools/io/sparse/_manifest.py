@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import field
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import ConfigDict, NonNegativeInt, PositiveInt, TypeAdapter
@@ -133,9 +133,9 @@ class CooPackManifest:
 _COO_MANIFEST_ADAPTER = TypeAdapter(CooPackManifest)
 
 # Backward-compatible names used by existing callers.
-PackFiles: TypeAlias = CooPackFiles
-PackManifest: TypeAlias = CooPackManifest
-SparsePackManifest: TypeAlias = CooPackManifest
+PackFiles = CooPackFiles
+PackManifest = CooPackManifest
+SparsePackManifest = CooPackManifest
 
 
 def _manifest_from_arrays(

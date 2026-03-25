@@ -202,9 +202,9 @@ class IShapeAwareTransform(ABC):
         ...
         ...     def fit(self, data: torch.Tensor) -> None:
         ...         # Lazy allocation from data shape
-        ...         moments_shape = tuple([
-        ...             1 if i in self.dim else s for i, s in enumerate(data.shape)
-        ...         ])
+        ...         moments_shape = tuple(
+        ...             [1 if i in self.dim else s for i, s in enumerate(data.shape)]
+        ...         )
         ...         self.register_buffer("min", torch.zeros(moments_shape))
         ...         self.register_buffer("max", torch.ones(moments_shape))
         ...         # ... fit logic ...

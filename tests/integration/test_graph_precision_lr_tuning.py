@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,6 +13,7 @@ import dlkit
 from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
+from dlkit.tools.config.precision import PrecisionStrategy
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
@@ -28,25 +28,30 @@ class TestGraphPrecisionLRTuning:
     def _build_graph_settings(
         graph_settings: GeneralSettings,
         *,
-        precision: str = "float64",
+        precision: PrecisionStrategy = PrecisionStrategy.FULL_64,
         enable_lr_tuning: bool = True,
     ) -> GeneralSettings:
         """Create modified GeneralSettings for graph precision scenarios."""
-        from dlkit.tools.config.components.model_components import ModelComponentSettings
         from dlkit.tools.config.session_settings import SessionSettings
         from dlkit.tools.config.trainer_settings import TrainerSettings
         from dlkit.tools.config.training_settings import TrainingSettings
 
         session = SessionSettings(seed=42, precision=precision)
+        graph_model = graph_settings.MODEL
+        assert graph_model is not None
 
-        model = ModelComponentSettings(
-            name="ScaledGATv2Projection",
-            module_path="dlkit.core.models.nn.graph.scaled_projection_networks",
-            hidden_size=4,
-            num_layers=1,
-            heads=1,
-            unified_shape=graph_settings.MODEL.unified_shape,
+        model = graph_model.model_copy(
+            update={
+                "name": "ScaledGATv2Projection",
+                "module_path": "dlkit.core.models.nn.graph.scaled_projection_networks",
+                "hidden_size": 4,
+                "num_layers": 1,
+                "heads": 1,
+            }
         )
+
+        graph_training = graph_settings.TRAINING
+        assert graph_training is not None
 
         if enable_lr_tuning:
             training = TrainingSettings(
@@ -56,19 +61,21 @@ class TestGraphPrecisionLRTuning:
                     max_lr=0.1,
                     num_training=2,
                 ),
-                trainer=TrainerSettings(
-                    fast_dev_run=False,
-                    enable_checkpointing=False,
-                    max_epochs=1,
-                    limit_train_batches=2,
-                    enable_progress_bar=False,
+                trainer=TrainerSettings.model_validate(
+                    {
+                        "fast_dev_run": False,
+                        "enable_checkpointing": False,
+                        "max_epochs": 1,
+                        "limit_train_batches": 2,
+                        "enable_progress_bar": False,
+                    }
                 ),
-                metrics=graph_settings.TRAINING.metrics,
-                loss_function=graph_settings.TRAINING.loss_function,
-                optimizer=graph_settings.TRAINING.optimizer,
+                metrics=graph_training.metrics,
+                loss_function=graph_training.loss_function,
+                optimizer=graph_training.optimizer,
             )
         else:
-            training = graph_settings.TRAINING
+            training = graph_training
 
         return GeneralSettings(
             SESSION=session,
@@ -83,14 +90,22 @@ class TestGraphPrecisionLRTuning:
         from dlkit.interfaces.api.domain.precision import precision_override
 
         dataset_cfg = graph_settings.DATASET
-        root: Path = dataset_cfg.root
+        assert dataset_cfg is not None
+        root = dataset_cfg.root
+        assert root is not None
+        x_path = getattr(dataset_cfg, "x", None)
+        edge_index_path = getattr(dataset_cfg, "edge_index", None)
+        y_path = getattr(dataset_cfg, "y", None)
+        assert x_path is not None
+        assert edge_index_path is not None
+        assert y_path is not None
         precision = graph_settings.SESSION.get_precision_strategy()
         with precision_override(precision):
             return GraphDataset(
                 root=root,
-                x=dataset_cfg.x,
-                edge_index=dataset_cfg.edge_index,
-                y=dataset_cfg.y,
+                x=x_path,
+                edge_index=edge_index_path,
+                y=y_path,
             )
 
     def test_graph_model_float64_lr_tuning_integration(

@@ -20,7 +20,7 @@ class MockTrial:
         return value
 
     def suggest_float(
-        self, name: str, low: float, high: float, step: float = None, log: bool = False
+        self, name: str, low: float, high: float, step: float | None = None, log: bool = False
     ) -> float:
         """Suggest float value (returns midpoint for deterministic testing)."""
         value = (low + high) / 2

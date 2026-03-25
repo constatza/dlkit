@@ -14,7 +14,8 @@ from mlflow.tracking import MlflowClient
 import dlkit
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
-from tests._timeout_constants import FAST_TEST_TIMEOUT
+
+FAST_TEST_TIMEOUT = int(30 * float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0")))
 
 
 @pytest.fixture

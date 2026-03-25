@@ -38,11 +38,12 @@ class TestMetricComponentSettings:
             metric_component_data: Metric component dataflow fixture
         """
         settings = MetricComponentSettings(**metric_component_data)
+        extra = settings.model_extra or {}
 
         assert settings.name == "Accuracy"
         assert settings.module_path == "torchmetrics.classification"
-        assert settings.task == "multiclass"  # Extra field allowed
-        assert settings.num_classes == 10  # Extra field allowed
+        assert extra["task"] == "multiclass"
+        assert extra["num_classes"] == 10
 
     def test_get_init_kwargs_excludes_component_fields(
         self, metric_component_data: dict[str, Any]
@@ -107,7 +108,9 @@ class TestLossComponentSettings:
         def custom_loss(x, y):
             return (x - y).abs().mean()
 
-        settings = LossComponentSettings(name=custom_loss, custom_param="test_value")
+        settings = LossComponentSettings.model_validate(
+            {"name": custom_loss, "custom_param": "test_value"}
+        )
         kwargs = settings.get_init_kwargs()
 
         assert "name" not in kwargs
@@ -153,17 +156,20 @@ class TestModelComponentSettings:
 
     def test_initialization_allows_extra_fields(self) -> None:
         """Test ModelComponentSettings allows extra fields (extra='allow')."""
-        settings = ModelComponentSettings(
-            name="ExtraModel",
-            custom_param="custom_value",
-            another_extra=123,
-            nested_config={"key": "value"},
+        settings = ModelComponentSettings.model_validate(
+            {
+                "name": "ExtraModel",
+                "custom_param": "custom_value",
+                "another_extra": 123,
+                "nested_config": {"key": "value"},
+            }
         )
+        extra = settings.model_extra or {}
 
         assert settings.name == "ExtraModel"
-        assert hasattr(settings, "custom_param")
-        assert hasattr(settings, "another_extra")
-        assert hasattr(settings, "nested_config")
+        assert extra["custom_param"] == "custom_value"
+        assert extra["another_extra"] == 123
+        assert extra["nested_config"] == {"key": "value"}
 
     def test_hyperparameter_fields_support(self, hyperparameter_model_data: dict[str, Any]) -> None:
         """Test ModelComponentSettings supports hyperparameter specifications.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -74,10 +74,12 @@ class MockRunContext(IRunContext):
     ) -> str | None:
         if not hasattr(self, "logged_models"):
             self.logged_models = []
-        self.logged_models.append({
-            "artifact_path": artifact_path,
-            "registered_model_name": registered_model_name,
-        })
+        self.logged_models.append(
+            {
+                "artifact_path": artifact_path,
+                "registered_model_name": registered_model_name,
+            }
+        )
         return f"runs:/{self._run_id}/{artifact_path}"
 
     def get_latest_model_version(
@@ -130,12 +132,14 @@ class MockExperimentTracker(IExperimentTracker):
         nested: bool = False,
         tags: dict[str, str] | None = None,
     ):
-        self.created_runs.append({
-            "experiment_name": experiment_name,
-            "run_name": run_name,
-            "nested": nested,
-            "tags": tags,
-        })
+        self.created_runs.append(
+            {
+                "experiment_name": experiment_name,
+                "run_name": run_name,
+                "nested": nested,
+                "tags": tags,
+            }
+        )
         yield self.run_context
 
     def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
@@ -204,7 +208,11 @@ def build_components():
     datamodule = Mock()
 
     return BuildComponents(
-        model=DummyModel(), datamodule=datamodule, trainer=trainer, shape_spec=None, meta={}
+        model=cast("Any", DummyModel()),
+        datamodule=datamodule,
+        trainer=trainer,
+        shape_spec=None,
+        meta={},
     )
 
 

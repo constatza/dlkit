@@ -13,6 +13,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from dlkit.tools.config.core.base_settings import ComponentSettings
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import (
     ComponentFactory,
@@ -89,7 +90,7 @@ def function_target(param1: str, param2: int, param3: str = "default") -> dict[s
 class CustomComponentFactory(ComponentFactory[MockTarget]):
     """Custom factory implementation for testing."""
 
-    def create(self, settings: MockComponentSettings, context: BuildContext) -> MockTarget:
+    def create(self, settings: ComponentSettings, context: BuildContext) -> MockTarget:
         """Create component with custom logic.
 
         Args:
@@ -99,9 +100,11 @@ class CustomComponentFactory(ComponentFactory[MockTarget]):
         Returns:
             MockTarget: Created test target
         """
+        typed_settings = settings
+        assert isinstance(typed_settings, MockComponentSettings)
         return MockTarget(
-            param1=f"custom_{settings.param1}",
-            param2=settings.param2 * 2,
+            param1=f"custom_{typed_settings.param1}",
+            param2=typed_settings.param2 * 2,
             custom_field="added_by_factory",
         )
 
@@ -190,11 +193,13 @@ class TestDefaultComponentFactory:
             sample_build_context: Sample build context fixture
         """
         factory = DefaultComponentFactory()
-        settings = MockComponentSettings(
-            name=MockTarget,
-            param1="filter_test",
-            param2=400,
-            incompatible_param="should_be_filtered",  # Not in MockTarget.__init__
+        settings = MockComponentSettings.model_validate(
+            {
+                "name": MockTarget,
+                "param1": "filter_test",
+                "param2": 400,
+                "incompatible_param": "should_be_filtered",
+            }
         )
 
         result = factory.create(settings, sample_build_context)

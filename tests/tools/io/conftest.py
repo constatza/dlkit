@@ -316,7 +316,7 @@ def mock_class_with_signature() -> type:
 
 
 @pytest.fixture
-def mock_function_with_signature() -> callable:
+def mock_function_with_signature() -> Callable[..., object]:
     """Create a mock function with specific signature for testing.
 
     Returns:
@@ -441,3 +441,6 @@ def npz_empty(tmp_path: Path) -> Path:
     path = tmp_path / "empty.npz"
     np.savez(path)
     return path
+
+
+from collections.abc import Callable

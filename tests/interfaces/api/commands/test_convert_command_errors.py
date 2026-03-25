@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -24,7 +25,7 @@ def test_validate_input_nonexistent_checkpoint() -> None:
     )
 
     with pytest.raises(WorkflowError) as exc_info:
-        command.validate_input(input_data, None)
+        command.validate_input(input_data, cast(Any, None))
 
     assert "Checkpoint file not found" in str(exc_info.value)
     assert exc_info.value.context["command"] == "convert"
@@ -50,7 +51,7 @@ def test_validate_input_directory_as_output_path(
     )
 
     with pytest.raises(WorkflowError) as exc_info:
-        command.validate_input(input_data, None)
+        command.validate_input(input_data, cast(Any, None))
 
     assert "Output path points to a directory" in str(exc_info.value)
     assert exc_info.value.context["command"] == "convert"
@@ -75,7 +76,7 @@ def test_validate_input_invalid_opset_versions(
         )
 
         with pytest.raises(WorkflowError) as exc_info:
-            command.validate_input(input_data, None)
+            command.validate_input(input_data, cast(Any, None))
 
         assert "Unsupported opset version" in str(exc_info.value)
         assert exc_info.value.context["opset"] == invalid_opset
@@ -96,7 +97,7 @@ def test_validate_input_missing_batch_size_with_shape(
     )
 
     with pytest.raises(WorkflowError) as exc_info:
-        command.validate_input(input_data, None)
+        command.validate_input(input_data, cast(Any, None))
 
     assert "provide --batch-size >= 1" in str(exc_info.value)
     assert exc_info.value.context["batch_size"] is None
@@ -117,7 +118,7 @@ def test_validate_input_zero_batch_size_with_shape(
     )
 
     with pytest.raises(WorkflowError) as exc_info:
-        command.validate_input(input_data, None)
+        command.validate_input(input_data, cast(Any, None))
 
     assert "provide --batch-size >= 1" in str(exc_info.value)
     assert exc_info.value.context["batch_size"] == 0
@@ -138,7 +139,7 @@ def test_validate_input_negative_batch_size_with_shape(
     )
 
     with pytest.raises(WorkflowError) as exc_info:
-        command.validate_input(input_data, None)
+        command.validate_input(input_data, cast(Any, None))
 
     assert "provide --batch-size >= 1" in str(exc_info.value)
     assert exc_info.value.context["batch_size"] == -1

@@ -182,17 +182,18 @@ class TransformChain(Transform):
                 ) from e
 
         # Infer transformed shape from one sample after fitting.
-        i: int = 0
+        transform_index = 0
         transform = self.transforms[0] if self.transforms else None
         try:
             sample_out = sample
-            for i, transform in enumerate(self.transforms):
+            for transform in self.transforms:
                 sample_out = transform(sample_out)
+                transform_index += 1
             self.transformed_shape = tuple(sample_out.shape)
             self.fitted = True
         except Exception as e:
             raise TransformChainError(
-                transform_index=i,
+                transform_index=transform_index,
                 transform_name=transform.__class__.__name__,
                 cause=e,
             ) from e

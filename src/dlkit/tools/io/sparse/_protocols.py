@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from ._manifest import PackFiles, PackManifest
 
 
-class SparseFormat(str, Enum):
+class SparseFormat(StrEnum):
     """Supported sparse storage formats."""
 
     COO = "coo"

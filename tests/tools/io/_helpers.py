@@ -144,30 +144,36 @@ def create_config_content_with_urls(
 
     # MLFLOW section
     if any(key.startswith("mlflow") for key in urls):
-        config_lines.extend([
-            "[MLFLOW]",
-            "enabled = true",
-            'experiment_name = "test_experiment"',
-        ])
+        config_lines.extend(
+            [
+                "[MLFLOW]",
+                "enabled = true",
+                'experiment_name = "test_experiment"',
+            ]
+        )
 
         config_lines.append("")
 
     # Custom URL sections
     custom_urls = {k: v for k, v in urls.items() if not k.startswith("mlflow")}
     if custom_urls:
-        config_lines.extend([
-            "[CUSTOM_URLS]",
-        ])
+        config_lines.extend(
+            [
+                "[CUSTOM_URLS]",
+            ]
+        )
         for key, url in custom_urls.items():
             config_lines.append(f'{key} = "{url}"')
         config_lines.append("")
 
     # SESSION section
     if include_regular_paths:
-        config_lines.extend([
-            "[SESSION]",
-            'name = "test_session"',
-        ])
+        config_lines.extend(
+            [
+                "[SESSION]",
+                'name = "test_session"',
+            ]
+        )
 
     return "\n".join(config_lines)
 

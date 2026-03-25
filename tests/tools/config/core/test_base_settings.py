@@ -36,7 +36,9 @@ class TestBasicSettings:
     def test_basic_settings_validation_on_creation(self) -> None:
         """Test BasicSettings validates dataflow on creation."""
         with pytest.raises(ValidationError):
-            MockBasicSettings(name="", value="invalid_int", enabled="not_bool")
+            MockBasicSettings.model_validate(
+                {"name": "", "value": "invalid_int", "enabled": "not_bool"}
+            )
 
     # Removed to_dict_compatible_with tests; factories handle construction explicitly.
 
@@ -79,16 +81,19 @@ class TestComponentSettings:
 
     def test_component_settings_allows_extra_fields(self) -> None:
         """Test ComponentSettings allows extra fields (extra='allow')."""
-        settings = MockComponentSettings(
-            name="TestComponent",
-            module_path="test.module",
-            extra_field="extra_value",
-            another_extra=123,
+        settings = MockComponentSettings.model_validate(
+            {
+                "name": "TestComponent",
+                "module_path": "test.module",
+                "extra_field": "extra_value",
+                "another_extra": 123,
+            }
         )
+        extra = settings.model_extra or {}
 
         assert settings.name == "TestComponent"
-        assert hasattr(settings, "extra_field")
-        assert hasattr(settings, "another_extra")
+        assert extra["extra_field"] == "extra_value"
+        assert extra["another_extra"] == 123
 
     def test_get_init_kwargs_excludes_component_fields(
         self, component_settings_data: dict[str, Any]
@@ -120,7 +125,7 @@ class TestComponentSettings:
         assert "param1" not in kwargs
         assert "param2" in kwargs
 
-    @given(valid_name(), st.text(min_size=1, max_size=50))
+    @given(valid_name(), st.text(min_size=1, max_size=50))  # ty: ignore[missing-argument]
     def test_component_settings_property_valid_names(self, name: str, module_path: str) -> None:
         """Property test: ComponentSettings accepts valid component names.
 

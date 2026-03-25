@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 try:  # MLflow is optional when tracking disabled
-    import mlflow  # type: ignore[import]
+    import mlflow
 except ImportError:  # pragma: no cover - exercised via indirect tests
     mlflow = None  # type: ignore[assignment]
 
@@ -271,12 +271,14 @@ class MLflowStudyRunContext(IStudyRunContext):
         """Log study-level metadata."""
         try:
             # Log study parameters using the run context
-            self._run_context.log_params({
-                "study_name": study.study_name,
-                "optimization_direction": study.direction.value,
-                "target_trials": study.target_trials,
-                "study_id": study.study_id,
-            })
+            self._run_context.log_params(
+                {
+                    "study_name": study.study_name,
+                    "optimization_direction": study.direction.value,
+                    "target_trials": study.target_trials,
+                    "study_id": study.study_id,
+                }
+            )
 
             # Log sampler configuration
             if study.sampler_config:
@@ -289,11 +291,13 @@ class MLflowStudyRunContext(IStudyRunContext):
                     self._run_context.log_params({f"pruner_{key}": value})
 
             # Set study tags using direct MLflow access
-            self._mlflow.set_tags({
-                "optimization_framework": "optuna",
-                "optimization_type": "hyperparameter_optimization",
-                "study_id": study.study_id,
-            })
+            self._mlflow.set_tags(
+                {
+                    "optimization_framework": "optuna",
+                    "optimization_type": "hyperparameter_optimization",
+                    "study_id": study.study_id,
+                }
+            )
 
             logger.debug("Study metadata logged to MLflow")
 
@@ -304,20 +308,22 @@ class MLflowStudyRunContext(IStudyRunContext):
         """Log final study summary."""
         try:
             # Log study-level metrics using run context
-            self._run_context.log_metrics({
-                "total_trials": float(result.total_trials),
-                "successful_trials": float(result.successful_trials),
-                "optimization_duration_seconds": result.total_duration_seconds,
-            })
+            self._run_context.log_metrics(
+                {
+                    "total_trials": float(result.total_trials),
+                    "successful_trials": float(result.successful_trials),
+                    "optimization_duration_seconds": result.total_duration_seconds,
+                }
+            )
 
             # Log best results if available
             if result.best_objective_value is not None:
                 self._run_context.log_metrics({"best_objective_value": result.best_objective_value})
 
             if result.best_trial:
-                self._run_context.log_metrics({
-                    "best_trial_number": float(result.best_trial.trial_number)
-                })
+                self._run_context.log_metrics(
+                    {"best_trial_number": float(result.best_trial.trial_number)}
+                )
 
                 # Log best hyperparameters as parameters
                 for key, value in result.best_hyperparameters.items():
@@ -392,10 +398,12 @@ class MLflowTrialRunContext(ITrialRunContext):
             self._run_context.log_params(hyperparameters)
 
             # Log trial identifier (static, doesn't change during trial)
-            self._run_context.log_params({
-                "trial_id": self._trial.trial_id,
-                "trial_number": self._trial.trial_number,
-            })
+            self._run_context.log_params(
+                {
+                    "trial_id": self._trial.trial_id,
+                    "trial_number": self._trial.trial_number,
+                }
+            )
             # NOTE: trial_state is NOT logged as a parameter because it changes during execution
             # State information should be logged as tags or tracked separately
 
@@ -493,9 +501,9 @@ class MLflowTrialRunContext(ITrialRunContext):
                 self._run_context.log_metrics({"objective_value": self._trial.objective_value})
 
             if self._trial.duration_seconds > 0:
-                self._run_context.log_metrics({
-                    "trial_duration_seconds": self._trial.duration_seconds
-                })
+                self._run_context.log_metrics(
+                    {"trial_duration_seconds": self._trial.duration_seconds}
+                )
 
             logger.debug("Trial {} metrics logged to MLflow", self._trial.trial_number)
 

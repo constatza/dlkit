@@ -12,6 +12,7 @@ build factory, keeping the test focused and independent of configuration loading
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -388,4 +389,4 @@ def test_predict_step_predictions_finite(
     """
     with torch.no_grad():
         result = flow_wrapper.predict_step(raw_x1_batch, 0)
-    assert torch.isfinite(result["predictions"]).all()
+    assert torch.isfinite(cast("Tensor", result["predictions"])).all()

@@ -31,10 +31,12 @@ Examples:
     >>> from torchmetrics import MetricCollection
     >>>
     >>> # Use custom metrics in MetricCollection
-    >>> metrics = MetricCollection({
-    ...     "mse": MeanSquaredError(),
-    ...     "norm_error": NormalizedVectorNormError(norm_ord=2),
-    ... })
+    >>> metrics = MetricCollection(
+    ...     {
+    ...         "mse": MeanSquaredError(),
+    ...         "norm_error": NormalizedVectorNormError(norm_ord=2),
+    ...     }
+    ... )
     >>>
     >>> preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
     >>> target = torch.tensor([[1.1, 1.9], [3.1, 3.9]])

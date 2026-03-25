@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Self, cast
+from typing import Self
 
 from pydantic import Field, FilePath, model_validator, validate_call
 
@@ -136,7 +136,7 @@ class GeneralSettings(BasicSettings):
         try:
             config = load_config(filepath, cls)
             if isinstance(config, cls):
-                return cast(Self, config)
+                return config
             # Handle dict case
             return cls.model_validate(config)
 

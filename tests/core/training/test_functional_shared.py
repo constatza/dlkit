@@ -228,10 +228,12 @@ class TestCorrectness:
         """Sparse per-sample (B, D, D) relative energy loss should match dense."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_batch = torch.tensor([
-            [[2.0, 0.0], [0.0, 1.0]],
-            [[3.0, 0.2], [0.2, 2.0]],
-        ])
+        dense_batch = torch.tensor(
+            [
+                [[2.0, 0.0], [0.0, 1.0]],
+                [[3.0, 0.2], [0.2, 2.0]],
+            ]
+        )
         sparse_batch = dense_batch.to_sparse_coo()
 
         dense = relative_energy_norm_loss(preds, target, dense_batch, eps=1e-8)
@@ -271,7 +273,11 @@ class TestEdgeCases:
         target = torch.tensor([1.1, 2.1, 3.1])
 
         with pytest.raises(ValueError, match="Invalid normalization"):
-            normalized_mse(preds, target, normalization="invalid")
+            normalized_mse(
+                preds,
+                target,
+                normalization="invalid",  # ty: ignore[invalid-argument-type]
+            )
 
     def test_normalized_vector_norm_with_zero_target(self, vector_tensors):
         """Test normalized vector norm handles zero targets with eps."""
@@ -327,4 +333,5 @@ class TestIntegration:
         loss = huber_loss(preds, target)
         loss.backward()
 
+        assert preds.grad is not None
         assert preds.grad.shape == preds.shape

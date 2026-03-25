@@ -48,14 +48,18 @@ def simple_2d_vectors():
 @pytest.fixture
 def temporal_sequence_3d():
     """Temporal sequence with shape (B=2, T=4, D=2)."""
-    preds = torch.tensor([
-        [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
-        [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
-    ])
-    target = torch.tensor([
-        [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
-        [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
-    ])
+    preds = torch.tensor(
+        [
+            [[0.0, 0.0], [1.0, 0.5], [2.5, 1.5], [4.0, 2.0]],
+            [[0.0, 1.0], [1.5, 2.0], [3.0, 3.5], [4.5, 5.0]],
+        ]
+    )
+    target = torch.tensor(
+        [
+            [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
+            [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
+        ]
+    )
     return preds, target
 
 
@@ -321,10 +325,12 @@ class TestMetricCollectionIntegration:
         preds, target = simple_2d_vectors
 
         # Create collection with multiple metrics
-        metrics = MetricCollection({
-            "norm_l1": NormalizedVectorNormError(norm_ord=1),
-            "norm_l2": NormalizedVectorNormError(norm_ord=2),
-        })
+        metrics = MetricCollection(
+            {
+                "norm_l1": NormalizedVectorNormError(norm_ord=1),
+                "norm_l2": NormalizedVectorNormError(norm_ord=2),
+            }
+        )
 
         _metric_update(metrics, preds, target)
         results = cast(Any, metrics).compute()
@@ -339,10 +345,12 @@ class TestMetricCollectionIntegration:
         """Test temporal metric in MetricCollection."""
         preds, target = temporal_sequence_3d
 
-        metrics = MetricCollection({
-            "velocity_error": TemporalDerivativeError(n=1, derivative_dim=1),
-            "accel_error": TemporalDerivativeError(n=2, derivative_dim=1),
-        })
+        metrics = MetricCollection(
+            {
+                "velocity_error": TemporalDerivativeError(n=1, derivative_dim=1),
+                "accel_error": TemporalDerivativeError(n=2, derivative_dim=1),
+            }
+        )
 
         _metric_update(metrics, preds, target)
         results = cast(Any, metrics).compute()
@@ -360,10 +368,12 @@ class TestMetricCollectionIntegration:
         target_2d = torch.tensor([[1.1, 1.9], [3.1, 3.9]])
 
         # Mix standard torchmetrics with custom
-        metrics = MetricCollection({
-            "mse": MeanSquaredError(),
-            "norm_error": NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
-        })
+        metrics = MetricCollection(
+            {
+                "mse": MeanSquaredError(),
+                "norm_error": NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
+            }
+        )
 
         _metric_update(metrics, preds_2d, target_2d)
         results = cast(Any, metrics).compute()

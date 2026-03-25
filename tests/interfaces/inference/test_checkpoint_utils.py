@@ -77,5 +77,5 @@ class TestExtractStateDict:
     def test_extract_non_dict_checkpoint(self):
         """Test handling non-dict checkpoint."""
         checkpoint = "not_a_dict"
-        result = extract_state_dict(checkpoint)
+        result = extract_state_dict(checkpoint)  # ty: ignore[invalid-argument-type]
         assert result == "not_a_dict"

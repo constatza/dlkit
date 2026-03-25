@@ -71,7 +71,7 @@ def apply_transforms(
         ...     (scaler, None),  # Scale features, keep targets
         ... )
     """
-    return tuple(t(x) if t is not None else x for x, t in zip(tensors, transforms))
+    return tuple(t(x) if t is not None else x for x, t in zip(tensors, transforms, strict=True))
 
 
 def apply_chain(x: Tensor, chain: torch.nn.Module) -> Tensor:

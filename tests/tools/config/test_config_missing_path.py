@@ -102,6 +102,6 @@ def test_factory_function_both_path_and_value_raises():
     arr = np.ones((10, 5))
 
     with pytest.raises(ValueError) as exc_info:
-        Feature(name="test", path="test.npy", value=arr)
+        Feature(name="test", path="test.npy", value=arr)  # ty: ignore[no-matching-overload]
 
     assert "cannot have both 'path' and 'value'" in str(exc_info.value)

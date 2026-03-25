@@ -14,6 +14,7 @@ import shutil
 import socket
 import unittest.mock
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from _pytest.tmpdir import TempPathFactory
@@ -130,7 +131,7 @@ def config_file(env: dict, with_root: bool) -> Path:
 def settings(env: dict, config_file: Path, loader_kind: str):
     if loader_kind == "io":
         return load_config(config_file)
-    return GeneralSettings.from_file(config_file)
+    return GeneralSettings.from_toml_file(config_file)
 
 
 @pytest.fixture
@@ -187,7 +188,7 @@ def pytest_configure(config):
     mlruns_session_dir.mkdir(parents=True, exist_ok=True)
     os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:///{(mlruns_session_dir / 'mlflow.db').as_posix()}"
 
-    pathlib.Path.home = classmethod(lambda cls, _home=home_dir: _home)
+    setattr(pathlib.Path, "home", classmethod(lambda cls, _home=home_dir: _home))  # noqa: B010
     global_environment.root_dir = str(root_dir)
 
     _TEST_SESSION_ROOT = session_root
@@ -218,7 +219,7 @@ def pytest_unconfigure(config):
     if _ORIGINAL_MLFLOW_TRACKING_URI is not None:
         os.environ["MLFLOW_TRACKING_URI"] = _ORIGINAL_MLFLOW_TRACKING_URI
 
-    pathlib.Path.home = _ORIGINAL_PATH_HOME
+    setattr(pathlib.Path, "home", _ORIGINAL_PATH_HOME)  # noqa: B010
 
     global _TEST_SESSION_ROOT, _TEST_HOME_DIR, _TEST_ARTIFACTS_DIR
     _TEST_SESSION_ROOT = None
@@ -290,7 +291,7 @@ def _fake_socket_when_restricted():
             return _real(family, type, proto)
         return _FakeSocket(family, type, proto)
 
-    socket.socket = _factory
+    setattr(socket, "socket", cast(Any, _factory))  # noqa: B010
 
 
 @pytest.fixture(autouse=True, scope="session")

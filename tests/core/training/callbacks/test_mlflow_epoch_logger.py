@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
+from unittest.mock import Mock
 
 import pytest
+from lightning.pytorch import LightningModule
 
 from dlkit.core.training.callbacks import MLflowEpochLogger
 
@@ -54,6 +57,7 @@ def _build_trainer(epoch: int, metrics: dict[str, FakeTensor], sanity_checking: 
 
 def test_validation_metrics_logged_per_epoch(run_context: RecordingRunContext) -> None:
     logger = MLflowEpochLogger(run_context)
+    pl_module = cast("LightningModule", Mock(spec=LightningModule))
 
     trainer = _build_trainer(
         epoch=2,
@@ -65,7 +69,7 @@ def test_validation_metrics_logged_per_epoch(run_context: RecordingRunContext) -
         },
     )
 
-    logger.on_validation_epoch_end(trainer, pl_module=None)
+    logger.on_validation_epoch_end(trainer, pl_module=pl_module)
 
     assert len(run_context.logged) == 1
     metrics, step = run_context.logged[0]
@@ -81,6 +85,7 @@ def test_validation_metrics_logged_per_epoch(run_context: RecordingRunContext) -
 
 def test_test_metrics_logged_once(run_context: RecordingRunContext) -> None:
     logger = MLflowEpochLogger(run_context)
+    pl_module = cast("LightningModule", Mock(spec=LightningModule))
 
     trainer = _build_trainer(
         epoch=5,
@@ -92,7 +97,7 @@ def test_test_metrics_logged_once(run_context: RecordingRunContext) -> None:
         },
     )
 
-    logger.on_test_end(trainer, pl_module=None)
+    logger.on_test_end(trainer, pl_module=pl_module)
 
     assert len(run_context.logged) == 1
     metrics, step = run_context.logged[0]
@@ -108,6 +113,7 @@ def test_test_metrics_logged_once(run_context: RecordingRunContext) -> None:
 
 def test_sanity_checking_skips_logging(run_context: RecordingRunContext) -> None:
     logger = MLflowEpochLogger(run_context)
+    pl_module = cast("LightningModule", Mock(spec=LightningModule))
 
     trainer = _build_trainer(
         epoch=0,
@@ -115,6 +121,6 @@ def test_sanity_checking_skips_logging(run_context: RecordingRunContext) -> None
         sanity_checking=True,
     )
 
-    logger.on_validation_epoch_end(trainer, pl_module=None)
+    logger.on_validation_epoch_end(trainer, pl_module=pl_module)
 
     assert run_context.logged == []

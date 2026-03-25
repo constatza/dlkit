@@ -88,10 +88,12 @@ class TestFullSystemIntegration:
                 }
 
         dataset = TinyDataset()
-        model_settings = ModelComponentSettings(
-            name="LinearNetwork",
-            module_path="dlkit.core.models.nn.ffnn.linear",
-            class_path="dlkit.core.models.nn.ffnn.linear.LinearNetwork",
+        model_settings = ModelComponentSettings.model_validate(
+            {
+                "name": "LinearNetwork",
+                "module_path": "dlkit.core.models.nn.ffnn.linear",
+                "class_path": "dlkit.core.models.nn.ffnn.linear.LinearNetwork",
+            }
         )
 
         inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)
@@ -345,7 +347,9 @@ class TestRealWorldScenarios:
         assert result.is_valid
 
         assert shape_spec.model_family() == ModelFamily.TIMESERIES.value
-        assert len(shape_spec.get_shape("x")) == 3  # Multi-dimensional for time series
+        x_shape = shape_spec.get_shape("x")
+        assert x_shape is not None
+        assert len(x_shape) == 3  # Multi-dimensional for time series
 
 
 # Removed: test_model_family_detection_uses_module_path
