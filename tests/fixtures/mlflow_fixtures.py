@@ -1,21 +1,22 @@
 """Pytest fixtures for MLflow resource management and test isolation."""
 
 import os
-import mlflow
-import pytest
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import Mock
 
+import mlflow
+import pytest
+
+from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import MLflowClientFactory
 from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import MLflowClientFactory
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 
 
 @pytest.fixture(autouse=True)
-def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None, None, None]:
+def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None]:
     """Automatically isolate MLflow global state between tests.
 
     This fixture runs before and after each test to ensure clean state.
@@ -90,7 +91,9 @@ def mlflow_test_settings():
 
 
 @pytest.fixture
-def mlflow_resource_manager(mlflow_test_settings, tmp_path: Path) -> Generator[MLflowResourceManager, None, None]:
+def mlflow_resource_manager(
+    mlflow_test_settings, tmp_path: Path
+) -> Generator[MLflowResourceManager]:
     """Provide a properly managed MLflow resource manager for testing.
 
     This fixture ensures proper setup and cleanup of MLflow resources.
@@ -141,11 +144,13 @@ def isolated_mlflow_tracker():
         except Exception:
             pass
 
+
 @pytest.fixture
 def process_leak_detector():
     """Detect and report process leaks during tests."""
-    import psutil
     import os
+
+    import psutil
 
     # Get initial process count
     initial_processes = set()
@@ -203,4 +208,4 @@ def thread_leak_detector():
 @pytest.fixture
 def resource_leak_detection(process_leak_detector, thread_leak_detector):
     """Combined resource leak detection for comprehensive monitoring."""
-    yield
+    return

@@ -16,16 +16,16 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from .functional import (
-    _normalized_vector_norm_update,
-    _normalized_vector_norm_compute,
-    _absolute_vector_norm_update,
     _absolute_vector_norm_compute,
-    _energy_norm_update,
+    _absolute_vector_norm_update,
     _energy_norm_compute,
-    _relative_energy_norm_update,
+    _energy_norm_update,
+    _normalized_vector_norm_compute,
+    _normalized_vector_norm_update,
     _relative_energy_norm_compute,
-    _temporal_derivative_update,
+    _relative_energy_norm_update,
     _temporal_derivative_compute,
+    _temporal_derivative_update,
 )
 
 
@@ -373,9 +373,9 @@ class RelativeEnergyNormError(Metric):
 
 
 __all__ = [
-    "NormalizedVectorNormError",
-    "TemporalDerivativeError",
     "AbsoluteVectorNormError",
     "EnergyNormError",
+    "NormalizedVectorNormError",
     "RelativeEnergyNormError",
+    "TemporalDerivativeError",
 ]

@@ -109,10 +109,7 @@ print(f"Best checkpoint: {result.checkpoint_path}")
 print(f"Metrics: {result.metrics}")
 
 # Resume from checkpoint
-result = service.execute_training(
-    settings,
-    checkpoint_path=result.checkpoint_path
-)
+result = service.execute_training(settings, checkpoint_path=result.checkpoint_path)
 ```
 
 **Implementation Notes**:
@@ -158,10 +155,7 @@ from pathlib import Path
 service = InferenceService()
 
 # Execute inference
-result = service.execute_inference(
-    settings,
-    checkpoint_path=Path("./checkpoints/best.ckpt")
-)
+result = service.execute_inference(settings, checkpoint_path=Path("./checkpoints/best.ckpt"))
 
 # Access predictions
 predictions = result.predictions
@@ -212,10 +206,7 @@ from dlkit.interfaces.api.services import OptimizationService
 service = OptimizationService()
 
 # Execute optimization
-result = service.execute_optimization(
-    settings,
-    trials=50
-)
+result = service.execute_optimization(settings, trials=50)
 
 # Access results
 print(f"Best trial: {result.best_trial}")
@@ -291,11 +282,7 @@ from dlkit.interfaces.api.services import ExecutionService
 service = ExecutionService()
 
 # Automatic workflow detection and execution
-result = service.execute(
-    settings,
-    mlflow=True,
-    epochs=50
-)
+result = service.execute(settings, mlflow=True, epochs=50)
 
 # Service automatically routes to:
 # - InferenceService if settings.SESSION.inference=True
@@ -483,11 +470,7 @@ from dlkit.interfaces.api.services import ExecutionService
 service = ExecutionService()
 
 # Automatically routes based on settings
-result = service.execute(
-    settings,
-    mlflow=True,
-    epochs=50
-)
+result = service.execute(settings, mlflow=True, epochs=50)
 
 # Result type determined by configuration
 # - TrainingResult if normal training

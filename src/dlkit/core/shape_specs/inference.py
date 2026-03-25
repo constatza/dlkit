@@ -8,13 +8,14 @@ and extensible shape inference from multiple sources.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from contextlib import suppress
-from typing import Any, Dict, List, Optional, cast
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
 
-from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
 from .core import IShapeSpec, create_shape_spec
+from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
+
 # Avoid circular import - factory imported at runtime where needed
 
 
@@ -27,10 +28,10 @@ class InferenceContext:
     """
 
     dataset: Any = None
-    checkpoint_path: Optional[Path] = None
+    checkpoint_path: Path | None = None
     model_settings: Any = None
-    entry_configs: Optional[Dict[str, Any]] = None
-    model_family: Optional[ModelFamily] = None
+    entry_configs: dict[str, Any] | None = None
+    model_family: ModelFamily | None = None
     shape_factory: Any = None  # ShapeSystemFactory - avoid circular import
 
     def __post_init__(self):
@@ -61,7 +62,7 @@ class ShapeInferenceStrategy(ABC):
         ...
 
     @abstractmethod
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Infer shape data from the context.
 
         Args:
@@ -110,7 +111,7 @@ class CheckpointMetadataStrategy(ShapeInferenceStrategy):
             and context.checkpoint_path.is_file()
         )
 
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Extract shapes from enhanced checkpoint metadata.
 
         Args:
@@ -142,7 +143,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
     @staticmethod
     def _pyg_types() -> tuple[type | None, type | None]:
         try:
-            from torch_geometric.data import Data, Batch  # type: ignore
+            from torch_geometric.data import Batch, Data
         except Exception:  # pragma: no cover - PyG optional at import time
             return (None, None)
         return (Data, Batch)
@@ -154,7 +155,7 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
         sample = self._safe_sample(context.dataset)
         return self._is_graph_sample(sample)
 
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Infer graph-centric shapes using PyG metadata."""
         sample = self._safe_sample(context.dataset)
         graph = self._extract_graph_sample(sample)
@@ -215,8 +216,8 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
                     return graph
         return None
 
-    def _collect_graph_shapes(self, graph: Any) -> Dict[str, tuple[int, ...]]:
-        shapes: Dict[str, tuple[int, ...]] = {}
+    def _collect_graph_shapes(self, graph: Any) -> dict[str, tuple[int, ...]]:
+        shapes: dict[str, tuple[int, ...]] = {}
 
         x = getattr(graph, "x", None)
         if x is not None and hasattr(x, "shape") and x.shape:
@@ -264,7 +265,7 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
         """
         return context.dataset is not None
 
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Infer shapes by sampling dataset.
 
         Args:
@@ -303,7 +304,7 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
         except Exception:
             return None
 
-    def _sample_dataset_shapes(self, dataset: Any) -> Dict[str, tuple[int, ...]] | None:
+    def _sample_dataset_shapes(self, dataset: Any) -> dict[str, tuple[int, ...]] | None:
         """Sample dataset to extract shape information."""
         from torch import Tensor
 
@@ -312,7 +313,7 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
         except Exception:
             return None
 
-        shapes: Dict[str, tuple[int, ...]] = {}
+        shapes: dict[str, tuple[int, ...]] = {}
 
         with suppress(ImportError):
             from tensordict import TensorDictBase
@@ -346,8 +347,8 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
         return shapes if shapes else None
 
     def _enhance_with_entry_configs(
-        self, shapes: Dict[str, tuple[int, ...]], entry_configs: Dict[str, Any]
-    ) -> Dict[str, tuple[int, ...]]:
+        self, shapes: dict[str, tuple[int, ...]], entry_configs: dict[str, Any]
+    ) -> dict[str, tuple[int, ...]]:
         """Enhance shapes with information from entry configurations."""
         enhanced = dict(shapes)
 
@@ -394,7 +395,7 @@ class ConfigurationStrategy(ShapeInferenceStrategy):
         """
         return context.model_settings is not None
 
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Infer shapes from model configuration.
 
         Args:
@@ -458,7 +459,7 @@ class DefaultFallbackStrategy(ShapeInferenceStrategy):
         """
         return True
 
-    def infer_shapes(self, context: InferenceContext) -> Optional[ShapeData]:
+    def infer_shapes(self, context: InferenceContext) -> ShapeData | None:
         """Provide default shapes as final fallback.
 
         Args:
@@ -503,7 +504,7 @@ class ShapeInferenceChain:
     providing robust shape inference with graceful fallbacks.
     """
 
-    def __init__(self, strategies: Optional[List[ShapeInferenceStrategy]] = None):
+    def __init__(self, strategies: list[ShapeInferenceStrategy] | None = None):
         """Initialize inference chain with strategies.
 
         Args:
@@ -550,7 +551,7 @@ class ShapeInferenceChain:
         # This should not happen if DefaultFallbackStrategy is included
         raise ValueError("All shape inference strategies failed")
 
-    def get_strategies(self) -> List[ShapeInferenceStrategy]:
+    def get_strategies(self) -> list[ShapeInferenceStrategy]:
         """Get list of all strategies in priority order.
 
         Returns:
@@ -568,7 +569,7 @@ class ShapeInferenceChain:
         # Re-sort by priority
         self._strategies.sort(key=lambda s: s.get_priority())
 
-    def _create_default_strategies(self) -> List[ShapeInferenceStrategy]:
+    def _create_default_strategies(self) -> list[ShapeInferenceStrategy]:
         """Create default strategy list.
 
         Returns:
@@ -592,8 +593,8 @@ class ShapeInferenceEngine:
 
     def __init__(
         self,
-        inference_chain: Optional[ShapeInferenceChain] = None,
-        shape_factory: Optional[Any] = None,
+        inference_chain: ShapeInferenceChain | None = None,
+        shape_factory: Any | None = None,
     ):  # ShapeSystemFactory - avoid circular import
         """Initialize inference engine.
 
@@ -632,7 +633,7 @@ class ShapeInferenceEngine:
         self,
         dataset: Any,
         model_settings: Any = None,
-        entry_configs: Optional[Dict[str, Any]] = None,
+        entry_configs: dict[str, Any] | None = None,
     ) -> IShapeSpec:
         """Infer shapes from dataset.
 
@@ -666,10 +667,10 @@ class ShapeInferenceEngine:
 
     def infer_comprehensive(
         self,
-        checkpoint_path: Optional[Path] = None,
+        checkpoint_path: Path | None = None,
         dataset: Any = None,
         model_settings: Any = None,
-        entry_configs: Optional[Dict[str, Any]] = None,
+        entry_configs: dict[str, Any] | None = None,
     ) -> IShapeSpec:
         """Comprehensive shape inference using all available sources.
 

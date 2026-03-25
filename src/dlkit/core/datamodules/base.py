@@ -1,13 +1,13 @@
-from typing import Any, Union, TYPE_CHECKING
 from abc import ABC, abstractmethod
-from torch.utils.data import DataLoader
+from typing import Any
+
 from lightning.pytorch import LightningDataModule
-from dlkit.core.datatypes.split import IndexSplit
+from torch.utils.data import DataLoader
+
 from dlkit.core.datasets.base import BaseDataset
 from dlkit.core.datatypes.dataset import SplitDataset
-
-if TYPE_CHECKING:
-    from dlkit.tools.config.dataloader_settings import DataloaderSettings
+from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.config.dataloader_settings import DataloaderSettings
 
 
 class BaseDataModule(ABC, LightningDataModule):
@@ -15,7 +15,7 @@ class BaseDataModule(ABC, LightningDataModule):
 
     dataset: BaseDataset
     index_split: IndexSplit
-    dataloader_settings: Union[dict[str, Any], "DataloaderSettings"]
+    dataloader_settings: dict[str, Any] | DataloaderSettings
     split_dataset: SplitDataset
     fitted: bool
 
@@ -23,7 +23,7 @@ class BaseDataModule(ABC, LightningDataModule):
         self,
         dataset: BaseDataset,
         split: IndexSplit,
-        dataloader: Union[dict[str, Any], "DataloaderSettings"],
+        dataloader: dict[str, Any] | DataloaderSettings,
     ) -> None:
         """Store dataset, split indices, and loader settings."""
         super().__init__()
@@ -43,18 +43,17 @@ class BaseDataModule(ABC, LightningDataModule):
         Returns:
             dict[str, Any]: Compatible kwargs for the loader class
         """
-        if hasattr(self.dataloader_settings, "to_dict"):
-            # Use strict dict serialization (no signature filtering)
-            kwargs = self.dataloader_settings.to_dict()  # type: ignore[attr-defined]
+        if isinstance(self.dataloader_settings, DataloaderSettings):
+            kwargs = self.dataloader_settings.to_dict()
         else:
-            # Plain dict
-            kwargs = dict(self.dataloader_settings)  # type: ignore[arg-type]
+            kwargs = dict(self.dataloader_settings)
 
         kwargs.update(overrides)
         # Safety: persistent_workers requires num_workers > 0
         try:
-            num_workers = int(kwargs.get("num_workers", 0))
-            if num_workers <= 0 and kwargs.get("persistent_workers", None):
+            _nw = kwargs.get("num_workers", 0)
+            num_workers = int(_nw) if isinstance(_nw, (int, str, float)) else 0
+            if num_workers <= 0 and kwargs.get("persistent_workers"):
                 kwargs["persistent_workers"] = False
         except Exception:
             kwargs.pop("persistent_workers", None)

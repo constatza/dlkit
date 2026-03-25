@@ -8,17 +8,17 @@ from loguru import logger
 from dlkit.tools.utils.logging_config import (
     configure_logging,
     get_effective_log_level,
-    suppress_third_party_loggers,
     should_enable_progress_bar,
+    suppress_third_party_loggers,
 )
 
 
-def test_get_effective_log_level_reads_env(monkeypatch) -> None:  # noqa: ANN001
+def test_get_effective_log_level_reads_env(monkeypatch) -> None:
     monkeypatch.setenv("DLKIT_LOG_LEVEL", "warning")
     assert get_effective_log_level(level=None, debug_enabled=False) == "WARNING"
 
 
-def test_cli_debug_override_forces_debug(monkeypatch) -> None:  # noqa: ANN001
+def test_cli_debug_override_forces_debug(monkeypatch) -> None:
     monkeypatch.setenv("DLKIT_LOG_LEVEL", "ERROR")
     assert get_effective_log_level(level=None, debug_enabled=True) == "DEBUG"
 
@@ -33,7 +33,7 @@ def test_should_enable_progress_bar_depends_on_effective_level() -> None:
 def test_configure_logging_uses_env_log_file_and_effective_level(
     monkeypatch,
     tmp_path: Path,
-) -> None:  # noqa: ANN001
+) -> None:
     log_file = tmp_path / "dlkit-info.log"
     monkeypatch.setenv("DLKIT_LOG_LEVEL", "INFO")
     monkeypatch.setenv("DLKIT_LOG_FILE", str(log_file))
@@ -52,7 +52,7 @@ def test_configure_logging_uses_env_log_file_and_effective_level(
 def test_configure_logging_does_not_render_bound_extra_fields(
     monkeypatch,
     tmp_path: Path,
-) -> None:  # noqa: ANN001
+) -> None:
     log_file = tmp_path / "dlkit-clean.log"
     monkeypatch.setenv("DLKIT_LOG_LEVEL", "INFO")
     monkeypatch.setenv("DLKIT_LOG_FILE", str(log_file))
@@ -71,7 +71,7 @@ def test_configure_logging_does_not_render_bound_extra_fields(
 def test_configure_logging_cli_level_overrides_env_for_file_sink(
     monkeypatch,
     tmp_path: Path,
-) -> None:  # noqa: ANN001
+) -> None:
     log_file = tmp_path / "dlkit-warning.log"
     monkeypatch.setenv("DLKIT_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("DLKIT_LOG_FILE", str(log_file))

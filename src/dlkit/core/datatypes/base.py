@@ -2,7 +2,6 @@ from typing import Annotated
 
 from pydantic.functional_validators import AfterValidator
 
-
 type IntHyperparameter = int | dict[str, int] | dict[str, tuple[int, ...]]
 type FloatHyperparameter = float | dict[str, float | int] | dict[str, tuple[float, ...]]
 type StrHyperparameter = str | dict[str, str] | dict[str, tuple[str, ...]]

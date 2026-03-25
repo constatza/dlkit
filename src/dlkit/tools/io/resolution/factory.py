@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .registry import ResolverRegistry
 from .context import ResolverContext
+from .registry import ResolverRegistry
 
 
 def create_resolver_registry() -> ResolverRegistry:

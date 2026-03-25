@@ -1,4 +1,5 @@
 # High-level config loading API (re-exported from tools.config)
+from dlkit.tools.config.data_entries import SparseFeature
 from dlkit.tools.config.factories import load_sections, load_settings
 
 from . import locations  # centralized path policy
@@ -18,8 +19,6 @@ from .config import (
     write_config,
 )
 from .index import load_split_indices
-from dlkit.tools.config.data_entries import SparseFeature
-
 from .sparse import (
     PackFiles,
     PackManifest,
@@ -70,4 +69,6 @@ __all__ = [
     "JsonWriter",
     "YamlWriter",
     "WriterFactory",
+    "load_section_config",
+    "load_sections_config",
 ]

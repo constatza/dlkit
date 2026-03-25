@@ -14,7 +14,7 @@ import pytest
 import torch
 
 from dlkit.core.datasets.flexible import BatchComplianceError, FlexibleDataset
-from dlkit.interfaces.api.domain.precision import precision_override, PrecisionStrategy
+from dlkit.interfaces.api.domain.precision import PrecisionStrategy, precision_override
 from dlkit.tools.config.data_entries import Feature, Target
 
 

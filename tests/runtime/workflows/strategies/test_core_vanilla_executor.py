@@ -6,12 +6,12 @@ from dataclasses import dataclass
 
 import pytest
 
-from dlkit.interfaces.api.domain import WorkflowError, TrainingResult
-from dlkit.runtime.workflows.strategies.core import VanillaExecutor
+from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.runtime.workflows.strategies.core import VanillaExecutor
 from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.training_settings import TrainingSettings
 from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.config.training_settings import TrainingSettings
 
 
 @pytest.fixture

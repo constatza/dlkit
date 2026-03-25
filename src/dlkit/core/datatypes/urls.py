@@ -16,17 +16,14 @@ import os
 import re
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BeforeValidator, TypeAdapter
-from pydantic import UrlConstraints
-from pydantic_core import Url
-from pydantic_core import core_schema
+from pydantic import AfterValidator, BeforeValidator, TypeAdapter, UrlConstraints
+from pydantic_core import Url, core_schema
 
 from dlkit.core.datatypes.tilde_expansion import (
     _expand_tilde_in_path,
     _expand_tilde_in_url,
     _home,
 )
-
 
 # ------------------------------
 # Tilde expansion and path checks
@@ -35,7 +32,6 @@ from dlkit.core.datatypes.tilde_expansion import (
 
 def tilde_expand_strict(value: Any) -> Any:
     """Expand tildes using the shared tilde expansion utilities."""
-
     if isinstance(value, os.PathLike):
         value = os.fspath(value)
 
@@ -52,7 +48,6 @@ def tilde_expand_strict(value: Any) -> Any:
 
 def local_path_security_check(value: Any) -> Any:
     """Normalize local paths while accepting os.PathLike inputs."""
-
     if value is None:
         return value
 

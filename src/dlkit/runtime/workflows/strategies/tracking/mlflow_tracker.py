@@ -1,21 +1,24 @@
 """MLflow adapter implementing tracking abstractions."""
 
-from contextlib import contextmanager, ExitStack, AbstractContextManager
+from collections.abc import Callable
+from contextlib import AbstractContextManager, ExitStack
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 from dlkit.interfaces.api.overrides.path_context import (
     get_current_path_context,
     path_override_context,
 )
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 
-from .backend import TrackingBackend, LocalSqliteBackend, select_backend
-from .interfaces import IExperimentTracker, IRunContext
+from .backend import LocalSqliteBackend, TrackingBackend, select_backend
 from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
+from .interfaces import IExperimentTracker, IRunContext
 from .mlflow_resource_manager import MLflowResourceManager
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -71,7 +74,7 @@ class MLflowTracker(IExperimentTracker):
         self._backend: TrackingBackend | None = None
         self._root_dir: Path | None = None
 
-    def __enter__(self) -> "MLflowTracker":
+    def __enter__(self) -> MLflowTracker:
         """Context manager entry - initializes MLflow resources using ExitStack.
 
         Creates and enters the MLflowResourceManager which handles client
@@ -118,7 +121,9 @@ class MLflowTracker(IExperimentTracker):
                 self._backend = None
                 raise
         else:
-            logger.debug("Skipping resource initialization - no config provided or autostart disabled")
+            logger.debug(
+                "Skipping resource initialization - no config provided or autostart disabled"
+            )
 
         return self
 
@@ -144,7 +149,6 @@ class MLflowTracker(IExperimentTracker):
         self._mlflow_config = None
         logger.debug("MLflowTracker.__exit__ completed")
 
-    @contextmanager
     def create_run(
         self,
         experiment_name: str | None = None,
@@ -160,8 +164,8 @@ class MLflowTracker(IExperimentTracker):
             nested: If True, creates a child run under the currently active parent run.
             tags: Optional tags to attach to the run.
 
-        Yields:
-            IRunContext: Run context for logging metrics, params, and artifacts.
+        Returns:
+            AbstractContextManager[IRunContext]: Context manager yielding active run context.
 
         Raises:
             RuntimeError: If MLflow not configured (configure not called).
@@ -171,13 +175,12 @@ class MLflowTracker(IExperimentTracker):
 
         exp_name = experiment_name or MLFLOW_DEFAULT_EXPERIMENT
 
-        with self._resource_manager.create_run(
+        return self._resource_manager.create_run(
             experiment_name=exp_name,
             run_name=run_name,
             nested=nested,
             tags=tags,
-        ) as run_context:
-            yield run_context
+        )
 
     def get_tracking_uri(self) -> str | None:
         """Return the resolved tracking URI, or None if not initialized.
@@ -211,7 +214,7 @@ class MLflowTracker(IExperimentTracker):
         self._root_dir = self._determine_root_dir(root_dir)
         logger.debug("MLflow config stored - will initialize in context entry")
 
-    def log_settings(self, settings: GeneralSettings, run_context: IRunContext) -> None:
+    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
         """Save complete configuration settings as MLflow TOML artifact.
 
         Args:
@@ -234,7 +237,7 @@ class MLflowTracker(IExperimentTracker):
             raise RuntimeError("Couldn't log settings") from e
 
     def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: GeneralSettings
+        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
         """Log model hyperparameters extracted from settings.MODEL.
 
@@ -262,7 +265,7 @@ class MLflowTracker(IExperimentTracker):
             raise RuntimeError("Couldn't log settings") from e
 
     def log_dataset_to_run(
-        self, datamodule: Any, run_context: IRunContext, settings: GeneralSettings
+        self, datamodule: Any, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
         """Log dataset lineage to MLflow with structured and artifact fallbacks."""
         dataset = getattr(datamodule, "dataset", None)
@@ -285,7 +288,7 @@ class MLflowTracker(IExperimentTracker):
         self,
         dataset: Any,
         run_context: IRunContext,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         tags: dict[str, str],
         sources: list[str],
     ) -> bool:
@@ -313,13 +316,13 @@ class MLflowTracker(IExperimentTracker):
         )
         return False
 
-    def _resolve_dataset_name(self, settings: GeneralSettings) -> str:
+    def _resolve_dataset_name(self, settings: _WorkflowSettings) -> str:
         configured_name = getattr(settings.DATASET, "name", None) if settings.DATASET else None
         if configured_name:
             return str(configured_name)
         return "training_data"
 
-    def _build_dataset_tags(self, settings: GeneralSettings, dataset: Any) -> dict[str, str]:
+    def _build_dataset_tags(self, settings: _WorkflowSettings, dataset: Any) -> dict[str, str]:
         tags: dict[str, str] = {}
         if settings.DATASET:
             try:
@@ -336,22 +339,22 @@ class MLflowTracker(IExperimentTracker):
         tags["dataset_class"] = type(dataset).__name__ if dataset is not None else "None"
         return tags
 
-    def _collect_dataset_sources(self, settings: GeneralSettings, dataset: Any) -> list[str]:
+    def _collect_dataset_sources(self, settings: _WorkflowSettings, dataset: Any) -> list[str]:
         del dataset
         return DatasetSourceCollector().collect(settings)
 
     def _log_dataset_manifest_artifact(
         self,
         run_context: IRunContext,
-        settings: GeneralSettings,
+        settings: _WorkflowSettings,
         dataset: Any,
         sources: list[str],
         tags: dict[str, str],
         structured_logged: bool,
     ) -> None:
         try:
-            import json
             import hashlib
+            import json
 
             fingerprint_payload = json.dumps(sorted(sources), separators=(",", ":"))
             fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()

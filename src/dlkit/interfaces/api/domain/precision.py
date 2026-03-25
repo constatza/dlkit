@@ -7,9 +7,9 @@ protocols, context management, and domain interfaces.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Protocol
-from collections.abc import Iterator
 
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
@@ -91,7 +91,7 @@ class PrecisionContext:
     def clear_override(self) -> None:
         """Clear precision override for current thread."""
         if hasattr(self._local, "override"):
-            delattr(self._local, "override")
+            del self._local.override
 
     @contextmanager
     def precision_override(self, precision: PrecisionStrategy) -> Iterator[None]:

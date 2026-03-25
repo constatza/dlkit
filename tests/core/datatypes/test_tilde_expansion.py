@@ -11,16 +11,16 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from dlkit.core.datatypes.tilde_expansion import (
-    expand_tilde_in_value,
+    _expand_tilde_in_path,
     _expand_tilde_in_string,
     _expand_tilde_in_url,
-    _expand_tilde_in_path,
     create_tilde_expanding_validator,
+    expand_tilde_in_value,
 )
-
 
 # Constants for test data
 HOME_PATH = "/test/home/user"
@@ -404,7 +404,7 @@ class TestTildeExpansionProperties:
             result = expand_tilde_in_value(url_with_tilde)
 
             # Extract schemes from original and result
-            original_scheme = url_with_tilde.split("://")[0]
+            original_scheme = url_with_tilde.split("://", maxsplit=1)[0]
             result_scheme = result.split("://")[0]
 
             # Scheme should be preserved
@@ -423,8 +423,9 @@ class TestIntegrationWithPydantic:
             tmp_path: pytest temporary directory fixture
         """
         # Import here to avoid circular dependencies during module import
-        from dlkit.core.datatypes import SimpleTildePath
         from pydantic import TypeAdapter
+
+        from dlkit.core.datatypes import SimpleTildePath
 
         adapter = TypeAdapter(SimpleTildePath)
 
@@ -440,8 +441,9 @@ class TestIntegrationWithPydantic:
             tmp_path: pytest temporary directory fixture
         """
         # Import here to avoid circular dependencies during module import
-        from dlkit.core.datatypes import SimpleMLflowURI
         from pydantic import TypeAdapter
+
+        from dlkit.core.datatypes import SimpleMLflowURI
 
         adapter = TypeAdapter(SimpleMLflowURI)
 

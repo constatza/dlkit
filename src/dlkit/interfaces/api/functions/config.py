@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from dlkit.interfaces.api.commands import (
-    ValidationCommandInput,
     GenerateTemplateCommandInput,
     ValidateTemplateCommandInput,
+    ValidationCommandInput,
     get_dispatcher,
 )
+from dlkit.interfaces.api.services.configuration_service import TemplateKind
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 
@@ -46,7 +47,7 @@ def validate_config(
 
 
 def generate_template(
-    template_type: str = "training",
+    template_type: TemplateKind = "training",
 ) -> str:
     """Generate configuration template.
 
@@ -68,7 +69,10 @@ def generate_template(
     input_data = GenerateTemplateCommandInput(template_type=template_type)
 
     # Use empty GeneralSettings since template generation doesn't need existing config
-    result = _dispatcher.execute("generate_template", input_data, GeneralSettings())
+    # TODO: TYPE — GeneralSettings.SESSION: SessionSettings vs protocol's SessionSettings | None
+    result = _dispatcher.execute(
+        "generate_template", input_data, cast(BaseSettingsProtocol, GeneralSettings())
+    )
     return result.template_content
 
 
@@ -95,12 +99,18 @@ def validate_template(
         >>> result["is_valid"]
         True
     """
+    template_kind: TemplateKind | None = (
+        cast(TemplateKind, template_type) if template_type is not None else None
+    )
     input_data = ValidateTemplateCommandInput(
-        template_content=template_content, template_type=template_type
+        template_content=template_content, template_type=template_kind
     )
 
     # Use empty GeneralSettings since template validation doesn't need existing config
-    result = _dispatcher.execute("validate_template", input_data, GeneralSettings())
+    # TODO: TYPE — GeneralSettings.SESSION: SessionSettings vs protocol's SessionSettings | None
+    result = _dispatcher.execute(
+        "validate_template", input_data, cast(BaseSettingsProtocol, GeneralSettings())
+    )
 
     return {
         "is_valid": result.is_valid,

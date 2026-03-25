@@ -53,7 +53,9 @@ def test_sparse_feature_supports_custom_payload_names(tmp_path: Path) -> None:
     feature = SparseFeature(
         name="matrix",
         path=pack_path,
-        files=SparseFilesConfig(indices="i.npy", values="v.npy", nnz_ptr="p.npy", values_scale="s.npy"),
+        files=SparseFilesConfig(
+            indices="i.npy", values="v.npy", nnz_ptr="p.npy", values_scale="s.npy"
+        ),
         denormalize=True,
     )
     assert feature.files.indices == "i.npy"

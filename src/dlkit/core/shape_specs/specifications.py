@@ -8,10 +8,9 @@ and testable.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Set, List
 
-from .value_objects import ShapeData, ShapeEntry, ModelFamily
 from .strategies import ValidationResult
+from .value_objects import ModelFamily, ShapeData
 
 
 class ShapeSpecification(ABC):
@@ -128,13 +127,12 @@ class OrSpecification(ShapeSpecification):
             return ValidationResult(
                 is_valid=True, errors=(), warnings=left_result.warnings + right_result.warnings
             )
-        else:
-            # Both failed - combine all errors and warnings
-            return ValidationResult(
-                is_valid=False,
-                errors=left_result.errors + right_result.errors,
-                warnings=left_result.warnings + right_result.warnings,
-            )
+        # Both failed - combine all errors and warnings
+        return ValidationResult(
+            is_valid=False,
+            errors=left_result.errors + right_result.errors,
+            warnings=left_result.warnings + right_result.warnings,
+        )
 
 
 class NotSpecification(ShapeSpecification):
@@ -163,14 +161,13 @@ class NotSpecification(ShapeSpecification):
             return ValidationResult.failure([
                 "Negated specification failed: wrapped spec was satisfied"
             ])
-        else:
-            return ValidationResult.success()
+        return ValidationResult.success()
 
 
 class RequiredEntriesSpecification(ShapeSpecification):
     """Specification that validates required shape entries exist."""
 
-    def __init__(self, required_entries: Set[str]):
+    def __init__(self, required_entries: set[str]):
         """Initialize with set of required entry names.
 
         Args:
@@ -476,9 +473,9 @@ class ShapeSpecificationBuilder:
 
     def __init__(self):
         """Initialize empty specification builder."""
-        self._specifications: List[ShapeSpecification] = []
+        self._specifications: list[ShapeSpecification] = []
 
-    def require_entries(self, entries: Set[str]) -> ShapeSpecificationBuilder:
+    def require_entries(self, entries: set[str]) -> ShapeSpecificationBuilder:
         """Add required entries specification.
 
         Args:

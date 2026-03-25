@@ -28,12 +28,10 @@ from dlkit.tools.config.core.patching import (
     compile_dotted_overrides,
     compile_mixed_overrides,
     insert_path,
-    iter_validated_updates,
     patch_model,
     split_overrides,
     strict_merge_patches,
 )
-
 
 # ---------------------------------------------------------------------------
 # Minimal test models
@@ -475,11 +473,11 @@ class TestExtraFieldPassthrough:
 
     def test_extra_field_patched(self, extra_model: ExtraModel) -> None:
         result = apply_patch(extra_model, {"extra_field": "world"})
-        assert result.extra_field == "world"  # type: ignore[attr-defined]
+        assert result.extra_field == "world"
 
     def test_new_extra_field_added(self, extra_model: ExtraModel) -> None:
         result = apply_patch(extra_model, {"brand_new": 42})
-        assert result.brand_new == 42  # type: ignore[attr-defined]
+        assert result.brand_new == 42
 
     def test_declared_field_still_validated(self, extra_model: ExtraModel) -> None:
         # "name" is a declared field — validation still applies

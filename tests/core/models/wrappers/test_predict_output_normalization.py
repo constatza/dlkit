@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from dlkit.core.models.wrappers.base import (
@@ -30,6 +30,16 @@ from dlkit.core.models.wrappers.base import (
 )
 from dlkit.core.models.wrappers.components import NamedBatchTransformer
 from dlkit.tools.utils.tensordict_utils import sequence_to_tensordict
+
+
+def _expect_tensor(value: object) -> Tensor:
+    assert isinstance(value, Tensor)
+    return value
+
+
+def _expect_tensordict(value: object) -> TensorDictBase:
+    assert isinstance(value, TensorDictBase)
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +193,8 @@ class TestNormalizeOutput:
         result = _normalize_output(d, "predictions", bs)
         assert isinstance(result, TensorDict)
         assert int(result.batch_size[0]) == bs
-        assert torch.equal(result["a"], t1)
-        assert torch.equal(result["b"], t2)
+        assert torch.equal(_expect_tensor(result["a"]), t1)
+        assert torch.equal(_expect_tensor(result["b"]), t2)
 
     def test_dict_with_list_value_becomes_nested_positional_td(
         self, t1: Tensor, t2: Tensor, bs: int
@@ -192,40 +202,38 @@ class TestNormalizeOutput:
         d = {"out": [t1, t2]}
         result = _normalize_output(d, "predictions", bs)
         assert isinstance(result, TensorDict)
-        inner = result["out"]
-        assert isinstance(inner, TensorDict)
-        assert torch.equal(inner["0"], t1)
-        assert torch.equal(inner["1"], t2)
+        inner = _expect_tensordict(result["out"])
+        assert torch.equal(_expect_tensor(inner["0"]), t1)
+        assert torch.equal(_expect_tensor(inner["1"]), t2)
 
     def test_dict_with_nested_dict(self, t1: Tensor, bs: int) -> None:
         d = {"z": {"x": t1}}
         result = _normalize_output(d, "predictions", bs)
         assert isinstance(result, TensorDict)
-        inner = result["z"]
-        assert isinstance(inner, TensorDict)
-        assert torch.equal(inner["x"], t1)
+        inner = _expect_tensordict(result["z"])
+        assert torch.equal(_expect_tensor(inner["x"]), t1)
 
     def test_combined_nested_structure(self, t1: Tensor, t2: Tensor, t3: Tensor, bs: int) -> None:
         d = {"out": [t1, t2], "z": {"x": t3}}
         result = _normalize_output(d, "predictions", bs)
         assert isinstance(result, TensorDict)
-        assert isinstance(result["out"], TensorDict)
-        assert torch.equal(result["out"]["0"], t1)
-        assert torch.equal(result["out"]["1"], t2)
-        assert isinstance(result["z"], TensorDict)
-        assert torch.equal(result["z"]["x"], t3)
+        out_td = _expect_tensordict(result["out"])
+        z_td = _expect_tensordict(result["z"])
+        assert torch.equal(_expect_tensor(out_td["0"]), t1)
+        assert torch.equal(_expect_tensor(out_td["1"]), t2)
+        assert torch.equal(_expect_tensor(z_td["x"]), t3)
 
     def test_list_becomes_positional_td(self, t1: Tensor, t2: Tensor, bs: int) -> None:
         result = _normalize_output([t1, t2], "latents", bs)
         assert isinstance(result, TensorDict)
-        assert torch.equal(result["0"], t1)
-        assert torch.equal(result["1"], t2)
+        assert torch.equal(_expect_tensor(result["0"]), t1)
+        assert torch.equal(_expect_tensor(result["1"]), t2)
 
     def test_tuple_becomes_positional_td(self, t1: Tensor, t2: Tensor, bs: int) -> None:
         result = _normalize_output((t1, t2), "latents", bs)
         assert isinstance(result, TensorDict)
-        assert torch.equal(result["0"], t1)
-        assert torch.equal(result["1"], t2)
+        assert torch.equal(_expect_tensor(result["0"]), t1)
+        assert torch.equal(_expect_tensor(result["1"]), t2)
 
     def test_empty_dict_raises_value_error(self, bs: int) -> None:
         with pytest.raises(ValueError, match="empty dict"):
@@ -296,12 +304,12 @@ class TestSequenceToTensordict:
         result = sequence_to_tensordict([t1, t2])
         assert isinstance(result, TensorDict)
         assert int(result.batch_size[0]) == bs
-        assert torch.equal(result["0"], t1)
-        assert torch.equal(result["1"], t2)
+        assert torch.equal(_expect_tensor(result["0"]), t1)
+        assert torch.equal(_expect_tensor(result["1"]), t2)
 
     def test_single_tensor(self, t1: Tensor, bs: int) -> None:
         result = sequence_to_tensordict([t1])
-        assert torch.equal(result["0"], t1)
+        assert torch.equal(_expect_tensor(result["0"]), t1)
 
     def test_tensordict_elements(self, td: TensorDict, bs: int) -> None:
         result = sequence_to_tensordict([td])
@@ -343,15 +351,13 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     Returns:
         Configured wrapper instance.
     """
-    import torch.nn as nn
+    from torch import nn
+
     from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
     from dlkit.core.models.wrappers.components import (
         NamedBatchTransformer,
-        RoutedLossComputer,
-        RoutedMetricsUpdater,
     )
     from dlkit.core.models.wrappers.prediction_strategies import DiscriminativePredictionStrategy
-    from tensordict import TensorDict
 
     class _FixedInvoker:
         def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:
@@ -361,10 +367,14 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
         def forward(self, *args: Any, **kwargs: Any) -> Tensor:
             return torch.zeros(bs, 1)
 
-        def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+        def _run_step(
+            self, batch: Any, batch_idx: int, stage: str
+        ) -> tuple[Tensor, int | None, Any]:
             from dlkit.core.models.wrappers.base import _batch_size_of
+
             batch = self._model_invoker.invoke(self.model, batch)
-            loss = self._loss_computer.compute(batch["predictions"], batch)
+            predictions = _expect_tensor(batch["predictions"])
+            loss = self._loss_computer.compute(predictions, batch)
             batch_size = _batch_size_of(batch["predictions"])
             return loss, batch_size, batch
 
@@ -418,7 +428,7 @@ class TestPredictStepOutput:
         wrapper = _make_wrapper(enriched, bs)
         out = wrapper.predict_step(batch, 0)
         assert isinstance(out, TensorDict)
-        assert torch.equal(out["predictions"], t1)
+        assert torch.equal(_expect_tensor(out["predictions"]), t1)
         assert out["latents"].shape == (bs, 0)
 
     def test_predictions_tensordict_forwarded(
@@ -445,7 +455,7 @@ class TestPredictStepOutput:
         enriched = TensorDict({"predictions": t1, "latents": t2}, batch_size=[bs])
         wrapper = _make_wrapper(enriched, bs)
         out = wrapper.predict_step(batch, 0)
-        assert torch.equal(out["latents"], t2)
+        assert torch.equal(_expect_tensor(out["latents"]), t2)
 
     def test_named_latents_tensordict_forwarded(
         self, bs: int, t1: Tensor, t2: Tensor, t3: Tensor, batch: TensorDict
@@ -455,9 +465,9 @@ class TestPredictStepOutput:
         enriched = TensorDict({"predictions": t1, "latents": latents_td}, batch_size=[bs])
         wrapper = _make_wrapper(enriched, bs)
         out = wrapper.predict_step(batch, 0)
-        assert isinstance(out["latents"], TensorDict)
-        assert torch.equal(out["latents"]["mu"], t2)
-        assert torch.equal(out["latents"]["logvar"], t3)
+        latents = _expect_tensordict(out["latents"])
+        assert torch.equal(_expect_tensor(latents["mu"]), t2)
+        assert torch.equal(_expect_tensor(latents["logvar"]), t3)
 
     def test_targets_are_cloned_not_view(self, bs: int, t1: Tensor, batch: TensorDict) -> None:
         """Targets in output are a clone of the original batch targets (Bug 1 fix).
@@ -469,7 +479,10 @@ class TestPredictStepOutput:
         wrapper = _make_wrapper(enriched, bs)
         out = wrapper.predict_step(batch, 0)
         # Values must match
-        assert torch.equal(out["targets"]["y"], batch["targets"]["y"])
+        assert torch.equal(
+            _expect_tensor(_expect_tensordict(out["targets"])["y"]),
+            _expect_tensor(_expect_tensordict(batch["targets"])["y"]),
+        )
         # Must be a different object (clone, not view)
         assert out["targets"] is not batch["targets"]
 
@@ -525,12 +538,12 @@ class TestInverseTransformPredictions:
         preds = TensorDict({"a": t1, "b": t2}, batch_size=[bs])
         result = transformer.inverse_transform_predictions(preds, "ignored")
         assert isinstance(result, TensorDict)
-        assert torch.allclose(result["a"], t1 / 2.0)
-        assert torch.equal(result["b"], t2)
+        assert torch.allclose(_expect_tensor(result["a"]), t1 / 2.0)
+        assert torch.equal(_expect_tensor(result["b"]), t2)
 
     def test_tensordict_no_matching_keys_passed_through(self, bs: int, t1: Tensor) -> None:
         transformer = NamedBatchTransformer(feature_chains={}, target_chains={})
         preds = TensorDict({"z": t1}, batch_size=[bs])
         result = transformer.inverse_transform_predictions(preds, "y")
         assert isinstance(result, TensorDict)
-        assert torch.equal(result["z"], t1)
+        assert torch.equal(_expect_tensor(result["z"]), t1)

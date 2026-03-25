@@ -16,8 +16,8 @@ from .models import InferenceResult, ModelState, OptimizationResult, TrainingRes
 from .precision import (
     PrecisionContext,
     PrecisionProvider,
-    precision_override,
     get_precision_context,
+    precision_override,
 )
 from .protocols import ExecutionStrategy, StrategyFactory, WorkflowOperation
 

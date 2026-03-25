@@ -7,7 +7,7 @@ primitives, encoders, and higher-level model modules.
 from __future__ import annotations
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from dlkit.core.datatypes.networks import NormalizerName
 

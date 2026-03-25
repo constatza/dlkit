@@ -11,6 +11,7 @@ from lightning.pytorch import LightningDataModule, LightningModule
 from tensordict import TensorDict
 
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.tensordict_utils import NestedKey, tensordict_to_numpy
 
 _STACKED_CACHE_UNSET = object()
@@ -35,7 +36,7 @@ class TrainingResult:
     predictions: list[Any] | None = field(default=None)
     mlflow_run_id: str | None = field(default=None)
     mlflow_tracking_uri: str | None = field(default=None)
-    _stacked_cache: TensorDict | None | object = field(
+    _stacked_cache: TensorDict | object | None = field(
         default=_STACKED_CACHE_UNSET,
         init=False,
         repr=False,
@@ -172,4 +173,4 @@ class ModelState:
     model: LightningModule
     datamodule: LightningDataModule
     trainer: Any | None
-    settings: GeneralSettings
+    settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig

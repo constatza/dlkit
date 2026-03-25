@@ -6,10 +6,11 @@ All scheme-specific logic lives on backend instances.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Protocol
-import os
+from typing import Protocol
 
 from dlkit.tools.io import url_resolver
 
@@ -121,6 +122,7 @@ def select_backend(
     if probe is None:
         # Lazy import to avoid circular dependency (uri_resolver imports select_backend)
         from dlkit.runtime.workflows.strategies.tracking.uri_resolver import local_host_alive
+
         probe = local_host_alive
 
     env_uri = os.getenv("MLFLOW_TRACKING_URI")
@@ -144,6 +146,7 @@ def _resolve_sqlite_db_path() -> Path:
     Returns:
         Absolute path to the SQLite database file.
     """
-    from dlkit.tools.io import locations
-    raw = locations.mlruns_backend_uri()
+    from dlkit.runtime.workflows.strategies.tracking import uri_resolver
+
+    raw = uri_resolver.default_sqlite_backend_uri()
     return url_resolver.resolve_local_uri(raw, Path.cwd())

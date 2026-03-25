@@ -5,14 +5,15 @@ that supports both the old BaseModel interface and the new ShapeAware/ShapeAgnos
 architecture, following the Factory and Adapter patterns.
 """
 
-from abc import ABC, abstractmethod
-from typing import Protocol, Any, Dict, Optional
+from typing import Any, Protocol
+
 import pytest
 import torch
+
 from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.shape_specs import create_shape_spec, ModelFamily, ShapeSource
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.core.shape_specs import ModelFamily, ShapeSource, create_shape_spec
 from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.config.precision import PrecisionStrategy
 
 
 class PrecisionTestModelProtocol(Protocol):
@@ -50,7 +51,7 @@ class TestModelFactory:
 
     @staticmethod
     def create_precision_test_model(
-        shape_dict: Dict[str, tuple], model_type: str = "shape_aware"
+        shape_dict: dict[str, tuple], model_type: str = "shape_aware"
     ) -> PrecisionTestModelProtocol:
         """Create a test model for precision testing.
 
@@ -66,11 +67,10 @@ class TestModelFactory:
         """
         if model_type == "shape_aware":
             return ShapeAwareTestModel(shape_dict=shape_dict)
-        elif model_type == "shape_agnostic":
+        if model_type == "shape_agnostic":
             # Future extension point for ShapeAgnostic models
             raise NotImplementedError("ShapeAgnostic test models not yet implemented")
-        else:
-            raise ValueError(f"Unsupported model_type: {model_type}")
+        raise ValueError(f"Unsupported model_type: {model_type}")
 
 
 class ShapeAwareTestModel(DLKitModel):
@@ -80,7 +80,7 @@ class ShapeAwareTestModel(DLKitModel):
     following the Adapter Pattern to maintain compatibility with existing tests.
     """
 
-    def __init__(self, shape_dict: Dict[str, tuple]):
+    def __init__(self, shape_dict: dict[str, tuple]):
         """Initialize test model with shape specification.
 
         Args:
@@ -121,16 +121,15 @@ class ShapeAwareTestModel(DLKitModel):
         model_dtype = self.get_model_dtype()
         if model_dtype == torch.float64:
             return PrecisionStrategy.FULL_64
-        elif model_dtype == torch.float32:
+        if model_dtype == torch.float32:
             return PrecisionStrategy.FULL_32
-        elif model_dtype == torch.float16:
+        if model_dtype == torch.float16:
             return PrecisionStrategy.TRUE_16
-        elif model_dtype == torch.bfloat16:
+        if model_dtype == torch.bfloat16:
             return PrecisionStrategy.TRUE_BF16
-        else:
-            # Fallback to service resolution
-            precision_service = get_precision_service()
-            return precision_service.resolve_precision()
+        # Fallback to service resolution
+        precision_service = get_precision_service()
+        return precision_service.resolve_precision()
 
     def get_model_dtype(self) -> torch.dtype:
         """Get the current dtype of model parameters."""
@@ -168,7 +167,7 @@ def test_model_factory() -> TestModelFactory:
 
 
 @pytest.fixture
-def sample_shape() -> Dict[str, tuple]:
+def sample_shape() -> dict[str, tuple]:
     """Standard shape specification for testing.
 
     Returns:

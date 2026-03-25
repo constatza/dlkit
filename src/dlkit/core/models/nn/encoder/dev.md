@@ -84,7 +84,7 @@ encoder = SkipEncoder1d(
     kernel_size=5,
     activation=torch.nn.functional.relu,
     normalize="batch",
-    dropout=0.1
+    dropout=0.1,
 )
 
 # Encode temporal sequence
@@ -131,17 +131,13 @@ import torch
 encoder_channels = [32, 64, 128, 256]
 encoder_timesteps = [100, 50, 25, 10]
 
-encoder = SkipEncoder1d(
-    channels=encoder_channels,
-    timesteps=encoder_timesteps,
-    kernel_size=5
-)
+encoder = SkipEncoder1d(channels=encoder_channels, timesteps=encoder_timesteps, kernel_size=5)
 
 # Decoder reverses encoder structure
 decoder = SkipDecoder1d(
     channels=encoder_channels[::-1],  # Reverse: [256, 128, 64, 32]
     timesteps=encoder_timesteps[::-1],  # Reverse: [10, 25, 50, 100]
-    kernel_size=5
+    kernel_size=5,
 )
 
 # Encode-decode cycle
@@ -184,7 +180,7 @@ import torch
 # Convert 128-d vector to (64, 10) feature map
 vector_to_tensor = VectorToTensorBlock(
     latent_dim=128,
-    target_shape=(64, 10)  # 64 channels, 10 timesteps
+    target_shape=(64, 10),  # 64 channels, 10 timesteps
 )
 
 # Convert latent vectors
@@ -224,21 +220,14 @@ from dlkit.core.models.nn.encoder import TensorToVectorBlock
 import torch
 
 # Convert (128, 25) feature map to 64-d vector
-tensor_to_vector = TensorToVectorBlock(
-    channels_in=128,
-    latent_dim=64
-)
+tensor_to_vector = TensorToVectorBlock(channels_in=128, latent_dim=64)
 
 # Compress feature maps
 feature_map = torch.randn(32, 128, 25)  # (batch, channels, timesteps)
 latent = tensor_to_vector(feature_map)  # Shape: (32, 64)
 
 # With transpose (pool over channels instead of timesteps)
-tensor_to_vector_t = TensorToVectorBlock(
-    channels_in=128,
-    latent_dim=64,
-    transpose=True
-)
+tensor_to_vector_t = TensorToVectorBlock(channels_in=128, latent_dim=64, transpose=True)
 latent_t = tensor_to_vector_t(feature_map)  # Shape: (32, 64)
 ```
 
@@ -258,10 +247,11 @@ from dlkit.core.models.nn.encoder import (
     SkipEncoder1d,
     SkipDecoder1d,
     VectorToTensorBlock,
-    TensorToVectorBlock
+    TensorToVectorBlock,
 )
 import torch
 import torch.nn as nn
+
 
 class SymmetricAutoencoder(nn.Module):
     def __init__(self, input_channels=32, input_timesteps=100, latent_dim=64):
@@ -273,30 +263,20 @@ class SymmetricAutoencoder(nn.Module):
 
         # Encoder: compress spatial/temporal dimensions
         self.encoder = SkipEncoder1d(
-            channels=channels,
-            timesteps=timesteps,
-            kernel_size=5,
-            normalize="batch"
+            channels=channels, timesteps=timesteps, kernel_size=5, normalize="batch"
         )
 
         # Latent compression
-        self.to_latent = TensorToVectorBlock(
-            channels_in=channels[-1],
-            latent_dim=latent_dim
-        )
+        self.to_latent = TensorToVectorBlock(channels_in=channels[-1], latent_dim=latent_dim)
 
         # Latent decompression
         self.from_latent = VectorToTensorBlock(
-            latent_dim=latent_dim,
-            target_shape=(channels[-1], timesteps[-1])
+            latent_dim=latent_dim, target_shape=(channels[-1], timesteps[-1])
         )
 
         # Decoder: reconstruct original dimensions
         self.decoder = SkipDecoder1d(
-            channels=channels[::-1],
-            timesteps=timesteps[::-1],
-            kernel_size=5,
-            normalize="batch"
+            channels=channels[::-1], timesteps=timesteps[::-1], kernel_size=5, normalize="batch"
         )
 
     def encode(self, x):
@@ -310,6 +290,7 @@ class SymmetricAutoencoder(nn.Module):
     def forward(self, x):
         return self.decode(self.encode(x))
 
+
 # Usage
 autoencoder = SymmetricAutoencoder()
 x = torch.randn(16, 32, 100)
@@ -322,27 +303,22 @@ from dlkit.core.models.nn.encoder import SkipEncoder1d
 import torch
 import torch.nn as nn
 
+
 class MultiScaleEncoder(nn.Module):
     def __init__(self):
         super().__init__()
 
         # Three encoders at different scales
         self.encoder_fine = SkipEncoder1d(
-            channels=[32, 64, 128],
-            timesteps=[100, 50, 25],
-            kernel_size=3
+            channels=[32, 64, 128], timesteps=[100, 50, 25], kernel_size=3
         )
 
         self.encoder_medium = SkipEncoder1d(
-            channels=[32, 64, 128],
-            timesteps=[50, 25, 10],
-            kernel_size=5
+            channels=[32, 64, 128], timesteps=[50, 25, 10], kernel_size=5
         )
 
         self.encoder_coarse = SkipEncoder1d(
-            channels=[32, 64, 128],
-            timesteps=[25, 10, 5],
-            kernel_size=7
+            channels=[32, 64, 128], timesteps=[25, 10, 5], kernel_size=7
         )
 
     def forward(self, x):
@@ -351,11 +327,8 @@ class MultiScaleEncoder(nn.Module):
         features_medium = self.encoder_medium(nn.functional.interpolate(x, size=50))
         features_coarse = self.encoder_coarse(nn.functional.interpolate(x, size=25))
 
-        return {
-            "fine": features_fine,
-            "medium": features_medium,
-            "coarse": features_coarse
-        }
+        return {"fine": features_fine, "medium": features_medium, "coarse": features_coarse}
+
 
 # Usage
 encoder = MultiScaleEncoder()
@@ -373,6 +346,7 @@ from dlkit.core.models.nn.attention import SelfAttentionBlock
 import torch
 import torch.nn as nn
 
+
 class AttentionEncoder(nn.Module):
     def __init__(self, latent_dim=128):
         super().__init__()
@@ -382,23 +356,14 @@ class AttentionEncoder(nn.Module):
 
         # Initial encoder
         self.encoder = SkipEncoder1d(
-            channels=channels,
-            timesteps=timesteps,
-            normalize="layer",
-            dropout=0.1
+            channels=channels, timesteps=timesteps, normalize="layer", dropout=0.1
         )
 
         # Attention over encoded features
-        self.attention = SelfAttentionBlock(
-            embed_dim=channels[-1],
-            num_heads=8
-        )
+        self.attention = SelfAttentionBlock(embed_dim=channels[-1], num_heads=8)
 
         # Final latent compression
-        self.to_latent = TensorToVectorBlock(
-            channels_in=channels[-1],
-            latent_dim=latent_dim
-        )
+        self.to_latent = TensorToVectorBlock(channels_in=channels[-1], latent_dim=latent_dim)
 
     def forward(self, x):
         # Encode with skip connections
@@ -410,6 +375,7 @@ class AttentionEncoder(nn.Module):
         # Compress to latent vector
         z = self.to_latent(x)  # (batch, 128)
         return z
+
 
 # Usage
 encoder = AttentionEncoder(latent_dim=128)
@@ -423,10 +389,11 @@ from dlkit.core.models.nn.encoder import (
     SkipEncoder1d,
     SkipDecoder1d,
     TensorToVectorBlock,
-    VectorToTensorBlock
+    VectorToTensorBlock,
 )
 import torch
 import torch.nn as nn
+
 
 class AsymmetricAutoencoder(nn.Module):
     """Encoder has more layers than decoder for aggressive compression."""
@@ -439,10 +406,7 @@ class AsymmetricAutoencoder(nn.Module):
         encoder_timesteps = [100, 50, 25, 12, 6, 3]
 
         self.encoder = SkipEncoder1d(
-            channels=encoder_channels,
-            timesteps=encoder_timesteps,
-            kernel_size=5,
-            dropout=0.1
+            channels=encoder_channels, timesteps=encoder_timesteps, kernel_size=5, dropout=0.1
         )
 
         self.to_latent = TensorToVectorBlock(512, latent_dim=64)
@@ -454,14 +418,13 @@ class AsymmetricAutoencoder(nn.Module):
         self.from_latent = VectorToTensorBlock(64, target_shape=(512, 3))
 
         self.decoder = SkipDecoder1d(
-            channels=decoder_channels,
-            timesteps=decoder_timesteps,
-            kernel_size=5
+            channels=decoder_channels, timesteps=decoder_timesteps, kernel_size=5
         )
 
     def forward(self, x):
         z = self.to_latent(self.encoder(x))
         return self.decoder(self.from_latent(z))
+
 
 # Usage
 ae = AsymmetricAutoencoder()
@@ -486,15 +449,12 @@ try:
     # Mismatched sequence lengths
     encoder = SkipEncoder1d(
         channels=[32, 64, 128],  # Length 3
-        timesteps=[100, 50]  # Length 2 - ERROR!
+        timesteps=[100, 50],  # Length 2 - ERROR!
     )
 except (ValueError, IndexError) as e:
     print(f"Sequence length mismatch: {e}")
     # Fix: match lengths
-    encoder = SkipEncoder1d(
-        channels=[32, 64, 128],
-        timesteps=[100, 50, 25]
-    )
+    encoder = SkipEncoder1d(channels=[32, 64, 128], timesteps=[100, 50, 25])
 
 try:
     # Wrong input channels

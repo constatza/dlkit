@@ -6,7 +6,8 @@ Direct functions for loading fitted transforms from checkpoints.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 import torch
 
@@ -69,7 +70,7 @@ def _load_named_transforms(
     prefix: str,
     state_dict: dict[str, Any],
     entry_configs: dict[str, Any],
-) -> dict[str, "TransformChain"]:
+) -> dict[str, TransformChain]:
     """Load transforms from named ModuleDict format (_batch_transformer._feature_chains.<name>.*).
 
     This is the current format produced by NamedBatchTransformer. Keys have the
@@ -134,8 +135,7 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
         if isinstance(module, ModuleList):
             module = module[idx]
         elif hasattr(module, "transforms"):
-            # TransformChain has transforms attribute
-            module = module.transforms[idx]  # type: ignore[index]
+            module = cast("Sequence[Any]", module.transforms)[idx]
         else:
             raise ValueError(f"Cannot index into {type(module)} at {part}")
 
@@ -144,8 +144,8 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
     buffer_value = state[key]
     if not hasattr(module, "register_buffer"):
         raise ValueError(f"Module {type(module)} does not have register_buffer method")
-    module.register_buffer(buffer_name, buffer_value)  # type: ignore[attr-defined]
-    logger.debug(f"Registered buffer: {key}")
+    cast(torch.nn.Module, module).register_buffer(buffer_name, buffer_value)
+    logger.debug("Registered buffer: %s", key)
 
 
 def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> list[Any]:
@@ -188,7 +188,7 @@ def _reconstruct_transform_chain(
         # Get transform settings
         transform_settings = _get_transform_settings(entry_name, entry_configs)
         if not transform_settings:
-            logger.warning(f"No transform settings found for '{entry_name}'")
+            logger.warning("No transform settings found for '%s'", entry_name)
             return None
 
         # Create and load chain
@@ -200,7 +200,7 @@ def _reconstruct_transform_chain(
             try:
                 _register_transform_buffer(chain, key, transform_state)
             except Exception as e:
-                logger.warning(f"Could not register buffer {key}: {e}")
+                logger.warning("Could not register buffer %s: %s", key, e)
 
         logger.debug(
             "Loaded transform chain for '{}' with {} transforms",
@@ -210,5 +210,5 @@ def _reconstruct_transform_chain(
         return chain
 
     except Exception as e:
-        logger.error(f"Failed to load transform chain for '{entry_name}': {e}")
+        logger.error("Failed to load transform chain for '%s': %s", entry_name, e)
         return None

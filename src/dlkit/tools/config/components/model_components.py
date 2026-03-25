@@ -1,14 +1,20 @@
 """Model component settings without build() methods - pure configuration."""
 
-from typing import Any
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.core.datatypes.base import IntHyperparameter
-from ..core.base_settings import ComponentSettings, HyperParameterSettings, BasicSettings
+
+from ..core.base_settings import (
+    BasicSettings,
+    ComponentSettings,
+    HyperParameterSettings,
+    RequiredNameComponentSettings,
+)
 from ..optimizer_settings import OptimizerSettings, SchedulerSettings
 
 
@@ -78,7 +84,9 @@ class MetricComponentSettings(ComponentSettings):
         extra_inputs: Extra kwargs passed to the metric, routed from batch
     """
 
-    name: str | type | Callable[..., Any] | None = Field(default="MeanSquaredError", description="Name of the metric")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default="MeanSquaredError", description="Name of the metric"
+    )
     module_path: str | None = Field(
         default="torchmetrics.regression", description="Module path to the metric"
     )
@@ -128,7 +136,7 @@ class LossComponentSettings(ComponentSettings):
         ... )
     """
 
-    name: str | type | Callable[..., Any] | None = Field(
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default="mse", description="Name of the loss function (default: mse)"
     )
     module_path: str | None = Field(
@@ -152,7 +160,7 @@ class LossComponentSettings(ComponentSettings):
         return v
 
 
-class ModelComponentSettings(ComponentSettings, HyperParameterSettings):
+class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettings):
     """Model architecture configuration - pure configuration only.
 
     This replaces ModelSettings.build() with factory pattern.
@@ -176,11 +184,8 @@ class ModelComponentSettings(ComponentSettings, HyperParameterSettings):
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
 
-    # TODO: refactor architecture — ComponentSettings.name is Optional[...] but
-    # ModelComponentSettings always requires a name. Fix by splitting ComponentSettings
-    # into NamedComponentSettings and AnonymousComponentSettings.
-    name: str | type | Callable[..., Any] | None = Field(
-        ...,
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default=None,
         description="Model namespace path",
         json_schema_extra={"dlkit_init_kwarg": False},
     )
@@ -247,7 +252,7 @@ class WrapperComponentSettings(ComponentSettings):
         Metrics configuration
     """
 
-    name: str | type | Callable[..., Any] | None = Field(
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default="StandardLightningWrapper", description="Name of the wrapper"
     )
     module_path: str | None = Field(
@@ -296,7 +301,7 @@ class WrapperComponentSettings(ComponentSettings):
         return len(self.metrics) > 0
 
 
-def extract_init_kwargs(settings: "ModelComponentSettings") -> dict[str, Any]:
+def extract_init_kwargs(settings: ModelComponentSettings) -> dict[str, Any]:
     """Extract constructor kwargs from model settings using whitelist tag.
 
     Includes only fields NOT tagged with ``dlkit_init_kwarg=False`` in their

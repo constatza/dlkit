@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.optuna_settings import OptunaSettings
 from dlkit.tools.config.core.patching import patch_model
+from dlkit.tools.config.optuna_settings import OptunaSettings
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import ISettingsSampler
@@ -155,9 +155,9 @@ class OptunaSettingsSampler:
         if not isinstance(range_spec, dict):
             raise ValueError(f"Invalid range specification for {param_name}: {range_spec}")
 
-        low = range_spec.get("low", None)
-        high = range_spec.get("high", None)
-        choices = range_spec.get("choices", None)
+        low = range_spec.get("low")
+        high = range_spec.get("high")
+        choices = range_spec.get("choices")
 
         if low and high and choices:
             raise ValueError(

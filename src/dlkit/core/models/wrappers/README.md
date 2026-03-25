@@ -48,22 +48,25 @@ ProcessingLightningWrapper (base)
 Every batch flowing through the standard wrapper is a nested `TensorDict`:
 
 ```python
-TensorDict({
-    "features": TensorDict({"x": tensor([B, F]),
-                            "A": tensor([B, N, N])},  # context feature
-                           batch_size=[B]),
-    "targets":  TensorDict({"y": tensor([B, T])},
-                           batch_size=[B]),
-}, batch_size=[B])
+TensorDict(
+    {
+        "features": TensorDict(
+            {"x": tensor([B, F]), "A": tensor([B, N, N])},  # context feature
+            batch_size=[B],
+        ),
+        "targets": TensorDict({"y": tensor([B, T])}, batch_size=[B]),
+    },
+    batch_size=[B],
+)
 ```
 
 Access patterns:
 ```python
-batch["features", "x"]       # single tensor
-batch["features"]["x"]       # equivalent
-batch["targets", "y"]        # target tensor
-batch.batch_size              # [B]
-batch.to("cuda")              # recursive device transfer — no custom collation needed
+batch["features", "x"]  # single tensor
+batch["features"]["x"]  # equivalent
+batch["targets", "y"]  # target tensor
+batch.batch_size  # [B]
+batch.to("cuda")  # recursive device transfer — no custom collation needed
 ```
 
 The standard wrapper no longer accepts DLKit's legacy custom `Batch` transport.
@@ -85,7 +88,7 @@ Feature(name="x", path="data/features_x.npy")
 Feature(name="z", path="data/features_z.npy")
 
 # Context feature — in batch for loss/metric use, NOT passed to model
-ContextFeature(name="A", path="data/stiffness.npy")   # model_input=False
+ContextFeature(name="A", path="data/stiffness.npy")  # model_input=False
 
 # Target — extracted by loss/metric routing
 Target(name="y", path="data/targets.npy")
@@ -213,6 +216,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from typing import Any
 
+
 class KwargModelInvoker:
     """Calls model with keyword arguments and writes output to batch."""
 
@@ -291,8 +295,8 @@ checkpoint["dlkit_metadata"] = {
     },
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
-    "feature_names": ["x"],          # model-input entries in dispatch order (for inference)
-    "predict_target_key": "y",       # target whose inverse transform is applied at predict time
+    "feature_names": ["x"],  # model-input entries in dispatch order (for inference)
+    "predict_target_key": "y",  # target whose inverse transform is applied at predict time
     "model_family": "dlkit_nn",
     "target_names": ["y"],
 }

@@ -6,7 +6,6 @@ All loading logic integrated directly - no use case objects.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Protocol, Self
 
 import torch
@@ -19,8 +18,8 @@ from dlkit.interfaces.api.services.precision_service import get_precision_servic
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 from dlkit.tools.utils.logging_config import get_logger
 
-from .config import PredictorConfig, ModelState
-from .loading import load_checkpoint, build_model_from_checkpoint
+from .config import ModelState, PredictorConfig
+from .loading import build_model_from_checkpoint, load_checkpoint
 from .shapes import infer_shape_specification
 from .transforms import load_transforms_from_checkpoint
 
@@ -29,8 +28,6 @@ logger = get_logger(__name__)
 
 class PredictorError(WorkflowError):
     """Base exception for predictor-related errors."""
-
-    pass
 
 
 class PredictorNotLoadedError(PredictorError):
@@ -262,11 +259,13 @@ class CheckpointPredictor(IPredictor):
         Returns:
             Transformed (args, kwargs) tuple.
         """
-        ft = self._model_state.feature_transforms  # type: ignore[union-attr]
+        if self._model_state is None:
+            return args, kwargs
+        ft = self._model_state.feature_transforms
         if not ft:
             return args, kwargs
 
-        fn = self._model_state.feature_names  # type: ignore[union-attr]
+        fn = self._model_state.feature_names
         transformed_args = tuple(
             ft[fn[i]](t) if i < len(fn) and fn[i] in ft else t for i, t in enumerate(args)
         )
@@ -291,8 +290,10 @@ class CheckpointPredictor(IPredictor):
         Returns:
             Inverse-transformed predictions (same type as input).
         """
-        tt = self._model_state.target_transforms  # type: ignore[union-attr]
-        target_key = self._model_state.predict_target_key  # type: ignore[union-attr]
+        if self._model_state is None:
+            return predictions
+        tt = self._model_state.target_transforms
+        target_key = self._model_state.predict_target_key
         if not tt or not target_key or target_key not in tt:
             return predictions
 
@@ -307,9 +308,14 @@ class CheckpointPredictor(IPredictor):
 
         # TensorDict: apply inverse to its "predictions" leaf if present
         if isinstance(predictions, TensorDict) and "predictions" in predictions.keys():
-            return predictions.apply(
-                lambda t: chain.inverse_transform(t), batch_size=predictions.batch_size
-            )  # type: ignore[return-value]
+            from typing import cast as _cast
+
+            return _cast(
+                TensorDict,
+                predictions.apply(
+                    lambda t: chain.inverse_transform(t), batch_size=predictions.batch_size
+                ),
+            )
 
         return predictions
 
@@ -375,10 +381,9 @@ class CheckpointPredictor(IPredictor):
         if device_spec == "auto":
             if torch.cuda.is_available():
                 return "cuda"
-            elif torch.backends.mps.is_available():
+            if torch.backends.mps.is_available():
                 return "mps"
-            else:
-                return "cpu"
+            return "cpu"
 
         return device_spec
 

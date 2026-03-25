@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
-from .models import Study, Trial, OptimizationResult, OptimizationDirection
+from .models import OptimizationDirection, OptimizationResult, Study, Trial
 
 
 class IStudyRepository(ABC):

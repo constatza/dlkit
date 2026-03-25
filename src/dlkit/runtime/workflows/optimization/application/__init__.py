@@ -13,13 +13,13 @@ implementations, following the Dependency Inversion Principle.
 """
 
 from .services import (
+    OptimizationOrchestrator,
     StudyManager,
     TrialExecutor,
-    OptimizationOrchestrator,
 )
 
 __all__ = [
+    "OptimizationOrchestrator",
     "StudyManager",
     "TrialExecutor",
-    "OptimizationOrchestrator",
 ]

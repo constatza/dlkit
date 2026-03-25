@@ -1,9 +1,10 @@
-from pydantic import DirectoryPath, validate_call
 import importlib
 import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+
+from pydantic import DirectoryPath, validate_call
 
 from dlkit.tools.utils.general import kwargs_compatible_with
 
@@ -56,7 +57,7 @@ def import_from_path(class_name: str, path: Path, base: Path) -> type:
             raise ImportError(f"Cannot load spec for file: {path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)  # type: ignore
+        spec.loader.exec_module(module)
         return getattr(module, class_name)
 
     if path.is_dir():
@@ -99,8 +100,7 @@ def init_class(
     exclude: set[str] | None = None,
     **kwargs,
 ):
-    """
-    Construct a class or function from a name and module path.
+    """Construct a class or function from a name and module path.
 
     Args:
         name: The name of the class to load.

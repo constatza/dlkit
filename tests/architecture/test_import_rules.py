@@ -7,7 +7,7 @@ import patterns and dependencies across the codebase.
 import ast
 import re
 from pathlib import Path
-from typing import List, Set, Dict, Tuple
+
 import pytest
 
 
@@ -15,8 +15,8 @@ class ImportAnalyzer(ast.NodeVisitor):
     """AST visitor to analyze import patterns in Python files."""
 
     def __init__(self):
-        self.imports: List[Tuple[str, str]] = []  # (module, name)
-        self.from_imports: List[Tuple[str, str]] = []  # (module, name)
+        self.imports: list[tuple[str, str]] = []  # (module, name)
+        self.from_imports: list[tuple[str, str]] = []  # (module, name)
 
     def visit_Import(self, node: ast.Import) -> None:
         """Visit import statements."""
@@ -30,7 +30,7 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.from_imports.append((node.module, alias.name))
 
 
-def analyze_python_file(file_path: Path) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+def analyze_python_file(file_path: Path) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """Analyze imports in a Python file.
 
     Args:
@@ -40,19 +40,19 @@ def analyze_python_file(file_path: Path) -> Tuple[List[Tuple[str, str]], List[Tu
         Tuple of (imports, from_imports) lists
     """
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         tree = ast.parse(content)
         analyzer = ImportAnalyzer()
         analyzer.visit(tree)
         return analyzer.imports, analyzer.from_imports
-    except (SyntaxError, UnicodeDecodeError):
+    except SyntaxError, UnicodeDecodeError:
         # Skip files that can't be parsed
         return [], []
 
 
-def get_python_files(directory: Path, exclude_patterns: List[str] = None) -> List[Path]:
+def get_python_files(directory: Path, exclude_patterns: list[str] = None) -> list[Path]:
     """Get all Python files in a directory recursively.
 
     Args:
@@ -84,18 +84,18 @@ class TestImportRules:
         return Path(__file__).parent.parent.parent
 
     @pytest.fixture(scope="class")
-    def test_files(self, project_root: Path) -> List[Path]:
+    def test_files(self, project_root: Path) -> list[Path]:
         """Get all test files."""
         test_dir = project_root / "tests"
         return get_python_files(test_dir)
 
     @pytest.fixture(scope="class")
-    def src_files(self, project_root: Path) -> List[Path]:
+    def src_files(self, project_root: Path) -> list[Path]:
         """Get all source files."""
         src_dir = project_root / "src" / "dlkit"
         return get_python_files(src_dir)
 
-    def test_no_direct_model_imports_in_tests(self, test_files: List[Path]) -> None:
+    def test_no_direct_model_imports_in_tests(self, test_files: list[Path]) -> None:
         """Ensure tests don't directly import concrete model classes.
 
         This enforces the Dependency Inversion Principle by ensuring tests
@@ -121,14 +121,14 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 for pattern in prohibited_patterns:
                     if re.search(pattern, content):
                         violations.append(str(file_path))
                         break
-            except (IOError, UnicodeDecodeError):
+            except OSError, UnicodeDecodeError:
                 continue
 
         assert not violations, (
@@ -162,7 +162,7 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Check for high-level API usage
@@ -178,7 +178,7 @@ class TestImportRules:
 
                 if has_test_functions and not has_api_usage:
                     violations.append(str(file_path))
-            except (IOError, UnicodeDecodeError):
+            except OSError, UnicodeDecodeError:
                 continue
 
         assert not violations, (
@@ -187,14 +187,14 @@ class TestImportRules:
             f"Files without high-level API usage: {violations}"
         )
 
-    def test_no_circular_dependencies(self, src_files: List[Path]) -> None:
+    def test_no_circular_dependencies(self, src_files: list[Path]) -> None:
         """Ensure no circular dependencies exist in source code.
 
         This enforces good architectural design by preventing circular
         dependencies that violate the Dependency Inversion Principle.
         """
         # Build dependency graph
-        dependencies: Dict[str, Set[str]] = {}
+        dependencies: dict[str, set[str]] = {}
 
         for file_path in src_files:
             # Convert file path to module name
@@ -216,11 +216,11 @@ class TestImportRules:
                     dependencies[module_name].add(module)
 
         # Detect cycles using DFS
-        def has_cycle(graph: Dict[str, Set[str]]) -> List[str]:
+        def has_cycle(graph: dict[str, set[str]]) -> list[str]:
             WHITE, GRAY, BLACK = 0, 1, 2
-            colors = {node: WHITE for node in graph}
+            colors = dict.fromkeys(graph, WHITE)
 
-            def dfs(node: str, path: List[str]) -> List[str]:
+            def dfs(node: str, path: list[str]) -> list[str]:
                 if colors[node] == GRAY:
                     # Found cycle
                     cycle_start = path.index(node)
@@ -260,7 +260,7 @@ class TestImportRules:
                 assert False, f"Circular dependency detected: {' -> '.join(cycle)}"
             # If it's a known exception, continue (the circular dependency is broken by function-level imports)
 
-    def test_domain_layer_isolation(self, src_files: List[Path]) -> None:
+    def test_domain_layer_isolation(self, src_files: list[Path]) -> None:
         """Ensure domain layer doesn't depend on infrastructure concerns.
 
         This enforces the Dependency Inversion Principle by ensuring the domain
@@ -292,7 +292,7 @@ class TestImportRules:
                 continue
 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Check for infrastructure imports
@@ -300,7 +300,7 @@ class TestImportRules:
                     if re.search(pattern, content):
                         violations.append((str(file_path), pattern))
                         break
-            except (IOError, UnicodeDecodeError):
+            except OSError, UnicodeDecodeError:
                 continue
 
         # Allow some exceptions for necessary integrations
@@ -342,5 +342,3 @@ class TestImportRules:
             f"Domain layer should not depend on infrastructure concerns. "
             f"Violations: {filtered_violations}"
         )
-
-

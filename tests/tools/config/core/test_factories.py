@@ -7,17 +7,20 @@ object construction from settings.
 from __future__ import annotations
 
 from typing import Any
-import pytest
 from unittest.mock import patch
-from hypothesis import given, strategies as st
 
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+
+from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import (
     ComponentFactory,
-    DefaultComponentFactory,
     ComponentRegistry,
+    DefaultComponentFactory,
     FactoryProvider,
 )
-from dlkit.tools.config.core.context import BuildContext
+
 from .conftest import MockComponentSettings
 
 

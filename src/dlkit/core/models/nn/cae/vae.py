@@ -4,13 +4,13 @@ from collections.abc import Callable
 
 import torch
 from torch import nn
+from torch.distributions.normal import Normal
 
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.models.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
 from dlkit.core.models.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
+from dlkit.core.models.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.core.models.nn.utils import build_channel_schedule
-from torch.distributions.normal import Normal
 
 
 def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:

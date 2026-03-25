@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-import warnings
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
-from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.core.updater import update_settings
 from dlkit.core.training.metrics.collect import collect_metrics
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
 from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.core.base_settings import BasicSettings
+from dlkit.tools.config.core.updater import update_settings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import ITrainingExecutor
@@ -46,7 +48,11 @@ class VanillaExecutor(ITrainingExecutor):
     Single responsibility: Execute PyTorch Lightning training workflow.
     """
 
-    def execute(self, components: BuildComponents, settings: GeneralSettings) -> TrainingResult:
+    def execute(
+        self,
+        components: BuildComponents,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> TrainingResult:
         """Execute pure training workflow.
 
         Args:
@@ -126,7 +132,7 @@ class VanillaExecutor(ITrainingExecutor):
         trainer: Trainer,
         model: LightningModule,
         datamodule: LightningDataModule | None,
-        settings: GeneralSettings,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Apply automatic learning rate tuning if configured.
 
@@ -157,7 +163,7 @@ class VanillaExecutor(ITrainingExecutor):
             # Try model-level attribute updates first (Lightning wrappers expose properties)
             if hasattr(model, "lr"):
                 try:
-                    model.lr = suggested_lr
+                    object.__setattr__(model, "lr", suggested_lr)
                     optimizer_lr = getattr(getattr(model, "optimizer", None), "lr", None)
                     if optimizer_lr == suggested_lr:
                         lr_handled = True
@@ -167,9 +173,12 @@ class VanillaExecutor(ITrainingExecutor):
 
             # Fallback to optimizer settings update when attribute path not available or ineffective
             if not lr_handled and hasattr(model, "optimizer") and hasattr(model.optimizer, "lr"):
-                model.optimizer = update_settings(model.optimizer, {"lr": suggested_lr})
-                logger.info("Learning rate tuned to {}", suggested_lr)
-                lr_handled = True
+                optimizer_attr = model.optimizer
+                if isinstance(optimizer_attr, BasicSettings):
+                    updated_optimizer = update_settings(optimizer_attr, {"lr": suggested_lr})
+                    object.__setattr__(model, "optimizer", updated_optimizer)
+                    logger.info("Learning rate tuned to {}", suggested_lr)
+                    lr_handled = True
 
             if not lr_handled:
                 logger.warning(
@@ -179,7 +188,7 @@ class VanillaExecutor(ITrainingExecutor):
 
         except Exception as e:
             logger.warning(
-                f"Learning rate tuning failed: {e}. Continuing with configured learning rate."
+                "Learning rate tuning failed: %s. Continuing with configured learning rate.", e
             )
 
     def _run_optional_steps(
@@ -203,13 +212,13 @@ class VanillaExecutor(ITrainingExecutor):
             with _suppress_training_runtime_warnings():
                 predictions = trainer.predict(model, datamodule=datamodule)
         except Exception as e:
-            logger.debug(f"Post-training predict step failed (non-fatal): {e}")
+            logger.debug("Post-training predict step failed (non-fatal): %s", e)
 
         try:
             with _suppress_training_runtime_warnings():
                 trainer.test(model, datamodule=datamodule)
         except Exception as e:
-            logger.debug(f"Post-training test step failed (non-fatal): {e}")
+            logger.debug("Post-training test step failed (non-fatal): %s", e)
 
         return predictions
 
@@ -273,7 +282,10 @@ class VanillaExecutor(ITrainingExecutor):
 
         return artifacts
 
-    def _get_resume_checkpoint_path(self, settings: GeneralSettings) -> str | None:
+    def _get_resume_checkpoint_path(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> str | None:
         """Get checkpoint path for resuming training if configured.
 
         Checks TRAINING.resume_from_checkpoint for the checkpoint path.
@@ -296,10 +308,10 @@ class VanillaExecutor(ITrainingExecutor):
         checkpoint_path = Path(training_checkpoint)
         if not checkpoint_path.exists():
             logger.warning(
-                f"Training checkpoint configured but not found: {checkpoint_path}. "
-                f"Starting training from scratch."
+                "Training checkpoint configured but not found: %s. Starting training from scratch.",
+                checkpoint_path,
             )
             return None
 
-        logger.info(f"Resuming training from checkpoint: {checkpoint_path}")
+        logger.info("Resuming training from checkpoint: %s", checkpoint_path)
         return str(checkpoint_path)

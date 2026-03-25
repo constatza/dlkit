@@ -1,10 +1,11 @@
 from collections.abc import Sequence
+from typing import cast
 
 import torch
-from pydantic import validate_call, ConfigDict
+from pydantic import ConfigDict, validate_call
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.errors import TransformNotFittedError, ShapeMismatchError
+from dlkit.core.training.transforms.errors import TransformNotFittedError
 
 
 class MinMaxScaler(Transform):
@@ -34,7 +35,8 @@ class MinMaxScaler(Transform):
             >>> scaler.fit(train_data)
         """
         super().__init__()
-        self.dim = dim if isinstance(dim, Sequence) else (dim,)
+        dim_values = cast("Sequence[int]", dim) if isinstance(dim, Sequence) else (dim,)
+        self.dim: tuple[int, ...] = tuple(int(index) for index in dim_values)
         # Register empty placeholder buffers so state_dict() always contains these keys
         # and load_state_dict() can fill them without pre-registration hacks
         self.register_buffer("min", torch.tensor([]))
@@ -62,7 +64,7 @@ class MinMaxScaler(Transform):
     def update_fit(self, batch: torch.Tensor) -> None:
         """Accumulate min/max statistics from one batch."""
         # Normalize dim indices
-        dim = tuple(idx % len(batch.shape) for idx in self.dim)
+        dim = tuple(index % len(batch.shape) for index in self.dim)
         self.dim = dim
 
         # Compute current batch statistics

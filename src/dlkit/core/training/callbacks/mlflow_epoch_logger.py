@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from lightning.pytorch import Callback, LightningModule, Trainer
 from loguru import logger
@@ -146,7 +147,10 @@ class MLflowEpochLogger(Callback):
         if isinstance(candidate, (int, float)):
             return float(candidate)
 
-        try:
-            return float(candidate)
-        except (TypeError, ValueError):
-            return None
+        if isinstance(candidate, str):
+            try:
+                return float(candidate)
+            except TypeError, ValueError:
+                return None
+
+        return None

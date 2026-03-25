@@ -74,7 +74,7 @@ def apply_transforms(
     return tuple(t(x) if t is not None else x for x, t in zip(tensors, transforms))
 
 
-def apply_chain(x: Tensor, chain: "torch.nn.Module") -> Tensor:
+def apply_chain(x: Tensor, chain: torch.nn.Module) -> Tensor:
     """Apply a transform chain forward pass. Pure function.
 
     Args:
@@ -87,7 +87,7 @@ def apply_chain(x: Tensor, chain: "torch.nn.Module") -> Tensor:
     return chain(x)
 
 
-def apply_inverse_chain(x: Tensor, chain: "torch.nn.Module") -> Tensor:
+def apply_inverse_chain(x: Tensor, chain: torch.nn.Module) -> Tensor:
     """Apply inverse transform if chain supports it, otherwise return x unchanged. Pure function.
 
     Args:

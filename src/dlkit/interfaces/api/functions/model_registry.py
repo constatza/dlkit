@@ -150,15 +150,15 @@ def load_registered_model(
     with tracking_uri_context(tracking_uri):
         match flavor:
             case "pytorch":
-                return mlflow.pytorch.load_model(model_uri)  # type: ignore[attr-defined]
+                return mlflow.pytorch.load_model(model_uri)
             case "sklearn":
-                return mlflow.sklearn.load_model(model_uri)  # type: ignore[attr-defined]
+                return mlflow.sklearn.load_model(model_uri)
             case "pyfunc":
                 return mlflow.pyfunc.load_model(model_uri)
             case "auto":
                 for loader in (
-                    mlflow.pytorch.load_model,  # type: ignore[attr-defined]
-                    mlflow.sklearn.load_model,  # type: ignore[attr-defined]
+                    mlflow.pytorch.load_model,
+                    mlflow.sklearn.load_model,
                     mlflow.pyfunc.load_model,
                 ):
                     try:

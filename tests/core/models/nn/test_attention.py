@@ -6,15 +6,14 @@ and dimension permutation helpers for temporal data.
 
 from __future__ import annotations
 
-import pytest
 import torch
 
 from dlkit.core.models.nn.attention.basic import SelfAttentionBlock
 from dlkit.core.models.nn.attention.transformer import (
-    TransformerEncoderBlock,
     TransformerDecoderBlock,
-    _seq_first,
+    TransformerEncoderBlock,
     _batch_first,
+    _seq_first,
 )
 
 
@@ -57,7 +56,7 @@ class TestSelfAttentionBlock:
 
     def test_is_nn_module(self) -> None:
         """SelfAttentionBlock should be an nn.Module."""
-        import torch.nn as nn
+        from torch import nn
 
         sa = SelfAttentionBlock(embed_dim=2, num_heads=1)
         assert isinstance(sa, nn.Module)
@@ -94,7 +93,7 @@ class TestTransformerEncoderBlock:
 
     def test_is_nn_module(self) -> None:
         """TransformerEncoderBlock should be an nn.Module."""
-        import torch.nn as nn
+        from torch import nn
 
         te = TransformerEncoderBlock(embed_dim=2, num_heads=1)
         assert isinstance(te, nn.Module)
@@ -153,7 +152,7 @@ class TestTransformerDecoderBlock:
 
     def test_is_nn_module(self) -> None:
         """TransformerDecoderBlock should be an nn.Module."""
-        import torch.nn as nn
+        from torch import nn
 
         td = TransformerDecoderBlock(embed_dim=2, num_heads=1)
         assert isinstance(td, nn.Module)

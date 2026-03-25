@@ -59,9 +59,7 @@ def _validate_coo_pack(
             f"manifest total_nnz ({manifest.total_nnz}) does not match values nnz ({values.size})"
         )
     if not np.isfinite(manifest.value_scale) or manifest.value_scale <= 0.0:
-        raise ValueError(
-            f"value_scale must be finite and > 0, got {manifest.value_scale}"
-        )
+        raise ValueError(f"value_scale must be finite and > 0, got {manifest.value_scale}")
     if not np.isclose(value_scale_from_disk, manifest.value_scale):
         raise ValueError(
             f"value_scale mismatch: payload ({value_scale_from_disk}) != contract ({manifest.value_scale})"

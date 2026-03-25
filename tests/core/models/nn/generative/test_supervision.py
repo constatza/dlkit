@@ -10,12 +10,10 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from dlkit.core.models.nn.generative.interfaces import INoiseSampler, ITimeSampler
 from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
 
 # ---------------------------------------------------------------------------
@@ -23,6 +21,16 @@ from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionB
 # ---------------------------------------------------------------------------
 _SEED: int = 42
 _CUSTOM_X1_KEY: str = "data"
+
+
+def _expect_tensor(value: object) -> Tensor:
+    assert isinstance(value, Tensor)
+    return value
+
+
+def _expect_tensordict(value: object) -> TensorDictBase:
+    assert isinstance(value, TensorDictBase)
+    return value
 
 
 # ===========================================================================
@@ -38,7 +46,7 @@ def test_supervision_builder_has_xt_key(flow_batch: TensorDict) -> None:
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert "xt" in result["features"].keys()
+    assert "xt" in _expect_tensordict(result["features"]).keys()
 
 
 def test_supervision_builder_has_t_key(flow_batch: TensorDict) -> None:
@@ -49,7 +57,7 @@ def test_supervision_builder_has_t_key(flow_batch: TensorDict) -> None:
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert "t" in result["features"].keys()
+    assert "t" in _expect_tensordict(result["features"]).keys()
 
 
 def test_supervision_builder_has_ut_key(flow_batch: TensorDict) -> None:
@@ -60,7 +68,7 @@ def test_supervision_builder_has_ut_key(flow_batch: TensorDict) -> None:
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert "ut" in result["targets"].keys()
+    assert "ut" in _expect_tensordict(result["targets"]).keys()
 
 
 def test_supervision_builder_removes_x1(flow_batch: TensorDict) -> None:
@@ -80,8 +88,9 @@ def test_supervision_builder_removes_x1(flow_batch: TensorDict) -> None:
     result = builder(flow_batch)
     # x1 survives because TensorDict.update() merges rather than replaces.
     # xt and t are added; x1 is NOT removed by the current implementation.
-    assert "xt" in result["features"].keys()
-    assert "t" in result["features"].keys()
+    features = _expect_tensordict(result["features"])
+    assert "xt" in features.keys()
+    assert "t" in features.keys()
 
 
 def test_supervision_builder_xt_shape_matches_x1(
@@ -96,12 +105,11 @@ def test_supervision_builder_xt_shape_matches_x1(
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert result["features"]["xt"].shape == torch.Size([batch_size, spatial_dim])
+    features = _expect_tensordict(result["features"])
+    assert _expect_tensor(features["xt"]).shape == torch.Size([batch_size, spatial_dim])
 
 
-def test_supervision_builder_t_shape(
-    flow_batch: TensorDict, batch_size: int
-) -> None:
+def test_supervision_builder_t_shape(flow_batch: TensorDict, batch_size: int) -> None:
     """features["t"] has shape (batch_size,).
 
     Args:
@@ -110,7 +118,8 @@ def test_supervision_builder_t_shape(
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert result["features"]["t"].shape == torch.Size([batch_size])
+    features = _expect_tensordict(result["features"])
+    assert _expect_tensor(features["t"]).shape == torch.Size([batch_size])
 
 
 def test_supervision_builder_ut_shape_matches_x1(
@@ -125,7 +134,8 @@ def test_supervision_builder_ut_shape_matches_x1(
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    assert result["targets"]["ut"].shape == torch.Size([batch_size, spatial_dim])
+    targets = _expect_tensordict(result["targets"])
+    assert _expect_tensor(targets["ut"]).shape == torch.Size([batch_size, spatial_dim])
 
 
 def test_supervision_builder_t_range(flow_batch: TensorDict) -> None:
@@ -136,7 +146,7 @@ def test_supervision_builder_t_range(flow_batch: TensorDict) -> None:
     """
     builder = FlowMatchingSupervisionBuilder(x1_key="x1")
     result = builder(flow_batch)
-    t = result["features"]["t"]
+    t = _expect_tensor(_expect_tensordict(result["features"])["t"])
     assert t.min() >= 0.0
     assert t.max() <= 1.0
 
@@ -162,9 +172,13 @@ def test_supervision_builder_reproducibility(flow_batch: TensorDict) -> None:
     gen2.manual_seed(_SEED)
     result2 = builder(flow_batch.clone(), gen2)
 
-    assert torch.equal(result1["features"]["xt"], result2["features"]["xt"])
-    assert torch.equal(result1["features"]["t"], result2["features"]["t"])
-    assert torch.equal(result1["targets"]["ut"], result2["targets"]["ut"])
+    features1 = _expect_tensordict(result1["features"])
+    features2 = _expect_tensordict(result2["features"])
+    targets1 = _expect_tensordict(result1["targets"])
+    targets2 = _expect_tensordict(result2["targets"])
+    assert torch.equal(_expect_tensor(features1["xt"]), _expect_tensor(features2["xt"]))
+    assert torch.equal(_expect_tensor(features1["t"]), _expect_tensor(features2["t"]))
+    assert torch.equal(_expect_tensor(targets1["ut"]), _expect_tensor(targets2["ut"]))
 
 
 # ===========================================================================
@@ -192,9 +206,11 @@ def test_supervision_builder_custom_x1_key(batch_size: int, spatial_dim: int) ->
     builder = FlowMatchingSupervisionBuilder(x1_key=_CUSTOM_X1_KEY)
     result = builder(batch)
 
-    assert "xt" in result["features"].keys()
-    assert "t" in result["features"].keys()
-    assert "ut" in result["targets"].keys()
+    features = _expect_tensordict(result["features"])
+    targets = _expect_tensordict(result["targets"])
+    assert "xt" in features.keys()
+    assert "t" in features.keys()
+    assert "ut" in targets.keys()
     # The original custom key is NOT removed (see test_supervision_builder_removes_x1).
 
 
@@ -250,10 +266,10 @@ def test_supervision_builder_protocol_compliance(
     result = builder(flow_batch)
 
     # t must be constant 0.5
-    t = result["features"]["t"]
+    t = _expect_tensor(_expect_tensordict(result["features"])["t"])
     assert torch.allclose(t, torch.full((batch_size,), _CONSTANT_TIME))
 
     # x0 = 0, x1 is known → ut = x1 - 0 = x1
-    x1 = flow_batch["features"]["x1"]
-    ut = result["targets"]["ut"]
+    x1 = _expect_tensor(_expect_tensordict(flow_batch["features"])["x1"])
+    ut = _expect_tensor(_expect_tensordict(result["targets"])["ut"])
     assert torch.allclose(ut, x1)

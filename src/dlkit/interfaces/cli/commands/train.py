@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import cast
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.interfaces.api import train as api_train, validate_config
+from dlkit.interfaces.api import train as api_train
+from dlkit.interfaces.api import validate_config
+from dlkit.interfaces.api.domain.errors import DLKitError
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result
@@ -65,12 +69,14 @@ def _run_training_impl(
         console.print(f"📖 Loading configuration from: {config_path}")
         try:
             settings = load_config(config_path, root_dir=root_dir, workflow_type="training")
-        except Exception as e:
+        except DLKitError as e:
             handle_api_error(e, console)
             raise typer.Exit(1)
 
+        training_settings = settings if isinstance(settings, TrainingSettingsProtocol) else None
+
         # Show training mode
-        if mlflow or settings.MLFLOW:
+        if mlflow or (training_settings and training_settings.MLFLOW):
             console.print("🎯 Using [bold]training with MLflow tracking[/bold]")
         else:
             console.print("🎯 Using [bold]vanilla training[/bold]")
@@ -125,8 +131,8 @@ def _run_training_impl(
 
         # --mlflow flag: ensure an [MLFLOW] section exists in settings.
         # The API has no boolean toggle — MLflow is enabled by config presence.
-        if mlflow and not settings.MLFLOW:  # type: ignore[attr-defined]
-            settings = settings.patch({"MLFLOW": {}})  # type: ignore[attr-defined]
+        if mlflow and not getattr(settings, "MLFLOW", None):
+            settings = cast(GeneralSettings, settings).patch({"MLFLOW": {}})
 
         with Progress(
             SpinnerColumn(),
@@ -154,8 +160,6 @@ def _run_training_impl(
         raise
     except Exception as e:
         # Handle DLKit errors (training failures, validation errors, etc.)
-        from dlkit.interfaces.api.domain.errors import DLKitError
-
         if isinstance(e, DLKitError):
             handle_api_error(e, console)
         else:

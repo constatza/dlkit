@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, patch
+from typing import Any, cast
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -83,7 +84,7 @@ class TestLRTunerSettings:
 
         # Invalid mode should raise validation error
         with pytest.raises(Exception):  # Pydantic ValidationError
-            LRTunerSettings(mode="invalid")  # type: ignore[arg-type]
+            LRTunerSettings(mode=cast(Any, "invalid"))
 
 
 class TestLRTuner:

@@ -1,9 +1,12 @@
-import torch
 from collections.abc import Sequence
-from pydantic import validate_call, ConfigDict
+from typing import cast
+
+import torch
+from pydantic import ConfigDict, validate_call
+
+from dlkit.tools.utils.general import slice_to_list
 
 from .base import Transform
-from dlkit.tools.utils.general import slice_to_list
 
 
 class TensorSubset(Transform):
@@ -51,8 +54,9 @@ class TensorSubset(Transform):
         self._keep = keep
 
     @property
-    def keep(self):
+    def keep(self) -> Sequence[int]:
         if isinstance(self._keep, slice):
+            assert self.length is not None, "length must be set before accessing keep as slice"
             return slice_to_list(self._keep, self.length)
         return self._keep
 
@@ -77,12 +81,13 @@ class TensorSubset(Transform):
         # Auto-fit from data if not already fitted
         if self.length is None:
             self.fit(x)
+        assert self.length is not None  # guaranteed by fit()
 
         # Build sorted list of indices to keep
         final_indices = sorted(set(range(self.length)) & set(self.keep))
 
-        # Create full-dimensional slice(None) list
-        indexer = [slice(None)] * x.ndim
+        # Create full-dimensional slice(None) list; element type is slice | list[int]
+        indexer = cast(list[slice | list[int]], [slice(None)] * x.ndim)
         indexer[self.dim] = list(final_indices)  # Index specific dimension
         return x[tuple(indexer)]
 

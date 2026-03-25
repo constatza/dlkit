@@ -9,6 +9,7 @@ chains to compute post-transform shapes for model construction.
 """
 
 from __future__ import annotations
+
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -122,14 +123,12 @@ def _resolve_transform_class(transform_settings: Any) -> type:
         return name
 
     if not isinstance(name, str):
-        raise TypeError(
-            f"Expected transform name to be a str or type, got {type(name).__name__}"
-        )
+        raise TypeError(f"Expected transform name to be a str or type, got {type(name).__name__}")
 
     import importlib
 
     module = importlib.import_module(module_path)
-    return getattr(module, name)  # pyright: ignore[reportArgumentType]
+    return cast(type, getattr(module, name))
 
 
 def _extract_transform_kwargs(transform_settings: Any) -> dict[str, Any]:

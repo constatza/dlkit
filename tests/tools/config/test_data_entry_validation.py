@@ -17,24 +17,19 @@ import torch
 
 from dlkit.tools.config.data_entries import (
     Feature,
-    Target,
+    PathBasedEntry,
     PathFeature,
     PathTarget,
+    Target,
+    ValueBasedEntry,
     ValueFeature,
     ValueTarget,
-    PathBasedEntry,
-    ValueBasedEntry,
     is_feature_entry,
-    is_target_entry,
     is_path_based,
+    is_target_entry,
     is_value_based,
 )
-from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
-from dlkit.tools.config.validators import validate_training_config_complete
-from dlkit.tools.config.training_settings import TrainingSettings
-from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.dataset_settings import DatasetSettings
-
 
 # ============================================================================
 # Fixtures
@@ -508,7 +503,6 @@ class TestDatasetSettingsValuePreservation:
 
     def test_value_feature_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
         """ValueFeature should remain ValueFeature when stored in DatasetSettings.features."""
-        from dlkit.tools.config.dataset_settings import DatasetSettings
 
         feat = Feature(name="x", value=sample_numpy_array)
         assert isinstance(feat, ValueFeature)
@@ -533,7 +527,6 @@ class TestDatasetSettingsValuePreservation:
 
     def test_value_target_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
         """ValueTarget should remain ValueTarget when stored in DatasetSettings.targets."""
-        from dlkit.tools.config.dataset_settings import DatasetSettings
 
         targ = Target(name="y", value=sample_numpy_array)
         assert isinstance(targ, ValueTarget)
@@ -560,7 +553,6 @@ class TestDatasetSettingsValuePreservation:
         self, tmp_path: Path, sample_numpy_array: np.ndarray
     ):
         """DatasetSettings should handle mixed ValueFeature and PathFeature correctly."""
-        from dlkit.tools.config.dataset_settings import DatasetSettings
 
         # Create path-based feature
         x_path = tmp_path / "x.npy"
@@ -589,7 +581,6 @@ class TestDatasetSettingsValuePreservation:
 
     def test_value_entries_work_with_flexible_dataset(self, sample_numpy_array: np.ndarray):
         """ValueFeature/ValueTarget should work with FlexibleDataset when passed through DatasetSettings."""
-        from dlkit.tools.config.dataset_settings import DatasetSettings
         from dlkit.core.datasets.flexible import FlexibleDataset
 
         # Create value-based entries

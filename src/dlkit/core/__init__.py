@@ -17,19 +17,19 @@ loading and advertise the submodules via ``__all__`` instead of importing
 them eagerly.
 """
 
+from collections.abc import Iterable
 from importlib import import_module
 from types import ModuleType
 from typing import TYPE_CHECKING
-from collections.abc import Iterable
 
 __all__ = ["datamodules", "datasets", "datatypes", "models", "training"]
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing only
-    from . import datamodules as datamodules  # noqa: F401
-    from . import datasets as datasets  # noqa: F401
-    from . import datatypes as datatypes  # noqa: F401
-    from . import models as models  # noqa: F401
-    from . import training as training  # noqa: F401
+    from . import datamodules as datamodules
+    from . import datasets as datasets
+    from . import datatypes as datatypes
+    from . import models as models
+    from . import training as training
 
 
 def __getattr__(name: str) -> ModuleType:
@@ -39,7 +39,6 @@ def __getattr__(name: str) -> ModuleType:
     expects while keeping the public API intact for callers that relied on the
     previous eager imports.
     """
-
     if name in __all__:
         module = import_module(f"{__name__}.{name}")
         globals()[name] = module
@@ -49,5 +48,4 @@ def __getattr__(name: str) -> ModuleType:
 
 def __dir__() -> Iterable[str]:
     """Ensure dir() lists lazily imported attributes."""
-
     return sorted(set(__all__) | set(globals().keys()))

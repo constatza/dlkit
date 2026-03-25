@@ -1,11 +1,11 @@
 """CLI command modules for DLKit."""
 
 # Import command modules to make them available
-from . import config, predict, optimize, train
+from . import config, optimize, predict, train
 
 __all__ = [
-    "train",
-    "predict",
-    "optimize",
     "config",
+    "optimize",
+    "predict",
+    "train",
 ]

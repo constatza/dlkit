@@ -5,7 +5,6 @@ Tests differentiability and correctness of functions in dlkit.core.training.func
 
 import pytest
 import torch
-from torch import Tensor
 
 from dlkit.core.training.functional import (
     huber_loss,
@@ -23,7 +22,6 @@ from dlkit.core.training.metrics.functional import (
     _relative_energy_norm_compute,
     _relative_energy_norm_update,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -230,12 +228,10 @@ class TestCorrectness:
         """Sparse per-sample (B, D, D) relative energy loss should match dense."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_batch = torch.tensor(
-            [
-                [[2.0, 0.0], [0.0, 1.0]],
-                [[3.0, 0.2], [0.2, 2.0]],
-            ]
-        )
+        dense_batch = torch.tensor([
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[3.0, 0.2], [0.2, 2.0]],
+        ])
         sparse_batch = dense_batch.to_sparse_coo()
 
         dense = relative_energy_norm_loss(preds, target, dense_batch, eps=1e-8)

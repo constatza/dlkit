@@ -276,6 +276,7 @@ model_type = detect_model_type(settings.MODEL, settings)
 # Check if shape spec required
 if requires_shape_spec(model_type):
     from dlkit.core.shape_specs.simple_inference import infer_shapes_from_dataset
+
     shape_summary = infer_shapes_from_dataset(dataset)
 else:
     shape_summary = None
@@ -355,6 +356,7 @@ if components.shape_spec:
 ```python
 from dlkit.runtime.workflows.factories import BuildFactory, IBuildStrategy
 
+
 class CustomBuildStrategy(IBuildStrategy):
     def can_handle(self, settings):
         # Custom detection logic
@@ -371,6 +373,7 @@ class CustomBuildStrategy(IBuildStrategy):
             shape_spec=None,
             meta={"dataset_type": "custom"},
         )
+
 
 # Use custom strategy
 factory = BuildFactory(strategies=[CustomBuildStrategy(), FlexibleBuildStrategy()])

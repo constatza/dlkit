@@ -7,7 +7,6 @@ from tensordict import TensorDict
 
 from dlkit.interfaces.api.domain.models import TrainingResult
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

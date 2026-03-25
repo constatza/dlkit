@@ -1,12 +1,11 @@
-from typing import Literal
-from importlib import import_module
-from inspect import signature, isclass
-from typing import Any
 from collections.abc import Callable
+from importlib import import_module
+from inspect import isclass, signature
 from types import FunctionType
+from typing import Any, Literal
 
 
-def get_mro_keys(cls: type) -> tuple[dict[str, Any], dict[str, Any]]:
+def get_mro_keys(cls: type) -> set[str] | list[str]:
     """Convert a dictionary to a format compatible with the constructor of a given class or function signature.
 
     Args:
@@ -15,7 +14,6 @@ def get_mro_keys(cls: type) -> tuple[dict[str, Any], dict[str, Any]]:
     Returns:
         dict[str, Any]: A dictionary with keys and values compatible with the constructor of the given class or function signature.
     """
-
     if isclass(cls):
         mro_keys = {
             name
@@ -41,9 +39,8 @@ def kwargs_compatible_with(
     raise ValueError(f"Invalid value for which: {which}")
 
 
-def slice_to_list(idx: slice, length: int):
-    """
-    Convert a slice to a list of indices of length `length`.
+def slice_to_list(idx: slice, length: int) -> list[int]:
+    """Convert a slice to a list of indices of length `length`.
 
     When the slice is a reverse slice (i.e. `start` and `stop` are both zero and `step` is negative),
     the resulting list will be a reversed list of indices of length `length`.
@@ -64,20 +61,18 @@ def slice_to_list(idx: slice, length: int):
 
 
 def get_name(obj: object) -> str:
-    """
-    Return the name of a function or class. If `obj` is an instance,
+    """Return the name of a function or class. If `obj` is an instance,
     return the class name of that instance. If it’s a function or class,
     return its __name__. Otherwise, return the type’s name.
     """
     if isinstance(obj, FunctionType):
         # It’s a function object
         return obj.__name__
-    elif isclass(obj):
+    if isclass(obj):
         # It’s a class object
         return obj.__name__
-    else:
-        # Assume it’s an instance; return its class’s name
-        return obj.__class__.__name__
+    # Assume it’s an instance; return its class’s name
+    return obj.__class__.__name__
 
 
 def filter_dict(
@@ -112,17 +107,15 @@ def get_signature_names(func: Callable) -> list[str]:
 
 
 def import_object(module_path: str, fallback_module: str = "") -> Callable:
-    """
-    Dynamically import an object given a path.
+    """Dynamically import an object given a path.
     Supports:
     - "module.Path:ClassName"
     - "module.Path" (module only)
     """
-    module_path, obj_name = split_module_path(module_path)
+    _mod, obj_name = split_module_path(module_path)
     # use default module as fallback
-    if module_path is None:
-        module_path = fallback_module
-    module = import_module(module_path)
+    resolved_module = _mod if _mod is not None else fallback_module
+    module = import_module(resolved_module)
     obj = getattr(module, obj_name)
     if obj is None:
         raise ImportError(f"Could not find {obj_name} in {module_path}")

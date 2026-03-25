@@ -12,7 +12,7 @@ It signals "this is a generative model" for:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from torch import Tensor
 
@@ -72,6 +72,7 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
             Tuple of (loss, batch_size, enriched_batch).
         """
         from functools import reduce
+
         from dlkit.core.models.wrappers.base import _batch_size_of
 
         gen = (self._train_generator_factory if stage == "train" else self._val_generator_factory)(
@@ -89,7 +90,7 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
         batch = self._model_invoker.invoke(self.model, batch)
 
         # Compute loss
-        loss = self._loss_computer.compute(batch["predictions"], batch)
+        loss = self._loss_computer.compute(cast(Tensor, batch["predictions"]), batch)
 
         batch_size = _batch_size_of(batch["predictions"])
         return loss, batch_size, batch

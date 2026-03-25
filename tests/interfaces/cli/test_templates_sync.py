@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dlkit.interfaces.cli import templates as tmpl
 from dlkit.interfaces.cli.commands.config import (
-    _create_training_template,
     _create_inference_template,
     _create_mlflow_template,
     _create_optuna_template,
+    _create_training_template,
 )
 
 

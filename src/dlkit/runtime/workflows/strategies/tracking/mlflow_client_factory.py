@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 
-import mlflow
 from mlflow import MlflowClient
-
-from dlkit.tools.io.url_utils import parse_url
 from mlflow.environment_variables import (
-    MLFLOW_HTTP_REQUEST_TIMEOUT,
-    MLFLOW_HTTP_REQUEST_MAX_RETRIES,
     MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR,
     MLFLOW_HTTP_REQUEST_BACKOFF_JITTER,
+    MLFLOW_HTTP_REQUEST_MAX_RETRIES,
+    MLFLOW_HTTP_REQUEST_TIMEOUT,
 )
+
+from dlkit.tools.io.url_utils import parse_url
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -45,22 +45,20 @@ class MLflowClientFactory:
             try:
                 parsed = parse_url(uri)
                 if not parsed.scheme:
-                    logger.warning(f"Tracking URI missing scheme: {uri}")
+                    logger.warning("Tracking URI missing scheme: %s", uri)
             except Exception as e:
-                logger.warning(f"Invalid tracking URI format: {uri} - {e}")
+                logger.warning("Invalid tracking URI format: %s - %s", uri, e)
 
         # Create client with explicit tracking URI
         if uri:
-            logger.debug(f"Creating MLflow client with tracking URI: {uri}")
+            logger.debug("Creating MLflow client with tracking URI: %s", uri)
             return MlflowClient(tracking_uri=uri)
-        else:
-            logger.debug("Creating MLflow client with default tracking URI")
-            return MlflowClient()
+        logger.debug("Creating MLflow client with default tracking URI")
+        return MlflowClient()
 
     @staticmethod
     def validate_client_connectivity(client: MlflowClient) -> bool:
         """Validate that client can connect to MLflow tracking server."""
-
         try:
             # Simple connectivity test - try to list experiments with trimmed timeouts
             # Note: All MLflow HTTP env vars must be integers
@@ -68,7 +66,7 @@ class MLflowClientFactory:
                 client.search_experiments()
             return True
         except Exception as e:
-            logger.warning(f"MLflow client connectivity test failed: {e}")
+            logger.warning("MLflow client connectivity test failed: %s", e)
             return False
 
     @staticmethod
@@ -78,23 +76,21 @@ class MLflowClientFactory:
         artifact_location: str | None = None,
     ) -> str:
         """Get experiment ID or create if it doesn't exist."""
-
-        logger.debug(f"Checking if experiment '{experiment_name}' exists")
+        logger.debug("Checking if experiment '%s' exists", experiment_name)
         try:
-            logger.debug(f"Calling client.get_experiment_by_name('{experiment_name}')")
+            logger.debug("Calling client.get_experiment_by_name('%s')", experiment_name)
             experiment = client.get_experiment_by_name(experiment_name)
-            logger.debug(f"get_experiment_by_name returned: {experiment}")
+            logger.debug("get_experiment_by_name returned: %s", experiment)
             if experiment is not None:
                 logger.debug(f"Experiment exists with ID: {experiment.experiment_id}")
                 return experiment.experiment_id
         except Exception as e:
             logger.debug(f"get_experiment_by_name failed with: {type(e).__name__}: {e}")
-            pass
 
         # Create new experiment if not found
-        logger.debug(f"Creating new MLflow experiment: {experiment_name}")
+        logger.debug("Creating new MLflow experiment: %s", experiment_name)
         result = client.create_experiment(experiment_name, artifact_location=artifact_location)
-        logger.debug(f"Experiment created with ID: {result}")
+        logger.debug("Experiment created with ID: %s", result)
         return result
 
 
@@ -103,7 +99,7 @@ def _temporary_request_settings(
     timeout: int,
     max_retries: int,
     backoff_factor: int,
-) -> None:
+) -> Iterator[None]:
     """Temporarily override MLflow HTTP request behaviour for fast validation.
 
     MLflow's defaults favour resiliency (large timeouts and exponential

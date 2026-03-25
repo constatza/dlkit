@@ -63,7 +63,7 @@ def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> No
         from lightning.pytorch.callbacks import ModelCheckpoint
     except ImportError:
         try:
-            from pytorch_lightning.callbacks import ModelCheckpoint  # type: ignore[no-redef]
+            from pytorch_lightning.callbacks import ModelCheckpoint
         except ImportError:
             logger.debug("MlflowCheckpointRouter: ModelCheckpoint not available")
             return
@@ -71,9 +71,7 @@ def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> No
     for cb in getattr(trainer, "callbacks", []):
         if isinstance(cb, ModelCheckpoint) and cb.dirpath is None:
             cb.dirpath = str(checkpoint_dir)
-            logger.debug(
-                f"MlflowCheckpointRouter: redirected ModelCheckpoint → {checkpoint_dir}"
-            )
+            logger.debug(f"MlflowCheckpointRouter: redirected ModelCheckpoint → {checkpoint_dir}")
 
 
 class MlflowCheckpointRouter(Callback):

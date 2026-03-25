@@ -8,17 +8,17 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.models.nn.cae import (
-    SkipCAE1d,
     LinearCAE1d,
+    SkipCAE1d,
     VAE1d,
-    vae_loss,
     reparameterize,
+    vae_loss,
 )
 from dlkit.core.models.nn.cae.base import CAE
-from dlkit.core.models.nn.base import DLKitModel
 
 
 @pytest.fixture

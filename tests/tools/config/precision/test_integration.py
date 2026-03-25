@@ -3,13 +3,12 @@
 import pytest
 import torch
 
-from dlkit.tools.config.precision import PrecisionStrategy
 from dlkit.interfaces.api.domain.precision import precision_override
 from dlkit.interfaces.api.services.precision_service import PrecisionService
-from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.data_entries import Feature
+from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.io.arrays import load_array
-from .conftest import TestModelFactory
 
 
 class TestPrecisionIntegration:
@@ -117,9 +116,6 @@ class TestPrecisionIntegration:
 
     def test_context_override_priority(self, sample_data_file, test_model_factory, sample_shape):
         """Test that context override has highest priority."""
-        # Setup session with one precision
-        session = SessionSettings(precision=PrecisionStrategy.FULL_32)
-
         # Override with context (use TRUE_16 instead of MIXED_16 to avoid ambiguity)
         with precision_override(PrecisionStrategy.TRUE_16):
             # I/O should use context override, not session

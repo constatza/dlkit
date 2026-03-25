@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class IRunContext(ABC):
@@ -105,7 +108,7 @@ class IRunContext(ABC):
         Example:
             ```python
             run_context.log_text('{"key": "value"}', "lineage/manifest.json")
-            run_context.log_text("[MLFLOW]\\nexperiment_name = \"demo\"", "config/settings.toml")
+            run_context.log_text('[MLFLOW]\\nexperiment_name = "demo"', "config/settings.toml")
             ```
         """
         raise NotImplementedError
@@ -281,6 +284,21 @@ class IExperimentTracker(ABC):
     """
 
     @abstractmethod
+    def __enter__(self) -> IExperimentTracker:
+        """Enter the tracker context manager, initialising resources."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool | None:
+        """Exit the tracker context manager, releasing resources."""
+        raise NotImplementedError
+
+    @abstractmethod
     def create_run(
         self,
         experiment_name: str | None = None,
@@ -317,7 +335,7 @@ class IExperimentTracker(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_settings(self, settings: GeneralSettings, run_context: IRunContext) -> None:
+    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
         """Log complete configuration settings to the run.
 
         Typically saves settings as an artifact (e.g., TOML file) for reproducibility.
@@ -340,7 +358,7 @@ class IExperimentTracker(ABC):
 
     @abstractmethod
     def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: GeneralSettings
+        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
         """Log model hyperparameters extracted from settings.
 
@@ -366,6 +384,24 @@ class IExperimentTracker(ABC):
                 # Logs: {"hidden_dim": 256, "num_layers": 3, "dropout": 0.1}
                 tracker.log_model_parameters(model, run, settings)
             ```
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_tracking_uri(self) -> str | None:
+        """Return the resolved tracking URI, or None if not initialized.
+
+        Returns:
+            Tracking URI string or None.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_local(self) -> bool:
+        """Return True when the backend stores data on the local filesystem.
+
+        Returns:
+            True if the backend is local (e.g., SQLite / local directory).
         """
         raise NotImplementedError
 
@@ -406,7 +442,6 @@ class NullRunContext(IRunContext):
             metrics: Ignored.
             step: Ignored.
         """
-        pass
 
     def log_params(self, params: dict[str, Any]) -> None:
         """No-op parameter logging.
@@ -414,7 +449,6 @@ class NullRunContext(IRunContext):
         Args:
             params: Ignored.
         """
-        pass
 
     def log_text(self, text: str, artifact_file: str) -> None:
         """No-op text artifact logging.
@@ -423,7 +457,6 @@ class NullRunContext(IRunContext):
             text: Ignored.
             artifact_file: Ignored.
         """
-        pass
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         """No-op artifact logging.
@@ -432,7 +465,6 @@ class NullRunContext(IRunContext):
             artifact_path: Ignored.
             artifact_dir: Ignored.
         """
-        pass
 
     def set_tag(self, key: str, value: str) -> None:
         """No-op tag setting.
@@ -441,7 +473,6 @@ class NullRunContext(IRunContext):
             key: Ignored.
             value: Ignored.
         """
-        pass
 
     def log_dataset(
         self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
@@ -453,7 +484,6 @@ class NullRunContext(IRunContext):
             context: Ignored.
             tags: Ignored.
         """
-        pass
 
     def log_model(
         self,
@@ -479,7 +509,6 @@ class NullRunContext(IRunContext):
 
     def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
         """No-op model alias update."""
-        pass
 
     def set_model_version_tag(
         self,
@@ -489,7 +518,14 @@ class NullRunContext(IRunContext):
         value: str,
     ) -> None:
         """No-op model version tag update."""
-        pass
+
+    def get_tracking_uri(self) -> str | None:
+        """Return None (null tracker has no backend)."""
+        return None
+
+    def is_local(self) -> bool:
+        """Return False (null tracker has no backend)."""
+        return False
 
 
 class NullTracker(IExperimentTracker):
@@ -539,7 +575,6 @@ class NullTracker(IExperimentTracker):
             exc_val: Exception value if an exception occurred.
             exc_tb: Exception traceback if an exception occurred.
         """
-        pass
 
     def create_run(
         self,
@@ -574,17 +609,16 @@ class NullTracker(IExperimentTracker):
 
         return _null_context()
 
-    def log_settings(self, settings: GeneralSettings, run_context: IRunContext) -> None:
+    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
         """No-op settings logging.
 
         Args:
             settings: Ignored.
             run_context: Ignored.
         """
-        pass
 
     def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: GeneralSettings
+        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
         """No-op model parameter logging.
 
@@ -593,16 +627,21 @@ class NullTracker(IExperimentTracker):
             run_context: Ignored.
             settings: Ignored.
         """
-        pass
+
+    def get_tracking_uri(self) -> str | None:
+        """Return None — null tracker has no backend."""
+        return None
+
+    def is_local(self) -> bool:
+        """Return False — null tracker has no backend."""
+        return False
 
 
 @runtime_checkable
 class ITrackingSetup(Protocol):
     """Optional protocol for trackers that support external configuration setup."""
 
-    def configure(
-        self, mlflow_config: Any, *, root_dir: Any = None
-    ) -> None: ...
+    def configure(self, mlflow_config: Any, *, root_dir: Any = None) -> None: ...
 
 
 @runtime_checkable

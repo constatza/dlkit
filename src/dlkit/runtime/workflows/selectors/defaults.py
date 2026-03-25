@@ -86,8 +86,8 @@ class FamilyDefaults:
         """
         # Graph detection via PyG types or samples
         try:
-            from torch_geometric.data import InMemoryDataset as _PyGDS  # type: ignore
             from torch_geometric.data import Data as _PyGData  # type: ignore
+            from torch_geometric.data import InMemoryDataset as _PyGDS  # type: ignore
 
             if isinstance(dataset, _PyGDS):
                 return DatasetFamily.GRAPH

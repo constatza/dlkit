@@ -15,9 +15,9 @@ from dlkit.interfaces.cli.adapters.config_adapter import (
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 
 from ._helpers import (
-    create_toml_config,
-    create_json_config,
     create_invalid_toml_config,
+    create_json_config,
+    create_toml_config,
 )
 
 
@@ -336,9 +336,10 @@ class TestResultPresenterModule:
 
     def test_config_adapter_functions_handle_errors(self) -> None:
         """Test that config adapter functions handle error cases properly."""
-        from dlkit.interfaces.cli.adapters.config_adapter import load_config, validate_config_path
-        from dlkit.interfaces.api.domain import ConfigurationError
         from pathlib import Path
+
+        from dlkit.interfaces.api.domain import ConfigurationError
+        from dlkit.interfaces.cli.adapters.config_adapter import load_config, validate_config_path
 
         # Test that functions handle missing files appropriately
         nonexistent_path = Path("nonexistent_file.toml")

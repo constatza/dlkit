@@ -8,8 +8,8 @@ exclusions, sorting) is the caller's responsibility.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, is_dataclass
 from collections.abc import Mapping
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -199,7 +199,7 @@ class WriterFactory:
     """
 
     @staticmethod
-    def create(format: str = "toml") -> IWriter:  # noqa: A002
+    def create(format: str = "toml") -> IWriter:
         """Create a writer for the given format.
 
         Args:
@@ -219,6 +219,4 @@ class WriterFactory:
             case "yaml" | "yml":
                 return YamlWriter()
             case _:
-                raise ValueError(
-                    f"Unsupported format {format!r}. Choose from: toml, json, yaml"
-                )
+                raise ValueError(f"Unsupported format {format!r}. Choose from: toml, json, yaml")

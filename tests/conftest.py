@@ -1,5 +1,4 @@
 from __future__ import annotations
-# ruff: noqa: E402
 
 # Bootstrap: ensure MLflow never defaults to sqlite:///mlflow.db in the project
 # root. pytest_configure() will replace this with a proper session-level path.
@@ -9,20 +8,20 @@ if "MLFLOW_TRACKING_URI" not in _os.environ:
     _os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:////tmp/dlkit_test_{_os.getpid()}_bootstrap.db"
 del _os
 
-from pathlib import Path
-import pathlib
 import os
+import pathlib
 import shutil
 import socket
 import unittest.mock
+from pathlib import Path
 
-from _pytest.tmpdir import TempPathFactory
 import pytest
+from _pytest.tmpdir import TempPathFactory
 
-from dlkit.tools.io import load_config
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.environment import env as global_environment
+from dlkit.tools.io import load_config
 from dlkit.tools.registry.public import _reset_for_tests as _reset_component_registry_for_tests
 
 _ORIGINAL_HOME_ENV = os.environ.get("HOME")
@@ -45,7 +44,7 @@ def with_root(request) -> bool:
     return request.param
 
 
-@pytest.fixture()
+@pytest.fixture
 def env(tmp_path: Path):
     cfg_dir = tmp_path / "cfg"
     root_override = tmp_path / "root_override"
@@ -120,21 +119,21 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_file(env: dict, with_root: bool) -> Path:
     cfg_path = env["cfg_dir"] / ("config_root.toml" if with_root else "config.toml")
     _write_config(cfg_path, with_root=with_root, env_paths=env)
     return cfg_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def settings(env: dict, config_file: Path, loader_kind: str):
     if loader_kind == "io":
         return load_config(config_file)
     return GeneralSettings.from_file(config_file)
 
 
-@pytest.fixture()
+@pytest.fixture
 def expected_root(env: dict, config_file: Path, with_root: bool) -> Path:
     return (env["root_override"] if with_root else config_file.parent).resolve()
 
@@ -188,7 +187,7 @@ def pytest_configure(config):
     mlruns_session_dir.mkdir(parents=True, exist_ok=True)
     os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:///{(mlruns_session_dir / 'mlflow.db').as_posix()}"
 
-    pathlib.Path.home = classmethod(lambda cls, _home=home_dir: _home)  # type: ignore[assignment]
+    pathlib.Path.home = classmethod(lambda cls, _home=home_dir: _home)
     global_environment.root_dir = str(root_dir)
 
     _TEST_SESSION_ROOT = session_root
@@ -228,19 +227,19 @@ def pytest_unconfigure(config):
     global_environment.root_dir = _ORIGINAL_ENV_ROOT
 
 
-def pytest_collection_modifyitems(config, items):  # noqa: D401
+def pytest_collection_modifyitems(config, items):
     """Skip slow socket-dependent cases in restricted sandboxes."""
     skip_net = pytest.mark.skip(reason="Network/sockets not permitted in sandbox")
     network_restricted = _network_restricted()
     for item in items:
         if network_restricted and any(
-            mark.name == "slow" for mark in getattr(item, "iter_markers", lambda: [])()
+            mark.name == "slow" for mark in getattr(item, "iter_markers", list)()
         ):
             item.add_marker(skip_net)
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _fake_socket_when_restricted():  # noqa: D401
+def _fake_socket_when_restricted():
     """Install a minimal fake socket if sandbox denies real sockets."""
     if not _network_restricted():
         return
@@ -261,10 +260,10 @@ def _fake_socket_when_restricted():  # noqa: D401
                 self._host = host or "127.0.0.1"
                 self._port = int(port) if int(port) != 0 else 50000
                 self._path = None
-                return None
+                return
 
             self._path = str(address)
-            return None
+            return
 
         def listen(self, backlog):
             # No real socket operations in restricted environments.
@@ -291,11 +290,11 @@ def _fake_socket_when_restricted():  # noqa: D401
             return _real(family, type, proto)
         return _FakeSocket(family, type, proto)
 
-    socket.socket = _factory  # type: ignore[assignment]
+    socket.socket = _factory
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _writable_home_dir():  # noqa: D401
+def _writable_home_dir():
     """Point HOME to a writable directory to allow file-based tracking.
 
     Some sandboxes disallow writing to the real home. The path is configured
@@ -306,7 +305,7 @@ def _writable_home_dir():  # noqa: D401
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _setup_test_artifacts_cleanup():  # noqa: D401
+def _setup_test_artifacts_cleanup():
     """Ensure test artifacts directory exists and clean up after session.
 
     This fixture automatically:
@@ -357,7 +356,7 @@ def _get_test_artifacts_dir() -> Path:
     return current / "tests" / "artifacts"
 
 
-@pytest.fixture()
+@pytest.fixture
 def test_artifacts_dir() -> Path:
     """Provide access to the test artifacts directory.
 
@@ -385,14 +384,13 @@ def _block_mlflow_host_probe():
 @pytest.fixture(autouse=True)
 def _isolate_global_component_state():
     """Reset global component registries and factory singletons between tests."""
-    previous_factory_registry = FactoryProvider._instance  # type: ignore[attr-defined]
-    FactoryProvider._instance = None  # type: ignore[attr-defined]
+    previous_factory_registry = FactoryProvider.reset_for_testing()
     _reset_component_registry_for_tests()
     try:
         yield
     finally:
         _reset_component_registry_for_tests()
-        FactoryProvider._instance = previous_factory_registry  # type: ignore[attr-defined]
+        FactoryProvider.restore_for_testing(previous_factory_registry)
 
 
 # Import MLflow test fixtures

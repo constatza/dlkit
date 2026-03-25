@@ -1,14 +1,15 @@
 from collections.abc import Callable
-from torch import nn
+
 import torch
+from torch import nn
 
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.cae.base import CAE
-from dlkit.core.models.nn.encoder.skip import SkipEncoder1d, SkipDecoder1d
 from dlkit.core.models.nn.encoder.latent import (
-    VectorToTensorBlock,
     TensorToVectorBlock,
+    VectorToTensorBlock,
 )
+from dlkit.core.models.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.core.models.nn.utils import build_channel_schedule
 
 

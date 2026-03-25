@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from dlkit.tools.config.mlflow_settings import MLflowSettings
@@ -73,18 +74,20 @@ class TestMLflowSettings:
 
     def test_legacy_nested_sections_fail_with_migration_message(self) -> None:
         with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
-            MLflowSettings(client={"experiment_name": "exp"})  # type: ignore[arg-type]
+            MLflowSettings(**cast(dict[str, Any], {"client": {"experiment_name": "exp"}}))
 
         with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
-            MLflowSettings(server={"host": "127.0.0.1"})  # type: ignore[arg-type]
+            MLflowSettings(**cast(dict[str, Any], {"server": {"host": "127.0.0.1"}}))
 
     def test_infra_fields_in_toml_are_rejected(self) -> None:
         with pytest.raises(ValidationError, match="env-only"):
-            MLflowSettings(tracking_uri="http://127.0.0.1:5000")  # type: ignore[arg-type]
+            MLflowSettings(**cast(dict[str, Any], {"tracking_uri": "http://127.0.0.1:5000"}))
 
         with pytest.raises(ValidationError, match="env-only"):
-            MLflowSettings(artifacts_destination="file:///C:/artifacts")  # type: ignore[arg-type]
+            MLflowSettings(
+                **cast(dict[str, Any], {"artifacts_destination": "file:///C:/artifacts"})
+            )
 
     def test_enabled_field_is_rejected(self) -> None:
         with pytest.raises(ValidationError, match="no longer has an 'enabled' field"):
-            MLflowSettings(enabled=True)  # type: ignore[arg-type]
+            MLflowSettings(**cast(dict[str, Any], {"enabled": True}))

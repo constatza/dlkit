@@ -6,12 +6,13 @@ from torch import nn
 from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
+
 from .base import BaseGraphNetwork
 from .projections import SkipProjection
 
 __all__ = [
-    "ProjectionNetwork",
     "GProjection",
+    "ProjectionNetwork",
 ]
 
 

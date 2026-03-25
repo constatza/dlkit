@@ -7,10 +7,9 @@ This is useful when the magnitude of feature vectors matters less than their dir
 from typing import TYPE_CHECKING
 
 import torch
-from pydantic import validate_call, ConfigDict
+from pydantic import ConfigDict, validate_call
 
 from dlkit.core.training.transforms.base import Transform
-from dlkit.core.training.transforms.errors import TransformApplicationError
 from dlkit.core.training.transforms.shape_inference import register_shape_inference
 
 if TYPE_CHECKING:
@@ -84,7 +83,7 @@ class SampleNormL2(Transform):
         self._last_norms = None
         self._shape_configured = False
 
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+    def configure_shape(self, shape_spec: IShapeSpec, entry_name: str) -> None:
         """Configure feature dimensions from shape information.
 
         Args:

@@ -14,9 +14,9 @@ Design goals:
 from typing import Any
 
 from .array import stack_batches, to_numpy
+from .array import to_plot_data as to_plot_array_data
 from .core import is_graph_output, summarize
 from .graph import to_plot_data as to_plot_graph_data
-from .array import to_plot_data as to_plot_array_data
 
 
 def to_plot_data(preds: Any, targets: Any | None = None) -> Any:
@@ -35,11 +35,11 @@ def to_plot_data(preds: Any, targets: Any | None = None) -> Any:
 
 
 __all__ = [
-    "stack_batches",
-    "to_numpy",
-    "to_plot_data",
-    "to_plot_array_data",
-    "to_plot_graph_data",
     "is_graph_output",
+    "stack_batches",
     "summarize",
+    "to_numpy",
+    "to_plot_array_data",
+    "to_plot_data",
+    "to_plot_graph_data",
 ]

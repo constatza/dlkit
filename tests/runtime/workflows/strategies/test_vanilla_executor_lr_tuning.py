@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.workflows.strategies.core.vanilla_executor import VanillaExecutor
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
+from dlkit.runtime.workflows.strategies.core.vanilla_executor import VanillaExecutor
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 from dlkit.tools.config.optimizer_settings import OptimizerSettings
@@ -82,7 +82,7 @@ class TestVanillaExecutorLRTuning:
 
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.interfaces.api.services.precision_service.get_precision_service"):
-                result = executor.execute(mock_components, settings_without_lr_tuner)
+                executor.execute(mock_components, settings_without_lr_tuner)
 
         # Verify training was called
         mock_components.trainer.fit.assert_called_once()
@@ -108,7 +108,7 @@ class TestVanillaExecutorLRTuning:
                     "dlkit.runtime.workflows.strategies.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
-                    result = executor.execute(mock_components, settings_with_lr_tuner)
+                    executor.execute(mock_components, settings_with_lr_tuner)
 
         # Verify LR tuner was called
         mock_lr_tuner.tune.assert_called_once()
@@ -152,7 +152,7 @@ class TestVanillaExecutorLRTuning:
                     "dlkit.runtime.workflows.strategies.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
-                    result = executor.execute(mock_components, settings_with_empty_lr_tuner)
+                    executor.execute(mock_components, settings_with_empty_lr_tuner)
 
         # Verify LR tuner WAS called (empty dict creates LRTunerSettings with defaults)
         mock_lr_tuner.tune.assert_called_once()
@@ -179,7 +179,7 @@ class TestVanillaExecutorLRTuning:
                     return_value=mock_lr_tuner,
                 ):
                     # Should not raise - graceful degradation
-                    result = executor.execute(mock_components, settings_with_lr_tuner)
+                    executor.execute(mock_components, settings_with_lr_tuner)
 
         # Verify training still proceeded
         mock_components.trainer.fit.assert_called_once()

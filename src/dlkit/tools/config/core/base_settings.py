@@ -27,6 +27,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dlkit.tools.config.core.patching import patch_model
@@ -69,7 +70,7 @@ class BasicSettings(BaseSettings):
         ser_json_bytes="base64",
     )
 
-    def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
+    def to_dict(self, exclude: set[str] | None = None) -> dict[str, object]:
         """Serialize settings to a plain dict.
 
         Excludes values that are None or not explicitly set, to reduce
@@ -165,10 +166,15 @@ class ComponentSettings(BasicSettings):
 
     This replaces the old ClassSettings but removes the build() method
     to follow SOLID principles. Object construction is now handled by factories.
-    Subclasses can declare their own name/module_path fields as needed.
+
+    ``name`` and ``module_path`` are conventional component selector fields
+    present on concrete subclasses and accessed via cast in factory code.
     """
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
+
+    name: str | type | Callable[..., object] | dict[str, str | tuple[str, ...]] | None = None
+    module_path: str | None = None
 
     def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Serialize component settings, excluding meta fields.
@@ -200,6 +206,54 @@ class ComponentSettings(BasicSettings):
         )
 
 
+class RequiredNameComponentSettings(ComponentSettings):
+    """ComponentSettings where name is required (no default).
+
+    Use as base for components that always need a name (model, etc.)
+    while still accepting str, type, Callable, or None at the type level.
+    The required constraint is enforced by a validator.
+    """
+
+    @model_validator(mode="after")
+    def _require_name(self) -> RequiredNameComponentSettings:
+        """Enforce that name is not None.
+
+        Returns:
+            The validated instance.
+
+        Raises:
+            ValueError: If name is None.
+        """
+        if self.name is None:
+            raise ValueError("name is required for this component settings class")
+        return self
+
+
+class StringNamedComponentSettings(ComponentSettings):
+    """ComponentSettings where name must be a non-empty string.
+
+    Use as base for components resolved purely by string name
+    (transforms, datasets). module_path defaults to an empty string.
+    The name constraint is enforced by a validator.
+    """
+
+    module_path: str | None = Field(default="", description="Module path for the component.")
+
+    @model_validator(mode="after")
+    def _require_string_name(self) -> StringNamedComponentSettings:
+        """Enforce that name is a non-empty string.
+
+        Returns:
+            The validated instance.
+
+        Raises:
+            ValueError: If name is not a non-empty string.
+        """
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("name must be a non-empty string for this component settings class")
+        return self
+
+
 class HyperParameterSettings(BasicSettings):
     """Settings that can contain hyperparameter specifications.
 
@@ -210,5 +264,3 @@ class HyperParameterSettings(BasicSettings):
     SettingsSampler implementations to maintain Single Responsibility Principle.
     Settings classes should only hold and validate configuration
     """
-
-    pass

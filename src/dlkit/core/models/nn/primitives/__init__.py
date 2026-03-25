@@ -1,43 +1,43 @@
 from .convolutional import ConvolutionBlock1d
 from .dense import DenseBlock
 from .parametrizations import (
+    SPD,
     PositiveColumnScale,
     PositiveRowScale,
-    PositiveScalarScale,
     PositiveSandwichScale,
-    SPD,
+    PositiveScalarScale,
     Symmetric,
 )
 from .parametrized_layers import (
     FactorizedLinear,
-    register_spd,
-    register_spd_factorized,
-    register_symmetric,
-    register_symmetric_factorized,
     SPDFactorizedLinear,
     SPDLinear,
     SymmetricFactorizedLinear,
     SymmetricLinear,
+    register_spd,
+    register_spd_factorized,
+    register_symmetric,
+    register_symmetric_factorized,
 )
 from .skip import SkipConnection
 
 __all__ = [
+    "SPD",
     "ConvolutionBlock1d",
     "DenseBlock",
     "FactorizedLinear",
     "PositiveColumnScale",
     "PositiveRowScale",
-    "PositiveScalarScale",
     "PositiveSandwichScale",
+    "PositiveScalarScale",
+    "SPDFactorizedLinear",
+    "SPDLinear",
+    "SkipConnection",
+    "Symmetric",
+    "SymmetricFactorizedLinear",
+    "SymmetricLinear",
     "register_spd",
     "register_spd_factorized",
     "register_symmetric",
     "register_symmetric_factorized",
-    "SkipConnection",
-    "SPD",
-    "SPDFactorizedLinear",
-    "SPDLinear",
-    "Symmetric",
-    "SymmetricFactorizedLinear",
-    "SymmetricLinear",
 ]

@@ -1,13 +1,13 @@
 from .base import CAE
-from .skip1d import SkipCAE1d
 from .linear import LinearCAE1d
-from .vae import VAE1d, vae_loss, reparameterize
+from .skip1d import SkipCAE1d
+from .vae import VAE1d, reparameterize, vae_loss
 
 __all__ = [
     "CAE",
-    "SkipCAE1d",
     "LinearCAE1d",
+    "SkipCAE1d",
     "VAE1d",
-    "vae_loss",
     "reparameterize",
+    "vae_loss",
 ]

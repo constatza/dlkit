@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
-from dlkit.core.models.nn.utils import make_norm_layer, build_channel_schedule
+from dlkit.core.models.nn.utils import build_channel_schedule, make_norm_layer
 
 
 class TestMakeNormLayer:

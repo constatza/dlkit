@@ -9,8 +9,10 @@ This module tests the foundational settings classes following SOLID principles:
 from __future__ import annotations
 
 from typing import Any
+
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from .conftest import MockBasicSettings, MockComponentSettings, valid_name

@@ -5,12 +5,11 @@ from pathlib import Path
 import pytest
 
 from dlkit.tools.config import (
-    load_settings,
     load_sections,
+    load_settings,
 )
 from dlkit.tools.config.workflow_settings import (
     TrainingWorkflowSettings,
-    InferenceWorkflowSettings,
 )
 
 

@@ -7,15 +7,15 @@ and class instantiation with parameter filtering.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-import os
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from dlkit.tools.io.system import import_from_module, import_from_path, load_class, init_class
+from dlkit.tools.io.system import import_from_module, import_from_path, init_class, load_class
 
 
 class TestImportFromModule:
@@ -428,9 +428,9 @@ class TestInitClass:
                 "dlkit.tools.io.system.kwargs_compatible_with",
                 side_effect=ValueError("Invalid kwargs"),
             ),
+            pytest.raises(ValueError, match="Invalid kwargs"),
         ):
-            with pytest.raises(ValueError, match="Invalid kwargs"):
-                init_class(name="MockTestClass", module_path="test_module", required_param="test")
+            init_class(name="MockTestClass", module_path="test_module", required_param="test")
 
 
 class TestSystemModuleIntegration:

@@ -42,14 +42,13 @@ class ResolverRegistry:
             return value
 
         # Path resolution for non-URL values
-        else:
-            try:
-                resolved_path = self._path_resolver.resolve(value, context)
-                # Return same type as input (str -> str, Path -> Path)
-                return str(resolved_path) if isinstance(value, str) else resolved_path
-            except ValueError:
-                # If path resolution fails, return original value
-                return value
+        try:
+            resolved_path = self._path_resolver.resolve(value, context)
+            # Return same type as input (str -> str, Path -> Path)
+            return str(resolved_path) if isinstance(value, str) else resolved_path
+        except ValueError:
+            # If path resolution fails, return original value
+            return value
 
     def resolve_url(self, url_string: str, context: ResolverContext) -> str:
         """Explicit URL resolution method.

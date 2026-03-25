@@ -1,7 +1,8 @@
 from collections.abc import Sequence
+
 from torch import Tensor
-from torch_geometric.transforms.base_transform import BaseTransform
 from torch_geometric.data import Data
+from torch_geometric.transforms.base_transform import BaseTransform
 
 # Small constant to prevent division by zero
 EPSILON: float = 1e-14

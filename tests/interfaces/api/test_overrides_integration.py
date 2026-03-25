@@ -8,15 +8,14 @@ This test shows the complete behavior ensuring:
 
 from __future__ import annotations
 
-
 import pytest
 
 from dlkit.interfaces.api.commands.train_command import TrainCommand, TrainCommandInput
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.dataloader_settings import DataloaderSettings
+from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.training_settings import TrainingSettings
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
 
 
 @pytest.fixture

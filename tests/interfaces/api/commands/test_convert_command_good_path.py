@@ -13,9 +13,10 @@ from dlkit.interfaces.api.commands.convert_command import (
     ConvertCommandInput,
     ConvertResult,
 )
+
 from ._helpers import (
-    create_multi_input_shape_spec,
     create_expected_input_names,
+    create_multi_input_shape_spec,
     validate_dynamic_axes_structure,
 )
 

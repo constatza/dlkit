@@ -1,8 +1,10 @@
 """Routines for loading and saving index splits."""
 
-from pydantic import FilePath
-from pathlib import Path
 import json
+from pathlib import Path
+
+from pydantic import FilePath
+
 from dlkit.core.datatypes.split import IndexSplit
 
 

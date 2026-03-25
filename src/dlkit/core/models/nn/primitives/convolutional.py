@@ -2,7 +2,7 @@
 import math
 from collections.abc import Callable
 
-import torch.nn as nn
+from torch import nn
 
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.utils import make_norm_layer
@@ -88,12 +88,13 @@ class DeconvolutionBlock1d(nn.Module):
         """
         super().__init__()
         self.activation = activation
+        effective_padding: int = 0 if padding == "same" else int(padding)
         self.conv1 = nn.ConvTranspose1d(
             in_channels,
             out_channels,
             kernel_size=kernel_size,
             dilation=dilation,
-            padding=padding,  # type: ignore[arg-type]
+            padding=effective_padding,
             stride=stride,
             groups=groups,
             output_padding=output_padding,

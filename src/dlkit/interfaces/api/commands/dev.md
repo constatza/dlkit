@@ -90,7 +90,9 @@ class MyCommand(BaseCommand[MyInput, MyOutput]):
         if not input_data.required_field:
             raise WorkflowError("required_field is missing")
 
-    def execute(self, input_data: MyInput, settings: BaseSettingsProtocol, **kwargs: Any) -> MyOutput:
+    def execute(
+        self, input_data: MyInput, settings: BaseSettingsProtocol, **kwargs: Any
+    ) -> MyOutput:
         self.validate_input(input_data, settings)
         # Execute command logic
         return MyOutput(result="success")
@@ -149,11 +151,7 @@ command = TrainCommand()
 
 # Prepare input
 input_data = TrainCommandInput(
-    mlflow=True,
-    epochs=50,
-    batch_size=32,
-    learning_rate=0.001,
-    experiment_name="my_experiment"
+    mlflow=True, epochs=50, batch_size=32, learning_rate=0.001, experiment_name="my_experiment"
 )
 
 # Execute
@@ -209,9 +207,7 @@ from dlkit.interfaces.api.commands import InferenceCommand, InferenceCommandInpu
 command = InferenceCommand()
 
 input_data = InferenceCommandInput(
-    checkpoint_path="./checkpoints/best.ckpt",
-    batch_size=64,
-    output_dir="./inference_output"
+    checkpoint_path="./checkpoints/best.ckpt", batch_size=64, output_dir="./inference_output"
 )
 
 result = command.execute(input_data, settings)
@@ -266,10 +262,7 @@ from dlkit.interfaces.api.commands import OptimizationCommand, OptimizationComma
 command = OptimizationCommand()
 
 input_data = OptimizationCommandInput(
-    trials=100,
-    mlflow=True,
-    study_name="hyperparameter_search",
-    experiment_name="optimization_exp"
+    trials=100, mlflow=True, study_name="hyperparameter_search", experiment_name="optimization_exp"
 )
 
 result = command.execute(input_data, settings)
@@ -368,15 +361,12 @@ input_data = ConvertCommandInput(
     output_path="model.onnx",
     shape="784",  # Feature dims (batch added automatically)
     batch_size=1,
-    opset=17
+    opset=17,
 )
 result = command.execute(input_data, None)
 
 # Convert with config-based shape inference
-input_data = ConvertCommandInput(
-    checkpoint_path="model.ckpt",
-    output_path="model.onnx"
-)
+input_data = ConvertCommandInput(checkpoint_path="model.ckpt", output_path="model.onnx")
 result = command.execute(input_data, settings)  # Infers shape from dataloader
 ```
 
@@ -427,6 +417,7 @@ print(f"Available: {commands}")
 
 # Global dispatcher instance
 from dlkit.interfaces.api.commands import get_dispatcher
+
 dispatcher = get_dispatcher()
 ```
 
@@ -473,8 +464,7 @@ print(gen_output.template_content)  # TOML string
 # Validate template
 val_cmd = ValidateTemplateCommand()
 val_input = ValidateTemplateCommandInput(
-    template_content=gen_output.template_content,
-    template_type="mlflow"
+    template_content=gen_output.template_content, template_type="mlflow"
 )
 val_output = val_cmd.execute(val_input, settings)
 
@@ -500,11 +490,7 @@ settings = GeneralSettings.from_toml("config.toml")
 
 # Create and execute command directly
 command = TrainCommand()
-input_data = TrainCommandInput(
-    mlflow=True,
-    epochs=100,
-    batch_size=32
-)
+input_data = TrainCommandInput(mlflow=True, epochs=100, batch_size=32)
 
 result = command.execute(input_data, settings)
 print(f"Training completed: {result.checkpoint_path}")
@@ -526,6 +512,7 @@ result = dispatcher.execute("train", input_data, settings)
 ```python
 from dlkit.interfaces.api.commands import BaseCommand, get_dispatcher
 
+
 # Create custom command
 class MyCommand(BaseCommand[MyInput, MyOutput]):
     def validate_input(self, input_data, settings):
@@ -535,6 +522,7 @@ class MyCommand(BaseCommand[MyInput, MyOutput]):
     def execute(self, input_data, settings, **kwargs):
         # Execution logic
         return MyOutput(result="done")
+
 
 # Register with dispatcher
 dispatcher = get_dispatcher()

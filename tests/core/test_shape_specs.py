@@ -1,7 +1,10 @@
 """Tests for ShapeSpec value object."""
 
+from typing import Any, cast
+
 import pytest
-from dlkit.core.shape_specs import create_shape_spec, ModelFamily, ShapeSource
+
+from dlkit.core.shape_specs import ModelFamily, ShapeSource, create_shape_spec
 
 
 class TestShapeSpec:
@@ -24,7 +27,7 @@ class TestShapeSpec:
         """Test that invalid data types are rejected."""
         with pytest.raises(AttributeError):
             create_shape_spec(
-                shapes="invalid",  # type: ignore
+                shapes=cast(Any, "invalid"),
                 model_family=ModelFamily.DLKIT_NN,
                 source=ShapeSource.TRAINING_DATASET,
             )

@@ -1,24 +1,25 @@
-from collections.abc import Sequence, Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
-from torch import Tensor
 from loguru import logger
+from torch import Tensor, nn
 from torch.nn import ModuleList
 
-from dlkit.tools.config.transform_settings import TransformSettings
 from dlkit.tools.config import BuildContext, FactoryProvider
+from dlkit.tools.config.transform_settings import TransformSettings
+
 from .base import (
-    Transform,
     FittableTransform,
     IncrementalFittableTransform,
     InvertibleTransform,
-    ShapeAwareTransform,
+    Transform,
 )
-from .errors import TransformNotFittedError, TransformChainError
+from .errors import TransformChainError, TransformNotFittedError
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
+
 
 class TransformChain(Transform):
     """Pipeline for chaining multiple transformations for one tensor stream.
@@ -40,13 +41,13 @@ class TransformChain(Transform):
 
     transforms: ModuleList
     transformed_shape: tuple[int, ...] | None
-    _shape_spec: "IShapeSpec | None"
+    _shape_spec: IShapeSpec | None
     _entry_name: str | None
 
     def __init__(
         self,
         transform_settings: Sequence[TransformSettings] | ModuleList,
-        shape_spec: "IShapeSpec | None" = None,
+        shape_spec: IShapeSpec | None = None,
         entry_name: str | None = None,
         validate_execution: bool = False,
     ) -> None:
@@ -85,7 +86,7 @@ class TransformChain(Transform):
         else:
             self.transforms = transform_settings
 
-    def fit(self, x: Tensor) -> None:
+    def fit(self, data: Tensor) -> None:
         """Fit the chain and propagate the intermediate output.
 
         Each transform is fitted in sequence (if it implements FittableTransform Protocol)
@@ -94,18 +95,18 @@ class TransformChain(Transform):
         Uses FittableTransform Protocol for type-safe capability checking.
 
         Args:
-            x: Input tensor to fit on (e.g., all training features).
+            data: Input tensor to fit on (e.g., all training features).
 
         Raises:
             TransformChainError: If any transform fit() raises an error.
         """
         for i, transform in enumerate(self.transforms):
             try:
-                # Protocol check: isinstance() with FittableTransform
+                # Protocol check: use separate var so transform is not narrowed for __call__
                 if isinstance(transform, FittableTransform):
-                    transform.fit(x)
-                # Apply the transform to produce the next input
-                x = transform(x)
+                    transform.fit(data)
+                # Apply: cast to nn.Module to avoid FittableTransform narrowing the __call__
+                data = cast(nn.Module, transform)(data)
             except Exception as e:
                 raise TransformChainError(
                     transform_index=i,
@@ -115,7 +116,7 @@ class TransformChain(Transform):
 
         # Mark as fitted and store the shape after all transforms
         self.fitted = True
-        self.transformed_shape = tuple(x.shape)
+        self.transformed_shape = tuple(data.shape)
 
     def fit_from_dataloader(
         self,
@@ -181,6 +182,8 @@ class TransformChain(Transform):
                 ) from e
 
         # Infer transformed shape from one sample after fitting.
+        i: int = 0
+        transform = self.transforms[0] if self.transforms else None
         try:
             sample_out = sample
             for i, transform in enumerate(self.transforms):
@@ -260,14 +263,14 @@ class TransformChain(Transform):
                 ) from e
         return x
 
-    def inverse(self) -> "TransformChain":
+    def inverse(self) -> TransformChain:
         """Return a new TransformChain with the transforms reversed.
 
         Returns:
             New chain with reversed transform order.
         """
         return TransformChain(
-            transform_settings=self.transforms[::-1],
+            transform_settings=cast(Any, self.transforms[::-1]),
             shape_spec=self._shape_spec,
             entry_name=self._entry_name,
         )
@@ -275,7 +278,7 @@ class TransformChain(Transform):
 
 def build_transforms(
     transform_seq: Sequence[TransformSettings],
-    shape_spec: "IShapeSpec | None" = None,
+    shape_spec: IShapeSpec | None = None,
     entry_name: str | None = None,
     validate_execution: bool = False,
 ) -> tuple[ModuleList, tuple[int, ...] | None]:
@@ -318,12 +321,7 @@ def build_transforms(
         logger.debug(f"Transform chain validation mode enabled with shape {current_shape}")
 
     for transform_settings in transform_seq:
-        # Create build context (no input_shape override needed)
-        context = BuildContext(
-            mode="transform_chain",
-            shape_spec=shape_spec,
-            entry_name=entry_name,
-        )
+        context = BuildContext(mode="transform_chain")
 
         # Instantiate transform
         module = FactoryProvider.create_component(transform_settings, context)

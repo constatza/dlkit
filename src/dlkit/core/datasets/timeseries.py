@@ -1,16 +1,19 @@
-import polars as pl
 from collections.abc import Sequence
+from typing import Any, SupportsIndex, cast, overload
+
+import polars as pl
 from pydantic import FilePath, validate_call
 from pytorch_forecasting import TimeSeriesDataSet
 
-from dlkit.tools.io.tables import read_table
 from dlkit.core.datasets.base import BaseDataset
+from dlkit.tools.io.tables import read_table
 from dlkit.tools.utils.general import slice_to_list
+
 from .base import register_dataset
 
 
 @register_dataset
-class ForecastingDataset(BaseDataset):
+class ForecastingDataset(BaseDataset[pl.DataFrame]):
     @validate_call
     def __init__(
         self,
@@ -20,7 +23,7 @@ class ForecastingDataset(BaseDataset):
         target: list[str] | str,
         group_ids: list[str] | str,
         **kwargs,
-    ):
+    ) -> None:
         """A dataset for time series forecasting with Pytorch Forecasting
         that wraps a polars dataframe.
 
@@ -75,7 +78,7 @@ class ForecastingDataset(BaseDataset):
         unique_groups = unique_groups.with_row_index(name="_ord").sort("_ord").drop("_ord")
         # Convert struct to Python tuples in consistent column order
         self.group_keys: list[tuple] = [
-            tuple(g.values()) if hasattr(g, "values") else tuple(g)  # type: ignore[arg-type]
+            tuple(g.values()) if isinstance(g, dict) else tuple(g)
             for g in unique_groups["g"].to_list()
         ]
 
@@ -83,22 +86,39 @@ class ForecastingDataset(BaseDataset):
         # Number of unique time series (group ids)
         return len(self.group_keys)
 
-    def __getitem__(self, idx):
-        if isinstance(idx, Sequence):
-            return self.__getitems__(idx)
+    @overload
+    def __getitem__(self, idx: SupportsIndex) -> pl.DataFrame: ...
+
+    @overload
+    def __getitem__(self, idx: slice) -> pl.DataFrame: ...
+
+    @overload
+    def __getitem__(self, idx: Sequence[int]) -> pl.DataFrame: ...
+
+    def __getitem__(  # ty: ignore[invalid-method-override]
+        self, idx: SupportsIndex | slice | Sequence[int]
+    ) -> pl.DataFrame:
+        if isinstance(idx, Sequence) and not isinstance(idx, (str, bytes)):
+            return self.__getitems__([int(cast("Any", i)) for i in idx])
         if isinstance(idx, slice):
             idx = slice_to_list(idx, self.__len__())
             return self.__getitems__(idx)
+        try:
+            numeric_idx = int(idx)
+        except TypeError:
+            raise TypeError("Index must be an integer, slice, or sequence of integers")
         # A single sample is the full time series for an ordinal group index
-        key = self._ordinal_to_key(idx)
+        key = self._ordinal_to_key(numeric_idx)
         return self._filter_by_key(key)
 
-    def __getitems__(self, indices: Sequence[int]):
+    def __getitems__(self, indices: Sequence[int]) -> pl.DataFrame:
         """Get multiple time series by ordinal group indices."""
         keys = [self._ordinal_to_key(i) for i in indices]
         return self._filter_by_keys(keys)
 
-    def to_timeseries_dataset(self, idx: slice | Sequence[int] | int, **kwargs):
+    def to_timeseries_dataset(
+        self, idx: slice | Sequence[int] | int, **kwargs: object
+    ) -> TimeSeriesDataSet:
         return TimeSeriesDataSet(
             self[idx].to_pandas(),
             self.time_idx,
@@ -109,7 +129,7 @@ class ForecastingDataset(BaseDataset):
         )
 
     # Thin-wrapper attribute access: expose TimeSeriesDataSet API transparently
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> object:
         """Delegate unknown attributes to the underlying TimeSeriesDataSet.
 
         This keeps the wrapper minimal while retaining full functionality
@@ -132,29 +152,31 @@ class ForecastingDataset(BaseDataset):
         return sorted(base)
 
     # Internal helpers
-    def _ordinal_to_key(self, idx: int) -> tuple:
+    def _ordinal_to_key(self, idx: int) -> tuple[object, ...]:
         if not isinstance(idx, int):
             raise TypeError("Index must be an integer for ordinal group selection")
         return self.group_keys[idx]
 
-    def _filter_by_key(self, key: tuple) -> pl.DataFrame:
+    def _filter_by_key(self, key: tuple[object, ...]) -> pl.DataFrame:
         # Build conjunction over group_id columns
-        expr = None
+        expr: pl.Expr | None = None
         for col, val in zip(self.group_ids, key):
             cond = pl.col(col) == val
             expr = cond if expr is None else (expr & cond)
         return self.df.filter(expr) if expr is not None else self.df.head(0)
 
-    def _filter_by_keys(self, keys: list[tuple]) -> pl.DataFrame:
+    def _filter_by_keys(self, keys: list[tuple[object, ...]]) -> pl.DataFrame:
         if not keys:
             return self.df.head(0)
         # Build disjunction of conjunctions
-        disj = None
+        disj: pl.Expr | None = None
         for key in keys:
-            conj = None
+            conj: pl.Expr | None = None
             for col, val in zip(self.group_ids, key):
                 cond = pl.col(col) == val
                 conj = cond if conj is None else (conj & cond)
+            if conj is None:
+                continue
             disj = conj if disj is None else (disj | conj)
         return self.df.filter(disj) if disj is not None else self.df.head(0)
 

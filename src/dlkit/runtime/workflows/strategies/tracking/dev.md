@@ -158,7 +158,9 @@ with tracker:
 
 **Example**:
 ```python
-from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import MLflowResourceManager
+from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
+    MLflowResourceManager,
+)
 
 resource_manager = MLflowResourceManager(mlflow_config)
 
@@ -210,10 +212,7 @@ from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator, MLflo
 base_executor = VanillaExecutor(settings)
 tracker = MLflowTracker()
 tracked_executor = TrackingDecorator(
-    executor=base_executor,
-    tracker=tracker,
-    settings=settings,
-    experiment_name="my_experiment"
+    executor=base_executor, tracker=tracker, settings=settings, experiment_name="my_experiment"
 )
 
 # Execute with automatic tracking
@@ -290,6 +289,7 @@ def execute_workflow(tracker: IExperimentTracker):
         run.log_metrics({"loss": 0.5})
         run.log_params({"lr": 0.001})
 
+
 # With MLflow tracking
 execute_workflow(MLflowTracker())
 
@@ -344,10 +344,7 @@ executor = VanillaExecutor(settings)
 # Wrap with tracking - decorator pattern
 tracker = MLflowTracker()
 tracked_executor = TrackingDecorator(
-    executor=executor,
-    tracker=tracker,
-    settings=settings,
-    experiment_name="my_training"
+    executor=executor, tracker=tracker, settings=settings, experiment_name="my_training"
 )
 
 # Execute - tracking happens automatically
@@ -365,9 +362,7 @@ with tracker:
         for trial_num, params in enumerate(param_grid):
             # Child run for each trial
             with tracker.create_run(
-                experiment_name="hp_search",
-                run_name=f"trial_{trial_num}",
-                nested=True
+                experiment_name="hp_search", run_name=f"trial_{trial_num}", nested=True
             ) as trial_run:
                 trial_run.log_params(params)
                 result = train_with_params(params)

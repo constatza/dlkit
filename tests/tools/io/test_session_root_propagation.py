@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.io.config import load_config
 from dlkit.tools.config import load_settings
 from dlkit.tools.config.environment import env as global_environment
-from dlkit.tools.io.locations import splits_dir, output
+from dlkit.tools.io.config import load_config
+from dlkit.tools.io.locations import output, splits_dir
 
 
 @pytest.fixture

@@ -6,12 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.training_settings import TrainingSettings
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
+from dlkit.tools.config.datamodule_settings import DataModuleSettings
+from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.config.training_settings import TrainingSettings
 
 
 def _base_settings() -> GeneralSettings:

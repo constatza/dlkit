@@ -17,11 +17,11 @@ class FakeTensor:
         self.detached = False
         self.moved_to_cpu = False
 
-    def detach(self) -> "FakeTensor":
+    def detach(self) -> FakeTensor:
         self.detached = True
         return self
 
-    def cpu(self) -> "FakeTensor":
+    def cpu(self) -> FakeTensor:
         self.moved_to_cpu = True
         return self
 
@@ -39,7 +39,7 @@ class RecordingRunContext:
         self.logged.append((metrics, step))
 
 
-@pytest.fixture()
+@pytest.fixture
 def run_context() -> RecordingRunContext:
     return RecordingRunContext()
 

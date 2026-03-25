@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 
 def create_toml_config(
@@ -186,15 +184,14 @@ def simulate_api_response(
             "execution_time_ms": execution_time,
             "value": {"status": "completed", "message": "Operation completed successfully"},
         }
-    else:
-        return {
-            "is_success": False,
-            "execution_time_ms": execution_time,
-            "error": {
-                "message": error_message or "Operation failed",
-                "context": error_context or {},
-            },
-        }
+    return {
+        "is_success": False,
+        "execution_time_ms": execution_time,
+        "error": {
+            "message": error_message or "Operation failed",
+            "context": error_context or {},
+        },
+    }
 
 
 def create_batch_input_files(

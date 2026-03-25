@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 import pytest
 
 
@@ -50,8 +51,9 @@ def sample_build_context() -> Any:
     Returns:
         BuildContext: Sample build context instance
     """
-    from dlkit.tools.config.core.context import BuildContext
     from pathlib import Path
+
+    from dlkit.tools.config.core.context import BuildContext
 
     return BuildContext(
         mode="training", device="cpu", random_seed=42, working_directory=Path.cwd(), overrides={}

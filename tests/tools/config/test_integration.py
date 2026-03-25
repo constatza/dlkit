@@ -8,12 +8,19 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-import pytest
 from unittest.mock import patch
 
-from dlkit.tools.config import GeneralSettings, ComponentFactory, FactoryProvider, BuildContext
-from dlkit.tools.config.core.factories import DefaultComponentFactory
+import pytest
+
+from dlkit.tools.config import BuildContext, ComponentFactory, FactoryProvider, GeneralSettings
 from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.core.base_settings import ComponentSettings
+from dlkit.tools.config.core.factories import DefaultComponentFactory
+
+
+def _expect_not_none[T](value: T | None) -> T:
+    assert value is not None
+    return value
 
 
 # Mock components for integration testing
@@ -22,10 +29,9 @@ from dlkit.tools.config.components.model_components import ModelComponentSetting
 @pytest.fixture(autouse=True)
 def _isolate_factory_provider_registry():
     """Prevent global FactoryProvider state from leaking across test modules."""
-    previous = FactoryProvider._instance  # type: ignore[attr-defined]
-    FactoryProvider._instance = None  # type: ignore[attr-defined]
+    previous = FactoryProvider.reset_for_testing()
     yield
-    FactoryProvider._instance = previous  # type: ignore[attr-defined]
+    FactoryProvider.restore_for_testing(previous)
 
 
 class MockModel:
@@ -85,7 +91,7 @@ class MockMetric:
 class CustomModelFactory(ComponentFactory[MockModel]):
     """Custom factory for mock models."""
 
-    def create(self, settings: ModelComponentSettings, context: BuildContext) -> MockModel:
+    def create(self, settings: ComponentSettings, context: BuildContext) -> MockModel:
         """Create mock model with custom logic.
 
         Args:
@@ -197,12 +203,12 @@ class TestSettingsFactoryIntegration:
         Args:
             sample_build_context: Build context fixture
         """
-        settings = ModelComponentSettings(
-            name="MockModel",
-            module_path="tests.tools.config.test_integration",
-            input_size=256,
-            output_size=20,
-        )
+        settings = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 256,
+            "output_size": 20,
+        })
 
         factory = DefaultComponentFactory()
         result = factory.create(settings, sample_build_context)
@@ -223,12 +229,12 @@ class TestSettingsFactoryIntegration:
         custom_factory = CustomModelFactory()
         FactoryProvider.register_factory(ModelComponentSettings, custom_factory)
 
-        settings = ModelComponentSettings(
-            name="MockModel",
-            module_path="tests.tools.config.test_integration",
-            input_size=100,
-            output_size=5,
-        )
+        settings = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 100,
+            "output_size": 5,
+        })
 
         # Create component through FactoryProvider
         result = FactoryProvider.create_component(settings, sample_build_context)
@@ -240,12 +246,12 @@ class TestSettingsFactoryIntegration:
 
     def test_factory_context_override_application(self) -> None:
         """Test factory applies build context overrides correctly."""
-        settings = ModelComponentSettings(
-            name="MockModel",
-            module_path="tests.tools.config.test_integration",
-            input_size=128,
-            output_size=10,
-        )
+        settings = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 128,
+            "output_size": 10,
+        })
 
         context = BuildContext(
             mode="inference",
@@ -273,9 +279,11 @@ class TestSettingsFactoryIntegration:
         """
         mock_import.return_value = MockModel
 
-        settings = ModelComponentSettings(
-            name="MockModel", module_path="test.models.mock", input_size=64
-        )
+        settings = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "test.models.mock",
+            "input_size": 64,
+        })
 
         factory = DefaultComponentFactory()
         result = factory.create(settings, sample_build_context)
@@ -299,14 +307,18 @@ class TestGeneralSettingsEndToEndIntegration:
         from dlkit.tools.config import load_settings
 
         settings = load_settings(integration_config_file)
+        session = _expect_not_none(settings.SESSION)
+        model = _expect_not_none(settings.MODEL)
+        optuna = _expect_not_none(settings.OPTUNA)
+        datamodule = _expect_not_none(settings.DATAMODULE)
 
         # Verify all components are properly loaded
-        assert settings.SESSION.name == "integration_session"
-        assert settings.MODEL.input_size == 128
+        assert session.name == "integration_session"
+        assert model.input_size == 128
         assert settings.MLFLOW is not None
         assert settings.MLFLOW.experiment_name == "integration_experiment"  # Configured value
-        assert settings.OPTUNA.enabled is True
-        assert settings.DATAMODULE.dataloader.batch_size == 64
+        assert optuna.enabled is True
+        assert datamodule.dataloader.batch_size == 64
 
     def test_settings_mode_specific_configuration_access(
         self, complete_config_data: dict[str, Any]
@@ -316,7 +328,7 @@ class TestGeneralSettingsEndToEndIntegration:
         Args:
             complete_config_data: Complete configuration dataflow fixture
         """
-        settings = GeneralSettings(**complete_config_data)
+        settings = GeneralSettings.model_validate(complete_config_data)
 
         # Test mode detection
         assert settings.is_training is True
@@ -349,7 +361,7 @@ class TestGeneralSettingsEndToEndIntegration:
         }
 
         with pytest.raises(ValueError, match="Checkpoint path must be provided"):
-            GeneralSettings(**invalid_config)
+            GeneralSettings.model_validate(invalid_config)
 
 
 class TestFactoryProviderSingletonIntegration:
@@ -368,12 +380,16 @@ class TestFactoryProviderSingletonIntegration:
         FactoryProvider.register_factory(ModelComponentSettings, custom_factory)
 
         # Create settings and use factory in different contexts
-        settings1 = ModelComponentSettings(
-            name="MockModel", module_path="tests.tools.config.test_integration", input_size=100
-        )
-        settings2 = ModelComponentSettings(
-            name="MockModel", module_path="tests.tools.config.test_integration", input_size=200
-        )
+        settings1 = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 100,
+        })
+        settings2 = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 200,
+        })
 
         # Both should use the custom factory
         result1 = FactoryProvider.create_component(settings1, sample_build_context)
@@ -397,8 +413,8 @@ class TestFactoryProviderSingletonIntegration:
 
         model_factory = CustomModelFactory()
 
-        class CustomMetricFactory(ComponentFactory):
-            def create(self, settings, context):
+        class CustomMetricFactory(ComponentFactory[MockMetric]):
+            def create(self, settings: ComponentSettings, context: BuildContext) -> MockMetric:
                 return MockMetric(name="custom_metric")
 
         metric_factory = CustomMetricFactory()
@@ -426,9 +442,11 @@ class TestBuildContextIntegration:
 
     def test_build_context_mode_specific_behavior(self) -> None:
         """Test BuildContext enables mode-specific behavior in factories."""
-        settings = ModelComponentSettings(
-            name="MockModel", module_path="tests.tools.config.test_integration", input_size=100
-        )
+        settings = ModelComponentSettings.model_validate({
+            "name": "MockModel",
+            "module_path": "tests.tools.config.test_integration",
+            "input_size": 100,
+        })
         custom_factory = CustomModelFactory()
 
         # Test training mode

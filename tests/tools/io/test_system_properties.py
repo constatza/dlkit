@@ -11,10 +11,10 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from hypothesis import given, assume, strategies as st, settings, HealthCheck
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 
-from dlkit.tools.io.system import import_from_module, import_from_path, load_class, init_class
-
+from dlkit.tools.io.system import import_from_module, import_from_path, init_class, load_class
 
 # Hypothesis strategies for generating test dataflow
 valid_module_names = st.sampled_from(["collections", "itertools", "json", "pathlib", "os", "sys"])
@@ -220,7 +220,7 @@ class TestInitClassProperties:
                 assert isinstance(result, MockClass)
                 assert result.param1 == "test_value"
 
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 # May fail if kwargs contain incompatible types
                 pass
 
@@ -314,7 +314,7 @@ class TestSystemModuleInvariants:
             if result is not None:
                 assert hasattr(result, "__name__")
                 assert result.__name__.isidentifier()
-        except (ImportError, AttributeError):
+        except ImportError, AttributeError:
             pass  # Expected for non-existent identifiers
 
     @given(st.dictionaries(python_identifiers, simple_kwargs_values, min_size=0, max_size=10))
@@ -350,7 +350,7 @@ class TestSystemModuleInvariants:
                 assert type(result1) is type(result2)
                 assert result1.fixed_param == result2.fixed_param
 
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 # May fail due to incompatible kwargs types
                 pass
 

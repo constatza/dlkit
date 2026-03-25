@@ -1,5 +1,5 @@
-from torch import Tensor
-import torch.nn as nn
+from torch import Tensor, nn
+
 from dlkit.core.training.transforms.chain import TransformChain
 
 

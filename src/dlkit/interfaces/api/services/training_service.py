@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.interfaces.api.overrides.path_context import (
+    get_current_path_context,
+    path_override_context,
+)
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
+from dlkit.runtime.workflows.orchestrator import Orchestrator
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
-from dlkit.runtime.workflows.orchestrator import Orchestrator
-from dlkit.interfaces.api.overrides.path_context import (
-    path_override_context,
-    get_current_path_context,
-)
 
 logger = get_logger(__name__)
 
@@ -52,7 +52,7 @@ class TrainingService:
                 if root_from_cfg and not (ctx and getattr(ctx, "root_dir", None)):
                     overrides["root_dir"] = root_from_cfg
             except Exception as e:
-                logger.warning(f"Failed to extract root_dir from settings (non-fatal): {e}")
+                logger.warning("Failed to extract root_dir from settings (non-fatal): %s", e)
 
             # Establish path context for the training run
             # Directories are created lazily when files are actually written
@@ -81,6 +81,6 @@ class TrainingService:
             if isinstance(e, WorkflowError):
                 raise
             raise WorkflowError(
-                f"Training execution failed: {str(e)}",
+                f"Training execution failed: {e!s}",
                 {"service": self.service_name, "error": str(e)},
             )

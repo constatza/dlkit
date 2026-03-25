@@ -1,18 +1,19 @@
 """Test checkpoint persistence in ProcessingLightningWrapper."""
 
+from pathlib import Path
+
 import pytest
 import torch
-from pathlib import Path
 from torch import nn
 
 from dlkit.core.models.wrappers.standard import StandardLightningWrapper
+from dlkit.core.shape_specs import create_shape_spec
 from dlkit.tools.config import (
-    WrapperComponentSettings,
     ModelComponentSettings,
+    WrapperComponentSettings,
 )
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.core.shape_specs import create_shape_spec
 from dlkit.tools.config.data_entries import Feature
 
 

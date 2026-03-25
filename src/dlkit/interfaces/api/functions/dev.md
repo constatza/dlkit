@@ -59,7 +59,7 @@ result = train(
     epochs=100,
     batch_size=32,
     learning_rate=0.001,
-    experiment_name="my_experiment"
+    experiment_name="my_experiment",
 )
 
 print(f"Duration: {result.duration_seconds:.2f}s")
@@ -89,10 +89,7 @@ import torch
 
 # New inference API - no config needed
 result = infer(
-    checkpoint_path="model.ckpt",
-    inputs={"x": torch.randn(32, 10)},
-    device="auto",
-    batch_size=32
+    checkpoint_path="model.ckpt", inputs={"x": torch.randn(32, 10)}, device="auto", batch_size=32
 )
 
 predictions = result.predictions
@@ -102,16 +99,19 @@ predictions = result.predictions
 ```python
 # OLD CODE (deprecated):
 from dlkit.tools.config import load_inference_settings
+
 settings = load_inference_settings("config.toml")
 result = infer(settings, "model.ckpt")
 
 # NEW CODE:
 from dlkit.interfaces.api import infer
+
 result = infer("model.ckpt", your_input_data)
 
 # OR for prediction mode with training config:
 from dlkit.interfaces.api import predict_with_config
 from dlkit.tools.io import load_settings
+
 settings = load_settings("config.toml")
 result = predict_with_config(settings, "model.ckpt")
 ```
@@ -136,11 +136,7 @@ from dlkit.tools.io import load_settings
 settings = load_settings("config.toml")
 
 # Execute prediction
-result = predict_with_config(
-    settings,
-    checkpoint_path="best.ckpt",
-    batch_size=64
-)
+result = predict_with_config(settings, checkpoint_path="best.ckpt", batch_size=64)
 
 predictions = result.predictions
 ```
@@ -173,12 +169,7 @@ from dlkit.tools.config import GeneralSettings
 settings = GeneralSettings.from_toml("optuna_config.toml")
 
 # Execute optimization
-result = optimize(
-    settings,
-    trials=50,
-    mlflow=True,
-    study_name="hyperparameter_search"
-)
+result = optimize(settings, trials=50, mlflow=True, study_name="hyperparameter_search")
 
 print(f"Best trial: {result.best_trial}")
 print(f"Best parameters: {result.study_summary}")
@@ -198,13 +189,7 @@ result = train(settings)
 
 ### Training with Overrides
 ```python
-result = train(
-    settings,
-    mlflow=True,
-    epochs=50,
-    batch_size=64,
-    experiment_name="experiment_1"
-)
+result = train(settings, mlflow=True, epochs=50, batch_size=64, experiment_name="experiment_1")
 ```
 
 ### Standalone Inference (New)

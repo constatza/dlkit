@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from dlkit.core.datatypes.networks import NormalizerName
 from dlkit.core.models.nn.utils import make_norm_layer

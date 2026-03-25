@@ -4,7 +4,6 @@ Tests that our new torchmetrics-compatible custom metrics work end-to-end
 with the config system and MetricCollection.
 """
 
-import pytest
 import torch
 from torchmetrics import MetricCollection
 
@@ -13,9 +12,9 @@ from dlkit.core.training.metrics import (
     NormalizedVectorNormError,
     TemporalDerivativeError,
 )
+from dlkit.tools.config import BuildContext
 from dlkit.tools.config.components.model_components import MetricComponentSettings
 from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.tools.config import BuildContext
 
 
 class TestCustomMetricsIntegration:

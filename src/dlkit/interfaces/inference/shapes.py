@@ -33,6 +33,7 @@ def infer_shape_specification(
         ShapeSummary with in_shapes and out_shapes, or None if unavailable
     """
     from loguru import logger
+
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
     # Strategy 1: Try checkpoint metadata first

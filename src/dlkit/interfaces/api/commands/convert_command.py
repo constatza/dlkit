@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 
-from dlkit.interfaces.api.domain.errors import WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
-from dlkit.runtime.workflows.factories.build_factory import FlexibleBuildStrategy
 from dlkit.core.models.wrappers.factories import WrapperFactory
+from dlkit.interfaces.api.domain.errors import WorkflowError
+from dlkit.runtime.workflows.factories.build_factory import FlexibleBuildStrategy
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
 from .base import BaseCommand
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -38,16 +41,23 @@ class ConvertResult:
     inputs: list[tuple[int, ...]]
 
 
-class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
+class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult, _WorkflowSettings]):
     """Command to convert a checkpointed model to ONNX."""
 
     def __init__(self, command_name: str = "convert") -> None:
+        """Initialize convert command."""
         super().__init__(command_name)
 
-    def validate_input(
-        self, input_data: ConvertCommandInput, settings: BaseSettingsProtocol | None
-    ) -> None:
-        # Basic path checks
+    def validate_input(self, input_data: ConvertCommandInput, settings: _WorkflowSettings) -> None:
+        """Validate convert command input.
+
+        Args:
+            input_data: Conversion parameters
+            settings: DLKit configuration (may be unused when --shape is provided)
+
+        Raises:
+            WorkflowError: On validation failure
+        """
         cp = Path(input_data.checkpoint_path)
         if not cp.exists():
             raise WorkflowError(
@@ -75,9 +85,22 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
     def execute(
         self,
         input_data: ConvertCommandInput,
-        settings: BaseSettingsProtocol | None,
+        settings: _WorkflowSettings,
         **kwargs: Any,
     ) -> ConvertResult:
+        """Execute model conversion to ONNX.
+
+        Args:
+            input_data: Conversion parameters
+            settings: DLKit configuration (used for shape inference when --shape omitted)
+            **kwargs: Additional parameters
+
+        Returns:
+            ConvertResult with output path and shape metadata
+
+        Raises:
+            WorkflowError: On conversion failure
+        """
         try:
             self.validate_input(input_data, settings)
 
@@ -101,7 +124,6 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
 
             # Batch-size consistency checks
             if inferred_from_cfg and input_data.batch_size is not None:
-                # Ensure dataloader batch matches provided batch-size
                 batch_dims = {s[0] for s in input_shapes}
                 if len(batch_dims) != 1 or next(iter(batch_dims)) != input_data.batch_size:
                     raise WorkflowError(
@@ -120,17 +142,15 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
                 input_names = ["input"]
                 dynamic_axes = {"input": {0: "batch"}, "output": {0: "batch"}}
             else:
-                # Multiple inputs supported by ONNX; wrapper must accept them.
                 example_seq = [torch.ones(s, dtype=torch.float32) for s in input_shapes]
                 example_inputs = tuple(example_seq)
                 input_names = [f"input{i}" for i in range(len(input_shapes))]
                 dynamic_axes = {name: {0: "batch"} for name in input_names}
                 dynamic_axes["output"] = {0: "batch"}
 
-            # Export via torch.onnx.export
             torch.onnx.export(
                 wrapper,
-                example_inputs,
+                cast(Any, example_inputs),
                 str(output_path),
                 opset_version=input_data.opset,
                 input_names=input_names,
@@ -151,12 +171,20 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
             ) from e
 
     def _parse_or_infer_shapes(
-        self, shape_spec: str | None, settings: BaseSettingsProtocol | None, default_batch: int
+        self,
+        shape_spec: str | None,
+        settings: _WorkflowSettings | None,
+        default_batch: int,
     ) -> tuple[list[tuple[int, ...]], bool]:
         """Parse a user shape spec or infer from config dataloader.
 
-        Returns (shapes, inferred_from_config).
-        Shapes must include batch dimension.
+        Args:
+            shape_spec: Optional CLI shape string (e.g. ``"128"`` or ``"64;128"``).
+            settings: DLKit configuration used for dataloader-based inference.
+            default_batch: Batch size to prepend when shape is provided via CLI.
+
+        Returns:
+            Tuple of (shapes, inferred_from_config). Shapes include batch dimension.
         """
         if shape_spec:
             parts = [p.strip() for p in shape_spec.split(";") if p.strip()]
@@ -178,7 +206,6 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
                     raise WorkflowError(
                         "All shape dimensions must be positive", {"shape": shape_spec}
                     )
-                # Prefix batch dimension for CLI-provided feature dims
                 shapes.append(tuple([default_batch, *idims]))
             return shapes, False
 
@@ -189,7 +216,6 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
                 {"command": self.command_name},
             )
 
-        # Build via strategy and get a batch from a dataloader
         strategy = FlexibleBuildStrategy()
         comps = strategy.build(settings)
         dm = comps.datamodule
@@ -215,14 +241,12 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
         except Exception as e:
             raise WorkflowError("Failed to get a batch from dataloader", {"error": str(e)}) from e
 
-        # Extract input tensor shape(s) including batch
         import torch
 
         shapes: list[tuple[int, ...]] = []
         if isinstance(batch, dict):
             x = batch.get("x")
             if x is None:
-                # Fallback to first tensor-like
                 for v in batch.values():
                     if isinstance(v, torch.Tensor):
                         x = v
@@ -236,7 +260,6 @@ class ConvertCommand(BaseCommand[ConvertCommandInput, ConvertResult]):
                 raise WorkflowError("First element of batch has no shape", {})
             shapes.append(tuple(int(d) for d in x.shape))
         else:
-            # Single tensor
             if not hasattr(batch, "shape"):
                 raise WorkflowError(
                     "Batch object is not a Tensor and not a supported container", {}

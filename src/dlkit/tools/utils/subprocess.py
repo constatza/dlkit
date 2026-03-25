@@ -1,6 +1,7 @@
-import psutil
 import time
 from typing import Final
+
+import psutil
 from loguru import logger
 
 # -------------------------------------------------------------------
@@ -21,10 +22,9 @@ def gather_process_tree(pid: int) -> list[psutil.Process]:
     Returns:
         List of psutil.Process objects including the root and its children.
     """
-
     try:
         parent = psutil.Process(pid)
-    except (psutil.NoSuchProcess, psutil.Error, ValueError):
+    except psutil.NoSuchProcess, psutil.Error, ValueError:
         return []
     return [parent] + parent.children(recursive=True)
 

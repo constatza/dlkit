@@ -7,18 +7,22 @@ that data entries should be accessible after dataset creation.
 
 from __future__ import annotations
 
-from typing import Any
 from threading import Lock
+from typing import Any
 
 from dlkit.tools.config.data_entries import (
     DataEntry,
-    Feature,
-    Target,
     Latent,
+    PathFeature,
+    PathTarget,
     Prediction,
-    is_feature_entry,
-    is_target_entry,
+    SparseFeature,
+    ValueFeature,
+    ValueTarget,
 )
+
+FeatureEntry = PathFeature | ValueFeature | SparseFeature
+TargetEntry = PathTarget | ValueTarget
 
 
 class DataEntryRegistry:
@@ -85,23 +89,31 @@ class DataEntryRegistry:
         with self._lock:
             return self._entries.copy()
 
-    def get_features(self) -> dict[str, Feature]:
+    def get_features(self) -> dict[str, FeatureEntry]:
         """Get all feature entries.
 
         Returns:
-            Dictionary mapping feature names to Feature objects
+            Dictionary mapping feature names to feature objects
         """
         with self._lock:
-            return {name: entry for name, entry in self._entries.items() if is_feature_entry(entry)}
+            return {
+                name: entry
+                for name, entry in self._entries.items()
+                if isinstance(entry, (PathFeature, ValueFeature, SparseFeature))
+            }
 
-    def get_targets(self) -> dict[str, Target]:
+    def get_targets(self) -> dict[str, TargetEntry]:
         """Get all target entries.
 
         Returns:
-            Dictionary mapping target names to Target objects
+            Dictionary mapping target names to target objects
         """
         with self._lock:
-            return {name: entry for name, entry in self._entries.items() if is_target_entry(entry)}
+            return {
+                name: entry
+                for name, entry in self._entries.items()
+                if isinstance(entry, (PathTarget, ValueTarget))
+            }
 
     def get_latents(self) -> dict[str, Latent]:
         """Get all latent entries.

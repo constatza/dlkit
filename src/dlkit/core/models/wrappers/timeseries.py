@@ -13,6 +13,8 @@ from torch import Tensor
 
 from dlkit.tools.config import ModelComponentSettings, WrapperComponentSettings
 from dlkit.tools.config.data_entries import DataEntry
+
+from .components import RoutedLossComputer
 from .standard import StandardLightningWrapper
 
 
@@ -46,7 +48,9 @@ class TimeSeriesLightningWrapper(StandardLightningWrapper):
             **kwargs,
         )
         # Store loss_function for PF-style tuple batch handling
-        self.loss_function = self._loss_computer._loss_fn  # type: ignore[attr-defined]
+        if not isinstance(self._loss_computer, RoutedLossComputer):
+            raise TypeError("TimeSeriesLightningWrapper requires RoutedLossComputer")
+        self.loss_function = self._loss_computer.loss_fn
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the model.

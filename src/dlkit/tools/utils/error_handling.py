@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import inspect
 import uuid
+from typing import NoReturn
 
-from dlkit.interfaces.api.domain.errors import WorkflowError, ConfigurationError
+from dlkit.interfaces.api.domain.errors import ConfigurationError, WorkflowError
 from dlkit.tools.utils.logging_config import get_logger
 
 # Global logger for error handling
@@ -17,7 +18,7 @@ _error_logger = get_logger(__name__, "error_handler")
 
 def raise_error(
     message: str, original_error: Exception | None = None, *, stage: str | None = None
-) -> None:
+) -> NoReturn:
     """Unified error raising with automatic context and logging.
 
     This is the single way to raise errors in DLKit. It automatically:
@@ -100,5 +101,4 @@ def raise_error(
     # Raise the appropriate exception
     if original_error:
         raise error_class(final_message, context) from original_error
-    else:
-        raise error_class(final_message, context)
+    raise error_class(final_message, context)

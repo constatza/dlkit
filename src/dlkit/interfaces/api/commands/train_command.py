@@ -8,15 +8,16 @@ from typing import Any
 
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import TrainingResult
-from dlkit.interfaces.api.services import TrainingService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
+from dlkit.interfaces.api.services import TrainingService
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
+
 from .base import BaseCommand
 
 logger = get_logger(__name__)
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TrainCommandInput:
@@ -35,7 +36,9 @@ class TrainCommandInput:
     additional_overrides: dict[str, Any] = field(default_factory=dict)
 
 
-class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
+class TrainCommand(
+    BaseCommand[TrainCommandInput, TrainingResult, TrainingWorkflowConfig | GeneralSettings]
+):
     """Command for executing training workflows.
 
     Handles training workflow execution with parameter overrides,
@@ -52,13 +55,13 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
     def validate_input(
         self,
         input_data: TrainCommandInput,
-        settings: TrainingWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: TrainingWorkflowConfig | GeneralSettings,
     ) -> None:
         """Validate train command input.
 
         Args:
             input_data: Training parameters and overrides
-            settings: DLKit configuration (supports new TrainingWorkflowConfig or legacy GeneralSettings)
+            settings: DLKit configuration (supports TrainingWorkflowConfig or legacy GeneralSettings)
 
         Raises:
             WorkflowError: On validation failure
@@ -77,21 +80,21 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
         except WorkflowError:
             raise
         except Exception as e:
-            error_msg = f"Input validation failed: {str(e)}"
+            error_msg = f"Input validation failed: {e!s}"
             logger.error("{}", error_msg)
             raise WorkflowError(error_msg, {"command": "train", "error": str(e)}) from e
 
     def execute(
         self,
         input_data: TrainCommandInput,
-        settings: TrainingWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: TrainingWorkflowConfig | GeneralSettings,
         **kwargs: Any,
     ) -> TrainingResult:
         """Execute training command.
 
         Args:
             input_data: Training parameters and overrides
-            settings: DLKit configuration (supports new TrainingWorkflowConfig or legacy GeneralSettings)
+            settings: DLKit configuration (supports TrainingWorkflowConfig or legacy GeneralSettings)
             **kwargs: Additional parameters
 
         Returns:
@@ -115,9 +118,14 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
                 logger.debug("Applying {} training overrides", len(overrides))
                 settings = self.override_manager.apply_overrides(settings, **overrides)
 
-            # Execute training
+            # Execute training — GeneralSettings is a supertype accepted by the service
             checkpoint = overrides.get("checkpoint_path") if overrides else None
-            result = self.training_service.execute_training(settings, checkpoint)
+            effective: GeneralSettings = (
+                settings
+                if isinstance(settings, GeneralSettings)
+                else GeneralSettings.model_validate(settings.model_dump())
+            )
+            result = self.training_service.execute_training(effective, checkpoint)
 
             logger.debug(
                 "Training command completed in {} seconds",
@@ -130,7 +138,7 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
             logger.error("Training execution failed: {}", e.message)
             raise
         except Exception as e:
-            error_msg = f"Training execution failed: {str(e)}"
+            error_msg = f"Training execution failed: {e!s}"
             logger.error("{}", error_msg)
             raise WorkflowError(
                 error_msg, {"command": "train", "error_type": type(e).__name__}
@@ -149,7 +157,6 @@ class TrainCommand(BaseCommand[TrainCommandInput, TrainingResult]):
         Returns:
             Dictionary of non-None overrides with paths normalized to Path objects
         """
-        # Use shared normalizer for path normalization and None-filtering
         return OverrideNormalizer.build_overrides_dict(
             checkpoint_path=input_data.checkpoint_path,
             root_dir=input_data.root_dir,

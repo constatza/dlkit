@@ -9,15 +9,16 @@ from torch import nn
 from torch_geometric.typing import Tensor
 
 from dlkit.core.shape_specs import IShapeSpec
+
 from .gat import GATv2Message
 from .projection_networks import GProjection, ProjectionNetwork
 
 EPSILON = 1e-14
 
 __all__ = [
-    "ScaledGProjection",
-    "ScaledGATv2Projection",
     "GATv2Projection",
+    "ScaledGATv2Projection",
+    "ScaledGProjection",
 ]
 
 

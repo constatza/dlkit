@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 from mlflow import MlflowClient
 
 from dlkit.tools.utils.logging_config import get_logger
+
 from .interfaces import IRunContext
 
 logger = get_logger(__name__)
@@ -43,7 +44,7 @@ class ClientBasedRunContext(IRunContext):
             for key, value in metrics.items():
                 self._client.log_metric(self._run_id, key, value, step=step)
         except Exception as e:
-            logger.warning(f"Failed to log metrics: {e}")
+            logger.warning("Failed to log metrics: %s", e)
 
     def log_params(self, params: dict[str, Any]) -> None:
         """Log parameters using MLflow client."""
@@ -51,7 +52,7 @@ class ClientBasedRunContext(IRunContext):
             for key, value in params.items():
                 self._client.log_param(self._run_id, key, str(value))
         except Exception as e:
-            logger.warning(f"Failed to log params: {e}")
+            logger.warning("Failed to log params: %s", e)
 
     def log_text(self, text: str, artifact_file: str) -> None:
         """Log text content directly as an artifact without writing to disk.
@@ -63,7 +64,7 @@ class ClientBasedRunContext(IRunContext):
         try:
             self._client.log_text(self._run_id, text, artifact_file)
         except Exception as e:
-            logger.warning(f"Failed to log text artifact '{artifact_file}': {e}")
+            logger.warning("Failed to log text artifact '%s': %s", artifact_file, e)
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         """Log artifact using MLflow client."""
@@ -72,14 +73,14 @@ class ClientBasedRunContext(IRunContext):
                 self._run_id, str(artifact_path), artifact_path=artifact_dir or None
             )
         except Exception as e:
-            logger.warning(f"Failed to log artifact {artifact_path}: {e}")
+            logger.warning("Failed to log artifact %s: %s", artifact_path, e)
 
     def set_tag(self, key: str, value: str) -> None:
         """Set tag using MLflow client."""
         try:
             self._client.set_tag(self._run_id, key, value)
         except Exception as e:
-            logger.warning(f"Failed to set tag {key}: {e}")
+            logger.warning("Failed to set tag %s: %s", key, e)
 
     def log_dataset(
         self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
@@ -96,9 +97,7 @@ class ClientBasedRunContext(IRunContext):
 
             # Client API expects mlflow.entities.Dataset (not mlflow.data.Dataset wrapper).
             dataset_entity = (
-                dataset._to_mlflow_entity()  # noqa: SLF001
-                if hasattr(dataset, "_to_mlflow_entity")
-                else dataset
+                dataset._to_mlflow_entity() if hasattr(dataset, "_to_mlflow_entity") else dataset
             )
 
             input_tags = [InputTag(key=k, value=v) for k, v in (tags or {}).items()]
@@ -113,7 +112,7 @@ class ClientBasedRunContext(IRunContext):
             self._client.log_inputs(self._run_id, datasets=[dataset_input])
 
         except Exception as e:
-            logger.warning(f"Failed to log dataset: {e}")
+            logger.warning("Failed to log dataset: %s", e)
 
     def log_model(
         self,
@@ -157,7 +156,7 @@ class ClientBasedRunContext(IRunContext):
                 fallback_uri=f"runs:/{self._run_id}/{artifact_path}",
             )
         except Exception as e:
-            logger.warning(f"Failed to log model: {e}")
+            logger.warning("Failed to log model: %s", e)
             return None
 
     def get_latest_model_version(
@@ -176,7 +175,7 @@ class ClientBasedRunContext(IRunContext):
         try:
             versions = self._client.search_model_versions(f"name='{model_name}'")
             numeric_versions = [
-                int(getattr(version, "version"))
+                int(version.version)
                 for version in versions
                 if _is_matching_version(
                     version=version,
@@ -186,7 +185,7 @@ class ClientBasedRunContext(IRunContext):
             ]
             return max(numeric_versions) if numeric_versions else None
         except Exception as e:
-            logger.warning(f"Failed to get latest model version for {model_name}: {e}")
+            logger.warning("Failed to get latest model version for %s: %s", model_name, e)
             return None
 
     def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
@@ -199,7 +198,7 @@ class ClientBasedRunContext(IRunContext):
             )
         except Exception as e:
             logger.warning(
-                f"Failed to set alias '{alias}' for model '{model_name}' v{version}: {e}"
+                "Failed to set alias '%s' for model '%s' v%s: %s", alias, model_name, version, e
             )
 
     def set_model_version_tag(
@@ -219,7 +218,11 @@ class ClientBasedRunContext(IRunContext):
             )
         except Exception as e:
             logger.warning(
-                f"Failed to set model version tag '{key}' for model '{model_name}' v{version}: {e}"
+                "Failed to set model version tag '%s' for model '%s' v%s: %s",
+                key,
+                model_name,
+                version,
+                e,
             )
 
     def log_batch(
@@ -263,7 +266,7 @@ class ClientBasedRunContext(IRunContext):
             )
 
         except Exception as e:
-            logger.warning(f"Failed to log batch: {e}")
+            logger.warning("Failed to log batch: %s", e)
 
     @property
     def run_id(self) -> str:

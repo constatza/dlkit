@@ -2,14 +2,14 @@ import builtins
 
 import pytest
 
-from dlkit.tools.registry.public import _reset_for_tests
 from dlkit.tools.registry import (
-    register_model,
+    register_datamodule,
     register_dataset,
     register_loss,
     register_metric,
-    register_datamodule,
+    register_model,
 )
+from dlkit.tools.registry.public import _reset_for_tests
 from dlkit.tools.registry.resolve import resolve_component
 
 

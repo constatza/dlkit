@@ -5,8 +5,7 @@ from torch_geometric.nn.conv import GATv2Conv
 
 
 class GATv2Message(nn.Module):
-    """
-    Stacked Graph Attention v2 (GATv2) message-passing module.
+    """Stacked Graph Attention v2 (GATv2) message-passing module.
 
     Args:
         hidden_size: Dimension of node feature embeddings.
@@ -48,8 +47,7 @@ class GATv2Message(nn.Module):
         edge_index: Tensor,
         edge_attr: Tensor | None = None,
     ) -> Tensor:
-        """
-        Apply GATv2Conv layers sequentially with optional edge weights.
+        """Apply GATv2Conv layers sequentially with optional edge weights.
 
         Args:
             x: Node feature tensor of shape (num_nodes, hidden_size).

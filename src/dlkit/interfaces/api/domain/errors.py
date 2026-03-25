@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class DLKitError(Exception):
     """Base exception for all DLKit domain errors."""
 
-    def __init__(self, message: str, context: dict[str, str] | None = None) -> None:
+    def __init__(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Initialize DLKit error.
 
         Args:
@@ -26,25 +28,17 @@ class DLKitError(Exception):
 class ConfigurationError(DLKitError):
     """Configuration validation or loading error."""
 
-    pass
-
 
 class WorkflowError(DLKitError):
     """Workflow execution error."""
-
-    pass
 
 
 class StrategyError(DLKitError):
     """Strategy selection or execution error."""
 
-    pass
-
 
 class ModelStateError(DLKitError):
     """Model state construction or management error."""
-
-    pass
 
 
 class ModelLoadingError(DLKitError):
@@ -54,10 +48,6 @@ class ModelLoadingError(DLKitError):
     such as state dict key mismatches or missing critical parameters.
     """
 
-    pass
-
 
 class PluginError(DLKitError):
     """Plugin configuration or execution error."""
-
-    pass

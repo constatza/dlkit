@@ -5,8 +5,8 @@ from __future__ import annotations
 from pydantic import Field
 
 from .core.base_settings import ComponentSettings, HyperParameterSettings
-from .enums import DataModuleName
 from .dataloader_settings import DataloaderSettings
+from .enums import DataModuleName
 
 
 class DataModuleSettings(ComponentSettings, HyperParameterSettings):

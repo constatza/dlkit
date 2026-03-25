@@ -24,7 +24,7 @@ import torch
 predictor = load_model("model.ckpt", device="auto")
 
 # Predict — mirrors model.forward() exactly
-output = predictor.predict(x=torch.randn(32, 10))   # → Tensor (32, out_dim)
+output = predictor.predict(x=torch.randn(32, 10))  # → Tensor (32, out_dim)
 
 # Clean up
 predictor.unload()
@@ -54,11 +54,11 @@ It no longer includes a checkpoint `version` field.
 ```python
 predictor = load_model(
     checkpoint_path="path/to/model.ckpt",
-    device="auto",             # "auto" | "cpu" | "cuda" | "mps"
-    batch_size=32,             # stored in config; not used for internal chunking yet
-    apply_transforms=True,     # apply feature/target transforms from checkpoint
-    auto_load=True,            # load immediately (set False to defer)
-    precision=None,            # override inferred precision (PrecisionStrategy | None)
+    device="auto",  # "auto" | "cpu" | "cuda" | "mps"
+    batch_size=32,  # stored in config; not used for internal chunking yet
+    apply_transforms=True,  # apply feature/target transforms from checkpoint
+    auto_load=True,  # load immediately (set False to defer)
+    precision=None,  # override inferred precision (PrecisionStrategy | None)
 )
 ```
 
@@ -96,7 +96,7 @@ output = predictor.predict(x=torch.randn(32, 10), edge_attr=torch.randn(32, 5))
 
 ```python
 # Single output
-output = predictor.predict(x=x_tensor)    # Tensor
+output = predictor.predict(x=x_tensor)  # Tensor
 
 # VAE — recon + latent parameters
 recon, mu, logvar = predictor.predict(x=x_tensor)
@@ -155,7 +155,7 @@ For workflows that need full PyTorch control:
 
 ```python
 predictor = load_model("model.ckpt")
-model = predictor.model   # standard nn.Module in eval mode
+model = predictor.model  # standard nn.Module in eval mode
 
 with torch.no_grad():
     output = model(x_tensor)

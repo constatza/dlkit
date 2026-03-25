@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
 from dataclasses import dataclass, replace
+from typing import Any
 
-from dlkit.tools.utils.logging_config import get_logger
-from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.utils.error_handling import raise_error
+from dlkit.tools.utils.logging_config import get_logger
+
 from .base import BaseCommand
 
 logger = get_logger(__name__, "dispatcher")
@@ -22,10 +22,10 @@ class CommandRegistry:
     following the Registry pattern.
     """
 
-    commands: dict[str, type[BaseCommand[Any, Any]]]
+    commands: dict[str, type[BaseCommand[Any, Any, Any]]]
 
     def register(
-        self, name: str, command_class: type[BaseCommand[Any, Any]]
+        self, name: str, command_class: type[BaseCommand[Any, Any, Any]]
     ) -> CommandRegistry:
         """Register a command implementation.
 
@@ -36,7 +36,7 @@ class CommandRegistry:
         logger.debug("Registering command '{}' with {}", name, command_class.__name__)
         return replace(self, commands={**self.commands, name: command_class})
 
-    def get(self, name: str) -> type[BaseCommand[Any, Any]] | None:
+    def get(self, name: str) -> type[BaseCommand[Any, Any, Any]] | None:
         """Get command class by name.
 
         Args:
@@ -66,7 +66,7 @@ class CommandDispatcher:
         """Initialize command dispatcher."""
         self.registry = CommandRegistry(commands={})
 
-    def register_command(self, name: str, command_class: type[BaseCommand[Any, Any]]) -> None:
+    def register_command(self, name: str, command_class: type[BaseCommand[Any, Any, Any]]) -> None:
         """Register a command for execution.
 
         Args:
@@ -93,7 +93,7 @@ class CommandDispatcher:
         Raises:
             WorkflowError: On execution failure
         """
-        logger.debug(f"Executing command: {command_name}")
+        logger.debug("Executing command: %s", command_name)
         try:
             # Look up command
             command_class = self.registry.get(command_name)

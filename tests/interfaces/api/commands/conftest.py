@@ -9,10 +9,9 @@ from unittest.mock import Mock
 import pytest
 import torch
 
+from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
 from dlkit.interfaces.api.commands.convert_command import ConvertCommandInput, ConvertResult
 from dlkit.tools.config import GeneralSettings
-from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
-
 
 # Test dataflow constants
 VALID_OPSET_VERSIONS = [9, 11, 13, 17, 18]

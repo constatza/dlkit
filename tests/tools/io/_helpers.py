@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-
 # URL test dataflow constants
 SQLITE_URLS = [
     "sqlite:///path/to/database.db",
@@ -144,7 +143,7 @@ def create_config_content_with_urls(
     # PATHS section - deprecated and removed
 
     # MLFLOW section
-    if any(key.startswith("mlflow") for key in urls.keys()):
+    if any(key.startswith("mlflow") for key in urls):
         config_lines.extend([
             "[MLFLOW]",
             "enabled = true",
@@ -308,4 +307,4 @@ def get_url_scheme(url: str) -> str | None:
     if not is_valid_url(url):
         return None
 
-    return url.split("://")[0].lower()
+    return url.split("://", maxsplit=1)[0].lower()

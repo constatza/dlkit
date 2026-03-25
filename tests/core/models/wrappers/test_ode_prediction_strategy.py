@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 
 from dlkit.core.models.nn.generative.functions.solvers import euler_step
 from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
@@ -136,9 +135,7 @@ def minimal_batch(batch_size: int, spatial_dim: int) -> TensorDict:
 # ===========================================================================
 
 
-def test_ode_strategy_raises_before_configure_shape(
-    batch_size: int, spatial_dim: int
-) -> None:
+def test_ode_strategy_raises_before_configure_shape(batch_size: int, spatial_dim: int) -> None:
     """ODEPredictionStrategy.predict raises RuntimeError if configure_shape not called.
 
     Args:
@@ -153,7 +150,9 @@ def test_ode_strategy_raises_before_configure_shape(
     model = _TinyVelocityModel(spatial_dim)
     batch = TensorDict(
         {
-            "features": TensorDict({"xt": torch.randn(batch_size, spatial_dim)}, batch_size=[batch_size]),
+            "features": TensorDict(
+                {"xt": torch.randn(batch_size, spatial_dim)}, batch_size=[batch_size]
+            ),
             "targets": TensorDict({}, batch_size=[batch_size]),
         },
         batch_size=[batch_size],

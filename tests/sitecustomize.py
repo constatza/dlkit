@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import os
 import random
+import types
 from pathlib import PureWindowsPath, WindowsPath
 
+_socket: types.ModuleType | None = None
 try:
     import socket as _socket
 except Exception:  # pragma: no cover - site import safety
-    _socket = None  # type: ignore
+    pass
 
 
 def _install_fake_socket() -> None:
@@ -29,7 +31,7 @@ def _install_fake_socket() -> None:
     _real_socket = _socket.socket
 
     class _FakeSocket:
-        def __init__(self, family=_socket.AF_INET, type=_socket.SOCK_STREAM, proto=0):  # noqa: D401
+        def __init__(self, family=_socket.AF_INET, type=_socket.SOCK_STREAM, proto=0):
             self._family = family
             self._type = type
             self._proto = proto
@@ -37,10 +39,10 @@ def _install_fake_socket() -> None:
             self._port = 0
             self._closed = False
 
-        def setsockopt(self, *args, **kwargs):  # noqa: D401
+        def setsockopt(self, *args, **kwargs):
             return None
 
-        def bind(self, address):  # noqa: D401
+        def bind(self, address):
             try:
                 host, port = address
             except Exception:
@@ -48,32 +50,31 @@ def _install_fake_socket() -> None:
             self._host = host or "127.0.0.1"
             # emulate ephemeral port allocation
             self._port = int(port) if int(port) != 0 else int(40000 + random.randint(0, 20000))
-            return None
 
-        def getsockname(self):  # noqa: D401
+        def getsockname(self):
             return (self._host, self._port)
 
-        def close(self):  # noqa: D401
+        def close(self):
             self._closed = True
 
-        def __enter__(self):  # noqa: D401
+        def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):  # noqa: D401
+        def __exit__(self, exc_type, exc, tb):
             self.close()
             return False
 
-    def _factory(family=-1, type=-1, proto=-1, fileno=None):  # noqa: D401
+    def _factory(family=-1, type=-1, proto=-1, fileno=None):
         # Keep the same signature as socket.socket
         return _FakeSocket(family, type, proto)
 
     # Replace only the constructor; leave constants and helpers intact
-    _socket.socket = _factory  # type: ignore[assignment]
+    _socket.socket = _factory
 
     # Also expose marker for debugging if needed
     _socket.__dict__.setdefault("_dlkit_fake_socket", True)
 
-    return None
+    return
 
 
 if _socket is not None:
@@ -98,9 +99,9 @@ def _install_posix_path_str() -> None:
         return format(self.as_posix(), spec)
 
     for cls in (PureWindowsPath, WindowsPath):
-        cls.__str__ = _to_posix  # type: ignore[assignment]
-        cls.__fspath__ = _to_posix  # type: ignore[assignment]
-        cls.__format__ = _format_posix  # type: ignore[assignment]
+        cls.__str__ = _to_posix
+        cls.__fspath__ = _to_posix
+        cls.__format__ = _format_posix
 
 
 if os.name == "nt":  # pragma: no cover - executed only on Windows CI

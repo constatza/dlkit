@@ -30,14 +30,14 @@ Pure business logic with no infrastructure dependencies:
 
 ```python
 # Core domain models
-Study          # Optimization session (aggregate root)
-Trial          # Individual hyperparameter attempt
+Study  # Optimization session (aggregate root)
+Trial  # Individual hyperparameter attempt
 OptimizationResult  # Complete optimization outcome
 
 # Domain protocols (following DIP)
-IStudyRepository          # Study persistence abstraction
-IExperimentTracker       # Experiment tracking abstraction
-IConfigurationPersistence # Configuration storage abstraction
+IStudyRepository  # Study persistence abstraction
+IExperimentTracker  # Experiment tracking abstraction
+IConfigurationPersistence  # Configuration storage abstraction
 ```
 
 ### Application Layer (`application/`)
@@ -45,9 +45,9 @@ IConfigurationPersistence # Configuration storage abstraction
 Services that orchestrate workflows:
 
 ```python
-StudyManager              # Study lifecycle management
-TrialExecutor            # Individual trial execution
-OptimizationOrchestrator # Complete workflow coordination
+StudyManager  # Study lifecycle management
+TrialExecutor  # Individual trial execution
+OptimizationOrchestrator  # Complete workflow coordination
 ```
 
 ### Infrastructure Layer (`infrastructure/`)
@@ -55,9 +55,9 @@ OptimizationOrchestrator # Complete workflow coordination
 Adapters for external services:
 
 ```python
-OptunaStudyRepository     # Optuna-based study storage
-MLflowTrackingAdapter    # MLflow experiment tracking
-TOMLConfigurationPersister # TOML config persistence
+OptunaStudyRepository  # Optuna-based study storage
+MLflowTrackingAdapter  # MLflow experiment tracking
+TOMLConfigurationPersister  # TOML config persistence
 ```
 
 ## Key Architectural Improvements
@@ -89,7 +89,7 @@ This creates proper nested MLflow run structure:
 factory = OptimizationServiceFactory(
     study_repository=OptunaStudyRepository(),
     experiment_tracker=MLflowTrackingAdapter(),
-    config_persister=TOMLConfigurationPersister()
+    config_persister=TOMLConfigurationPersister(),
 )
 
 orchestrator = factory.create_optimization_orchestrator(settings)
@@ -114,7 +114,7 @@ result = orchestrator.execute_optimization(
     study_name="hyperparameter_search",
     base_settings=settings,
     n_trials=100,
-    direction=OptimizationDirection.MINIMIZE
+    direction=OptimizationDirection.MINIMIZE,
 )
 ```
 
@@ -124,12 +124,11 @@ result = orchestrator.execute_optimization(
 from dlkit.runtime.workflows.optimization import (
     OptimizationServiceFactory,
     MLflowTrackingAdapter,
-    TOMLConfigurationPersister
+    TOMLConfigurationPersister,
 )
 
 factory = OptimizationServiceFactory(
-    experiment_tracker=MLflowTrackingAdapter(),
-    config_persister=TOMLConfigurationPersister()
+    experiment_tracker=MLflowTrackingAdapter(), config_persister=TOMLConfigurationPersister()
 )
 
 orchestrator = factory.create_optimization_orchestrator(settings)
@@ -144,6 +143,7 @@ Replace:
 ```python
 # OLD: God Object with SOLID violations
 from dlkit.runtime.workflows.strategies.optimization import OptunaOptimization
+
 strategy = OptunaOptimization()
 result = strategy.run(settings)
 ```
@@ -152,12 +152,13 @@ With:
 ```python
 # NEW: Clean architecture with proper separation
 from dlkit.runtime.workflows.optimization import create_optimization_orchestrator
+
 orchestrator = create_optimization_orchestrator(settings)
 result = orchestrator.execute_optimization(
     study_name="my_study",
     base_settings=settings,
     n_trials=100,
-    direction=OptimizationDirection.MINIMIZE
+    direction=OptimizationDirection.MINIMIZE,
 )
 ```
 

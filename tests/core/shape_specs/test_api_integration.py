@@ -4,17 +4,16 @@ These tests demonstrate the shape system integration without requiring
 the full DLKit API stack to be working perfectly.
 """
 
-import pytest
 from unittest.mock import Mock
+
 import torch
 
 from dlkit.core.shape_specs import (
-    create_shape_spec,
     ModelFamily,
-    ShapeSource,
     ShapeInferenceEngine,
+    ShapeSource,
     ShapeSystemFactory,
-    InferenceContext,
+    create_shape_spec,
 )
 
 

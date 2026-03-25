@@ -6,7 +6,9 @@ GeneralSettings top level (TRAINING, DATAMODULE, DATASET, etc.).
 """
 
 from typing import Any
-from pydantic import Field, model_validator, field_validator
+
+from pydantic import Field, field_validator
+
 from dlkit.core.datatypes.secure_uris import SecurePath
 
 from .core.base_settings import BasicSettings
@@ -79,8 +81,8 @@ class SessionSettings(BasicSettings):
         # Reject integers
         if isinstance(v, int):
             raise ValueError(
-                f"Invalid precision value in [SESSION] configuration: "
-                f"Integer values not supported. Use semantic aliases like 'double', 'single', 'float64', etc."
+                "Invalid precision value in [SESSION] configuration: "
+                "Integer values not supported. Use semantic aliases like 'double', 'single', 'float64', etc."
             )
 
         # Use from_string to parse and validate (handles str only)

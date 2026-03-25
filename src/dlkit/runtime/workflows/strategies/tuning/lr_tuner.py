@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 import warnings
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from lightning.pytorch.tuner import Tuner
+from lightning.pytorch.tuner.tuning import Tuner
 
 from dlkit.tools.utils.logging_config import get_logger
 
@@ -13,6 +14,7 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from lightning.pytorch import LightningDataModule, LightningModule, Trainer
+
     from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 
 
@@ -68,7 +70,7 @@ class LRTuner:
 
         # Run learning rate finder with safe globals context for PyTorch 2.6+
         # This allows LR finder to save/restore checkpoints with dlkit config classes
-        with torch.serialization.safe_globals(safe_classes):
+        with torch.serialization.safe_globals(safe_classes):  # type: ignore[arg-type]
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message=".*weights_only.*", category=UserWarning)
                 warnings.filterwarnings(
@@ -87,7 +89,7 @@ class LRTuner:
                 )
 
                 # Get suggested learning rate
-                suggested_lr = lr_finder.suggestion()
+                suggested_lr = lr_finder.suggestion() if lr_finder is not None else None
 
         if suggested_lr is None:
             raise RuntimeError(
@@ -97,33 +99,33 @@ class LRTuner:
                 "or using a manual learning rate instead."
             )
 
-        logger.info(f"Learning rate tuner suggested: {suggested_lr}")
+        logger.info("Learning rate tuner suggested: %s", suggested_lr)
 
         return suggested_lr
 
-    def _get_safe_globals(self) -> list[type]:
+    def _get_safe_globals(self) -> list[Callable[..., object]]:
         """Get list of dlkit classes to register as safe globals for checkpoint loading.
 
         Returns:
             list[type]: List of classes that should be allowed in checkpoint loading
         """
         from dlkit.tools.config.components.model_components import (
-            WrapperComponentSettings,
-            ModelComponentSettings,
-            MetricComponentSettings,
             LossComponentSettings,
+            MetricComponentSettings,
+            ModelComponentSettings,
+            WrapperComponentSettings,
         )
-        from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
+        from dlkit.tools.config.core.base_settings import BasicSettings
+        from dlkit.tools.config.dataloader_settings import DataloaderSettings
         from dlkit.tools.config.datamodule_settings import DataModuleSettings
         from dlkit.tools.config.dataset_settings import DatasetSettings, IndexSplitSettings
-        from dlkit.tools.config.dataloader_settings import DataloaderSettings
+        from dlkit.tools.config.general_settings import GeneralSettings
         from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
         from dlkit.tools.config.mlflow_settings import MLflowSettings
-        from dlkit.tools.config.core.base_settings import BasicSettings
-        from dlkit.tools.config.general_settings import GeneralSettings
-        from dlkit.tools.config.training_settings import TrainingSettings
-        from dlkit.tools.config.session_settings import SessionSettings
+        from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
         from dlkit.tools.config.paths_settings import PathsSettings
+        from dlkit.tools.config.session_settings import SessionSettings
+        from dlkit.tools.config.training_settings import TrainingSettings
 
         return [
             # Base settings

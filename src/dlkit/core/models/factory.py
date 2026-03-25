@@ -11,7 +11,8 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import torch.nn as nn
+    from torch import nn
+
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
 
@@ -37,7 +38,7 @@ def _constructor_params(model_cls: type) -> frozenset[str]:
             if name != "self"
             and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         )
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return frozenset()
 
 
@@ -59,7 +60,7 @@ def _is_lazy_module(model_cls: type) -> bool:
 
 
 def _lazy_kwargs(
-    model_cls: type, shape: "ShapeSummary", explicit_kwargs: dict[str, Any]
+    model_cls: type, shape: ShapeSummary, explicit_kwargs: dict[str, Any]
 ) -> dict[str, Any]:
     """Build kwargs for lazy models — inject only output-dim alias.
 
@@ -83,7 +84,7 @@ def _lazy_kwargs(
 
 
 def _ffnn_kwargs(
-    model_cls: type, shape: "ShapeSummary", explicit_kwargs: dict[str, Any]
+    model_cls: type, shape: ShapeSummary, explicit_kwargs: dict[str, Any]
 ) -> dict[str, Any]:
     """Build kwargs for FFNN models — inject in_features / out_features aliases.
 
@@ -109,7 +110,7 @@ def _ffnn_kwargs(
 
 
 def _conv_kwargs(
-    model_cls: type, shape: "ShapeSummary", explicit_kwargs: dict[str, Any]
+    model_cls: type, shape: ShapeSummary, explicit_kwargs: dict[str, Any]
 ) -> dict[str, Any]:
     """Build kwargs for Conv/CAE models — inject in_channels / in_length.
 
@@ -159,10 +160,10 @@ def _select_strategy(model_cls: type) -> str:
 
 
 def build_model(
-    model_cls: type["nn.Module"],
-    shape: "ShapeSummary | None",
+    model_cls: type[nn.Module],
+    shape: ShapeSummary | None,
     kwargs: dict[str, Any],
-) -> "nn.Module":
+) -> nn.Module:
     """Construct a model using explicit strategy selection.
 
     Inspects the constructor signature once to select a single construction

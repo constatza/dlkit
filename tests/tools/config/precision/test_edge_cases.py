@@ -1,19 +1,19 @@
 """Edge case and concurrency-focused tests for precision control."""
 
-import pytest
-import torch
 import gc
 import threading
 import time
 
-from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.tools.config.precision import PrecisionStrategy
-from dlkit.interfaces.api.domain.precision import precision_override, get_precision_context
-from dlkit.interfaces.api.services.precision_service import get_precision_service
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.io.arrays import load_array
+import pytest
+import torch
 
+from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
+from dlkit.interfaces.api.domain.precision import get_precision_context, precision_override
+from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.config.data_entries import Feature
+from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.io.arrays import load_array
 
 LOAD_SHAPE = (16, 4)
 SMALL_FILE_SHAPE = (8, 4)

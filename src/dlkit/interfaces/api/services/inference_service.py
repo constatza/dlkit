@@ -46,7 +46,9 @@ class InferenceService:
             if settings.has_batch_inference_config:
                 datamodule = build_inference_datamodule(settings)
                 datamodule.setup("predict")
-                feature_names = predictor._model_state.feature_names if predictor._model_state else ()
+                feature_names = (
+                    predictor._model_state.feature_names if predictor._model_state else ()
+                )
 
                 for batch in datamodule.predict_dataloader():
                     features_td = batch["features"]
@@ -75,6 +77,6 @@ class InferenceService:
             if isinstance(e, WorkflowError):
                 raise
             raise WorkflowError(
-                f"Inference execution failed: {str(e)}",
+                f"Inference execution failed: {e!s}",
                 {"service": self.service_name, "error": str(e)},
             )

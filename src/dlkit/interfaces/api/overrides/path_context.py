@@ -8,11 +8,11 @@ responsibility principle of DLKitEnvironment.
 from __future__ import annotations
 
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Generator
 
 from dlkit.tools.config.environment import DLKitEnvironment
 from dlkit.tools.io.paths import normalize_user_path
@@ -121,16 +121,16 @@ def resolve_with_context(component_path: str, env: DLKitEnvironment | None = Non
         # Check for direct component overrides
         if component_path == "output" and context.output_dir:
             return context.output_dir.resolve()
-        elif component_path.startswith("output/") and context.output_dir:
+        if component_path.startswith("output/") and context.output_dir:
             # For paths like "output/mlruns", replace "output" with the override
             relative_path = component_path[7:]  # Remove "output/"
             return (context.output_dir / relative_path).resolve()
-        elif component_path == "dataflow" and context.data_dir:
+        if component_path == "dataflow" and context.data_dir:
             return context.data_dir.resolve()
-        elif component_path.startswith("dataflow/") and context.data_dir:
+        if component_path.startswith("dataflow/") and context.data_dir:
             relative_path = component_path[5:]  # Remove "dataflow/"
             return (context.data_dir / relative_path).resolve()
-        elif "checkpoint" in component_path and context.checkpoints_dir:
+        if "checkpoint" in component_path and context.checkpoints_dir:
             return context.checkpoints_dir.resolve()
 
     # Default resolution using environment root

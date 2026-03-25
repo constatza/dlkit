@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 
 from dlkit.core.datasets.flexible import (
     BatchComplianceError,
@@ -22,12 +22,22 @@ from dlkit.core.datasets.flexible import (
 )
 from dlkit.tools.config.data_entries import (
     Feature,
-    Target,
     PathFeature,
     PathTarget,
+    Target,
     ValueFeature,
     ValueTarget,
 )
+
+
+def _expect_tensor(value: object) -> torch.Tensor:
+    assert isinstance(value, torch.Tensor)
+    return value
+
+
+def _expect_tensordict(value: object) -> TensorDictBase:
+    assert isinstance(value, TensorDictBase)
+    return value
 
 
 # ============================================================================
@@ -256,10 +266,12 @@ class TestFlexibleDatasetNewHierarchy:
 
         assert len(ds) == 5
         sample = ds[0]
+        features = _expect_tensordict(sample["features"])
+        targets = _expect_tensordict(sample["targets"])
 
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) == 1
-        assert len(sample["targets"].keys()) == 1
+        assert len(features.keys()) == 1
+        assert len(targets.keys()) == 1
         assert isinstance(sample["features", "feat1"], torch.Tensor)
         assert isinstance(sample["targets", "target1"], torch.Tensor)
         assert sample["features", "feat1"].shape == (2,)
@@ -273,10 +285,12 @@ class TestFlexibleDatasetNewHierarchy:
 
         assert len(ds) == 5
         sample = ds[0]
+        features = _expect_tensordict(sample["features"])
+        targets = _expect_tensordict(sample["targets"])
 
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) >= 1
-        assert len(sample["targets"].keys()) >= 1
+        assert len(features.keys()) >= 1
+        assert len(targets.keys()) >= 1
 
     def test_dataset_with_mixed_entries(self, value_feature: ValueFeature, path_target: PathTarget):
         """Test FlexibleDataset with mixed value and path entries."""
@@ -284,10 +298,12 @@ class TestFlexibleDatasetNewHierarchy:
 
         assert len(ds) == 5
         sample = ds[0]
+        features = _expect_tensordict(sample["features"])
+        targets = _expect_tensordict(sample["targets"])
 
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) >= 1
-        assert len(sample["targets"].keys()) >= 1
+        assert len(features.keys()) >= 1
+        assert len(targets.keys()) >= 1
         assert isinstance(sample["features", "feat1"], torch.Tensor)
         assert isinstance(sample["targets", "target_file"], torch.Tensor)
 
@@ -313,8 +329,10 @@ class TestFlexibleDatasetFactoryEntries:
         ds = FlexibleDataset(features=[feat], targets=[targ])
 
         assert len(ds) == 5
-        assert isinstance(ds[0], TensorDict)
-        assert len(ds[0]["features"].keys()) == 1 and len(ds[0]["targets"].keys()) == 1
+        sample = ds[0]
+        assert isinstance(sample, TensorDict)
+        assert len(_expect_tensordict(sample["features"]).keys()) == 1
+        assert len(_expect_tensordict(sample["targets"]).keys()) == 1
 
     def test_dataset_with_factory_value_entries(self):
         """Test FlexibleDataset with Feature/Target factory value entries."""
@@ -331,9 +349,11 @@ class TestFlexibleDatasetFactoryEntries:
 
         assert isinstance(sample, TensorDict)
         assert torch.allclose(
-            sample["features", "X"], torch.tensor([10.0, 11.0], dtype=torch.float32)
+            _expect_tensor(sample["features", "X"]), torch.tensor([10.0, 11.0], dtype=torch.float32)
         )
-        assert torch.allclose(sample["targets", "Y"], torch.tensor([1.0], dtype=torch.float32))
+        assert torch.allclose(
+            _expect_tensor(sample["targets", "Y"]), torch.tensor([1.0], dtype=torch.float32)
+        )
 
     def test_dataset_with_factory_placeholder_raises(self):
         """Test FlexibleDataset raises error for factory placeholder entries."""
@@ -370,8 +390,9 @@ class TestFlexibleDatasetValidation:
         ds = FlexibleDataset(features=[feat], targets=None)
 
         assert len(ds) == 5
-        assert isinstance(ds[0], TensorDict)
-        assert len(ds[0]["features"].keys()) >= 1
+        sample = ds[0]
+        assert isinstance(sample, TensorDict)
+        assert len(_expect_tensordict(sample["features"]).keys()) >= 1
 
     def test_only_targets_valid(self):
         """Test FlexibleDataset with only targets."""
@@ -381,8 +402,9 @@ class TestFlexibleDatasetValidation:
         ds = FlexibleDataset(features=[], targets=[targ])
 
         assert len(ds) == 5
-        assert isinstance(ds[0], TensorDict)
-        assert len(ds[0]["targets"].keys()) >= 1
+        sample = ds[0]
+        assert isinstance(sample, TensorDict)
+        assert len(_expect_tensordict(sample["targets"]).keys()) >= 1
 
 
 # ============================================================================
@@ -413,9 +435,10 @@ class TestIntegration:
 
         assert len(ds) == 5
         sample = ds[0]
+        features = _expect_tensordict(sample["features"])
 
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) == 3
+        assert len(features.keys()) == 3
         assert sample["features", "feat1"].shape == (2,)
         assert sample["features", "feat2"].shape == (3,)
         assert sample["features", "feat3"].shape == (4,)
@@ -434,8 +457,12 @@ class TestIntegration:
         sample = ds[0]
 
         assert isinstance(sample, TensorDict)
-        assert torch.equal(sample["features", "X"], torch.tensor([0.0, 1.0], dtype=torch.float32))
-        assert torch.equal(sample["targets", "Y"], torch.tensor([0.0], dtype=torch.float32))
+        assert torch.equal(
+            _expect_tensor(sample["features", "X"]), torch.tensor([0.0, 1.0], dtype=torch.float32)
+        )
+        assert torch.equal(
+            _expect_tensor(sample["targets", "Y"]), torch.tensor([0.0], dtype=torch.float32)
+        )
 
     def test_flexible_dataset_with_value_factory_entries(self):
         """Test FlexibleDataset with Feature/Target factory value entries."""
@@ -447,13 +474,19 @@ class TestIntegration:
         assert len(dataset) == 10
 
         batch = dataset[0]
+        features = _expect_tensordict(batch["features"])
+        targets = _expect_tensordict(batch["targets"])
         assert isinstance(batch, TensorDict)
-        assert len(batch["features"].keys()) >= 1
-        assert len(batch["targets"].keys()) >= 1
+        assert len(features.keys()) >= 1
+        assert len(targets.keys()) >= 1
         assert batch["features", "x"].shape == (5,)
         assert batch["targets", "y"].shape == (1,)
-        assert torch.allclose(batch["features", "x"], torch.ones(5, dtype=torch.float32))
-        assert torch.allclose(batch["targets", "y"], torch.zeros(1, dtype=torch.float32))
+        assert torch.allclose(
+            _expect_tensor(batch["features", "x"]), torch.ones(5, dtype=torch.float32)
+        )
+        assert torch.allclose(
+            _expect_tensor(batch["targets", "y"]), torch.zeros(1, dtype=torch.float32)
+        )
 
     def test_flexible_dataset_mixed_factory_types(self, tmp_path: Path):
         """Test FlexibleDataset with mixed factory entries (path and value)."""
@@ -473,8 +506,12 @@ class TestIntegration:
 
         batch = dataset[5]
         assert isinstance(batch, TensorDict)
-        assert torch.allclose(batch["features", "x"], torch.full((3,), 2.0, dtype=torch.float32))
-        assert torch.allclose(batch["targets", "y"], torch.full((1,), 5.0, dtype=torch.float32))
+        assert torch.allclose(
+            _expect_tensor(batch["features", "x"]), torch.full((3,), 2.0, dtype=torch.float32)
+        )
+        assert torch.allclose(
+            _expect_tensor(batch["targets", "y"]), torch.full((1,), 5.0, dtype=torch.float32)
+        )
 
     def test_flexible_dataset_all_entry_formats_factory_based(self, tmp_path: Path):
         """Test FlexibleDataset with all supported entry formats using factories."""
@@ -499,14 +536,18 @@ class TestIntegration:
 
         assert len(dataset) == 8
         sample = dataset[0]
+        features = _expect_tensordict(sample["features"])
+        targets = _expect_tensordict(sample["targets"])
 
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) == 3 and len(sample["targets"].keys()) == 1
+        assert len(features.keys()) == 3 and len(targets.keys()) == 1
         assert sample["features", "x1"].shape == (2,)
         assert sample["features", "x2"].shape == (3,)
         assert sample["features", "x3"].shape == (4,)
         assert sample["targets", "y"].shape == (1,)
-        assert torch.allclose(sample["targets", "y"], torch.tensor([10.0], dtype=torch.float32))
+        assert torch.allclose(
+            _expect_tensor(sample["targets", "y"]), torch.tensor([10.0], dtype=torch.float32)
+        )
 
 
 # ============================================================================
@@ -572,8 +613,8 @@ class TestBatchCompliance:
         ds = FlexibleDataset(features=[feature_5x2], targets=[target_5x1])
 
         assert ds._dataset_td.batch_size == torch.Size([5])
-        assert ds._dataset_td["features"].batch_size == torch.Size([5])
-        assert ds._dataset_td["targets"].batch_size == torch.Size([5])
+        assert _expect_tensordict(ds._dataset_td["features"]).batch_size == torch.Size([5])
+        assert _expect_tensordict(ds._dataset_td["targets"]).batch_size == torch.Size([5])
 
     def test_getitem_returns_unbatched_tensordict(
         self, feature_5x2: ValueFeature, target_5x1: ValueTarget

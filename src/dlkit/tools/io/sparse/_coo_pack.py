@@ -427,9 +427,7 @@ class CooPackReader(AbstractSparsePackReader):
             return np.zeros_like(resolved, dtype=np.int64)
         max_index = int(resolved.max())
         if max_index >= self.n_samples:
-            raise IndexError(
-                f"sample_index {max_index} out of range for {self.n_samples} samples"
-            )
+            raise IndexError(f"sample_index {max_index} out of range for {self.n_samples} samples")
         return resolved
 
     def build_torch_sparse(

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import os
-import threading
 
 import mlflow
 from mlflow import MlflowClient
@@ -17,7 +17,6 @@ from dlkit.runtime.workflows.strategies.tracking.backend import (
     RemoteServerBackend,
     TrackingBackend,
 )
-from dlkit.runtime.workflows.strategies.tracking.uri_resolver import parse_mlflow_scheme
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.io import url_resolver
 from dlkit.tools.utils.logging_config import (
@@ -127,9 +126,7 @@ class MLflowResourceManager:
         self._ensure_local_storage_if_needed(artifact_uri)
 
         with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
-            self._state.client = MLflowClientFactory.create_client(
-                tracking_uri=tracking_uri
-            )
+            self._state.client = MLflowClientFactory.create_client(tracking_uri=tracking_uri)
             if not MLflowClientFactory.validate_client_connectivity(self._state.client):
                 logger.warning("MLflow client connectivity validation failed")
 
@@ -241,7 +238,10 @@ class MLflowResourceManager:
                         yield ClientBasedRunContext(client, run_id, tracking_uri=tracking_uri)
                     finally:
                         with self._state.stack_lock:
-                            if self._state.active_run_stack and self._state.active_run_stack[-1] == run_id:
+                            if (
+                                self._state.active_run_stack
+                                and self._state.active_run_stack[-1] == run_id
+                            ):
                                 self._state.active_run_stack.pop()
         finally:
             self._restore_tracking_uri_if_last_run()

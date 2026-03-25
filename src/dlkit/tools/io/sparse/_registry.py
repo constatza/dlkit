@@ -50,9 +50,7 @@ def get_codec(fmt: SparseFormat) -> SparseCodec:
         return _codecs[fmt]
     except KeyError:
         known = ", ".join(f.value for f in _codecs)
-        raise ValueError(
-            f"Unregistered sparse format '{fmt.value}'. Known: {known}"
-        ) from None
+        raise ValueError(f"Unregistered sparse format '{fmt.value}'. Known: {known}") from None
 
 
 def get_reader_factory(fmt: SparseFormat) -> Callable[..., AbstractSparsePackReader]:
@@ -71,6 +69,4 @@ def get_reader_factory(fmt: SparseFormat) -> Callable[..., AbstractSparsePackRea
         return _reader_factories[fmt]
     except KeyError:
         known = ", ".join(f.value for f in _reader_factories)
-        raise ValueError(
-            f"Unregistered sparse format '{fmt.value}'. Known: {known}"
-        ) from None
+        raise ValueError(f"Unregistered sparse format '{fmt.value}'. Known: {known}") from None

@@ -1,11 +1,11 @@
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from types import MappingProxyType
+
 import numpy as np
 import torch
-from pathlib import Path
-from pydantic import FilePath, validate_call, ConfigDict
+from pydantic import ConfigDict, FilePath, validate_call
 from torch import Tensor
-from collections.abc import Mapping
-from types import MappingProxyType
-from collections.abc import Callable
 
 from dlkit.interfaces.api.services.precision_service import get_precision_service
 

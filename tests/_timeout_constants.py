@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 
-
 TIMEOUT_MULTIPLIER = float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0"))
 
 _FAST_BASE = 30

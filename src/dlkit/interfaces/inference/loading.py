@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
@@ -18,8 +18,6 @@ import torch
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.utils.logging_config import get_logger
-
-from .shapes import infer_shape_specification
 
 logger = get_logger(__name__)
 
@@ -168,7 +166,7 @@ def detect_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype:
 
 def build_model_from_checkpoint(
     checkpoint: dict[str, Any],
-    shape_spec: "ShapeSummary | None" = None,
+    shape_spec: ShapeSummary | None = None,
 ) -> torch.nn.Module:
     """Build and load model from checkpoint.
 
@@ -189,6 +187,7 @@ def build_model_from_checkpoint(
         WorkflowError: If model building fails
     """
     import importlib
+
     from dlkit.core.models.factory import build_model as _build_model
 
     # Extract model settings
@@ -199,7 +198,7 @@ def build_model_from_checkpoint(
     # Wrapper-level keys (_batch_transformer, etc.) are discarded.
     raw_sd = checkpoint.get("state_dict", checkpoint)
     if isinstance(raw_sd, dict) and any(k.startswith("model.") for k in raw_sd):
-        state_dict = {k[len("model."):]: v for k, v in raw_sd.items() if k.startswith("model.")}
+        state_dict = {k[len("model.") :]: v for k, v in raw_sd.items() if k.startswith("model.")}
     else:
         state_dict = raw_sd if isinstance(raw_sd, dict) else {}
     checkpoint_dtype = detect_checkpoint_dtype(state_dict)
@@ -226,8 +225,9 @@ def build_model_from_checkpoint(
 
     # Extract init kwargs using whitelist tag (no exclusion list needed)
     from dlkit.tools.config.components.model_components import extract_init_kwargs
+
     hyperparams = extract_init_kwargs(model_settings)
-    model = _build_model(model_cls, shape_spec, hyperparams)
+    model = _build_model(cast("type[torch.nn.Module]", model_cls), shape_spec, hyperparams)
 
     # Convert model to checkpoint dtype BEFORE loading weights
     # This prevents precision loss during state dict loading
@@ -343,7 +343,7 @@ def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResu
             has_shape_metadata = True
 
     except Exception as e:
-        logger.error(f"Checkpoint validation failed: {e}")
+        logger.error("Checkpoint validation failed: %s", e)
 
     return CheckpointValidationResult(
         checkpoint_path=checkpoint_path,

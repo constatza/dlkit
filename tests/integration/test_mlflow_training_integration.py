@@ -9,9 +9,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 from urllib.parse import urlparse
 from urllib.request import url2pathname
+from uuid import uuid4
 
 import pytest
 
@@ -21,12 +21,12 @@ from mlflow.tracking import MlflowClient
 
 import dlkit
 from dlkit import (
-    search_registered_models,
-    list_model_versions,
     get_model_version,
+    list_model_versions,
+    load_logged_model,
     load_registered_model,
     search_logged_models,
-    load_logged_model,
+    search_registered_models,
 )
 from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
 from dlkit.tools.config import GeneralSettings

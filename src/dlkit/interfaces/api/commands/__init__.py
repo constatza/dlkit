@@ -8,11 +8,6 @@ with proper dependency injection and error handling.
 """
 
 from .base import BaseCommand
-from .dispatcher import CommandDispatcher, get_dispatcher
-from .train_command import TrainCommand, TrainCommandInput
-from .inference_command import InferenceCommand, InferenceCommandInput
-from .optimization_command import OptimizationCommand, OptimizationCommandInput
-from .validation_command import ValidationCommand, ValidationCommandInput
 from .configuration_command import (
     GenerateTemplateCommand,
     GenerateTemplateCommandInput,
@@ -21,23 +16,35 @@ from .configuration_command import (
     ValidateTemplateCommandInput,
     ValidateTemplateCommandOutput,
 )
+from .dispatcher import CommandDispatcher, get_dispatcher
+from .inference_command import InferenceCommand, InferenceCommandInput
+from .optimization_command import OptimizationCommand, OptimizationCommandInput
+from .train_command import TrainCommand, TrainCommandInput
+from .validation_command import ValidationCommand, ValidationCommandInput
+
+_dispatcher = get_dispatcher()
+_dispatcher.register_command("train", TrainCommand)
+_dispatcher.register_command("optimize", OptimizationCommand)
+_dispatcher.register_command("validate_config", ValidationCommand)
+_dispatcher.register_command("generate_template", GenerateTemplateCommand)
+_dispatcher.register_command("validate_template", ValidateTemplateCommand)
 
 __all__ = [
     "BaseCommand",
     "CommandDispatcher",
-    "get_dispatcher",
-    "TrainCommand",
-    "TrainCommandInput",
+    "GenerateTemplateCommand",
+    "GenerateTemplateCommandInput",
+    "GenerateTemplateCommandOutput",
     "InferenceCommand",
     "InferenceCommandInput",
     "OptimizationCommand",
     "OptimizationCommandInput",
-    "ValidationCommand",
-    "ValidationCommandInput",
-    "GenerateTemplateCommand",
-    "GenerateTemplateCommandInput",
-    "GenerateTemplateCommandOutput",
+    "TrainCommand",
+    "TrainCommandInput",
     "ValidateTemplateCommand",
     "ValidateTemplateCommandInput",
     "ValidateTemplateCommandOutput",
+    "ValidationCommand",
+    "ValidationCommandInput",
+    "get_dispatcher",
 ]

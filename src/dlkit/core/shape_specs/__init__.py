@@ -19,41 +19,41 @@ Usage:
     )
 """
 
-from .core import IShapeSpec, ShapeSpec, GraphShapeSpec, NullShapeSpec, create_shape_spec
-from .value_objects import ShapeEntry, ShapeData, ModelFamily, ShapeSource
-from .strategies import ShapeValidator, ShapeSerializer, ShapeAliasResolver, ValidationResult
-from .registry import ModelFamilyRegistry, ModelFamilyDetector, ModelFamilyRegistryFactory
+from .checkpoint_loader import CheckpointShapeLoader
+from .core import GraphShapeSpec, IShapeSpec, NullShapeSpec, ShapeSpec, create_shape_spec
 from .factory import ShapeSystemFactory
-from .specifications import (
-    ShapeSpecification,
-    ShapeValidationEngine,
-    ShapeSpecificationBuilder,
-    RequiredEntriesSpecification,
-    PositiveDimensionsSpecification,
-    ModelFamilyCompatibilitySpecification,
-    DimensionRangeSpecification,
-)
 from .inference import (
-    ShapeInferenceStrategy,
-    ShapeInferenceChain,
-    ShapeInferenceEngine,
-    InferenceContext,
     CheckpointMetadataStrategy,
     DatasetSamplingStrategy,
+    InferenceContext,
+    ShapeInferenceChain,
+    ShapeInferenceEngine,
+    ShapeInferenceStrategy,
 )
+from .registry import ModelFamilyDetector, ModelFamilyRegistry, ModelFamilyRegistryFactory
 from .serialization import (
-    VersionedShapeSerializer,
     SerializationFormat,
     SerializationVersion,
     SerializedShape,
     ShapeFormatMigrator,
+    VersionedShapeSerializer,
 )
-from .checkpoint_loader import CheckpointShapeLoader
 from .simple_inference import (
     ShapeSummary,
-    infer_shapes_from_dataset,
     infer_post_transform_shapes,
+    infer_shapes_from_dataset,
 )
+from .specifications import (
+    DimensionRangeSpecification,
+    ModelFamilyCompatibilitySpecification,
+    PositiveDimensionsSpecification,
+    RequiredEntriesSpecification,
+    ShapeSpecification,
+    ShapeSpecificationBuilder,
+    ShapeValidationEngine,
+)
+from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator, ValidationResult
+from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
 __all__ = [
     # Core interfaces and implementations

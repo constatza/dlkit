@@ -14,16 +14,15 @@ Provides concrete implementations of the SOLID protocols defined in protocols.py
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
-from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 from loguru import logger
-from tensordict import TensorDict, NestedKey
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
-from torch import Tensor
+from torch import Tensor, nn
 from torchmetrics import Metric
 
 from dlkit.core.training.transforms.base import (
@@ -121,13 +120,13 @@ class ModelOutputSpec:
     prediction_key: str = "predictions"
     latent_keys: tuple[str | tuple[str, ...], ...] = ()
 
-    def all_out_keys(self) -> list[str | tuple[str, ...]]:
+    def all_out_keys(self) -> list[NestedKey]:
         """Return all TensorDictModule out_keys in positional order.
 
         Returns:
             List starting with ``prediction_key`` followed by ``latent_keys``.
         """
-        return [self.prediction_key, *self.latent_keys]
+        return cast(list[NestedKey], [self.prediction_key, *self.latent_keys])
 
 
 # ---------------------------------------------------------------------------
@@ -171,15 +170,17 @@ class TensorDictModelInvoker:
 
     def __init__(
         self,
-        in_keys: list[str | tuple[str, ...]],
+        in_keys: list[NestedKey],
         output_spec: ModelOutputSpec | None = None,
-        kwarg_in_keys: dict[str, str | tuple[str, ...]] | None = None,
+        kwarg_in_keys: dict[str, NestedKey] | None = None,
     ) -> None:
         self._output_spec = output_spec or ModelOutputSpec()
         self._out_keys = self._output_spec.all_out_keys()
         n_pos: int = len(in_keys)
         kwarg_names: list[str] = list((kwarg_in_keys or {}).keys())
-        all_in_keys: list[str | tuple[str, ...]] = in_keys + list((kwarg_in_keys or {}).values())
+        all_in_keys: list[NestedKey] = cast(
+            list[NestedKey], in_keys + list((kwarg_in_keys or {}).values())
+        )
         self._model_cell: list[nn.Module | None] = [None]
 
         cell = self._model_cell
@@ -253,7 +254,7 @@ def _classify_feature_entries(
         name: str | None = getattr(entry, "name", None)
         if name is None or mi is False or mi is None:
             continue
-        elif mi is True:
+        if mi is True:
             kwarg_map[name] = name  # entry name as kwarg key
         elif isinstance(mi, int) and not isinstance(mi, bool):
             positional.append((float(mi), name))  # explicit int positional
@@ -298,8 +299,8 @@ def _build_invoker_from_entries(
     """
     positional, kwarg_map = _classify_feature_entries(feature_entries)
     positional.sort(key=lambda x: x[0])
-    positional_in_keys: list[str | tuple[str, ...]] = [("features", name) for _, name in positional]
-    kwarg_in_keys: dict[str, str | tuple[str, ...]] = {
+    positional_in_keys: list[NestedKey] = [("features", name) for _, name in positional]
+    kwarg_in_keys: dict[str, NestedKey] = {
         kw: ("features", entry_name) for kw, entry_name in kwarg_map.items()
     }
 
@@ -372,6 +373,11 @@ class RoutedLossComputer:
             extra_routes=extra_routes,
         )
 
+    @property
+    def loss_fn(self) -> Callable:
+        """Expose the routed loss callable without leaking route internals."""
+        return self._route.loss_fn
+
     def compute(self, predictions: Tensor, batch: Any) -> Tensor:
         """Compute loss from predictions and named batch.
 
@@ -431,7 +437,9 @@ class RoutedMetricsUpdater:
             "test": test_routes,
         }
         # Pre-parse extra input routes once at construction time
-        self._parsed_extra: dict[str, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]] = {
+        self._parsed_extra: dict[
+            str, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]
+        ] = {
             stage: [
                 (
                     r.metric,
@@ -455,7 +463,7 @@ class RoutedMetricsUpdater:
         for metric, target_ns, target_name, extra_routes in self._parsed_extra.get(stage, []):
             target = batch[target_ns, target_name].to(dtype=predictions.dtype)
             extra = {kwarg: batch[route] for kwarg, route in extra_routes}
-            metric.update(predictions, target, **extra)
+            cast(Any, metric).update(predictions, target, **extra)
 
     def compute(self, stage: str) -> dict[str, Any]:
         """Compute accumulated metric values for the given stage.
@@ -466,7 +474,10 @@ class RoutedMetricsUpdater:
         Returns:
             Dictionary mapping metric class names to computed values.
         """
-        return {type(r.metric).__name__: r.metric.compute() for r in self._routes.get(stage, [])}
+        return {
+            type(route.metric).__name__: cast(Any, route.metric).compute()
+            for route in self._routes.get(stage, [])
+        }
 
     def reset(self, stage: str) -> None:
         """Reset metric state for the given stage.
@@ -574,8 +585,8 @@ class NamedBatchTransformer(nn.Module):
 
         return TensorDict(
             {
-                fn: TensorDict(new_features, batch_size=batch.batch_size),
-                tn: TensorDict(new_targets, batch_size=batch.batch_size),
+                fn: TensorDict(cast(Any, new_features), batch_size=batch.batch_size),
+                tn: TensorDict(cast(Any, new_targets), batch_size=batch.batch_size),
             },
             batch_size=batch.batch_size,
         )
@@ -604,7 +615,7 @@ class NamedBatchTransformer(nn.Module):
                     return chain.inverse_transform(predictions)
                 return predictions
             case TensorDict():
-                result: dict[str, Tensor | TensorDict] = {}
+                result: dict[str, Tensor | TensorDictBase] = {}
                 for k, v in predictions.items():
                     match v:
                         case torch.Tensor() if k in self._target_chains:
@@ -615,8 +626,8 @@ class NamedBatchTransformer(nn.Module):
                                 else v
                             )
                         case _:
-                            result[k] = v
-                return TensorDict(result, batch_size=predictions.batch_size)
+                            result[k] = cast(Tensor | TensorDictBase, v)
+                return TensorDict(cast(Any, result), batch_size=predictions.batch_size)
 
     def fit(self, dataloader: Any) -> None:
         """Fit all fittable transforms using training data.
@@ -624,7 +635,10 @@ class NamedBatchTransformer(nn.Module):
         Args:
             dataloader: Training DataLoader to iterate for fitting.
         """
-        for namespace, chains in (("features", self._feature_chains), ("targets", self._target_chains)):
+        for namespace, chains in (
+            ("features", self._feature_chains),
+            ("targets", self._target_chains),
+        ):
             for entry_name, chain in chains.items():
                 if not isinstance(chain, FittableTransform):
                     continue

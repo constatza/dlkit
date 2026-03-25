@@ -3,15 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import dlkit
 import numpy as np
-import torch
 import pytest
+import torch
 from lightning.pytorch import Trainer
 from torch import Tensor
 
-from dlkit.core.datasets.flexible import FlexibleDataset
+import dlkit
 from dlkit.core.datamodules.array import InMemoryModule
+from dlkit.core.datasets.flexible import FlexibleDataset
 from dlkit.core.datatypes.split import IndexSplit
 from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.core.models.wrappers.functions import apply_inverse_chain
@@ -47,7 +47,7 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
     )
     n = len(dataset)
     # Edge case: zero validation/test to ensure transforms fit on the full dataset
-    train = tuple(range(0, n))
+    train = tuple(range(n))
     val = tuple()
     test = train
     # Predict over the training indices for exact inverse-transform comparisons

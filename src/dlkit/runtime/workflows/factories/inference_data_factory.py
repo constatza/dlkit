@@ -6,12 +6,12 @@ from pathlib import Path
 
 from lightning.pytorch import LightningDataModule
 
-from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.core.datasets.flexible import FlexibleDataset
+from dlkit.core.datatypes.split import IndexSplit
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 from dlkit.tools.io.split_provider import get_or_create_split
-from dlkit.core.datasets.flexible import FlexibleDataset
 
 
 def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDataModule:
@@ -37,6 +37,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
 
     try:
         from dlkit.tools.io.locations import root as _root
+
         cfg_dir = _root()
     except Exception:
         cfg_dir = Path.cwd()

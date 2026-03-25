@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from dlkit.tools.config import GeneralSettings
 
@@ -106,26 +106,18 @@ class OverrideProvider(Protocol):
 class ConfigurationContext(SettingsProvider, LoggingProvider, Protocol):
     """Protocol for components needing configuration and logging."""
 
-    pass
-
 
 class TrainingContext(
     SettingsProvider, LoggingProvider, CheckpointProvider, ResourceProvider, Protocol
 ):
     """Protocol for training-related components."""
 
-    pass
-
 
 class InferenceContext(SettingsProvider, LoggingProvider, CheckpointProvider, Protocol):
     """Protocol for inference-related components."""
-
-    pass
 
 
 class OptimizationContext(
     SettingsProvider, LoggingProvider, ResourceProvider, MetadataProvider, Protocol
 ):
     """Protocol for optimization-related components."""
-
-    pass

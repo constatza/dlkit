@@ -9,14 +9,14 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from dlkit.runtime.workflows.strategies.tracking.backend import LocalSqliteBackend
-from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import MLflowResourceManager
+from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
+    MLflowResourceManager,
+)
 from dlkit.tools.config.mlflow_settings import MLflowSettings
-from dlkit.tools.io import url_resolver
 
 
 @pytest.fixture
@@ -63,7 +63,9 @@ class TestMLflowResourceManagerThreadSafety:
         for t in threads:
             t.join()
 
-        assert manager._state.active_run_stack == [], "Stack must be empty after all threads complete"
+        assert manager._state.active_run_stack == [], (
+            "Stack must be empty after all threads complete"
+        )
         assert len(errors) == 0
 
     def test_concurrent_state_snapshot_access(
@@ -96,7 +98,9 @@ class TestMLflowResourceManagerThreadSafety:
             assert len(errors) == 0
             assert len(snapshots) == 10
 
-    def test_cleanup_clears_stack(self, mlflow_config_enabled: MLflowSettings, tmp_path: Path) -> None:
+    def test_cleanup_clears_stack(
+        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
+    ) -> None:
         """Stack must be empty after context manager exit.
 
         Args:
@@ -107,9 +111,8 @@ class TestMLflowResourceManagerThreadSafety:
         backend = LocalSqliteBackend(db_path=db_path)
         manager = MLflowResourceManager(mlflow_config_enabled, backend)
 
-        with manager:
-            with manager._state.stack_lock:
-                manager._state.active_run_stack.extend(["run1", "run2", "run3"])
+        with manager, manager._state.stack_lock:
+            manager._state.active_run_stack.extend(["run1", "run2", "run3"])
 
         assert len(manager._state.active_run_stack) == 0
 

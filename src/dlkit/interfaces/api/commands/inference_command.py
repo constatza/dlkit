@@ -8,9 +8,10 @@ from typing import Any
 
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import InferenceResult
-from dlkit.interfaces.api.services import InferenceService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
+from dlkit.interfaces.api.services import InferenceService
 from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+
 from .base import BaseCommand
 
 
@@ -33,7 +34,9 @@ class InferenceCommandInput:
             object.__setattr__(self, "additional_overrides", {})
 
 
-class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
+class InferenceCommand(
+    BaseCommand[InferenceCommandInput, InferenceResult, InferenceWorkflowConfig]
+):
     """Command for executing inference workflows.
 
     Handles inference workflow execution with checkpoint loading,
@@ -84,7 +87,7 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
             raise
         except Exception as e:
             raise WorkflowError(
-                f"Input validation failed: {str(e)}", {"command": "infer", "error": str(e)}
+                f"Input validation failed: {e!s}", {"command": "infer", "error": str(e)}
             ) from e
 
     def execute(
@@ -123,7 +126,7 @@ class InferenceCommand(BaseCommand[InferenceCommandInput, InferenceResult]):
             raise
         except Exception as e:
             raise WorkflowError(
-                f"Inference execution failed: {str(e)}",
+                f"Inference execution failed: {e!s}",
                 {"command": "infer", "error_type": type(e).__name__},
             ) from e
 

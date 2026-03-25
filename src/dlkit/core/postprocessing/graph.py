@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from .array import to_numpy
 from .core import is_graph_output
 

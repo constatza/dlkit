@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import logging
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,8 @@ def _backtrace_enabled() -> bool:
 
 def _diagnose_enabled() -> bool:
     return os.getenv("DLKIT_LOG_DIAGNOSE", _ENV_DISABLED) == _ENV_ENABLED
+
+
 _CURRENT_LOG_LEVEL = "INFO"
 _MLFLOW_SQLITE_BOOTSTRAP_LOGGERS = (
     "alembic.runtime.migration",
@@ -87,10 +89,7 @@ def configure_logging(
     logger.add(
         log_file,
         format=(
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-            "{level: <8} | "
-            "{name}:{function}:{line} | "
-            "{message}"
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
         ),
         level=resolved_level,
         rotation=_LOG_ROTATION_SIZE,

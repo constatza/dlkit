@@ -4,14 +4,19 @@ from typing import Any
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.core.datatypes.base import FloatHyperparameter, PositiveFloatHyperparameter, StrHyperparameter
+from dlkit.core.datatypes.base import FloatHyperparameter, PositiveFloatHyperparameter
+
 from .core.base_settings import ComponentSettings, HyperParameterSettings
 
 
 class OptimizerSettings(ComponentSettings, HyperParameterSettings):
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
-    name: StrHyperparameter = Field(default="AdamW", description="Optimizer name")
-    module_path: str | None = Field(default="torch.optim", description="Module path to the optimizer")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default="AdamW", description="Optimizer name"
+    )
+    module_path: str | None = Field(
+        default="torch.optim", description="Module path to the optimizer"
+    )
     lr: PositiveFloatHyperparameter = Field(
         default=1e-3, description="Learning rate", alias="learning_rate"
     )
@@ -20,7 +25,9 @@ class OptimizerSettings(ComponentSettings, HyperParameterSettings):
 
 class SchedulerSettings(ComponentSettings):
     model_config = SettingsConfigDict(extra="allow")
-    name: str | type | Callable[..., Any] | None = Field(default="ReduceLROnPlateau", description="Scheduler name")
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
+        default="ReduceLROnPlateau", description="Scheduler name"
+    )
     module_path: str | None = Field(
         default="torch.optim.lr_scheduler", description="Module path to the scheduler"
     )

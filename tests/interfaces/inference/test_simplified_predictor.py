@@ -9,19 +9,20 @@ Tests the core predictor functionality after Phase 1 refactoring:
 
 from __future__ import annotations
 
-import pytest
-import torch
 from dataclasses import replace
 from pathlib import Path
 
-from dlkit.interfaces.inference import load_model, CheckpointPredictor, PredictorConfig
+import pytest
+import torch
+
+from dlkit.interfaces.inference import CheckpointPredictor, PredictorConfig, load_model
 from dlkit.interfaces.inference.loading import (
     build_model_from_checkpoint,
-    load_checkpoint,
-    extract_state_dict,
     detect_checkpoint_dtype,
-    validate_checkpoint,
+    extract_state_dict,
     get_checkpoint_info,
+    load_checkpoint,
+    validate_checkpoint,
 )
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 

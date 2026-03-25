@@ -70,10 +70,14 @@ from dlkit.runtime.workflows.strategies.core import ITrainingExecutor, VanillaEx
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
 
+
 # Type-safe executor usage
-def train_model(executor: ITrainingExecutor, components: BuildComponents, settings: GeneralSettings):
+def train_model(
+    executor: ITrainingExecutor, components: BuildComponents, settings: GeneralSettings
+):
     result = executor.execute(components, settings)
     print(f"Training completed: {result.metrics}")
+
 
 # Works with any ITrainingExecutor implementation
 executor = VanillaExecutor()
@@ -168,10 +172,12 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 from dlkit.runtime.workflows.strategies.core import IOptimizationStrategy
 from dlkit.tools.config import GeneralSettings
 
+
 def run_optimization(optimizer: IOptimizationStrategy, settings: GeneralSettings):
     result = optimizer.execute_optimization(settings)
     print(f"Best trial: {result.best_trial}")
     print(f"Best training metrics: {result.training_result.metrics}")
+
 
 # Works with any IOptimizationStrategy implementation (e.g., OptunaOptimizer)
 ```
@@ -206,7 +212,7 @@ print(f"Training metrics: {result.metrics}")
 print(f"Validation loss: {result.metrics.get('val_loss', 'N/A')}")
 
 # Access checkpoint artifacts
-if best_ckpt := result.artifacts.get('best_checkpoint'):
+if best_ckpt := result.artifacts.get("best_checkpoint"):
     print(f"Best model saved at: {best_ckpt}")
 ```
 
@@ -221,10 +227,7 @@ vanilla_executor = VanillaExecutor()
 # Wrap with tracking - decorator pattern
 tracker = MLflowTracker()
 tracked_executor = TrackingDecorator(
-    executor=vanilla_executor,
-    tracker=tracker,
-    settings=settings,
-    experiment_name="my_training"
+    executor=vanilla_executor, tracker=tracker, settings=settings, experiment_name="my_training"
 )
 
 # Execute with automatic tracking
@@ -236,6 +239,7 @@ result = tracked_executor.execute(components, settings)
 ```python
 from dlkit.runtime.workflows.strategies.core import ITrainingExecutor
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+
 
 class DistributedExecutor(ITrainingExecutor):
     """Custom executor with distributed training logic."""
@@ -256,13 +260,11 @@ class DistributedExecutor(ITrainingExecutor):
             metrics = collect_distributed_metrics(trainer)
 
             return TrainingResult(
-                model_state=None,
-                metrics=metrics,
-                artifacts={},
-                duration_seconds=0.0
+                model_state=None, metrics=metrics, artifacts={}, duration_seconds=0.0
             )
         except Exception as e:
             raise WorkflowError(f"Distributed training failed: {e}") from e
+
 
 # Use custom executor - same interface
 executor = DistributedExecutor(world_size=4)
@@ -274,6 +276,7 @@ result = executor.execute(components, settings)
 from dlkit.runtime.workflows.strategies.core import ITrainingExecutor
 from dlkit.interfaces.api.domain import TrainingResult
 
+
 class MockExecutor(ITrainingExecutor):
     """Mock executor for testing without actual training."""
 
@@ -283,8 +286,9 @@ class MockExecutor(ITrainingExecutor):
             model_state=None,
             metrics={"val_loss": 0.5, "val_accuracy": 0.95},
             artifacts={},
-            duration_seconds=10.0
+            duration_seconds=10.0,
         )
+
 
 # Test workflows without training overhead
 def test_workflow_orchestration():

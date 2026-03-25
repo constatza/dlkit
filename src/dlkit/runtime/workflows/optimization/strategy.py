@@ -9,10 +9,12 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from dlkit.interfaces.api.domain import OptimizationResult as APIOptimizationResult, WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.utils.logging_config import get_logger
+from dlkit.interfaces.api.domain import OptimizationResult as APIOptimizationResult
+from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.strategies.core.interfaces import IOptimizationStrategy
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+from dlkit.tools.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
     from .factory import OptimizationServiceFactory
@@ -28,7 +30,11 @@ class OptimizationStrategy(IOptimizationStrategy):
     and coordinate optimization services.
     """
 
-    def __init__(self, factory: OptimizationServiceFactory, settings: GeneralSettings):
+    def __init__(
+        self,
+        factory: OptimizationServiceFactory,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ):
         """Initialize optimization strategy.
 
         Args:
@@ -36,9 +42,14 @@ class OptimizationStrategy(IOptimizationStrategy):
             settings: Configuration settings
         """
         self._factory = factory
-        self._settings = settings
+        self._settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig = (
+            settings
+        )
 
-    def execute_optimization(self, settings: GeneralSettings) -> APIOptimizationResult:
+    def execute_optimization(
+        self,
+        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    ) -> APIOptimizationResult:
         """Execute optimization using clean architecture.
 
         The orchestrator now manages the experiment tracker lifecycle, so the

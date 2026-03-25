@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 from urllib import request
-import os
-import socket
 
-from dlkit.tools.io import locations
+import dlkit.tools.io.locations as locations
 from dlkit.tools.io import url_resolver
-
 
 _LOCAL_MLFLOW_URL = "http://127.0.0.1:5000"
 
@@ -69,6 +68,7 @@ def resolve_tracking_uri() -> str:
     for consistent backend selection logic.
     """
     from dlkit.runtime.workflows.strategies.tracking.backend import select_backend
+
     return select_backend().tracking_uri()
 
 
@@ -106,6 +106,11 @@ def resolve_mlflow_uris() -> ResolvedMlflowUris:
     )
 
 
+def default_sqlite_backend_uri() -> str:
+    """Return the configured local SQLite MLflow backend URI."""
+    return locations.mlruns_backend_uri()
+
+
 def _normalize_tracking_uri(uri: str) -> str:
     """Normalize tracking URI and absolute-resolve sqlite paths."""
     cleaned = uri.strip()
@@ -131,7 +136,7 @@ def _tcp_port_open(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host, port), timeout=0.25):
             return True
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         return False
 
 
@@ -151,7 +156,7 @@ def _looks_like_mlflow(base_url: str) -> bool:
     try:
         url = f"{base_url}/health"
         req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=1.0) as resp:  # noqa: S310
+        with request.urlopen(req, timeout=1.0) as resp:
             return resp.status == 200
     except Exception:
         return False

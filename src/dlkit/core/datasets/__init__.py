@@ -1,14 +1,14 @@
+from .base import BaseDataset, get_dataset, register_dataset
 from .flexible import FlexibleDataset
-from .timeseries import ForecastingDataset
 from .graph import GraphDataset, ScaledGraphDataset
-from .base import BaseDataset, register_dataset, get_dataset
+from .timeseries import ForecastingDataset
 
 __all__ = [
+    "BaseDataset",
     "FlexibleDataset",
     "ForecastingDataset",
     "GraphDataset",
     "ScaledGraphDataset",
-    "BaseDataset",
-    "register_dataset",
     "get_dataset",
+    "register_dataset",
 ]

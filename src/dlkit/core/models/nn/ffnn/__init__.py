@@ -1,37 +1,37 @@
-from .simple import FeedForwardNN, ConstantWidthFFNN
-from .plain import SimpleFeedForwardNN, ConstantWidthSimpleFFNN
 from .linear import LinearNetwork
 from .norm_scaled import (
+    NormScaledConstantWidthFFNN,
+    NormScaledFactorizedLinear,
     NormScaledFFNN,
     NormScaledLinearFFNN,
-    NormScaledConstantWidthFFNN,
-    NormScaledSymmetricLinear,
-    NormScaledSPDLinear,
-    NormScaledFactorizedLinear,
-    NormScaledSymmetricFactorizedLinear,
     NormScaledSPDFactorizedLinear,
-)
-from .parametric import (
-    ParametricDenseBlock,
-    ConstantWidthParametricFFNN,
-    EmbeddedParametricFFNN,
-)
-from .parametric_variants import (
-    ConstantWidthSPDFFNN,
-    ConstantWidthSPDFactorizedFFNN,
-    ConstantWidthFactorizedFFNN,
-    EmbeddedSPDFFNN,
-    EmbeddedSPDFactorizedFFNN,
-    EmbeddedFactorizedFFNN,
+    NormScaledSPDLinear,
+    NormScaledSymmetricFactorizedLinear,
+    NormScaledSymmetricLinear,
 )
 from .norm_scaled_deep import (
-    NormScaledConstantWidthSPDFFNN,
-    NormScaledConstantWidthSPDFactorizedFFNN,
     NormScaledConstantWidthFactorizedFFNN,
-    NormScaledEmbeddedSPDFFNN,
-    NormScaledEmbeddedSPDFactorizedFFNN,
+    NormScaledConstantWidthSPDFactorizedFFNN,
+    NormScaledConstantWidthSPDFFNN,
     NormScaledEmbeddedFactorizedFFNN,
+    NormScaledEmbeddedSPDFactorizedFFNN,
+    NormScaledEmbeddedSPDFFNN,
 )
+from .parametric import (
+    ConstantWidthParametricFFNN,
+    EmbeddedParametricFFNN,
+    ParametricDenseBlock,
+)
+from .parametric_variants import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSPDFactorizedFFNN,
+    ConstantWidthSPDFFNN,
+    EmbeddedFactorizedFFNN,
+    EmbeddedSPDFactorizedFFNN,
+    EmbeddedSPDFFNN,
+)
+from .plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from .simple import ConstantWidthFFNN, FeedForwardNN
 
 __all__ = [
     # Residual networks

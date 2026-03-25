@@ -8,7 +8,11 @@ from typing import Any
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+
 from .base import BaseCommand
+
+type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -19,7 +23,7 @@ class ValidationCommandInput:
     dry_build: bool = False
 
 
-class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
+class ValidationCommand(BaseCommand[ValidationCommandInput, bool, _WorkflowSettings]):
     """Command for validating configuration against strategies.
 
     Handles configuration validation with automatic strategy detection
@@ -31,7 +35,7 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
         super().__init__(command_name)
 
     def validate_input(
-        self, input_data: ValidationCommandInput, settings: BaseSettingsProtocol
+        self, input_data: ValidationCommandInput, settings: _WorkflowSettings
     ) -> None:
         """Validate validation command input.
 
@@ -48,12 +52,12 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
 
         except Exception as e:
             raise WorkflowError(
-                f"Input validation failed: {str(e)}",
+                f"Input validation failed: {e!s}",
                 {"command": "validate_config", "error": str(e)},
             ) from e
 
     def execute(
-        self, input_data: ValidationCommandInput, settings: BaseSettingsProtocol, **kwargs: Any
+        self, input_data: ValidationCommandInput, settings: _WorkflowSettings, **kwargs: Any
     ) -> bool:
         """Execute validation command.
 
@@ -85,7 +89,7 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
                     return False, "[DATAMODULE] section is required"
                 # In training mode require TRAINING
                 if not (s.SESSION and getattr(s.SESSION, "inference", False)):
-                    if not s.TRAINING:
+                    if not getattr(s, "TRAINING", None):
                         return False, "[TRAINING] section is required for training"
                 # In inference mode require MODEL.checkpoint
                 if s.SESSION and getattr(s.SESSION, "inference", False):
@@ -119,6 +123,8 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
                     from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 
                     _ = BuildFactory().build_components(settings)
+                except WorkflowError:
+                    raise
                 except Exception as e:
                     ok = False
                     msg = f"Dry build failed: {e}"
@@ -136,7 +142,7 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
             raise
         except Exception as e:
             raise WorkflowError(
-                f"Validation execution failed: {str(e)}",
+                f"Validation execution failed: {e!s}",
                 {
                     "command": "validate_config",
                     "profile": profile,
@@ -145,6 +151,14 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
             ) from e
 
     def _describe_profile(self, settings: BaseSettingsProtocol) -> str:
+        """Build a human-readable profile string for the given settings.
+
+        Args:
+            settings: DLKit configuration
+
+        Returns:
+            Profile string describing mode and enabled features
+        """
         optim = self._optuna_enabled(settings)
         tracking = self._mlflow_enabled(settings)
         mode = "inference" if self._is_inference(settings) else "training"
@@ -158,13 +172,16 @@ class ValidationCommand(BaseCommand[ValidationCommandInput, bool]):
         return "+".join(features)
 
     def _optuna_enabled(self, settings: BaseSettingsProtocol) -> bool:
+        """Check whether Optuna optimization is enabled in settings."""
         optuna_cfg = getattr(settings, "OPTUNA", None)
         return bool(optuna_cfg and getattr(optuna_cfg, "enabled", False))
 
     def _mlflow_enabled(self, settings: BaseSettingsProtocol) -> bool:
+        """Check whether MLflow tracking is configured in settings."""
         mlflow_cfg = getattr(settings, "MLFLOW", None)
         return mlflow_cfg is not None
 
     def _is_inference(self, settings: BaseSettingsProtocol) -> bool:
+        """Check whether settings describe an inference workflow."""
         session = getattr(settings, "SESSION", None)
         return bool(session and getattr(session, "inference", False))

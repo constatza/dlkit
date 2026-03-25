@@ -4,14 +4,13 @@ import pytest
 import torch
 
 from dlkit.core.models.nn.primitives.parametrizations import (
+    SPD,
     PositiveColumnScale,
     PositiveRowScale,
-    PositiveScalarScale,
     PositiveSandwichScale,
-    SPD,
+    PositiveScalarScale,
     Symmetric,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures — shared matrix data
@@ -288,7 +287,6 @@ class TestSPD:
         """forward() must reject non-symmetric inputs."""
         with pytest.raises(ValueError, match="symmetric"):
             spd_parametrization(square_base)
-
 
 
 # ---------------------------------------------------------------------------

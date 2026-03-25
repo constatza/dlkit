@@ -10,25 +10,28 @@ This module tests the complete float64 precision pipeline to ensure:
 """
 
 import sys
-from pathlib import Path
 
 import pytest
 import torch
 
+from dlkit.core.models.nn.base import DLKitModel
+from dlkit.interfaces.api.domain.precision import precision_override
+from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.precision import PrecisionStrategy
 from dlkit.tools.config.precision.strategy import _PRECISION_ALIAS_MAP
 from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.io.arrays import load_array
-from dlkit.interfaces.api.services.precision_service import get_precision_service
-from dlkit.interfaces.api.domain.precision import precision_override, get_precision_context
-from dlkit.core.models.nn.base import DLKitModel
-
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
     reason="MPS backend on macOS lacks float64 support",
 )
+
+
+def _build_session(*, precision: object, **kwargs: object) -> SessionSettings:
+    """Create a SessionSettings instance through Pydantic validation."""
+    return SessionSettings.model_validate({"precision": precision, **kwargs})
 
 
 class Float64TestModel(DLKitModel):
@@ -92,48 +95,48 @@ class TestFloat64EndToEnd:
         """Test that numeric strings are rejected, only semantic aliases work."""
         # Numeric strings should be rejected
         with pytest.raises(ValueError, match="Invalid precision value"):
-            SessionSettings(precision="64")
+            _build_session(precision="64")
 
     def test_precision_string_double(self):
         """Test float64 precision with alias 'double'."""
-        session = SessionSettings(precision="double")
+        session = _build_session(precision="double")
         assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_string_float64(self):
         """Test float64 precision with alias 'float64'."""
-        session = SessionSettings(precision="float64")
+        session = _build_session(precision="float64")
         assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_string_f64(self):
         """Test float64 precision with alias 'f64'."""
-        session = SessionSettings(precision="f64")
+        session = _build_session(precision="f64")
         assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_string_fp64(self):
         """Test float64 precision with alias 'fp64'."""
-        session = SessionSettings(precision="fp64")
+        session = _build_session(precision="fp64")
         assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_integer_rejected(self):
         """Test that integer precision values are rejected."""
         with pytest.raises(ValueError, match="Integer values not supported"):
-            SessionSettings(precision=64)
+            _build_session(precision=64)
 
     def test_precision_case_insensitive(self):
         """Test that precision strings are case-insensitive."""
         for value in ["DOUBLE", "Double", "FLOAT64", "Float64", "F64"]:
-            session = SessionSettings(precision=value)
+            session = _build_session(precision=value)
             assert session.precision == PrecisionStrategy.FULL_64
 
     def test_invalid_precision_string_raises_error(self):
         """Test that invalid precision string raises clear error."""
         with pytest.raises(ValueError, match="Invalid precision value.*wtf"):
-            SessionSettings(precision="wtf")
+            _build_session(precision="wtf")
 
     def test_invalid_numeric_string_raises_error(self):
         """Test that numeric string precision raises clear error."""
         with pytest.raises(ValueError, match="Invalid precision value"):
-            SessionSettings(precision="128")
+            _build_session(precision="128")
 
     def test_model_weights_float64(self, model_shape):
         """Test that model weights are initialized as float64."""
@@ -148,7 +151,7 @@ class TestFloat64EndToEnd:
 
     def test_model_weights_float64_with_session(self, model_shape):
         """Test that model uses session precision for float64."""
-        session = SessionSettings(precision="double")
+        session = _build_session(precision="double")
 
         with precision_override(session.get_precision_strategy()):
             model = Float64TestModel(**model_shape)
@@ -189,11 +192,12 @@ class TestFloat64EndToEnd:
 
     def test_data_loading_float64(self, sample_data):
         """Test that data is loaded with float64 precision."""
-        session = SessionSettings(precision="float64")
+        session = _build_session(precision="float64")
         feature = Feature(name="input", path=sample_data["input"])
 
         # Load with session precision using context
         with precision_override(session.get_precision_strategy()):
+            assert feature.path is not None
             data = load_array(feature.path)
 
         assert data.dtype == torch.float64
@@ -203,7 +207,7 @@ class TestFloat64EndToEnd:
         """Test complete training pipeline with float64 precision."""
 
         # 1. Setup session with float64
-        session = SessionSettings(precision="double", seed=42)
+        session = _build_session(precision="double", seed=42)
         assert session.precision == PrecisionStrategy.FULL_64
 
         # 2. Load data with float64 precision using context
@@ -211,6 +215,8 @@ class TestFloat64EndToEnd:
         target = Target(name="target", path=sample_data["target"])
 
         with precision_override(session.get_precision_strategy()):
+            assert feature.path is not None
+            assert target.path is not None
             input_data = load_array(feature.path)
             target_data = load_array(target.path)
 
@@ -243,11 +249,10 @@ class TestFloat64EndToEnd:
             if param.grad is not None:
                 assert param.grad.dtype == torch.float64, f"Gradient for {name} should be float64"
 
-
     def test_precision_service_float64(self):
         """Test precision service with float64."""
         service = get_precision_service()
-        session = SessionSettings(precision="f64")
+        session = _build_session(precision="f64")
 
         # Resolve precision
         resolved = service.resolve_precision(session)
@@ -268,7 +273,7 @@ class TestFloat64EndToEnd:
     def test_precision_service_tensor_casting_float64(self):
         """Test precision service tensor casting to float64."""
         service = get_precision_service()
-        session = SessionSettings(precision="double")
+        session = _build_session(precision="double")
 
         # Create float32 tensor
         tensor = torch.randn(10, 20, dtype=torch.float32)
@@ -281,7 +286,7 @@ class TestFloat64EndToEnd:
     def test_precision_service_model_application_float64(self, model_shape):
         """Test precision service apply_precision_to_model with float64."""
         service = get_precision_service()
-        session = SessionSettings(precision="fp64")
+        session = _build_session(precision="fp64")
 
         # Create model with default precision (float32)
         with precision_override(PrecisionStrategy.FULL_32):
@@ -326,7 +331,7 @@ class TestFloat64EndToEnd:
 
         for alias in test_aliases:
             expected_strategy = _PRECISION_ALIAS_MAP[alias]
-            session = SessionSettings(precision=alias)
+            session = _build_session(precision=alias)
             assert session.precision == expected_strategy, (
                 f"Alias '{alias}' should resolve to {expected_strategy}"
             )
@@ -351,7 +356,7 @@ class TestFloat64EndToEnd:
     def test_precision_info_float64(self):
         """Test comprehensive precision info for float64."""
         service = get_precision_service()
-        session = SessionSettings(precision="double")
+        session = _build_session(precision="double")
 
         info = service.get_precision_info(session)
 

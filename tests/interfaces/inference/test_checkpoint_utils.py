@@ -6,7 +6,6 @@ inference subsystem architecture.
 
 from __future__ import annotations
 
-import pytest
 import torch
 
 from dlkit.interfaces.inference.loading import extract_state_dict

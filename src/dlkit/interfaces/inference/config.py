@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 if TYPE_CHECKING:
-    import torch.nn as nn
+    from torch import nn
+
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
     from dlkit.core.training.transforms.chain import TransformChain
 
@@ -59,11 +60,11 @@ class ModelState:
             transform to the first model output at predict time.
     """
 
-    model: "nn.Module"  # PyTorch model in eval mode
+    model: nn.Module  # PyTorch model in eval mode
     device: str
-    shape_spec: "ShapeSummary | None" = None
-    feature_transforms: dict[str, "TransformChain"] | None = None
-    target_transforms: dict[str, "TransformChain"] | None = None
+    shape_spec: ShapeSummary | None = None
+    feature_transforms: dict[str, TransformChain] | None = None
+    target_transforms: dict[str, TransformChain] | None = None
     metadata: dict[str, str | int | float | bool | dict | list] = field(default_factory=dict)
     feature_names: tuple[str, ...] = field(default_factory=tuple)
     predict_target_key: str = ""

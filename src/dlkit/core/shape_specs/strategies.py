@@ -6,12 +6,11 @@ of shape handling: validation, serialization, and alias resolution.
 
 from __future__ import annotations
 
-import torch
-from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from typing import Dict, Any, Iterable, Set
+from typing import Any
 
-from .value_objects import ShapeData, ShapeEntry, ModelFamily, ShapeSource
+from .value_objects import ShapeData, ShapeEntry
 
 
 # TODO: Investigate whether shape-spec validation needs a dedicated result carrier.
@@ -117,7 +116,7 @@ class ShapeSerializer:
 
         self._versioned_serializer = versioned_serializer or VersionedShapeSerializer()
 
-    def serialize(self, data: ShapeData) -> Dict[str, Any]:
+    def serialize(self, data: ShapeData) -> dict[str, Any]:
         """Serialize ShapeData to dictionary.
 
         Args:
@@ -129,7 +128,7 @@ class ShapeSerializer:
         serialized_shape = self._versioned_serializer.serialize(data)
         return serialized_shape.to_dict()
 
-    def deserialize(self, raw: Dict[str, Any]) -> ShapeData:
+    def deserialize(self, raw: dict[str, Any]) -> ShapeData:
         """Deserialize dictionary to ShapeData.
 
         Args:
@@ -143,7 +142,7 @@ class ShapeSerializer:
         """
         return self._versioned_serializer.deserialize(raw)
 
-    def deserialize_legacy_format(self, legacy_data: Dict[str, Any]) -> ShapeData | None:
+    def deserialize_legacy_format(self, legacy_data: dict[str, Any]) -> ShapeData | None:
         """Deserialize legacy shape_info format.
 
         Args:

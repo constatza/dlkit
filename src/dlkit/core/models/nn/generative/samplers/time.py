@@ -37,8 +37,10 @@ class UniformTimeSampler:
         Returns:
             Time tensor of shape ``(batch_size,)``.
         """
-        return torch.empty(batch_size, device=device, dtype=dtype).uniform_(
-            self._t_min, self._t_max
-        ) if generator is None else torch.rand(
-            batch_size, device=device, dtype=dtype, generator=generator
-        ) * (self._t_max - self._t_min) + self._t_min
+        return (
+            torch.empty(batch_size, device=device, dtype=dtype).uniform_(self._t_min, self._t_max)
+            if generator is None
+            else torch.rand(batch_size, device=device, dtype=dtype, generator=generator)
+            * (self._t_max - self._t_min)
+            + self._t_min
+        )

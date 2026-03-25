@@ -13,17 +13,16 @@ from torch import Tensor
 from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.runtime.workflows.strategies.tracking.artifact_logger import (
-    ArtifactLogger,
-    TAG_LOGGED_MODEL_URI,
     TAG_LOGGED_MODEL_ARTIFACT_PATH,
+    TAG_LOGGED_MODEL_URI,
     TAG_MODEL_CLASS,
     TAG_MODEL_REGISTRATION_ENABLED,
+    ArtifactLogger,
     _resolve_model_class_name,
 )
 from dlkit.runtime.workflows.strategies.tracking.interfaces import IRunContext
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
-
 
 # ---------------------------------------------------------------------------
 # Minimal test doubles for wrapper unwrapping tests

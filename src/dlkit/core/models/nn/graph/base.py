@@ -1,6 +1,8 @@
-from dlkit.core.models.nn.base import DLKitModel
-from torch import Tensor, nn
 from abc import abstractmethod
+
+from torch import Tensor
+
+from dlkit.core.models.nn.base import DLKitModel
 from dlkit.core.shape_specs import IShapeSpec
 
 

@@ -233,7 +233,7 @@ def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
     for key, value in os.environ.items():
         if not key.upper().startswith(prefix_upper):
             continue
-        rest = key[len(prefix):]
+        rest = key[len(prefix) :]
         if not rest:
             continue
         # Skip flat vars (e.g. DLKIT_ROOT_DIR) unless the prefix already

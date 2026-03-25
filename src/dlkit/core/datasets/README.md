@@ -73,10 +73,7 @@ sample = dataset[0]
 # {'features': tensor([...]), 'targets': tensor([...])}
 
 # Load multiple features from same NPZ
-features = [
-    Feature(name="features", path="data.npz"),
-    Feature(name="latent", path="data.npz")
-]
+features = [Feature(name="features", path="data.npz"), Feature(name="latent", path="data.npz")]
 dataset = FlexibleDataset(features=features)
 
 sample = dataset[0]
@@ -109,8 +106,8 @@ path = "data.npz"
 
 ```python
 features = [
-    Feature(name="x", path="features.npy"),     # Load from .npy
-    Feature(name="embeddings", path="data.npz") # Load "embeddings" from .npz
+    Feature(name="x", path="features.npy"),  # Load from .npy
+    Feature(name="embeddings", path="data.npz"),  # Load "embeddings" from .npz
 ]
 targets = [Target(name="y", path="labels.pt")]  # Load from PyTorch file
 dataset = FlexibleDataset(features=features, targets=targets)
@@ -242,18 +239,19 @@ from dlkit.tools.config.core.updater import update_settings
 config = load_settings("config.toml", inference=False)
 
 # Inject dataset with NPZ files programmatically
-update_settings(config, {
-    "DATASET": DatasetSettings(
-        name="dlkit.core.datasets.flexible.FlexibleDataset",
-        features=(
-            Feature(name="features", path="data.npz"),
-            Feature(name="latent", path="data.npz"),
-        ),
-        targets=(
-            Target(name="targets", path="data.npz"),
+update_settings(
+    config,
+    {
+        "DATASET": DatasetSettings(
+            name="dlkit.core.datasets.flexible.FlexibleDataset",
+            features=(
+                Feature(name="features", path="data.npz"),
+                Feature(name="latent", path="data.npz"),
+            ),
+            targets=(Target(name="targets", path="data.npz"),),
         )
-    )
-})
+    },
+)
 
 # Train with NPZ data
 result = train(config, epochs=100)
@@ -269,7 +267,7 @@ import numpy as np
 # Create NPZ file for inference
 test_data = {
     "features": np.random.randn(100, 64).astype(np.float32),
-    "latent": np.random.randn(100, 32).astype(np.float32)
+    "latent": np.random.randn(100, 32).astype(np.float32),
 }
 np.savez("test_data.npz", **test_data)
 
@@ -278,10 +276,7 @@ predictor = load_model("model.ckpt", device="cuda")
 
 # Option 1: Load and pass arrays
 npz = np.load("test_data.npz")
-result = predictor.predict({
-    "features": npz["features"],
-    "latent": npz["latent"]
-})
+result = predictor.predict({"features": npz["features"], "latent": npz["latent"]})
 
 # Option 2: Pass file paths (if supported by predictor)
 # predictor handles loading internally
@@ -342,7 +337,7 @@ for key in npz.keys():
    ```python
    # Entry name must match NPZ array key
    features = [Feature(name="features", path="data.npz")]  # ✅ Correct
-   features = [Feature(name="x", path="data.npz")]         # ❌ Fails if "x" not in npz
+   features = [Feature(name="x", path="data.npz")]  # ❌ Fails if "x" not in npz
    ```
 
 3. **Use Compressed NPZ for Large Files:**
@@ -383,7 +378,8 @@ To add new array formats (HDF5, Zarr, Parquet):
    ```python
    def _load_hdf5(path: Path, dataset_path: str, **kwargs) -> np.ndarray:
        import h5py
-       with h5py.File(path, 'r') as f:
+
+       with h5py.File(path, "r") as f:
            return f[dataset_path][:]
    ```
 

@@ -11,9 +11,10 @@ from rich.panel import Panel
 from rich.text import Text
 
 from dlkit.tools.utils.logging_config import configure_logging, get_effective_log_level, get_logger
-from .commands import optimize, config, convert
-from .commands import train as train
+
+from .commands import config, convert, optimize
 from .commands import predict as predict
+from .commands import train as train
 
 logger = get_logger(__name__)
 
@@ -88,10 +89,10 @@ def main(
 def show_info() -> None:
     """Show system and DLKit environment information."""
     try:
-        import torch
         import lightning
         import mlflow
         import optuna
+        import torch
 
         info_text = Text()
         info_text.append("🧠 DLKit - Deep Learning Toolkit\n\n", style="bold blue")

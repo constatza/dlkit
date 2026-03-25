@@ -137,9 +137,7 @@ class BasicOverrideManager[T: BasicSettings]:
         from dlkit.tools.io.paths import normalize_user_path
 
         set_path_context(
-            PathOverrideContext(
-                root_dir=normalize_user_path(root_dir, require_absolute=True)
-            )
+            PathOverrideContext(root_dir=normalize_user_path(root_dir, require_absolute=True))
         )
 
     def validate_overrides(
@@ -168,7 +166,7 @@ class BasicOverrideManager[T: BasicSettings]:
             if not isinstance(checkpoint_path, Path):
                 try:
                     checkpoint_path = Path(checkpoint_path)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     errors.append("checkpoint_path must be a valid path")
                     return errors
 

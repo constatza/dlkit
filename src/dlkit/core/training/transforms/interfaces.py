@@ -73,7 +73,6 @@ class IInvertibleTransform(ABC):
                 forward() has not been called yet.
             RuntimeError: If batch size mismatch between forward/inverse calls.
         """
-        pass
 
 
 class IFittableTransform(ABC):
@@ -136,7 +135,6 @@ class IFittableTransform(ABC):
             >>> scaler.fit(training_data)  # Compute mean/std
             >>> scaler.fitted  # True
         """
-        pass
 
 
 class ISerializableTransform(ABC):
@@ -173,11 +171,10 @@ class ISerializableTransform(ABC):
             Dictionary with serialized state, JSON-compatible types preferred.
             Should include all information needed to reconstruct the transform.
         """
-        pass
 
     @classmethod
     @abstractmethod
-    def from_checkpoint_dict(cls, state: dict) -> "ISerializableTransform":
+    def from_checkpoint_dict(cls, state: dict) -> ISerializableTransform:
         """Reconstruct transform from checkpoint dictionary.
 
         Args:
@@ -186,7 +183,6 @@ class ISerializableTransform(ABC):
         Returns:
             Reconstructed transform instance with restored state.
         """
-        pass
 
 
 class IShapeAwareTransform(ABC):
@@ -240,4 +236,3 @@ class IShapeAwareTransform(ABC):
             >>> pca.infer_output_shape((64,))
             (10,)
         """
-        pass

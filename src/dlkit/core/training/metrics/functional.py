@@ -27,7 +27,6 @@ Shape Notation:
 
 from collections.abc import Callable
 from functools import partial
-from typing import TypeAlias
 
 import torch
 from torch import Tensor
@@ -42,7 +41,7 @@ from .._norm_ops import (
 # TYPE ALIASES
 # ============================================================================
 
-AggregatorFn: TypeAlias = Callable[[Tensor], Tensor]
+type AggregatorFn = Callable[[Tensor], Tensor]
 """Reduction function that maps a tensor of per-sample values to a scalar.
 
 Examples:
@@ -92,7 +91,7 @@ def compute_error_vectors(preds: Tensor, target: Tensor) -> Tensor:
     return preds - target
 
 
-def compute_vector_norm(tensor: Tensor, ord: int = 2, dim: int = -1) -> Tensor:
+def compute_vector_norm(tensor: Tensor, ord: float = 2, dim: int = -1) -> Tensor:
     """Compute vector norm along specified dimension.
 
     Shape:
@@ -174,7 +173,7 @@ def apply_aggregation(
 def normalized_vector_norm_error(
     preds: Tensor,
     target: Tensor,
-    ord: int = 2,
+    ord: float = 2,
     dim: int = -1,
     eps: float = 1e-8,
     aggregator: Callable[[Tensor], Tensor] = torch.mean,

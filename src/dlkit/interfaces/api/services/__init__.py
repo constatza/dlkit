@@ -9,6 +9,6 @@ __all__ = [
     "InferenceService",
     "OptimizationService",
     "PrecisionService",
-    "get_precision_service",
     "TrainingService",
+    "get_precision_service",
 ]

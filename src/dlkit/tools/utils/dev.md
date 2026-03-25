@@ -95,17 +95,14 @@ None - pure utility functions
 ```python
 from dlkit.tools.utils.general import kwargs_compatible_with
 
+
 class MyModel:
     def __init__(self, hidden_size: int, num_layers: int):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-all_kwargs = {
-    "hidden_size": 128,
-    "num_layers": 3,
-    "learning_rate": 0.001,
-    "batch_size": 32
-}
+
+all_kwargs = {"hidden_size": 128, "num_layers": 3, "learning_rate": 0.001, "batch_size": 32}
 
 compatible = kwargs_compatible_with(MyModel, **all_kwargs)
 # Result: {"hidden_size": 128, "num_layers": 3}
@@ -237,6 +234,7 @@ from dlkit.tools.utils.system_utils import recommended_uvicorn_workers
 workers = recommended_uvicorn_workers()
 
 import uvicorn
+
 uvicorn.run(app, host="0.0.0.0", port=8000, workers=workers)
 ```
 
@@ -270,12 +268,7 @@ from dlkit.tools.utils.general import import_object, kwargs_compatible_with
 
 model_class = import_object("torch.nn:Linear")
 
-all_config = {
-    "in_features": 784,
-    "out_features": 10,
-    "bias": True,
-    "learning_rate": 0.001
-}
+all_config = {"in_features": 784, "out_features": 10, "bias": True, "learning_rate": 0.001}
 
 compatible_kwargs = kwargs_compatible_with(model_class, **all_config)
 model = model_class(**compatible_kwargs)

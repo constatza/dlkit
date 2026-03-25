@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any, Literal
+
 from pydantic import Field, PositiveInt
 
-from .core.base_settings import ComponentSettings, BasicSettings
+from .core.base_settings import BasicSettings, ComponentSettings
 
 
 class PrunerSettings(ComponentSettings):
@@ -19,10 +20,12 @@ class PrunerSettings(ComponentSettings):
         interval_steps: Interval between pruning steps
     """
 
-    name: str | type | Callable[..., Any] | None = Field(
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default="NopPruner", description="Pruner algorithm name for hyperparameter optimization"
     )
-    module_path: str | None = Field(default="optuna.pruners", description="Module path for the pruner")
+    module_path: str | None = Field(
+        default="optuna.pruners", description="Module path for the pruner"
+    )
     n_warmup_steps: int | None = Field(
         default=None, description="Number of warmup steps before pruning starts"
     )
@@ -38,10 +41,12 @@ class SamplerSettings(ComponentSettings):
         seed: Random seed for reproducibility
     """
 
-    name: str | type | Callable[..., Any] | None = Field(
+    name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default="TPESampler", description="Sampler algorithm name for hyperparameter optimization"
     )
-    module_path: str | None = Field(default="optuna.samplers", description="Module path for the sampler")
+    module_path: str | None = Field(
+        default="optuna.samplers", description="Module path for the sampler"
+    )
     seed: int | None = Field(default=None, description="Optional random seed for reproducibility")
 
 

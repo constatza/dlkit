@@ -1,16 +1,17 @@
 """Tests for PrecisionContext."""
 
-import pytest
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from dlkit.tools.config.precision import PrecisionStrategy
+import pytest
+
 from dlkit.interfaces.api.domain.precision import (
     PrecisionContext,
-    get_global_precision_context,
     current_precision_override,
+    get_global_precision_context,
     precision_override,
 )
+from dlkit.tools.config.precision import PrecisionStrategy
 
 
 class TestPrecisionContext:
@@ -173,12 +174,12 @@ class TestPrecisionContext:
         """Test string representation."""
         # Without override
         repr_str = repr(context)
-        assert "PrecisionContext(no_override)" == repr_str
+        assert repr_str == "PrecisionContext(no_override)"
 
         # With override
         context.set_override(PrecisionStrategy.MIXED_16)
         repr_str = repr(context)
-        assert "PrecisionContext(override=MIXED_16)" == repr_str
+        assert repr_str == "PrecisionContext(override=MIXED_16)"
 
     def test_thread_local_independence(self):
         """Test that thread-local storage is truly independent."""

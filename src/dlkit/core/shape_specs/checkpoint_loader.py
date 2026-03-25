@@ -6,15 +6,15 @@ from checkpoints without loading the full model.
 
 from __future__ import annotations
 
-from typing import Any, Dict
 from pathlib import Path
+from typing import Any
 
 import torch
 
 from dlkit.tools.utils.logging_config import get_logger
 
 from .core import IShapeSpec, create_shape_spec
-from .serialization import VersionedShapeSerializer, SerializedShape
+from .serialization import SerializedShape, VersionedShapeSerializer
 
 logger = get_logger(__name__)
 
@@ -101,7 +101,7 @@ class CheckpointShapeLoader:
             return False
 
     @staticmethod
-    def extract_shape_info(checkpoint_path: Path | str) -> Dict[str, Any]:
+    def extract_shape_info(checkpoint_path: Path | str) -> dict[str, Any]:
         """Extract modern shape specification summary from checkpoint metadata.
 
         Args:

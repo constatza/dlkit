@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from dataclasses import dataclass
 
 from dlkit.interfaces.api.domain import (
-    TrainingResult,
     OptimizationResult,
+    TrainingResult,
     WorkflowError,
 )
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.utils.logging_config import get_logger
 
-from .training_service import TrainingService
 from .optimization_service import OptimizationService
+from .training_service import TrainingService
 
 logger = get_logger(__name__, "execution_service")
 
@@ -121,29 +121,29 @@ class ExecutionService:
                     run_name,
                     **additional_overrides,
                 )
-            else:  # training
-                return self._execute_training(
-                    settings,
-                    checkpoint_path,
-                    root_dir,
-                    output_dir,
-                    data_dir,
-                    epochs,
-                    batch_size,
-                    learning_rate,
-                    experiment_name,
-                    run_name,
-                    tags=tags,
-                    hooks=hooks,
-                    **additional_overrides,
-                )
+            # training
+            return self._execute_training(
+                settings,
+                checkpoint_path,
+                root_dir,
+                output_dir,
+                data_dir,
+                epochs,
+                batch_size,
+                learning_rate,
+                experiment_name,
+                run_name,
+                tags=tags,
+                hooks=hooks,
+                **additional_overrides,
+            )
 
         except Exception as e:
             duration = time.time() - start_time
             if isinstance(e, WorkflowError):
                 raise
             raise WorkflowError(
-                f"Execution service failed: {str(e)}",
+                f"Execution service failed: {e!s}",
                 {
                     "service": self.service_name,
                     "duration_seconds": str(duration),

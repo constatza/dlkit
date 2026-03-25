@@ -23,8 +23,7 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
-import torch.nn as nn
-from torch_geometric.transforms import BaseTransform
+from torch import nn
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs import IShapeSpec
@@ -130,7 +129,7 @@ class ShapeAwareTransform(Protocol):
         >>> isinstance(scaler, ShapeAwareTransform)  # True
     """
 
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+    def configure_shape(self, shape_spec: IShapeSpec, entry_name: str) -> None:
         """Configure transform with shape information.
 
         Args:
@@ -140,7 +139,7 @@ class ShapeAwareTransform(Protocol):
         ...
 
 
-class Transform(BaseTransform, nn.Module):
+class Transform(nn.Module):
     """Base class for tensor transformations.
 
     This class provides the foundation for all transforms in DLKit. It integrates
@@ -256,7 +255,6 @@ class Transform(BaseTransform, nn.Module):
             ...         self.std = data.std(dim=0)
             ...         self.fitted = True
         """
-        pass
 
     # NOTE: No default inverse_transform() method!
     # Only transforms that actually implement it should be considered InvertibleTransform.
@@ -278,7 +276,7 @@ class Transform(BaseTransform, nn.Module):
     #     class NonInvertible(Transform):  # Will NOT pass (no inverse_transform method)
     #         pass
 
-    def configure_shape(self, shape_spec: "IShapeSpec", entry_name: str) -> None:
+    def configure_shape(self, shape_spec: IShapeSpec, entry_name: str) -> None:
         """Configure transform with shape information (OPTIONAL).
 
         Override this method if your transform benefits from eager buffer allocation.
@@ -298,7 +296,6 @@ class Transform(BaseTransform, nn.Module):
             ...         self.register_buffer("min", torch.zeros(moments_shape))
             ...         self.register_buffer("max", torch.ones(moments_shape))
         """
-        pass
 
     @property
     def fitted(self) -> bool:

@@ -96,11 +96,7 @@ print(f"Checkpoint: {result.checkpoint_path}")
 ```python
 from dlkit.interfaces.api import infer
 
-result = infer(
-    checkpoint_path="model.ckpt",
-    inputs={"x": torch.randn(32, 10)},
-    device="auto"
-)
+result = infer(checkpoint_path="model.ckpt", inputs={"x": torch.randn(32, 10)}, device="auto")
 predictions = result.predictions
 ```
 
@@ -129,10 +125,10 @@ from dlkit.interfaces.api import train
 
 result = train(
     settings,
-    epochs=50,              # Training override
-    batch_size=64,          # Datamodule override
-    output_dir="./exp_1",   # Path override
-    mlflow_host="localhost" # MLflow override
+    epochs=50,  # Training override
+    batch_size=64,  # Datamodule override
+    output_dir="./exp_1",  # Path override
+    mlflow_host="localhost",  # MLflow override
 )
 ```
 
@@ -206,16 +202,19 @@ is_valid = val_cmd.execute(val_input, settings)
 ```python
 # BEFORE:
 from dlkit.tools.config import load_inference_settings
+
 settings = load_inference_settings("config.toml")
 result = infer(settings, checkpoint_path)
 
 # NOW:
 from dlkit.interfaces.api import infer
+
 result = infer(checkpoint_path, input_data)
 
 # OR for prediction with config:
 from dlkit.interfaces.api import predict_with_config
 from dlkit.tools.io import load_settings
+
 settings = load_settings("config.toml")
 result = predict_with_config(settings, checkpoint_path)
 ```

@@ -14,18 +14,19 @@ different options, so they are split into subcommands for clarity and ergonomics
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import typer
+import yaml
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
-from dlkit.interfaces.api import validate_config, generate_template
-from .. import templates as tmpl
+from dlkit.interfaces.api import generate_template, validate_config
+from dlkit.interfaces.cli.templates import TemplateKind
 
+from .. import templates as tmpl
 from ..adapters.config_adapter import load_config
-import yaml
 from ..middleware.error_handler import handle_api_error
 
 # Create config command group
@@ -75,7 +76,7 @@ def validate_configuration(
         console.print(f"🎯 Validating for strategy: [bold]{strategy}[/bold]")
 
         # Validate configuration
-        validate_config(settings, strategy)
+        validate_config(settings)
         console.print("✅ Configuration is valid!")
 
     except typer.Exit:
@@ -114,7 +115,7 @@ def show_configuration(
         settings = load_config(config_path)
 
         # Get configuration dict with robust fallback for mocked settings
-        def _as_config_dict(obj) -> dict:
+        def _as_config_dict(obj: Any) -> dict[str, Any]:
             # Preferred: use to_dict() if it returns a dict
             try:
                 fn = getattr(obj, "to_dict", None)
@@ -128,7 +129,7 @@ def show_configuration(
             try:
                 md = getattr(obj, "model_dump", None)
                 if callable(md):
-                    return md(exclude_none=True)
+                    return cast(dict[str, Any], md(exclude_none=True))
             except Exception:
                 pass
             # Last resort
@@ -201,7 +202,7 @@ def create_template(
             raise typer.Exit(1)
 
         # Generate template using API
-        template_content = generate_template(template_type)
+        template_content = generate_template(cast(TemplateKind, template_type))
 
         # Write template to file
         with open(output_path, "w") as f:

@@ -7,12 +7,13 @@ by focusing solely on configuration-related operations.
 
 from __future__ import annotations
 
-from typing import Any, Literal, get_origin, get_args
 from pathlib import Path
-from pydantic import BaseModel
-from pydantic.fields import FieldInfo
-from tomlkit import document, table, dumps, comment
+from typing import Any, Literal, cast, get_args, get_origin
 
+from pydantic import BaseModel
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic.fields import FieldInfo
+from tomlkit import comment, document, dumps, table
 
 TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
 
@@ -65,14 +66,13 @@ class ConfigurationService:
         # Add other sections based on template type
         if template_type == "training":
             return cls._customize_for_training(template_dict)
-        elif template_type == "inference":
+        if template_type == "inference":
             return cls._customize_for_inference(template_dict)
-        elif template_type == "mlflow":
+        if template_type == "mlflow":
             return cls._customize_for_mlflow(template_dict)
-        elif template_type == "optuna":
+        if template_type == "optuna":
             return cls._customize_for_optuna(template_dict)
-        else:
-            raise ValueError(f"Unknown template type: {template_type}")
+        raise ValueError(f"Unknown template type: {template_type}")
 
     @classmethod
     def _extract_model_fields(cls, model_class: type[BaseModel]) -> dict[str, Any]:
@@ -95,8 +95,8 @@ class ConfigurationService:
                     annotation = next(arg for arg in args if arg is not type(None))
 
             # Check if this is a nested Pydantic model
-            if hasattr(annotation, "model_fields"):
-                # This is a nested Pydantic model
+            if isinstance(annotation, type) and issubclass(annotation, PydanticBaseModel):
+                # annotation is narrowed to type[PydanticBaseModel]
                 nested_dict = cls._extract_model_fields(annotation)
                 if nested_dict:  # Only include if it has content
                     result[toml_name] = nested_dict
@@ -135,19 +135,17 @@ class ConfigurationService:
         # Generate type-appropriate placeholders
         if annotation is str:
             return "placeholder_value"
-        elif annotation is int:
+        if annotation is int:
             return 0
-        elif annotation is float:
+        if annotation is float:
             return 0.0
-        elif annotation is bool:
+        if annotation is bool:
             return False
-        elif annotation is Path or getattr(annotation, "__module__", "").startswith("pathlib"):
+        if annotation is Path or getattr(annotation, "__module__", "").startswith("pathlib"):
             return "./path/placeholder"
-        else:
-            # For complex types, return a placeholder string
-            return (
-                f"<{annotation.__name__ if hasattr(annotation, '__name__') else str(annotation)}>"
-            )
+        # For complex types, return a placeholder string
+        name = getattr(annotation, "__name__", None) or repr(annotation)
+        return f"<{name}>"
 
     @classmethod
     def _customize_for_training(cls, base_dict: dict) -> dict:
@@ -310,7 +308,7 @@ class ConfigurationService:
                 parent, child = section_key.split(".", 1)
                 if parent not in doc:
                     doc.add(parent, table())
-                parent_table = doc[parent]
+                parent_table = cast(Any, doc[parent])
                 child_table = table()
 
                 if isinstance(content, dict):
@@ -346,6 +344,6 @@ class ConfigurationService:
                             if dotted_key in comments:
                                 subtable.add(comment(comments[dotted_key]))
                             subtable.add(subk, subv)
-                        doc[section_key].add(k, subtable)
+                        cast(Any, doc[section_key]).add(k, subtable)
 
         return dumps(doc)

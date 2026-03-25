@@ -15,7 +15,6 @@ from dlkit.interfaces.api.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 
-
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
     reason="MPS backend on macOS lacks float64 support",

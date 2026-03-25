@@ -8,11 +8,11 @@ from typing import Any
 
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import OptimizationResult
-from dlkit.interfaces.api.services import OptimizationService
 from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
+from dlkit.interfaces.api.services import OptimizationService
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig
+
 from .base import BaseCommand
 
 
@@ -37,7 +37,11 @@ class OptimizationCommandInput:
             object.__setattr__(self, "additional_overrides", {})
 
 
-class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResult]):
+class OptimizationCommand(
+    BaseCommand[
+        OptimizationCommandInput, OptimizationResult, OptimizationWorkflowConfig | GeneralSettings
+    ]
+):
     """Command for executing hyperparameter optimization workflows.
 
     Handles Optuna-based optimization with parameter overrides,
@@ -53,13 +57,13 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
     def validate_input(
         self,
         input_data: OptimizationCommandInput,
-        settings: OptimizationWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
     ) -> None:
         """Validate optimization command input.
 
         Args:
             input_data: Optimization parameters and overrides
-            settings: DLKit configuration (supports new OptimizationWorkflowConfig or legacy GeneralSettings)
+            settings: DLKit configuration (supports OptimizationWorkflowConfig or legacy GeneralSettings)
 
         Raises:
             WorkflowError: On validation failure
@@ -81,20 +85,20 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
             raise
         except Exception as e:
             raise WorkflowError(
-                f"Input validation failed: {str(e)}", {"command": "optimize", "error": str(e)}
+                f"Input validation failed: {e!s}", {"command": "optimize", "error": str(e)}
             ) from e
 
     def execute(
         self,
         input_data: OptimizationCommandInput,
-        settings: OptimizationWorkflowConfig | GeneralSettings | BaseSettingsProtocol,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
         **kwargs: Any,
     ) -> OptimizationResult:
         """Execute optimization command.
 
         Args:
             input_data: Optimization parameters and overrides
-            settings: DLKit configuration (supports new OptimizationWorkflowConfig or legacy GeneralSettings)
+            settings: DLKit configuration (supports OptimizationWorkflowConfig or legacy GeneralSettings)
             **kwargs: Additional parameters
 
         Returns:
@@ -112,17 +116,22 @@ class OptimizationCommand(BaseCommand[OptimizationCommandInput, OptimizationResu
             if overrides:
                 settings = self.override_manager.apply_overrides(settings, **overrides)
 
-            # Execute optimization
+            # Execute optimization — GeneralSettings is the supertype accepted by the service
             checkpoint = overrides.get("checkpoint_path") if overrides else None
+            effective: GeneralSettings = (
+                settings
+                if isinstance(settings, GeneralSettings)
+                else GeneralSettings.model_validate(settings.model_dump())
+            )
             return self.optimization_service.execute_optimization(
-                settings, input_data.trials or 100, checkpoint
+                effective, input_data.trials or 100, checkpoint
             )
 
         except WorkflowError:
             raise
         except Exception as e:
             raise WorkflowError(
-                f"Optimization execution failed: {str(e)}",
+                f"Optimization execution failed: {e!s}",
                 {"command": "optimize", "error_type": type(e).__name__},
             ) from e
 

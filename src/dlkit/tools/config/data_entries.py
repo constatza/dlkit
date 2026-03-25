@@ -143,7 +143,7 @@ class DataEntry(BasicSettings, ABC):
         return v
 
     @model_validator(mode="after")
-    def validate_name_when_data_present(self) -> "DataEntry":
+    def validate_name_when_data_present(self) -> DataEntry:
         """Enforce name requirement when data source exists.
 
         This validator implements fail-fast validation for malformed configs.
@@ -436,7 +436,7 @@ class PathBasedEntry(DataEntry, IPathBased, ABC):
         return self.path is None
 
     @model_validator(mode="after")
-    def validate_path_existence(self, info: ValidationInfo) -> "PathBasedEntry":
+    def validate_path_existence(self, info: ValidationInfo) -> PathBasedEntry:
         """Validate path existence with eager validation.
 
         Validates path immediately when not None, supporting fail-fast
@@ -605,6 +605,7 @@ class SparseFeature(PathBasedEntry):
     The `path` points to a sparse pack directory containing sparse payload arrays.
     Runtime loading does not require a manifest file.
     """
+
     files: SparseFilesConfig = Field(
         default_factory=SparseFilesConfig,
         description="Sparse payload file naming",
@@ -617,7 +618,7 @@ class SparseFeature(PathBasedEntry):
     )
 
     @model_validator(mode="after")
-    def validate_is_sparse_pack(self) -> "SparseFeature":
+    def validate_is_sparse_pack(self) -> SparseFeature:
         """Validate that `path` is a sparse pack directory."""
         if self.path is None:
             return self
@@ -626,8 +627,7 @@ class SparseFeature(PathBasedEntry):
         required = (self.files.indices, self.files.values, self.files.nnz_ptr)
         if not all((self.path / name).exists() for name in required):
             raise ValueError(
-                f"Not a sparse pack directory: {self.path}. "
-                f"Expected payload files: {self.files}"
+                f"Not a sparse pack directory: {self.path}. Expected payload files: {self.files}"
             )
         scale_path = self.path / self.files.values_scale
         if scale_path.exists():
@@ -1066,7 +1066,7 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
     model_config = SettingsConfigDict(arbitrary_types_allowed=True)
 
     @model_validator(mode="after")
-    def validate_feature_ref(self) -> "AutoencoderTarget":
+    def validate_feature_ref(self) -> AutoencoderTarget:
         """Validate feature_ref and warn about manual transforms.
 
         Returns:
