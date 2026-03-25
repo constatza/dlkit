@@ -108,17 +108,19 @@ def test_splits_saved_to_session_root_dir(
 
         # Load training settings
         settings = load_settings(config_path)
+        session = settings.SESSION
+        assert session is not None
 
         # Verify SESSION.root_dir is set
-        assert settings.SESSION.root_dir is not None
-        assert Path(settings.SESSION.root_dir).resolve() == custom_root.resolve()
+        assert session.root_dir is not None
+        assert Path(session.root_dir).resolve() == custom_root.resolve()
 
         # Get or create a split
         split = get_or_create_split(
             num_samples=100,
             test_ratio=0.15,
             val_ratio=0.15,
-            session_name=settings.SESSION.name,
+            session_name=session.name,
         )
 
         # Verify split was created
@@ -134,21 +136,21 @@ def test_splits_saved_to_session_root_dir(
             f"Splits directory mismatch!\n"
             f"Expected: {expected_splits_dir}\n"
             f"Actual: {actual_splits_dir}\n"
-            f"SESSION.root_dir: {settings.SESSION.root_dir}"
+            f"SESSION.root_dir: {session.root_dir}"
         )
 
         # Verify split file was actually created in the correct location
         # Note: filename now includes num_samples to prevent stale cache bugs
-        split_file = expected_splits_dir / f"{settings.SESSION.name}_100_split.json"
+        split_file = expected_splits_dir / f"{session.name}_100_split.json"
         assert split_file.exists(), (
             f"Split file not found at expected location: {split_file}\n"
             f"Checked in: {expected_splits_dir}"
         )
 
         # Verify it's NOT in CWD (the bug we're fixing)
-        cwd_split_file = Path.cwd() / "output" / "splits" / f"{settings.SESSION.name}_split.json"
+        cwd_split_file = Path.cwd() / "output" / "splits" / f"{session.name}_split.json"
         if cwd_split_file.exists() and cwd_split_file.resolve() != split_file.resolve():
-            pytest.fail(
+            raise AssertionError(
                 f"Split file incorrectly saved to CWD!\n"
                 f"CWD location: {cwd_split_file}\n"
                 f"Expected location: {split_file}"

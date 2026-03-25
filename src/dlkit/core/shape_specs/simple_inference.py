@@ -206,7 +206,7 @@ def _propagate_entry_shapes(
 
     return tuple(
         _propagate_shape_through_chain(shape, getattr(entry, "transforms", ()) or ())
-        for shape, entry in zip(raw_shapes, entries)
+        for shape, entry in zip(raw_shapes, entries, strict=True)
     )
 
 

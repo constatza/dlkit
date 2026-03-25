@@ -52,7 +52,7 @@ def analyze_python_file(file_path: Path) -> tuple[list[tuple[str, str]], list[tu
         return [], []
 
 
-def get_python_files(directory: Path, exclude_patterns: list[str] = None) -> list[Path]:
+def get_python_files(directory: Path, exclude_patterns: list[str] | None = None) -> list[Path]:
     """Get all Python files in a directory recursively.
 
     Args:
@@ -144,7 +144,7 @@ class TestImportRules:
         """
         integration_dir = project_root / "tests" / "integration"
         if not integration_dir.exists():
-            pytest.skip("No integration tests directory found")
+            return
 
         integration_files = get_python_files(integration_dir)
         violations = []

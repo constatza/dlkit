@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from dlkit.tools.config import load_settings, update_settings
 from dlkit.tools.config.data_entries import Feature
+from dlkit.tools.config.extras_settings import ExtrasSettings
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -18,6 +19,12 @@ def _expect_not_none[T](value: T | None) -> T:
 def _expect_mapping(value: object) -> dict[str, object]:
     assert isinstance(value, dict)
     return cast("dict[str, object]", value)
+
+
+def _expect_extra_fields(extras: ExtrasSettings) -> dict[str, object]:
+    extra_fields = extras.model_extra
+    assert extra_fields is not None
+    return cast("dict[str, object]", extra_fields)
 
 
 class TestBasicUpdates:
@@ -562,14 +569,14 @@ custom_field2 = "value2"
             settings, {"EXTRAS": {"deeply": {"nested": {"custom": "data"}}}}
         )
         extras = _expect_not_none(new_settings.EXTRAS)
+        extra_fields = _expect_extra_fields(extras)
 
         # Original keys remain intact
-        assert extras.custom_field1 == "value1"
-        assert extras.custom_field2 == "value2"
+        assert extra_fields["custom_field1"] == "value1"
+        assert extra_fields["custom_field2"] == "value2"
 
         # New nested content is merged in
-        assert hasattr(extras, "deeply")
-        deeply = _expect_mapping(extras.deeply)
+        deeply = _expect_mapping(extra_fields["deeply"])
         nested = _expect_mapping(deeply["nested"])
         assert nested["custom"] == "data"
 
@@ -620,9 +627,10 @@ custom_field2 = "value2"
             },
         )
         extras = _expect_not_none(new_settings.EXTRAS)
+        extra_fields = _expect_extra_fields(extras)
 
-        assert extras.custom_field1 == "value1"
-        assert extras.custom_field2 == "updated"
+        assert extra_fields["custom_field1"] == "value1"
+        assert extra_fields["custom_field2"] == "updated"
 
 
 class TestValidation:
@@ -763,8 +771,9 @@ existing_field = "value"
 
         # EXTRAS is ExtrasSettings with extra="allow", access via attributes
         extras = _expect_not_none(new_settings.EXTRAS)
-        assert extras.existing_field == "value"
-        assert extras.new_field == "new_value"
+        extra_fields = _expect_extra_fields(extras)
+        assert extra_fields["existing_field"] == "value"
+        assert extra_fields["new_field"] == "new_value"
 
     def test_empty_dict(self, tmp_path):
         """Test updating with empty dict."""

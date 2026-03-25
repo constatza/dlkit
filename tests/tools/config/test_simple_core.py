@@ -50,7 +50,7 @@ class MockTrial:
         return value
 
     def suggest_float(
-        self, name: str, low: float, high: float, step: float = None, log: bool = False
+        self, name: str, low: float, high: float, step: float | None = None, log: bool = False
     ) -> float:
         value = (low + high) / 2
         self.suggestions[name] = value

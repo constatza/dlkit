@@ -111,7 +111,7 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-preview = true
+src = ["src", "tests"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -122,10 +122,41 @@ docstring-code-format = true
 select = [
     "F",      # pyflakes
     "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
 ]
+ignore = [
+    "B904",   # exception translation is intentional across CLI and service layers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/dlkit/tools/io/config.py" = [
+    "B903",   # small internal stub class is clearer than a dataclass here
+]
+"tests/**/*.py" = [
+    "B011",   # assert False is occasionally used in test-only failure branches
+    "B017",   # broad exception assertions are still used in compatibility tests
+    "B028",   # stacklevel is low-value noise in warning assertions and fixtures
+    "B903",   # test-local helper classes do not need dataclass conversion
+]
+
+[tool.ty.analysis]
+respect-type-ignore-comments = true
+allowed-unresolved-imports = []
+replace-imports-with-any = []
 
 [tool.ty.environment]
 root = ["src", "tests"]
+python-version = "3.14"
+python-platform = "all"
+
+[tool.ty.rules]
+redundant-cast = "error"
+unused-type-ignore-comment = "error"
+
+[tool.ty.src]
+respect-ignore-files = true
 
 [tool.ty.terminal]
 output-format = "concise"
+error-on-warning = true

@@ -85,13 +85,15 @@ class IRunContext(ABC):
 
         Example:
             ```python
-            run_context.log_params({
-                "learning_rate": 0.001,
-                "batch_size": 32,
-                "optimizer": "adam",
-                "num_layers": 3,
-                "dropout": 0.1,
-            })
+            run_context.log_params(
+                {
+                    "learning_rate": 0.001,
+                    "batch_size": 32,
+                    "optimizer": "adam",
+                    "num_layers": 3,
+                    "dropout": 0.1,
+                }
+            )
             ```
         """
         raise NotImplementedError

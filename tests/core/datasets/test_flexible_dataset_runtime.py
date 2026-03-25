@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import torch
@@ -32,7 +33,9 @@ def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
     assert len(ds) == 5
     sample0 = ds[0]
     assert isinstance(sample0, TensorDict)
-    assert len(sample0["features"].keys()) == 2 and len(sample0["targets"].keys()) == 1
+    features = cast("TensorDict", sample0["features"])
+    targets = cast("TensorDict", sample0["targets"])
+    assert len(features.keys()) == 2 and len(targets.keys()) == 1
     assert isinstance(sample0["features", "x1"], torch.Tensor)
     assert tuple(sample0["features", "x1"].shape) == (2,)
     assert tuple(sample0["features", "x2"].shape) == (3,)

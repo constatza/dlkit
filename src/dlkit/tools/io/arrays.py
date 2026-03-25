@@ -65,14 +65,16 @@ def _load_torch_array(path: Path | str, **kwargs) -> object:
 
 
 # Frozen, immutable loader map, typed as a Mapping
-_LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType({
-    ".npz": _load_npz,
-    ".npy": np.load,
-    ".txt": np.loadtxt,
-    ".csv": np.loadtxt,
-    ".pt": _load_torch_array,
-    ".pth": _load_torch_array,
-})
+_LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType(
+    {
+        ".npz": _load_npz,
+        ".npy": np.load,
+        ".txt": np.loadtxt,
+        ".csv": np.loadtxt,
+        ".pt": _load_torch_array,
+        ".pth": _load_torch_array,
+    }
+)
 # ──────────────────────────────────────────────────────────────────────────────
 
 

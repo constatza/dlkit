@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from tensordict import TensorDict
 
 from dlkit.core.datasets.flexible import BatchComplianceError, FlexibleDataset
 from dlkit.interfaces.api.domain.precision import PrecisionStrategy, precision_override
@@ -78,8 +79,6 @@ class TestFlexibleDatasetWithNpz:
 
     def test_getitem_returns_correct_data(self, npz_multi_array: dict) -> None:
         """Test that __getitem__ returns correct slices from NPZ data."""
-        from tensordict import TensorDict
-
         features = [Feature(name="features", path=npz_multi_array["path"])]
         targets = [Target(name="targets", path=npz_multi_array["path"])]
 
@@ -88,14 +87,18 @@ class TestFlexibleDatasetWithNpz:
         # Get first sample
         sample = dataset[0]
         assert isinstance(sample, TensorDict)
-        assert len(sample["features"].keys()) == 1
-        assert len(sample["targets"].keys()) == 1
+        features_td = sample["features"]
+        targets_td = sample["targets"]
+        assert isinstance(features_td, TensorDict)
+        assert isinstance(targets_td, TensorDict)
+        assert len(features_td.keys()) == 1
+        assert len(targets_td.keys()) == 1
         assert sample["features", "features"].shape == (5,)
         assert sample["targets", "targets"].shape == (1,)
 
         # Verify data matches original
         np.testing.assert_allclose(
-            sample["features", "features"].numpy(),
+            np.asarray(sample["features", "features"].numpy()),
             npz_multi_array["features"][0],
             rtol=1e-5,
             atol=1e-7,
@@ -121,7 +124,7 @@ class TestFlexibleDatasetWithNpz:
         dataset = FlexibleDataset(features=features)
 
         # Compare with original data
-        loaded_data = dataset._dataset_td["features", "features"].numpy()
+        loaded_data = np.asarray(dataset._dataset_td["features", "features"].numpy())
         original_data = npz_multi_array["features"]
 
         np.testing.assert_allclose(loaded_data, original_data, rtol=1e-5, atol=1e-7)
@@ -134,7 +137,7 @@ class TestFlexibleDatasetWithNpz:
 
         assert dataset._dataset_td["features", "features"].shape == (10, 5)
         np.testing.assert_allclose(
-            dataset._dataset_td["features", "features"].numpy(),
+            np.asarray(dataset._dataset_td["features", "features"].numpy()),
             npz_multi_array["features"],
             rtol=1e-5,
             atol=1e-7,
@@ -146,7 +149,7 @@ class TestFlexibleDatasetWithNpz:
 
         assert dataset2._dataset_td["features", "latent"].shape == (10, 3)
         np.testing.assert_allclose(
-            dataset2._dataset_td["features", "latent"].numpy(),
+            np.asarray(dataset2._dataset_td["features", "latent"].numpy()),
             npz_multi_array["latent"],
             rtol=1e-5,
             atol=1e-7,

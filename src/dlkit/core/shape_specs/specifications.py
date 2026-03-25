@@ -158,9 +158,9 @@ class NotSpecification(ShapeSpecification):
         result = self._spec.is_satisfied_by(shape_data)
 
         if result.is_valid:
-            return ValidationResult.failure([
-                "Negated specification failed: wrapped spec was satisfied"
-            ])
+            return ValidationResult.failure(
+                ["Negated specification failed: wrapped spec was satisfied"]
+            )
         return ValidationResult.success()
 
 

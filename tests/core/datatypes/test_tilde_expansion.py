@@ -342,14 +342,16 @@ class TestTildeExpansionProperties:
         assert result is value
 
     @given(
-        st.sampled_from([
-            "~/test",
-            "/~/test",
-            "~",
-            "/~",
-            "sqlite:///~/db.sqlite",
-            "file:///~/docs/file.txt",
-        ])
+        st.sampled_from(
+            [
+                "~/test",
+                "/~/test",
+                "~",
+                "/~",
+                "sqlite:///~/db.sqlite",
+                "file:///~/docs/file.txt",
+            ]
+        )
     )
     def test_tilde_expansion_idempotent(self, text_with_tilde: str) -> None:
         """Test that tilde expansion is idempotent (expanding twice gives same result).
@@ -386,13 +388,15 @@ class TestTildeExpansionProperties:
                 assert result.startswith(HOME_PATH) and not result.startswith("~/")
 
     @given(
-        st.sampled_from([
-            "sqlite:///~/db.sqlite",
-            "file:///~/docs/file.txt",
-            "http://localhost/~/api",
-            "https://example.com/~/data/file.json",
-            "ftp://server/~/uploads/file.zip",
-        ])
+        st.sampled_from(
+            [
+                "sqlite:///~/db.sqlite",
+                "file:///~/docs/file.txt",
+                "http://localhost/~/api",
+                "https://example.com/~/data/file.json",
+                "ftp://server/~/uploads/file.zip",
+            ]
+        )
     )
     def test_url_scheme_preserved(self, url_with_tilde: str) -> None:
         """Test that URL schemes are always preserved during expansion.

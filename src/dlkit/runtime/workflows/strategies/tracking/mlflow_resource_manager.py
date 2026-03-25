@@ -350,8 +350,9 @@ class MLflowResourceManager:
                 mlflow.end_run()
             except Exception:
                 pass
-            if hasattr(mlflow, "_active_run_stack"):
-                mlflow._active_run_stack.clear()  # type: ignore[attr-defined]
+            active_run_stack = getattr(mlflow, "_active_run_stack", None)
+            if active_run_stack is not None:
+                active_run_stack.clear()
             # In MLflow 3.x, set_tracking_uri(None) ignores the env var and
             # defaults to the CWD-relative mlflow.db. Use the env var value so
             # the isolation URI set by fixtures is preserved after reset.
@@ -360,6 +361,6 @@ class MLflowResourceManager:
                 mlflow.set_tracking_uri(saved)
                 os.environ["MLFLOW_TRACKING_URI"] = saved
             else:
-                mlflow.set_tracking_uri(None)  # type: ignore[arg-type]
+                logger.debug("MLFLOW_TRACKING_URI not set; leaving tracking URI unchanged")
         except Exception as e:  # pragma: no cover - best-effort safety
             logger.warning("Failed to reset MLflow global state: {}", e)

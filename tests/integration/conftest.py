@@ -251,12 +251,14 @@ def _make_settings(
 
     training = TrainingSettings(
         epochs=epochs,
-        trainer=TrainerSettings(
-            fast_dev_run=True,  # Use fast dev run for ultra-fast testing
-            enable_checkpointing=False,
-            accelerator="cpu",
-            enable_progress_bar=False,  # Disable progress bar for faster tests
-            enable_model_summary=False,  # Disable model summary for faster tests
+        trainer=TrainerSettings.model_validate(
+            {
+                "fast_dev_run": True,  # Use fast dev run for ultra-fast testing
+                "enable_checkpointing": False,
+                "accelerator": "cpu",
+                "enable_progress_bar": False,  # Disable progress bar for faster tests
+                "enable_model_summary": False,  # Disable model summary for faster tests
+            }
         ),
         metrics=(
             MetricComponentSettings(
@@ -323,13 +325,15 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
     output_dir = tmp_path / "graph_outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset = DatasetSettings(
-        name="GraphDataset",
-        module_path="dlkit.core.datasets.graph",
-        root=minimal_graph_dataset["data_dir"],
-        x=minimal_graph_dataset["node_features"],
-        edge_index=minimal_graph_dataset["adjacency"],
-        y=minimal_graph_dataset["targets"],
+    dataset = DatasetSettings.model_validate(
+        {
+            "name": "GraphDataset",
+            "module_path": "dlkit.core.datasets.graph",
+            "root": minimal_graph_dataset["data_dir"],
+            "x": minimal_graph_dataset["node_features"],
+            "edge_index": minimal_graph_dataset["adjacency"],
+            "y": minimal_graph_dataset["targets"],
+        }
     )
 
     datamodule = DataModuleSettings(
@@ -356,21 +360,25 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
         model_family=ModelFamily.GRAPH,  # Specify graph model family
     )
 
-    model = ModelComponentSettings(
-        name="GProjection",
-        module_path="dlkit.core.models.nn.graph.projection_networks",
-        hidden_size=4,  # Small hidden size for fast testing
-        unified_shape=shape_spec,  # Provide explicit shape spec
+    model = ModelComponentSettings.model_validate(
+        {
+            "name": "GProjection",
+            "module_path": "dlkit.core.models.nn.graph.projection_networks",
+            "hidden_size": 4,  # Small hidden size for fast testing
+            "unified_shape": shape_spec,  # Provide explicit shape spec
+        }
     )
 
     training = TrainingSettings(
         epochs=1,
-        trainer=TrainerSettings(
-            fast_dev_run=True,  # Use fast dev run for ultra-fast testing
-            enable_checkpointing=False,
-            accelerator="cpu",
-            enable_progress_bar=False,
-            enable_model_summary=False,
+        trainer=TrainerSettings.model_validate(
+            {
+                "fast_dev_run": True,  # Use fast dev run for ultra-fast testing
+                "enable_checkpointing": False,
+                "accelerator": "cpu",
+                "enable_progress_bar": False,
+                "enable_model_summary": False,
+            }
         ),
         metrics=(
             MetricComponentSettings(

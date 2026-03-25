@@ -153,11 +153,13 @@ class TestAPIConceptIntegration:
                 dataset=mock_dataset, model_settings=settings
             )
 
-            inferred_shapes.append({
-                "input": shape_spec.get_input_shape(),
-                "output": shape_spec.get_output_shape(),
-                "family": shape_spec.model_family(),
-            })
+            inferred_shapes.append(
+                {
+                    "input": shape_spec.get_input_shape(),
+                    "output": shape_spec.get_output_shape(),
+                    "family": shape_spec.model_family(),
+                }
+            )
 
         # 4. All configurations should have same input/output shapes
         base_shapes = inferred_shapes[0]

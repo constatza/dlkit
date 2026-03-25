@@ -82,7 +82,7 @@ class StackedProjection(nn.Module):
         self._output = gnn.Linear(prev_features, out_features, bias=bias)
 
     def forward(self, x):
-        for linear, activation in zip(self._layers, self._activations):
+        for linear, activation in zip(self._layers, self._activations, strict=True):
             x = activation(linear(x))
         return self._output(x)
 
@@ -107,19 +107,23 @@ class SkipProjection(nn.Module):
         self._input = gnn.Linear(in_features, hidden_features, bias=bias)
         self._input_activation = _build_activation(activation)
 
-        self._residual_layers = nn.ModuleList([
-            gnn.Linear(hidden_features, hidden_features, bias=bias) for _ in range(num_layers)
-        ])
-        self._residual_activations = nn.ModuleList([
-            _build_activation(activation) for _ in range(num_layers)
-        ])
+        self._residual_layers = nn.ModuleList(
+            [gnn.Linear(hidden_features, hidden_features, bias=bias) for _ in range(num_layers)]
+        )
+        self._residual_activations = nn.ModuleList(
+            [_build_activation(activation) for _ in range(num_layers)]
+        )
 
         self._output = gnn.Linear(hidden_features, out_features, bias=bias)
 
     def forward(self, x):
         x = self._input_activation(self._input(x))
 
-        for layer, activation in zip(self._residual_layers, self._residual_activations):
+        for layer, activation in zip(
+            self._residual_layers,
+            self._residual_activations,
+            strict=True,
+        ):
             residual = x
             x = activation(layer(x))
             x = x + residual

@@ -8,6 +8,7 @@ covered in individual component tests.
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -41,6 +42,8 @@ class ProductionTestModel(DLKitModel):
         # Extract shapes from unified_shape for building layers
         input_shape = unified_shape.get_input_shape()
         output_shape = unified_shape.get_output_shape()
+        assert input_shape is not None
+        assert output_shape is not None
 
         self.encoder = torch.nn.Sequential(
             torch.nn.Linear(input_shape[0], 128),
@@ -65,9 +68,9 @@ class TestComprehensivePrecision:
     """Comprehensive precision control tests."""
 
     @pytest.fixture
-    def sample_datasets(self, tmp_path):
+    def sample_datasets(self, tmp_path: Path) -> dict[str, Path]:
         """Create multiple sample datasets for testing."""
-        datasets = {}
+        datasets: dict[str, Path] = {}
 
         # Create different precision datasets
         for name, dtype in [
@@ -91,6 +94,8 @@ class TestComprehensivePrecision:
         # Create features and targets with session precision
         feature = Feature(name="input", path=sample_datasets["float32"])
         target = Target(name="output", path=sample_datasets["float32"])
+        assert feature.path is not None
+        assert target.path is not None
 
         # Load data with session precision using context
         with precision_override(session.get_precision_strategy()):
@@ -209,7 +214,7 @@ class TestComprehensivePrecision:
             PrecisionStrategy.MIXED_BF16: torch.bfloat16,
         }
 
-        for thread_id, result in results.items():
+        for _thread_id, result in results.items():
             strategy = result["strategy"]
             expected_dtype = expected_dtypes[strategy]
             assert result["data_dtype"] == expected_dtype
@@ -350,8 +355,9 @@ class TestComprehensivePrecision:
         # Data loading phase with precision context
         features = []
         with precision_override(session.get_precision_strategy()):
-            for i, (name, path) in enumerate(sample_datasets.items()):
+            for i, (_name, path) in enumerate(sample_datasets.items()):
                 feature = Feature(name=f"feature_{i}", path=path)
+                assert feature.path is not None
                 data = load_array(feature.path)
                 features.append(data)
                 assert data.dtype == torch.float16
@@ -413,13 +419,15 @@ class TestComprehensivePrecision:
                     # Forward pass
                     output = model(data[:5])
 
-                    results.append({
-                        "worker_id": worker_id,
-                        "strategy": strategy,
-                        "data_dtype": data.dtype,
-                        "model_dtype": next(model.parameters()).dtype,
-                        "output_dtype": output.dtype,
-                    })
+                    results.append(
+                        {
+                            "worker_id": worker_id,
+                            "strategy": strategy,
+                            "data_dtype": data.dtype,
+                            "model_dtype": next(model.parameters()).dtype,
+                            "output_dtype": output.dtype,
+                        }
+                    )
 
             return results
 

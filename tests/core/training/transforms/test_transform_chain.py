@@ -25,7 +25,9 @@ def test_transform_chain_build_fit_forward_inverse() -> None:
     x_rec = chain.inverse_transform(y)
 
     assert chain.fitted
-    assert tuple(chain.transformed_shape) == tuple(x.shape)
+    transformed_shape = chain.transformed_shape
+    assert transformed_shape is not None
+    assert tuple(transformed_shape) == tuple(x.shape)
     assert torch.allclose(x_rec, x)
 
     inv = chain.inverse()

@@ -580,11 +580,13 @@ class TestProgrammaticOverrideWorkflow:
             dataloader=DataloaderSettings(batch_size=16),
         )
 
-        model = ModelComponentSettings(
-            name="LinearNetwork",
-            module_path="dlkit.core.models.nn.ffnn",
-            input_size=10,
-            output_size=1,
+        model = ModelComponentSettings.model_validate(
+            {
+                "name": "LinearNetwork",
+                "module_path": "dlkit.core.models.nn.ffnn",
+                "input_size": 10,
+                "output_size": 1,
+            }
         )
 
         config = config.model_copy(
@@ -622,7 +624,7 @@ class TestProgrammaticOverrideWorkflow:
         with pytest.raises(ValidationError):
             dataset = DatasetSettings(
                 features=(Feature(name="x", path="/nonexistent/bad.npy"),),
-                targets=(Feature(name="y", path="/another/bad.npy"),),
+                targets=(Target(name="y", path="/another/bad.npy"),),
             )
 
             config.model_copy(update={"DATASET": dataset})

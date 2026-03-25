@@ -38,7 +38,7 @@ class TestShapeEntry:
     def test_shape_entry_invalid_dimensions_not_tuple(self):
         """Test that non-tuple dimensions raise ValueError."""
         with pytest.raises(ValueError, match="must be tuple"):
-            ShapeEntry(name="x", dimensions=[10, 20])  # List instead of tuple
+            ShapeEntry(name="x", dimensions=[10, 20])  # ty: ignore[invalid-argument-type]
 
     def test_shape_entry_invalid_dimensions_empty(self):
         """Test that empty dimensions raise ValueError."""
@@ -58,7 +58,7 @@ class TestShapeEntry:
     def test_shape_entry_invalid_dimensions_non_integer(self):
         """Test that non-integer dimensions raise ValueError."""
         with pytest.raises(ValueError, match="must be positive integer"):
-            ShapeEntry(name="x", dimensions=(10.5, 20))
+            ShapeEntry(name="x", dimensions=(10.5, 20))  # ty: ignore[invalid-argument-type]
 
     def test_shape_entry_string_representation(self):
         """Test string representation."""
@@ -123,7 +123,7 @@ class TestShapeData:
         """Test that non-dict entries raise ValueError."""
         with pytest.raises(ValueError, match="must be dictionary"):
             ShapeData(
-                entries=["x", "y"],  # List instead of dict
+                entries=["x", "y"],  # ty: ignore[invalid-argument-type]
                 model_family=ModelFamily.DLKIT_NN,
                 source=ShapeSource.TRAINING_DATASET,
             )
@@ -133,7 +133,7 @@ class TestShapeData:
         with pytest.raises(ValueError, match="must be ModelFamily enum"):
             ShapeData(
                 entries={},
-                model_family="invalid",  # String instead of enum
+                model_family="invalid",  # ty: ignore[invalid-argument-type]
                 source=ShapeSource.TRAINING_DATASET,
             )
 
@@ -143,7 +143,7 @@ class TestShapeData:
             ShapeData(
                 entries={},
                 model_family=ModelFamily.DLKIT_NN,
-                source="invalid",  # String instead of enum
+                source="invalid",  # ty: ignore[invalid-argument-type]
             )
 
     def test_shape_data_invalid_default_input_not_found(self, sample_entries):
@@ -170,7 +170,7 @@ class TestShapeData:
         """Test that non-ShapeEntry values raise ValueError."""
         with pytest.raises(ValueError, match="must be ShapeEntry"):
             ShapeData(
-                entries={"x": (10, 20)},  # Tuple instead of ShapeEntry
+                entries={"x": (10, 20)},  # ty: ignore[invalid-argument-type]
                 model_family=ModelFamily.DLKIT_NN,
                 source=ShapeSource.TRAINING_DATASET,
             )

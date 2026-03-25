@@ -123,7 +123,7 @@ class TestSqliteUriAbsolutePaths:
     def test_unix_path_on_windows_raises_error(self, root: Path) -> None:
         """Test that Unix absolute paths on Windows raise clear errors."""
         if os.name != "nt":
-            pytest.skip("Windows-specific error test")
+            return
 
         uri = "sqlite:////data/projects/mlruns/mlflow.db"
         with pytest.raises(ValueError, match="Unix absolute path.*cannot be used on Windows"):
@@ -132,7 +132,7 @@ class TestSqliteUriAbsolutePaths:
     def test_windows_path_on_unix_raises_error(self, root: Path) -> None:
         """Test that Windows absolute paths on Unix raise clear errors."""
         if os.name == "nt":
-            pytest.skip("Unix-specific error test")
+            return
 
         uri = "sqlite:///C:/data/projects/mlruns/mlflow.db"
         with pytest.raises(ValueError, match="Windows absolute path.*cannot be used on.*platform"):

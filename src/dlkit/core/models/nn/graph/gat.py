@@ -26,18 +26,20 @@ class GATv2Message(nn.Module):
         dropout: float = 0.0,
     ):
         super().__init__()
-        self.layers = nn.ModuleList([
-            GATv2Conv(
-                in_channels=hidden_size,
-                out_channels=hidden_size // heads,
-                heads=heads,
-                concat=concat,
-                edge_dim=edge_dim,
-                residual=residual,
-                dropout=dropout,
-            )
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                GATv2Conv(
+                    in_channels=hidden_size,
+                    out_channels=hidden_size // heads,
+                    heads=heads,
+                    concat=concat,
+                    edge_dim=edge_dim,
+                    residual=residual,
+                    dropout=dropout,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
         self.activation = activation
 

@@ -10,15 +10,24 @@ passed validation but failed at runtime.
 """
 
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
+from pydantic import BaseModel
 
+from dlkit.tools.config.dataset_settings import DatasetSettings
 from dlkit.tools.io.config import (
     ConfigValidationError,
     load_sections_config,
     load_training_config_eager,
 )
+
+
+def _dataset_section(settings: dict[str, BaseModel]) -> DatasetSettings:
+    """Narrow the DATASET section from generic section-loading output."""
+    return cast("DatasetSettings", settings["DATASET"])
+
 
 # ============================================================================
 # Fixtures
@@ -148,11 +157,11 @@ name = "y"
 path = "{sample_target_file.as_posix()}"
 """)
 
-        settings = load_sections_config(config, ["DATASET"])
-        assert len(settings["DATASET"].features) == 1
-        assert len(settings["DATASET"].targets) == 1
-        assert settings["DATASET"].features[0].name == "x"
-        assert settings["DATASET"].targets[0].name == "y"
+        settings = _dataset_section(load_sections_config(config, ["DATASET"]))
+        assert len(settings.features) == 1
+        assert len(settings.targets) == 1
+        assert settings.features[0].name == "x"
+        assert settings.targets[0].name == "y"
 
     def test_multiple_features_all_with_names_succeed(self, tmp_path: Path):
         """Multiple features all with names should succeed."""
@@ -188,9 +197,9 @@ name = "y"
 path = "{y_path.as_posix()}"
 """)
 
-        settings = load_sections_config(config, ["DATASET"])
-        assert len(settings["DATASET"].features) == 3
-        assert all(f.name for f in settings["DATASET"].features)
+        settings = _dataset_section(load_sections_config(config, ["DATASET"]))
+        assert len(settings.features) == 3
+        assert all(f.name for f in settings.features)
 
 
 class TestSectionLevelOptionality:

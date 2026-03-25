@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, cast
 
 import pytest
 
@@ -45,7 +46,11 @@ def build_components(trainer_stub):
         pass
 
     return BuildComponents(
-        model=DummyModel(), datamodule=object(), trainer=trainer_stub, shape_spec=None, meta={}
+        model=cast(Any, DummyModel()),
+        datamodule=cast(Any, object()),
+        trainer=cast(Any, trainer_stub),
+        shape_spec=None,
+        meta={},
     )
 
 
@@ -90,8 +95,8 @@ def test_vanilla_executor_metric_extraction(build_components, settings, trainer_
 def test_vanilla_executor_no_trainer_error(settings):
     """Test that executor raises WorkflowError when trainer is None."""
     components = BuildComponents(
-        model=object(),
-        datamodule=object(),
+        model=cast(Any, object()),
+        datamodule=cast(Any, object()),
         trainer=None,  # No trainer
         shape_spec=None,
         meta={},
@@ -114,7 +119,11 @@ def test_vanilla_executor_trainer_exception_handling(settings):
             raise RuntimeError("Training failed")
 
     components = BuildComponents(
-        model=object(), datamodule=object(), trainer=FailingTrainer(), shape_spec=None, meta={}
+        model=cast(Any, object()),
+        datamodule=cast(Any, object()),
+        trainer=cast(Any, FailingTrainer()),
+        shape_spec=None,
+        meta={},
     )
 
     executor = VanillaExecutor()
@@ -149,7 +158,11 @@ def test_vanilla_executor_post_training_exception_handling(build_components, set
 
     failing_trainer = PartiallyFailingTrainer()
     components = BuildComponents(
-        model=object(), datamodule=object(), trainer=failing_trainer, shape_spec=None, meta={}
+        model=cast(Any, object()),
+        datamodule=cast(Any, object()),
+        trainer=cast(Any, failing_trainer),
+        shape_spec=None,
+        meta={},
     )
 
     executor = VanillaExecutor()

@@ -37,17 +37,19 @@ class TestTrainCommandIntegration:
     ) -> None:
         config_file = tmp_path / "training.toml"
         config_file.write_text(
-            "\n".join([
-                "[SESSION]",
-                'name = "test_training"',
-                "inference = false",
-                "",
-                "[PATHS]",
-                'output_dir = "./outputs"',
-                "",
-                "[TRAINING.trainer]",
-                "max_epochs = 1",
-            ])
+            "\n".join(
+                [
+                    "[SESSION]",
+                    'name = "test_training"',
+                    "inference = false",
+                    "",
+                    "[PATHS]",
+                    'output_dir = "./outputs"',
+                    "",
+                    "[TRAINING.trainer]",
+                    "max_epochs = 1",
+                ]
+            )
         )
 
         result = cli_runner.invoke(cli_app, ["train", str(config_file)])

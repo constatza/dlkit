@@ -17,7 +17,7 @@ Coverage:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -83,6 +83,12 @@ class ExcludedFieldModel(BaseModel):
     secret: Any = Field(default=None, exclude=True)
 
 
+def _extra_fields(model: ExtraModel) -> dict[str, object]:
+    extra = model.model_extra
+    assert extra is not None
+    return cast("dict[str, object]", extra)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -103,7 +109,7 @@ def outer_model() -> OuterModel:
 @pytest.fixture
 def extra_model() -> ExtraModel:
     """ExtraModel with one extra field pre-set."""
-    return ExtraModel(name="comp", extra_field="hello")
+    return ExtraModel.model_validate({"name": "comp", "extra_field": "hello"})
 
 
 @pytest.fixture
@@ -473,11 +479,11 @@ class TestExtraFieldPassthrough:
 
     def test_extra_field_patched(self, extra_model: ExtraModel) -> None:
         result = apply_patch(extra_model, {"extra_field": "world"})
-        assert result.extra_field == "world"
+        assert _extra_fields(result)["extra_field"] == "world"
 
     def test_new_extra_field_added(self, extra_model: ExtraModel) -> None:
         result = apply_patch(extra_model, {"brand_new": 42})
-        assert result.brand_new == 42
+        assert _extra_fields(result)["brand_new"] == 42
 
     def test_declared_field_still_validated(self, extra_model: ExtraModel) -> None:
         # "name" is a declared field — validation still applies

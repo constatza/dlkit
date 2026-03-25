@@ -71,10 +71,12 @@ class NormalizedVectorNormError(Metric):
         True
         >>>
         >>> # Use in MetricCollection
-        >>> metrics = MetricCollection([
-        ...     NormalizedVectorNormError(norm_ord=1),
-        ...     NormalizedVectorNormError(norm_ord=2),
-        ... ])
+        >>> metrics = MetricCollection(
+        ...     [
+        ...         NormalizedVectorNormError(norm_ord=1),
+        ...         NormalizedVectorNormError(norm_ord=2),
+        ...     ]
+        ... )
         >>> metrics.update(preds, target)
         >>> results = metrics.compute()
     """
@@ -175,10 +177,12 @@ class TemporalDerivativeError(Metric):
         >>> accel_error = accel_metric.compute()
         >>>
         >>> # Use in MetricCollection
-        >>> metrics = MetricCollection({
-        ...     "velocity_error": TemporalDerivativeError(n=1),
-        ...     "acceleration_error": TemporalDerivativeError(n=2),
-        ... })
+        >>> metrics = MetricCollection(
+        ...     {
+        ...         "velocity_error": TemporalDerivativeError(n=1),
+        ...         "acceleration_error": TemporalDerivativeError(n=2),
+        ...     }
+        ... )
     """
 
     def __init__(

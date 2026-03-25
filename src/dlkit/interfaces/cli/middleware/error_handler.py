@@ -62,22 +62,26 @@ def _get_error_suggestions(error: DLKitError) -> list[str]:
     suggestions = []
 
     if isinstance(error, ConfigurationError):
-        suggestions.extend([
-            "Check your configuration file syntax and formatting",
-            "Validate configuration: dlkit config validate <config_file>",
-            "Create a template: dlkit config create --output config.toml",
-        ])
+        suggestions.extend(
+            [
+                "Check your configuration file syntax and formatting",
+                "Validate configuration: dlkit config validate <config_file>",
+                "Create a template: dlkit config create --output config.toml",
+            ]
+        )
 
         # Specific suggestions based on context
         if error.context.get("config_path"):
             suggestions.append(f"Verify file exists: {error.context['config_path']}")
 
     elif isinstance(error, StrategyError):
-        suggestions.extend([
-            "Verify the strategy name is correct (training, mlflow, optuna, inference)",
-            "Check that required plugins are enabled in configuration",
-            "Validate strategy compatibility: dlkit config validate <config> --strategy <strategy>",
-        ])
+        suggestions.extend(
+            [
+                "Verify the strategy name is correct (training, mlflow, optuna, inference)",
+                "Check that required plugins are enabled in configuration",
+                "Validate strategy compatibility: dlkit config validate <config> --strategy <strategy>",
+            ]
+        )
 
         if "available_modes" in error.context:
             modes = ", ".join(error.context["available_modes"])
@@ -85,25 +89,31 @@ def _get_error_suggestions(error: DLKitError) -> list[str]:
 
     elif isinstance(error, PluginError):
         plugin_name = error.context.get("plugin", "unknown")
-        suggestions.extend([
-            f"Enable {plugin_name} plugin in configuration",
-            f"Check {plugin_name} plugin configuration parameters",
-            "Verify plugin dependencies are installed",
-        ])
+        suggestions.extend(
+            [
+                f"Enable {plugin_name} plugin in configuration",
+                f"Check {plugin_name} plugin configuration parameters",
+                "Verify plugin dependencies are installed",
+            ]
+        )
 
     elif isinstance(error, ModelStateError):
-        suggestions.extend([
-            "Check model configuration and parameters",
-            "Verify dataflow module configuration",
-            "Ensure trainer settings are compatible",
-        ])
+        suggestions.extend(
+            [
+                "Check model configuration and parameters",
+                "Verify dataflow module configuration",
+                "Ensure trainer settings are compatible",
+            ]
+        )
 
     elif isinstance(error, WorkflowError):
-        suggestions.extend([
-            "Check log files for detailed error information",
-            "Verify system resources (memory, GPU, disk space)",
-            "Try running with --verbose for more details",
-        ])
+        suggestions.extend(
+            [
+                "Check log files for detailed error information",
+                "Verify system resources (memory, GPU, disk space)",
+                "Try running with --verbose for more details",
+            ]
+        )
 
         # Add strategy-specific suggestions
         strategy = error.context.get("strategy")

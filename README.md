@@ -850,3 +850,14 @@ uv sync --dev
 uv tool install prek
 prek install -t pre-commit -t pre-push
 ```
+
+Run repository-local developer tools through `uv run` so you use the pinned
+toolchain from this project:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check src tests
+uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q
+uv run pytest tests --maxfail=1 --disable-warnings -vv
+```

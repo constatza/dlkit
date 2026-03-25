@@ -19,12 +19,14 @@ from dlkit.tools.io.system import import_from_module, import_from_path, init_cla
 # Hypothesis strategies for generating test dataflow
 valid_module_names = st.sampled_from(["collections", "itertools", "json", "pathlib", "os", "sys"])
 
-valid_class_names = st.sampled_from([
-    ("collections", "defaultdict"),
-    ("itertools", "chain"),
-    ("json", "JSONEncoder"),
-    ("pathlib", "Path"),
-])
+valid_class_names = st.sampled_from(
+    [
+        ("collections", "defaultdict"),
+        ("itertools", "chain"),
+        ("json", "JSONEncoder"),
+        ("pathlib", "Path"),
+    ]
+)
 
 # Simplified strategies with better filtering
 python_identifiers = st.text(
@@ -132,7 +134,7 @@ class TestClass:
             try:
                 result_relative = import_from_path("TestClass", relative_path, tmp_path)
             except Exception:
-                pytest.skip("Module content caused import error")
+                return
 
             # Import using absolute path
             absolute_path = module_file.resolve()
@@ -182,7 +184,7 @@ class TestLoadClassProperties:
                 pass  # Expected for non-existent paths
             except Exception as e:
                 # Other exceptions might indicate logic errors
-                pytest.fail(f"Unexpected exception type: {type(e).__name__}: {e}")
+                raise AssertionError(f"Unexpected exception type: {type(e).__name__}: {e}") from e
 
         run_test()
 
@@ -258,7 +260,7 @@ class TestInitClassProperties:
                 name="MockClass",
                 module_path="test_module",
                 exclude=filtered_exclude_keys,
-                **test_kwargs,
+                **test_kwargs,  # ty: ignore[invalid-argument-type]
                 **additional_kwargs,
             )
 

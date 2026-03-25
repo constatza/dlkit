@@ -63,7 +63,7 @@ def mock_settings_with_sections(draw) -> Mock:
 # Property-based tests
 
 
-@given(validation_command_inputs())
+@given(validation_command_inputs())  # ty: ignore[missing-argument]
 def test_validation_command_input_dataclass_invariants(input_data: ValidationCommandInput) -> None:
     """Test ValidationCommandInput dataclass invariants."""
     # Input should always be constructible
@@ -85,7 +85,7 @@ def test_command_initialization_with_various_names(command_name: str) -> None:
     assert isinstance(command, ValidationCommand)
 
 
-@given(validation_command_inputs(), mock_settings_with_sections())
+@given(validation_command_inputs(), mock_settings_with_sections())  # ty: ignore[missing-argument]
 def test_structural_validation_properties(
     input_data: ValidationCommandInput, settings: Mock
 ) -> None:

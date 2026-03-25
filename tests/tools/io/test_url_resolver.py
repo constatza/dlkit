@@ -136,8 +136,8 @@ class TestFileUrlValidation:
         correct_url = "file:///C:/Users/test/file.txt"
         try:
             url_resolver.resolve_local_uri(correct_url, Path.cwd())
-        except ConfigurationError:
-            pytest.fail("Correct file URL should not raise ConfigurationError")
+        except ConfigurationError as exc:
+            raise AssertionError("Correct file URL should not raise ConfigurationError") from exc
         except ValueError:
             # Cross-platform error is expected on non-Windows (but not ConfigurationError)
             pass

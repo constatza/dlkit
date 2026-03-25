@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -68,7 +69,7 @@ class TestNumpyWriterBasic:
         output_dir.mkdir()
 
         writer = NumpyWriter(output_dir=output_dir)
-        writer.on_predict_batch_end(mock_trainer, mock_module, sample_dict_output, [], 0, 0)
+        writer.on_predict_batch_end(mock_trainer, mock_module, sample_dict_output, (), 0, 0)
 
         # Check predictions are stored
         assert len(writer._predictions) > 0
@@ -85,7 +86,14 @@ class TestNumpyWriterBasic:
         output_dir.mkdir()
 
         writer = NumpyWriter(output_dir=output_dir)
-        writer.on_predict_batch_end(mock_trainer, mock_module, sample_tensor_output, [], 0, 0)
+        writer.on_predict_batch_end(
+            mock_trainer,
+            mock_module,
+            cast(Any, sample_tensor_output),
+            (),
+            0,
+            0,
+        )
 
         # Check predictions are stored
         assert len(writer._predictions) > 0
@@ -104,7 +112,7 @@ class TestNumpyWriterBasic:
         writer = NumpyWriter(output_dir=output_dir)
 
         # Add some predictions
-        writer.on_predict_batch_end(mock_trainer, mock_module, sample_dict_output, [], 0, 0)
+        writer.on_predict_batch_end(mock_trainer, mock_module, sample_dict_output, (), 0, 0)
 
         # Trigger epoch end
         writer.on_predict_epoch_end(mock_trainer, mock_module)
@@ -123,7 +131,14 @@ class TestNumpyWriterBasic:
         writer = NumpyWriter(output_dir=output_dir)
 
         # Should not crash with invalid output
-        writer.on_predict_batch_end(mock_trainer, mock_module, "invalid", [], 0, 0)
+        writer.on_predict_batch_end(
+            mock_trainer,
+            mock_module,
+            "invalid",  # ty: ignore[invalid-argument-type]
+            (),
+            0,
+            0,
+        )
 
         # Should have no predictions stored
         assert len(writer._predictions) == 0

@@ -21,6 +21,7 @@ class TestNormalizePath:
         """Path objects should be passed through unchanged."""
         input_path = (tmp_path / "path_object").resolve()
         result = OverrideNormalizer.normalize_path(input_path)
+        assert result is not None
         assert result.resolve() == input_path
 
     def test_normalize_path_from_none(self) -> None:
@@ -48,6 +49,7 @@ class TestNormalizePath:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = OverrideNormalizer.normalize_path("~/data")
+        assert result is not None
         assert result.resolve() == (fake_home / "data").resolve()
 
     def test_normalize_root_dir_invalid_relative(self) -> None:

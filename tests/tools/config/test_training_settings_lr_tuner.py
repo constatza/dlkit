@@ -47,7 +47,7 @@ class TestTrainingSettingsLRTuner:
 
     def test_lr_tuner_with_empty_dict(self) -> None:
         """Test configuring lr_tuner with empty dict (simulates empty TOML section)."""
-        settings = TrainingSettings(lr_tuner={})
+        settings = TrainingSettings.model_validate({"lr_tuner": {}})
 
         assert settings.lr_tuner is not None
         # Should use all defaults
@@ -67,7 +67,7 @@ class TestTrainingSettingsLRTuner:
             }
         }
 
-        settings = TrainingSettings(**config)
+        settings = TrainingSettings.model_validate(config)
 
         assert settings.lr_tuner is not None
         assert settings.lr_tuner.min_lr == 1e-5
@@ -89,7 +89,7 @@ class TestTrainingSettingsLRTuner:
         data = original.model_dump()
 
         # Deserialize back
-        restored = TrainingSettings(**data)
+        restored = TrainingSettings.model_validate(data)
 
         assert restored.lr_tuner is not None
         assert restored.lr_tuner.min_lr == 1e-7

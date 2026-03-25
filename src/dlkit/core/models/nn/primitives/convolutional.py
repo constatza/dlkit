@@ -70,7 +70,7 @@ class DeconvolutionBlock1d(nn.Module):
         padding: str | int = "same",
         output_padding: int = 0,
         groups: int = 1,
-        activation: Callable | nn.Module = nn.GELU(),
+        activation: Callable | nn.Module | None = None,
     ):
         """A residual transposed convolutional block with upsampling.
 
@@ -87,7 +87,7 @@ class DeconvolutionBlock1d(nn.Module):
             activation (Callable | nn.Module, optional): Activation function. Defaults to nn.GELU().
         """
         super().__init__()
-        self.activation = activation
+        self.activation = nn.GELU() if activation is None else activation
         effective_padding: int = 0 if padding == "same" else int(padding)
         self.conv1 = nn.ConvTranspose1d(
             in_channels,

@@ -36,7 +36,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run ty
-        run: uv run ty check src/dlkit --output-format github --no-progress
+        run: uv run ty check src tests --output-format github --no-progress
 
       - name: Run pytest fast smoke
         run: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q

@@ -65,12 +65,14 @@ class OverrideNormalizer:
     """
 
     # Known path fields that should be normalized to Path objects
-    PATH_FIELDS = frozenset({
-        "checkpoint_path",
-        "root_dir",
-        "output_dir",
-        "data_dir",
-    })
+    PATH_FIELDS = frozenset(
+        {
+            "checkpoint_path",
+            "root_dir",
+            "output_dir",
+            "data_dir",
+        }
+    )
 
     @staticmethod
     def normalize_path(path: str | Path | None, *, require_absolute: bool = False) -> Path | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -46,7 +47,11 @@ def build_components():
             self.called["test"] += 1
 
     return BuildComponents(
-        model=TestModel(), datamodule=Mock(), trainer=TestTrainer(), shape_spec=None, meta={}
+        model=cast("Any", TestModel()),
+        datamodule=Mock(),
+        trainer=cast("Any", TestTrainer()),
+        shape_spec=None,
+        meta={},
     )
 
 
@@ -222,7 +227,11 @@ def test_error_handling_integration(build_components):
             raise RuntimeError("Training failed")
 
     failing_components = BuildComponents(
-        model=Mock(), datamodule=Mock(), trainer=FailingTrainer(), shape_spec=None, meta={}
+        model=cast("Any", Mock()),
+        datamodule=Mock(),
+        trainer=cast("Any", FailingTrainer()),
+        shape_spec=None,
+        meta={},
     )
 
     factory = ExecutionStrategyFactory()

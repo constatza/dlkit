@@ -169,7 +169,10 @@ class TestTrainingResultStacking:
         nested_targets = cast(TensorDict, stacked["targets"])
         assert stacked["predictions"].shape == (7, 2)
         assert nested_targets["y"].shape == (7, 1)
-        assert torch.allclose(nested_targets["y"][:4], cast(TensorDict, b0["targets"])["y"])
+        assert torch.allclose(
+            cast("torch.Tensor", nested_targets["y"][:4]),
+            cast("torch.Tensor", cast(TensorDict, b0["targets"])["y"]),
+        )
         assert stacked["latents"].shape == (7, 0)
 
     def test_nested_multi_target_stacked(

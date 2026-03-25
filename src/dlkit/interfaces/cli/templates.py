@@ -175,9 +175,11 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
         "DATASET.name": "Dataset class path or alias",
     }
     if kind == "inference":
-        base.update({
-            "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
-        })
+        base.update(
+            {
+                "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
+            }
+        )
     return base
 
 

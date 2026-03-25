@@ -78,7 +78,7 @@ def extract_batch_dimensions(shapes: list[tuple[int, ...]]) -> set[int]:
 
 
 def validate_dynamic_axes_structure(
-    input_names: list[str], output_names: list[str] = None
+    input_names: list[str], output_names: list[str] | None = None
 ) -> dict[str, dict[int, str]]:
     """Create expected dynamic axes structure for ONNX export.
 

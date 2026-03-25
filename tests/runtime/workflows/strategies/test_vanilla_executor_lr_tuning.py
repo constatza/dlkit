@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -11,6 +12,18 @@ from dlkit.runtime.workflows.strategies.core.vanilla_executor import VanillaExec
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 from dlkit.tools.config.optimizer_settings import OptimizerSettings
+
+
+def _trainer_mock(components: BuildComponents) -> Mock:
+    trainer = components.trainer
+    assert trainer is not None
+    return cast(Mock, trainer)
+
+
+def _optimizer_settings(components: BuildComponents) -> OptimizerSettings:
+    optimizer = components.model.optimizer
+    assert isinstance(optimizer, OptimizerSettings)
+    return optimizer
 
 
 @pytest.fixture
@@ -85,10 +98,10 @@ class TestVanillaExecutorLRTuning:
                 executor.execute(mock_components, settings_without_lr_tuner)
 
         # Verify training was called
-        mock_components.trainer.fit.assert_called_once()
+        _trainer_mock(mock_components).fit.assert_called_once()
 
         # Verify original LR was NOT modified
-        assert mock_components.model.optimizer.lr == 0.001
+        assert _optimizer_settings(mock_components).lr == 0.001
 
     def test_execute_with_lr_tuner_enabled(
         self,
@@ -122,10 +135,10 @@ class TestVanillaExecutorLRTuning:
         assert call_args[0][2].num_training == 50
 
         # Verify learning rate was updated
-        assert mock_components.model.optimizer.lr == 0.005
+        assert _optimizer_settings(mock_components).lr == 0.005
 
         # Verify training was called after tuning
-        mock_components.trainer.fit.assert_called_once()
+        _trainer_mock(mock_components).fit.assert_called_once()
 
     def test_execute_with_lr_tuner_empty_config(
         self,
@@ -138,7 +151,7 @@ class TestVanillaExecutorLRTuning:
         # Simulate empty TOML section: [TRAINING.lr_tuner]
         settings_with_empty_lr_tuner = GeneralSettings(
             SESSION=SessionSettings(seed=42),
-            TRAINING=TrainingSettings(lr_tuner={}),
+            TRAINING=TrainingSettings.model_validate({"lr_tuner": {}}),
         )
 
         executor = VanillaExecutor()
@@ -158,7 +171,7 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.assert_called_once()
 
         # Verify LR was updated
-        assert mock_components.model.optimizer.lr == 0.003
+        assert _optimizer_settings(mock_components).lr == 0.003
 
     def test_execute_lr_tuner_failure_continues_training(
         self,
@@ -182,10 +195,10 @@ class TestVanillaExecutorLRTuning:
                     executor.execute(mock_components, settings_with_lr_tuner)
 
         # Verify training still proceeded
-        mock_components.trainer.fit.assert_called_once()
+        _trainer_mock(mock_components).fit.assert_called_once()
 
         # Verify original LR was preserved
-        assert mock_components.model.optimizer.lr == 0.001
+        assert _optimizer_settings(mock_components).lr == 0.001
 
     def test_apply_lr_tuning_helper_method(
         self,
@@ -198,19 +211,21 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.007
 
+        trainer = mock_components.trainer
+        assert trainer is not None
         with patch(
             "dlkit.runtime.workflows.strategies.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(
-                mock_components.trainer,
+                trainer,
                 mock_components.model,
                 mock_components.datamodule,
                 settings_with_lr_tuner,
             )
 
         # Verify LR was updated
-        assert mock_components.model.optimizer.lr == 0.007
+        assert _optimizer_settings(mock_components).lr == 0.007
 
     def test_apply_lr_tuning_with_no_training_settings(
         self,
@@ -225,13 +240,15 @@ class TestVanillaExecutorLRTuning:
 
         mock_lr_tuner = Mock()
 
+        trainer = mock_components.trainer
+        assert trainer is not None
         with patch(
             "dlkit.runtime.workflows.strategies.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise
             executor._apply_lr_tuning(
-                mock_components.trainer,
+                trainer,
                 mock_components.model,
                 mock_components.datamodule,
                 settings,
@@ -261,13 +278,15 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.008
 
+        trainer = components_no_opt.trainer
+        assert trainer is not None
         with patch(
             "dlkit.runtime.workflows.strategies.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise - logs warning instead
             executor._apply_lr_tuning(
-                components_no_opt.trainer,
+                trainer,
                 components_no_opt.model,
                 components_no_opt.datamodule,
                 settings_with_lr_tuner,
@@ -288,25 +307,27 @@ class TestVanillaExecutorLRTuning:
         """
         executor = VanillaExecutor()
 
-        original_optimizer = mock_components.model.optimizer
+        original_optimizer = _optimizer_settings(mock_components)
         original_lr = original_optimizer.lr
 
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.009
 
+        trainer = mock_components.trainer
+        assert trainer is not None
         with patch(
             "dlkit.runtime.workflows.strategies.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(
-                mock_components.trainer,
+                trainer,
                 mock_components.model,
                 mock_components.datamodule,
                 settings_with_lr_tuner,
             )
 
         # Verify new LR is set on the (new) optimizer instance
-        assert mock_components.model.optimizer.lr == 0.009
+        assert _optimizer_settings(mock_components).lr == 0.009
 
         # Original optimizer object is unchanged (immutable semantics)
         assert original_optimizer.lr == original_lr

@@ -53,7 +53,7 @@ class TestMakeNormLayer:
     def test_unsupported_raises(self) -> None:
         """Unsupported normalizer name should raise ValueError."""
         with pytest.raises(ValueError, match="Unsupported normalizer"):
-            make_norm_layer("invalid_norm", 4)
+            make_norm_layer("invalid_norm", 4)  # ty: ignore[invalid-argument-type]
 
     def test_identity_is_passthrough(self, batch_size: int = 3) -> None:
         """Identity layer should pass input unchanged."""

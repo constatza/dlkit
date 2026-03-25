@@ -20,17 +20,21 @@ def sample_targets() -> Tensor:
 @pytest.fixture
 def sample_2d_vectors() -> tuple[Tensor, Tensor]:
     """Sample 2D vector dataflow for normalized vector norm error testing."""
-    predictions = torch.tensor([
-        [1.0, 0.0],  # Predicted vector 1
-        [0.0, 2.0],  # Predicted vector 2
-        [1.0, 1.0],  # Predicted vector 3
-    ])
+    predictions = torch.tensor(
+        [
+            [1.0, 0.0],  # Predicted vector 1
+            [0.0, 2.0],  # Predicted vector 2
+            [1.0, 1.0],  # Predicted vector 3
+        ]
+    )
 
-    targets = torch.tensor([
-        [1.0, 1.0],  # Target vector 1 (norm = sqrt(2))
-        [2.0, 0.0],  # Target vector 2 (norm = 2.0)
-        [0.0, 1.0],  # Target vector 3 (norm = 1.0)
-    ])
+    targets = torch.tensor(
+        [
+            [1.0, 1.0],  # Target vector 1 (norm = sqrt(2))
+            [2.0, 0.0],  # Target vector 2 (norm = 2.0)
+            [0.0, 1.0],  # Target vector 3 (norm = 1.0)
+        ]
+    )
 
     return predictions, targets
 
@@ -39,15 +43,19 @@ def sample_2d_vectors() -> tuple[Tensor, Tensor]:
 def temporal_data() -> tuple[Tensor, Tensor]:
     """Sample temporal dataflow for time series testing."""
     # Shape: (batch, features, time)
-    predictions = torch.tensor([
-        [[1.0, 2.0, 3.0, 4.0]],  # Batch 1
-        [[2.0, 3.0, 4.0, 5.0]],  # Batch 2
-    ])
+    predictions = torch.tensor(
+        [
+            [[1.0, 2.0, 3.0, 4.0]],  # Batch 1
+            [[2.0, 3.0, 4.0, 5.0]],  # Batch 2
+        ]
+    )
 
-    targets = torch.tensor([
-        [[1.1, 1.9, 3.1, 3.9]],  # Batch 1
-        [[2.1, 2.9, 4.1, 4.9]],  # Batch 2
-    ])
+    targets = torch.tensor(
+        [
+            [[1.1, 1.9, 3.1, 3.9]],  # Batch 1
+            [[2.1, 2.9, 4.1, 4.9]],  # Batch 2
+        ]
+    )
 
     return predictions, targets
 
@@ -61,17 +69,21 @@ def zero_targets() -> Tensor:
 @pytest.fixture
 def unit_vectors() -> tuple[Tensor, Tensor]:
     """Unit vector dataflow for normalized testing."""
-    predictions = torch.tensor([
-        [1.0, 0.0],
-        [0.0, 1.0],
-        [0.707, 0.707],  # Approximate unit vector
-    ])
+    predictions = torch.tensor(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.707, 0.707],  # Approximate unit vector
+        ]
+    )
 
-    targets = torch.tensor([
-        [1.0, 0.0],
-        [0.0, 1.0],
-        [1.0, 0.0],
-    ])
+    targets = torch.tensor(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+        ]
+    )
 
     return predictions, targets
 
@@ -88,18 +100,22 @@ def batch_vectors_2d() -> tuple[Tensor, Tensor]:
     Returns:
         Tuple of (preds, targets) tensors with shape (4, 2).
     """
-    preds = torch.tensor([
-        [3.0, 4.0],  # L2 norm = 5.0
-        [1.0, 0.0],  # L2 norm = 1.0
-        [0.0, 2.0],  # L2 norm = 2.0
-        [1.0, 1.0],  # L2 norm = sqrt(2)
-    ])
-    targets = torch.tensor([
-        [3.0, 4.0],  # identical to pred 0 → zero error
-        [2.0, 0.0],
-        [0.0, 1.0],
-        [2.0, 2.0],
-    ])
+    preds = torch.tensor(
+        [
+            [3.0, 4.0],  # L2 norm = 5.0
+            [1.0, 0.0],  # L2 norm = 1.0
+            [0.0, 2.0],  # L2 norm = 2.0
+            [1.0, 1.0],  # L2 norm = sqrt(2)
+        ]
+    )
+    targets = torch.tensor(
+        [
+            [3.0, 4.0],  # identical to pred 0 → zero error
+            [2.0, 0.0],
+            [0.0, 1.0],
+            [2.0, 2.0],
+        ]
+    )
     return preds, targets
 
 
@@ -142,16 +158,20 @@ def batch_vectors_3d() -> tuple[Tensor, Tensor]:
     Returns:
         Tuple of (preds, targets) tensors with shape (3, 3).
     """
-    preds = torch.tensor([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [1.0, 1.0, 0.0],
-    ])
-    targets = torch.tensor([
-        [2.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0],
-        [2.0, 2.0, 0.0],
-    ])
+    preds = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],
+        ]
+    )
+    targets = torch.tensor(
+        [
+            [2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [2.0, 2.0, 0.0],
+        ]
+    )
     return preds, targets
 
 

@@ -23,6 +23,7 @@ from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.tools.config.enums import DatasetFamily
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.training_settings import TrainingSettings
@@ -63,7 +64,7 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
     sess = SessionSettings(inference=inference)
     settings = GeneralSettings(SESSION=sess, MODEL=mdl, DATASET=ds, DATAMODULE=dm, TRAINING=tr)
     # Attach a fake dataset sample we want to drive shape inference with
-    settings.__dict__["_test_sample"] = sample  # type: ignore[attr-defined]
+    settings.__dict__["_test_sample"] = sample
     return settings
 
 
@@ -85,7 +86,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     # Patch FactoryProvider.create_component to return our fakes
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            return _FakeDataset(settings.__dict__["_test_sample"])  # type: ignore[index]
+            return _FakeDataset(settings.__dict__["_test_sample"])
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -131,7 +132,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         "edge_index": np.zeros((2, 8), dtype=int),
         "y": np.ones((5, 1)),
     }
-    ds = DatasetSettings(name="Any", module_path="x", type="graph")
+    ds = DatasetSettings(name="Any", module_path="x", type=DatasetFamily.GRAPH)
     dm = DataModuleSettings()
     mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
     settings = GeneralSettings(
@@ -175,7 +176,7 @@ def test_build_factory_selects_timeseries_strategy(
 ) -> None:
     # Timeseries hint via type; fallback uses flexible inference
     ts_sample = {"x": np.zeros((12, 2)), "y": np.zeros((1,))}
-    ds = DatasetSettings(name="Any", module_path="x", type="timeseries")
+    ds = DatasetSettings(name="Any", module_path="x", type=DatasetFamily.TIMESERIES)
     dm = DataModuleSettings()
     mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
     settings = GeneralSettings(
@@ -326,8 +327,8 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     ds = DatasetSettings(
         name="SupervisedArrayDataset",
         module_path="dlkit.core.datasets",
-        features=[Feature(name="x", path=x_path)],
-        targets=[Target(name="y", path=y_path)],
+        features=(Feature(name="x", path=x_path),),
+        targets=(Target(name="y", path=y_path),),
         memmap_cache=True,
     )
     dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
@@ -408,8 +409,8 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
-        features=[Feature(name="x", path=x_path)],
-        targets=[Target(name="y", path=y_path)],
+        features=(Feature(name="x", path=x_path),),
+        targets=(Target(name="y", path=y_path),),
     )
     dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
     mdl = ModelComponentSettings(
@@ -473,12 +474,12 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
-        features=[
+        features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
             Feature(name="aux", path=aux_path, model_input=False),
-        ],
-        targets=[Target(name="y", path=y_path)],
+        ),
+        targets=(Target(name="y", path=y_path),),
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
@@ -537,11 +538,11 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
-        features=[
+        features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
-        ],
-        targets=[Target(name="y", path=y_path)],
+        ),
+        targets=(Target(name="y", path=y_path),),
     )
     training = TrainingSettings(
         loss_function=LossComponentSettings(
@@ -598,11 +599,11 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
-        features=[
+        features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
-        ],
-        targets=[Target(name="y", path=y_path)],
+        ),
+        targets=(Target(name="y", path=y_path),),
     )
     training = TrainingSettings(
         metrics=(
@@ -659,8 +660,8 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.core.datasets",
-        features=[Feature(name="matrix", path=matrix_path, model_input=False)],
-        targets=[Target(name="y", path=y_path)],
+        features=(Feature(name="matrix", path=matrix_path, model_input=False),),
+        targets=(Target(name="y", path=y_path),),
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),

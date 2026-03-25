@@ -8,10 +8,11 @@ This test suite verifies the three-layer defense-in-depth approach:
 
 import os
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from dlkit.tools.config import load_settings
+from dlkit.tools.config import GeneralSettings, load_settings
 from dlkit.tools.config.environment import env as global_environment
 from dlkit.tools.io.config import load_config
 from dlkit.tools.io.locations import output, splits_dir
@@ -91,7 +92,9 @@ def test_session_root_dir_propagated_to_environment(
         global_environment.root_dir = None
 
         # Load config
-        settings = load_config(test_config_with_session_root)
+        settings = cast(
+            GeneralSettings, load_config(test_config_with_session_root, GeneralSettings)
+        )
 
         # Verify SESSION.root_dir is set in settings
         assert settings.SESSION.root_dir is not None
@@ -128,7 +131,9 @@ def test_env_var_takes_precedence_over_session_root(
         test_env = DLKitEnvironment()
 
         # Load config
-        settings = load_config(test_config_with_session_root)
+        settings = cast(
+            GeneralSettings, load_config(test_config_with_session_root, GeneralSettings)
+        )
 
         # Verify SESSION.root_dir is set in settings
         assert settings.SESSION.root_dir is not None
@@ -156,8 +161,11 @@ def test_split_path_respects_session_root_dir(test_config_with_session_root: Pat
         global_environment.root_dir = None
 
         # Load config (this should sync SESSION.root_dir to DLKitEnvironment)
-        settings = load_config(test_config_with_session_root)
+        settings = cast(
+            GeneralSettings, load_config(test_config_with_session_root, GeneralSettings)
+        )
 
+        assert settings.SESSION.root_dir is not None
         session_root = Path(settings.SESSION.root_dir)
 
         # Get splits directory
@@ -185,8 +193,11 @@ def test_output_path_respects_session_root_dir(test_config_with_session_root: Pa
         global_environment.root_dir = None
 
         # Load config
-        settings = load_config(test_config_with_session_root)
+        settings = cast(
+            GeneralSettings, load_config(test_config_with_session_root, GeneralSettings)
+        )
 
+        assert settings.SESSION.root_dir is not None
         session_root = Path(settings.SESSION.root_dir)
 
         # Get output path
@@ -215,10 +226,12 @@ def test_load_settings_propagates_session_root(test_config_with_session_root: Pa
 
         # Load config via load_settings
         settings = load_settings(test_config_with_session_root)
+        session = settings.SESSION
+        assert session is not None
 
         # Verify SESSION.root_dir is set
-        assert settings.SESSION.root_dir is not None
-        session_root = Path(settings.SESSION.root_dir)
+        assert session.root_dir is not None
+        session_root = Path(session.root_dir)
 
         # Verify it was propagated to DLKitEnvironment
         assert global_environment.root_dir is not None

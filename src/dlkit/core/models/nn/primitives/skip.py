@@ -53,7 +53,7 @@ class SkipConnection(nn.Module):
         module: nn.Module,
         how: Literal["sum", "concat"] = "sum",
         layer_type: Literal["conv1d", "conv2d", "linear"] = "conv1d",
-        activation: Callable[[torch.Tensor], torch.Tensor] = nn.Identity(),
+        activation: Callable[[torch.Tensor], torch.Tensor] | None = None,
         in_channels: int | None = None,
         out_channels: int | None = None,
         kernel_size: int = 1,
@@ -94,7 +94,7 @@ class SkipConnection(nn.Module):
             bias=bias,
         )
         self.kernel_size = kernel_size
-        self.activation = activation
+        self.activation = nn.Identity() if activation is None else activation
         self.layer_type = layer_type
         self.module = module
 

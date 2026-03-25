@@ -86,8 +86,8 @@ class FamilyDefaults:
         """
         # Graph detection via PyG types or samples
         try:
-            from torch_geometric.data import Data as _PyGData  # type: ignore
-            from torch_geometric.data import InMemoryDataset as _PyGDS  # type: ignore
+            from torch_geometric.data import Data as _PyGData
+            from torch_geometric.data import InMemoryDataset as _PyGDS
 
             if isinstance(dataset, _PyGDS):
                 return DatasetFamily.GRAPH
@@ -102,7 +102,7 @@ class FamilyDefaults:
 
         # Timeseries detection via pytorch_forecasting TimeSeriesDataSet
         try:
-            from pytorch_forecasting import TimeSeriesDataSet as _TFDS  # type: ignore
+            from pytorch_forecasting import TimeSeriesDataSet as _TFDS
 
             # Our ForecastingDataset exposes `.timeseries`
             ts = getattr(dataset, "timeseries", None)

@@ -178,7 +178,7 @@ def compile_dotted_overrides(
 
     root: dict[str, Any] = {}
     for k, v in dotted.items():
-        insert_path(root, key=cast(str, k), value=v, sep=sep)
+        insert_path(root, key=k, value=v, sep=sep)
     return root
 
 
@@ -390,8 +390,7 @@ def apply_patch[M: BaseModel](model: M, patch: Mapping[str, Any], *, revalidate:
         return new_model
 
     # Full-model validation without serialising to dict — excluded fields survive.
-    validated = TypeAdapter(model.__class__).validate_python(new_model, from_attributes=True)
-    return cast(M, validated)
+    return TypeAdapter(model.__class__).validate_python(new_model, from_attributes=True)
 
 
 def patch_model[M: BaseModel](

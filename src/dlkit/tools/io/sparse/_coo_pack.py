@@ -539,7 +539,7 @@ class CooPackReader(AbstractSparsePackReader):
         out_indices_np[0] = np.repeat(np.arange(batch_size, dtype=np.int64), nnz_lengths)
 
         cursor = 0
-        for sample_start, sample_end, nnz_len in zip(starts, ends, nnz_lengths):
+        for sample_start, sample_end, nnz_len in zip(starts, ends, nnz_lengths, strict=True):
             if nnz_len == 0:
                 continue
             sample_start_int = int(sample_start)

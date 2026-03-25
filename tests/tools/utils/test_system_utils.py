@@ -281,6 +281,7 @@ class TestNormalizeUserPath:
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         result = normalize_user_path("~/runs", require_absolute=True)
+        assert result is not None
         assert result.resolve() == (fake_home / "runs").resolve()
 
     def test_coerce_root_dir_requires_absolute(

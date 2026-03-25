@@ -137,12 +137,12 @@ class ClientBasedRunContext(IRunContext):
             logged_model = None
             match _resolve_model_flavor(model):
                 case "sklearn":
-                    logged_model = mlflow.sklearn.log_model(  # type: ignore[attr-defined]
+                    logged_model = mlflow.sklearn.log_model(
                         sk_model=model,
                         **kwargs,
                     )
                 case "pytorch":
-                    logged_model = mlflow.pytorch.log_model(  # type: ignore[attr-defined]
+                    logged_model = mlflow.pytorch.log_model(
                         pytorch_model=model,
                         **kwargs,
                     )

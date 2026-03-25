@@ -14,6 +14,7 @@ from dlkit.runtime.workflows.strategies.tracking.interfaces import IRunContext
 from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.tools.config.enums import DatasetFamily
 from dlkit.tools.config.general_settings import GeneralSettings
 
 
@@ -95,8 +96,8 @@ def _make_settings(tmp_path: Path) -> GeneralSettings:
 
     dataset = DatasetSettings(
         name="CustomDataset",
-        features=[Feature(name="x", path=feature_path)],
-        targets=[Target(name="y", path=target_path)],
+        features=(Feature(name="x", path=feature_path),),
+        targets=(Target(name="y", path=target_path),),
     )
     return GeneralSettings(DATASET=dataset)
 
@@ -148,12 +149,14 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
     np.save(y, np.array([[0.0], [1.0]], dtype=np.float32))
 
     settings = GeneralSettings(
-        DATASET=DatasetSettings(
-            name="GraphDataset",
-            type="graph",
-            x=x,
-            edge_index=edge_index,
-            y=y,
+        DATASET=DatasetSettings.model_validate(
+            {
+                "name": "GraphDataset",
+                "type": DatasetFamily.GRAPH,
+                "x": x,
+                "edge_index": edge_index,
+                "y": y,
+            }
         )
     )
     run_context = _DatasetRunContext()

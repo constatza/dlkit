@@ -87,6 +87,7 @@ def test_get_or_create_split_uses_explicit_filepath(
     assert list(split.train) == sample_split_data["train"]
     assert list(split.validation) == sample_split_data["validation"]
     assert list(split.test) == sample_split_data["test"]
+    assert split.predict is not None
     assert list(split.predict) == sample_split_data["predict"]
 
 

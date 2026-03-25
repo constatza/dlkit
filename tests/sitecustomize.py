@@ -16,8 +16,9 @@ import os
 import random
 import types
 from pathlib import PureWindowsPath, WindowsPath
+from typing import Any
 
-_socket: types.ModuleType | None = None
+_socket: types.ModuleType | Any | None = None
 try:
     import socket as _socket
 except Exception:  # pragma: no cover - site import safety
@@ -69,7 +70,7 @@ def _install_fake_socket() -> None:
         return _FakeSocket(family, type, proto)
 
     # Replace only the constructor; leave constants and helpers intact
-    _socket.socket = _factory
+    setattr(_socket, "socket", _factory)  # noqa: B010
 
     # Also expose marker for debugging if needed
     _socket.__dict__.setdefault("_dlkit_fake_socket", True)
@@ -99,9 +100,9 @@ def _install_posix_path_str() -> None:
         return format(self.as_posix(), spec)
 
     for cls in (PureWindowsPath, WindowsPath):
-        cls.__str__ = _to_posix
-        cls.__fspath__ = _to_posix
-        cls.__format__ = _format_posix
+        setattr(cls, "__str__", _to_posix)  # noqa: B010
+        setattr(cls, "__fspath__", _to_posix)  # noqa: B010
+        setattr(cls, "__format__", _format_posix)  # noqa: B010
 
 
 if os.name == "nt":  # pragma: no cover - executed only on Windows CI

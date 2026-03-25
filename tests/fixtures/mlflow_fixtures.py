@@ -3,6 +3,7 @@
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import Mock
 
 import mlflow
@@ -117,7 +118,7 @@ def mock_mlflow_resource_manager(mock_mlflow_client, mlflow_test_settings, tmp_p
 
     # Mock the client creation to return our mock
     original_create_client = MLflowClientFactory.create_client
-    MLflowClientFactory.create_client = lambda *args, **kwargs: mock_mlflow_client
+    cast(Any, MLflowClientFactory).create_client = lambda tracking_uri=None: mock_mlflow_client
 
     try:
         with manager:
