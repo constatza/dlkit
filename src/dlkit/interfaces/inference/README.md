@@ -198,5 +198,5 @@ print(meta.model_family, meta.wrapper_type)
 
 ## Developer Notes
 
-See [`dev.md`](dev.md) for architectural decisions, dispatch semantics, output
+See [`inference.md`](inference.md) for architectural decisions, dispatch semantics, output
 normalization, and known limitations.

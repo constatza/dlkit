@@ -18,7 +18,7 @@ The `dlkit.interfaces.api` module provides DLKit's public API layer, implementin
 ```
 ┌─────────────────────────────────────────────────┐
 │         Public API Functions (Facade)           │
-│  train(), infer(), optimize(), predict()        │
+│  train(), optimize(), load_model()             │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
@@ -94,10 +94,12 @@ print(f"Checkpoint: {result.checkpoint_path}")
 
 ### Inference (Standalone)
 ```python
-from dlkit.interfaces.api import infer
+from dlkit import load_model
+import torch
 
-result = infer(checkpoint_path="model.ckpt", inputs={"x": torch.randn(32, 10)}, device="auto")
-predictions = result.predictions
+predictor = load_model("model.ckpt", device="auto")
+predictions = predictor.predict(x=torch.randn(32, 10))
+predictor.unload()
 ```
 
 ### Optimization
@@ -111,11 +113,11 @@ print(f"Best trial: {result.best_trial}")
 ## Module Documentation
 
 Detailed documentation for each submodule:
-- **Commands**: `/home/archer/projects/dlkit/src/dlkit/interfaces/api/commands/dev.md`
-- **Services**: `/home/archer/projects/dlkit/src/dlkit/interfaces/api/services/dev.md`
-- **Domain**: `/home/archer/projects/dlkit/src/dlkit/interfaces/api/domain/dev.md`
-- **Overrides**: `/home/archer/projects/dlkit/src/dlkit/interfaces/api/overrides/dev.md`
-- **Functions**: `/home/archer/projects/dlkit/src/dlkit/interfaces/api/functions/dev.md`
+- **Commands**: [`commands/commands.md`](commands/commands.md)
+- **Services**: [`services/services.md`](services/services.md)
+- **Domain**: [`domain/domain.md`](domain/domain.md)
+- **Overrides**: [`overrides/overrides.md`](overrides/overrides.md)
+- **Functions**: [`functions/functions.md`](functions/functions.md)
 
 ## Common Patterns
 
@@ -191,38 +193,24 @@ is_valid = val_cmd.execute(val_input, settings)
 - [ ] Distributed workflow coordination
 - [ ] Plugin system for custom workflows
 
-## Breaking Changes
+## Inference
 
-### Current Layout
-- **Inference API**: `infer()` now requires checkpoint and inputs only (no config)
-- **Prediction API**: Use `predict_with_config()` for Lightning-based prediction
-- **InferenceWorkflowSettings**: Deprecated - use `TrainingWorkflowSettings` with `SESSION.inference=True`
+Inference is handled by a dedicated stateful predictor. Use `load_model()` from the
+top-level `dlkit` package:
 
-### Migration Guide
 ```python
-# BEFORE:
-from dlkit.tools.config import load_inference_settings
+from dlkit import load_model
 
-settings = load_inference_settings("config.toml")
-result = infer(settings, checkpoint_path)
-
-# NOW:
-from dlkit.interfaces.api import infer
-
-result = infer(checkpoint_path, input_data)
-
-# OR for prediction with config:
-from dlkit.interfaces.api import predict_with_config
-from dlkit.tools.io import load_settings
-
-settings = load_settings("config.toml")
-result = predict_with_config(settings, checkpoint_path)
+with load_model("model.ckpt", device="auto") as predictor:
+    predictions = predictor.predict(x=input_tensor)
 ```
 
+See [`interfaces/inference/README.md`](../inference/README.md) for the full inference API.
+
 ## Related Documentation
-- Architecture Overview: `/home/archer/projects/dlkit/CLAUDE.md`
-- Runtime Workflows: `/home/archer/projects/dlkit/src/dlkit/runtime/workflows/dev.md` (if exists)
-- Configuration Guide: `/home/archer/projects/dlkit/src/dlkit/tools/config/dev.md` (if exists)
+- Architecture Overview: [`AGENTS.md`](../../../../AGENTS.md)
+- Inference API: [`interfaces/inference/README.md`](../inference/README.md)
+- Configuration Guide: [`tools/config/config.md`](../../tools/config/config.md)
 
 ## Contributors Guide
 
@@ -244,9 +232,3 @@ result = predict_with_config(settings, checkpoint_path)
 
 ## Maintainers
 - DLKit Development Team
-
-## Change Log
-- **2025-10-03**: Created comprehensive API documentation
-- **2024-12-15**: BREAKING CHANGE - New inference API
-- **2024-11-20**: Added command dispatcher and registry
-- **2024-11-01**: Initial API layer implementation

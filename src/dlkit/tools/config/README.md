@@ -191,6 +191,19 @@ Resolution order is:
 2. `SESSION.root_dir`
 3. Config file directory / current working directory fallback
 
+## Immutable Settings
+
+All `BasicSettings` subclasses are `frozen=True`. Fields cannot be mutated after construction.
+Use `patch_model()` from `dlkit.tools.config.core.patching` for structured updates:
+
+```python
+from dlkit.tools.config.core.patching import patch_model
+
+new_settings = patch_model(settings, {"TRAINING.epochs": 200, "SESSION.seed": 0})
+```
+
+`patch_model()` returns a **new** instance — the original is unchanged. Colliding dotted-key patches raise `ValueError` to prevent silent overwrites.
+
 ## Programmatic Construction
 
 ```python
