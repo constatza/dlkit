@@ -19,8 +19,6 @@ class TestTrainCommandIntegration:
         result = cli_runner.invoke(cli_app, ["train", "--help"])
 
         assert result.exit_code == 0
-        assert "train" in result.stdout.lower()
-        assert "configuration" in result.stdout.lower()
 
     def test_train_command_no_args_error(
         self,

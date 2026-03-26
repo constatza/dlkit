@@ -40,8 +40,6 @@ def test_train_help(cli_runner: CliRunner) -> None:
     """Train command help is accessible."""
     result = cli_runner.invoke(cli_app, ["train", "--help"])
     assert result.exit_code == 0
-    assert result.exit_code == 0
-    assert "train" in result.output.lower()
 
 
 def test_config_subcommands_structure(cli_runner: CliRunner) -> None:

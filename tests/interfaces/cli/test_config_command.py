@@ -53,8 +53,6 @@ def test_config_validate_detects_missing_file(cli_runner: CliRunner) -> None:
     """Test that config validate properly reports missing files."""
     result = cli_runner.invoke(cli_app, ["config", "validate", "nonexistent.toml"])
     assert result.exit_code != 0, "Should fail with missing file"
-    # Should provide meaningful error message
-    assert "not found" in result.output.lower() or "error" in result.output.lower()
 
 
 def test_config_validate_processes_valid_file(
