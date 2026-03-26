@@ -367,7 +367,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._lr_manager = ConfigLearningRateManager(self)
 
         # Apply precision to model immediately after creation
-        from dlkit.interfaces.api.services.precision_service import get_precision_service
+        from dlkit.tools.config.precision.service import get_precision_service
 
         precision_service = get_precision_service()
         precision_strategy = precision_service.resolve_precision()
@@ -383,7 +383,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     def configure_model(self) -> None:
         """Reapply precision after Lightning setup/checkpoint restore."""
         super().configure_model()
-        from dlkit.interfaces.api.services.precision_service import get_precision_service
+        from dlkit.tools.config.precision.service import get_precision_service
 
         precision_service = get_precision_service()
         precision_strategy = precision_service.resolve_precision()

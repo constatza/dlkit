@@ -245,7 +245,7 @@ class DataEntry(BasicSettings, ABC):
         if self.dtype is not None:
             return self.dtype
 
-        from dlkit.interfaces.api.services.precision_service import get_precision_service
+        from dlkit.tools.config.precision.service import get_precision_service
 
         precision_service = get_precision_service()
         return precision_service.get_torch_dtype(precision_provider)
@@ -265,7 +265,7 @@ class DataEntry(BasicSettings, ABC):
             return self.dtype
 
         try:
-            from dlkit.interfaces.api.services.precision_service import get_precision_service
+            from dlkit.tools.config.precision.service import get_precision_service
 
             precision_service = get_precision_service()
             return precision_service.get_torch_dtype()

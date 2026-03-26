@@ -11,11 +11,11 @@ from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
 from dlkit.core.training.metrics.collect import collect_metrics
 from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
-from dlkit.interfaces.api.services.precision_service import get_precision_service
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.base_settings import BasicSettings
 from dlkit.tools.config.core.updater import update_settings
+from dlkit.tools.config.precision.service import get_precision_service
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 

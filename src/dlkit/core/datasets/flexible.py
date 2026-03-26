@@ -245,7 +245,7 @@ def _load_or_convert_tensor(
 
         # Use PrecisionService for dtype if not specified
         # This respects the global precision context set by precision_override()
-        from dlkit.interfaces.api.services.precision_service import get_precision_service
+        from dlkit.tools.config.precision.service import get_precision_service
 
         precision_service = get_precision_service()
         resolved_dtype = precision_service.get_torch_dtype()
