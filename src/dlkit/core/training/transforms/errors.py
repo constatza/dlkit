@@ -9,7 +9,7 @@ Design Pattern: Exception Hierarchy
 - Clear error messages with context
 """
 
-from dlkit.interfaces.api.domain.errors import DLKitError
+from dlkit.tools.utils.errors import DLKitError
 
 
 class TransformError(DLKitError):
