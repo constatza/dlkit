@@ -67,7 +67,7 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
 
     try:
         from dlkit.core.datatypes.urls import tilde_expand_strict
-        from dlkit.interfaces.api.overrides.path_context import get_current_path_context
+        from dlkit.tools.io.path_context import get_current_path_context
     except Exception as exc:
         logger.debug("Path preprocessing skipped (import error): {}", exc)
         return data

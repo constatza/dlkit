@@ -87,8 +87,8 @@ class IBuildStrategy:
         """
         import contextlib
 
-        from dlkit.interfaces.api.domain.precision import precision_override
-        from dlkit.interfaces.api.overrides.path_context import (
+        from dlkit.tools.config.precision.context import precision_override
+        from dlkit.tools.io.path_context import (
             get_current_path_context,
             path_override_context,
         )
