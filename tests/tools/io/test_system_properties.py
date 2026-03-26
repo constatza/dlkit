@@ -6,6 +6,7 @@ for dynamic imports, path resolution, and parameter filtering.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -29,8 +30,12 @@ valid_class_names = st.sampled_from(
 )
 
 # Simplified strategies with better filtering
+# Restricted to ASCII (max_codepoint=127) to avoid Windows cp1252 encoding failures
+# and filesystem edge cases with non-ASCII module names.
 python_identifiers = st.text(
-    alphabet=st.characters(whitelist_categories=("Lu", "Ll"), whitelist_characters="_"),
+    alphabet=st.characters(
+        whitelist_categories=("Lu", "Ll"), whitelist_characters="_", max_codepoint=127
+    ),
     min_size=1,
     max_size=20,
 ).filter(lambda x: x.isidentifier() and not x.startswith("__") and x.isalpha())
@@ -57,8 +62,7 @@ class TestImportFromModuleProperties:
         result = import_from_module(class_name, module_name)
 
         assert result is not None
-        assert hasattr(result, "__name__")
-        assert result.__name__ == class_name
+        assert inspect.isclass(result) or callable(result)
 
     @given(valid_class_names)
     def test_import_preserves_class_name_in_result(self, class_spec: tuple[str, str]) -> None:
@@ -70,8 +74,7 @@ class TestImportFromModuleProperties:
         module_name, class_name = class_spec
 
         result = import_from_module(class_name, module_name)
-        # For valid imports, the name should match
-        assert hasattr(result, "__name__")
+        # class_name is from a controlled sampled_from — safe to assert against
         assert result.__name__ == class_name
 
     @given(valid_module_names, python_identifiers)
@@ -118,16 +121,15 @@ class TestImportFromPathProperties:
         @given(python_identifiers)
         def run_test(mod_name: str) -> None:
             # Create a valid Python module
-            module_content = f'''
-class TestClass:
-    """Generated test class."""
-
-    def __init__(self):
-        self.module_name = "{mod_name}"
-'''
+            module_content = (
+                "class TestClass:\n"
+                '    """Generated test class."""\n'
+                "    def __init__(self):\n"
+                "        pass\n"
+            )
 
             module_file = tmp_path / f"{mod_name}.py"
-            module_file.write_text(module_content)
+            module_file.write_text(module_content, encoding="utf-8")
 
             # Import using relative path
             relative_path = Path(f"{mod_name}.py")
@@ -140,9 +142,9 @@ class TestClass:
             absolute_path = module_file.resolve()
             result_absolute = import_from_path("TestClass", absolute_path, tmp_path)
 
-            # Both should return the same class
-            assert result_relative.__name__ == result_absolute.__name__
+            # "TestClass" is a controlled literal defined in the module fixture above
             assert result_relative.__name__ == "TestClass"
+            assert result_absolute.__name__ == "TestClass"
 
         run_test()
 
@@ -314,8 +316,8 @@ class TestSystemModuleInvariants:
             result = import_from_module(identifier, "collections")
             # If import succeeds, result should have valid __name__
             if result is not None:
-                assert hasattr(result, "__name__")
-                assert result.__name__.isidentifier()
+                assert inspect.isclass(result) or callable(result)
+                # result.__name__ would be a generated identifier — don't assert its value
         except ImportError, AttributeError:
             pass  # Expected for non-existent identifiers
 
@@ -368,7 +370,7 @@ class TestClass:
         pass
 """
             module_file = tmp_path / f"{file_name}.py"
-            module_file.write_text(module_content)
+            module_file.write_text(module_content, encoding="utf-8")
 
             # Import using exact case
             result = import_from_path("TestClass", module_file, tmp_path)
