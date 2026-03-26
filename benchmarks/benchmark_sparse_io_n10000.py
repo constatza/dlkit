@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
@@ -66,7 +67,7 @@ def iter_loader(dataset: FlexibleDataset, batch_size: int) -> tuple[int, int, fl
     return steps, n_seen, perf_counter() - t0
 
 
-def time_once(name: str, fn) -> tuple[object, float]:
+def time_once[T](name: str, fn: Callable[[], T]) -> tuple[T, float]:
     """Time a one-off operation and log elapsed seconds."""
     t0 = perf_counter()
     result = fn()
