@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dlkit.interfaces.api.tracking_hooks import TrackingHooks
+from dlkit.runtime.workflows.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 
