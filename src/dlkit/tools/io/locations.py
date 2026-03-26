@@ -9,12 +9,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dlkit.interfaces.api.overrides.path_context import (
-    get_current_path_context,
-    resolve_with_context,
-)
+from dlkit.interfaces.api.overrides.path_context import resolve_with_context
 from dlkit.tools.config.environment import DLKitEnvironment
 from dlkit.tools.config.environment import env as global_environment
+from dlkit.tools.io.path_context import get_current_path_context
 
 
 def _root_from_context() -> Path | None:

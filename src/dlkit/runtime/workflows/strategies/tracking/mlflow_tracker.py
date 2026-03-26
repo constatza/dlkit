@@ -5,12 +5,12 @@ from contextlib import AbstractContextManager, ExitStack
 from pathlib import Path
 from typing import Any
 
-from dlkit.interfaces.api.overrides.path_context import (
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+from dlkit.tools.io.path_context import (
     get_current_path_context,
     path_override_context,
 )
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
 
 from .backend import LocalSqliteBackend, TrackingBackend, select_backend
