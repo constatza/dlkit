@@ -199,11 +199,12 @@ present_training_result(result, console)
 **Example**:
 ```python
 from rich.console import Console
-from dlkit.interfaces.api import predict_with_config
+from dlkit import load_model
 from dlkit.interfaces.cli.adapters.result_presenter import present_inference_result
 
 console = Console()
-result = predict_with_config(settings, checkpoint_path)
+with load_model("model.ckpt", device="auto") as predictor:
+    result = predictor.predict(x=input_tensor)
 present_inference_result(result, console, save_predictions=True)
 ```
 

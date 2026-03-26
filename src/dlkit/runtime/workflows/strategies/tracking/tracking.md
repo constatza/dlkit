@@ -49,8 +49,6 @@ Key architectural decisions:
 ### Internal Dependencies
 - `dlkit.tools.config`: Settings and configuration (`GeneralSettings`, `MLflowSettings`)
 - `dlkit.tools.utils.logging_config`: Logger configuration (`get_logger`)
-- `dlkit.interfaces.servers.health_checker`: Server health checking (`HTTPHealthChecker`)
-- `dlkit.interfaces.servers.mlflow_adapter`: MLflow server adapter (`MLflowServerContext`, `MLflowServerAdapter`)
 - `dlkit.tools.io.config`: Configuration I/O (`write_config`)
 
 ### External Dependencies
