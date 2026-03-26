@@ -9,7 +9,7 @@ from torch_geometric.transforms import BaseTransform, GCNNorm
 from torch_geometric.utils import dense_to_sparse
 
 from dlkit.core.datasets.tensor_utils import ensure2d
-from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.tools.config.precision.service import get_precision_service
 from dlkit.tools.io import load_array
 
 from .base import BaseDataset, register_dataset
