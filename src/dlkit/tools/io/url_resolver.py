@@ -14,8 +14,8 @@ from typing import Literal
 
 from yarl import URL
 
-from dlkit.interfaces.api.domain.errors import ConfigurationError
 from dlkit.tools.io.path_normalizers import canonicalize_file_path
+from dlkit.tools.utils.errors import ConfigurationError
 
 LocalScheme = Literal["file", "sqlite"]
 
