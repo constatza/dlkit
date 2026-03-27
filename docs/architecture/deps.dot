@@ -3,12 +3,10 @@
 //   box           = module/package/component
 //   A -> B        = A imports from B (A depends on B)
 //   solid         = normal dependency
-//   dashed+red    = violation (upward / wrong-direction)
-//   dashed+orange = architectural concern (legal direction, too tight)
 //   color fill    = layer ownership only
 //   cluster       = subsystem/package boundary
 //
-// Last updated: 2026-03-26 (QW-1 through QW-4 completed; 17 of 25 violations resolved)
+// Last updated: 2026-03-26 (all violations resolved — FR-1 through FR-2b complete)
 
 digraph dlkit {
     rankdir=TB;
@@ -23,21 +21,15 @@ digraph dlkit {
         label="Legend";
         style=filled; color="#e0e0e0"; fillcolor="#f5f5f5"; fontsize=10;
 
-        leg_normal  [label="Normal dep",         shape=plaintext, fillcolor=none, style=""];
-        leg_concern [label="Arch concern",        shape=plaintext, fillcolor=none, style=""];
-        leg_viol    [label="Violation (upward)",  shape=plaintext, fillcolor=none, style=""];
+        leg_normal  [label="Normal dep", shape=plaintext, fillcolor=none, style=""];
 
         leg_a [label="A", width=0.5]; leg_b [label="B", width=0.5];
-        leg_c [label="C", width=0.5]; leg_d [label="D", width=0.5];
-        leg_e [label="E", width=0.5]; leg_f [label="F", width=0.5];
 
-        leg_a -> leg_b [style=solid,  color=black];
-        leg_c -> leg_d [style=dashed, color=darkorange, penwidth=1.5];
-        leg_e -> leg_f [style=dashed, color=red,        penwidth=2];
+        leg_a -> leg_b [style=solid, color=black];
 
-        { rank=same; leg_a; leg_c; leg_e; }
-        { rank=same; leg_b; leg_d; leg_f; }
-        { rank=same; leg_normal; leg_concern; leg_viol; }
+        { rank=same; leg_a; }
+        { rank=same; leg_b; }
+        { rank=same; leg_normal; }
     }
 
     // ── LAYER 1 — tools (foundation) ────────────────────────────────────
@@ -45,8 +37,8 @@ digraph dlkit {
         label="tools  (foundation)";
         style=filled; fillcolor="#fffde7"; color="#f9a825"; fontsize=12;
 
-        tools_config   [label="tools/config",   fillcolor="#fff176"];
-        tools_io       [label="tools/io",        fillcolor="#fff176"];
+        tools_config   [label="tools/config\n(incl. core/types.py)", fillcolor="#fff176"];
+        tools_io       [label="tools/io\n(incl. path_context)",      fillcolor="#fff176"];
         tools_registry [label="tools/registry",  fillcolor="#fff176"];
         tools_utils    [label="tools/utils",     fillcolor="#fff176"];
     }
@@ -57,7 +49,7 @@ digraph dlkit {
         style=filled; fillcolor="#e3f2fd"; color="#1565c0"; fontsize=12;
 
         core_nn        [label="core/models/nn",       fillcolor="#90caf9"];
-        core_wrappers  [label="core/models/wrappers", fillcolor="#90caf9"];
+        core_wrappers  [label="core/models/wrappers\n(accepts WrapperComponents)", fillcolor="#90caf9"];
         core_training  [label="core/training",        fillcolor="#90caf9"];
         core_datasets  [label="core/datasets",        fillcolor="#90caf9"];
         core_datamod   [label="core/datamodules",     fillcolor="#90caf9"];
@@ -65,12 +57,21 @@ digraph dlkit {
         core_datatypes [label="core/datatypes",       fillcolor="#90caf9"];
     }
 
+    // ── LAYER 2.5 — domain shared kernel ────────────────────────────────
+    subgraph cluster_domain {
+        label="domain  (shared kernel — FR-1)";
+        style=filled; fillcolor="#f3e5f5"; color="#6a1b9a"; fontsize=12;
+
+        dlkit_domain [label="dlkit.domain\n(TrainingResult, InferenceResult\nOptimizationResult, ModelState)",
+                      fillcolor="#ce93d8"];
+    }
+
     // ── LAYER 3 — runtime (orchestration) ───────────────────────────────
     subgraph cluster_runtime {
         label="runtime  (orchestration)";
         style=filled; fillcolor="#e8f5e9"; color="#2e7d32"; fontsize=12;
 
-        rt_factories    [label="runtime/factories",    fillcolor="#a5d6a7"];
+        rt_factories    [label="runtime/factories\n(component_builders.py — FR-2)", fillcolor="#a5d6a7"];
         rt_orchestrator [label="runtime/orchestrator", fillcolor="#a5d6a7"];
         rt_strategies   [label="runtime/strategies\n(vanilla, tracking, optuna)", fillcolor="#a5d6a7"];
         rt_optim        [label="runtime/optimization", fillcolor="#a5d6a7"];
@@ -85,10 +86,9 @@ digraph dlkit {
             label="interfaces/api";
             style=filled; fillcolor="#f8bbd0"; color="#c2185b"; fontsize=11;
 
-            api_domain    [label="api/domain\n(models, errors, precision)", fillcolor="#f48fb1"];
-            api_services  [label="api/services\n(precision_service, …)",    fillcolor="#f48fb1"];
-            api_overrides [label="api/overrides\n(path_context, manager)",  fillcolor="#f48fb1"];
-            api_tracking  [label="api/tracking_hooks", fillcolor="#f48fb1", shape=note];
+            api_domain    [label="api/domain\n(errors, precision, override_types\nmodels.py = re-export shim)", fillcolor="#f48fb1"];
+            api_services  [label="api/services\n(override_service.py — FR-4)",    fillcolor="#f48fb1"];
+            api_commands  [label="api/commands\n(normalizer.py — FR-4)",           fillcolor="#f48fb1"];
         }
 
         subgraph cluster_cli {
@@ -105,13 +105,17 @@ digraph dlkit {
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // NORMAL DEPENDENCIES  (solid black)
+    // NORMAL DEPENDENCIES  (solid black — all violations resolved)
     // ═════════════════════════════════════════════════════════════════════
 
     // tools internal
     tools_config -> tools_io        [label="file loading"];
     tools_config -> tools_utils;
     tools_config -> tools_registry;
+
+    // domain → tools only
+    dlkit_domain -> tools_config    [label="GeneralSettings\nworkflow_configs"];
+    dlkit_domain -> tools_utils     [label="tensordict_utils"];
 
     // core → tools
     core_datasets -> tools_io       [label="load_array"];
@@ -124,16 +128,19 @@ digraph dlkit {
     core_datamod  -> core_datasets;
     core_shapes   -> core_nn;
 
-    // runtime → core + tools
-    rt_factories    -> core_wrappers;
+    // runtime → core + domain + tools
+    rt_factories    -> core_wrappers   [label="create wrappers"];
     rt_factories    -> core_shapes;
     rt_factories    -> core_datatypes;
-    rt_factories    -> tools_config;
+    rt_factories    -> tools_config    [label="FactoryProvider\nBuildContext\n(centralised here — FR-2)"];
     rt_factories    -> tools_io;
+    rt_orchestrator -> dlkit_domain    [label="OptimizationResult\nTrainingResult"];
     rt_orchestrator -> tools_config;
     rt_orchestrator -> tools_utils;
-    rt_strategies   -> core_training [label="callbacks, metrics"];
+    rt_strategies   -> dlkit_domain    [label="TrainingResult\nModelState\nWorkflowError"];
+    rt_strategies   -> core_training   [label="callbacks, metrics"];
     rt_strategies   -> tools_config;
+    rt_optim        -> dlkit_domain    [label="TrainingResult\nWorkflowError"];
     rt_optim        -> tools_config;
 
     // runtime internal
@@ -141,69 +148,32 @@ digraph dlkit {
     rt_strategies   -> rt_factories;
     rt_optim        -> rt_factories;
 
-    // interfaces/api internal + → runtime/tools
+    // interfaces/api → runtime + domain + tools
     api_services  -> api_domain;
+    api_services  -> api_commands     [label="OverrideNormalizer"];
     api_services  -> rt_orchestrator;
     api_services  -> rt_optim;
+    api_services  -> dlkit_domain     [label="result types"];
     api_services  -> tools_config;
-    api_overrides -> tools_config;
-    api_overrides -> tools_io;
+    api_services  -> tools_io         [label="path_override_context\nresolve_with_context"];
+    api_commands  -> api_services;
+    api_commands  -> api_domain;
+    api_commands  -> dlkit_domain     [label="result types"];
+    api_commands  -> tools_config;
     api_domain    -> tools_config;
     api_domain    -> tools_utils;
 
     // cli
     iface_cli -> api_services;
+    iface_cli -> api_commands;
     iface_cli -> api_domain;
-    iface_cli -> api_overrides;
     iface_cli -> tools_config;
+    iface_cli -> tools_io             [label="path_override_context"];
 
     // inference
     iface_infer -> core_wrappers;
     iface_infer -> core_shapes;
-    iface_infer -> api_domain    [label="errors, precision"];
+    iface_infer -> api_domain         [label="errors, precision"];
+    iface_infer -> dlkit_domain       [label="ModelState\nInferenceResult"];
     iface_infer -> tools_config;
-
-    // ═════════════════════════════════════════════════════════════════════
-    // VIOLATIONS  (dashed red, constraint=false)
-    // ═════════════════════════════════════════════════════════════════════
-
-    // tools → interfaces (CRITICAL — tools is foundation layer)
-    // FIXED BY QW-3: tools_io -> api_services (arrays.py) — precision moved to tools/config/precision
-    // FIXED BY QW-3: tools_config -> api_services (data_entries, trainer_settings) — precision moved
-    // FIXED BY QW-2: tools_config -> api_overrides (sources.py) — path_context moved to tools/io
-    // FIXED BY QW-2: tools_io -> api_overrides (locations.py) — path_context moved to tools/io
-    // FIXED BY QW-1: tools_utils -> api_domain (error_handling.py) — exceptions moved to tools/utils/errors
-    // FIXED BY QW-1: tools_io -> api_domain (url_resolver.py) — exceptions moved to tools/utils/errors
-
-    // core → interfaces
-    // FIXED BY QW-3: core_wrappers -> api_services (wrappers/base.py) — precision moved
-    // FIXED BY QW-3: core_datasets -> api_services (flexible.py, graph.py) — precision moved
-    // FIXED BY QW-1: core_training -> api_domain (transforms/errors.py) — exceptions moved
-
-    // runtime → interfaces
-    rt_strategies   -> api_domain    [label="TrainingResult, ModelState\nWorkflowError",
-                                      style=dashed, color=red, penwidth=2, constraint=false];
-    // FIXED BY QW-3: rt_strategies -> api_services (vanilla_executor) — precision moved
-    // FIXED BY QW-2: rt_strategies -> api_overrides (mlflow_tracker) — path_context moved
-    // FIXED BY QW-4: rt_strategies -> api_tracking (TrackingHooks) — moved to runtime/workflows
-    rt_orchestrator -> api_domain    [label="OptimizationResult, TrainingResult",
-                                      style=dashed, color=red, penwidth=2, constraint=false];
-    rt_optim        -> api_domain    [label="TrainingResult, WorkflowError",
-                                      style=dashed, color=red, penwidth=2, constraint=false];
-    // FIXED BY QW-3: rt_factories -> api_domain (precision_override lazy) — precision moved
-    // FIXED BY QW-2: rt_factories -> api_overrides (path_override_context lazy) — path_context moved
-
-    // ═════════════════════════════════════════════════════════════════════
-    // ARCHITECTURAL CONCERNS  (dashed orange — legal direction, too tight)
-    // ═════════════════════════════════════════════════════════════════════
-
-    // core domain objects pull factory infrastructure from tools/config
-    core_wrappers -> tools_config  [label="BuildContext, FactoryProvider\n(infra leak into domain)",
-                                    style=dashed, color=darkorange, penwidth=1.5, constraint=false];
-    core_training -> tools_config  [label="BuildContext, FactoryProvider\nTransformSettings",
-                                    style=dashed, color=darkorange, penwidth=1.5, constraint=false];
-
-    // tools/config pulling a core type
-    tools_config  -> core_datatypes [label="IntHyperparameter\n(model_components.py)",
-                                     style=dashed, color=darkorange, penwidth=1.5, constraint=false];
 }

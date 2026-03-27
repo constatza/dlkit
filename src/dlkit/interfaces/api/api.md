@@ -6,12 +6,11 @@ The `dlkit.interfaces.api` module provides DLKit's public API layer, implementin
 ## Module Organization
 
 ### Submodules
-1. **`commands/`** - Command pattern implementations for workflow operations
-2. **`services/`** - Business logic orchestration services
-3. **`domain/`** - Domain models and error hierarchy
-4. **`overrides/`** - Runtime parameter override management
-5. **`functions/`** - Public API functions (entry points)
-6. **`adapters/`** - (Empty) Reserved for future adapters
+1. **`commands/`** - Command pattern implementations; includes `normalizer.py` (OverrideNormalizer)
+2. **`services/`** - Business logic orchestration; includes `override_service.py` (BasicOverrideManager)
+3. **`domain/`** - Error hierarchy, precision, override TypedDicts; result types re-exported from `dlkit.domain`
+4. **`functions/`** - Public API functions (entry points)
+5. **`adapters/`** - (Empty) Reserved for future adapters
 
 ## Architecture Layers
 
@@ -75,10 +74,10 @@ The `dlkit.interfaces.api` module provides DLKit's public API layer, implementin
 - CLI layer catches and presents user-friendly messages
 
 ### 5. Override Management
-- Runtime parameter overrides without mutating settings
-- Thread-local path context for API flexibility
-- Immutable settings updated via `patch()`
-- Override validation before application
+- `OverrideNormalizer` (`commands/normalizer.py`) — pure utility for path normalization and None-filtering
+- `BasicOverrideManager` (`services/override_service.py`) — applies setting patches via `BasicSettings.patch()`
+- Override TypedDicts (`domain/override_types.py`) — typed contracts for override inputs
+- Thread-local path context (`tools.io.path_context`) — API-level root/output/data dir overrides
 
 ## Quick Start Guide
 
@@ -116,7 +115,6 @@ Detailed documentation for each submodule:
 - **Commands**: [`commands/commands.md`](commands/commands.md)
 - **Services**: [`services/services.md`](services/services.md)
 - **Domain**: [`domain/domain.md`](domain/domain.md)
-- **Overrides**: [`overrides/overrides.md`](overrides/overrides.md)
 - **Functions**: [`functions/functions.md`](functions/functions.md)
 
 ## Common Patterns
@@ -136,7 +134,7 @@ result = train(
 
 ### 2. Path Context Management
 ```python
-from dlkit.interfaces.api.overrides import path_override_context
+from dlkit.tools.io.path_context import path_override_context, resolve_with_context
 
 with path_override_context({"output_dir": "./custom_output"}):
     result = train(settings)  # Uses custom output directory

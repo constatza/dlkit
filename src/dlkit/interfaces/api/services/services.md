@@ -21,15 +21,17 @@ Key architectural decisions:
 ## Module Structure
 
 ### Public API
-| Name | Type | Purpose | Returns |
-|------|------|---------|---------|
-| `TrainingService` | Class | Orchestrate training workflows | `TrainingResult` |
-| `InferenceService` | Class | Orchestrate inference workflows | `InferenceResult` |
-| `OptimizationService` | Class | Orchestrate Optuna optimization workflows | `OptimizationResult` |
-| `ExecutionService` | Class | Intelligent workflow routing based on settings | `TrainingResult \| InferenceResult \| OptimizationResult` |
-| `ConfigurationService` | Class | Generate and validate configuration templates | `str` or validation results |
-| `PrecisionService` | Class | Centralized precision coordination and resolution | Various precision types |
-| `get_precision_service()` | Function | Get global precision service instance | `PrecisionService` |
+| Name | File | Type | Purpose | Returns |
+|------|------|------|---------|---------|
+| `TrainingService` | `training_service.py` | Class | Orchestrate training workflows | `TrainingResult` |
+| `InferenceService` | `inference_service.py` | Class | Orchestrate inference workflows | `InferenceResult` |
+| `OptimizationService` | `optimization_service.py` | Class | Orchestrate Optuna optimization workflows | `OptimizationResult` |
+| `ExecutionService` | `execution_service.py` | Class | Intelligent workflow routing based on settings | `TrainingResult \| InferenceResult \| OptimizationResult` |
+| `ConfigurationService` | `configuration_service.py` | Class | Generate and validate configuration templates | `str` or validation results |
+| `PrecisionService` | `precision_service.py` | Class | Centralized precision coordination and resolution | Various precision types |
+| `get_precision_service()` | `precision_service.py` | Function | Get global precision service instance | `PrecisionService` |
+| `BasicOverrideManager` | `override_service.py` | Class | Apply runtime parameter overrides to settings | Updated settings |
+| `basic_override_manager` | `override_service.py` | Instance | Global singleton override manager | N/A |
 
 ### Internal Components
 | Name | Type | Purpose | Returns |
@@ -51,8 +53,10 @@ Key architectural decisions:
 ### Internal Dependencies
 - `dlkit.runtime.workflows.orchestrator`: Main workflow orchestrator
 - `dlkit.runtime.workflows.factories.build_factory`: Component building
-- `dlkit.interfaces.api.domain`: Result models and error types
-- `dlkit.interfaces.api.overrides.path_context`: Thread-local path overrides
+- `dlkit.domain`: Shared result types (`TrainingResult`, `InferenceResult`, `OptimizationResult`, `ModelState`)
+- `dlkit.interfaces.api.domain`: Error types and precision
+- `dlkit.interfaces.api.commands.normalizer`: `OverrideNormalizer` for path normalization
+- `dlkit.tools.io.path_context`: Thread-local path overrides (`path_override_context`, `resolve_with_context`)
 - `dlkit.tools.config`: Configuration models and settings
 - `dlkit.tools.io`: Path resolution and provisioning
 - `dlkit.interfaces.servers.domain_functions`: Server configuration helpers
