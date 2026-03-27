@@ -1,7 +1,9 @@
 # Domain Module
 
 ## Overview
-The domain module defines core domain models and error hierarchy for DLKit's API layer. It provides typed result objects for workflows (training, inference, optimization) and a structured exception hierarchy following domain-driven design principles.
+The domain module defines the error hierarchy, precision types, and override contracts for DLKit's API layer.
+Workflow result types (`TrainingResult`, `InferenceResult`, `OptimizationResult`, `ModelState`) have been
+moved to the shared kernel `dlkit.domain`; `models.py` here is a re-export shim for backward compatibility.
 
 ## Architecture & Design Patterns
 - **Domain-Driven Design**: Domain models represent business concepts, not technical artifacts
@@ -13,18 +15,22 @@ The domain module defines core domain models and error hierarchy for DLKit's API
 ## Module Structure
 
 ### Public API
-| Name | Type | Purpose | Returns |
-|------|------|---------|---------|
-| `TrainingResult` | Dataclass | Training workflow result | N/A |
-| `InferenceResult` | Dataclass | Inference workflow result | N/A |
-| `OptimizationResult` | Dataclass | Optimization workflow result | N/A |
-| `ModelState` | Dataclass | Complete model and component state | N/A |
-| `DLKitError` | Exception | Base exception for all domain errors | N/A |
-| `ConfigurationError` | Exception | Configuration validation or loading error | N/A |
-| `WorkflowError` | Exception | Workflow execution error | N/A |
-| `StrategyError` | Exception | Strategy selection or execution error | N/A |
-| `ModelStateError` | Exception | Model state construction or management error | N/A |
-| `PluginError` | Exception | Plugin configuration or execution error | N/A |
+| Name | File | Type | Purpose |
+|------|------|------|---------|
+| `TrainingResult` | `models.py` (re-export → `dlkit.domain`) | Dataclass | Training workflow result |
+| `InferenceResult` | `models.py` (re-export → `dlkit.domain`) | Dataclass | Inference workflow result |
+| `OptimizationResult` | `models.py` (re-export → `dlkit.domain`) | Dataclass | Optimization workflow result |
+| `ModelState` | `models.py` (re-export → `dlkit.domain`) | Dataclass | Complete model and component state |
+| `DLKitError` | `errors.py` | Exception | Base exception for all domain errors |
+| `ConfigurationError` | `errors.py` | Exception | Configuration validation or loading error |
+| `WorkflowError` | `errors.py` | Exception | Workflow execution error |
+| `StrategyError` | `errors.py` | Exception | Strategy selection or execution error |
+| `ModelStateError` | `errors.py` | Exception | Model state construction or management error |
+| `PluginError` | `errors.py` | Exception | Plugin configuration or execution error |
+| `BasicOverrides` | `override_types.py` | TypedDict | General runtime override contract |
+| `MLflowOverrides` | `override_types.py` | TypedDict | MLflow-specific override contract |
+| `TrainingOverrides` | `override_types.py` | TypedDict | Training-specific override contract |
+| `PathOverrides` | `override_types.py` | TypedDict | Path override contract |
 
 ## Key Components
 

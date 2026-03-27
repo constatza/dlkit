@@ -20,18 +20,19 @@ Key architectural decisions:
 ## Module Structure
 
 ### Public API
-| Name | Type | Purpose | Returns |
-|------|------|---------|---------|
-| `BaseCommand[TInput, TOutput]` | Abstract Class | Base command with validation and execution contracts | N/A |
-| `TrainCommand` | Class | Execute training workflows | `TrainingResult` |
-| `InferenceCommand` | Class | Execute inference workflows | `InferenceResult` |
-| `OptimizationCommand` | Class | Execute Optuna optimization workflows | `OptimizationResult` |
-| `ValidationCommand` | Class | Validate configuration against strategies | `bool` |
-| `ConvertCommand` | Class | Convert checkpoints to ONNX format | `ConvertResult` |
-| `GenerateTemplateCommand` | Class | Generate configuration templates | `GenerateTemplateCommandOutput` |
-| `ValidateTemplateCommand` | Class | Validate configuration templates | `ValidateTemplateCommandOutput` |
-| `CommandDispatcher` | Class | Route and execute commands by name | `Any` |
-| `get_dispatcher()` | Function | Get global dispatcher instance | `CommandDispatcher` |
+| Name | File | Type | Purpose | Returns |
+|------|------|------|---------|---------|
+| `BaseCommand[TInput, TOutput]` | `base.py` | Abstract Class | Base command with validation and execution contracts | N/A |
+| `TrainCommand` | `train_command.py` | Class | Execute training workflows | `TrainingResult` |
+| `InferenceCommand` | `inference_command.py` | Class | Execute inference workflows | `InferenceResult` |
+| `OptimizationCommand` | `optimization_command.py` | Class | Execute Optuna optimization workflows | `OptimizationResult` |
+| `ValidationCommand` | `validation_command.py` | Class | Validate configuration against strategies | `bool` |
+| `ConvertCommand` | `convert_command.py` | Class | Convert checkpoints to ONNX format | `ConvertResult` |
+| `GenerateTemplateCommand` | `configuration_command.py` | Class | Generate configuration templates | `GenerateTemplateCommandOutput` |
+| `ValidateTemplateCommand` | `configuration_command.py` | Class | Validate configuration templates | `ValidateTemplateCommandOutput` |
+| `CommandDispatcher` | `dispatcher.py` | Class | Route and execute commands by name | `Any` |
+| `get_dispatcher()` | `dispatcher.py` | Function | Get global dispatcher instance | `CommandDispatcher` |
+| `OverrideNormalizer` | `normalizer.py` | Class | Pure utility for path normalization and None-filtering | N/A |
 
 ### Internal Components
 | Name | Type | Purpose | Returns |
@@ -53,8 +54,10 @@ Key architectural decisions:
 
 ### Internal Dependencies
 - `dlkit.interfaces.api.services`: Business logic services (TrainingService, InferenceService, OptimizationService, ConfigurationService)
-- `dlkit.interfaces.api.domain`: Result models and error types (TrainingResult, WorkflowError, etc.)
-- `dlkit.interfaces.api.overrides`: Override management (basic_override_manager, path_context)
+- `dlkit.interfaces.api.services.override_service`: `basic_override_manager` singleton
+- `dlkit.interfaces.api.commands.normalizer`: `OverrideNormalizer` — path normalization and None-filtering
+- `dlkit.domain`: Shared result types (TrainingResult, InferenceResult, OptimizationResult)
+- `dlkit.interfaces.api.domain`: Error types (WorkflowError, ConfigurationError, etc.)
 - `dlkit.tools.config`: Configuration models (GeneralSettings, BaseSettingsProtocol)
 - `dlkit.tools.utils`: Logging and error handling utilities
 - `dlkit.runtime.workflows`: Component factories and build strategies
@@ -622,7 +625,7 @@ except WorkflowError as e:
 ## Related Modules
 - `dlkit.interfaces.api.services`: Business logic executed by commands
 - `dlkit.interfaces.api.domain`: Result types and error hierarchy
-- `dlkit.interfaces.api.overrides`: Parameter override management
+- `dlkit.interfaces.api.services.override_service`: Parameter override management
 - `dlkit.interfaces.cli`: CLI layer that invokes commands
 - `dlkit.tools.config`: Configuration models and loading
 
