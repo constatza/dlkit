@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dlkit.interfaces.api.commands.normalizer import OverrideNormalizer
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import OptimizationResult
-from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
-from dlkit.interfaces.api.services import OptimizationService
+from dlkit.interfaces.api.services import OptimizationService, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig
 

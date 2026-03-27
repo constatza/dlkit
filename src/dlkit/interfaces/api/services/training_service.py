@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
-from dlkit.interfaces.api.overrides.path_context import (
-    get_current_path_context,
-    path_override_context,
-)
 from dlkit.interfaces.api.tracking_hooks import TrackingHooks
 from dlkit.runtime.workflows.orchestrator import Orchestrator
 from dlkit.tools.config import GeneralSettings
+from dlkit.tools.io.path_context import (
+    get_current_path_context,
+    path_override_context,
+)
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)

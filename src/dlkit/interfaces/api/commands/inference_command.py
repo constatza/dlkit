@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dlkit.interfaces.api.commands.normalizer import OverrideNormalizer
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import InferenceResult
-from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
-from dlkit.interfaces.api.services import InferenceService
+from dlkit.interfaces.api.services import InferenceService, basic_override_manager
 from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 
 from .base import BaseCommand

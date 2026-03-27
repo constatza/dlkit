@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.interfaces.api.overrides.normalizer import OverrideNormalizer
+from dlkit.interfaces.api.commands.normalizer import OverrideNormalizer
 
 
 class TestNormalizePath:

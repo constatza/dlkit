@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dlkit.interfaces.api.commands.normalizer import OverrideNormalizer
 from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.api.domain.models import TrainingResult
-from dlkit.interfaces.api.overrides import OverrideNormalizer, basic_override_manager
-from dlkit.interfaces.api.services import TrainingService
+from dlkit.interfaces.api.services import TrainingService, basic_override_manager
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger

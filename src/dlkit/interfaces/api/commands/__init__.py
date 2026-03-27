@@ -18,6 +18,7 @@ from .configuration_command import (
 )
 from .dispatcher import CommandDispatcher, get_dispatcher
 from .inference_command import InferenceCommand, InferenceCommandInput
+from .normalizer import OverrideNormalizer
 from .optimization_command import OptimizationCommand, OptimizationCommandInput
 from .train_command import TrainCommand, TrainCommandInput
 from .validation_command import ValidationCommand, ValidationCommandInput
@@ -39,6 +40,7 @@ __all__ = [
     "InferenceCommandInput",
     "OptimizationCommand",
     "OptimizationCommandInput",
+    "OverrideNormalizer",
     "TrainCommand",
     "TrainCommandInput",
     "ValidateTemplateCommand",

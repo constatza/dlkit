@@ -15,7 +15,7 @@ Design Principles:
 
 Example:
     >>> from pathlib import Path
-    >>> from dlkit.interfaces.api.overrides.normalizer import OverrideNormalizer
+    >>> from dlkit.interfaces.api.commands.normalizer import OverrideNormalizer
     >>>
     >>> # Normalize individual path
     >>> path = OverrideNormalizer.normalize_path("/tmp/data")

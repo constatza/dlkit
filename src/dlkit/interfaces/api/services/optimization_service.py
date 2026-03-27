@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dlkit.interfaces.api.domain import OptimizationResult, WorkflowError
-from dlkit.interfaces.api.overrides.path_context import (
+from dlkit.runtime.workflows.orchestrator import Orchestrator
+from dlkit.tools.config import GeneralSettings
+from dlkit.tools.io.path_context import (
     get_current_path_context,
     path_override_context,
 )
-from dlkit.runtime.workflows.orchestrator import Orchestrator
-from dlkit.tools.config import GeneralSettings
 
 if TYPE_CHECKING:
     pass
