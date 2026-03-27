@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+from dlkit.interfaces.api.services import BasicOverrideManager
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.general_settings import GeneralSettings

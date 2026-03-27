@@ -205,7 +205,7 @@ class ExecutionService:
         **additional_overrides: Any,
     ) -> OptimizationResult:
         """Execute optimization workflow with intelligent parameter handling."""
-        from dlkit.interfaces.api.overrides import basic_override_manager
+        from dlkit.interfaces.api.services import basic_override_manager
 
         opt_overrides = {}
         if checkpoint_path is not None:
@@ -273,7 +273,7 @@ class ExecutionService:
 
         all_overrides = {**training_overrides, **additional_overrides}
 
-        from dlkit.interfaces.api.overrides import basic_override_manager
+        from dlkit.interfaces.api.services import basic_override_manager
 
         path_overrides: dict[str, Any] = {}
         if checkpoint_path is not None:

@@ -1,4 +1,4 @@
-"""Override manager for applying runtime parameter overrides to settings objects."""
+"""Override manager service for applying runtime parameter overrides to settings objects."""
 
 from __future__ import annotations
 
@@ -130,10 +130,7 @@ class BasicOverrideManager[T: BasicSettings]:
         if not root_dir:
             return
 
-        from dlkit.interfaces.api.overrides.path_context import (
-            PathOverrideContext,
-            set_path_context,
-        )
+        from dlkit.tools.io.path_context import PathOverrideContext, set_path_context
         from dlkit.tools.io.paths import normalize_user_path
 
         set_path_context(
