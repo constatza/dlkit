@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from dlkit.interfaces.api.domain import OptimizationResult as APIOptimizationResult
+from dlkit.domain import OptimizationResult as APIOptimizationResult
 from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.strategies.core.interfaces import IOptimizationStrategy
 from dlkit.tools.config import GeneralSettings

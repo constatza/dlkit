@@ -4,6 +4,8 @@ This module contains the core domain models, protocols, and errors
 that define the business logic of DLKit without framework dependencies.
 """
 
+from dlkit.domain import InferenceResult, ModelState, OptimizationResult, TrainingResult
+
 from .errors import (
     ConfigurationError,
     DLKitError,
@@ -12,7 +14,7 @@ from .errors import (
     StrategyError,
     WorkflowError,
 )
-from .models import InferenceResult, ModelState, OptimizationResult, TrainingResult
+from .override_types import BasicOverrides, MLflowOverrides, PathOverrides, TrainingOverrides
 from .precision import (
     PrecisionContext,
     PrecisionProvider,
@@ -27,6 +29,11 @@ __all__ = [
     "TrainingResult",
     "InferenceResult",
     "OptimizationResult",
+    # Override types
+    "BasicOverrides",
+    "MLflowOverrides",
+    "PathOverrides",
+    "TrainingOverrides",
     # Precision
     "PrecisionContext",
     "PrecisionProvider",

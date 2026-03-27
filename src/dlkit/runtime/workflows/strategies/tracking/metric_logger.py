@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain import TrainingResult
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import IExperimentTracker, IRunContext

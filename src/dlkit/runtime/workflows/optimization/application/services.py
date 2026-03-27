@@ -12,7 +12,8 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
+from dlkit.domain import TrainingResult
+from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents, BuildFactory
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (

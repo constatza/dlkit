@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from dlkit.interfaces.api.domain import OptimizationResult, TrainingResult
+from dlkit.domain import OptimizationResult, TrainingResult
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig

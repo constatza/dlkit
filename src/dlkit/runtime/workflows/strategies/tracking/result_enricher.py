@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger

@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain import TrainingResult
 
 
 class OptimizationDirection(Enum):
