@@ -18,10 +18,9 @@ from torchmetrics import MetricCollection
 from dlkit.core.models.wrappers.components import (
     NamedBatchTransformer,
     WrapperCheckpointMetadata,
+    WrapperComponents,
 )
 from dlkit.tools.config import (
-    BuildContext,
-    FactoryProvider,
     ModelComponentSettings,
     WrapperComponentSettings,
 )
@@ -60,19 +59,21 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         shape_summary: Any = None,
+        components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
         """Initialise the graph wrapper.
 
-        Builds model, metrics, and loss function from settings, then wires null
-        protocol sentinels into the base class (the step methods below override
-        everything so the sentinels are never actually invoked).
+        Wires pre-built components and null protocol sentinels into the base class
+        (the step methods below override everything so the sentinels are never invoked).
 
         Args:
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations.
             shape_summary: Shape summary from dataset inference (optional).
+            components: Pre-built WrapperComponents containing loss, metrics, transforms,
+                optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule.
         """
         entry_configs = entry_configs or ()
@@ -80,22 +81,12 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         # Build model and value objects before calling super().__init__()
         model = _build_model_from_settings(model_settings, shape_summary)
 
-        # Build metrics and loss before super() (values only, assigned after super())
-        _val_metrics = MetricCollection(
-            [
-                FactoryProvider.create_component(metric, BuildContext(mode="training"))
-                for metric in settings.metrics
-            ]
-        )
-        _test_metrics = MetricCollection(
-            [
-                FactoryProvider.create_component(metric, BuildContext(mode="training"))
-                for metric in settings.metrics
-            ]
-        )
-        _loss_function = FactoryProvider.create_component(
-            settings.loss_function, BuildContext(mode="training")
-        )
+        # Use injected components
+        _loss_function = components.loss_fn
+        _val_metrics = MetricCollection([r.metric for r in components.val_metric_routes])
+        _test_metrics = MetricCollection([r.metric for r in components.test_metric_routes])
+        optimizer_factory = components.optimizer_factory
+        scheduler_factory = components.scheduler_factory
 
         feature_entries = [e for e in entry_configs if is_feature_entry(e)]
         checkpoint_metadata = WrapperCheckpointMetadata(
@@ -131,6 +122,8 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             batch_transformer=_null_transformer,
             optimizer_settings=settings.optimizer,
             scheduler_settings=getattr(settings, "scheduler", None),
+            optimizer_factory=optimizer_factory,
+            scheduler_factory=scheduler_factory,
             predict_target_key="",
             checkpoint_metadata=checkpoint_metadata,
             prediction_strategy=_prediction_strategy,

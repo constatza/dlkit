@@ -53,7 +53,8 @@ Key architectural decisions:
 ### Sub-modules
 | Sub-module | Purpose | Key Classes |
 |------------|---------|-------------|
-| `core/` | Core infrastructure (base classes, factories, context) | `BasicSettings`, `ComponentSettings`, `ComponentFactory`, `BuildContext` |
+| `core/` | Core infrastructure (base classes, factories, context, types) | `BasicSettings`, `ComponentSettings`, `ComponentFactory`, `BuildContext` |
+| `core/types.py` | Hyperparameter type aliases (moved from `core/datatypes` — FR-3) | `IntHyperparameter`, `FloatHyperparameter`, `StrHyperparameter`, `PositiveFloatHyperparameter` |
 | `components/` | Component-specific settings (model, loss, metric, wrapper) | `ModelComponentSettings`, `LossComponentSettings`, `MetricComponentSettings` |
 | `precision/` | Precision strategy enumeration | `PrecisionStrategy` |
 | `samplers/` | Hyperparameter sampling implementations | `ISettingsSampler`, `OptunaSettingsSampler` |

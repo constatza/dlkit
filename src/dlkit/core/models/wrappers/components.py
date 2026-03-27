@@ -767,3 +767,30 @@ class WrapperCheckpointMetadata:
     predict_target_key: str
     shape_summary: Any | None = None
     output_spec: ModelOutputSpec = dataclasses.field(default_factory=ModelOutputSpec)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WrapperComponents:
+    """Pre-built wrapper components for dependency injection into a Lightning wrapper.
+
+    Constructed at the runtime/factories boundary; consumed by core wrappers.
+    All fields are pre-instantiated nn.Modules or callables — no FactoryProvider
+    calls needed inside core after this object is created.
+
+    Attributes:
+        loss_fn: Instantiated loss function module.
+        val_metric_routes: MetricRoute list for validation stage.
+        test_metric_routes: MetricRoute list for test stage.
+        optimizer_factory: Callable accepting model parameters, returning Optimizer.
+        scheduler_factory: Callable accepting optimizer, returning LRScheduler; or None.
+        feature_transforms: Pre-built ModuleList per feature entry name (empty → no transforms).
+        target_transforms: Pre-built ModuleList per target entry name (empty → no transforms).
+    """
+
+    loss_fn: nn.Module
+    val_metric_routes: list[MetricRoute]
+    test_metric_routes: list[MetricRoute]
+    optimizer_factory: Callable[..., Any]
+    scheduler_factory: Callable[..., Any] | None
+    feature_transforms: dict[str, nn.ModuleList]
+    target_transforms: dict[str, nn.ModuleList]

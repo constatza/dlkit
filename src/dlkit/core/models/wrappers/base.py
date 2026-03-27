@@ -6,7 +6,7 @@ is a pure Lightning coordinator.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, cast
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
@@ -34,7 +34,6 @@ from dlkit.core.models.wrappers.protocols import (
     IModelInvoker,
     IPredictionStrategy,
 )
-from dlkit.tools.config import BuildContext, FactoryProvider
 
 
 def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
@@ -307,6 +306,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         batch_transformer: IBatchTransformer,
         optimizer_settings: Any,
         scheduler_settings: Any = None,
+        optimizer_factory: Callable[..., Any] | None = None,
+        scheduler_factory: Callable[..., Any] | None = None,
         predict_target_key: str,
         checkpoint_metadata: WrapperCheckpointMetadata | None = None,
         prediction_strategy: IPredictionStrategy,
@@ -324,6 +325,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             batch_transformer: Applies transforms to batches (nn.Module for state persistence).
             optimizer_settings: Optimizer configuration settings.
             scheduler_settings: Scheduler configuration settings (optional).
+            optimizer_factory: Callable that builds an optimizer from model parameters (optional).
+            scheduler_factory: Callable that builds a scheduler from an optimizer (optional).
             predict_target_key: Target entry name whose chain is inverted at predict time.
             checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
             prediction_strategy: Strategy that implements predict_step logic.
@@ -345,6 +348,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._batch_transformer = batch_transformer
         self.optimizer = optimizer_settings
         self.scheduler = scheduler_settings
+        self._optimizer_factory = optimizer_factory
+        self._scheduler_factory = scheduler_factory
         self._predict_target_key = predict_target_key
         self._checkpoint_metadata = checkpoint_metadata
         self._prediction_strategy = prediction_strategy
@@ -578,15 +583,15 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self.lr = value
 
     def configure_optimizers(self):
-        """Configure optimizer and scheduler from stored settings."""
-        optimizer = FactoryProvider.create_component(
-            self.optimizer,
-            BuildContext(mode="training", overrides={"params": self.model.parameters()}),
-        )
-        scheduler = FactoryProvider.create_component(
-            self.scheduler,
-            BuildContext(mode="training", overrides={"optimizer": optimizer}),
-        )
+        """Configure optimizer and scheduler from injected factories.
+
+        Returns:
+            Dictionary with "optimizer" and optional "lr_scheduler" keys.
+        """
+        if self._optimizer_factory is None:
+            raise TypeError("optimizer_factory must be provided via WrapperComponents")
+        optimizer = self._optimizer_factory(self.model.parameters())
+        scheduler = self._scheduler_factory(optimizer) if self._scheduler_factory else None
         if scheduler is None:
             return {"optimizer": optimizer}
         return {

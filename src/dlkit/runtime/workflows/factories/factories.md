@@ -24,14 +24,21 @@ Key architectural decisions:
 ## Module Structure
 
 ### Public API
-| Name | Type | Purpose | Returns |
-|------|------|---------|---------|
-| `BuildFactory` | Class | Main factory for component construction | N/A |
-| `BuildComponents` | Dataclass | Container for built components | N/A |
-| `IBuildStrategy` | Protocol | Build strategy interface | N/A |
-| `FlexibleBuildStrategy` | Class | Strategy for flexible/array datasets | N/A |
-| `GraphBuildStrategy` | Class | Strategy for graph datasets | N/A |
-| `TimeSeriesBuildStrategy` | Class | Strategy for timeseries datasets | N/A |
+| Name | File | Type | Purpose | Returns |
+|------|------|------|---------|---------|
+| `BuildFactory` | `build_factory.py` | Class | Main factory for component construction | N/A |
+| `BuildComponents` | `build_factory.py` | Dataclass | Container for built components | N/A |
+| `IBuildStrategy` | `build_factory.py` | Protocol | Build strategy interface | N/A |
+| `FlexibleBuildStrategy` | `build_factory.py` | Class | Strategy for flexible/array datasets | N/A |
+| `GraphBuildStrategy` | `build_factory.py` | Class | Strategy for graph datasets | N/A |
+| `TimeSeriesBuildStrategy` | `build_factory.py` | Class | Strategy for timeseries datasets | N/A |
+| `WrapperComponents` | `component_builders.py` | Frozen dataclass | Pre-built components for injection into wrappers (FR-2) | N/A |
+| `build_wrapper_components` | `component_builders.py` | Function | Build all wrapper components from settings | `WrapperComponents` |
+| `build_loss_fn` | `component_builders.py` | Function | Instantiate loss function via FactoryProvider | `nn.Module` |
+| `build_metric_routes` | `component_builders.py` | Function | Build MetricRoute list from metric settings | `list[MetricRoute]` |
+| `build_transforms` | `component_builders.py` | Function | Build transform ModuleList from settings | `nn.ModuleList` |
+| `make_optimizer_factory` | `component_builders.py` | Function | Create optimizer factory callable | `Callable` |
+| `make_scheduler_factory` | `component_builders.py` | Function | Create scheduler factory callable or None | `Callable \| None` |
 
 ### Model Detection
 | Name | Type | Purpose | Returns |
@@ -51,15 +58,19 @@ Key architectural decisions:
 ## Dependencies
 
 ### Internal Dependencies
-- `dlkit.tools.config`: Settings management (`GeneralSettings`, `BuildContext`)
-- `dlkit.tools.config.core.factories`: Factory provider
+- `dlkit.tools.config`: Settings management (`GeneralSettings`, `BuildContext`, `FactoryProvider`)
 - `dlkit.core.datatypes.split`: Split management (`IndexSplit`)
 - `dlkit.core.shape_specs`: Shape inference system
 - `dlkit.core.models.wrappers.factories`: Wrapper factory
+- `dlkit.core.models.wrappers.components`: `WrapperComponents` value object (defined in core, built here)
 - `dlkit.runtime.workflows.selectors.defaults`: Family defaults
 - `dlkit.runtime.workflows.entry_registry`: Data entry registry
 - `dlkit.tools.io.split_provider`: Split caching
 - `dlkit.tools.io.locations`: Standard paths
+
+**Design note (FR-2)**: All `FactoryProvider` calls for wrapper construction are centralised in
+`component_builders.py`. Core wrappers (`standard.py`, `graph.py`) accept a `WrapperComponents`
+value object and never call `FactoryProvider` directly — eliminating the core→tools/factory coupling.
 
 ### External Dependencies
 - `lightning.pytorch`: PyTorch Lightning (`LightningModule`, `LightningDataModule`, `Trainer`)

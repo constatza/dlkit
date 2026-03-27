@@ -22,6 +22,7 @@ Tests fail if architectural violations are introduced.
 import inspect
 
 import torch
+from torch import nn
 
 from dlkit.core.training.transforms.base import (
     FittableTransform,
@@ -44,7 +45,7 @@ class TestProtocolBasedArchitecture:
             MinMaxScaler(dim=0),
             StandardScaler(dim=0),
             PCA(n_components=10),
-            TransformChain([]),  # Takes list of transforms as positional arg
+            TransformChain(nn.ModuleList()),
         ]
 
         for instance in fittable_instances:
@@ -60,7 +61,7 @@ class TestProtocolBasedArchitecture:
             MinMaxScaler(dim=0),
             StandardScaler(dim=0),
             PCA(n_components=10),
-            TransformChain([]),  # Takes list of transforms as positional arg
+            TransformChain(nn.ModuleList()),
         ]
 
         for instance in invertible_instances:

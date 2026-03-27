@@ -7,14 +7,13 @@ from typing import Any
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.core.datatypes.base import IntHyperparameter
-
 from ..core.base_settings import (
     BasicSettings,
     ComponentSettings,
     HyperParameterSettings,
     RequiredNameComponentSettings,
 )
+from ..core.types import IntHyperparameter
 from ..optimizer_settings import OptimizerSettings, SchedulerSettings
 
 

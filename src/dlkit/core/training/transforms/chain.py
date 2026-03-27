@@ -1,13 +1,9 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
-import torch
 from loguru import logger
 from torch import Tensor, nn
 from torch.nn import ModuleList
-
-from dlkit.tools.config import BuildContext, FactoryProvider
-from dlkit.tools.config.transform_settings import TransformSettings
 
 from .base import (
     FittableTransform,
@@ -46,45 +42,34 @@ class TransformChain(Transform):
 
     def __init__(
         self,
-        transform_settings: Sequence[TransformSettings] | ModuleList,
+        transforms: ModuleList,
         shape_spec: IShapeSpec | None = None,
         entry_name: str | None = None,
-        validate_execution: bool = False,
     ) -> None:
-        """Initialize the transform chain.
+        """Initialize the transform chain from a pre-built ModuleList.
 
         Args:
-            transform_settings: Sequence of TransformSettings to instantiate,
-                or an existing ModuleList of transforms.
+            transforms: ModuleList of instantiated transform modules.
             shape_spec: Optional shape specification for transforms.
             entry_name: Optional entry name to look up shape in shape_spec.
-            validate_execution: If True, execute dummy tensors to validate
-                transform compatibility. Default False (use analytical inference).
+
+        Note:
+            TransformChain no longer builds transforms from settings. Use
+            ``component_builders.build_transform_list()`` to instantiate transforms,
+            then pass the ModuleList here.
 
         Example:
-            >>> # Analytical inference (recommended)
-            >>> chain = TransformChain(settings, shape_spec=spec, entry_name="features")
-            >>>
-            >>> # With validation (slower but validates compatibility)
-            >>> chain = TransformChain(
-            ...     settings, shape_spec=spec, entry_name="features", validate_execution=True
+            >>> from dlkit.runtime.workflows.factories.component_builders import (
+            ...     build_transform_list,
             ... )
+            >>> module_list, shape = build_transform_list(settings, shape_spec=spec)
+            >>> chain = TransformChain(module_list, shape_spec=spec, entry_name="features")
         """
         super().__init__()
         self._shape_spec = shape_spec
         self._entry_name = entry_name
+        self.transforms = transforms
         self.transformed_shape = None
-
-        # Build transforms with shape inference
-        if not isinstance(transform_settings, ModuleList):
-            self.transforms, self.transformed_shape = build_transforms(
-                transform_settings,
-                shape_spec=shape_spec,
-                entry_name=entry_name,
-                validate_execution=validate_execution,
-            )
-        else:
-            self.transforms = transform_settings
 
     def fit(self, data: Tensor) -> None:
         """Fit the chain and propagate the intermediate output.
@@ -271,75 +256,7 @@ class TransformChain(Transform):
             New chain with reversed transform order.
         """
         return TransformChain(
-            transform_settings=cast(Any, self.transforms[::-1]),
+            transforms=cast(Any, self.transforms[::-1]),
             shape_spec=self._shape_spec,
             entry_name=self._entry_name,
         )
-
-
-def build_transforms(
-    transform_seq: Sequence[TransformSettings],
-    shape_spec: IShapeSpec | None = None,
-    entry_name: str | None = None,
-    validate_execution: bool = False,
-) -> tuple[ModuleList, tuple[int, ...] | None]:
-    """Instantiate transforms with analytical shape inference or validation.
-
-    This function uses pure analytical shape inference by default for efficiency.
-    Optionally, dummy tensor execution can be used to validate transform compatibility.
-
-    Args:
-        transform_seq: List of transform settings to instantiate.
-        shape_spec: Optional shape specification for initial shape.
-        entry_name: Optional entry name to look up in shape_spec.
-        validate_execution: If True, execute dummy tensors for validation.
-
-    Returns:
-        Tuple of (ModuleList of transforms, final output shape or None).
-
-    Example:
-        >>> # Analytical inference (fast)
-        >>> transforms, output_shape = build_transforms(
-        ...     settings, shape_spec=spec, entry_name="features"
-        ... )
-        >>>
-        >>> # With validation (slower)
-        >>> transforms, output_shape = build_transforms(
-        ...     settings, shape_spec=spec, entry_name="features", validate_execution=True
-        ... )
-    """
-    # Get initial shape from shape_spec
-    current_shape = None
-    if shape_spec and entry_name:
-        current_shape = shape_spec.get_shape(entry_name)
-
-    module_list = ModuleList()
-
-    # Optional: Create dummy tensor for validation
-    dummy_input = None
-    if validate_execution and current_shape is not None:
-        dummy_input = torch.zeros(current_shape)
-        logger.debug(f"Transform chain validation mode enabled with shape {current_shape}")
-
-    for transform_settings in transform_seq:
-        context = BuildContext(mode="transform_chain")
-
-        # Instantiate transform
-        module = FactoryProvider.create_component(transform_settings, context)
-
-        # Analytical shape inference using instance method (always computed for tracking)
-        if current_shape is not None and hasattr(module, "infer_output_shape"):
-            current_shape = module.infer_output_shape(current_shape)
-
-        # Optional: Validate with dummy execution
-        if validate_execution and dummy_input is not None:
-            dummy_input = module(dummy_input)
-            if current_shape is not None:
-                assert tuple(dummy_input.shape) == current_shape, (
-                    f"Shape mismatch: analytical={current_shape}, "
-                    f"execution={tuple(dummy_input.shape)}"
-                )
-
-        module_list.append(module)
-
-    return module_list, current_shape

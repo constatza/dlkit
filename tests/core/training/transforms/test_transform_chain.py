@@ -13,11 +13,14 @@ from dlkit.tools.config.transform_settings import TransformSettings
 
 def test_transform_chain_build_fit_forward_inverse() -> None:
     # Single MinMax scaler in chain
+    from dlkit.runtime.workflows.factories.component_builders import build_transform_list
+
     ts = TransformSettings(
         name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
     )
     # No shape_spec needed - transforms will infer from data
-    chain = TransformChain([ts])
+    module_list, _ = build_transform_list([ts])
+    chain = TransformChain(module_list)
 
     x = torch.tensor([[0.0, 1.0], [2.0, 3.0]])
     chain.fit(x)

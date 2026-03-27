@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from torch.nn import ModuleList
+from torch.optim import Adam
 
+from dlkit.core.models.wrappers.components import WrapperComponents
 from dlkit.core.models.wrappers.factories import WrapperFactory
 from dlkit.tools.config.components.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.data_entries import Feature
 
 
@@ -24,9 +25,22 @@ class _Graph(nn.Module):
         return x
 
 
-def test_wrapper_factory_detects_standard(monkeypatch):
-    # FactoryProvider.create_component should return a standard-like model
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
+def _make_components(
+    feature_names: tuple[str, ...] = (),
+    target_names: tuple[str, ...] = (),
+) -> WrapperComponents:
+    return WrapperComponents(
+        loss_fn=nn.MSELoss(),
+        val_metric_routes=[],
+        test_metric_routes=[],
+        optimizer_factory=lambda params: Adam(params, lr=1e-3),
+        scheduler_factory=None,
+        feature_transforms={n: ModuleList() for n in feature_names},
+        target_transforms={n: ModuleList() for n in target_names},
+    )
+
+
+def test_wrapper_factory_detects_standard():
     mdl = ModelComponentSettings(
         name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
     )
@@ -34,36 +48,34 @@ def test_wrapper_factory_detects_standard(monkeypatch):
     assert wrapper_type == "standard"
 
 
-def test_wrapper_factory_create_standard_wrapper(monkeypatch):
-    # Patch FactoryProvider for model instantiation inside wrapper base class
-    def _fake_create(settings, ctx: BuildContext):
-        if isinstance(settings, ModelComponentSettings):
-            return _Std()
-        # Return simple objects for loss/metrics/optimizer etc.
-        return object()
-
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
-
+def test_wrapper_factory_create_standard_wrapper():
     mdl = ModelComponentSettings(
         name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
     )
     wset = WrapperComponentSettings()
     entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
+    components = _make_components(feature_names=("x",))
     wrapper = WrapperFactory.create_standard_wrapper(
-        model_settings=mdl, settings=wset, shape=None, entry_configs=entry_configs
+        model_settings=mdl,
+        settings=wset,
+        entry_configs=entry_configs,
+        components=components,
     )
     assert wrapper is not None
 
 
-def test_wrapper_factory_auto_creates_standard(monkeypatch):
-    # Detection returns standard; auto path should create standard
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(lambda s, c: _Std()))
+def test_wrapper_factory_auto_creates_standard():
     mdl = ModelComponentSettings(
         name="_Std", module_path="tests.core.models.wrappers.test_wrapper_factory"
     )
     wset = WrapperComponentSettings()
     entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
+    components = _make_components(feature_names=("x",))
     w = WrapperFactory.create_wrapper(
-        model_settings=mdl, settings=wset, wrapper_type="auto", entry_configs=entry_configs
+        model_settings=mdl,
+        settings=wset,
+        wrapper_type="auto",
+        entry_configs=entry_configs,
+        components=components,
     )
     assert w.__class__.__name__.lower().startswith("standard")

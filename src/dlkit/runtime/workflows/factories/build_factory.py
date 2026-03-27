@@ -293,6 +293,12 @@ class FlexibleBuildStrategy(IBuildStrategy):
         if settings.TRAINING.scheduler is not None:
             wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
         wrapper_settings = WrapperComponentSettings(**wrapper_kwargs)
+
+        # Build pre-instantiated wrapper components (centralize FactoryProvider calls)
+        from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
+
+        components = build_wrapper_components(wrapper_settings, entry_configs)
+
         # Use family-compatible wrapper (factory kept for test monkeypatch on standard wrapper)
         # family resolved from dataset instance if needed; standard wrapper used for flexible
         model: LightningModule = WrapperFactory.create_standard_wrapper(
@@ -300,6 +306,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             settings=wrapper_settings,
             shape_summary=shape_summary,
             entry_configs=entry_configs,
+            components=components,
         )
 
         # Trainer (training mode only)
@@ -763,11 +770,17 @@ class GraphBuildStrategy(IBuildStrategy):
             wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
         wrapper_settings = WrapperComponentSettings(**wrapper_kwargs)
 
+        # Build pre-instantiated wrapper components (centralize FactoryProvider calls)
+        from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
+
+        components = build_wrapper_components(wrapper_settings, entry_configs)
+
         assert settings.MODEL is not None, "MODEL settings are required"
         model: LightningModule = WrapperFactory.create_graph_wrapper(
             model_settings=settings.MODEL,
             settings=wrapper_settings,
             entry_configs=entry_configs,
+            components=components,
         )
 
         trainer: Trainer | None = None
@@ -939,11 +952,19 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
                 wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
             wrapper_settings = WrapperComponentSettings(**wrapper_kwargs)
 
+            # Build pre-instantiated wrapper components (centralize FactoryProvider calls)
+            from dlkit.runtime.workflows.factories.component_builders import (
+                build_wrapper_components,
+            )
+
+            components = build_wrapper_components(wrapper_settings, entry_configs)
+
             model = WrapperFactory.create_timeseries_wrapper(
                 model_settings=settings.MODEL,
                 settings=wrapper_settings,
                 shape_summary=shape_summary,
                 entry_configs=entry_configs,
+                components=components,
             )
 
         trainer: Trainer | None = None

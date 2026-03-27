@@ -13,7 +13,8 @@ The datatypes module provides foundational type definitions, dataset splitting u
 
 Key architectural decisions:
 - Tilde expansion happens before validation for consistent behavior
-- Type aliases enable union types for simple values or optimization ranges
+- **Hyperparameter type aliases** (`IntHyperparameter`, `FloatHyperparameter`, etc.) were moved to
+  `dlkit.tools.config.core.types` (FR-3) to break the `tools/config → core/datatypes` cycle.
 - IndexSplit separates index generation from dataset implementation
 - URL validation uses Pydantic v2 primitives only (no urllib/httpx dependencies)
 - Security checks prevent path traversal attacks in local paths
@@ -21,12 +22,8 @@ Key architectural decisions:
 ## Module Structure
 
 ### Public API
-| Name | Type | Purpose | Returns |
-|------|------|---------|---------|
-| `IntHyperparameter` | Type Alias | Integer hyperparameter (value or range) | N/A |
-| `FloatHyperparameter` | Type Alias | Float hyperparameter (value or range) | N/A |
-| `StrHyperparameter` | Type Alias | String hyperparameter (value or choices) | N/A |
-| `Hyperparameter` | Type Alias | Union of all hyperparameter types | N/A |
+| Name | Type | Purpose | Notes |
+|------|------|---------|-------|
 | `SplitDataset` | Class | Dataset with train/val/test/predict splits | N/A |
 | `IndexSplit` | Class | Immutable split indices | N/A |
 | `Splitter` | Class | Generate random dataset splits | `IndexSplit` |

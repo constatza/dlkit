@@ -15,20 +15,18 @@ from torch import Tensor
 from torch.nn import Identity
 
 from dlkit.core.models.wrappers.components import (
-    MetricRoute,
     ModelOutputSpec,
     NamedBatchTransformer,
     RoutedLossComputer,
     RoutedMetricsUpdater,
     WrapperCheckpointMetadata,
+    WrapperComponents,
     _build_invoker_from_entries,
     _classify_feature_entries,
 )
 from dlkit.core.models.wrappers.protocols import IFittableBatchTransformer
 from dlkit.core.training.transforms.chain import TransformChain
 from dlkit.tools.config import (
-    BuildContext,
-    FactoryProvider,
     ModelComponentSettings,
     WrapperComponentSettings,
 )
@@ -40,56 +38,6 @@ from .prediction_strategies import DiscriminativePredictionStrategy
 
 if TYPE_CHECKING:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
-
-
-def _make_chain(entry: DataEntry) -> Any:
-    """Create a TransformChain for an entry, or Identity if no transforms configured.
-
-    Args:
-        entry: Data entry configuration with optional transforms attribute.
-
-    Returns:
-        TransformChain if transforms configured, nn.Identity otherwise.
-    """
-    settings = getattr(entry, "transforms", None)
-    return (
-        TransformChain(settings, entry_name=getattr(entry, "name", None))
-        if settings
-        else Identity()
-    )
-
-
-def _make_routes(
-    metric_specs: tuple,
-    default_target_key: str,
-) -> list[MetricRoute]:
-    """Build MetricRoute list from metric settings.
-
-    Args:
-        metric_specs: Tuple of MetricComponentSettings.
-        default_target_key: Target name used when spec.target_key is None.
-
-    Returns:
-        List of MetricRoute value objects.
-    """
-    routes = []
-    for spec in metric_specs:
-        metric = FactoryProvider.create_component(spec, BuildContext(mode="training"))
-        target_key_str = getattr(spec, "target_key", None)
-        if target_key_str:
-            target_name = target_key_str.split(".", 1)[1]
-        else:
-            target_name = default_target_key
-        extra_inputs = getattr(spec, "extra_inputs", ()) or ()
-        routes.append(
-            MetricRoute(
-                metric=metric,
-                target_ns="targets",
-                target_name=target_name,
-                extra_inputs=tuple(extra_inputs),
-            )
-        )
-    return routes
 
 
 def _validate_extra_inputs_against_signature(
@@ -248,6 +196,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         shape_summary: ShapeSummary | None = None,
+        components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
         """Build protocols from settings and initialise the base wrapper.
@@ -257,6 +206,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations in config-insertion order.
             shape_summary: Shape summary from dataset inference (for shape-aware models).
+            components: Pre-built WrapperComponents containing loss, metrics, transforms,
+                optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule (ignored otherwise).
         """
         entry_configs = entry_configs or ()
@@ -273,13 +224,23 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
         default_target_key: str = all_target_keys[0] if all_target_keys else ""
 
-        # --- Build transform chains ---
+        # --- Use injected components ---
+        loss_fn = components.loss_fn
+        val_metric_routes = components.val_metric_routes
+        test_metric_routes = components.test_metric_routes
+        optimizer_factory = components.optimizer_factory
+        scheduler_factory = components.scheduler_factory
+        # Build TransformChain from pre-built ModuleLists
         feature_chains: dict[str, Any] = {
-            e.name: _make_chain(e) for e in feature_entries if e.name is not None
+            name: (TransformChain(ml) if len(ml) > 0 else Identity())
+            for name, ml in components.feature_transforms.items()
         }
         target_chains: dict[str, Any] = {
-            e.name: _make_chain(e) for e in target_entries if e.name is not None
+            name: (TransformChain(ml) if len(ml) > 0 else Identity())
+            for name, ml in components.target_transforms.items()
         }
+
+        # --- Build transform transformer (always needed for transform fitting) ---
         batch_transformer = NamedBatchTransformer(feature_chains, target_chains)
 
         # --- Build model invoker (resolves model_input ordering) ---
@@ -287,9 +248,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         model_invoker = _build_invoker_from_entries(feature_entries, output_spec)
 
         # --- Build loss computer ---
-        loss_fn = FactoryProvider.create_component(
-            settings.loss_function, BuildContext(mode="training")
-        )
         loss_spec = settings.loss_function
         auto_extra = _build_auto_extra_inputs(entry_configs)
         explicit_extra = tuple(getattr(loss_spec, "extra_inputs", ()) or ())
@@ -309,10 +267,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
 
         # --- Build metrics updater ---
-        metric_specs = tuple(getattr(settings, "metrics", ()) or ())
         metrics_updater = RoutedMetricsUpdater(
-            val_routes=_make_routes(metric_specs, default_target_key),
-            test_routes=_make_routes(metric_specs, default_target_key),
+            val_routes=val_metric_routes,
+            test_routes=test_metric_routes,
         )
 
         # --- Build checkpoint metadata ---
@@ -340,6 +297,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             batch_transformer=batch_transformer,
             optimizer_settings=settings.optimizer,
             scheduler_settings=getattr(settings, "scheduler", None),
+            optimizer_factory=optimizer_factory,
+            scheduler_factory=scheduler_factory,
             predict_target_key=predict_target_key,
             checkpoint_metadata=checkpoint_metadata,
             prediction_strategy=prediction_strategy,

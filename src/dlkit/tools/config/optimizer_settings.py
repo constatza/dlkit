@@ -4,9 +4,8 @@ from typing import Any
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.core.datatypes.base import FloatHyperparameter, PositiveFloatHyperparameter
-
 from .core.base_settings import ComponentSettings, HyperParameterSettings
+from .core.types import FloatHyperparameter, PositiveFloatHyperparameter
 
 
 class OptimizerSettings(ComponentSettings, HyperParameterSettings):

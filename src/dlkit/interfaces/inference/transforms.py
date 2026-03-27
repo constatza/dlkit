@@ -191,8 +191,13 @@ def _reconstruct_transform_chain(
             logger.warning("No transform settings found for '%s'", entry_name)
             return None
 
-        # Create and load chain
-        chain = TransformChain(transform_settings)
+        # Create and load chain using component_builders to instantiate transforms
+        from torch.nn import ModuleList
+
+        from dlkit.runtime.workflows.factories.component_builders import build_transform_list
+
+        raw_list, _ = build_transform_list(transform_settings, entry_name=entry_name)
+        chain = TransformChain(ModuleList(raw_list), entry_name=entry_name)
         result = chain.load_state_dict(transform_state, strict=False)
 
         # Register unexpected keys as buffers (fitted parameters like min/max)

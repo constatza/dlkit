@@ -2,13 +2,6 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, Field
 
-from .base import (
-    FloatHyperparameter,
-    Hyperparameter,
-    IntHyperparameter,
-    StrHyperparameter,
-)
-
 # Lightweight, Pydantic-first URL/path types (security-light)
 from .tilde_expansion import expand_tilde_in_value
 from .urls import (
@@ -35,10 +28,6 @@ SimpleMLflowURI = Annotated[
 
 
 __all__ = [
-    "IntHyperparameter",
-    "FloatHyperparameter",
-    "StrHyperparameter",
-    "Hyperparameter",
     # Simple shortcuts (security-light)
     "SimpleTildePath",
     "SimpleMLflowURI",
