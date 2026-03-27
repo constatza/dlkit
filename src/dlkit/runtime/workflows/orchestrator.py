@@ -5,7 +5,7 @@ Composes: prepare (ops) -> build (factory) -> execute (strategy) -> finalize.
 
 from __future__ import annotations
 
-from dlkit.interfaces.api.domain import OptimizationResult, TrainingResult
+from dlkit.domain import OptimizationResult, TrainingResult
 from dlkit.runtime.workflows.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (

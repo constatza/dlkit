@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain import TrainingResult
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig

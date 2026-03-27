@@ -6,7 +6,7 @@ Each service has a single responsibility following SOLID principles.
 
 from __future__ import annotations
 
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain import TrainingResult
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.runtime.workflows.tracking_hooks import TrackingHooks
 from dlkit.tools.config import GeneralSettings

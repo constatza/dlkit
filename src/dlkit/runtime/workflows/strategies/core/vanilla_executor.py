@@ -10,7 +10,8 @@ from typing import Any
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
 from dlkit.core.training.metrics.collect import collect_metrics
-from dlkit.interfaces.api.domain import ModelState, TrainingResult, WorkflowError
+from dlkit.domain import ModelState, TrainingResult
+from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.factories.build_factory import BuildComponents
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.base_settings import BasicSettings

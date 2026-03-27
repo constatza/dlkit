@@ -441,7 +441,7 @@ def mlflow_settings(
 @pytest.fixture
 def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
     """Create GeneralSettings with Optuna enabled using overrides."""
-    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+    from dlkit.interfaces.api.services import BasicOverrideManager
 
     # Start with base training settings
     base_settings = _make_settings(

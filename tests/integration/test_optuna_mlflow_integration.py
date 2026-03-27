@@ -24,7 +24,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
 
     Uses sqlite tracking for speed and deterministic isolation.
     """
-    from dlkit.interfaces.api.overrides.manager import BasicOverrideManager
+    from dlkit.interfaces.api.services import BasicOverrideManager
 
     # Start with base training settings
     manager = BasicOverrideManager()
