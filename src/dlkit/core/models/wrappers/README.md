@@ -31,7 +31,7 @@ ProcessingLightningWrapper (base)
 | File | Purpose |
 |---|---|
 | `protocols.py` | SOLID protocols (ISP-compliant interfaces) |
-| `components.py` | Concrete protocol implementations |
+| `components.py` | Concrete protocol implementations + `WrapperComponents` value object (FR-2) |
 | `base.py` | `ProcessingLightningWrapper` — pure Lightning coordinator |
 | `callbacks.py` | Lifecycle callbacks such as transform fitting |
 | `checkpoint_dto.py` | Checkpoint metadata normalization helpers |
@@ -40,6 +40,25 @@ ProcessingLightningWrapper (base)
 | `timeseries.py` | `TimeSeriesLightningWrapper` — tuple-batch workflows |
 | `factories.py` | `WrapperFactory` — detects model family, returns correct wrapper |
 | `security.py` | Checkpoint security — `configure_checkpoint_loading()`, `register_dlkit_safe_globals()` |
+
+**Dependency Injection (FR-2)**
+
+Core wrappers no longer call `FactoryProvider` directly. All factory calls are
+centralised in `runtime/workflows/factories/component_builders.py`. `BuildFactory`
+strategies pre-build a `WrapperComponents` value object and pass it to
+`WrapperFactory.create_*()`, which forwards it to each wrapper's `__init__`.
+
+```python
+# runtime layer — component_builders.py
+components = build_wrapper_components(settings, entry_configs)
+
+# runtime layer — build_factory.py
+wrapper = WrapperFactory.create_standard_wrapper(model, entry_configs, components, ...)
+
+# core layer — standard.py (receives components, never calls FactoryProvider)
+class StandardLightningWrapper(ProcessingLightningWrapper):
+    def __init__(self, model, entry_configs, components: WrapperComponents, ...): ...
+```
 
 ---
 

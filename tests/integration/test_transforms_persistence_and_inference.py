@@ -16,6 +16,7 @@ from dlkit.core.datatypes.split import IndexSplit
 from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.core.models.wrappers.functions import apply_inverse_chain
 from dlkit.core.models.wrappers.standard import StandardLightningWrapper
+from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
 from dlkit.tools.config.components.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -84,6 +85,7 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
 
 def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
+    from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
 
     model_settings = ModelComponentSettings(
         name=MODEL_NAME,
@@ -96,9 +98,11 @@ def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> Standard
     # x/y shapes provided by FlexibleDataset are 1D (feature dimension = 4)
     shape_summary = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
 
+    components = build_wrapper_components(wrapper_settings, entry_cfgs)
     wrapper = StandardLightningWrapper(
         settings=wrapper_settings,
         model_settings=model_settings,
+        components=components,
         shape_summary=shape_summary,
         entry_configs=entry_cfgs,
     )
@@ -205,17 +209,20 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
 
     from dlkit.core.shape_specs.simple_inference import ShapeSummary
 
+    _settings = WrapperComponentSettings()
+    _model_settings = ModelComponentSettings(
+        name=MODEL_NAME,
+        module_path=MODEL_MODULE_PATH,
+        hidden_size=4,
+        num_layers=1,
+    )
     loaded = StandardLightningWrapper.load_from_checkpoint(
         str(ckpt_path),
-        settings=WrapperComponentSettings(),
-        model_settings=ModelComponentSettings(
-            name=MODEL_NAME,
-            module_path=MODEL_MODULE_PATH,
-            hidden_size=4,
-            num_layers=1,
-        ),
+        settings=_settings,
+        model_settings=_model_settings,
         shape_summary=ShapeSummary(in_shapes=((4,),), out_shapes=((4,),)),
         entry_configs=entries,
+        components=build_wrapper_components(_settings, entries),
         strict=False,
     )
     captured, hook = _capture_forward_input(loaded.model)
