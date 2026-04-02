@@ -68,7 +68,6 @@ depends_on = [
     { path = "dlkit.domain" },
     { path = "dlkit.runtime.data" },
     { path = "dlkit.runtime.adapters.lightning" },
-    { path = "dlkit.runtime.workflows.factories" },
 ]
 
 [[modules]]

@@ -95,9 +95,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
 
-    # Force detection to treat the dummy model as shape-aware so shape inference runs
+    # Force detection to treat the dummy model as shape-aware so shape inference runs.
+    # Patch in flexible_build_strategy's own namespace (it imports detect_model_type directly).
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.runtime.workflows.factories.flexible_build_strategy.detect_model_type",
         lambda *_: ModelType.SHAPE_AWARE_DLKIT,
     )
 
@@ -107,9 +108,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
         captured_shape_summary["summary"] = kwargs.get("shape_summary")
         return _FakeModel()
 
-    # Patch WrapperFactory used inside FlexibleBuildStrategy by targeting the source module
+    # Patch WrapperFactory.create_standard_wrapper on the class object itself —
+    # shared by all importers, so the original path still works.
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.runtime.adapters.lightning.factories.WrapperFactory.create_standard_wrapper",
         staticmethod(_capture_wrapper),
     )
 

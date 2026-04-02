@@ -6,14 +6,17 @@ from typing import Any
 
 from loguru import logger
 
+from dlkit.runtime.adapters.lightning.factories import WrapperFactory
 from dlkit.runtime.execution.components import RuntimeComponents
 from dlkit.shared.shapes import ShapeSummary
 from dlkit.tools.config.data_entries import DataEntry
 from dlkit.tools.config.model_components import WrapperComponentSettings
 
 from .build_strategy import IBuildStrategy, WorkflowSettings, build_trainer
+from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
 from .feature_pipeline import FeaturePipeline
+from .model_detection import detect_model_type, requires_shape_spec
 from .module_defaults import with_runtime_module_defaults
 from .shape_inference_pipeline import ShapeInferencePipeline
 
@@ -97,12 +100,10 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        from . import build_factory as build_factory_module
-
-        model_type = build_factory_module.detect_model_type(model_settings)
+        model_type = detect_model_type(model_settings)
 
         shape_summary: ShapeSummary | None = None
-        if build_factory_module.requires_shape_spec(model_type):
+        if requires_shape_spec(model_type):
             shape_summary = self._shape_inference.infer_flexible(
                 model_settings.name,
                 dataset,
@@ -119,12 +120,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
             wrapper_kwargs["scheduler"] = training_settings.scheduler
         wrapper_settings = with_runtime_module_defaults(WrapperComponentSettings(**wrapper_kwargs))
 
-        from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
-
-        from . import build_factory as build_factory_module
-
         components = build_wrapper_components(wrapper_settings, entry_configs)
-        model = build_factory_module.WrapperFactory.create_standard_wrapper(
+        model = WrapperFactory.create_standard_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
             shape_summary=shape_summary,

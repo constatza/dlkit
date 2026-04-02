@@ -14,11 +14,11 @@ from time import perf_counter
 
 import numpy as np
 import torch
-from dlkit.core.datasets.flexible import FlexibleDataset, collate_tensordict
-from dlkit.core.training.functional import relative_energy_norm_loss
 from loguru import logger
 from torch.utils.data import DataLoader
 
+from dlkit.domain.losses import relative_energy_norm_loss
+from dlkit.runtime.data.datasets.flexible import FlexibleDataset, collate_tensordict
 from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
 from dlkit.tools.io.sparse import open_sparse_pack, save_sparse_pack
 
