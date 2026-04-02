@@ -9,7 +9,7 @@ import inspect
 import uuid
 from typing import NoReturn
 
-from dlkit.tools.utils.errors import ConfigurationError, WorkflowError
+from dlkit.shared.errors import ConfigurationError, WorkflowError
 from dlkit.tools.utils.logging_config import get_logger
 
 # Global logger for error handling

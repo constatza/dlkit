@@ -10,21 +10,21 @@ from lightning.pytorch import Trainer
 from torch import Tensor
 
 import dlkit
-from dlkit.core.datamodules.array import InMemoryModule
-from dlkit.core.datasets.flexible import FlexibleDataset
-from dlkit.core.datatypes.split import IndexSplit
-from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.core.models.wrappers.functions import apply_inverse_chain
-from dlkit.core.models.wrappers.standard import StandardLightningWrapper
+from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
+from dlkit.runtime.adapters.lightning.datamodules.array import InMemoryModule
+from dlkit.runtime.adapters.lightning.functions import apply_inverse_chain
+from dlkit.runtime.adapters.lightning.standard import StandardLightningWrapper
+from dlkit.runtime.data.datasets.flexible import FlexibleDataset
 from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
-from dlkit.tools.config.components.model_components import (
+from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
+from dlkit.tools.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
 from dlkit.tools.config.transform_settings import TransformSettings
+from dlkit.tools.datatypes.split import IndexSplit
 
-MODEL_MODULE_PATH = "dlkit.core.models.nn.ffnn.simple"
+MODEL_MODULE_PATH = "dlkit.domain.nn.ffnn.simple"
 MODEL_NAME = "ConstantWidthFFNN"
 
 
@@ -75,17 +75,15 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
 
 def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
     # Apply MinMaxScaler to both x and y; direct for features, inverse for targets at predict
-    ts = TransformSettings(
-        name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
-    )
+    ts = TransformSettings(name="MinMaxScaler", module_path="dlkit.domain.transforms.minmax", dim=0)
     x = Feature(name="x", path=fx, transforms=[ts])
     y = Target(name="y", path=fy, transforms=[ts])
     return (x, y)
 
 
 def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
-    from dlkit.core.shape_specs.simple_inference import ShapeSummary
     from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
+    from dlkit.shared.shapes import ShapeSummary
 
     model_settings = ModelComponentSettings(
         name=MODEL_NAME,
@@ -207,7 +205,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     trainer.save_checkpoint(ckpt_path)
     assert ckpt_path.exists()
 
-    from dlkit.core.shape_specs.simple_inference import ShapeSummary
+    from dlkit.shared.shapes import ShapeSummary
 
     _settings = WrapperComponentSettings()
     _model_settings = ModelComponentSettings(

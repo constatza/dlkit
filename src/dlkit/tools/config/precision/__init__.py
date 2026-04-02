@@ -7,6 +7,7 @@ and service coordination for configuration purposes.
 from .context import (
     PrecisionContext,
     PrecisionProvider,
+    current_precision_override,
     get_global_precision_context,
     get_precision_context,
     precision_override,
@@ -19,6 +20,7 @@ __all__ = [
     "PrecisionProvider",
     "PrecisionService",
     "PrecisionStrategy",
+    "current_precision_override",
     "get_global_precision_context",
     "get_precision_context",
     "get_precision_service",

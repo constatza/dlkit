@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.datatypes.split import IndexSplit
 from dlkit.tools.io.locations import splits_dir
 from dlkit.tools.io.split_provider import get_or_create_split
 

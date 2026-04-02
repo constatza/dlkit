@@ -14,12 +14,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.shape_specs import create_shape_spec
-from dlkit.interfaces.api.domain.precision import precision_override
-from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.domain.nn.base import DLKitModel
+from dlkit.domain.shapes import create_shape_spec
 from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.precision import (
+    PrecisionStrategy,
+    get_precision_service,
+    precision_override,
+)
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.trainer_settings import TrainerSettings
 from dlkit.tools.io.arrays import load_array

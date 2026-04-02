@@ -1,5 +1,5 @@
-from dlkit.tools.config.components.model_components import LossComponentSettings
 from dlkit.tools.config.core import BuildContext, FactoryProvider
+from dlkit.tools.config.model_components import LossComponentSettings
 from dlkit.tools.registry import register_loss
 from dlkit.tools.registry.public import _reset_for_tests
 

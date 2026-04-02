@@ -55,8 +55,6 @@ __all__ = list(_EXPORTS)
 
 def __getattr__(name: str) -> Any:
     """Resolve top-level exports lazily."""
-    if name == "nn":
-        return import_module("dlkit.core.models.nn")
     if name in _EXPORTS:
         module_name, attr_name = _EXPORTS[name]
         module = import_module(module_name)
@@ -66,4 +64,4 @@ def __getattr__(name: str) -> Any:
 
 def __dir__() -> list[str]:
     """Expose lazy exports in interactive tooling."""
-    return sorted([*__all__, "nn"])
+    return sorted(__all__)

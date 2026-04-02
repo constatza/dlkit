@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, Mock, patch
 import torch
 from typer.testing import CliRunner
 
-from dlkit.interfaces.api.domain import ConfigurationError
 from dlkit.interfaces.cli.commands.predict import app as predict_app
+from dlkit.shared import ConfigurationError
 from dlkit.tools.config import GeneralSettings
 
 

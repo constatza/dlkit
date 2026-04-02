@@ -105,7 +105,7 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
     model_block = (
         "[MODEL]\n"
         'name = "ConstantWidthFFNN"\n'
-        'module_path = "dlkit.core.models.nn.ffnn.simple"\n'
+        'module_path = "dlkit.domain.nn.ffnn.simple"\n'
         'checkpoint = "model.ckpt"\n'
     )
 
@@ -376,7 +376,7 @@ def test_artifacts_dir() -> Path:
 def _block_mlflow_host_probe():
     """Prevent tests from attaching to any real localhost MLflow server."""
     with unittest.mock.patch(
-        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.local_host_alive",
+        "dlkit.runtime.tracking.uri_resolver.local_host_alive",
         return_value=False,
     ):
         yield

@@ -590,7 +590,7 @@ class TestDatasetSettingsValuePreservation:
 
     def test_value_entries_work_with_flexible_dataset(self, sample_numpy_array: np.ndarray):
         """ValueFeature/ValueTarget should work with FlexibleDataset when passed through DatasetSettings."""
-        from dlkit.core.datasets.flexible import FlexibleDataset
+        from dlkit.runtime.data.datasets.flexible import FlexibleDataset
 
         # Create value-based entries
         feat = Feature(name="x", value=sample_numpy_array)

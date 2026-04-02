@@ -10,7 +10,7 @@ import torch
 from loguru import logger
 
 import dlkit
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.shared import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 from dlkit.tools.config.precision import PrecisionStrategy
@@ -43,7 +43,7 @@ class TestGraphPrecisionLRTuning:
         model = graph_model.model_copy(
             update={
                 "name": "ScaledGATv2Projection",
-                "module_path": "dlkit.core.models.nn.graph.scaled_projection_networks",
+                "module_path": "dlkit.domain.nn.graph.scaled_projection_networks",
                 "hidden_size": 4,
                 "num_layers": 1,
                 "heads": 1,
@@ -86,8 +86,8 @@ class TestGraphPrecisionLRTuning:
         )
 
     def _load_dataset(self, graph_settings: GeneralSettings) -> Any:
-        from dlkit.core.datasets.graph import GraphDataset
-        from dlkit.interfaces.api.domain.precision import precision_override
+        from dlkit.runtime.data.datasets.graph import GraphDataset
+        from dlkit.tools.config.precision import precision_override
 
         dataset_cfg = graph_settings.DATASET
         assert dataset_cfg is not None

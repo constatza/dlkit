@@ -39,7 +39,7 @@ name = "original_name"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -48,7 +48,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -85,7 +85,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -94,7 +94,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -137,7 +137,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -146,7 +146,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -197,7 +197,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -206,7 +206,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -256,7 +256,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -269,7 +269,7 @@ path = "{features_path.as_posix()}"
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -313,7 +313,7 @@ name = "original"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -322,7 +322,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -351,7 +351,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -360,7 +360,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -394,7 +394,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -403,7 +403,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 checkpoint = "{ckpt1.as_posix()}"
 
 [TRAINING]
@@ -437,7 +437,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -446,7 +446,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -483,7 +483,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -492,7 +492,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -535,7 +535,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -544,7 +544,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -589,7 +589,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -598,7 +598,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -645,7 +645,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -654,7 +654,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -686,7 +686,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -695,7 +695,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -730,7 +730,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -739,7 +739,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10
@@ -784,7 +784,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -793,7 +793,7 @@ batch_size = 32
 
 [MODEL]
 name = "LinearNetwork"
-module_path = "dlkit.core.models.nn.ffnn"
+module_path = "dlkit.domain.nn.ffnn"
 
 [TRAINING]
 epochs = 10

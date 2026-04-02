@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
-from dlkit.core.datatypes.secure_uris import SecurePath
+from dlkit.tools.config.security.uri_types import SecurePath
 
 from .core.base_settings import BasicSettings
 from .precision import PrecisionStrategy

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import FilePath
 
-from dlkit.core.datatypes.split import IndexSplit
+from dlkit.tools.datatypes.split import IndexSplit
 
 
 def load_split_indices(path: FilePath) -> IndexSplit:

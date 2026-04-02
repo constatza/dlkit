@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from pydantic import TypeAdapter, ValidationError
 
-from dlkit.core.datatypes.urls import FileUrl
+from dlkit.tools.datatypes.urls import FileUrl
 
 _FILE_URL_ADAPTER = TypeAdapter(FileUrl)
 

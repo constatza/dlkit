@@ -3,10 +3,8 @@
 import pytest
 import torch
 
-from dlkit.interfaces.api.domain.precision import precision_override
-from dlkit.interfaces.api.services.precision_service import PrecisionService
 from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.precision import PrecisionService, PrecisionStrategy, precision_override
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.io.arrays import load_array
 

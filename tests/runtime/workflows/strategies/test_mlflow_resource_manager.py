@@ -10,15 +10,15 @@ from unittest.mock import MagicMock, Mock
 import mlflow
 import pytest
 
-from dlkit.runtime.workflows.strategies.tracking import uri_resolver
-from dlkit.runtime.workflows.strategies.tracking.backend import (
+import dlkit.runtime.tracking.uri_resolver as uri_resolver
+from dlkit.runtime.tracking.backend import (
     LocalServerBackend,
     LocalSqliteBackend,
 )
-from dlkit.runtime.workflows.strategies.tracking.mlflow_client_factory import (
+from dlkit.runtime.tracking.mlflow_client_factory import (
     MLflowClientFactory,
 )
-from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
+from dlkit.runtime.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
 from dlkit.tools.config.mlflow_settings import MLflowSettings
@@ -47,7 +47,7 @@ def test_resolve_tracking_uri_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False, raising=True)
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.uri_resolver.locations.mlruns_backend_uri",
+        "dlkit.runtime.tracking.uri_resolver.locations.mlruns_backend_uri",
         lambda: "sqlite:///tests/artifacts/mlruns/mlflow.db",
     )
 
@@ -119,7 +119,7 @@ def test_create_run_preserves_nested_parent_child_structure(
         ),
     ]
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.mlflow.start_run",
+        "dlkit.runtime.tracking.mlflow_resource_manager.mlflow.start_run",
         start_run,
     )
 
@@ -186,7 +186,7 @@ def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
     monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
     monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda _c: True)
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
+        "dlkit.runtime.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
         lambda: _SuppressionContext(),
     )
 
@@ -217,7 +217,7 @@ def test_initialize_resources_skips_bootstrap_suppression_for_http(
     monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: mock_client)
     monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda _c: True)
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
+        "dlkit.runtime.tracking.mlflow_resource_manager.suppress_mlflow_sqlite_bootstrap_logs",
         lambda: _SuppressionContext(),
     )
 

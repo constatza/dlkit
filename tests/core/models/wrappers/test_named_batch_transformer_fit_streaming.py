@@ -5,10 +5,10 @@ import torch
 from tensordict import TensorDict
 from torch.nn import ModuleList
 
-from dlkit.core.models.wrappers.components import NamedBatchTransformer
-from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.minmax import MinMaxScaler
-from dlkit.core.training.transforms.pca import PCA
+from dlkit.domain.transforms.chain import TransformChain
+from dlkit.domain.transforms.minmax import MinMaxScaler
+from dlkit.domain.transforms.pca import PCA
+from dlkit.runtime.adapters.lightning.components import NamedBatchTransformer
 
 
 def _make_batch(x: torch.Tensor) -> TensorDict:
@@ -35,7 +35,7 @@ def test_named_batch_transformer_fit_streaming_does_not_use_torch_cat(
     def _cat_guard(*args, **kwargs):
         raise AssertionError("torch.cat should not be used by streaming fit path")
 
-    monkeypatch.setattr("dlkit.core.models.wrappers.components.torch.cat", _cat_guard)
+    monkeypatch.setattr("dlkit.runtime.adapters.lightning.components.torch.cat", _cat_guard)
     transformer.fit(dataloader)
 
     assert chain.fitted

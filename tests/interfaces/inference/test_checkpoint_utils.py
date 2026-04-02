@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import torch
 
-from dlkit.interfaces.inference.loading import extract_state_dict
+from dlkit.runtime.predictor.loading import extract_state_dict
 
 
 class TestExtractStateDict:

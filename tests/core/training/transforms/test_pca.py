@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from dlkit.core.training.transforms.pca import PCA
+from dlkit.domain.transforms.pca import PCA
 
 
 def _expect_tensor(value: object) -> torch.Tensor:
@@ -236,7 +236,7 @@ class TestPCAEdgeCases:
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
     ) -> None:
         """Calling forward before fit should raise RuntimeError."""
-        from dlkit.core.training.transforms.errors import TransformNotFittedError
+        from dlkit.domain.transforms.errors import TransformNotFittedError
 
         with pytest.raises(TransformNotFittedError):
             pca_2_components.forward(simple_2d_data)
@@ -245,7 +245,7 @@ class TestPCAEdgeCases:
         self, pca_2_components: PCA, simple_2d_data: torch.Tensor
     ) -> None:
         """Calling inverse_transform before fit should raise RuntimeError."""
-        from dlkit.core.training.transforms.errors import TransformNotFittedError
+        from dlkit.domain.transforms.errors import TransformNotFittedError
 
         projected = torch.randn(100, 2)
         with pytest.raises(TransformNotFittedError):

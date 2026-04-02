@@ -33,7 +33,7 @@ from pathlib import Path
 # Note: dlkit high-level APIs (train/infer/optimize) not used due to shape inference gap
 # This satisfies architectural test while documenting the limitation
 import dlkit  # noqa: F401 - imported to satisfy architectural test
-from dlkit.core.shape_specs import ModelFamily, create_shape_spec
+from dlkit.domain.shapes import ModelFamily, create_shape_spec
 
 
 class TestGraphWorkflowIntegration:
@@ -47,7 +47,7 @@ class TestGraphWorkflowIntegration:
         - Edge index and edge attributes are computed correctly
         - Edge shapes are exposed via public properties
         """
-        from dlkit.core.datasets.graph import GraphDataset
+        from dlkit.runtime.data.datasets.graph import GraphDataset
 
         # Create dataset
         dataset = GraphDataset(
@@ -79,7 +79,7 @@ class TestGraphWorkflowIntegration:
         - Models correctly extract dimensions from shape specs
         - Model architecture matches expected dimensions
         """
-        from dlkit.core.models.nn.graph.projection_networks import GProjection
+        from dlkit.domain.nn.graph.projection_networks import GProjection
 
         # Create shape spec
         shape_spec = create_shape_spec(
@@ -109,8 +109,8 @@ class TestGraphWorkflowIntegration:
         """
         import inspect
 
-        from dlkit.core.datatypes.networks import GraphInput
-        from dlkit.core.models.wrappers.graph import GraphLightningWrapper
+        from dlkit.runtime.adapters.lightning.graph import GraphLightningWrapper
+        from dlkit.runtime.data.graph.types import GraphInput
 
         # Check forward signature (decomposed tensor API)
         forward_sig = inspect.signature(GraphLightningWrapper.forward)
@@ -132,7 +132,7 @@ class TestGraphWorkflowIntegration:
         - dlkit-specific types (GraphDict, GraphInput) are available
         - All types can be imported from datatypes.networks
         """
-        from dlkit.core.datatypes.networks import (
+        from dlkit.runtime.data.graph.types import (
             Batch,
             Data,
             GraphDict,
@@ -157,7 +157,7 @@ class TestGraphWorkflowIntegration:
         - GraphDataset exposes edge_attr_shape property
         - Edge shapes are non-None after processing
         """
-        from dlkit.core.datasets.graph import GraphDataset
+        from dlkit.runtime.data.datasets.graph import GraphDataset
 
         # Create dataset directly
         dataset = GraphDataset(

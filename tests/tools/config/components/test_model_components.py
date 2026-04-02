@@ -13,7 +13,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from dlkit.tools.config.components.model_components import (
+from dlkit.runtime.workflows.factories.module_defaults import with_runtime_module_defaults
+from dlkit.tools.config.model_components import (
     LossComponentSettings,
     MetricComponentSettings,
     ModelComponentSettings,
@@ -74,9 +75,11 @@ class TestLossComponentSettings:
     def test_initialization_with_defaults(self) -> None:
         """Test LossComponentSettings initialization with default values."""
         settings = LossComponentSettings()
+        resolved = with_runtime_module_defaults(settings)
 
         assert settings.name == "mse"
-        assert settings.module_path == "dlkit.core.training.functional"
+        assert settings.module_path is None
+        assert resolved.module_path == "dlkit.domain.losses"
 
     def test_initialization_with_custom_data(self, loss_component_data: dict[str, Any]) -> None:
         """Test LossComponentSettings initialization with custom
@@ -236,9 +239,11 @@ class TestWrapperComponentSettings:
     def test_initialization_with_defaults(self) -> None:
         """Test WrapperComponentSettings initialization with default values."""
         settings = WrapperComponentSettings()
+        resolved = with_runtime_module_defaults(settings)
 
         assert settings.name == "StandardLightningWrapper"
-        assert settings.module_path == "dlkit.core.models.wrappers"
+        assert settings.module_path is None
+        assert resolved.module_path == "dlkit.runtime.adapters.lightning"
         assert isinstance(settings.optimizer, object)  # Default factory
         assert isinstance(settings.scheduler, object)  # Default factory
         assert settings.train is True

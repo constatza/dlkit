@@ -10,7 +10,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.api import train as api_train
 from dlkit.interfaces.api import validate_config
-from dlkit.interfaces.api.domain.errors import DLKitError
+from dlkit.shared.errors import DLKitError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.protocols import TrainingSettingsProtocol
 

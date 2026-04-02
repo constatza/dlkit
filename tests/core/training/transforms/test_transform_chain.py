@@ -4,10 +4,10 @@ import pytest
 import torch
 from torch.nn import ModuleList
 
-from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.minmax import MinMaxScaler
-from dlkit.core.training.transforms.pca import PCA
-from dlkit.core.training.transforms.standard import StandardScaler
+from dlkit.domain.transforms.chain import TransformChain
+from dlkit.domain.transforms.minmax import MinMaxScaler
+from dlkit.domain.transforms.pca import PCA
+from dlkit.domain.transforms.standard import StandardScaler
 from dlkit.tools.config.transform_settings import TransformSettings
 
 
@@ -15,9 +15,7 @@ def test_transform_chain_build_fit_forward_inverse() -> None:
     # Single MinMax scaler in chain
     from dlkit.runtime.workflows.factories.component_builders import build_transform_list
 
-    ts = TransformSettings(
-        name="MinMaxScaler", module_path="dlkit.core.training.transforms.minmax", dim=0
-    )
+    ts = TransformSettings(name="MinMaxScaler", module_path="dlkit.domain.transforms.minmax", dim=0)
     # No shape_spec needed - transforms will infer from data
     module_list, _ = build_transform_list([ts])
     chain = TransformChain(module_list)

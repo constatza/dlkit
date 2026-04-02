@@ -29,8 +29,6 @@ Capability Interfaces (ABC Mixins):
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import overload
 
@@ -497,57 +495,6 @@ class ValueBasedEntry(DataEntry, IValueBased, ABC):
     def is_placeholder(self) -> bool:
         """Placeholder when no value has been provided."""
         return self.value is None
-
-
-# =============================================================================
-# Runtime tensor entries (non-Pydantic)
-# =============================================================================
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TensorDataEntry:
-    """Runtime entry that holds a resolved tensor for model consumption."""
-
-    name: str
-    tensor: torch.Tensor
-    write: bool = False
-    transforms: tuple[TransformSettings, ...] = ()
-
-
-def _coerce_tensor(value: torch.Tensor | np.ndarray, dtype: torch.dtype | None) -> torch.Tensor:
-    tensor = torch.as_tensor(value)
-    if dtype is not None:
-        tensor = tensor.to(dtype=dtype)
-    return tensor
-
-
-def to_tensor_entry(entry: DataEntry) -> TensorDataEntry:
-    """Convert a config entry (path or value) into a concrete tensor entry."""
-    name = entry.name or "anonymous"
-    dtype = getattr(entry, "dtype", None)
-    write = getattr(entry, "write", False)
-    transforms = tuple(getattr(entry, "transforms", ()) or ())
-
-    if isinstance(entry, PathBasedEntry):
-        if not entry.has_path() or entry.path is None:
-            raise ValueError(f"Entry '{name}' is a placeholder without a path or value")
-        from dlkit.tools.io.arrays import load_array  # Local import to avoid import cycles
-
-        tensor = load_array(entry.path, dtype=dtype)
-        return TensorDataEntry(name=name, tensor=tensor, write=write, transforms=transforms)
-
-    if isinstance(entry, ValueBasedEntry):
-        if not entry.has_value() or entry.value is None:
-            raise ValueError(f"Entry '{name}' is a placeholder without a value")
-        tensor = _coerce_tensor(entry.value, dtype=dtype)
-        return TensorDataEntry(name=name, tensor=tensor, write=write, transforms=transforms)
-
-    raise TypeError(f"Unsupported entry type for tensor conversion: {type(entry)}")
-
-
-def convert_to_tensor_entries(entries: Iterable[DataEntry]) -> tuple[TensorDataEntry, ...]:
-    """Convert a sequence of config entries to concrete tensor entries."""
-    return tuple(to_tensor_entry(entry) for entry in entries)
 
 
 # =============================================================================

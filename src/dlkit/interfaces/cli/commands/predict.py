@@ -22,7 +22,7 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.interfaces.inference.api import load_model
+from dlkit.interfaces.inference import load_model
 from dlkit.runtime.workflows.factories.inference_data_factory import build_inference_datamodule
 from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
 
@@ -180,7 +180,7 @@ def _run_inference_impl(
         predictions = torch.cat(all_predictions, dim=0) if all_predictions else None
 
         # Create InferenceResult for presentation
-        from dlkit.interfaces.api.domain.models import InferenceResult
+        from dlkit.shared import InferenceResult
 
         result = InferenceResult(
             model_state=None, predictions=predictions, metrics=None, duration_seconds=0.0
@@ -195,7 +195,7 @@ def _run_inference_impl(
         raise
     except Exception as e:
         # Handle DLKit errors (inference failures, etc.)
-        from dlkit.interfaces.api.domain.errors import DLKitError
+        from dlkit.shared.errors import DLKitError
 
         if isinstance(e, DLKitError):
             handle_api_error(e, console)

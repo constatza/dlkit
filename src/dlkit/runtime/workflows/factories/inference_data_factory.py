@@ -6,12 +6,14 @@ from pathlib import Path
 
 from lightning.pytorch import LightningDataModule
 
-from dlkit.core.datasets.flexible import FlexibleDataset
-from dlkit.core.datatypes.split import IndexSplit
+from dlkit.runtime.data.datasets.flexible import FlexibleDataset
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.tools.datatypes.split import IndexSplit
 from dlkit.tools.io.split_provider import get_or_create_split
+
+from .module_defaults import with_runtime_module_defaults
 
 
 def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDataModule:
@@ -68,4 +70,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
         split=index_split,
         dataloader=settings.DATAMODULE.dataloader,
     )
-    return FactoryProvider.create_component(settings.DATAMODULE, dm_context)
+    return FactoryProvider.create_component(
+        with_runtime_module_defaults(settings.DATAMODULE),
+        dm_context,
+    )

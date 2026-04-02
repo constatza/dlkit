@@ -30,8 +30,8 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
         default=DataModuleName.IN_MEMORY, description="DataModule class name"
     )
     module_path: str | None = Field(
-        default="dlkit.core.datamodules",
-        description="Module path where the datamodule class is located",
+        default=None,
+        description="Optional module path where the datamodule class is located",
     )
 
     dataloader: DataloaderSettings = Field(

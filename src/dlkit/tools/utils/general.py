@@ -39,27 +39,6 @@ def kwargs_compatible_with(
     raise ValueError(f"Invalid value for which: {which}")
 
 
-def slice_to_list(idx: slice, length: int) -> list[int]:
-    """Convert a slice to a list of indices of length `length`.
-
-    When the slice is a reverse slice (i.e. `start` and `stop` are both zero and `step` is negative),
-    the resulting list will be a reversed list of indices of length `length`.
-
-    Args:
-        idx: The slice to convert.
-        length: The length of the resulting list.
-
-    Returns:
-        list[int]: A list of indices as defined by the slice.
-    """
-    start = (idx.start or 0) % (length + 1)
-    stop = (idx.stop or length) % (length + 1)
-    step = idx.step or 1
-    if start == stop == 0 and step < 0:
-        start, stop = length - 1, 0
-    return list(range(start, stop, step))
-
-
 def get_name(obj: object) -> str:
     """Return the name of a function or class. If `obj` is an instance,
     return the class name of that instance. If it’s a function or class,

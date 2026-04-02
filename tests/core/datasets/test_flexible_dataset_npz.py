@@ -14,9 +14,9 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.core.datasets.flexible import BatchComplianceError, FlexibleDataset
-from dlkit.interfaces.api.domain.precision import PrecisionStrategy, precision_override
+from dlkit.runtime.data.datasets.flexible import BatchComplianceError, FlexibleDataset
 from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.tools.config.precision import PrecisionStrategy, precision_override
 
 
 class TestFlexibleDatasetWithNpz:

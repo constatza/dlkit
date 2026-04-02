@@ -15,11 +15,11 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.tools.config.model_components import ModelComponentSettings
 from dlkit.tools.config.validators import (
     ConfigValidationError,
     validate_inference_config_complete,
@@ -61,7 +61,7 @@ class TestEagerValidationSuccessCases:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -74,7 +74,7 @@ class TestEagerValidationSuccessCases:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 "input_size": 10,
                 "output_size": 1,
             },
@@ -139,7 +139,7 @@ class TestEagerValidationSuccessCases:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": str(checkpoint_path),
             },
         }
@@ -288,7 +288,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -297,7 +297,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
         }
 
@@ -317,7 +317,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
         }
 
@@ -343,12 +343,12 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
         }
 
@@ -379,7 +379,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -412,7 +412,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": str(checkpoint_path),
             },
         }
@@ -432,7 +432,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 # Missing checkpoint!
             },
         }
@@ -456,7 +456,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": "/this/checkpoint/does/not/exist.ckpt",
             },
         }
@@ -493,7 +493,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -502,7 +502,7 @@ class TestCompletenessValidation:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
         }
 
@@ -576,14 +576,14 @@ class TestProgrammaticOverrideWorkflow:
 
         datamodule = DataModuleSettings(
             name="InMemoryModule",
-            module_path="dlkit.core.datamodules",
+            module_path="dlkit.runtime.adapters.lightning.datamodules",
             dataloader=DataloaderSettings(batch_size=16),
         )
 
         model = ModelComponentSettings.model_validate(
             {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
                 "input_size": 10,
                 "output_size": 1,
             }
@@ -649,7 +649,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -657,7 +657,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
         }
 
@@ -712,7 +712,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.core.datamodules",
+                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -721,7 +721,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "MODEL": {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn",
+                "module_path": "dlkit.domain.nn.ffnn",
             },
             "MLFLOW": {},
             "OPTUNA": {

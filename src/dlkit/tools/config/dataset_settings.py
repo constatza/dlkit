@@ -93,9 +93,13 @@ class DatasetSettings(StringNamedComponentSettings):
         default="FlexibleDataset", description="Dataset class name"
     )
     module_path: str | None = Field(
-        default="dlkit.core.datasets", description="Module path where the dataset class is located"
+        default=None, description="Optional module path where the dataset class is located"
     )
     # Optional dataset family hint for strategy selection (accepts strings or StrEnum)
+    family: DatasetFamily | None = Field(
+        default=None,
+        description="Explicit dataset family (flexible, graph, timeseries)",
+    )
     type: DatasetFamily | None = Field(
         default=None,
         description="Dataset family type hint (flexible, graph, timeseries)",

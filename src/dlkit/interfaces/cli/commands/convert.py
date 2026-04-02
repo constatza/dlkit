@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from dlkit.interfaces.api.commands.convert_command import ConvertCommand, ConvertCommandInput
 from dlkit.interfaces.cli.adapters.config_adapter import load_config
+from dlkit.runtime.workflows.entrypoints._settings import WorkflowSettings
+from dlkit.runtime.workflows.entrypoints.convert import convert_checkpoint_to_onnx
 
 app = typer.Typer(name="convert", help="🔁 Convert checkpoints to export formats (e.g., ONNX)")
 console = Console()
@@ -60,21 +61,18 @@ def entry(
             )
 
         # Load settings only if provided (for dataloader-based inference)
-        settings = load_config(config) if config else None
+        settings = cast(WorkflowSettings | None, load_config(config) if config else None)
 
         if settings is None and not shape:
             raise typer.BadParameter("Provide either --shape or --config")
 
-        cmd = ConvertCommand()
-        result = cmd.execute(
-            ConvertCommandInput(
-                checkpoint_path=checkpoint,
-                output_path=output,
-                shape=shape,
-                opset=opset,
-                batch_size=batch_size,
-            ),
-            cast(Any, settings),
+        result = convert_checkpoint_to_onnx(
+            checkpoint_path=checkpoint,
+            output_path=output,
+            settings=settings,
+            shape=shape,
+            opset=opset,
+            batch_size=batch_size,
         )
 
         text = Text()

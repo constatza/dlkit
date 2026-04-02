@@ -87,7 +87,7 @@ class TestNullObjectPattern:
 
 
 class TestSingleResponsibility:
-    """Verify context lifecycle has single owner (Service layer)."""
+    """Verify context lifecycle has a single runtime owner."""
 
     def test_optimization_strategy_does_not_manage_context(self):
         """OptimizationStrategy does not contain context management logic."""
@@ -110,18 +110,18 @@ class TestSingleResponsibility:
             "is the responsibility of the service layer."
         )
 
-    def test_optimization_service_manages_context(self):
-        """OptimizationService is the single owner of tracker context lifecycle."""
+    def test_runtime_optimization_entrypoint_manages_context(self):
+        """The runtime optimization entrypoint owns tracker context lifecycle."""
         import inspect
 
-        from dlkit.interfaces.api.services.optimization_service import OptimizationService
+        from dlkit.runtime.workflows.entrypoints.optimization import optimize
 
-        source = inspect.getsource(OptimizationService.execute_optimization)
+        source = inspect.getsource(optimize)
 
         # Service should enter context
         assert "with experiment_tracker" in source, (
-            "Service must enter experiment tracker context to ensure proper "
-            "resource lifecycle management. Service layer owns context lifecycle."
+            "Runtime entrypoint must enter experiment tracker context to ensure proper "
+            "resource lifecycle management. Runtime layer owns context lifecycle."
         )
 
 

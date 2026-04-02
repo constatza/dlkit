@@ -5,8 +5,8 @@ Composes: prepare (ops) -> build (factory) -> execute (strategy) -> finalize.
 
 from __future__ import annotations
 
-from dlkit.domain import OptimizationResult, TrainingResult
-from dlkit.runtime.workflows.tracking_hooks import TrackingHooks
+from dlkit.shared import OptimizationResult, TrainingResult
+from dlkit.shared.hooks import LifecycleHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -16,7 +16,8 @@ from dlkit.tools.utils.error_handling import raise_error
 from dlkit.tools.utils.logging_config import get_logger
 
 from .factories.build_factory import BuildFactory
-from .strategies.factory import ExecutionStrategyFactory
+from .factories.execution_strategy_factory import ExecutionStrategyFactory
+from .optimization.factory import OptimizationServiceFactory
 
 logger = get_logger(__name__, "orchestrator")
 
@@ -31,7 +32,7 @@ class ExecutionSelector:
         self,
         settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         explicit: str | None = None,
-        hooks: TrackingHooks | None = None,
+        hooks: LifecycleHooks | None = None,
     ):
         """Create execution strategy using SOLID factory composition."""
         # Log what features are detected
@@ -53,7 +54,7 @@ class ExecutionSelector:
         self,
         settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ):
-        """Create optimization strategy using SOLID factory composition."""
+        """Create optimization strategy from the runtime workflows layer."""
         # Log what features are detected
         features = []
         if settings.OPTUNA and getattr(settings.OPTUNA, "enabled", False):
@@ -66,8 +67,7 @@ class ExecutionSelector:
         feature_str = " + ".join(features)
         logger.info("Creating optimization strategy with {}", feature_str)
 
-        # Use factory to create composed optimization strategy based on settings
-        return self._factory.create_optimization_strategy(settings)
+        return OptimizationServiceFactory().create_optimization_strategy(settings)
 
 
 class Orchestrator:
@@ -82,7 +82,7 @@ class Orchestrator:
     def execute_training(
         self,
         settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
-        hooks: TrackingHooks | None = None,
+        hooks: LifecycleHooks | None = None,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")
         try:
@@ -112,12 +112,7 @@ class Orchestrator:
         self,
         settings: GeneralSettings | OptimizationWorkflowConfig,
     ) -> OptimizationResult:
-        """Execute optimization workflow using factory pattern for proper composition.
-
-        This now uses the ExecutionSelector factory to create the appropriate
-        optimization strategy, ensuring proper MLflow integration when both
-        Optuna and MLflow are enabled (parent study run + nested trial runs).
-        """
+        """Execute optimization workflow with runtime-owned tracker lifecycle."""
         logger.info("Starting optimization workflow orchestration")
         try:
             # Optimization should not run in inference mode
@@ -125,10 +120,16 @@ class Orchestrator:
                 logger.warning("Optimization requested but inference mode is active")
                 raise_error("Inference mode active: optimization suspended.")
 
-            # Use factory pattern for proper strategy composition
-            optimization_strategy = self._selector.select_optimization(settings)
+            base_factory = OptimizationServiceFactory()
+            experiment_tracker = base_factory._create_experiment_tracker(settings)
+            strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
+            optimization_strategy = strategy_factory.create_optimization_strategy(settings)
             logger.info("Starting optimization execution with selected strategy")
-            result = optimization_strategy.execute_optimization(settings)
+            if experiment_tracker is not None:
+                with experiment_tracker:
+                    result = optimization_strategy.execute_optimization(settings)
+            else:
+                result = optimization_strategy.execute_optimization(settings)
             logger.info("Optimization execution completed successfully")
             return result
 

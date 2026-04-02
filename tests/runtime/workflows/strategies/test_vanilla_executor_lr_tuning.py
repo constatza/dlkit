@@ -7,27 +7,27 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
-from dlkit.runtime.workflows.strategies.core.vanilla_executor import VanillaExecutor
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.runtime.execution.vanilla_executor import VanillaExecutor
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 from dlkit.tools.config.optimizer_settings import OptimizerSettings
 
 
-def _trainer_mock(components: BuildComponents) -> Mock:
+def _trainer_mock(components: RuntimeComponents) -> Mock:
     trainer = components.trainer
     assert trainer is not None
     return cast(Mock, trainer)
 
 
-def _optimizer_settings(components: BuildComponents) -> OptimizerSettings:
+def _optimizer_settings(components: RuntimeComponents) -> OptimizerSettings:
     optimizer = components.model.optimizer
     assert isinstance(optimizer, OptimizerSettings)
     return optimizer
 
 
 @pytest.fixture
-def mock_components() -> BuildComponents:
+def mock_components() -> RuntimeComponents:
     """Mock build components for testing."""
     mock_trainer = Mock()
     mock_trainer.fit = Mock()
@@ -43,7 +43,7 @@ def mock_components() -> BuildComponents:
 
     mock_datamodule = Mock()
 
-    return BuildComponents(
+    return RuntimeComponents(
         model=mock_model,
         datamodule=mock_datamodule,
         trainer=mock_trainer,
@@ -87,7 +87,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_execute_without_lr_tuner_configured(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_without_lr_tuner: GeneralSettings,
     ) -> None:
         """Test that training proceeds normally without LR tuner."""
@@ -105,7 +105,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_execute_with_lr_tuner_enabled(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
         """Test that LR tuner is called and updates learning rate."""
@@ -118,7 +118,7 @@ class TestVanillaExecutorLRTuning:
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.tools.config.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+                    "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     executor.execute(mock_components, settings_with_lr_tuner)
@@ -142,7 +142,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_execute_with_lr_tuner_empty_config(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
     ) -> None:
         """Test that LR tuner is called with empty dict config (all defaults)."""
         from dlkit.tools.config.session_settings import SessionSettings
@@ -162,7 +162,7 @@ class TestVanillaExecutorLRTuning:
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.tools.config.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+                    "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     executor.execute(mock_components, settings_with_empty_lr_tuner)
@@ -175,7 +175,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_execute_lr_tuner_failure_continues_training(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
         """Test that training continues if LR tuner fails."""
@@ -188,7 +188,7 @@ class TestVanillaExecutorLRTuning:
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.tools.config.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+                    "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     # Should not raise - graceful degradation
@@ -202,7 +202,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_apply_lr_tuning_helper_method(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
         """Test _apply_lr_tuning helper method in isolation."""
@@ -214,7 +214,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+            "dlkit.runtime.execution.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(
@@ -229,7 +229,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_apply_lr_tuning_with_no_training_settings(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
     ) -> None:
         """Test _apply_lr_tuning when TRAINING is None."""
         executor = VanillaExecutor()
@@ -243,7 +243,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+            "dlkit.runtime.execution.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise
@@ -259,7 +259,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_apply_lr_tuning_model_without_optimizer_attribute(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
         """Test graceful handling when model lacks optimizer attribute."""
@@ -267,7 +267,7 @@ class TestVanillaExecutorLRTuning:
 
         # Model without optimizer attribute
         mock_model_no_opt = Mock(spec=[])
-        components_no_opt = BuildComponents(
+        components_no_opt = RuntimeComponents(
             model=mock_model_no_opt,
             datamodule=mock_components.datamodule,
             trainer=mock_components.trainer,
@@ -281,7 +281,7 @@ class TestVanillaExecutorLRTuning:
         trainer = components_no_opt.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+            "dlkit.runtime.execution.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise - logs warning instead
@@ -297,7 +297,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_mutable_optimizer_update(
         self,
-        mock_components: BuildComponents,
+        mock_components: RuntimeComponents,
         settings_with_lr_tuner: GeneralSettings,
     ) -> None:
         """Test that optimizer update uses mutable update_settings.
@@ -316,7 +316,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.workflows.strategies.tuning.LRTuner",
+            "dlkit.runtime.execution.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(

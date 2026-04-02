@@ -66,8 +66,7 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
         return data
 
     try:
-        from dlkit.core.datatypes.urls import tilde_expand_strict
-        from dlkit.tools.io.path_context import get_current_path_context
+        from dlkit.tools.datatypes.urls import tilde_expand_strict
     except Exception as exc:
         logger.debug("Path preprocessing skipped (import error): {}", exc)
         return data
@@ -89,14 +88,6 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
         return str(path_obj)
 
     def _resolve_root_dir(session_data: dict[str, Any] | None) -> Path:
-        try:
-            ctx = get_current_path_context()
-            root_dir = getattr(ctx, "root_dir", None) if ctx else None
-            if root_dir is not None:
-                return Path(root_dir).resolve()
-        except Exception as exc:
-            logger.warning("Could not read path context for root_dir resolution: {}", exc)
-
         if isinstance(session_data, dict):
             candidate = session_data.get("root_dir")
             if isinstance(candidate, str) and candidate:

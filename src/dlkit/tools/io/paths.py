@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic_core import Url
 
-from dlkit.core.datatypes.urls import tilde_expand_strict
+from dlkit.tools.datatypes.urls import tilde_expand_strict
 
 
 def mkdir_for_local(uri: Url | str, *, root: Path | None = None) -> None:

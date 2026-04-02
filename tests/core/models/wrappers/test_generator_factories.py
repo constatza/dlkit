@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from dlkit.core.models.wrappers.generator_factories import (
+from dlkit.runtime.adapters.lightning.generator_factories import (
     DeterministicGeneratorFactory,
     FixedGeneratorFactory,
     NullGeneratorFactory,

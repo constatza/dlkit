@@ -26,7 +26,6 @@ Key architectural decisions:
 | `kwargs_compatible_with()` | Function | Filter kwargs for constructor compatibility | `dict[str, Any]` |
 | `import_object()` | Function | Dynamically import class/function from path | `Callable` |
 | `get_name()` | Function | Get name of function/class/instance | `str` |
-| `slice_to_list()` | Function | Convert slice to list of indices | `list[int]` |
 | `filter_dict()` | Function | Filter dict by predicate on keys/values | `dict` |
 | `get_signature_names()` | Function | Get parameter names from callable | `list[str]` |
 | `get_logger()` | Function | Get configured logger instance | `Logger` |
@@ -60,14 +59,14 @@ None - pure utility functions
 
 > **Moved modules**: Path utilities (`mkdir_for_local`, `normalize_user_path`,
 > `coerce_root_dir_to_absolute`) now live in `dlkit.tools.io.paths`.
-> Tensor utilities (`ensure2d`) now live in `dlkit.core.datasets.tensor_utils`.
-> Checkpoint security now lives in `dlkit.core.models.wrappers.security`.
-> Metric collection now lives in `dlkit.core.training.metrics.collect`.
+> Tensor utilities (`ensure2d`) now live in `dlkit.runtime.data.datasets.tensor_utils`.
+> Checkpoint security now lives in `dlkit.runtime.adapters.lightning.security`.
+> Metric collection now lives in `dlkit.domain.metrics.collect`.
 
 ## Dependencies
 
 ### Internal Dependencies
-- `dlkit.tools.config.environment`: Environment settings (`DLKitEnvironment`)
+- none required for logging defaults; log level and log file resolution come from `DLKIT_*` environment variables
 
 ### External Dependencies
 - `loguru`: Structured logging (`logger`)
@@ -141,7 +140,7 @@ from dlkit.tools.utils.general import import_object
 Linear = import_object("torch.nn:Linear")
 model = Linear(10, 5)
 
-MyModel = import_object("MyModel", fallback_module="dlkit.core.models.nn.ffnn")
+MyModel = import_object("MyModel", fallback_module="dlkit.domain.nn.ffnn")
 
 relu = import_object("torch.nn.functional:relu")
 ```
@@ -329,9 +328,9 @@ paths = filter_dict(config, lambda v: isinstance(v, str))
 
 ## Related Modules
 - `dlkit.tools.io.paths`: Path utilities (`mkdir_for_local`, `normalize_user_path`, `coerce_root_dir_to_absolute`)
-- `dlkit.core.datasets.tensor_utils`: Tensor/dataloader helpers (`ensure2d`)
-- `dlkit.core.models.wrappers.security`: Checkpoint security configuration
-- `dlkit.core.training.metrics.collect`: Metric value collection
+- `dlkit.runtime.data.datasets.tensor_utils`: Tensor/dataloader helpers (`ensure2d`)
+- `dlkit.runtime.adapters.lightning.security`: Checkpoint security configuration
+- `dlkit.domain.metrics.collect`: Metric value collection
 - `dlkit.tools.config`: Uses import utilities for dynamic component loading
 - `dlkit.tools.registry`: Uses import utilities for component resolution
 - All modules: Use get_logger for consistent logging

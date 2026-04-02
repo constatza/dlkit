@@ -10,9 +10,9 @@ from unittest.mock import Mock
 import pytest
 from torch import Tensor
 
-from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
-from dlkit.runtime.workflows.strategies.tracking.artifact_logger import (
+from dlkit.runtime.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.runtime.tracking.artifact_logger import (
     TAG_LOGGED_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_URI,
     TAG_MODEL_CLASS,
@@ -20,7 +20,7 @@ from dlkit.runtime.workflows.strategies.tracking.artifact_logger import (
     ArtifactLogger,
     _resolve_model_class_name,
 )
-from dlkit.runtime.workflows.strategies.tracking.interfaces import IRunContext
+from dlkit.runtime.tracking.interfaces import IRunContext
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 
@@ -75,7 +75,7 @@ class _RecordingRunContext(IRunContext):
     def log_params(self, params: dict[str, Any]) -> None:
         pass
 
-    def log_text(self, text: str, artifact_file: str) -> None:
+    def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None:
         pass
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
@@ -133,8 +133,8 @@ class _RecordingRunContext(IRunContext):
         self.model_version_tag_calls.append((model_name, version, key, value))
 
 
-def _build_components(model: Any) -> BuildComponents:
-    return BuildComponents(
+def _build_components(model: Any) -> RuntimeComponents:
+    return RuntimeComponents(
         model=model,
         datamodule=Mock(),
         trainer=None,

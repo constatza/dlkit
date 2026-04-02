@@ -60,12 +60,12 @@ precision = "float32"
 [MODEL]
 # Model class name - supports multiple formats:
 #   - Simple name: "ConstantWidthFFNN" (looked up in module_path)
-#   - Fully qualified: "dlkit.core.models.nn.ffnn.ConstantWidthFFNN"
+#   - Fully qualified: "dlkit.domain.nn.ffnn.ConstantWidthFFNN"
 name = "ConstantWidthFFNN"
 
 # Module path where the model class is located
 # Default covers most DLKit models; change for custom models
-module_path = "dlkit.core.models.nn"
+module_path = "dlkit.domain.nn"
 
 # Checkpoint path for inference mode (model weights only)
 # Use this field for inference; use TRAINING.resume_from_checkpoint for
@@ -239,8 +239,8 @@ min_lr = 1e-8         # Minimum learning rate
 name = "mse"
 
 # Module path to the loss function
-# Default: dlkit.core.training.functional (shared functional module)
-module_path = "dlkit.core.training.functional"
+# Default: dlkit.domain.losses
+module_path = "dlkit.domain.losses"
 
 
 # -----------------------------------------------------------------------------
@@ -266,7 +266,7 @@ module_path = "dlkit.core.training.functional"
 # DataModule class name
 # Options: "InMemoryDataModule", "GraphDataModule", "TimeSeriesDataModule"
 name = "InMemoryDataModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 
 # -----------------------------------------------------------------------------
@@ -301,7 +301,7 @@ pin_memory = true
 # Dataset class name
 # Options: "FlexibleDataset", "GraphDataset", "TimeSeriesDataset"
 name = "FlexibleDataset"
-module_path = "dlkit.core.datasets"
+module_path = "dlkit.runtime.data.datasets"
 
 # Optional dataset family hint for automatic strategy selection
 # type = "flexible"  # Options: "flexible", "graph", "timeseries"
@@ -326,11 +326,11 @@ path = "data/features.npy"          # Path to data file
 # Optional transforms applied to this feature
 # [[DATASET.features.transforms]]
 # name = "StandardScaler"
-# module_path = "dlkit.core.training.transforms"
+# module_path = "dlkit.domain.transforms"
 
 # [[DATASET.features.transforms]]
 # name = "PCA"
-# module_path = "dlkit.core.training.transforms"
+# module_path = "dlkit.domain.transforms"
 # n_components = 50
 
 
@@ -355,7 +355,7 @@ path = "data/targets.npy"           # Path to data file
 # Optional transforms applied to targets
 # [[DATASET.targets.transforms]]
 # name = "MinMaxScaler"
-# module_path = "dlkit.core.training.transforms"
+# module_path = "dlkit.domain.transforms"
 
 
 # -----------------------------------------------------------------------------

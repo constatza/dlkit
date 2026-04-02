@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from dlkit.core.training.metrics.functional import (
+from dlkit.domain.metrics.functional import (
     _absolute_vector_norm_compute,
     _energy_norm_compute,
     _normalized_vector_norm_compute,

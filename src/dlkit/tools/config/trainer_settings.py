@@ -10,10 +10,11 @@ from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import Callback
 from pydantic import DirectoryPath, Field
 
+from dlkit.tools.config import BuildContext, FactoryProvider
+
 # Import moved to method level to avoid circular imports
 from dlkit.tools.utils.logging_config import get_logger, should_enable_progress_bar
 
-from .core import BuildContext, FactoryProvider
 from .core.base_settings import ComponentSettings
 
 loguru_logger = get_logger(__name__)

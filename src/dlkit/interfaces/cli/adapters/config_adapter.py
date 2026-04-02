@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dlkit.interfaces.api.domain import ConfigurationError
+from dlkit.shared import ConfigurationError
 from dlkit.tools.config import load_settings
 from dlkit.tools.config.protocols import BaseSettingsProtocol
 from dlkit.tools.io.path_context import path_override_context

@@ -1,0 +1,215 @@
+source_roots = ["src"]
+exact = false
+
+[[modules]]
+path = "dlkit.shared"
+depends_on = []
+
+[[modules]]
+path = "dlkit.tools"
+depends_on = [
+    { path = "dlkit.shared" },
+]
+
+[[modules]]
+path = "dlkit.domain"
+depends_on = [
+    { path = "dlkit.shared" },
+]
+
+[[modules]]
+path = "dlkit.runtime"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+]
+
+[[modules]]
+path = "dlkit.runtime.data"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+]
+
+[[modules]]
+path = "dlkit.runtime.execution"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+]
+
+[[modules]]
+path = "dlkit.runtime.adapters.lightning"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime.data" },
+]
+
+[[modules]]
+path = "dlkit.runtime.tracking"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.data" },
+    { path = "dlkit.runtime.execution" },
+    { path = "dlkit.runtime.adapters.lightning" },
+]
+
+[[modules]]
+path = "dlkit.runtime.predictor"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime.data" },
+    { path = "dlkit.runtime.adapters.lightning" },
+    { path = "dlkit.runtime.workflows.factories" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime.data" },
+    { path = "dlkit.runtime.execution" },
+    { path = "dlkit.runtime.tracking" },
+    { path = "dlkit.runtime.adapters.lightning" },
+    { path = "dlkit.runtime.workflows.entry_registry" },
+    { path = "dlkit.runtime.workflows.factories" },
+    { path = "dlkit.runtime.workflows.selectors" },
+    { path = "dlkit.runtime.workflows.optimization" },
+    { path = "dlkit.runtime.workflows.optimization.infrastructure" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.entry_registry"
+depends_on = [
+    { path = "dlkit.tools" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.selectors"
+depends_on = [
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.data" },
+    { path = "dlkit.runtime.adapters.lightning" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.factories"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime.data" },
+    { path = "dlkit.runtime.execution" },
+    { path = "dlkit.runtime.tracking" },
+    { path = "dlkit.runtime.adapters.lightning" },
+    { path = "dlkit.runtime.workflows.entry_registry" },
+    { path = "dlkit.runtime.workflows.selectors" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.optimization"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.execution" },
+    { path = "dlkit.runtime.tracking" },
+    { path = "dlkit.runtime.workflows.factories" },
+    { path = "dlkit.runtime.workflows.optimization.domain" },
+    { path = "dlkit.runtime.workflows.optimization.application" },
+    { path = "dlkit.runtime.workflows.optimization.infrastructure" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.optimization.domain"
+depends_on = [
+    { path = "dlkit.shared" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.optimization.application"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.execution" },
+    { path = "dlkit.runtime.tracking" },
+    { path = "dlkit.runtime.adapters.lightning" },
+    { path = "dlkit.runtime.workflows.factories" },
+    { path = "dlkit.runtime.workflows.optimization.domain" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.optimization.infrastructure"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.tracking" },
+    { path = "dlkit.runtime.workflows.optimization.domain" },
+]
+
+[[modules]]
+path = "dlkit.runtime.workflows.entrypoints"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime" },
+    { path = "dlkit.runtime.adapters.lightning" },
+    { path = "dlkit.runtime.workflows" },
+    { path = "dlkit.runtime.workflows.factories" },
+    { path = "dlkit.runtime.workflows.optimization" },
+]
+
+[[modules]]
+path = "dlkit.interfaces"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.domain" },
+    { path = "dlkit.runtime" },
+]
+
+[[modules]]
+path = "dlkit.interfaces.cli"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.interfaces" },
+    { path = "dlkit.interfaces.api" },
+    { path = "dlkit.interfaces.inference" },
+    { path = "dlkit.runtime.workflows.entrypoints" },
+    { path = "dlkit.runtime.workflows.factories" },
+]
+
+[[modules]]
+path = "dlkit.interfaces.api.functions"
+depends_on = [
+    { path = "dlkit.interfaces" },
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.runtime.workflows.entrypoints" },
+]
+
+[[modules]]
+path = "dlkit.interfaces.inference"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.runtime.predictor" },
+]
+
+[[modules]]
+path = "dlkit"
+depends_on = [
+    { path = "dlkit.shared" },
+    { path = "dlkit.tools" },
+    { path = "dlkit.interfaces" },
+]

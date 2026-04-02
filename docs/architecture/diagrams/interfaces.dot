@@ -1,0 +1,28 @@
+digraph {
+"dlkit.domain" [label="domain"];
+"dlkit.interfaces" [label="interfaces" style="bold"];
+"dlkit.interfaces.api" [label="api"];
+"dlkit.interfaces.cli" [label="cli"];
+"dlkit.interfaces.inference" [label="inference"];
+"dlkit.runtime" [label="runtime"];
+"dlkit.shared" [label="shared"];
+"dlkit.tools" [label="tools"];
+"dlkit.interfaces" -> "dlkit.interfaces.api" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.interfaces" -> "dlkit.interfaces.cli" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.interfaces" -> "dlkit.interfaces.inference" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.shared";
+"dlkit.interfaces.api" -> "dlkit.interfaces.inference";
+"dlkit.interfaces.api" -> "dlkit.runtime";
+"dlkit.interfaces.api" -> "dlkit.shared";
+"dlkit.interfaces.api" -> "dlkit.tools";
+"dlkit.interfaces.cli" -> "dlkit.interfaces.api";
+"dlkit.interfaces.cli" -> "dlkit.interfaces.inference";
+"dlkit.interfaces.cli" -> "dlkit.runtime";
+"dlkit.interfaces.cli" -> "dlkit.shared";
+"dlkit.interfaces.cli" -> "dlkit.tools";
+"dlkit.interfaces.inference" -> "dlkit.runtime";
+"dlkit.runtime" -> "dlkit.domain";
+"dlkit.runtime" -> "dlkit.shared";
+"dlkit.runtime" -> "dlkit.tools";
+"dlkit.tools" -> "dlkit.shared";
+}

@@ -163,6 +163,11 @@ cython_debug/
 # raw
 *data
 *data/*
+!src/dlkit/runtime/data/
+!src/dlkit/runtime/data/*.py
+!src/dlkit/runtime/data/*.md
+!src/dlkit/runtime/data/**/*.py
+!src/dlkit/runtime/data/**/*.md
 input/
 output/
 raw/

@@ -10,8 +10,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from dlkit.runtime.workflows.strategies.tracking.interfaces import IRunContext
-from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
+from dlkit.runtime.tracking.interfaces import IRunContext
+from dlkit.runtime.tracking.mlflow_tracker import MLflowTracker
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.dataset_settings import DatasetSettings
 from dlkit.tools.config.enums import DatasetFamily
@@ -37,9 +37,10 @@ class _DatasetRunContext(IRunContext):
     def log_params(self, params: dict[str, Any]) -> None:
         pass
 
-    def log_text(self, text: str, artifact_file: str) -> None:
+    def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None:
         if artifact_file.startswith("lineage/"):
-            self.manifests.append(json.loads(text))
+            payload = content.decode("utf-8") if isinstance(content, bytes) else content
+            self.manifests.append(json.loads(payload))
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
         pass

@@ -1,0 +1,31 @@
+digraph {
+"dlkit.shared" [label="shared"];
+"dlkit.tools" [label="tools" style="bold"];
+"dlkit.tools.config" [label="config"];
+"dlkit.tools.datatypes" [label="datatypes"];
+"dlkit.tools.io" [label="io"];
+"dlkit.tools.path_context_state" [label="path_context_state"];
+"dlkit.tools.registry" [label="registry"];
+"dlkit.tools.tensor_entries" [label="tensor_entries"];
+"dlkit.tools.utils" [label="utils"];
+"dlkit.tools" -> "dlkit.tools.config" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.datatypes" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.io" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.path_context_state" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.registry" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.tensor_entries" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools" -> "dlkit.tools.utils" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.tools.config" -> "dlkit.tools.datatypes";
+"dlkit.tools.config" -> "dlkit.tools.path_context_state";
+"dlkit.tools.config" -> "dlkit.tools.registry";
+"dlkit.tools.config" -> "dlkit.tools.utils";
+"dlkit.tools.io" -> "dlkit.shared";
+"dlkit.tools.io" -> "dlkit.tools.config";
+"dlkit.tools.io" -> "dlkit.tools.datatypes";
+"dlkit.tools.io" -> "dlkit.tools.path_context_state";
+"dlkit.tools.io" -> "dlkit.tools.utils";
+"dlkit.tools.registry" -> "dlkit.tools.utils";
+"dlkit.tools.tensor_entries" -> "dlkit.tools.config";
+"dlkit.tools.tensor_entries" -> "dlkit.tools.io";
+"dlkit.tools.utils" -> "dlkit.shared";
+}

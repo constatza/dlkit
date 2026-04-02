@@ -8,13 +8,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.runtime.execution import ITrainingExecutor, VanillaExecutor
 
 # OptimizationDecorator removed - use clean architecture tests instead
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
-from dlkit.runtime.workflows.strategies.core import ITrainingExecutor, VanillaExecutor
-from dlkit.runtime.workflows.strategies.factory import ExecutionStrategyFactory
-from dlkit.runtime.workflows.strategies.tracking import TrackingDecorator
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.runtime.tracking.tracking_decorator import TrackingDecorator
+from dlkit.runtime.workflows.factories.execution_strategy_factory import ExecutionStrategyFactory
+from dlkit.shared import TrainingResult
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.optuna_settings import OptunaSettings
@@ -22,7 +22,7 @@ from dlkit.tools.config.optuna_settings import OptunaSettings
 
 @pytest.fixture
 def build_components():
-    """Create realistic BuildComponents for integration testing."""
+    """Create realistic RuntimeComponents for integration testing."""
 
     @dataclass(frozen=True, slots=True)
     class TestModel:
@@ -46,7 +46,7 @@ def build_components():
             """Match PyTorch Lightning Trainer.test() signature."""
             self.called["test"] += 1
 
-    return BuildComponents(
+    return RuntimeComponents(
         model=cast("Any", TestModel()),
         datamodule=Mock(),
         trainer=cast("Any", TestTrainer()),
@@ -58,7 +58,7 @@ def build_components():
 def test_single_responsibility_principle_integration(build_components, monkeypatch):
     """Test that each component has a single, focused responsibility."""
     # Ensure no local MLflow server is detected and no env var set
-    from dlkit.runtime.workflows.strategies.tracking import uri_resolver
+    import dlkit.runtime.tracking.uri_resolver as uri_resolver
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
@@ -89,9 +89,7 @@ def test_open_closed_principle_integration(build_components):
         )
     )
 
-    with patch(
-        "dlkit.runtime.workflows.strategies.tracking.mlflow_tracker.MLflowTracker"
-    ) as mock_tracker_class:
+    with patch("dlkit.runtime.tracking.mlflow_tracker.MLflowTracker") as mock_tracker_class:
         mock_tracker = Mock()
         mock_tracker_class.return_value = mock_tracker
 
@@ -147,9 +145,8 @@ def test_liskov_substitution_principle_integration(build_components):
 
 def test_interface_segregation_principle_integration():
     """Test that interfaces are focused and not bloated."""
-    from dlkit.runtime.workflows.strategies.core.interfaces import ITrainingExecutor
-    from dlkit.runtime.workflows.strategies.optuna.interfaces import IHyperparameterOptimizer
-    from dlkit.runtime.workflows.strategies.tracking.interfaces import IExperimentTracker
+    from dlkit.runtime.execution.interfaces import IOptimizationStrategy, ITrainingExecutor
+    from dlkit.runtime.tracking.interfaces import IExperimentTracker
 
     # ITrainingExecutor should only have execute method
     training_methods = [method for method in dir(ITrainingExecutor) if not method.startswith("_")]
@@ -160,12 +157,11 @@ def test_interface_segregation_principle_integration():
     assert "create_run" in tracker_methods
     assert "log_settings" in tracker_methods
 
-    # IHyperparameterOptimizer should only have optimization methods
+    # IOptimizationStrategy should only expose optimization execution
     optimizer_methods = [
-        method for method in dir(IHyperparameterOptimizer) if not method.startswith("_")
+        method for method in dir(IOptimizationStrategy) if not method.startswith("_")
     ]
-    assert "optimize" in optimizer_methods
-    assert "create_sampled_settings" in optimizer_methods
+    assert optimizer_methods == ["execute_optimization"]
 
 
 def test_dependency_inversion_principle_integration(build_components):
@@ -199,8 +195,6 @@ def test_dependency_inversion_principle_integration(build_components):
 
 def test_pure_solid_architecture_integration(build_components):
     """Test that pure SOLID architecture works without backward compatibility."""
-    from dlkit.runtime.workflows.strategies import ExecutionStrategyFactory, VanillaExecutor
-
     settings = GeneralSettings()
 
     # Pure SOLID interface
@@ -219,14 +213,14 @@ def test_pure_solid_architecture_integration(build_components):
 
 def test_error_handling_integration(build_components):
     """Test that error handling works correctly across the architecture."""
-    from dlkit.interfaces.api.domain import WorkflowError
+    from dlkit.shared import WorkflowError
 
     # Create failing trainer
     class FailingTrainer:
         def fit(self, *args, **kwargs):
             raise RuntimeError("Training failed")
 
-    failing_components = BuildComponents(
+    failing_components = RuntimeComponents(
         model=cast("Any", Mock()),
         datamodule=Mock(),
         trainer=cast("Any", FailingTrainer()),

@@ -16,7 +16,7 @@ import pytest
 import torch
 
 from dlkit.interfaces.inference import CheckpointPredictor, PredictorConfig, load_model
-from dlkit.interfaces.inference.loading import (
+from dlkit.runtime.predictor.loading import (
     build_model_from_checkpoint,
     detect_checkpoint_dtype,
     extract_state_dict,

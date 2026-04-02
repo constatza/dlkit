@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Self
 
 from pydantic import Field, FilePath, model_validator, validate_call
 
-from .components.model_components import ModelComponentSettings
 from .core.base_settings import BasicSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
 from .extras_settings import ExtrasSettings
 from .generative_settings import GenerativeSettings
 from .mlflow_settings import MLflowSettings
+from .model_components import ModelComponentSettings
 from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
 from .session_settings import SessionSettings
@@ -131,14 +132,16 @@ class GeneralSettings(BasicSettings):
         Raises:
             ValueError: If the config cannot be loaded or validated
         """
-        from dlkit.tools.io.config import load_config
+        from dlkit.tools.config.core.patching import patch_model
+        from dlkit.tools.config.core.sources import DLKitTomlSource, _read_env_patches
+        from dlkit.tools.config.environment import sync_session_root_to_environment
 
         try:
-            config = load_config(filepath, cls)
-            if isinstance(config, cls):
-                return config
-            # Handle dict case
-            return cls.model_validate(config)
+            settings = cls.model_validate(DLKitTomlSource(Path(filepath))())
+            if env := _read_env_patches("DLKIT_", "__"):
+                settings = patch_model(settings, env)
+            sync_session_root_to_environment(settings)
+            return settings
 
         except Exception as e:
             raise ValueError(f"Failed to load configuration from {filepath}: {e}") from e

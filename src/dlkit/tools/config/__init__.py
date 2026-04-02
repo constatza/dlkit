@@ -13,11 +13,6 @@ Main Classes:
 - TrainingModeSettings: Full training pipeline with plugins
 - InferenceModeSettings: Lightweight inference configuration
 
-Factory System:
-- ComponentFactory: Abstract factory for component creation
-- FactoryProvider: Global factory registry and access point
-- BuildContext: Dependency injection context
-
 Plugin System:
 - PluginConfig: Base plugin configuration
 - MLflowPluginConfig: MLflow experiment tracking
@@ -55,13 +50,6 @@ InferenceSettings = InferenceWorkflowSettings
 
 # Partial loading factories
 # Component settings
-from .components import (
-    LossComponentSettings,
-    MetricComponentSettings,
-    ModelComponentSettings,
-    WrapperComponentSettings,
-)
-
 # Utility settings
 from .dataloader_settings import DataloaderSettings
 from .datamodule_settings import DataModuleSettings
@@ -80,6 +68,12 @@ from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSe
 
 # Flattened functional settings
 from .mlflow_settings import MLflowSettings
+from .model_components import (
+    LossComponentSettings,
+    MetricComponentSettings,
+    ModelComponentSettings,
+    WrapperComponentSettings,
+)
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .optuna_settings import OptunaSettings
 
@@ -108,12 +102,12 @@ __all__ = [
     "load_sections",
     # Core infrastructure
     "BasicSettings",
-    "ComponentSettings",
-    "HyperParameterSettings",
+    "BuildContext",
     "ComponentFactory",
     "ComponentRegistry",
+    "ComponentSettings",
     "FactoryProvider",
-    "BuildContext",
+    "HyperParameterSettings",
     "update_settings",
     # Flattened functional settings
     "MLflowSettings",

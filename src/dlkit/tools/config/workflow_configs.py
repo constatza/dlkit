@@ -23,11 +23,11 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from .components.model_components import ModelComponentSettings
 from .core.base_settings import BasicSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
 from .mlflow_settings import MLflowSettings
+from .model_components import ModelComponentSettings
 from .optuna_settings import OptunaSettings
 from .paths_settings import PathsSettings
 from .session_settings import SessionSettings

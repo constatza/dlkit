@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.core.shape_specs import ModelFamily, create_shape_spec
-from dlkit.interfaces.api.domain import TrainingResult
+from dlkit.domain.shapes import ModelFamily, create_shape_spec
+from dlkit.shared import TrainingResult
 from dlkit.tools.config import (
     DataModuleSettings,
     DatasetSettings,
@@ -23,13 +23,13 @@ from dlkit.tools.config import (
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.tools.config.components.model_components import (
-    MetricComponentSettings,
-    ModelComponentSettings,
-)
 from dlkit.tools.config.data_entries import Feature, Target
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.tools.config.dataset_settings import IndexSplitSettings
+from dlkit.tools.config.model_components import (
+    MetricComponentSettings,
+    ModelComponentSettings,
+)
 from dlkit.tools.config.trainer_settings import TrainerSettings
 
 # Test constants - optimized for speed
@@ -168,7 +168,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
     checkpoint_path = tmp_path / "model.ckpt"
 
     # Build the model to get the correct state dict keys
-    from dlkit.core.models.nn.ffnn import ConstantWidthFFNN
+    from dlkit.domain.nn.ffnn import ConstantWidthFFNN
 
     _model = ConstantWidthFFNN(
         in_features=FEATURE_SIZE,
@@ -187,7 +187,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
             },
             "model_settings": {
                 "name": "ConstantWidthFFNN",
-                "module_path": "dlkit.core.models.nn.ffnn.simple",
+                "module_path": "dlkit.domain.nn.ffnn.simple",
                 "params": {
                     "hidden_size": FEATURE_SIZE,
                     "num_layers": 1,
@@ -222,7 +222,7 @@ def _make_settings(
 
     dataset = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         root=data_dir,
         features=(Feature(name="x", path=data_dir / "features.npy"),),
         targets=(Target(name="y", path=data_dir / "targets.npy"),),
@@ -231,7 +231,7 @@ def _make_settings(
 
     datamodule = DataModuleSettings(
         name="InMemoryModule",
-        module_path="dlkit.core.datamodules",
+        module_path="dlkit.runtime.adapters.lightning.datamodules",
         dataloader=DataloaderSettings(
             num_workers=0,
             batch_size=batch_size,
@@ -243,7 +243,7 @@ def _make_settings(
 
     model = ModelComponentSettings(
         name="ConstantWidthFFNN",
-        module_path="dlkit.core.models.nn.ffnn.simple",
+        module_path="dlkit.domain.nn.ffnn.simple",
         hidden_size=4,  # Reduced from 8 for faster testing
         num_layers=1,
         checkpoint=checkpoint if inference else None,
@@ -263,7 +263,7 @@ def _make_settings(
         metrics=(
             MetricComponentSettings(
                 name="MeanSquaredError",
-                module_path="dlkit.core.training.metrics",
+                module_path="dlkit.domain.metrics",
             ),
         ),
     )
@@ -328,7 +328,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
     dataset = DatasetSettings.model_validate(
         {
             "name": "GraphDataset",
-            "module_path": "dlkit.core.datasets.graph",
+            "module_path": "dlkit.runtime.data.datasets.graph",
             "root": minimal_graph_dataset["data_dir"],
             "x": minimal_graph_dataset["node_features"],
             "edge_index": minimal_graph_dataset["adjacency"],
@@ -338,7 +338,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
 
     datamodule = DataModuleSettings(
         name="GraphDataModule",
-        module_path="dlkit.core.datamodules.graph",
+        module_path="dlkit.runtime.adapters.lightning.datamodules.graph",
         dataloader=DataloaderSettings(
             num_workers=0,
             batch_size=2,  # Small batch for graph data
@@ -363,7 +363,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
     model = ModelComponentSettings.model_validate(
         {
             "name": "GProjection",
-            "module_path": "dlkit.core.models.nn.graph.projection_networks",
+            "module_path": "dlkit.domain.nn.graph.projection_networks",
             "hidden_size": 4,  # Small hidden size for fast testing
             "unified_shape": shape_spec,  # Provide explicit shape spec
         }
@@ -383,7 +383,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
         metrics=(
             MetricComponentSettings(
                 name="MeanSquaredError",
-                module_path="dlkit.core.training.metrics",
+                module_path="dlkit.domain.metrics",
             ),
         ),
     )
@@ -406,7 +406,7 @@ def mlflow_settings(
     minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> GeneralSettings:
     """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
-    from dlkit.runtime.workflows.strategies.tracking import uri_resolver
+    import dlkit.runtime.tracking.uri_resolver as uri_resolver
 
     base_settings = _make_settings(
         data_dir=minimal_dataset["data_dir"],
@@ -441,7 +441,7 @@ def mlflow_settings(
 @pytest.fixture
 def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
     """Create GeneralSettings with Optuna enabled using overrides."""
-    from dlkit.interfaces.api.services import BasicOverrideManager
+    from dlkit.runtime.workflows.entrypoints._overrides import apply_runtime_overrides
 
     # Start with base training settings
     base_settings = _make_settings(
@@ -453,10 +453,10 @@ def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> General
     )
 
     # Enable Optuna using overrides
-    manager = BasicOverrideManager()
-    optuna_settings = manager.apply_overrides(
+    optuna_settings = apply_runtime_overrides(
         base_settings, enable_optuna=True, trials=OPTUNA_TRIALS, study_name="test_study"
     )
+    assert optuna_settings.OPTUNA is not None
     # Ensure isolated study storage per test to avoid cross-test accumulation
     try:
         unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
@@ -519,7 +519,7 @@ seed = 42
 
 [DATASET]
 name = "FlexibleDataset"
-module_path = "dlkit.core.datasets"
+module_path = "dlkit.runtime.data.datasets"
 root_dir = "{data_dir.as_posix()}"
 
 [[DATASET.features]]
@@ -535,7 +535,7 @@ filepath = "split.txt"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.core.datamodules"
+module_path = "dlkit.runtime.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 num_workers = 0
@@ -546,7 +546,7 @@ persistent_workers = false
 
 [MODEL]
 name = "ConstantWidthFFNN"
-module_path = "dlkit.core.models.nn.ffnn.simple"
+module_path = "dlkit.domain.nn.ffnn.simple"
 hidden_size = 4
 num_layers = 1
 

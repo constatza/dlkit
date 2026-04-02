@@ -8,13 +8,13 @@ from dlkit.runtime.workflows.factories.feature_dependencies import (
     select_required_features,
     validate_feature_selection,
 )
-from dlkit.tools.config.components.model_components import (
+from dlkit.tools.config.data_entries import AutoencoderTarget, Feature, Target
+from dlkit.tools.config.model_components import (
     LossComponentSettings,
     LossInputRef,
     MetricComponentSettings,
     MetricInputRef,
 )
-from dlkit.tools.config.data_entries import AutoencoderTarget, Feature, Target
 
 
 def test_collect_feature_dependencies_captures_all_dependency_sources(tmp_path) -> None:

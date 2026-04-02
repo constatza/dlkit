@@ -10,7 +10,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.core.models.nn.utils import build_channel_schedule, make_norm_layer
+from dlkit.domain.nn.utils import build_channel_schedule, make_norm_layer
 
 
 class TestMakeNormLayer:

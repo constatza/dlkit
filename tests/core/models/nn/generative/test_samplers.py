@@ -10,8 +10,8 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
-from dlkit.core.models.nn.generative.samplers.time import UniformTimeSampler
+from dlkit.domain.nn.generative.samplers.noise import GaussianNoiseSampler
+from dlkit.domain.nn.generative.samplers.time import UniformTimeSampler
 
 # ---------------------------------------------------------------------------
 # Named constants

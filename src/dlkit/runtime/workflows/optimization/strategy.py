@@ -9,9 +9,9 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from dlkit.domain import OptimizationResult as APIOptimizationResult
-from dlkit.interfaces.api.domain import WorkflowError
-from dlkit.runtime.workflows.strategies.core.interfaces import IOptimizationStrategy
+from dlkit.runtime.execution.interfaces import IOptimizationStrategy
+from dlkit.shared import OptimizationResult as APIOptimizationResult
+from dlkit.shared.errors import WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger

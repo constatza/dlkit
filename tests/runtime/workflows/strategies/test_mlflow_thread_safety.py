@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.runtime.workflows.strategies.tracking.backend import LocalSqliteBackend
-from dlkit.runtime.workflows.strategies.tracking.mlflow_resource_manager import (
+from dlkit.runtime.tracking.backend import LocalSqliteBackend
+from dlkit.runtime.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
 from dlkit.tools.config.mlflow_settings import MLflowSettings

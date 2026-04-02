@@ -10,9 +10,9 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.models.nn.ffnn.linear import LinearNetwork
-from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN, FeedForwardNN
+from dlkit.domain.nn.base import DLKitModel
+from dlkit.domain.nn.ffnn.linear import LinearNetwork
+from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN, FeedForwardNN
 
 
 @pytest.fixture

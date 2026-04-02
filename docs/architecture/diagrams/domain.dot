@@ -1,0 +1,23 @@
+digraph {
+"dlkit.domain" [label="domain" style="bold"];
+"dlkit.domain._norm_ops" [label="_norm_ops"];
+"dlkit.domain.losses" [label="losses"];
+"dlkit.domain.metrics" [label="metrics"];
+"dlkit.domain.nn" [label="nn"];
+"dlkit.domain.shapes" [label="shapes"];
+"dlkit.domain.transforms" [label="transforms"];
+"dlkit.shared" [label="shared"];
+"dlkit.domain" -> "dlkit.domain._norm_ops" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.domain.losses" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.domain.metrics" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.domain.nn" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.domain.shapes" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain" -> "dlkit.domain.transforms" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.domain.losses" -> "dlkit.domain._norm_ops";
+"dlkit.domain.losses" -> "dlkit.domain.metrics";
+"dlkit.domain.metrics" -> "dlkit.domain._norm_ops";
+"dlkit.domain.nn" -> "dlkit.shared";
+"dlkit.domain.shapes" -> "dlkit.domain.nn";
+"dlkit.domain.shapes" -> "dlkit.shared";
+"dlkit.domain.transforms" -> "dlkit.shared";
+}

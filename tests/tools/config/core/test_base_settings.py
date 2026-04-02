@@ -15,7 +15,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from .conftest import MockBasicSettings, MockComponentSettings, valid_name
+from .conftest import MockBasicSettings, MockComponentSettings
 
 
 class TestBasicSettings:
@@ -125,7 +125,16 @@ class TestComponentSettings:
         assert "param1" not in kwargs
         assert "param2" in kwargs
 
-    @given(valid_name(), st.text(min_size=1, max_size=50))  # ty: ignore[missing-argument]
+    @given(
+        st.text(
+            min_size=1,
+            max_size=50,
+            alphabet=st.characters(
+                whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters=("_", ".")
+            ),
+        ),
+        st.text(min_size=1, max_size=50),
+    )
     def test_component_settings_property_valid_names(self, name: str, module_path: str) -> None:
         """Property test: ComponentSettings accepts valid component names.
 

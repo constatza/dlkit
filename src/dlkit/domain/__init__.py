@@ -1,10 +1,7 @@
-"""DLKit shared domain kernel.
+"""Pure domain logic for models, shapes, transforms, metrics, and losses."""
 
-Shared result and state types consumed by both the runtime and interfaces layers.
-Depends only on tools + stdlib/torch/lightning/tensordict.
-"""
-
-from .results import InferenceResult, OptimizationResult, TrainingResult
-from .state import ModelState
-
-__all__ = ["TrainingResult", "InferenceResult", "OptimizationResult", "ModelState"]
+from . import metrics as metrics
+from . import nn as nn
+from . import shapes as shapes
+from . import transforms as transforms
+from .losses import *  # noqa: F403

@@ -24,16 +24,16 @@ import inspect
 import torch
 from torch import nn
 
-from dlkit.core.training.transforms.base import (
+from dlkit.domain.transforms.base import (
     FittableTransform,
     InvertibleTransform,
     ShapeAwareTransform,
     Transform,
 )
-from dlkit.core.training.transforms.chain import TransformChain
-from dlkit.core.training.transforms.minmax import MinMaxScaler
-from dlkit.core.training.transforms.pca import PCA
-from dlkit.core.training.transforms.standard import StandardScaler
+from dlkit.domain.transforms.chain import TransformChain
+from dlkit.domain.transforms.minmax import MinMaxScaler
+from dlkit.domain.transforms.pca import PCA
+from dlkit.domain.transforms.standard import StandardScaler
 
 
 class TestProtocolBasedArchitecture:
@@ -124,7 +124,7 @@ class TestProtocolUsage:
 
     def test_transform_chain_uses_protocols(self):
         """TransformChain uses Protocols for capability checking."""
-        from dlkit.core.training.transforms import chain
+        from dlkit.domain.transforms import chain
 
         fit_source = inspect.getsource(chain.TransformChain.fit)
         inverse_source = inspect.getsource(chain.TransformChain.inverse_transform)
@@ -294,7 +294,7 @@ class TestInvariants:
 
 def test_phase2_protocol_architecture_complete():
     """Verify Phase 2 Protocol-based architecture is correctly implemented."""
-    from dlkit.core.training.transforms import chain
+    from dlkit.domain.transforms import chain
 
     # 1. TransformChain uses FittableTransform Protocol
     fit_source = inspect.getsource(chain.TransformChain.fit)

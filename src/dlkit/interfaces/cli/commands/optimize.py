@@ -104,7 +104,7 @@ def _run_optimization_impl(
         raise
     except Exception as e:
         # Handle DLKit errors (optimization failures, etc.)
-        from dlkit.interfaces.api.domain.errors import DLKitError
+        from dlkit.shared.errors import DLKitError
 
         if isinstance(e, DLKitError):
             handle_api_error(e, console)

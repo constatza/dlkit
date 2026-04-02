@@ -28,7 +28,7 @@ from dlkit import (
     search_logged_models,
     search_registered_models,
 )
-from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
+from dlkit.runtime.adapters.lightning.base import ProcessingLightningWrapper
 from dlkit.tools.config import GeneralSettings
 
 

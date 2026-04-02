@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.workflows.strategies.tuning import LRTuner
+from dlkit.runtime.execution.tuning import LRTuner
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
 
 
@@ -103,7 +103,7 @@ class TestLRTuner:
         mock_lr_finder.suggestion.return_value = 0.001
 
         # Mock Tuner class
-        with patch("dlkit.runtime.workflows.strategies.tuning.lr_tuner.Tuner") as MockTuner:
+        with patch("dlkit.runtime.execution.tuning.lr_tuner.Tuner") as MockTuner:
             mock_tuner_instance = Mock()
             mock_tuner_instance.lr_find.return_value = mock_lr_finder
             MockTuner.return_value = mock_tuner_instance
@@ -139,7 +139,7 @@ class TestLRTuner:
         mock_lr_finder = Mock()
         mock_lr_finder.suggestion.return_value = 0.005
 
-        with patch("dlkit.runtime.workflows.strategies.tuning.lr_tuner.Tuner") as MockTuner:
+        with patch("dlkit.runtime.execution.tuning.lr_tuner.Tuner") as MockTuner:
             mock_tuner_instance = Mock()
             mock_tuner_instance.lr_find.return_value = mock_lr_finder
             MockTuner.return_value = mock_tuner_instance
@@ -170,7 +170,7 @@ class TestLRTuner:
         mock_lr_finder = Mock()
         mock_lr_finder.suggestion.return_value = None
 
-        with patch("dlkit.runtime.workflows.strategies.tuning.lr_tuner.Tuner") as MockTuner:
+        with patch("dlkit.runtime.execution.tuning.lr_tuner.Tuner") as MockTuner:
             mock_tuner_instance = Mock()
             mock_tuner_instance.lr_find.return_value = mock_lr_finder
             MockTuner.return_value = mock_tuner_instance
@@ -190,7 +190,7 @@ class TestLRTuner:
         mock_lr_finder = Mock()
         mock_lr_finder.suggestion.return_value = 0.002
 
-        with patch("dlkit.runtime.workflows.strategies.tuning.lr_tuner.Tuner") as MockTuner:
+        with patch("dlkit.runtime.execution.tuning.lr_tuner.Tuner") as MockTuner:
             mock_tuner_instance = Mock()
             mock_tuner_instance.lr_find.return_value = mock_lr_finder
             MockTuner.return_value = mock_tuner_instance

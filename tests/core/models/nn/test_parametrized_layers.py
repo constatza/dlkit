@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.nn.utils import parametrize
 
-from dlkit.core.models.nn.primitives.parametrized_layers import (
+from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
     SPDFactorizedLinear,
     SPDLinear,

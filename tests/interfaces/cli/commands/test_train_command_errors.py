@@ -8,8 +8,8 @@ from unittest.mock import patch
 import typer
 from typer.testing import CliRunner
 
-from dlkit.interfaces.api.domain.errors import ConfigurationError, WorkflowError
 from dlkit.interfaces.cli.app import app as cli_app
+from dlkit.shared.errors import ConfigurationError, WorkflowError
 
 
 class TestTrainCommandErrorHandling:

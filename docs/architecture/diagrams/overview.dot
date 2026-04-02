@@ -1,0 +1,15 @@
+digraph {
+"dlkit.domain" [label="domain"];
+"dlkit.interfaces" [label="interfaces"];
+"dlkit.runtime" [label="runtime"];
+"dlkit.shared" [label="shared"];
+"dlkit.tools" [label="tools"];
+"dlkit.domain" -> "dlkit.shared";
+"dlkit.interfaces" -> "dlkit.runtime";
+"dlkit.interfaces" -> "dlkit.shared";
+"dlkit.interfaces" -> "dlkit.tools";
+"dlkit.runtime" -> "dlkit.domain";
+"dlkit.runtime" -> "dlkit.shared";
+"dlkit.runtime" -> "dlkit.tools";
+"dlkit.tools" -> "dlkit.shared";
+}
