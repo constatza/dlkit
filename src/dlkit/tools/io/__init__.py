@@ -1,7 +1,3 @@
-# High-level config loading API (re-exported from tools.config)
-from dlkit.tools.config.data_entries import SparseFeature
-from dlkit.tools.config.factories import load_sections, load_settings
-
 from . import locations  # centralized path policy
 from .arrays import load_array
 from .config import (
@@ -30,16 +26,22 @@ from .sparse import (
     validate_sparse_pack,
 )
 from .tables import read_table
+from .tensor_entries import (
+    TensorDataEntry,
+    convert_totensor_entries,
+    to_tensor_entry,
+)
 from .writers import IWriter, JsonWriter, TomlWriter, WriterFactory, YamlWriter
 
 __all__ = [
-    # High-level config loading API
-    "load_settings",
-    "load_sections",
     # Data loading
     "load_array",
     "read_table",
     "load_split_indices",
+    # Tensor entries
+    "TensorDataEntry",
+    "to_tensor_entry",
+    "convert_totensor_entries",
     # Low-level config utilities
     "load_config",
     "load_raw_config",
@@ -62,7 +64,6 @@ __all__ = [
     "PackManifest",
     "register_manifest_schema",
     "SparseFormat",
-    "SparseFeature",
     # Writers
     "IWriter",
     "TomlWriter",

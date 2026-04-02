@@ -7,11 +7,14 @@ import time
 import pytest
 import torch
 
-from dlkit.core.models.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.interfaces.api.domain.precision import get_precision_context, precision_override
-from dlkit.interfaces.api.services.precision_service import get_precision_service
+from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.precision import (
+    PrecisionStrategy,
+    get_precision_context,
+    get_precision_service,
+    precision_override,
+)
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.io.arrays import load_array
 

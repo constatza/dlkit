@@ -259,7 +259,7 @@ class TestCompileDottedOverrides:
 
     def test_non_string_key_raises(self) -> None:
         with pytest.raises(ValueError, match="strings"):
-            compile_dotted_overrides({1: "oops"})  # type: ignore[dict-item]
+            compile_dotted_overrides(cast(Any, {1: "oops"}))
 
     def test_collision_raises(self) -> None:
         # "a.b.c" inserts {"a": {"b": {"c": 1}}}; then "a.b" tries to set

@@ -14,11 +14,11 @@ import pytest
 import torch
 from torchmetrics import MetricCollection
 
-from dlkit.core.training.metrics.functional import (
+from dlkit.domain.metrics.functional import (
     normalized_vector_norm_error,
     temporal_derivative_error,
 )
-from dlkit.core.training.metrics.torchmetrics_wrappers import (
+from dlkit.domain.metrics.torchmetrics_wrappers import (
     NormalizedVectorNormError,
     TemporalDerivativeError,
 )

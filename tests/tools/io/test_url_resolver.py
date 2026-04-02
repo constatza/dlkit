@@ -123,7 +123,7 @@ class TestFileUrlValidation:
 
     def test_malformed_windows_path_detected(self) -> None:
         """Malformed file://C:/path should raise ConfigurationError."""
-        from dlkit.interfaces.api.domain.errors import ConfigurationError
+        from dlkit.shared.errors import ConfigurationError
 
         malformed_url = "file://C:/Users/test/file.txt"
         with pytest.raises(ConfigurationError):
@@ -131,7 +131,7 @@ class TestFileUrlValidation:
 
     def test_correct_windows_path_accepted(self) -> None:
         """Correct file:///C:/path should not raise validation error."""
-        from dlkit.interfaces.api.domain.errors import ConfigurationError
+        from dlkit.shared.errors import ConfigurationError
 
         correct_url = "file:///C:/Users/test/file.txt"
         try:
@@ -144,7 +144,7 @@ class TestFileUrlValidation:
 
     def test_file_url_with_host_rejected(self) -> None:
         """File URLs with non-empty host should raise."""
-        from dlkit.interfaces.api.domain.errors import ConfigurationError
+        from dlkit.shared.errors import ConfigurationError
 
         url_with_host = "file://hostname/path/to/file"
         with pytest.raises(ConfigurationError):

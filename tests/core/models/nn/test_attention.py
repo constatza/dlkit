@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import torch
 
-from dlkit.core.models.nn.attention.basic import SelfAttentionBlock
-from dlkit.core.models.nn.attention.transformer import (
+from dlkit.domain.nn.attention.basic import SelfAttentionBlock
+from dlkit.domain.nn.attention.transformer import (
     TransformerDecoderBlock,
     TransformerEncoderBlock,
     _batch_first,

@@ -13,17 +13,13 @@ class TransformSettings(StringNamedComponentSettings):
         ```python
         from dlkit.tools.config.transform_settings import TransformSettings
 
-        minmax = TransformSettings(
-            name="MinMaxScaler",
-            module_path="dlkit.core.training.transforms.minmax",
-            dim=0,
-        )
+        minmax = TransformSettings(name="MinMaxScaler", dim=0)
         ```
     """
 
     module_path: str | None = Field(
-        default="dlkit.core.training.transforms",
-        description="Python module path containing the transform implementation.",
+        default=None,
+        description="Optional Python module path containing the transform implementation.",
     )
     dim: tuple[int, ...] | int = Field(
         default=0,

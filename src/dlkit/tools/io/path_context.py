@@ -6,50 +6,22 @@ No dependency on tools/config or interfaces layers.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dlkit.tools.io.explicit_path_context import (
+    PathContext,
+    resolve_component_path,
+    resolve_root_dir,
+)
+from dlkit.tools.io.path_context_state import (
+    PathOverrideContext,
+    get_current_path_context,
+    set_path_context,
+)
 from dlkit.tools.io.paths import normalize_user_path
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PathOverrideContext:
-    """Context for API path overrides.
-
-    This allows API calls to temporarily override path resolution
-    without affecting the global environment configuration.
-    """
-
-    root_dir: Path | None = None
-    output_dir: Path | None = None
-    data_dir: Path | None = None
-    checkpoints_dir: Path | None = None
-
-
-# Thread-local storage for path override context
-_context_storage = threading.local()
-
-
-def get_current_path_context() -> PathOverrideContext | None:
-    """Get the current path override context for this thread.
-
-    Returns:
-        PathOverrideContext or None if no context is active
-    """
-    return getattr(_context_storage, "path_context", None)
-
-
-def set_path_context(context: PathOverrideContext | None) -> None:
-    """Set the path override context for this thread.
-
-    Args:
-        context: Path override context or None to clear
-    """
-    _context_storage.path_context = context
 
 
 @contextmanager
@@ -129,3 +101,15 @@ def resolve_with_context(component_path: str, env=None) -> Path:
     registry, resolver_context = create_default_resolver_system(effective_root)
     resolved = registry.resolve(component_path, resolver_context)
     return Path(resolved) if resolved is not None else (effective_root / component_path).resolve()
+
+
+__all__ = [
+    "PathContext",
+    "PathOverrideContext",
+    "get_current_path_context",
+    "path_override_context",
+    "resolve_component_path",
+    "resolve_root_dir",
+    "resolve_with_context",
+    "set_path_context",
+]

@@ -2,81 +2,46 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from dlkit.interfaces.api.commands import (
-    OptimizationCommandInput,
-    TrainCommandInput,
-    get_dispatcher,
+from dlkit.interfaces.api.domain.override_types import (
+    OptimizationOverrides,
+    TrainingOverrides,
 )
-from dlkit.interfaces.api.domain import (
+from dlkit.runtime.workflows.entrypoints import optimize as runtime_optimize
+from dlkit.runtime.workflows.entrypoints import train as runtime_train
+from dlkit.runtime.workflows.entrypoints._settings import WorkflowSettings
+from dlkit.shared import (
     OptimizationResult,
     TrainingResult,
 )
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 
-# Inference API removed - use load_model() instead
-# from dlkit import load_model
-# predictor = load_model("model.ckpt")
-# result = predictor.predict(inputs)
 
-# Get the global command dispatcher
-_dispatcher = get_dispatcher()
+def _coerce_override_paths(overrides: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Coerce known path-like override values into ``Path`` objects."""
+    path_fields = {"checkpoint_path", "root_dir", "output_dir", "data_dir"}
+    coerced: dict[str, Any] = {}
+    if overrides is not None:
+        for key, value in overrides.items():
+            coerced[key] = value
+    for field in path_fields:
+        value = coerced.get(field)
+        if isinstance(value, str):
+            coerced[field] = Path(value)
+    return coerced
 
 
 def train(
-    settings: BaseSettingsProtocol,
-    checkpoint_path: Path | str | None = None,
-    # Root override
-    root_dir: Path | str | None = None,
-    # Training overrides
-    epochs: int | None = None,
-    batch_size: int | None = None,
-    learning_rate: float | None = None,
-    # MLflow overrides — only meaningful when settings already has an [MLFLOW] section
-    experiment_name: str | None = None,
-    run_name: str | None = None,
-    **additional_overrides: Any,
+    settings: WorkflowSettings,
+    overrides: TrainingOverrides | None = None,
 ) -> TrainingResult:
-    """Run training with optional overrides.
-
-    Note: For optimization (Optuna), use `optimize()` instead.
-    This function specifically performs training workflows only.
-
-    To enable MLflow tracking, include an ``[MLFLOW]`` section in your configuration
-    (or pass ``GeneralSettings(MLFLOW=MLflowSettings(...))``) — there is no
-    boolean ``mlflow`` toggle here.
-
-    Args:
-        settings: Parsed and validated configuration.
-        checkpoint_path: Checkpoint to resume from (overrides ``[MODEL].checkpoint``).
-        root_dir: Override the root directory for all path resolution.
-        epochs: Override ``[TRAINING].epochs`` and ``[TRAINING.trainer].max_epochs``.
-        batch_size: Override ``[DATAMODULE.dataloader].batch_size``.
-        learning_rate: Override ``[TRAINING.optimizer].lr``.
-        experiment_name: Override ``[MLFLOW].experiment_name``.
-        run_name: Override ``[MLFLOW].run_name``.
-        additional_overrides: Extra overrides passed through to the manager.
-
-    Returns:
-        TrainingResult: Training execution result.
-
-    Raises:
-        WorkflowError: On execution failure.
-    """
-    input_data = TrainCommandInput(
-        checkpoint_path=checkpoint_path,
-        root_dir=root_dir,
-        epochs=epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        experiment_name=experiment_name,
-        run_name=run_name,
-        additional_overrides=additional_overrides,
+    """Run training with optional overrides."""
+    return runtime_train(
+        settings,
+        overrides=cast(Any, _coerce_override_paths(overrides)),
     )
-
-    return _dispatcher.execute("train", input_data, settings)
 
 
 # REMOVED: Old infer() and predict_with_config() functions
@@ -90,47 +55,11 @@ def train(
 
 
 def optimize(
-    settings: BaseSettingsProtocol,
-    trials: int = 100,
-    checkpoint_path: Path | str | None = None,
-    # Root override
-    root_dir: Path | str | None = None,
-    # Optuna overrides
-    study_name: str | None = None,
-    # MLflow overrides — only meaningful when settings already has an [MLFLOW] section
-    experiment_name: str | None = None,
-    run_name: str | None = None,
-    **additional_overrides: Any,
+    settings: WorkflowSettings,
+    overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
-    """Run Optuna hyperparameter optimization with optional overrides.
-
-    To enable MLflow tracking, include an ``[MLFLOW]`` section in your configuration.
-    There is no boolean ``mlflow`` toggle.
-
-    Args:
-        settings: Parsed and validated configuration (with ``[OPTUNA].enabled=true``).
-        trials: Number of trials to run.
-        checkpoint_path: Optional warm-start checkpoint path.
-        root_dir: Override the root directory for all path resolution.
-        study_name: Override ``[OPTUNA].study_name``.
-        experiment_name: Override ``[MLFLOW].experiment_name``.
-        run_name: Override ``[MLFLOW].run_name``.
-        additional_overrides: Extra overrides passed through to the manager.
-
-    Returns:
-        OptimizationResult: Optimization summary, best trial, and final training result.
-
-    Raises:
-        WorkflowError: On execution failure.
-    """
-    input_data = OptimizationCommandInput(
-        trials=trials,
-        checkpoint_path=checkpoint_path,
-        root_dir=root_dir,
-        study_name=study_name,
-        experiment_name=experiment_name,
-        run_name=run_name,
-        additional_overrides=additional_overrides,
+    """Run Optuna hyperparameter optimization with optional overrides."""
+    return runtime_optimize(
+        settings,
+        overrides=cast(Any, _coerce_override_paths(overrides)),
     )
-
-    return _dispatcher.execute("optimize", input_data, settings)

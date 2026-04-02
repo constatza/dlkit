@@ -6,13 +6,13 @@ from torch import nn
 from torch.nn import ModuleList
 from torch.optim import Adam
 
-from dlkit.core.models.wrappers.components import WrapperComponents
-from dlkit.core.models.wrappers.standard import StandardLightningWrapper
-from dlkit.tools.config.components.model_components import (
+from dlkit.runtime.adapters.lightning.components import WrapperComponents
+from dlkit.runtime.adapters.lightning.standard import StandardLightningWrapper
+from dlkit.tools.config.data_entries import Feature
+from dlkit.tools.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import Feature
 
 
 class _IdentityModel(nn.Module):

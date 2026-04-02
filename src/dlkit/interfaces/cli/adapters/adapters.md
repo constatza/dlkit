@@ -46,7 +46,7 @@ Key architectural decisions:
 - `dlkit.tools.config`: Configuration loading (`load_settings`, `load_sections`)
 - `dlkit.tools.config.protocols`: Protocol interfaces (`BaseSettingsProtocol`)
 - `dlkit.interfaces.api.overrides.path_context`: Path override context manager
-- `dlkit.core.postprocessing`: Prediction summarization utilities
+- `dlkit.interfaces.cli.presenters`: Prediction summarization utilities
 
 ### External Dependencies
 - `rich`: Terminal formatting (Console, Panel, Table, Text, Syntax)
@@ -332,7 +332,7 @@ present_optimization_result(result, console)
 ```python
 from pathlib import Path
 from dlkit.interfaces.cli.adapters.config_adapter import load_config
-from dlkit.interfaces.api.domain.errors import ConfigurationError
+from dlkit.shared.errors import ConfigurationError
 
 try:
     # Load with workflow-specific optimization
@@ -364,7 +364,7 @@ present_training_result(result, console)
 ```python
 from pathlib import Path
 from dlkit.interfaces.cli.adapters.config_adapter import validate_config_path
-from dlkit.interfaces.api.domain.errors import ConfigurationError
+from dlkit.shared.errors import ConfigurationError
 
 try:
     # Validate before expensive operations
@@ -466,7 +466,7 @@ except ConfigurationError as e:
 - `dlkit.interfaces.cli.commands`: CLI commands that use these adapters
 - `dlkit.interfaces.cli.middleware`: Error handler that consumes ConfigurationError
 - `dlkit.tools.config`: Configuration loading infrastructure
-- `dlkit.core.postprocessing`: Prediction summarization utilities
+- `dlkit.interfaces.cli.presenters`: Prediction summarization utilities
 
 ## Change Log
 - **2025-10-03**: Comprehensive CLI adapters documentation created

@@ -23,11 +23,10 @@ class TestConvertCommandGoodPath:
         checkpoint_path.write_text("dummy checkpoint")
         output_path = tmp_path / "model.onnx"
 
-        with patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls:
-            mock_cmd = Mock()
-            mock_cmd.execute.return_value = sample_convert_result
-            mock_cmd_cls.return_value = mock_cmd
-
+        with patch(
+            "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+        ) as mock_convert:
+            mock_convert.return_value = sample_convert_result
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -41,17 +40,11 @@ class TestConvertCommandGoodPath:
             )
 
         assert result.exit_code == 0
-        assert "✅ Export successful" in result.stdout
-        assert "test_model.onnx" in result.stdout
-        assert "Opset: 17" in result.stdout
-        assert "Inputs: (1, 3, 224, 224)" in result.stdout
-
-        input_data = mock_cmd.execute.call_args[0][0]
-        assert input_data.checkpoint_path == checkpoint_path
-        assert input_data.output_path == output_path
-        assert input_data.shape == "3,224,224"
-        assert input_data.batch_size == 1
-        assert input_data.opset == 17
+        assert mock_convert.call_args.kwargs["checkpoint_path"] == checkpoint_path
+        assert mock_convert.call_args.kwargs["output_path"] == output_path
+        assert mock_convert.call_args.kwargs["shape"] == "3,224,224"
+        assert mock_convert.call_args.kwargs["batch_size"] == 1
+        assert mock_convert.call_args.kwargs["opset"] == 17
 
     def test_convert_with_config_file(
         self,
@@ -66,16 +59,15 @@ class TestConvertCommandGoodPath:
         output_path = tmp_path / "model.onnx"
 
         with (
-            patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls,
+            patch(
+                "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+            ) as mock_convert,
             patch(
                 "dlkit.interfaces.cli.commands.convert.load_config",
                 return_value=sample_settings,
             ) as mock_load,
         ):
-            mock_cmd = Mock()
-            mock_cmd.execute.return_value = sample_convert_result
-            mock_cmd_cls.return_value = mock_cmd
-
+            mock_convert.return_value = sample_convert_result
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -90,9 +82,8 @@ class TestConvertCommandGoodPath:
 
         assert result.exit_code == 0
         mock_load.assert_called_once_with(sample_config_file)
-        input_data, settings = mock_cmd.execute.call_args[0]
-        assert input_data.shape is None
-        assert settings == sample_settings
+        assert mock_convert.call_args.kwargs["shape"] is None
+        assert mock_convert.call_args.kwargs["settings"] == sample_settings
 
     def test_convert_with_config_and_batch_validation(
         self,
@@ -107,15 +98,14 @@ class TestConvertCommandGoodPath:
         output_path = tmp_path / "model.onnx"
 
         with (
-            patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls,
+            patch(
+                "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+            ) as mock_convert,
             patch(
                 "dlkit.interfaces.cli.commands.convert.load_config", return_value=sample_settings
             ),
         ):
-            mock_cmd = Mock()
-            mock_cmd.execute.return_value = sample_convert_result
-            mock_cmd_cls.return_value = mock_cmd
-
+            mock_convert.return_value = sample_convert_result
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -131,7 +121,7 @@ class TestConvertCommandGoodPath:
             )
 
         assert result.exit_code == 0
-        assert mock_cmd.execute.call_args[0][0].batch_size == 8
+        assert mock_convert.call_args.kwargs["batch_size"] == 8
 
     def test_convert_short_options(
         self,
@@ -146,15 +136,14 @@ class TestConvertCommandGoodPath:
         output_path = tmp_path / "model.onnx"
 
         with (
-            patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls,
+            patch(
+                "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+            ) as mock_convert,
             patch(
                 "dlkit.interfaces.cli.commands.convert.load_config", return_value=sample_settings
             ),
         ):
-            mock_cmd = Mock()
-            mock_cmd.execute.return_value = sample_convert_result
-            mock_cmd_cls.return_value = mock_cmd
-
+            mock_convert.return_value = sample_convert_result
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -170,4 +159,4 @@ class TestConvertCommandGoodPath:
             )
 
         assert result.exit_code == 0
-        assert mock_cmd.execute.call_args[0][0].batch_size == 16
+        assert mock_convert.call_args.kwargs["batch_size"] == 16

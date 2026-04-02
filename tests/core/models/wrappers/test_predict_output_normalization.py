@@ -20,7 +20,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from dlkit.core.models.wrappers.base import (
+from dlkit.runtime.adapters.lightning.base import (
     _MAX_NORMALIZE_DEPTH,
     _batch_size_of,
     _leaf_device,
@@ -28,7 +28,7 @@ from dlkit.core.models.wrappers.base import (
     _normalize_output,
     _unpack_model_output,
 )
-from dlkit.core.models.wrappers.components import NamedBatchTransformer
+from dlkit.runtime.adapters.lightning.components import NamedBatchTransformer
 from dlkit.tools.utils.tensordict_utils import sequence_to_tensordict
 
 
@@ -353,11 +353,13 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     """
     from torch import nn
 
-    from dlkit.core.models.wrappers.base import ProcessingLightningWrapper
-    from dlkit.core.models.wrappers.components import (
+    from dlkit.runtime.adapters.lightning.base import ProcessingLightningWrapper
+    from dlkit.runtime.adapters.lightning.components import (
         NamedBatchTransformer,
     )
-    from dlkit.core.models.wrappers.prediction_strategies import DiscriminativePredictionStrategy
+    from dlkit.runtime.adapters.lightning.prediction_strategies import (
+        DiscriminativePredictionStrategy,
+    )
 
     class _FixedInvoker:
         def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:
@@ -370,7 +372,7 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
         def _run_step(
             self, batch: Any, batch_idx: int, stage: str
         ) -> tuple[Tensor, int | None, Any]:
-            from dlkit.core.models.wrappers.base import _batch_size_of
+            from dlkit.runtime.adapters.lightning.base import _batch_size_of
 
             batch = self._model_invoker.invoke(self.model, batch)
             predictions = _expect_tensor(batch["predictions"])

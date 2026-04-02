@@ -14,7 +14,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
+from dlkit.domain.nn.generative.supervision import FlowMatchingSupervisionBuilder
 
 # ---------------------------------------------------------------------------
 # Named constants

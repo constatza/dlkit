@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.optimization.domain import (
     IStudyRepository,
     OptimizationDirection,
@@ -17,6 +16,7 @@ from dlkit.runtime.workflows.optimization.domain import (
     Trial,
     TrialState,
 )
+from dlkit.shared.errors import WorkflowError
 
 
 class OptunaStudyRepository(IStudyRepository):

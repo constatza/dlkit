@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.core.shape_specs import ModelFamily, ShapeSource, create_shape_spec
+from dlkit.domain.shapes import ModelFamily, ShapeSource, create_shape_spec
 
 
 class TestShapeSpec:

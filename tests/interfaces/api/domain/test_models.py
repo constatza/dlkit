@@ -5,7 +5,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.domain import TrainingResult
+from dlkit.shared import TrainingResult
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -8,16 +8,9 @@ import numpy as np
 import pytest
 from tensordict import TensorDict
 
-from dlkit.core.shape_specs.simple_inference import ShapeSummary
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
 from dlkit.runtime.workflows.factories.model_detection import ModelType
-from dlkit.tools.config.components.model_components import (
-    LossComponentSettings,
-    LossInputRef,
-    MetricComponentSettings,
-    MetricInputRef,
-    ModelComponentSettings,
-)
+from dlkit.shared.shapes import ShapeSummary
 from dlkit.tools.config.core.context import BuildContext
 from dlkit.tools.config.core.factories import FactoryProvider
 from dlkit.tools.config.data_entries import Feature, Target
@@ -25,6 +18,13 @@ from dlkit.tools.config.datamodule_settings import DataModuleSettings
 from dlkit.tools.config.dataset_settings import DatasetSettings
 from dlkit.tools.config.enums import DatasetFamily
 from dlkit.tools.config.general_settings import GeneralSettings
+from dlkit.tools.config.model_components import (
+    LossComponentSettings,
+    LossInputRef,
+    MetricComponentSettings,
+    MetricInputRef,
+    ModelComponentSettings,
+)
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.training_settings import TrainingSettings
 
@@ -57,9 +57,11 @@ def tmp_checkpoint(tmp_path: Path) -> Path:
 
 def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> GeneralSettings:
     # Minimal flattened settings; we will patch factories to avoid importing real components
-    ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.core.datasets")
-    dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
-    mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.core.models.nn", checkpoint=ckpt)
+    ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.runtime.data.datasets")
+    dm = DataModuleSettings(
+        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+    )
+    mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.domain.nn", checkpoint=ckpt)
     tr = TrainingSettings()
     sess = SessionSettings(inference=inference)
     settings = GeneralSettings(SESSION=sess, MODEL=mdl, DATASET=ds, DATAMODULE=dm, TRAINING=tr)
@@ -243,7 +245,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     created_wrapper_settings = []
 
     # Capture the original __init__ method
-    from dlkit.tools.config.components.model_components import WrapperComponentSettings
+    from dlkit.tools.config.model_components import WrapperComponentSettings
 
     original_init = WrapperComponentSettings.__init__
 
@@ -271,7 +273,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
         return wrapper_mock
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    from dlkit.core.models.wrappers.factories import WrapperFactory
+    from dlkit.runtime.adapters.lightning.factories import WrapperFactory
 
     monkeypatch.setattr(
         WrapperFactory, "create_standard_wrapper", staticmethod(_fake_create_wrapper)
@@ -326,14 +328,16 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
 
     ds = DatasetSettings(
         name="SupervisedArrayDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(Feature(name="x", path=x_path),),
         targets=(Target(name="y", path=y_path),),
         memmap_cache=True,
     )
-    dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
+    dm = DataModuleSettings(
+        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+    )
     mdl = ModelComponentSettings(
-        name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
@@ -371,7 +375,9 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
             return _FakeDataModule()
         return _FakeModel()
 
-    monkeypatch.setattr("dlkit.core.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset)
+    monkeypatch.setattr(
+        "dlkit.runtime.data.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset
+    )
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
         "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
@@ -408,13 +414,15 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(Feature(name="x", path=x_path),),
         targets=(Target(name="y", path=y_path),),
     )
-    dm = DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules")
+    dm = DataModuleSettings(
+        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+    )
     mdl = ModelComponentSettings(
-        name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+        name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
@@ -473,7 +481,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -484,10 +492,12 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
         MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
         DATASET=ds,
-        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        DATAMODULE=DataModuleSettings(
+            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        ),
         TRAINING=TrainingSettings(),
     )
 
@@ -537,7 +547,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -552,10 +562,12 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
         MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
         DATASET=ds,
-        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        DATAMODULE=DataModuleSettings(
+            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        ),
         TRAINING=training,
     )
 
@@ -598,7 +610,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -615,10 +627,12 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
         MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
         DATASET=ds,
-        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        DATAMODULE=DataModuleSettings(
+            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        ),
         TRAINING=training,
     )
 
@@ -659,17 +673,19 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=(Feature(name="matrix", path=matrix_path, model_input=False),),
         targets=(Target(name="y", path=y_path),),
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(inference=True),
         MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.core.models.nn", checkpoint=tmp_checkpoint
+            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
         DATASET=ds,
-        DATAMODULE=DataModuleSettings(name="InMemoryModule", module_path="dlkit.core.datamodules"),
+        DATAMODULE=DataModuleSettings(
+            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        ),
         TRAINING=TrainingSettings(),
     )
     settings.DATASET.__dict__["targets"] = [
@@ -724,7 +740,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     created_wrapper_settings = []
 
     # Capture the original __init__ method
-    from dlkit.tools.config.components.model_components import WrapperComponentSettings
+    from dlkit.tools.config.model_components import WrapperComponentSettings
 
     original_init = WrapperComponentSettings.__init__
 
@@ -749,7 +765,7 @@ def test_build_factory_handles_none_scheduler_correctly(
         return wrapper_mock
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    from dlkit.core.models.wrappers.factories import WrapperFactory
+    from dlkit.runtime.adapters.lightning.factories import WrapperFactory
 
     monkeypatch.setattr(
         WrapperFactory, "create_standard_wrapper", staticmethod(_fake_create_wrapper)

@@ -24,10 +24,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
 
     Uses sqlite tracking for speed and deterministic isolation.
     """
-    from dlkit.interfaces.api.services import BasicOverrideManager
-
-    # Start with base training settings
-    manager = BasicOverrideManager()
+    from dlkit.runtime.workflows.entrypoints._overrides import apply_runtime_overrides
 
     # Create isolated MLflow directory per test for proper isolation
     mlruns_dir = tmp_path / "mlruns"
@@ -37,7 +34,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
 
     # Enable both MLflow and Optuna with tiny sqlite-backed stores.
     # Use unique experiment name per test to prevent conflicts
-    settings_with_overrides = manager.apply_overrides(
+    settings_with_overrides = apply_runtime_overrides(
         training_settings,
         enable_mlflow=True,
         experiment_name=f"test_optuna_mlflow_{tmp_path.name}",  # Unique per test
@@ -45,6 +42,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
         trials=1,  # Minimal trials for speed
         study_name=f"test_study_{tmp_path.name}",  # Unique per test
     )
+    assert settings_with_overrides.OPTUNA is not None
 
     # Ensure optuna has isolated storage per test
     unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
@@ -99,7 +97,7 @@ class TestOptunaMLflowOptimization:
 
     def test_no_optimization_raises_error(self):
         """Test that optimize() raises error when optimization not enabled."""
-        from dlkit.interfaces.api.domain import WorkflowError
+        from dlkit.shared import WorkflowError
 
         settings = GeneralSettings()  # No OPTUNA enabled
 
@@ -114,7 +112,7 @@ class TestBackwardCompatibility:
 
     def test_vanilla_workflow_raises_error(self):
         """Test that vanilla (no optimization) workflows raise clear error."""
-        from dlkit.interfaces.api.domain import WorkflowError
+        from dlkit.shared import WorkflowError
 
         settings = GeneralSettings()  # No OPTUNA or MLFLOW
 

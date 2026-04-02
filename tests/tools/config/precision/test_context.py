@@ -5,13 +5,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from dlkit.interfaces.api.domain.precision import (
+from dlkit.tools.config.precision import (
     PrecisionContext,
+    PrecisionStrategy,
     current_precision_override,
     get_global_precision_context,
     precision_override,
 )
-from dlkit.tools.config.precision import PrecisionStrategy
 
 
 class TestPrecisionContext:

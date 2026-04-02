@@ -17,14 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.interfaces.api.domain.path_context import (
+from dlkit.tools.config.environment import DLKitEnvironment
+from dlkit.tools.config.general_settings import GeneralSettings
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.io.path_context import (
     PathContext,
     resolve_component_path,
     resolve_root_dir,
 )
-from dlkit.tools.config.environment import DLKitEnvironment
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.session_settings import SessionSettings
 
 # ============================================================================
 # Factory Methods Tests

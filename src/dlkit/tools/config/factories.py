@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 from .workflow_settings import (
@@ -74,9 +75,7 @@ class WorkflowSettingsLoader:
             raise ValueError("At least one section must be specified")
 
         if strict:
-            from dlkit.tools.io.config import get_available_sections
-
-            available = get_available_sections(config_path)
+            available = _get_available_sections(config_path)
             missing = [s for s in sections if s not in available]
             if missing:
                 raise ValueError(
@@ -90,6 +89,15 @@ class WorkflowSettingsLoader:
 
 # Default factory instance for convenience
 default_settings_loader = WorkflowSettingsLoader()
+
+
+def _get_available_sections(config_path: Path | str) -> list[str]:
+    """Return the top-level TOML sections present in a config file."""
+
+    with open(config_path, "rb") as handle:
+        data = tomllib.load(handle)
+    return [key.upper() for key in data if isinstance(key, str)]
+
 
 # Convenience functions that delegate to the default loader
 
@@ -115,11 +123,6 @@ def load_settings(config_path: Path | str) -> TrainingWorkflowSettings:
         ConfigSectionError: If required sections are missing.
 
     Examples:
-        >>> # Load from tools.io (preferred)
-        >>> from dlkit.tools.io import load_settings
-        >>> settings = load_settings("config.toml")
-        >>>
-        >>> # Also available from tools.config
         >>> from dlkit.tools.config import load_settings
         >>> settings = load_settings("config.toml")
 
@@ -159,8 +162,6 @@ def load_sections(
         ConfigSectionError: If strict=True and required sections are missing.
 
     Examples:
-        >>> # Load from tools.io (preferred)
-        >>> from dlkit.tools.io import load_sections
         >>> settings = load_sections("config.toml", ["MODEL", "DATASET"])
         >>>
         >>> # Strict loading ensures all sections exist

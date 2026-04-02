@@ -17,7 +17,7 @@ import torch
 from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
-from dlkit.core.datasets.flexible import (
+from dlkit.runtime.data.datasets.flexible import (
     FlexibleDataset,
     _build_memmap_cache,
     collate_tensordict,
@@ -126,7 +126,7 @@ def test_memmap_cache_reused_on_second_instantiation(
     _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
 
     with patch(
-        "dlkit.core.datasets.flexible._build_memmap_cache", wraps=_build_memmap_cache
+        "dlkit.runtime.data.datasets.flexible._build_memmap_cache", wraps=_build_memmap_cache
     ) as mock_build:
         _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
         mock_build.assert_not_called()

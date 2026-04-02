@@ -10,15 +10,15 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.models.nn.cae import (
+from dlkit.domain.nn.base import DLKitModel
+from dlkit.domain.nn.cae import (
     LinearCAE1d,
     SkipCAE1d,
     VAE1d,
     reparameterize,
     vae_loss,
 )
-from dlkit.core.models.nn.cae.base import CAE
+from dlkit.domain.nn.cae.base import CAE
 
 
 @pytest.fixture

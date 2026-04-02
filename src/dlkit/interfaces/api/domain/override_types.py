@@ -1,4 +1,4 @@
-"""Type definitions for DLKit API overrides."""
+"""Public override payload types for the API layer."""
 
 from __future__ import annotations
 
@@ -6,63 +6,49 @@ from pathlib import Path
 from typing import TypedDict
 
 
-class BasicOverrides(TypedDict, total=False):
-    """Type definition for basic runtime overrides.
+class TrainingOverrides(TypedDict, total=False):
+    """Supported API overrides for training workflows."""
 
-    All fields are optional to allow partial overrides.
-    """
-
-    # Path overrides
-    checkpoint_path: Path
-    output_dir: Path
-    data_dir: Path
-
-    # Training overrides
+    checkpoint_path: Path | str
+    root_dir: Path | str
+    output_dir: Path | str
+    data_dir: Path | str
     epochs: int
     batch_size: int
     learning_rate: float
-
-    # MLflow overrides
     experiment_name: str
     run_name: str
     register_model: bool
+    tags: dict[str, str]
+    loss_function: str
+    loss_module: str
 
-    # Optuna overrides
+
+class OptimizationOverrides(TypedDict, total=False):
+    """Supported API overrides for optimization workflows."""
+
+    checkpoint_path: Path | str
+    root_dir: Path | str
+    output_dir: Path | str
+    data_dir: Path | str
+    trials: int
+    study_name: str
+    experiment_name: str
+    run_name: str
+    enable_optuna: bool
+    register_model: bool
+    tags: dict[str, str]
+
+
+class ExecutionOverrides(TrainingOverrides, total=False):
+    """Superset of supported API overrides for the unified execution entrypoint."""
+
     trials: int
     study_name: str
 
 
-class MLflowOverrides(TypedDict, total=False):
-    """Type definition for MLflow-specific overrides."""
-
-    # Flat configuration
-    experiment_name: str
-    run_name: str
-    register_model: bool
-
-
-class TrainingOverrides(TypedDict, total=False):
-    """Type definition for training-specific overrides."""
-
-    epochs: int
-    batch_size: int
-    learning_rate: float
-    optimizer: str
-    scheduler: str
-
-    # Training flags
-    train: bool
-    test: bool
-    predict: bool
-
-
-class PathOverrides(TypedDict, total=False):
-    """Type definition for path-related overrides."""
-
-    root_dir: Path
-    input_dir: Path
-    output_dir: Path
-    data_dir: Path
-    checkpoints_dir: Path
-    figures_dir: Path
-    predictions_dir: Path
+__all__ = [
+    "ExecutionOverrides",
+    "OptimizationOverrides",
+    "TrainingOverrides",
+]

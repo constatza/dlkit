@@ -11,8 +11,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from dlkit.core.postprocessing import summarize
-from dlkit.interfaces.api.domain import InferenceResult, OptimizationResult, TrainingResult
+from dlkit.interfaces.cli.presenters import summarize
+from dlkit.shared import InferenceResult, OptimizationResult, TrainingResult
 
 
 def present_training_result(result: TrainingResult, console: Console) -> None:

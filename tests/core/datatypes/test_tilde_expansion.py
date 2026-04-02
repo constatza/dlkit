@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from dlkit.core.datatypes.tilde_expansion import (
+from dlkit.tools.datatypes.tilde_expansion import (
     _expand_tilde_in_path,
     _expand_tilde_in_string,
     _expand_tilde_in_url,
@@ -429,7 +429,7 @@ class TestIntegrationWithPydantic:
         # Import here to avoid circular dependencies during module import
         from pydantic import TypeAdapter
 
-        from dlkit.core.datatypes import SimpleTildePath
+        from dlkit.tools.datatypes import SimpleTildePath
 
         adapter = TypeAdapter(SimpleTildePath)
 
@@ -447,7 +447,7 @@ class TestIntegrationWithPydantic:
         # Import here to avoid circular dependencies during module import
         from pydantic import TypeAdapter
 
-        from dlkit.core.datatypes import SimpleMLflowURI
+        from dlkit.tools.datatypes import SimpleMLflowURI
 
         adapter = TypeAdapter(SimpleMLflowURI)
 
@@ -488,43 +488,43 @@ class TestNormalizeUrlPath:
 
     def test_adds_leading_slash(self) -> None:
         """URL paths always get leading slash."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("path/to/file") == "/path/to/file"
 
     def test_preserves_leading_slash(self) -> None:
         """Existing leading slash is preserved."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("/path/to/file") == "/path/to/file"
 
     def test_converts_backslashes(self) -> None:
         """Backslashes converted to forward slashes."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("\\path\\to\\file") == "/path/to/file"
 
     def test_collapses_triple_slashes(self) -> None:
         """Triple slashes collapsed to single."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("///path") == "/path"
 
     def test_handles_mixed_slashes(self) -> None:
         """Mixed forward and backslashes normalized."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("path\\to/file") == "/path/to/file"
 
     def test_empty_path(self) -> None:
         """Empty path gets leading slash."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("") == "/"
 
     def test_relative_path_gets_slash(self) -> None:
         """Relative paths get leading slash for URL usage."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_url_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_url_path
 
         assert _normalize_url_path("relative") == "/relative"
 
@@ -534,13 +534,13 @@ class TestNormalizeFilePath:
 
     def test_unix_absolute_path(self) -> None:
         """Unix absolute paths preserved."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         assert _normalize_file_path("/home/user/file") == "/home/user/file"
 
     def test_windows_absolute_path(self) -> None:
         """Windows absolute paths preserved with drive letter."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("C:\\Users\\test\\file")
         # pathlib normalizes to forward slashes but keeps drive letter
@@ -548,14 +548,14 @@ class TestNormalizeFilePath:
 
     def test_windows_absolute_with_forward_slashes(self) -> None:
         """Windows paths with forward slashes work correctly."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("C:/Users/test/file")
         assert result == "C:/Users/test/file"
 
     def test_converts_backslashes(self) -> None:
         """Backslashes converted to forward slashes."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("path\\to\\file")
         assert "\\" not in result
@@ -563,21 +563,21 @@ class TestNormalizeFilePath:
 
     def test_relative_paths_unchanged(self) -> None:
         """Relative paths remain relative."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("relative/path")
         assert result == "relative/path"
 
     def test_mixed_slashes(self) -> None:
         """Mixed slashes normalized."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("path\\to/file")
         assert result == "path/to/file"
 
     def test_windows_unc_path(self) -> None:
         """Windows UNC paths handled correctly."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("\\\\server\\share\\file")
         # UNC paths start with //
@@ -585,7 +585,7 @@ class TestNormalizeFilePath:
 
     def test_dot_segments_normalized(self) -> None:
         """Dot segments in paths partially normalized."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("path/./to/../file")
         # pathlib normalizes away . but keeps .. (doesn't fully resolve)
@@ -593,7 +593,7 @@ class TestNormalizeFilePath:
 
     def test_empty_path(self) -> None:
         """Empty path becomes current directory."""
-        from dlkit.core.datatypes.tilde_expansion import _normalize_file_path
+        from dlkit.tools.datatypes.tilde_expansion import _normalize_file_path
 
         result = _normalize_file_path("")
         assert result == "."

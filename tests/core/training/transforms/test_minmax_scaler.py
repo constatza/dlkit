@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from dlkit.core.training.transforms.minmax import MinMaxScaler
+from dlkit.domain.transforms.minmax import MinMaxScaler
 
 
 def test_minmax_scaler_fit_transform_inverse() -> None:

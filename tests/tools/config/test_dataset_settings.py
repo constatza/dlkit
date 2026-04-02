@@ -17,7 +17,7 @@ def test_get_init_kwargs_preserves_data_entries(tmp_path: Path) -> None:
     targets = (Target(name="y", path=y_path),)
     settings = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.core.datasets",
+        module_path="dlkit.runtime.data.datasets",
         features=features,
         targets=targets,
     )

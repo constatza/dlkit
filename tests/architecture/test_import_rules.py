@@ -104,7 +104,7 @@ class TestImportRules:
         violations = []
         prohibited_patterns = [
             # Specific patterns for the old BaseModel that was removed
-            r"from dlkit\.core\.models\.nn\.base import BaseModel",
+            r"from dlkit\.presenter_utils\.models\.nn\.base import BaseModel",
             r"import.*BaseModel.*from.*dlkit",
         ]
 

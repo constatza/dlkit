@@ -21,10 +21,10 @@ import torch.nn.functional as F
 from tensordict import TensorDict
 from torch import Tensor, nn
 
-from dlkit.core.models.nn.generative.functions.solvers import euler_step
-from dlkit.core.models.nn.generative.samplers.noise import GaussianNoiseSampler
-from dlkit.core.models.nn.generative.supervision import FlowMatchingSupervisionBuilder
-from dlkit.core.models.wrappers.components import (
+from dlkit.domain.nn.generative.functions.solvers import euler_step
+from dlkit.domain.nn.generative.samplers.noise import GaussianNoiseSampler
+from dlkit.domain.nn.generative.supervision import FlowMatchingSupervisionBuilder
+from dlkit.runtime.adapters.lightning.components import (
     ModelOutputSpec,
     NamedBatchTransformer,
     RoutedLossComputer,
@@ -32,10 +32,10 @@ from dlkit.core.models.wrappers.components import (
     TensorDictModelInvoker,
     WrapperCheckpointMetadata,
 )
-from dlkit.core.models.wrappers.flowmatching import FlowMatchingWrapper
-from dlkit.core.models.wrappers.generator_factories import DeterministicGeneratorFactory
-from dlkit.core.models.wrappers.prediction_strategies import ODEPredictionStrategy
-from dlkit.tools.config.components.model_components import WrapperComponentSettings
+from dlkit.runtime.adapters.lightning.flowmatching import FlowMatchingWrapper
+from dlkit.runtime.adapters.lightning.generator_factories import DeterministicGeneratorFactory
+from dlkit.runtime.adapters.lightning.prediction_strategies import ODEPredictionStrategy
+from dlkit.tools.config.model_components import WrapperComponentSettings
 from dlkit.tools.config.optimizer_settings import OptimizerSettings
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import torch
 from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
-from dlkit.core.datasets.flexible import FlexibleDataset, collate_tensordict
+from dlkit.runtime.data.datasets.flexible import FlexibleDataset, collate_tensordict
 from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
 
 

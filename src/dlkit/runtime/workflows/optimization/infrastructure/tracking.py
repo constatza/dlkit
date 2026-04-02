@@ -13,12 +13,8 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any
 
-try:  # MLflow is optional when tracking disabled
-    import mlflow
-except ImportError:  # pragma: no cover - exercised via indirect tests
-    mlflow = None  # type: ignore[assignment]
+import mlflow
 
-from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.optimization.domain import (
     IExperimentTracker,
     IStudyRunContext,
@@ -27,6 +23,7 @@ from dlkit.runtime.workflows.optimization.domain import (
     Study,
     Trial,
 )
+from dlkit.shared.errors import WorkflowError
 from dlkit.tools.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -75,7 +72,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
         if self._tracker is None:
             # Import and create the existing MLflowTracker
             try:
-                from dlkit.runtime.workflows.strategies.tracking.mlflow_tracker import MLflowTracker
+                from dlkit.runtime.tracking.mlflow_tracker import MLflowTracker
 
                 self._tracker = MLflowTracker(disable_autostart=False)
             except ImportError as e:

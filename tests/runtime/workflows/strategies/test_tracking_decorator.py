@@ -10,14 +10,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
-from dlkit.runtime.workflows.strategies.core import VanillaExecutor
-from dlkit.runtime.workflows.strategies.tracking import (
-    IExperimentTracker,
-    IRunContext,
-    TrackingDecorator,
-)
+from dlkit.runtime.execution import VanillaExecutor
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.runtime.tracking.interfaces import IExperimentTracker, IRunContext
+from dlkit.runtime.tracking.tracking_decorator import TrackingDecorator
+from dlkit.shared import TrainingResult, WorkflowError
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
@@ -46,7 +43,7 @@ class MockRunContext(IRunContext):
     def log_params(self, params: dict[str, Any]) -> None:
         self.logged_params.update(params)
 
-    def log_text(self, text: str, artifact_file: str) -> None:
+    def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None:
         pass
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
@@ -189,7 +186,7 @@ def mlflow_settings():
 
 @pytest.fixture
 def build_components():
-    """Create BuildComponents for testing."""
+    """Create RuntimeComponents for testing."""
 
     @dataclass(frozen=True, slots=True)
     class DummyModel:
@@ -207,7 +204,7 @@ def build_components():
 
     datamodule = Mock()
 
-    return BuildComponents(
+    return RuntimeComponents(
         model=cast("Any", DummyModel()),
         datamodule=datamodule,
         trainer=trainer,
@@ -263,7 +260,7 @@ def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_component
     settings_no_mlflow = GeneralSettings()  # No MLFLOW section
 
     # Use NullTracker for the proper "disabled MLflow" scenario
-    from dlkit.runtime.workflows.strategies.tracking.interfaces import NullTracker
+    from dlkit.runtime.tracking.interfaces import NullTracker
 
     decorator = TrackingDecorator(mock_executor, NullTracker())
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from dlkit.core.training.transforms.standard import StandardScaler
+from dlkit.domain.transforms.standard import StandardScaler
 
 
 def test_standard_scaler_fit_transform_inverse() -> None:

@@ -12,9 +12,10 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from dlkit.domain import TrainingResult
-from dlkit.interfaces.api.domain import WorkflowError
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents, BuildFactory
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.runtime.workflows.factories.build_factory import BuildFactory
+from dlkit.shared import TrainingResult
+from dlkit.shared.errors import WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -246,7 +247,7 @@ class TrialExecutor:
 
     def _execute_training(
         self,
-        components: BuildComponents,
+        components: RuntimeComponents,
         settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
         trial_context: Any = None,
         enable_checkpointing: bool = False,
@@ -271,12 +272,12 @@ class TrialExecutor:
             self._inject_mlflow_logger(components, trial_context)
 
         # Use existing VanillaExecutor for actual training
-        from dlkit.runtime.workflows.strategies.core import VanillaExecutor
+        from dlkit.runtime.execution.vanilla_executor import VanillaExecutor
 
         executor = VanillaExecutor()
         return executor.execute(components, settings)
 
-    def _disable_checkpoints(self, components: BuildComponents) -> None:
+    def _disable_checkpoints(self, components: RuntimeComponents) -> None:
         """Remove checkpoint callbacks from trainer (SRP: single responsibility).
 
         During optimization, we don't want to save checkpoints for every trial
@@ -306,7 +307,7 @@ class TrialExecutor:
         except Exception as e:
             logger.warning("Failed to disable checkpoints: {}", e)
 
-    def _inject_mlflow_logger(self, components: BuildComponents, trial_context: Any) -> None:
+    def _inject_mlflow_logger(self, components: RuntimeComponents, trial_context: Any) -> None:
         """Inject MLflow epoch logger callback for metric logging during optimization.
 
         Args:
@@ -319,7 +320,7 @@ class TrialExecutor:
                 return
 
             # Create callback that logs metrics with epoch numbers instead of steps
-            from dlkit.core.training.callbacks import MLflowEpochLogger
+            from dlkit.runtime.adapters.lightning.callbacks import MLflowEpochLogger
 
             # The trial_context from MLflowTrackingAdapter wraps a run_context
             # We need to pass the underlying run_context to the callback
@@ -408,9 +409,8 @@ class OptimizationOrchestrator:
     ) -> OptimizationResult:
         """Execute complete optimization workflow.
 
-        IMPORTANT: This method manages the experiment tracker context lifecycle.
-        The tracker context is entered RIGHT BEFORE optimization work begins and
-        exited RIGHT AFTER work completes, ensuring server lifetime matches work duration.
+        The runtime edge owns the experiment tracker context lifecycle. This
+        service assumes any tracker dependency has already been entered.
 
         Args:
             study_name: Name of the optimization study
@@ -446,10 +446,8 @@ class OptimizationOrchestrator:
             }
 
             if tracker is not None:
-                with tracker:
-                    study = self._study_manager.create_study(**study_kwargs)
-                    result = self._execute_with_tracking(study, base_settings)
-                return result
+                study = self._study_manager.create_study(**study_kwargs)
+                return self._execute_with_tracking(study, base_settings)
 
             study = self._study_manager.create_study(**study_kwargs)
             return self._execute_without_tracking(study, base_settings)

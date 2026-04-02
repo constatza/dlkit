@@ -9,14 +9,14 @@ from typing import Any, cast
 import torch
 from torchmetrics import MetricCollection
 
-from dlkit.core.training.metrics import (
+from dlkit.domain.metrics import (
     MeanSquaredError,
     NormalizedVectorNormError,
     TemporalDerivativeError,
 )
 from dlkit.tools.config import BuildContext
-from dlkit.tools.config.components.model_components import MetricComponentSettings
 from dlkit.tools.config.core.factories import FactoryProvider
+from dlkit.tools.config.model_components import MetricComponentSettings
 
 
 class TestCustomMetricsIntegration:
@@ -73,7 +73,7 @@ class TestCustomMetricsIntegration:
         metric_settings = MetricComponentSettings.model_validate(
             {
                 "name": "NormalizedVectorNormError",
-                "module_path": "dlkit.core.training.metrics",
+                "module_path": "dlkit.domain.metrics",
                 "norm_ord": 2,
             }
         )
@@ -101,12 +101,12 @@ class TestCustomMetricsIntegration:
         # Create metric settings
         mse_settings = MetricComponentSettings(
             name="MeanSquaredError",
-            module_path="dlkit.core.training.metrics",
+            module_path="dlkit.domain.metrics",
         )
         norm_settings = MetricComponentSettings.model_validate(
             {
                 "name": "NormalizedVectorNormError",
-                "module_path": "dlkit.core.training.metrics",
+                "module_path": "dlkit.domain.metrics",
                 "norm_ord": 2,
             }
         )

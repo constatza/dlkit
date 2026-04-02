@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from dlkit.core.shape_specs import (
+from dlkit.domain.shapes import (
     DimensionRangeSpecification,
     ModelFamily,
     ModelFamilyCompatibilitySpecification,

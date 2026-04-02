@@ -74,7 +74,7 @@ filepath = "{split_path}"
 
 [MODEL]
 name = "ConstantWidthFFNN"
-module_path = "dlkit.core.models.nn.ffnn.simple"
+module_path = "dlkit.domain.nn.ffnn.simple"
 checkpoint = "{checkpoint_path}"
 
 [MLFLOW]
@@ -144,13 +144,13 @@ def mock_api_functions() -> dict[str, Any]:
     Returns:
         Dictionary of mocked API functions with proper return values.
     """
-    from dlkit.interfaces.api.domain import ConfigurationError, TrainingResult
+    from dlkit.shared import ConfigurationError, TrainingResult
 
     # Mock successful validation
     mock_validate = Mock(return_value=True)
 
     # Mock successful training result
-    from dlkit.interfaces.api.domain import ModelState
+    from dlkit.shared import ModelState
 
     mock_model_state = Mock(spec=ModelState)
 
@@ -320,7 +320,7 @@ def sample_settings() -> Mock:
     mock_settings.model_dump.return_value = {
         "SESSION": {"name": "test_session", "inference": False, "seed": 42},
         "DATASET": {"name": "FlexibleDataset", "root_dir": "."},
-        "MODEL": {"name": "ConstantWidthFFNN", "module_path": "dlkit.core.models.nn.ffnn.simple"},
+        "MODEL": {"name": "ConstantWidthFFNN", "module_path": "dlkit.domain.nn.ffnn.simple"},
         "MLFLOW": {"experiment_name": "test_experiment"},
     }
     return mock_settings
@@ -337,7 +337,7 @@ def mock_configuration_error() -> Any:
     Returns:
         Mock ConfigurationError object.
     """
-    from dlkit.interfaces.api.domain import ConfigurationError
+    from dlkit.shared import ConfigurationError
 
     return ConfigurationError(
         "Invalid configuration for testing",
@@ -352,7 +352,7 @@ def mock_workflow_error() -> Any:
     Returns:
         Mock WorkflowError object.
     """
-    from dlkit.interfaces.api.domain import WorkflowError
+    from dlkit.shared import WorkflowError
 
     return WorkflowError(
         "Workflow execution failed for testing",
@@ -412,7 +412,7 @@ def mock_successful_training_result() -> Any:
     """
     from pathlib import Path
 
-    from dlkit.interfaces.api.domain import ModelState, TrainingResult
+    from dlkit.shared import ModelState, TrainingResult
 
     # Create a mock ModelState
     mock_model_state = Mock(spec=ModelState)
@@ -432,7 +432,7 @@ def mock_successful_inference_result() -> Any:
     Returns:
         Mock InferenceResult object for testing.
     """
-    from dlkit.interfaces.api.domain import InferenceResult, ModelState
+    from dlkit.shared import InferenceResult, ModelState
 
     # Create a mock ModelState
     mock_model_state = Mock(spec=ModelState)
@@ -452,7 +452,7 @@ def mock_strategy_error() -> Any:
     Returns:
         Mock StrategyError object.
     """
-    from dlkit.interfaces.api.domain import StrategyError
+    from dlkit.shared import StrategyError
 
     return StrategyError(
         "Invalid strategy configuration for testing",
@@ -613,23 +613,9 @@ def sample_convert_result() -> Any:
     """
     from pathlib import Path
 
-    from dlkit.interfaces.api.commands.convert_command import ConvertResult
+    from dlkit.runtime.workflows.entrypoints.convert import ConvertResult
 
     return ConvertResult(output_path=Path("test_model.onnx"), opset=17, inputs=[(1, 3, 224, 224)])
-
-
-@pytest.fixture
-def mock_convert_command() -> Mock:
-    """Create mock ConvertCommand for CLI testing.
-
-    Returns:
-        Mock ConvertCommand with autospec for proper method signatures.
-    """
-    from dlkit.interfaces.api.commands.convert_command import ConvertCommand
-
-    mock_command = Mock(spec=ConvertCommand)
-    mock_command.execute = Mock()
-    return mock_command
 
 
 @pytest.fixture

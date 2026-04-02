@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from dlkit.core.postprocessing import (
+from dlkit.interfaces.cli.presenters import (
     stack_batches,
     to_numpy,
     to_plot_array_data,

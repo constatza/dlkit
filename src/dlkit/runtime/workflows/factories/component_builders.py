@@ -12,13 +12,16 @@ from typing import Any
 from torch import nn
 from torch.nn import ModuleList
 
-from dlkit.core.models.wrappers.components import MetricRoute, WrapperComponents
-from dlkit.tools.config import BuildContext, FactoryProvider
-from dlkit.tools.config.components.model_components import (
+from dlkit.runtime.adapters.lightning.components import MetricRoute, WrapperComponents
+from dlkit.tools.config.core.context import BuildContext
+from dlkit.tools.config.core.factories import FactoryProvider
+from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.tools.config.model_components import (
     LossComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+
+from .module_defaults import with_runtime_module_defaults
 
 
 def build_loss_fn(loss_settings: LossComponentSettings) -> nn.Module:
@@ -30,7 +33,10 @@ def build_loss_fn(loss_settings: LossComponentSettings) -> nn.Module:
     Returns:
         Instantiated loss function module.
     """
-    return FactoryProvider.create_component(loss_settings, BuildContext(mode="training"))
+    return FactoryProvider.create_component(
+        with_runtime_module_defaults(loss_settings),
+        BuildContext(mode="training"),
+    )
 
 
 def build_metric_routes(
@@ -50,7 +56,10 @@ def build_metric_routes(
     """
     routes = []
     for spec in metric_specs:
-        metric = FactoryProvider.create_component(spec, BuildContext(mode="training"))
+        metric = FactoryProvider.create_component(
+            with_runtime_module_defaults(spec),
+            BuildContext(mode="training"),
+        )
         target_key_str = getattr(spec, "target_key", None)
         if target_key_str:
             target_name = target_key_str.split(".", 1)[1]
@@ -101,7 +110,10 @@ def build_transform_list(
 
     for transform_settings in transform_seq:
         context = BuildContext(mode="transform_chain")
-        module = FactoryProvider.create_component(transform_settings, context)
+        module = FactoryProvider.create_component(
+            with_runtime_module_defaults(transform_settings),
+            context,
+        )
 
         if current_shape is not None and hasattr(module, "infer_output_shape"):
             current_shape = module.infer_output_shape(current_shape)

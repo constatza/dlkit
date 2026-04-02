@@ -13,7 +13,7 @@ import pytest
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from dlkit.core.datasets.flexible import (
+from dlkit.runtime.data.datasets.flexible import (
     BatchComplianceError,
     FlexibleDataset,
     PlaceholderNotResolvedError,

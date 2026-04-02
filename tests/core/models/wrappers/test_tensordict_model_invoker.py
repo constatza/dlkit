@@ -10,14 +10,14 @@ Covers:
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import torch
 from tensordict import TensorDict
 from torch import Tensor, nn
 
-from dlkit.core.models.wrappers.components import (
+from dlkit.runtime.adapters.lightning.components import (
     ModelOutputSpec,
     TensorDictModelInvoker,
     _build_invoker_from_entries,
@@ -104,7 +104,7 @@ class TestModelOutputSpec:
     def test_spec_is_frozen(self) -> None:
         spec = ModelOutputSpec()
         with pytest.raises(Exception):
-            spec.prediction_key = "other"  # type: ignore[misc]
+            cast(Any, spec).prediction_key = "other"
 
 
 # ---------------------------------------------------------------------------

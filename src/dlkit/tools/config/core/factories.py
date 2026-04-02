@@ -1,4 +1,4 @@
-"""Factory pattern implementation for SOLID-compliant object construction."""
+"""Factories for settings-driven component construction."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from collections.abc import Callable
 from inspect import isclass
 from typing import Any, cast
 
+from dlkit.tools.config.core.base_settings import ComponentSettings
 from dlkit.tools.utils.general import import_object, kwargs_compatible_with
 
-from .base_settings import ComponentSettings
 from .context import BuildContext
 
 
@@ -125,13 +125,13 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         """
         try:
             # Import locally to avoid circular imports at module import time
-            from dlkit.tools.config.components.model_components import (
+            from dlkit.tools.config.datamodule_settings import DataModuleSettings
+            from dlkit.tools.config.dataset_settings import DatasetSettings
+            from dlkit.tools.config.model_components import (
                 LossComponentSettings,
                 MetricComponentSettings,
                 ModelComponentSettings,
             )
-            from dlkit.tools.config.datamodule_settings import DataModuleSettings
-            from dlkit.tools.config.dataset_settings import DatasetSettings
 
             if isinstance(settings, ModelComponentSettings):
                 return "model"

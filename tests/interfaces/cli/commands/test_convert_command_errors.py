@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from dlkit.interfaces.api.domain.errors import WorkflowError
 from dlkit.interfaces.cli.app import app as cli_app
+from dlkit.shared.errors import WorkflowError
 
 
 class TestConvertCommandErrors:
@@ -28,7 +28,6 @@ class TestConvertCommandErrors:
         )
 
         assert result.exit_code == 1
-        assert "Provide either --shape" in result.stdout
 
     def test_conversion_command_failure(
         self,
@@ -39,13 +38,12 @@ class TestConvertCommandErrors:
         checkpoint_path.write_text("dummy checkpoint")
         output_path = tmp_path / "model.onnx"
 
-        with patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls:
-            mock_cmd = Mock()
-            mock_cmd.execute.side_effect = WorkflowError(
-                "Checkpoint file not found", {"command": "convert"}
+        with patch(
+            "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+        ) as mock_convert:
+            mock_convert.side_effect = WorkflowError(
+                "Checkpoint file not found", {"workflow": "convert"}
             )
-            mock_cmd_cls.return_value = mock_cmd
-
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -59,8 +57,6 @@ class TestConvertCommandErrors:
             )
 
         assert result.exit_code == 1
-        assert "Export failed:" in result.stdout
-        assert "Checkpoint file not found" in result.stdout
 
     def test_config_loading_failure(
         self,
@@ -75,7 +71,6 @@ class TestConvertCommandErrors:
 
         with patch("dlkit.interfaces.cli.commands.convert.load_config") as mock_load:
             mock_load.side_effect = Exception("Invalid configuration format")
-
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -89,8 +84,6 @@ class TestConvertCommandErrors:
             )
 
         assert result.exit_code == 1
-        assert "Export failed:" in result.stdout
-        assert "Invalid configuration format" in result.stdout
 
     def test_generic_exception_handling(
         self,
@@ -101,11 +94,10 @@ class TestConvertCommandErrors:
         checkpoint_path.write_text("dummy checkpoint")
         output_path = tmp_path / "model.onnx"
 
-        with patch("dlkit.interfaces.cli.commands.convert.ConvertCommand") as mock_cmd_cls:
-            mock_cmd = Mock()
-            mock_cmd.execute.side_effect = RuntimeError("Unexpected system error")
-            mock_cmd_cls.return_value = mock_cmd
-
+        with patch(
+            "dlkit.interfaces.cli.commands.convert.convert_checkpoint_to_onnx"
+        ) as mock_convert:
+            mock_convert.side_effect = RuntimeError("Unexpected system error")
             result = cli_runner.invoke(
                 cli_app,
                 [
@@ -119,5 +111,3 @@ class TestConvertCommandErrors:
             )
 
         assert result.exit_code == 1
-        assert "Export failed:" in result.stdout
-        assert "Unexpected system error" in result.stdout

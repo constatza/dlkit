@@ -13,9 +13,9 @@ from unittest.mock import patch
 import pytest
 
 from dlkit.tools.config import BuildContext, ComponentFactory, FactoryProvider, GeneralSettings
-from dlkit.tools.config.components.model_components import ModelComponentSettings
 from dlkit.tools.config.core.base_settings import ComponentSettings
 from dlkit.tools.config.core.factories import DefaultComponentFactory
+from dlkit.tools.config.model_components import ModelComponentSettings
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -421,7 +421,7 @@ class TestFactoryProviderSingletonIntegration:
             sample_build_context: Build context fixture
         """
         # Register factories for different settings types
-        from dlkit.tools.config.components.model_components import MetricComponentSettings
+        from dlkit.tools.config.model_components import MetricComponentSettings
 
         model_factory = CustomModelFactory()
 

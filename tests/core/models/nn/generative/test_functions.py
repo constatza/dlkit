@@ -17,10 +17,10 @@ from collections.abc import Callable
 import torch
 from torch import Tensor
 
-from dlkit.core.models.nn.generative.functions.broadcast import broadcast_time
-from dlkit.core.models.nn.generative.functions.paths import linear_path, noise_schedule_path
-from dlkit.core.models.nn.generative.functions.solvers import euler_step, heun_step, integrate
-from dlkit.core.models.nn.generative.functions.targets import displacement_target
+from dlkit.domain.nn.generative.functions.broadcast import broadcast_time
+from dlkit.domain.nn.generative.functions.paths import linear_path, noise_schedule_path
+from dlkit.domain.nn.generative.functions.solvers import euler_step, heun_step, integrate
+from dlkit.domain.nn.generative.functions.targets import displacement_target
 
 # ---------------------------------------------------------------------------
 # Named constants

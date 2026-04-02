@@ -10,7 +10,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.core.models.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
+from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 
 
 @pytest.fixture

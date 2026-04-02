@@ -17,6 +17,8 @@ _ENV_DISABLED = "0"
 _LOG_ROTATION_SIZE = "10 MB"
 _LOG_RETENTION_PERIOD = "7 days"
 _LOG_COMPRESSION_FORMAT = "gz"
+_DEFAULT_INTERNAL_DIR = ".dlkit"
+_DEFAULT_LOG_FILENAME = "dlkit.log"
 
 
 def _backtrace_enabled() -> bool:
@@ -81,11 +83,8 @@ def configure_logging(
         filter=_debug_filter,
     )
 
-    from dlkit.tools.config.environment import DLKitEnvironment
-
-    env = DLKitEnvironment()
     default_log_file = _get_default_log_file_path()
-    log_file = env.log_file or str(default_log_file)
+    log_file = os.getenv("DLKIT_LOG_FILE") or str(default_log_file)
     logger.add(
         log_file,
         format=(
@@ -106,9 +105,7 @@ def configure_logging(
 def normalize_log_level(level: str | None) -> str:
     """Normalize a log level string to a valid Loguru level name."""
     if level is None:
-        from dlkit.tools.config.environment import DLKitEnvironment
-
-        candidate = DLKitEnvironment().log_level
+        candidate = os.getenv("DLKIT_LOG_LEVEL", "INFO")
     else:
         candidate = level
 
@@ -132,15 +129,17 @@ def get_effective_log_level(
 
 
 def _get_default_log_file_path() -> Path:
-    """Get default log file path using environment settings.
+    """Get default log file path using environment variables only.
 
     Returns:
         Path to default log file in DLKit internal directory
     """
-    from dlkit.tools.config.environment import DLKitEnvironment
-
-    env = DLKitEnvironment()
-    return env.get_log_file_path()
+    root_dir = Path(os.getenv("DLKIT_ROOT_DIR", Path.cwd())).resolve()
+    internal_dir = os.getenv("DLKIT_INTERNAL_DIR", _DEFAULT_INTERNAL_DIR)
+    log_filename = os.getenv("DLKIT_LOG_FILENAME", _DEFAULT_LOG_FILENAME)
+    internal_path = root_dir / internal_dir
+    internal_path.mkdir(parents=True, exist_ok=True)
+    return internal_path / log_filename
 
 
 def _is_debug_enabled(resolved_level: str | None = None) -> bool:

@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from dlkit.core.datatypes.secure_uris import SecurePath
+from dlkit.tools.config.security.uri_types import SecurePath
 
 
 def _setenv_if_missing(key: str, value: int) -> None:
@@ -107,16 +107,6 @@ class DLKitEnvironment(BaseSettings):
             return Path(self.root_dir).resolve()
         return Path.cwd()
 
-    def create_resolver_context(self) -> Any:
-        """Create ResolverContext using existing factory infrastructure.
-
-        Returns:
-            ResolverContext: Context configured with effective root path
-        """
-        from dlkit.tools.io.resolution.factory import create_resolver_context
-
-        return create_resolver_context(self.get_root_path())
-
     def get_internal_dir_path(self) -> Path:
         """Get path to DLKit internal directory.
 
@@ -142,3 +132,41 @@ env = DLKitEnvironment()
 # Configure MLflow retry behavior early, before MLflow is imported.
 # ensure_mlflow_defaults() is idempotent so this is safe to call at module level.
 ensure_mlflow_defaults()
+
+
+def sync_session_root_to_environment(settings: Any) -> None:
+    """Synchronize SESSION.root_dir to the global environment fallback.
+
+    This is intentionally config-local so `tools.config` does not depend on
+    `tools.io` for root propagation.
+    """
+
+    try:
+        from loguru import logger
+
+        if os.environ.get("DLKIT_ROOT_DIR"):
+            return
+
+        session = getattr(settings, "SESSION", None)
+        if session is None:
+            return
+
+        session_root_dir = getattr(session, "root_dir", None)
+        if session_root_dir is None:
+            return
+
+        root_path = Path(session_root_dir).expanduser()
+        if not root_path.is_absolute():
+            root_path = (Path.cwd() / root_path).resolve()
+        else:
+            root_path = root_path.resolve()
+
+        env.root_dir = str(root_path)
+        logger.debug(
+            "Synchronized SESSION.root_dir to DLKitEnvironment for fallback path resolution",
+            session_root_dir=str(root_path),
+        )
+    except Exception as e:
+        from loguru import logger
+
+        logger.warning(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from dlkit.core.models.nn.primitives.parametrizations import (
+from dlkit.domain.nn.primitives.parametrizations import (
     SPD,
     PositiveColumnScale,
     PositiveRowScale,

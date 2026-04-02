@@ -10,10 +10,9 @@ from typing import Any, Protocol
 import pytest
 import torch
 
-from dlkit.core.models.nn.base import DLKitModel
-from dlkit.core.shape_specs import ModelFamily, ShapeSource, create_shape_spec
-from dlkit.interfaces.api.services.precision_service import get_precision_service
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.domain.nn.base import DLKitModel
+from dlkit.domain.shapes import ModelFamily, ShapeSource, create_shape_spec
+from dlkit.tools.config.precision import PrecisionStrategy, get_precision_service
 
 
 class PrecisionTestModelProtocol(Protocol):

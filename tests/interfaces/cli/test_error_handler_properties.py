@@ -7,19 +7,19 @@ from unittest.mock import Mock
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from dlkit.interfaces.api.domain import (
-    ConfigurationError,
-    ModelStateError,
-    PluginError,
-    StrategyError,
-    WorkflowError,
-)
 from dlkit.interfaces.cli.middleware.error_handler import (
     _get_error_suggestions,
     format_validation_error,
     handle_api_error,
     handle_keyboard_interrupt,
     handle_unexpected_error,
+)
+from dlkit.shared import (
+    ConfigurationError,
+    ModelStateError,
+    PluginError,
+    StrategyError,
+    WorkflowError,
 )
 
 

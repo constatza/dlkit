@@ -1,12 +1,12 @@
 """Tests for shared functional loss/metric implementations.
 
-Tests differentiability and correctness of functions in dlkit.core.training.functional.
+Tests differentiability and correctness of functions in dlkit.domain.losses.
 """
 
 import pytest
 import torch
 
-from dlkit.core.training.functional import (
+from dlkit.domain.losses import (
     huber_loss,
     log_cosh_loss,
     mae,
@@ -18,7 +18,7 @@ from dlkit.core.training.functional import (
     smooth_l1_loss,
     vector_norm_loss,
 )
-from dlkit.core.training.metrics.functional import (
+from dlkit.domain.metrics.functional import (
     _relative_energy_norm_compute,
     _relative_energy_norm_update,
 )

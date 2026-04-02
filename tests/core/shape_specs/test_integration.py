@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from dlkit.core.shape_specs import (
+from dlkit.domain.shapes import (
     ModelFamily,
     ShapeData,
     ShapeEntry,
@@ -20,7 +20,7 @@ from dlkit.core.shape_specs import (
     VersionedShapeSerializer,
     create_shape_spec,
 )
-from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.model_components import ModelComponentSettings
 
 
 class TestFullSystemIntegration:
@@ -51,7 +51,7 @@ class TestFullSystemIntegration:
         """Mock model settings for testing."""
         settings = Mock()
         settings.architecture = "FeedForwardNN"
-        settings.class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
+        settings.class_path = "dlkit.domain.nn.ffnn.simple.FeedForwardNN"
         return settings
 
     def test_end_to_end_shape_inference_from_dataset(
@@ -91,8 +91,8 @@ class TestFullSystemIntegration:
         model_settings = ModelComponentSettings.model_validate(
             {
                 "name": "LinearNetwork",
-                "module_path": "dlkit.core.models.nn.ffnn.linear",
-                "class_path": "dlkit.core.models.nn.ffnn.linear.LinearNetwork",
+                "module_path": "dlkit.domain.nn.ffnn.linear",
+                "class_path": "dlkit.domain.nn.ffnn.linear.LinearNetwork",
             }
         )
 
@@ -147,7 +147,7 @@ class TestFullSystemIntegration:
         # Test DLKIT NN detection
         class DLKitSettings:
             architecture = "FeedForwardNN"
-            class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
+            class_path = "dlkit.domain.nn.ffnn.simple.FeedForwardNN"
 
         detected_family = registry.detect_family(DLKitSettings())
         assert detected_family == ModelFamily.DLKIT_NN
@@ -155,7 +155,7 @@ class TestFullSystemIntegration:
         # Test graph detection
         class GraphSettings:
             architecture = "BaseGraphNetwork"
-            class_path = "dlkit.core.models.nn.graph.base.BaseGraphNetwork"
+            class_path = "dlkit.domain.nn.graph.base.BaseGraphNetwork"
 
         detected_family = registry.detect_family(GraphSettings())
         assert detected_family == ModelFamily.GRAPH

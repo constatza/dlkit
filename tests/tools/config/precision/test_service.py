@@ -5,9 +5,12 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from dlkit.interfaces.api.domain.precision import PrecisionContext, PrecisionProvider
-from dlkit.interfaces.api.services.precision_service import PrecisionService
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.config.precision import (
+    PrecisionContext,
+    PrecisionProvider,
+    PrecisionService,
+    PrecisionStrategy,
+)
 
 
 class TestPrecisionService:

@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import torch
 
-from dlkit.core.shape_specs import (
+from dlkit.domain.shapes import (
     ModelFamily,
     ShapeInferenceEngine,
     ShapeSource,
@@ -38,7 +38,7 @@ class TestAPIConceptIntegration:
         # Use a simple class to avoid Mock auto-creating attributes
         class ModelSettings:
             architecture = "FeedForwardNN"
-            class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
+            class_path = "dlkit.domain.nn.ffnn.simple.FeedForwardNN"
 
         model_settings = ModelSettings()
 
@@ -189,7 +189,7 @@ class TestAPIConceptIntegration:
         # 2. Graph model settings
         class GraphModelSettings:
             architecture = "BaseGraphNetwork"
-            class_path = "dlkit.core.models.nn.graph.base.BaseGraphNetwork"
+            class_path = "dlkit.domain.nn.graph.base.BaseGraphNetwork"
 
         model_settings = GraphModelSettings()
 
@@ -225,7 +225,7 @@ class TestAPIConceptIntegration:
 
         class ModelSettings:
             architecture = "FeedForwardNN"
-            class_path = "dlkit.core.models.nn.ffnn.simple.FeedForwardNN"
+            class_path = "dlkit.domain.nn.ffnn.simple.FeedForwardNN"
 
         model_settings = ModelSettings()
 

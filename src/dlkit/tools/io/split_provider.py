@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from dlkit.core.datatypes.split import IndexSplit, Splitter
+from dlkit.tools.datatypes.split import IndexSplit, Splitter
 from dlkit.tools.io.index import load_split_indices, save_split_indices
 from dlkit.tools.io.locations import splits_dir
 

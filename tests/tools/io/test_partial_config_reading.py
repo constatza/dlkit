@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, Field
 
-from dlkit.tools.config.components.model_components import ModelComponentSettings
+from dlkit.tools.config.model_components import ModelComponentSettings
 from dlkit.tools.config.paths_settings import PathsSettings
 from dlkit.tools.io.config import (
     ConfigSectionError,
@@ -157,7 +157,10 @@ class TestLoadSectionsConfig:
         register_section_mapping(PathsTestSettings, "PATHS")
         register_section_mapping(ModelTestSettings, "MODEL")
 
-        section_configs = {"PATHS": PathsTestSettings, "MODEL": ModelTestSettings}
+        section_configs: dict[str, type[BaseModel] | None] = {
+            "PATHS": PathsTestSettings,
+            "MODEL": ModelTestSettings,
+        }
 
         configs = load_sections_config(config_file, section_configs)
 
@@ -202,7 +205,10 @@ class TestLoadSectionsConfig:
 
     def test_load_with_missing_section(self, config_file):
         """Test loading when one section is missing."""
-        section_configs = {"PATHS": PathsTestSettings, "NONEXISTENT": SampleSectionSettings}
+        section_configs: dict[str, type[BaseModel] | None] = {
+            "PATHS": PathsTestSettings,
+            "NONEXISTENT": SampleSectionSettings,
+        }
 
         with pytest.raises(ConfigSectionError) as exc_info:
             load_sections_config(config_file, section_configs)
@@ -266,7 +272,10 @@ class TestPerformance:
         register_section_mapping(ModelTestSettings, "MODEL")
 
         # Loading multiple sections should work efficiently
-        section_configs = {"PATHS": PathsTestSettings, "MODEL": ModelTestSettings}
+        section_configs: dict[str, type[BaseModel] | None] = {
+            "PATHS": PathsTestSettings,
+            "MODEL": ModelTestSettings,
+        }
 
         configs = load_sections_config(config_file, section_configs)
 

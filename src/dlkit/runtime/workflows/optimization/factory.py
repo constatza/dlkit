@@ -7,8 +7,8 @@ with proper separation of concerns.
 
 from __future__ import annotations
 
-from dlkit.interfaces.api.domain import WorkflowError
 from dlkit.runtime.workflows.factories.build_factory import BuildFactory
+from dlkit.shared.errors import WorkflowError
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
 from dlkit.tools.utils.logging_config import get_logger
@@ -186,7 +186,9 @@ class OptimizationServiceFactory:
         logger.debug("MLflow config present: {}", mlflow_config is not None)
 
         if mlflow_config:
-            from dlkit.runtime.workflows.strategies.tracking import determine_experiment_name
+            from dlkit.runtime.tracking.naming import (
+                determine_experiment_name,
+            )
 
             experiment_name = determine_experiment_name(settings, mlflow_config)
             logger.info(
@@ -261,7 +263,7 @@ class OptimizationServiceFactory:
         }
 
         # Determine study name (study gets run name)
-        from dlkit.runtime.workflows.strategies.tracking import determine_study_name
+        from dlkit.runtime.tracking.naming import determine_study_name
 
         config["study_name"] = determine_study_name(settings, optuna_config)
 

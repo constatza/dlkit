@@ -6,35 +6,14 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS: dict[str, tuple[str, str]] = {
-    "ConfigurationError": ("dlkit.interfaces.api.domain", "ConfigurationError"),
-    "GenerateTemplateCommand": ("dlkit.interfaces.api.commands", "GenerateTemplateCommand"),
-    "GenerateTemplateCommandInput": (
-        "dlkit.interfaces.api.commands",
-        "GenerateTemplateCommandInput",
-    ),
-    "InferenceCommand": ("dlkit.interfaces.api.commands", "InferenceCommand"),
-    "InferenceCommandInput": ("dlkit.interfaces.api.commands", "InferenceCommandInput"),
-    "InferenceResult": ("dlkit.interfaces.api.domain", "InferenceResult"),
+    "ConfigurationError": ("dlkit.shared", "ConfigurationError"),
+    "InferenceResult": ("dlkit.shared", "InferenceResult"),
     "LoggedModelRecord": ("dlkit.interfaces.api.functions", "LoggedModelRecord"),
-    "OptimizationCommand": ("dlkit.interfaces.api.commands", "OptimizationCommand"),
-    "OptimizationCommandInput": (
-        "dlkit.interfaces.api.commands",
-        "OptimizationCommandInput",
-    ),
-    "OptimizationResult": ("dlkit.interfaces.api.domain", "OptimizationResult"),
-    "StrategyError": ("dlkit.interfaces.api.domain", "StrategyError"),
-    "TrackingHooks": ("dlkit.interfaces.api.tracking_hooks", "TrackingHooks"),
-    "TrainCommand": ("dlkit.interfaces.api.commands", "TrainCommand"),
-    "TrainCommandInput": ("dlkit.interfaces.api.commands", "TrainCommandInput"),
-    "TrainingResult": ("dlkit.interfaces.api.domain", "TrainingResult"),
-    "ValidateTemplateCommand": ("dlkit.interfaces.api.commands", "ValidateTemplateCommand"),
-    "ValidateTemplateCommandInput": (
-        "dlkit.interfaces.api.commands",
-        "ValidateTemplateCommandInput",
-    ),
-    "ValidationCommand": ("dlkit.interfaces.api.commands", "ValidationCommand"),
-    "ValidationCommandInput": ("dlkit.interfaces.api.commands", "ValidationCommandInput"),
-    "WorkflowError": ("dlkit.interfaces.api.domain", "WorkflowError"),
+    "OptimizationResult": ("dlkit.shared", "OptimizationResult"),
+    "StrategyError": ("dlkit.shared", "StrategyError"),
+    "LifecycleHooks": ("dlkit.shared", "LifecycleHooks"),
+    "TrainingResult": ("dlkit.shared", "TrainingResult"),
+    "WorkflowError": ("dlkit.shared", "WorkflowError"),
     "build_logged_model_uri": ("dlkit.interfaces.api.functions", "build_logged_model_uri"),
     "build_registered_model_uri": (
         "dlkit.interfaces.api.functions",

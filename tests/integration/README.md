@@ -77,7 +77,7 @@ filepath = "<tmp_path>/test_data/split.txt"
 
 [MODEL]
 name = "ConstantWidthFFNN"
-module_path = "dlkit.core.models.nn.ffnn.simple"
+module_path = "dlkit.domain.nn.ffnn.simple"
 # checkpoint = "/path/to/model.ckpt"  # for inference
 
 [MODEL.params]

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 
-from dlkit.core.datasets.flexible import FlexibleDataset
+from dlkit.runtime.data.datasets.flexible import FlexibleDataset
 from dlkit.tools.config.data_entries import Feature, Target
 
 

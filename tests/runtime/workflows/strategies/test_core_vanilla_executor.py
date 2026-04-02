@@ -7,9 +7,9 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.interfaces.api.domain import TrainingResult, WorkflowError
-from dlkit.runtime.workflows.factories.build_factory import BuildComponents
-from dlkit.runtime.workflows.strategies.core import VanillaExecutor
+from dlkit.runtime.execution import VanillaExecutor
+from dlkit.runtime.execution.components import RuntimeComponents
+from dlkit.shared import TrainingResult, WorkflowError
 from dlkit.tools.config.general_settings import GeneralSettings
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.config.training_settings import TrainingSettings
@@ -39,13 +39,13 @@ def trainer_stub():
 
 @pytest.fixture
 def build_components(trainer_stub):
-    """Create BuildComponents for testing."""
+    """Create RuntimeComponents for testing."""
 
     @dataclass(frozen=True, slots=True)
     class DummyModel:
         pass
 
-    return BuildComponents(
+    return RuntimeComponents(
         model=cast(Any, DummyModel()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, trainer_stub),
@@ -94,7 +94,7 @@ def test_vanilla_executor_metric_extraction(build_components, settings, trainer_
 
 def test_vanilla_executor_no_trainer_error(settings):
     """Test that executor raises WorkflowError when trainer is None."""
-    components = BuildComponents(
+    components = RuntimeComponents(
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=None,  # No trainer
@@ -118,7 +118,7 @@ def test_vanilla_executor_trainer_exception_handling(settings):
         def fit(self, *args, **kwargs):
             raise RuntimeError("Training failed")
 
-    components = BuildComponents(
+    components = RuntimeComponents(
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, FailingTrainer()),
@@ -157,7 +157,7 @@ def test_vanilla_executor_post_training_exception_handling(build_components, set
             raise RuntimeError("Test failed")
 
     failing_trainer = PartiallyFailingTrainer()
-    components = BuildComponents(
+    components = RuntimeComponents(
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, failing_trainer),
