@@ -44,9 +44,14 @@ class EntrypointContext:
 
         path_overrides: dict[str, Any] = {}
         current_context = get_current_path_context()
-        root_from_cfg = getattr(getattr(effective, "SESSION", None), "root_dir", None)
-        if root_from_cfg and not (current_context and getattr(current_context, "root_dir", None)):
-            path_overrides["root_dir"] = root_from_cfg
+        already_has_root = current_context and getattr(current_context, "root_dir", None)
+        if not already_has_root:
+            # Prefer an explicit root_dir override; fall back to SESSION.root_dir
+            override_root = normalized_overrides.get("root_dir")
+            root_from_cfg = getattr(getattr(effective, "SESSION", None), "root_dir", None)
+            resolved_root = override_root or root_from_cfg
+            if resolved_root:
+                path_overrides["root_dir"] = resolved_root
         return cls(settings=effective, path_overrides=path_overrides)
 
     def elapsed(self) -> float:

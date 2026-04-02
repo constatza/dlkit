@@ -5,7 +5,7 @@ Composes: prepare (ops) -> build (factory) -> execute (strategy) -> finalize.
 
 from __future__ import annotations
 
-from dlkit.shared import OptimizationResult, TrainingResult
+from dlkit.shared import TrainingResult
 from dlkit.shared.hooks import LifecycleHooks
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.workflow_configs import (
@@ -107,34 +107,6 @@ class Orchestrator:
 
         except Exception as e:
             raise_error("Training orchestration failed", e)
-
-    def execute_optimization(
-        self,
-        settings: GeneralSettings | OptimizationWorkflowConfig,
-    ) -> OptimizationResult:
-        """Execute optimization workflow with runtime-owned tracker lifecycle."""
-        logger.info("Starting optimization workflow orchestration")
-        try:
-            # Optimization should not run in inference mode
-            if settings.SESSION and getattr(settings.SESSION, "inference", False):
-                logger.warning("Optimization requested but inference mode is active")
-                raise_error("Inference mode active: optimization suspended.")
-
-            base_factory = OptimizationServiceFactory()
-            experiment_tracker = base_factory._create_experiment_tracker(settings)
-            strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
-            optimization_strategy = strategy_factory.create_optimization_strategy(settings)
-            logger.info("Starting optimization execution with selected strategy")
-            if experiment_tracker is not None:
-                with experiment_tracker:
-                    result = optimization_strategy.execute_optimization(settings)
-            else:
-                result = optimization_strategy.execute_optimization(settings)
-            logger.info("Optimization execution completed successfully")
-            return result
-
-        except Exception as e:
-            raise_error("Optimization orchestration failed", e)
 
 
 # Execution classes moved to strategies/execution.py to avoid bloat here

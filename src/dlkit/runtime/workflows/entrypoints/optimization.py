@@ -20,7 +20,7 @@ def optimize(
 
     try:
         base_factory = OptimizationServiceFactory()
-        experiment_tracker = base_factory._create_experiment_tracker(context.settings)
+        experiment_tracker = base_factory.create_experiment_tracker(context.settings)
         strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
         optimization_strategy = strategy_factory.create_optimization_strategy(context.settings)
 

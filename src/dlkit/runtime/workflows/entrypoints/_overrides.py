@@ -132,24 +132,10 @@ def _build_patch(settings: Any, overrides: dict[str, Any]) -> dict[str, Any]:
     return patch
 
 
-def _apply_path_context_side_effects(overrides: dict[str, Any]) -> None:
-    """Apply root-dir context side effects for request-scoped execution."""
-    root_dir = overrides.get("root_dir")
-    if not root_dir:
-        return
-
-    from dlkit.tools.io.path_context import PathOverrideContext, set_path_context
-
-    set_path_context(
-        PathOverrideContext(root_dir=normalize_user_path(root_dir, require_absolute=True))
-    )
-
-
 def apply_runtime_overrides[T: BasicSettings](
     base_settings: T,
     **overrides: Any,
 ) -> T:
-    """Apply runtime overrides onto immutable settings models."""
-    _apply_path_context_side_effects(overrides)
+    """Apply runtime overrides onto immutable settings models (pure function)."""
     patch = _build_patch(base_settings, overrides)
     return base_settings.patch(patch) if patch else base_settings

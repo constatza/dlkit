@@ -134,8 +134,8 @@ class TestDependencyInversion:
 
         from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
 
-        # Check _create_experiment_tracker method
-        source = inspect.getsource(OptimizationServiceFactory._create_experiment_tracker)
+        # Check create_experiment_tracker method
+        source = inspect.getsource(OptimizationServiceFactory.create_experiment_tracker)
 
         # Factory should NOT enter contexts
         assert "with" not in source or "__enter__" not in source, (

@@ -7,6 +7,7 @@ from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
+from dlkit.runtime.adapters.lightning.factories import WrapperFactory
 from dlkit.runtime.execution.components import RuntimeComponents
 from dlkit.shared.shapes import ShapeSummary
 from dlkit.tools.config import GeneralSettings
@@ -19,7 +20,9 @@ from dlkit.tools.config.workflow_configs import (
     TrainingWorkflowConfig,
 )
 
+from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
+from .model_detection import detect_model_type, requires_shape_spec
 from .module_defaults import with_runtime_module_defaults
 from .shape_inference_pipeline import ShapeInferencePipeline
 
@@ -118,15 +121,11 @@ class GraphBuildStrategy(IBuildStrategy):
             wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
         wrapper_settings = with_runtime_module_defaults(WrapperComponentSettings(**wrapper_kwargs))
 
-        from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
-
-        from . import build_factory as build_factory_module
-
         components = build_wrapper_components(wrapper_settings, entry_configs)
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        model: LightningModule = build_factory_module.WrapperFactory.create_graph_wrapper(
+        model: LightningModule = WrapperFactory.create_graph_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
             entry_configs=entry_configs,
@@ -173,11 +172,9 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        from . import build_factory as build_factory_module
-
-        model_type = build_factory_module.detect_model_type(model_settings)
+        model_type = detect_model_type(model_settings)
         shape_summary: ShapeSummary | None = None
-        if build_factory_module.requires_shape_spec(model_type):
+        if requires_shape_spec(model_type):
             shape_summary = self._shape_inference.infer_timeseries(dataset)
 
         skip_wrapper = False
@@ -222,14 +219,8 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             wrapper_settings = with_runtime_module_defaults(
                 WrapperComponentSettings(**wrapper_kwargs)
             )
-            from dlkit.runtime.workflows.factories.component_builders import (
-                build_wrapper_components,
-            )
-
-            from . import build_factory as build_factory_module
-
             components = build_wrapper_components(wrapper_settings, entry_configs)
-            model = build_factory_module.WrapperFactory.create_timeseries_wrapper(
+            model = WrapperFactory.create_timeseries_wrapper(
                 model_settings=model_settings,
                 settings=wrapper_settings,
                 shape_summary=shape_summary,

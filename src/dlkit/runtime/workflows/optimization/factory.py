@@ -88,9 +88,9 @@ class OptimizationServiceFactory:
         """
         try:
             # Create dependencies
-            study_repository = self._create_study_repository(settings)
-            experiment_tracker = self._create_experiment_tracker(settings)
-            config_persister = self._create_config_persister(settings)
+            study_repository = self.create_study_repository(settings)
+            experiment_tracker = self.create_experiment_tracker(settings)
+            config_persister = self.create_config_persister(settings)
 
             # Create services
             study_manager = StudyManager(study_repository)
@@ -135,7 +135,7 @@ class OptimizationServiceFactory:
         Returns:
             Configured study manager
         """
-        repository = self._create_study_repository(settings)
+        repository = self.create_study_repository(settings)
         return StudyManager(repository)
 
     def create_trial_executor(self) -> TrialExecutor:
@@ -146,7 +146,7 @@ class OptimizationServiceFactory:
         """
         return TrialExecutor(self._build_factory)
 
-    def _create_study_repository(self, settings: _WorkflowSettings) -> IStudyRepository:
+    def create_study_repository(self, settings: _WorkflowSettings) -> IStudyRepository:
         """Create study repository based on settings.
 
         Args:
@@ -169,7 +169,7 @@ class OptimizationServiceFactory:
         # Fall back to in-memory repository for testing/development
         return InMemoryStudyRepository()
 
-    def _create_experiment_tracker(self, settings: _WorkflowSettings) -> IExperimentTracker | None:
+    def create_experiment_tracker(self, settings: _WorkflowSettings) -> IExperimentTracker | None:
         """Create experiment tracker based on settings.
 
         Args:
@@ -207,7 +207,7 @@ class OptimizationServiceFactory:
         logger.debug("Using NullTrackingAdapter (MLflow not enabled)")
         return NullTrackingAdapter()
 
-    def _create_config_persister(
+    def create_config_persister(
         self, settings: _WorkflowSettings
     ) -> IConfigurationPersistence | None:
         """Create configuration persister based on settings.
