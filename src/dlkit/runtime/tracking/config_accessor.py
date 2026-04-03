@@ -36,9 +36,9 @@ class ConfigAccessor:
         """Get model name with fallback.
 
         Returns:
-            Model name from settings or default "DLKitModel"
+            Model name from settings or default "Model"
         """
-        return self._get_nested("MODEL", "name", default="DLKitModel")
+        return self._get_nested("MODEL", "name", default="Model")
 
     def get_session_root_dir(self) -> Path | None:
         """Get session root directory.

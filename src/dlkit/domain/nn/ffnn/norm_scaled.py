@@ -6,7 +6,6 @@ from typing import Literal
 import torch
 from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
@@ -17,7 +16,7 @@ from dlkit.domain.nn.primitives.parametrized_layers import (
 )
 
 
-class NormScaledFFNN(DLKitModel):
+class NormScaledFFNN(nn.Module):
     """Wrap a base FFNN with input/output norm scaling.
 
     This module enforces homogeneous scaling consistency for Ax = b by:

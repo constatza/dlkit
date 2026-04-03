@@ -1,5 +1,4 @@
 from . import attention, cae, encoder, ffnn, graph, primitives
-from .base import DLKitModel
 from .ffnn.linear import LinearNetwork
 from .ffnn.norm_scaled import (
     NormScaledConstantWidthFFNN,
@@ -35,7 +34,6 @@ from .ffnn.parametric_variants import (
 from .ffnn.plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 
 __all__ = [
-    "DLKitModel",
     "LinearNetwork",
     # NormScaled single-layer
     "NormScaledFFNN",

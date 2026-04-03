@@ -3,11 +3,10 @@ from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection
 
 
-class FeedForwardNN(DLKitModel):
+class FeedForwardNN(nn.Module):
     """Feed-forward neural network with skip connections and configurable layers.
 
     Args:

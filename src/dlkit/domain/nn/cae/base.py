@@ -1,10 +1,10 @@
 import abc
 from typing import Any
 
-from dlkit.domain.nn.base import DLKitModel
+from torch import nn
 
 
-class CAE(DLKitModel):
+class CAE(nn.Module):
     """Convolutional autoencoder base class.
 
     Provides abstract methods for encode and decode operations, and a standard
