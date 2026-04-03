@@ -9,6 +9,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+import torch.nn as nn
+from lightning.pytorch import LightningModule
+
 
 def _string_attribute(settings: Any, name: str) -> str | None:
     """Safely extract a string attribute from *settings*.
@@ -197,17 +200,19 @@ class ClassBasedDetector(ModelFamilyDetector):
             model_class = self._import_class(class_path)
 
             # Import base classes for checking
-            from dlkit.domain.nn.base import DLKitModel
             from dlkit.domain.nn.graph.base import BaseGraphNetwork
 
             # Check inheritance (most specific first)
             if issubclass(model_class, BaseGraphNetwork):
                 return ModelFamily.GRAPH
 
-            if issubclass(model_class, DLKitModel):
+            if issubclass(model_class, LightningModule):
+                return ModelFamily.EXTERNAL
+
+            if issubclass(model_class, nn.Module):
                 return ModelFamily.DLKIT_NN
 
-            # Everything else (including PyTorch Forecasting) is external
+            # Everything else is external
             return ModelFamily.EXTERNAL
 
         except Exception:

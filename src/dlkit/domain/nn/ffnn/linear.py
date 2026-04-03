@@ -2,11 +2,10 @@ from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.utils import make_norm_layer
 
 
-class LinearNetwork(DLKitModel):
+class LinearNetwork(nn.Module):
     """A simple linear network with a single layer and optional normalization.
 
     This network consists of a single linear transformation with optional

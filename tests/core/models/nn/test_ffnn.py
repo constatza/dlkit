@@ -10,7 +10,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.ffnn.linear import LinearNetwork
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN, FeedForwardNN
 
@@ -41,8 +40,8 @@ class TestFeedForwardNN:
         assert ffnn(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_is_dlkit_model(self, ffnn: FeedForwardNN) -> None:
-        """FeedForwardNN should be instance of DLKitModel."""
-        assert isinstance(ffnn, DLKitModel)
+        """FeedForwardNN should be instance of nn.Module."""
+        assert isinstance(ffnn, nn.Module)
 
     def test_is_nn_module(self, ffnn: FeedForwardNN) -> None:
         """FeedForwardNN should be instance of nn.Module."""
@@ -138,8 +137,8 @@ class TestConstantWidthFFNN:
         assert isinstance(constant_ffnn, FeedForwardNN)
 
     def test_is_dlkit_model(self, constant_ffnn: ConstantWidthFFNN) -> None:
-        """ConstantWidthFFNN should be instance of DLKitModel."""
-        assert isinstance(constant_ffnn, DLKitModel)
+        """ConstantWidthFFNN should be instance of nn.Module."""
+        assert isinstance(constant_ffnn, nn.Module)
 
     def test_is_nn_module(self, constant_ffnn: ConstantWidthFFNN) -> None:
         """ConstantWidthFFNN should be instance of nn.Module."""
@@ -181,8 +180,8 @@ class TestLinearNetwork:
         assert linear_net(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_is_dlkit_model(self, linear_net: LinearNetwork) -> None:
-        """LinearNetwork should be instance of DLKitModel."""
-        assert isinstance(linear_net, DLKitModel)
+        """LinearNetwork should be instance of nn.Module."""
+        assert isinstance(linear_net, nn.Module)
 
     def test_is_nn_module(self, linear_net: LinearNetwork) -> None:
         """LinearNetwork should be instance of nn.Module."""

@@ -10,7 +10,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.cae import (
     LinearCAE1d,
     SkipCAE1d,
@@ -76,8 +75,8 @@ class TestSkipCAE1d:
         assert isinstance(skip_cae, CAE)
 
     def test_is_dlkit_model(self, skip_cae: SkipCAE1d) -> None:
-        """SkipCAE1d should be an instance of DLKitModel."""
-        assert isinstance(skip_cae, DLKitModel)
+        """SkipCAE1d should be an instance of nn.Module."""
+        assert isinstance(skip_cae, nn.Module)
 
     def test_has_parameters(self, skip_cae: SkipCAE1d) -> None:
         """SkipCAE1d should have trainable parameters."""
@@ -133,8 +132,8 @@ class TestLinearCAE1d:
         assert isinstance(linear_cae, CAE)
 
     def test_is_dlkit_model(self, linear_cae: LinearCAE1d) -> None:
-        """LinearCAE1d should be an instance of DLKitModel."""
-        assert isinstance(linear_cae, DLKitModel)
+        """LinearCAE1d should be an instance of nn.Module."""
+        assert isinstance(linear_cae, nn.Module)
 
     def test_no_impl_delegation(self, linear_cae: LinearCAE1d) -> None:
         """Old delegation pattern should be gone (no _impl)."""
@@ -176,8 +175,8 @@ class TestVAE1d:
         assert mu.ndim == 2
 
     def test_is_dlkit_model(self, vae: VAE1d) -> None:
-        """VAE1d should be an instance of DLKitModel."""
-        assert isinstance(vae, DLKitModel)
+        """VAE1d should be an instance of nn.Module."""
+        assert isinstance(vae, nn.Module)
 
     def test_not_cae(self, vae: VAE1d) -> None:
         """VAE1d should NOT be an instance of CAE."""

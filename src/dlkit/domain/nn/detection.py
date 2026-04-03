@@ -12,6 +12,8 @@ from enum import Enum
 from importlib import import_module
 from typing import Any
 
+import torch.nn as nn
+
 
 class ModelType(Enum):
     """Model type classifications."""
@@ -73,20 +75,18 @@ class ABCModelTypeDetector(IModelTypeDetector):
 
         # Check inheritance
         try:
-            from dlkit.domain.nn.base import DLKitModel
+            from lightning.pytorch import LightningModule
+
             from dlkit.domain.nn.graph.base import BaseGraphNetwork
 
             if issubclass(model_cls, BaseGraphNetwork):
                 return ModelType.GRAPH
 
-            if issubclass(model_cls, DLKitModel):
-                return ModelType.SHAPE_AWARE_DLKIT
-
-            # Check for external Lightning modules (PyTorch Forecasting, etc.)
-            from lightning.pytorch import LightningModule
-
             if issubclass(model_cls, LightningModule):
                 return ModelType.SHAPE_AGNOSTIC_EXTERNAL
+
+            if issubclass(model_cls, nn.Module):
+                return ModelType.SHAPE_AWARE_DLKIT
 
         except ImportError:
             pass

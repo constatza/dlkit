@@ -3,11 +3,10 @@ from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.primitives import DenseBlock
 
 
-class SimpleFeedForwardNN(DLKitModel):
+class SimpleFeedForwardNN(nn.Module):
     """Feed-forward neural network without skip connections.
 
     Mirrors FeedForwardNN but uses bare DenseBlocks instead of SkipConnection

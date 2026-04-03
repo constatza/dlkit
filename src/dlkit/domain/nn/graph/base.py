@@ -1,12 +1,11 @@
 from abc import abstractmethod
 
-from torch import Tensor
+from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.shared.shapes import ShapeSpecProtocol
 
 
-class BaseGraphNetwork(DLKitModel):
+class BaseGraphNetwork(nn.Module):
     """Abstract base for graph neural networks (PyG-based).
 
     Args:

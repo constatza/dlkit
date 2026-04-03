@@ -3,7 +3,6 @@ from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.nn.primitives import SkipConnection
 from dlkit.domain.nn.utils import make_norm_layer
 
@@ -53,7 +52,7 @@ class ParametricDenseBlock(nn.Module):
         return self.dropout(x)
 
 
-class ConstantWidthParametricFFNN(DLKitModel):
+class ConstantWidthParametricFFNN(nn.Module):
     """Constant-width network using parametric dense blocks (in == out == size).
 
     Args:
@@ -111,7 +110,7 @@ class ConstantWidthParametricFFNN(DLKitModel):
         return x
 
 
-class EmbeddedParametricFFNN(DLKitModel):
+class EmbeddedParametricFFNN(nn.Module):
     """Parametric network with linear input embedding and output projection.
 
     Architecture: Linear(in→hidden) → ConstantWidthParametricFFNN → Linear(hidden→out).

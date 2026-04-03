@@ -405,9 +405,9 @@ class ArtifactLogger:
 
     def _derive_registered_model_name(self, model: Any) -> str:
         """Build registered model name from model class name."""
-        raw_name = _resolve_model_class_name(model) or "DLKitModel"
+        raw_name = _resolve_model_class_name(model) or "Model"
         normalized = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
-        return normalized or "DLKitModel"
+        return normalized or "Model"
 
     def _apply_aliases(
         self,
