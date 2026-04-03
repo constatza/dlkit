@@ -17,8 +17,8 @@ from dlkit.shared.protocols import IDataModule, ITrainableModule
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.core.base_settings import BasicSettings
 from dlkit.tools.config.core.updater import update_settings
-from dlkit.tools.config.precision.service import get_precision_service
 from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+from dlkit.tools.precision.service import get_precision_service
 from dlkit.tools.utils.logging_config import get_logger
 
 from .interfaces import ITrainingExecutor

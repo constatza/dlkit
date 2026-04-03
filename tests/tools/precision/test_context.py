@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from dlkit.tools.config.precision import (
+from dlkit.tools.precision import (
     PrecisionContext,
     PrecisionStrategy,
     current_precision_override,

@@ -123,7 +123,7 @@ class TrainerSettings(ComponentSettings):
             lightning_logger = False
 
         # Resolve precision parameter using precision service
-        from dlkit.tools.config.precision.service import get_precision_service
+        from dlkit.tools.precision.service import get_precision_service
 
         precision_service = get_precision_service()
         lightning_precision = self.precision

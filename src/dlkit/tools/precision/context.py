@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Protocol
 
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.precision.strategy import PrecisionStrategy
 
 
 class PrecisionProvider(Protocol):
@@ -196,7 +196,7 @@ def precision_override(precision: PrecisionStrategy) -> Iterator[None]:
         None - context manager for use with 'with' statement.
 
     Examples:
-        >>> from dlkit.tools.config.precision.context import precision_override, PrecisionStrategy
+        >>> from dlkit.tools.precision.context import precision_override, PrecisionStrategy
         >>> with precision_override(PrecisionStrategy.MIXED_16):
         ...     # All operations here use MIXED_16 precision
         ...     pass

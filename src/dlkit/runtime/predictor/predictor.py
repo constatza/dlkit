@@ -13,12 +13,12 @@ from tensordict import TensorDict
 
 from dlkit.runtime.adapters.lightning.base import _unpack_model_output
 from dlkit.shared.errors import WorkflowError
-from dlkit.tools.config.precision import (
+from dlkit.tools.precision import (
     PrecisionService,
     get_precision_service,
     precision_override,
 )
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.precision.strategy import PrecisionStrategy
 from dlkit.tools.utils.logging_config import get_logger
 
 from .config import ModelState, PredictorConfig

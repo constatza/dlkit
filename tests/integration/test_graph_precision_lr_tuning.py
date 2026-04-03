@@ -13,7 +13,7 @@ import dlkit
 from dlkit.shared import TrainingResult
 from dlkit.tools.config import GeneralSettings
 from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
-from dlkit.tools.config.precision import PrecisionStrategy
+from dlkit.tools.precision import PrecisionStrategy
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
@@ -87,7 +87,7 @@ class TestGraphPrecisionLRTuning:
 
     def _load_dataset(self, graph_settings: GeneralSettings) -> Any:
         from dlkit.runtime.data.datasets.graph import GraphDataset
-        from dlkit.tools.config.precision import precision_override
+        from dlkit.tools.precision import precision_override
 
         dataset_cfg = graph_settings.DATASET
         assert dataset_cfg is not None

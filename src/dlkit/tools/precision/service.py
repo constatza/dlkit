@@ -6,22 +6,16 @@ precision strategy resolution across all DLKit components.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast
+from typing import Any
 
 import torch
 
-from dlkit.tools.config.precision.context import (
+from dlkit.tools.precision.context import (
     PrecisionContext,
     PrecisionProvider,
     get_global_precision_context,
 )
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
-
-
-class _PrecisionAware(Protocol):
-    _precision_dtype: torch.dtype
-    _precision_applied: bool
-    _effective_precision_strategy: object
+from dlkit.tools.precision.strategy import PrecisionStrategy
 
 
 class PrecisionService:
@@ -170,28 +164,6 @@ class PrecisionService:
         precision = self.resolve_precision(provider, default)
         return precision.supports_autocast()
 
-    def validate_precision_compatibility(
-        self, precision: PrecisionStrategy, device_type: str = "cuda"
-    ) -> bool:
-        """Validate precision compatibility with device and PyTorch version.
-
-        Args:
-            precision: Precision strategy to validate.
-            device_type: Device type ("cuda", "cpu", "mps", etc.).
-
-        Returns:
-            True if precision is compatible with the device and PyTorch version.
-
-        Note:
-            This is a placeholder for future validation logic.
-            Currently returns True for all combinations.
-        """
-        # Future implementation could check:
-        # - bfloat16 support on device
-        # - PyTorch version compatibility
-        # - Device-specific precision limitations
-        return True
-
     def cast_tensor(
         self,
         tensor: torch.Tensor,
@@ -230,14 +202,6 @@ class PrecisionService:
         precision = self.resolve_precision(provider, default)
         target_dtype = precision.to_torch_dtype()
         model = model.to(dtype=target_dtype)
-
-        # Sync precision metadata for DLKit models that track effective precision
-        if hasattr(model, "_precision_dtype"):
-            cast(_PrecisionAware, model)._precision_dtype = target_dtype
-        if hasattr(model, "_precision_applied"):
-            cast(_PrecisionAware, model)._precision_applied = True
-        if hasattr(model, "_effective_precision_strategy"):
-            cast(_PrecisionAware, model)._effective_precision_strategy = precision
 
         return model
 
