@@ -9,6 +9,7 @@ DLKit uses typed Pydantic settings plus runtime-owned module defaults.
 - `workflow_settings.py` remains the re-export shim.
 - Secure URI/path config types live under `tools.config.security.uri_types`.
 - `DATASET.family` can explicitly select the runtime dataset family.
+- `tools.precision` owns the precision service — see [`../precision/README.md`](../precision/README.md).
 
 ## Recommended Entry Points
 ```python
