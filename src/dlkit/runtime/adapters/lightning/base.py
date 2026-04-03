@@ -15,6 +15,7 @@ from dlkit.runtime.adapters.lightning.security import configure_checkpoint_loadi
 configure_checkpoint_loading()
 
 import torch
+from lightning import LightningModule
 from tensordict import TensorDict
 from torch import Tensor, nn
 
@@ -33,7 +34,6 @@ from dlkit.runtime.adapters.lightning.protocols import (
     IModelInvoker,
     IPredictionStrategy,
 )
-from lightning import LightningModule
 
 
 def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
