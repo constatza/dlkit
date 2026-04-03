@@ -13,17 +13,17 @@ import sys
 
 import pytest
 import torch
+from torch import nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.precision import (
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.io.arrays import load_array
+from dlkit.tools.precision import (
     PrecisionStrategy,
     get_precision_service,
     precision_override,
 )
-from dlkit.tools.config.precision.strategy import _PRECISION_ALIAS_MAP
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.io.arrays import load_array
+from dlkit.tools.precision.strategy import _PRECISION_ALIAS_MAP
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
@@ -36,7 +36,7 @@ def _build_session(*, precision: object, **kwargs: object) -> SessionSettings:
     return SessionSettings.model_validate({"precision": precision, **kwargs})
 
 
-class Float64TestModel(DLKitModel):
+class Float64TestModel(nn.Module):
     """Test model for float64 precision verification."""
 
     def __init__(self, in_features: int, out_features: int, **kwargs):

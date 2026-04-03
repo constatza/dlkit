@@ -94,7 +94,7 @@ class TestVanillaExecutorLRTuning:
         executor = VanillaExecutor()
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.config.precision.service.get_precision_service"):
+            with patch("dlkit.tools.precision.service.get_precision_service"):
                 executor.execute(mock_components, settings_without_lr_tuner)
 
         # Verify training was called
@@ -116,7 +116,7 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.return_value = 0.005
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.config.precision.service.get_precision_service"):
+            with patch("dlkit.tools.precision.service.get_precision_service"):
                 with patch(
                     "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,
@@ -160,7 +160,7 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.return_value = 0.003
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.config.precision.service.get_precision_service"):
+            with patch("dlkit.tools.precision.service.get_precision_service"):
                 with patch(
                     "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,
@@ -186,7 +186,7 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.side_effect = RuntimeError("Tuning failed")
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.config.precision.service.get_precision_service"):
+            with patch("dlkit.tools.precision.service.get_precision_service"):
                 with patch(
                     "dlkit.runtime.execution.tuning.LRTuner",
                     return_value=mock_lr_tuner,

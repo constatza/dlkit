@@ -9,14 +9,14 @@ import torch
 
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
 from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.precision import (
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.io.arrays import load_array
+from dlkit.tools.precision import (
     PrecisionStrategy,
     get_precision_context,
     get_precision_service,
     precision_override,
 )
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.io.arrays import load_array
 
 LOAD_SHAPE = (16, 4)
 SMALL_FILE_SHAPE = (8, 4)

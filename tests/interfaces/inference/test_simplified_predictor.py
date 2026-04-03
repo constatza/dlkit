@@ -24,7 +24,7 @@ from dlkit.runtime.predictor.loading import (
     load_checkpoint,
     validate_checkpoint,
 )
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.precision.strategy import PrecisionStrategy
 
 
 class TestCheckpointLoading:

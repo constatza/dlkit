@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.tools.config.precision import PrecisionStrategy, precision_override
 from dlkit.tools.io.arrays import _load_npz, load_array
+from dlkit.tools.precision import PrecisionStrategy, precision_override
 
 
 class TestLoadNpzFunction:

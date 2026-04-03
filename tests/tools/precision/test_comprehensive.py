@@ -13,21 +13,21 @@ from unittest.mock import patch
 
 import pytest
 import torch
+from torch import nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.shapes import create_shape_spec
 from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.precision import (
+from dlkit.tools.config.session_settings import SessionSettings
+from dlkit.tools.config.trainer_settings import TrainerSettings
+from dlkit.tools.io.arrays import load_array
+from dlkit.tools.precision import (
     PrecisionStrategy,
     get_precision_service,
     precision_override,
 )
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.trainer_settings import TrainerSettings
-from dlkit.tools.io.arrays import load_array
 
 
-class ProductionTestModel(DLKitModel):
+class ProductionTestModel(nn.Module):
     """Realistic model for production testing."""
 
     def __init__(self, shape, **kwargs):
@@ -248,7 +248,7 @@ class TestComprehensivePrecision:
         feature = Feature(name="test", path=sample_datasets["float32"])
 
         # Mock service failure
-        with patch("dlkit.tools.config.precision.service.get_precision_service") as mock_service:
+        with patch("dlkit.tools.precision.service.get_precision_service") as mock_service:
             mock_service.side_effect = RuntimeError("Service unavailable")
 
             # Should fall back to provided default

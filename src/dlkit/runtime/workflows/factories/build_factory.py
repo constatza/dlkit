@@ -7,7 +7,6 @@ import contextlib
 from dlkit.runtime.adapters.lightning.factories import WrapperFactory
 from dlkit.runtime.execution.components import RuntimeComponents
 from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.precision.context import precision_override
 from dlkit.tools.config.validators import validate_config_complete
 from dlkit.tools.config.workflow_configs import (
     InferenceWorkflowConfig,
@@ -16,6 +15,7 @@ from dlkit.tools.config.workflow_configs import (
 )
 from dlkit.tools.io.path_context import get_current_path_context, path_override_context
 from dlkit.tools.io.paths import coerce_root_dir_to_absolute
+from dlkit.tools.precision.context import precision_override
 
 from .build_strategy import (
     GraphBuildStrategy,

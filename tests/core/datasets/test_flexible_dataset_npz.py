@@ -16,7 +16,7 @@ from tensordict import TensorDict
 
 from dlkit.runtime.data.datasets.flexible import BatchComplianceError, FlexibleDataset
 from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.precision import PrecisionStrategy, precision_override
+from dlkit.tools.precision import PrecisionStrategy, precision_override
 
 
 class TestFlexibleDatasetWithNpz:

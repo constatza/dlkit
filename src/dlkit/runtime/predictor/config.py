@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.precision.strategy import PrecisionStrategy
 
 if TYPE_CHECKING:
     from torch import nn

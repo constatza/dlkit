@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.tools.precision.strategy import PrecisionStrategy
 
 from .config import PredictorConfig
 from .loading import (

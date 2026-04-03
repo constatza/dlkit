@@ -9,10 +9,10 @@ from typing import Any, Protocol
 
 import pytest
 import torch
+from torch import nn
 
-from dlkit.domain.nn.base import DLKitModel
 from dlkit.domain.shapes import ModelFamily, ShapeSource, create_shape_spec
-from dlkit.tools.config.precision import PrecisionStrategy, get_precision_service
+from dlkit.tools.precision import PrecisionStrategy, get_precision_service
 
 
 class PrecisionTestModelProtocol(Protocol):
@@ -72,10 +72,10 @@ class TestModelFactory:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
 
-class ShapeAwareTestModel(DLKitModel):
+class ShapeAwareTestModel(nn.Module):
     """Test model for shape-based model construction.
 
-    This model uses DLKitModel with shape specification for model configuration,
+    This model uses nn.Module with shape specification for model configuration,
     following the Adapter Pattern to maintain compatibility with existing tests.
     """
 

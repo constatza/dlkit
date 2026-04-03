@@ -637,7 +637,7 @@ def double_precision_settings(training_settings: GeneralSettings) -> GeneralSett
     Returns:
         GeneralSettings with SESSION.precision set to FULL_64.
     """
-    from dlkit.tools.config.precision import PrecisionStrategy
+    from dlkit.tools.precision import PrecisionStrategy
 
     new_session = training_settings.SESSION.model_copy(
         update={"precision": PrecisionStrategy.FULL_64}

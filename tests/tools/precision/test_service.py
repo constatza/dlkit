@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from dlkit.tools.config.precision import (
+from dlkit.tools.precision import (
     PrecisionContext,
     PrecisionProvider,
     PrecisionService,
@@ -89,14 +89,6 @@ class TestPrecisionService:
         mock_provider.get_precision_strategy.return_value = PrecisionStrategy.FULL_32
         is_mixed = precision_service.is_mixed_precision(mock_provider)
         assert not is_mixed
-
-    def test_validate_precision_compatibility(self, precision_service):
-        """Test precision compatibility validation."""
-        # Currently always returns True (placeholder implementation)
-        is_compatible = precision_service.validate_precision_compatibility(
-            PrecisionStrategy.MIXED_16, "cuda"
-        )
-        assert is_compatible
 
     def test_cast_tensor(self, precision_service, mock_provider):
         """Test tensor casting."""

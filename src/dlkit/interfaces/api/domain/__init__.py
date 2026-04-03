@@ -16,7 +16,7 @@ from dlkit.shared import (
     TrainingResult,
     WorkflowError,
 )
-from dlkit.tools.config.precision import (
+from dlkit.tools.precision import (
     PrecisionContext,
     PrecisionProvider,
     get_precision_context,

@@ -4,9 +4,9 @@ import pytest
 import torch
 
 from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.precision import PrecisionService, PrecisionStrategy, precision_override
 from dlkit.tools.config.session_settings import SessionSettings
 from dlkit.tools.io.arrays import load_array
+from dlkit.tools.precision import PrecisionService, PrecisionStrategy, precision_override
 
 
 class TestPrecisionIntegration:

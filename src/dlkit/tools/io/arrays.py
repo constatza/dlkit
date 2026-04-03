@@ -7,7 +7,7 @@ import torch
 from pydantic import ConfigDict, FilePath, validate_call
 from torch import Tensor
 
-from dlkit.tools.config.precision.service import get_precision_service
+from dlkit.tools.precision.service import get_precision_service
 
 # ──────────────────────────────────────────────────────────────────────────────
 

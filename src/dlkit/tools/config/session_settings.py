@@ -10,9 +10,9 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from dlkit.tools.config.security.uri_types import SecurePath
+from dlkit.tools.precision import PrecisionStrategy
 
 from .core.base_settings import BasicSettings
-from .precision import PrecisionStrategy
 
 
 class SessionSettings(BasicSettings):
