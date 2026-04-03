@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
+from abc import ABC, abstractmethod
 from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
@@ -22,7 +22,7 @@ from dlkit.tools.config.workflow_configs import (
 
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
-from .model_detection import detect_model_type, requires_shape_spec
+from .model_detection import detect_model_type, requires_shape_spec, should_skip_wrapper
 from .module_defaults import with_runtime_module_defaults
 from .shape_inference_pipeline import ShapeInferencePipeline
 
@@ -51,36 +51,20 @@ def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     return trainer_settings.build(session=settings.SESSION)
 
 
-class IBuildStrategy:
-    """Template-method base class for runtime component strategies."""
+class IBuildStrategy(ABC):
+    """Abstract base class for runtime component build strategies."""
 
-    def can_handle(self, settings: WorkflowSettings) -> bool:  # pragma: no cover - interface
-        raise NotImplementedError
+    @abstractmethod
+    def can_handle(self, settings: WorkflowSettings) -> bool:
+        """Return True if this strategy can build components for the given settings."""
 
     def build(self, settings: WorkflowSettings) -> RuntimeComponents:
-        """Apply precision/path context setup before strategy-specific work."""
-        from dlkit.tools.config.precision.context import precision_override
-        from dlkit.tools.io.path_context import get_current_path_context, path_override_context
-        from dlkit.tools.io.paths import coerce_root_dir_to_absolute
+        """Build runtime components. Infrastructure context is applied by BuildFactory."""
+        return self._build_core(settings)
 
-        precision_strategy = settings.SESSION.get_precision_strategy()
-        context = get_current_path_context()
-        session_root_dir = coerce_root_dir_to_absolute(settings.SESSION.root_dir)
-        needs_path_context = (not context or not context.root_dir) and session_root_dir
-
-        precision_ctx = (
-            precision_override(precision_strategy)
-            if precision_strategy is not None
-            else contextlib.nullcontext()
-        )
-        with precision_ctx:
-            if needs_path_context:
-                with path_override_context({"root_dir": session_root_dir}):
-                    return self._build_core(settings)
-            return self._build_core(settings)
-
-    def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:  # pragma: no cover
-        raise NotImplementedError
+    @abstractmethod
+    def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
+        """Construct and return runtime components for the given settings."""
 
 
 class GraphBuildStrategy(IBuildStrategy):
@@ -177,32 +161,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         if requires_shape_spec(model_type):
             shape_summary = self._shape_inference.infer_timeseries(dataset)
 
-        skip_wrapper = False
-        try:
-            from dlkit.runtime.data.datasets.timeseries import ForecastingDataset
-
-            if isinstance(dataset, ForecastingDataset):
-                skip_wrapper = True
-        except Exception:
-            pass
-        try:
-            model_ref = getattr(model_settings, "name", None)
-            model_cls = None
-            if isinstance(model_ref, str):
-                from dlkit.tools.utils.general import import_object
-
-                model_cls = import_object(
-                    model_ref, fallback_module=model_settings.module_path or ""
-                )
-            elif isinstance(model_ref, type):
-                model_cls = model_ref
-            if isinstance(model_cls, type):
-                from lightning.pytorch import LightningModule as BaseLightningModule
-
-                if issubclass(model_cls, BaseLightningModule):
-                    skip_wrapper = True
-        except Exception:
-            pass
+        skip_wrapper = should_skip_wrapper(model_settings, dataset)
 
         if skip_wrapper:
             model = FactoryProvider.create_component(model_settings, context)
