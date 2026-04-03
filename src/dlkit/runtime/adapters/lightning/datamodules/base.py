@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
 
 from dlkit.runtime.data.datasets.base import BaseDataset
 from dlkit.runtime.data.splits import SplitDataset
 from dlkit.tools.config.dataloader_settings import DataloaderSettings
 from dlkit.tools.datatypes.split import IndexSplit
-from lightning.pytorch import LightningDataModule
 
 
 class BaseDataModule(ABC, LightningDataModule):

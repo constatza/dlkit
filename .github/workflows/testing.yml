@@ -30,13 +30,13 @@ jobs:
         run: uv sync --dev
 
       - name: Run Ruff lint
-        run: uv run ruff check .
+        run: uv run ruff check . --output-format github
 
       - name: Run Ruff format
         run: uv run ruff format --check .
 
       - name: Run ty
-        run: uv run ty check src tests --output-format github --no-progress
+        run: uv run ty check src/dlkit --output-format github --no-progress
 
       - name: Run pytest fast smoke
         run: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q

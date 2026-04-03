@@ -130,6 +130,10 @@ ignore = [
     "B904",   # exception translation is intentional across CLI and service layers
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["dlkit"]
+known-third-party = ["lightning", "torch", "numpy", "loguru", "pytest", "tensordict", "torchmetrics", "optuna", "mlflow", "pydantic", "typer", "polars", "yaml"]
+
 [tool.ruff.lint.per-file-ignores]
 "src/dlkit/tools/io/config.py" = [
     "B903",   # small internal stub class is clearer than a dataclass here

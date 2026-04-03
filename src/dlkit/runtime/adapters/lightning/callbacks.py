@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
+from lightning import Callback
 from loguru import logger
 from pydantic import DirectoryPath, validate_call
 
 from dlkit.tools.io.url_utils import get_url_path
 from dlkit.tools.utils.logging_config import get_logger
-from lightning import Callback
 
 if TYPE_CHECKING:
     from lightning.pytorch import LightningModule, Trainer
