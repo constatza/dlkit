@@ -13,7 +13,11 @@ from tensordict import TensorDict
 
 from dlkit.runtime.adapters.lightning.base import _unpack_model_output
 from dlkit.shared.errors import WorkflowError
-from dlkit.tools.config.precision import get_precision_service, precision_override
+from dlkit.tools.config.precision import (
+    PrecisionService,
+    get_precision_service,
+    precision_override,
+)
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 from dlkit.tools.utils.logging_config import get_logger
 
@@ -87,14 +91,22 @@ class CheckpointPredictor(IPredictor):
         ...     result = predictor.predict(x=inputs)
     """
 
-    def __init__(self, config: PredictorConfig):
+    def __init__(
+        self,
+        config: PredictorConfig,
+        precision_service: PrecisionService | None = None,
+    ) -> None:
         """Initialize predictor with configuration.
 
         Args:
             config: Predictor configuration
+            precision_service: Optional precision service override. Defaults to the global
+                precision service when not provided.
         """
         self._config = config
-        self._precision_service = get_precision_service()
+        self._precision_service = (
+            precision_service if precision_service is not None else get_precision_service()
+        )
 
         # State
         self._model_state: ModelState | None = None

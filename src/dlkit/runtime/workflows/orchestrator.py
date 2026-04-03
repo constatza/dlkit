@@ -22,8 +22,8 @@ from .optimization.factory import OptimizationServiceFactory
 logger = get_logger(__name__, "orchestrator")
 
 
-class ExecutionSelector:
-    """Pure SOLID execution strategy selector using factory composition."""
+class WorkflowExecutionSelector:
+    """Routes workflow settings to the appropriate execution strategy (training or optimization)."""
 
     def __init__(self, factory: ExecutionStrategyFactory | None = None):
         self._factory = factory or ExecutionStrategyFactory()
@@ -74,10 +74,12 @@ class Orchestrator:
     """High-level training orchestrator."""
 
     def __init__(
-        self, build_factory: BuildFactory | None = None, selector: ExecutionSelector | None = None
+        self,
+        build_factory: BuildFactory | None = None,
+        selector: WorkflowExecutionSelector | None = None,
     ) -> None:
         self._build_factory = build_factory or BuildFactory()
-        self._selector = selector or ExecutionSelector()
+        self._selector = selector or WorkflowExecutionSelector()
 
     def execute_training(
         self,
