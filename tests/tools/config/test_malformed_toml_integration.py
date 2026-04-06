@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 from pydantic import BaseModel
 
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.io.config import (
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.io.config import (
     ConfigValidationError,
     load_sections_config,
     load_training_config_eager,

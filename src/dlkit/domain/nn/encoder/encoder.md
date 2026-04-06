@@ -40,7 +40,7 @@ None - standard nn.Module interface.
 - `dlkit.domain.nn.primitives.dense`: `DenseBlock` for fully connected layers
 - `dlkit.domain.nn.primitives.convolutional`: `ConvolutionBlock1d` for conv layers
 - `dlkit.domain.nn.primitives.skip`: `SkipConnection` for residual connections
-- `dlkit.runtime.data.graph.types`: `NormalizerName` type hints
+- `dlkit.engine.data.graph.types`: `NormalizerName` type hints
 
 ### External Dependencies
 - `torch`: PyTorch tensor operations and neural network modules

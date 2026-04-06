@@ -11,18 +11,18 @@ from torch import Tensor
 
 import dlkit
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.runtime.adapters.lightning.datamodules.array import InMemoryModule
-from dlkit.runtime.adapters.lightning.functions import apply_inverse_chain
-from dlkit.runtime.adapters.lightning.standard import StandardLightningWrapper
-from dlkit.runtime.data.datasets.flexible import FlexibleDataset
-from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
-from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
-from dlkit.tools.config.model_components import (
+from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
+from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
+from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
+from dlkit.engine.data.datasets.flexible import FlexibleDataset
+from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
+from dlkit.infrastructure.config.data_entries import Feature, FeatureType, Target, TargetType
+from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.transform_settings import TransformSettings
-from dlkit.tools.datatypes.split import IndexSplit
+from dlkit.infrastructure.config.transform_settings import TransformSettings
+from dlkit.infrastructure.types.split import IndexSplit
 
 MODEL_MODULE_PATH = "dlkit.domain.nn.ffnn.simple"
 MODEL_NAME = "ConstantWidthFFNN"
@@ -53,7 +53,7 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
     test = train
     # Predict over the training indices for exact inverse-transform comparisons
     split = IndexSplit(train=train, validation=val, test=test, predict=train)
-    from dlkit.tools.config.dataloader_settings import DataloaderSettings
+    from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 
     dm = InMemoryModule(
         dataset=dataset,
@@ -82,8 +82,8 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
 
 
 def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
-    from dlkit.runtime.workflows.factories.component_builders import build_wrapper_components
-    from dlkit.shared.shapes import ShapeSummary
+    from dlkit.common.shapes import ShapeSummary
+    from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
 
     model_settings = ModelComponentSettings(
         name=MODEL_NAME,
@@ -205,7 +205,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     trainer.save_checkpoint(ckpt_path)
     assert ckpt_path.exists()
 
-    from dlkit.shared.shapes import ShapeSummary
+    from dlkit.common.shapes import ShapeSummary
 
     _settings = WrapperComponentSettings()
     _model_settings = ModelComponentSettings(

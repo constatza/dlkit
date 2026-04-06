@@ -6,7 +6,7 @@ digraph {
 "dlkit.domain.nn" [label="nn"];
 "dlkit.domain.shapes" [label="shapes"];
 "dlkit.domain.transforms" [label="transforms"];
-"dlkit.shared" [label="shared"];
+"dlkit.common" [label="common"];
 "dlkit.domain" -> "dlkit.domain._norm_ops" [style="dashed" color="gray50" arrowhead="none"];
 "dlkit.domain" -> "dlkit.domain.losses" [style="dashed" color="gray50" arrowhead="none"];
 "dlkit.domain" -> "dlkit.domain.metrics" [style="dashed" color="gray50" arrowhead="none"];
@@ -16,8 +16,8 @@ digraph {
 "dlkit.domain.losses" -> "dlkit.domain._norm_ops";
 "dlkit.domain.losses" -> "dlkit.domain.metrics";
 "dlkit.domain.metrics" -> "dlkit.domain._norm_ops";
-"dlkit.domain.nn" -> "dlkit.shared";
+"dlkit.domain.nn" -> "dlkit.common";
 "dlkit.domain.shapes" -> "dlkit.domain.nn";
-"dlkit.domain.shapes" -> "dlkit.shared";
-"dlkit.domain.transforms" -> "dlkit.shared";
+"dlkit.domain.shapes" -> "dlkit.common";
+"dlkit.domain.transforms" -> "dlkit.common";
 }

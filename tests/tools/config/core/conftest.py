@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from hypothesis import strategies as st
 
-from dlkit.tools.config.core.base_settings import (
+from dlkit.infrastructure.config.core.base_settings import (
     BasicSettings,
     ComponentSettings,
     HyperParameterSettings,

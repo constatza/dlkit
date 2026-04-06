@@ -17,7 +17,7 @@ def _get_default_optuna_storage() -> str:
     Returns:
         Default Optuna storage URL resolved through environment settings
     """
-    from dlkit.tools.io import locations
+    from dlkit.infrastructure.io import locations
 
     return locations.optuna_storage_uri()
 
@@ -28,9 +28,9 @@ def _get_environment_aware_output_dir() -> str:
     Returns:
         Default output directory path respecting environment configuration
     """
-    from dlkit.tools.config.environment import DLKitEnvironment
+    from dlkit.infrastructure.config.environment import EnvironmentSettings
 
-    env = DLKitEnvironment()
+    env = EnvironmentSettings()
     return str(env.get_root_path() / "output")
 
 

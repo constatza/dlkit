@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from torch import nn
 
-    from dlkit.shared.shapes import ShapeSummary
+    from dlkit.common.shapes import ShapeSummary
 
 
 # Recognised aliases for input / output dimension injection.

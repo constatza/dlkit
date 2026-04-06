@@ -476,7 +476,7 @@ except Exception as e:
 - `dlkit.interfaces.cli.adapters`: Configuration and result presentation adapters
 - `dlkit.interfaces.cli.middleware`: Error handling middleware
 - `dlkit.interfaces.servers`: Server management services
-- `dlkit.tools.config`: Configuration models and validation
+- `dlkit.infrastructure.config`: Configuration models and validation
 
 ## Change Log
 - **2025-10-03**: Comprehensive CLI commands documentation created

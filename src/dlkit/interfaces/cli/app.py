@@ -10,7 +10,11 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from dlkit.tools.utils.logging_config import configure_logging, get_effective_log_level, get_logger
+from dlkit.infrastructure.utils.logging_config import (
+    configure_logging,
+    get_effective_log_level,
+    get_logger,
+)
 
 from .commands import config, convert, optimize
 from .commands import predict as predict

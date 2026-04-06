@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dlkit.tools.config.data_entries import SparseFeature, SparseFilesConfig
-from dlkit.tools.io.sparse import PackFiles, save_sparse_pack
+from dlkit.infrastructure.config.data_entries import SparseFeature, SparseFilesConfig
+from dlkit.infrastructure.io.sparse import PackFiles, save_sparse_pack
 
 
 @pytest.fixture(name="minimal_sparse_pack")

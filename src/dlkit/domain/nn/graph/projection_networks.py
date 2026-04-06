@@ -5,7 +5,7 @@ from __future__ import annotations
 from torch import nn
 from torch_geometric.typing import Tensor
 
-from dlkit.shared.shapes import ShapeSpecProtocol
+from dlkit.common.shapes import ShapeSpecProtocol
 
 from .base import BaseGraphNetwork
 from .projections import SkipProjection

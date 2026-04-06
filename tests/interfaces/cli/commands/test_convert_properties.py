@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
+from dlkit.common.errors import WorkflowError
+from dlkit.engine.workflows.entrypoints.convert import ConvertResult
 from dlkit.interfaces.cli.app import app as cli_app
-from dlkit.runtime.workflows.entrypoints.convert import ConvertResult
-from dlkit.shared.errors import WorkflowError
 
 MIN_OPSET = 9
 MAX_OPSET = 20

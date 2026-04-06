@@ -15,15 +15,15 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.io.arrays import load_array
-from dlkit.tools.precision import (
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.io.arrays import load_array
+from dlkit.infrastructure.precision import (
     PrecisionStrategy,
     get_precision_service,
     precision_override,
 )
-from dlkit.tools.precision.strategy import _PRECISION_ALIAS_MAP
+from dlkit.infrastructure.precision.strategy import _PRECISION_ALIAS_MAP
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",

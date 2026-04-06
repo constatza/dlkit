@@ -7,11 +7,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.execution.components import RuntimeComponents
-from dlkit.runtime.execution.vanilla_executor import VanillaExecutor
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
-from dlkit.tools.config.optimizer_settings import OptimizerSettings
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.training.vanilla_executor import VanillaExecutor
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
 
 def _trainer_mock(components: RuntimeComponents) -> Mock:
@@ -55,8 +55,8 @@ def mock_components() -> RuntimeComponents:
 @pytest.fixture
 def settings_without_lr_tuner() -> GeneralSettings:
     """Settings without LR tuner configured."""
-    from dlkit.tools.config.session_settings import SessionSettings
-    from dlkit.tools.config.training_settings import TrainingSettings
+    from dlkit.infrastructure.config.session_settings import SessionSettings
+    from dlkit.infrastructure.config.training_settings import TrainingSettings
 
     return GeneralSettings(
         SESSION=SessionSettings(seed=42),
@@ -67,8 +67,8 @@ def settings_without_lr_tuner() -> GeneralSettings:
 @pytest.fixture
 def settings_with_lr_tuner() -> GeneralSettings:
     """Settings with LR tuner configured (enabled)."""
-    from dlkit.tools.config.session_settings import SessionSettings
-    from dlkit.tools.config.training_settings import TrainingSettings
+    from dlkit.infrastructure.config.session_settings import SessionSettings
+    from dlkit.infrastructure.config.training_settings import TrainingSettings
 
     return GeneralSettings(
         SESSION=SessionSettings(seed=42),
@@ -94,7 +94,7 @@ class TestVanillaExecutorLRTuning:
         executor = VanillaExecutor()
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.precision.service.get_precision_service"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 executor.execute(mock_components, settings_without_lr_tuner)
 
         # Verify training was called
@@ -116,9 +116,9 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.return_value = 0.005
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.precision.service.get_precision_service"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.execution.tuning.LRTuner",
+                    "dlkit.engine.training.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     executor.execute(mock_components, settings_with_lr_tuner)
@@ -145,8 +145,8 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """Test that LR tuner is called with empty dict config (all defaults)."""
-        from dlkit.tools.config.session_settings import SessionSettings
-        from dlkit.tools.config.training_settings import TrainingSettings
+        from dlkit.infrastructure.config.session_settings import SessionSettings
+        from dlkit.infrastructure.config.training_settings import TrainingSettings
 
         # Simulate empty TOML section: [TRAINING.lr_tuner]
         settings_with_empty_lr_tuner = GeneralSettings(
@@ -160,9 +160,9 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.return_value = 0.003
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.precision.service.get_precision_service"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.execution.tuning.LRTuner",
+                    "dlkit.engine.training.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     executor.execute(mock_components, settings_with_empty_lr_tuner)
@@ -186,9 +186,9 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.side_effect = RuntimeError("Tuning failed")
 
         with patch("pytorch_lightning.seed_everything"):
-            with patch("dlkit.tools.precision.service.get_precision_service"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch(
-                    "dlkit.runtime.execution.tuning.LRTuner",
+                    "dlkit.engine.training.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
                     # Should not raise - graceful degradation
@@ -214,7 +214,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.execution.tuning.LRTuner",
+            "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(
@@ -234,7 +234,7 @@ class TestVanillaExecutorLRTuning:
         """Test _apply_lr_tuning when TRAINING is None."""
         executor = VanillaExecutor()
 
-        from dlkit.tools.config.session_settings import SessionSettings
+        from dlkit.infrastructure.config.session_settings import SessionSettings
 
         settings = GeneralSettings(SESSION=SessionSettings(seed=42), TRAINING=None)
 
@@ -243,7 +243,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.execution.tuning.LRTuner",
+            "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise
@@ -281,7 +281,7 @@ class TestVanillaExecutorLRTuning:
         trainer = components_no_opt.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.execution.tuning.LRTuner",
+            "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             # Should not raise - logs warning instead
@@ -316,7 +316,7 @@ class TestVanillaExecutorLRTuning:
         trainer = mock_components.trainer
         assert trainer is not None
         with patch(
-            "dlkit.runtime.execution.tuning.LRTuner",
+            "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
             executor._apply_lr_tuning(

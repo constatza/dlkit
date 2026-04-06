@@ -10,9 +10,8 @@ from unittest.mock import Mock
 import pytest
 from torch import Tensor
 
-from dlkit.runtime.adapters.lightning.base import ProcessingLightningWrapper
-from dlkit.runtime.execution.components import RuntimeComponents
-from dlkit.runtime.tracking.artifact_logger import (
+from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.engine.tracking.artifact_logger import (
     TAG_LOGGED_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_URI,
     TAG_MODEL_CLASS,
@@ -20,9 +19,10 @@ from dlkit.runtime.tracking.artifact_logger import (
     ArtifactLogger,
     _resolve_model_class_name,
 )
-from dlkit.runtime.tracking.interfaces import IRunContext
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.engine.tracking.interfaces import IRunContext
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 # ---------------------------------------------------------------------------
 # Minimal test doubles for wrapper unwrapping tests

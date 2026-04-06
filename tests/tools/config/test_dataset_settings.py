@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 
 
 def test_get_init_kwargs_preserves_data_entries(tmp_path: Path) -> None:
@@ -17,7 +17,7 @@ def test_get_init_kwargs_preserves_data_entries(tmp_path: Path) -> None:
     targets = (Target(name="y", path=y_path),)
     settings = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=features,
         targets=targets,
     )

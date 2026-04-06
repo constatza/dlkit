@@ -1,0 +1,13 @@
+digraph {
+"dlkit.common" [label="common" style="bold"];
+"dlkit.common.errors" [label="errors"];
+"dlkit.common.hooks" [label="hooks"];
+"dlkit.common.results" [label="results"];
+"dlkit.common.shapes" [label="shapes"];
+"dlkit.common.state" [label="state"];
+"dlkit.common" -> "dlkit.common.errors" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.common" -> "dlkit.common.hooks" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.common" -> "dlkit.common.results" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.common" -> "dlkit.common.shapes" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.common" -> "dlkit.common.state" [style="dashed" color="gray50" arrowhead="none"];
+}

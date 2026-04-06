@@ -183,7 +183,7 @@ Precision and learning-rate tuning tests for graph models.
 uv run pytest tests/integration/ -v
 
 # Run with coverage
-uv run pytest tests/integration/ --cov=dlkit.interfaces.api --cov=dlkit.runtime.workflows
+uv run pytest tests/integration/ --cov=dlkit.interfaces.api --cov=dlkit.engine.workflows
 
 # Skip slow tests
 uv run pytest tests/integration/ -m "not slow"

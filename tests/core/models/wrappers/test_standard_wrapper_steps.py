@@ -11,10 +11,15 @@ from torch import nn
 from torch.nn import ModuleList
 from torch.optim import Adam
 
-from dlkit.runtime.adapters.lightning.components import WrapperComponents
-from dlkit.runtime.adapters.lightning.standard import StandardLightningWrapper
-from dlkit.tools.config.data_entries import Feature, Target, is_feature_entry, is_target_entry
-from dlkit.tools.config.model_components import (
+from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
+from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.infrastructure.config.data_entries import (
+    Feature,
+    Target,
+    is_feature_entry,
+    is_target_entry,
+)
+from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
     ModelComponentSettings,

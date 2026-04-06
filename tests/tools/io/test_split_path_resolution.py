@@ -11,10 +11,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dlkit.tools.config import load_settings
-from dlkit.tools.config.environment import env as global_environment
-from dlkit.tools.io.locations import splits_dir
-from dlkit.tools.io.split_provider import get_or_create_split
+from dlkit.infrastructure.config import load_settings
+from dlkit.infrastructure.config.environment import env as global_environment
+from dlkit.infrastructure.io.locations import splits_dir
+from dlkit.infrastructure.io.split_provider import get_or_create_split
 
 
 @pytest.fixture

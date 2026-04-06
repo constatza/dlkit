@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
-from dlkit.runtime.workflows.entrypoints import execute as runtime_execute
-from dlkit.shared import OptimizationResult, TrainingResult
-from dlkit.shared.hooks import LifecycleHooks
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
-from dlkit.tools.config.workflow_configs import (
+from dlkit.common import OptimizationResult, TrainingResult
+from dlkit.common.hooks import LifecycleHooks
+from dlkit.engine.workflows.entrypoints import execute as runtime_execute
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
+from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
+from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
 
 
 def execute(

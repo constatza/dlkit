@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dlkit.tools.io.path_normalizers import (
+from dlkit.infrastructure.io.path_normalizers import (
     canonicalize_file_path,
     normalize_file_uri,
     path_to_file_uri,

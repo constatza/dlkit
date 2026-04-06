@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.io import url_resolver
+from dlkit.infrastructure.io import url_resolver
 
 
 @pytest.fixture

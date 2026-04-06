@@ -47,7 +47,7 @@ class TestGraphWorkflowIntegration:
         - Edge index and edge attributes are computed correctly
         - Edge shapes are exposed via public properties
         """
-        from dlkit.runtime.data.datasets.graph import GraphDataset
+        from dlkit.engine.data.datasets.graph import GraphDataset
 
         # Create dataset
         dataset = GraphDataset(
@@ -109,8 +109,8 @@ class TestGraphWorkflowIntegration:
         """
         import inspect
 
-        from dlkit.runtime.adapters.lightning.graph import GraphLightningWrapper
-        from dlkit.runtime.data.graph.types import GraphInput
+        from dlkit.engine.adapters.lightning.graph import GraphLightningWrapper
+        from dlkit.engine.data.graph.types import GraphInput
 
         # Check forward signature (decomposed tensor API)
         forward_sig = inspect.signature(GraphLightningWrapper.forward)
@@ -132,7 +132,7 @@ class TestGraphWorkflowIntegration:
         - dlkit-specific types (GraphDict, GraphInput) are available
         - All types can be imported from datatypes.networks
         """
-        from dlkit.runtime.data.graph.types import (
+        from dlkit.engine.data.graph.types import (
             Batch,
             Data,
             GraphDict,
@@ -157,7 +157,7 @@ class TestGraphWorkflowIntegration:
         - GraphDataset exposes edge_attr_shape property
         - Edge shapes are non-None after processing
         """
-        from dlkit.runtime.data.datasets.graph import GraphDataset
+        from dlkit.engine.data.datasets.graph import GraphDataset
 
         # Create dataset directly
         dataset = GraphDataset(

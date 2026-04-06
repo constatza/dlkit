@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.tools.config.data_entries import (
+from dlkit.infrastructure.config.data_entries import (
     Feature,
     PathBasedEntry,
     PathFeature,
@@ -30,7 +30,7 @@ from dlkit.tools.config.data_entries import (
     is_target_entry,
     is_value_based,
 )
-from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 
 # ============================================================================
 # Fixtures
@@ -590,7 +590,7 @@ class TestDatasetSettingsValuePreservation:
 
     def test_value_entries_work_with_flexible_dataset(self, sample_numpy_array: np.ndarray):
         """ValueFeature/ValueTarget should work with FlexibleDataset when passed through DatasetSettings."""
-        from dlkit.runtime.data.datasets.flexible import FlexibleDataset
+        from dlkit.engine.data.datasets.flexible import FlexibleDataset
 
         # Create value-based entries
         feat = Feature(name="x", value=sample_numpy_array)

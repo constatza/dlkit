@@ -12,7 +12,7 @@ from pathlib import Path
 import torch
 
 import dlkit
-from dlkit.tools.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings
 
 
 class TestBasicIntegration:
@@ -47,7 +47,7 @@ class TestBasicIntegration:
 
         from mlflow.tracking import MlflowClient
 
-        from dlkit.runtime.tracking.naming import determine_experiment_name
+        from dlkit.engine.tracking.naming import determine_experiment_name
 
         tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
         client = MlflowClient(tracking_uri=tracking_uri)

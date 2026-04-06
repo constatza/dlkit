@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dlkit.shared.shapes import ShapeSpecProtocol as IShapeSpec
+from dlkit.common.shapes import ShapeSpecProtocol as IShapeSpec
 
 from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator, ValidationResult
 from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource

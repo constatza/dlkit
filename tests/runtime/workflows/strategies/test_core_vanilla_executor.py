@@ -7,12 +7,12 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.runtime.execution import VanillaExecutor
-from dlkit.runtime.execution.components import RuntimeComponents
-from dlkit.shared import TrainingResult, WorkflowError
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.training_settings import TrainingSettings
+from dlkit.common import TrainingResult, WorkflowError
+from dlkit.engine.training import VanillaExecutor
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 @pytest.fixture

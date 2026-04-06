@@ -53,7 +53,7 @@ def sample_build_context() -> Any:
     """
     from pathlib import Path
 
-    from dlkit.tools.config.core.context import BuildContext
+    from dlkit.infrastructure.config.core.context import BuildContext
 
     return BuildContext(
         mode="training", device="cpu", random_seed=42, working_directory=Path.cwd(), overrides={}

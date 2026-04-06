@@ -4,7 +4,7 @@ This module contains the core domain models, protocols, and errors
 that define the business logic of DLKit without framework dependencies.
 """
 
-from dlkit.shared import (
+from dlkit.common import (
     ConfigurationError,
     DLKitError,
     InferenceResult,
@@ -16,7 +16,7 @@ from dlkit.shared import (
     TrainingResult,
     WorkflowError,
 )
-from dlkit.tools.precision import (
+from dlkit.infrastructure.precision import (
     PrecisionContext,
     PrecisionProvider,
     get_precision_context,

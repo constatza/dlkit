@@ -1,7 +1,7 @@
 # Inference Module
 
 ## Overview
-`dlkit.interfaces.inference` is now a thin public adapter over `dlkit.runtime.predictor`.
+`dlkit.interfaces.inference` is now a thin public adapter over `dlkit.engine.inference`.
 The interface layer no longer owns separate predictor, loading, shape, or transform
 implementations.
 
@@ -13,7 +13,7 @@ implementations.
 - `IPredictor`
 - `PredictorConfig`
 
-These symbols are re-exported from `dlkit.runtime.predictor`.
+These symbols are re-exported from `dlkit.engine.inference`.
 
 ## Dependency Direction
 

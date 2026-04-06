@@ -5,10 +5,10 @@ from torch import nn
 from torch.nn import ModuleList
 from torch.optim import Adam
 
-from dlkit.runtime.adapters.lightning.components import WrapperComponents
-from dlkit.runtime.adapters.lightning.factories import WrapperFactory
-from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.model_components import (
+from dlkit.engine.adapters.lightning.factories import WrapperFactory
+from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )

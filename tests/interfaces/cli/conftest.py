@@ -144,13 +144,13 @@ def mock_api_functions() -> dict[str, Any]:
     Returns:
         Dictionary of mocked API functions with proper return values.
     """
-    from dlkit.shared import ConfigurationError, TrainingResult
+    from dlkit.common import ConfigurationError, TrainingResult
 
     # Mock successful validation
     mock_validate = Mock(return_value=True)
 
     # Mock successful training result
-    from dlkit.shared import ModelState
+    from dlkit.common import ModelState
 
     mock_model_state = Mock(spec=ModelState)
 
@@ -337,7 +337,7 @@ def mock_configuration_error() -> Any:
     Returns:
         Mock ConfigurationError object.
     """
-    from dlkit.shared import ConfigurationError
+    from dlkit.common import ConfigurationError
 
     return ConfigurationError(
         "Invalid configuration for testing",
@@ -352,7 +352,7 @@ def mock_workflow_error() -> Any:
     Returns:
         Mock WorkflowError object.
     """
-    from dlkit.shared import WorkflowError
+    from dlkit.common import WorkflowError
 
     return WorkflowError(
         "Workflow execution failed for testing",
@@ -412,7 +412,7 @@ def mock_successful_training_result() -> Any:
     """
     from pathlib import Path
 
-    from dlkit.shared import ModelState, TrainingResult
+    from dlkit.common import ModelState, TrainingResult
 
     # Create a mock ModelState
     mock_model_state = Mock(spec=ModelState)
@@ -432,7 +432,7 @@ def mock_successful_inference_result() -> Any:
     Returns:
         Mock InferenceResult object for testing.
     """
-    from dlkit.shared import InferenceResult, ModelState
+    from dlkit.common import InferenceResult, ModelState
 
     # Create a mock ModelState
     mock_model_state = Mock(spec=ModelState)
@@ -452,7 +452,7 @@ def mock_strategy_error() -> Any:
     Returns:
         Mock StrategyError object.
     """
-    from dlkit.shared import StrategyError
+    from dlkit.common import StrategyError
 
     return StrategyError(
         "Invalid strategy configuration for testing",
@@ -613,7 +613,7 @@ def sample_convert_result() -> Any:
     """
     from pathlib import Path
 
-    from dlkit.runtime.workflows.entrypoints.convert import ConvertResult
+    from dlkit.engine.workflows.entrypoints.convert import ConvertResult
 
     return ConvertResult(output_path=Path("test_model.onnx"), opset=17, inputs=[(1, 3, 224, 224)])
 

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, Mock, patch
 import torch
 from typer.testing import CliRunner
 
+from dlkit.common import ConfigurationError
+from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.cli.commands.predict import app as predict_app
-from dlkit.shared import ConfigurationError
-from dlkit.tools.config import GeneralSettings
 
 
 def _make_mock_predictor(feature_names: list[str] | None = None) -> MagicMock:

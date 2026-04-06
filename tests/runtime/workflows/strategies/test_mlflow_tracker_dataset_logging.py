@@ -10,12 +10,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from dlkit.runtime.tracking.interfaces import IRunContext
-from dlkit.runtime.tracking.mlflow_tracker import MLflowTracker
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.config.enums import DatasetFamily
-from dlkit.tools.config.general_settings import GeneralSettings
+from dlkit.engine.tracking.interfaces import IRunContext
+from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.enums import DatasetFamily
+from dlkit.infrastructure.config.general_settings import GeneralSettings
 
 
 class _DatasetRunContext(IRunContext):

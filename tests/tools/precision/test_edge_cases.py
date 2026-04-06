@@ -8,10 +8,10 @@ import pytest
 import torch
 
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
-from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.io.arrays import load_array
-from dlkit.tools.precision import (
+from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.io.arrays import load_array
+from dlkit.infrastructure.precision import (
     PrecisionStrategy,
     get_precision_context,
     get_precision_service,

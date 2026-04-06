@@ -17,12 +17,12 @@ There is no top-level `dlkit.nn` package.
 
 Current ownership:
 
-- `dlkit.shared`
+- `dlkit.common`
   - errors
   - results
   - model state
   - minimal shape contracts
-- `dlkit.tools`
+- `dlkit.infrastructure`
   - configuration
   - path and I/O infrastructure
   - URL/path/split datatypes
@@ -33,7 +33,7 @@ Current ownership:
   - `domain.transforms`
   - `domain.metrics`
   - `domain.losses`
-- `dlkit.runtime`
+- `dlkit.engine`
   - Lightning adapters
   - runtime datasets and splits
   - execution

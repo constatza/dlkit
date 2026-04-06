@@ -38,7 +38,7 @@ def test_environment_module_loads_early():
     import sys
 
     # The environment module should be loaded
-    assert "dlkit.tools.config.environment" in sys.modules
+    assert "dlkit.infrastructure.config.environment" in sys.modules
 
     # The MLflow retry settings should be configured
     assert "MLFLOW_HTTP_REQUEST_MAX_RETRIES" in os.environ

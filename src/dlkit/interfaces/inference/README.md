@@ -1,7 +1,7 @@
 # Inference Module
 
 `dlkit.interfaces.inference` is the public checkpoint-inference adapter.
-Implementation lives in `dlkit.runtime.predictor`; this package re-exports that
+Implementation lives in `dlkit.engine.inference`; this package re-exports that
 runtime predictor surface for users.
 
 ## Public API

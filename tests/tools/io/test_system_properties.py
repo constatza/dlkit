@@ -15,7 +15,12 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from dlkit.tools.io.system import import_from_module, import_from_path, init_class, load_class
+from dlkit.infrastructure.io.system import (
+    import_from_module,
+    import_from_path,
+    init_class,
+    load_class,
+)
 
 # Hypothesis strategies for generating test dataflow
 valid_module_names = st.sampled_from(["collections", "itertools", "json", "pathlib", "os", "sys"])
@@ -211,7 +216,7 @@ class TestInitClassProperties:
                 self.param2 = param2
                 self.extra_kwargs = kwargs
 
-        with patch("dlkit.tools.io.system.load_class", return_value=MockClass):
+        with patch("dlkit.infrastructure.io.system.load_class", return_value=MockClass):
             try:
                 result = init_class(
                     name="MockClass",
@@ -252,8 +257,8 @@ class TestInitClassProperties:
         additional_kwargs = {"valid_param": "should_be_included"}
 
         with (
-            patch("dlkit.tools.io.system.load_class", return_value=MockClass),
-            patch("dlkit.tools.io.system.kwargs_compatible_with") as mock_kwargs,
+            patch("dlkit.infrastructure.io.system.load_class", return_value=MockClass),
+            patch("dlkit.infrastructure.io.system.kwargs_compatible_with") as mock_kwargs,
         ):
             # Mock kwargs filtering to exclude the specified keys
             mock_kwargs.return_value = additional_kwargs
@@ -286,7 +291,7 @@ class TestInitClassProperties:
         def mock_function(x: int = 1, y: str = "default") -> str:
             return f"x={x}, y={y}"
 
-        with patch("dlkit.tools.io.system.load_class", return_value=mock_function):
+        with patch("dlkit.infrastructure.io.system.load_class", return_value=mock_function):
             try:
                 result = init_class(name=name, module_path=module_path, x=42, y="test")
 
@@ -333,7 +338,7 @@ class TestSystemModuleInvariants:
             def __init__(self, fixed_param: str = "fixed"):
                 self.fixed_param = fixed_param
 
-        with patch("dlkit.tools.io.system.load_class", return_value=ConsistentClass):
+        with patch("dlkit.infrastructure.io.system.load_class", return_value=ConsistentClass):
             try:
                 # Run init_class twice with the same parameters
                 result1 = init_class(

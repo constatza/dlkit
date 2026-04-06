@@ -1,6 +1,6 @@
 """Public inference adapter over the runtime predictor subsystem."""
 
-from dlkit.runtime.predictor import (
+from dlkit.engine.inference import (
     CheckpointPredictor,
     IPredictor,
     PredictorConfig,

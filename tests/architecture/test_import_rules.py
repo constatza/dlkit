@@ -247,9 +247,9 @@ class TestImportRules:
         # Known exceptions for function-level imports that break circular dependencies
         known_exceptions = {
             (
-                "dlkit.tools.io.config",
-                "dlkit.tools.config.general_settings",
-                "dlkit.tools.io.config",
+                "dlkit.infrastructure.io.config",
+                "dlkit.infrastructure.config.general_settings",
+                "dlkit.infrastructure.io.config",
             )
         }
 

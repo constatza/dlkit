@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.config import (
+from dlkit.infrastructure.config import (
     load_sections,
     load_settings,
 )
-from dlkit.tools.config.workflow_settings import (
+from dlkit.infrastructure.config.workflow_settings import (
     TrainingWorkflowSettings,
 )
 

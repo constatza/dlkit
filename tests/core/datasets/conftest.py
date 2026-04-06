@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from dlkit.tools.io.sparse import save_sparse_pack
+from dlkit.infrastructure.io.sparse import save_sparse_pack
 
 
 def _dense_matrices_to_coo(

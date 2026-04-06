@@ -8,13 +8,13 @@ from torch import nn
 from torch.nn import ModuleList
 from torch.optim import Adam
 
-from dlkit.runtime.adapters.lightning.components import WrapperComponents
-from dlkit.runtime.adapters.lightning.standard import StandardLightningWrapper
-from dlkit.tools.config import (
+from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
+from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.infrastructure.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.tools.config.data_entries import Feature
+from dlkit.infrastructure.config.data_entries import Feature
 
 
 class _DummyModel(nn.Module):

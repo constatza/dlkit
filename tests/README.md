@@ -8,7 +8,7 @@ This is a hard rule for all filesystem assertions:
 
 - Never hard-code POSIX-only absolute paths like `"/tmp/..."` in shared tests.
 - Never assume Windows drive-less path formatting in URIs.
-- Always build expected paths from `pathlib.Path`, `tmp_path`, and the shared URI helpers in `dlkit.tools.io.url_resolver`.
+- Always build expected paths from `pathlib.Path`, `tmp_path`, and the shared URI helpers in `dlkit.infrastructure.io.url_resolver`.
 - When asserting on `file://` or `sqlite://` values, compare normalized URIs produced by shared helpers instead of hand-written strings.
 - If the behavior is intentionally platform-specific, mark it loudly and explicitly in the test.
 

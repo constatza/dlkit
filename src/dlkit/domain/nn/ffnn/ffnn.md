@@ -48,7 +48,7 @@ None - all inherit from `ShapeAwareModel` ABC.
 - `dlkit.domain.nn.base`: `ShapeAwareModel` for shape handling and precision
 - `dlkit.domain.shapes`: `IShapeSpec`, `NullShapeSpec` protocols
 - `dlkit.domain.nn.primitives`: `DenseBlock`, `SkipConnection` building blocks
-- `dlkit.tools.config.precision`: `PrecisionStrategy` for dtype management
+- `dlkit.infrastructure.precision`: `PrecisionStrategy` for dtype management
 
 ### External Dependencies
 - `torch`: PyTorch tensor operations and neural network modules
@@ -657,8 +657,8 @@ except TypeError as e:
 - `dlkit.domain.nn.base`: `ShapeAwareModel` foundation
 - `dlkit.domain.nn.primitives`: `DenseBlock`, `SkipConnection` building blocks
 - `dlkit.domain.shapes`: Shape specification system
-- `dlkit.runtime.adapters.lightning`: Lightning wrappers for training FFNNs
-- `dlkit.tools.config.precision`: Precision management
+- `dlkit.engine.adapters.lightning`: Lightning wrappers for training FFNNs
+- `dlkit.infrastructure.precision`: Precision management
 
 ## Change Log
 - **2025-10-03**: Initial documentation created

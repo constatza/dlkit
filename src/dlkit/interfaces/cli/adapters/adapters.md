@@ -43,8 +43,8 @@ Key architectural decisions:
 ### Internal Dependencies
 - `dlkit.interfaces.api.domain`: Domain models (`TrainingResult`, `InferenceResult`, `OptimizationResult`)
 - `dlkit.interfaces.api.domain.errors`: Error types (`ConfigurationError`)
-- `dlkit.tools.config`: Configuration loading (`load_settings`, `load_sections`)
-- `dlkit.tools.config.protocols`: Protocol interfaces (`BaseSettingsProtocol`)
+- `dlkit.infrastructure.config`: Configuration loading (`load_settings`, `load_sections`)
+- `dlkit.infrastructure.config.protocols`: Protocol interfaces (`BaseSettingsProtocol`)
 - `dlkit.interfaces.api.overrides.path_context`: Path override context manager
 - `dlkit.interfaces.cli.presenters`: Prediction summarization utilities
 
@@ -332,7 +332,7 @@ present_optimization_result(result, console)
 ```python
 from pathlib import Path
 from dlkit.interfaces.cli.adapters.config_adapter import load_config
-from dlkit.shared.errors import ConfigurationError
+from dlkit.common.errors import ConfigurationError
 
 try:
     # Load with workflow-specific optimization
@@ -364,7 +364,7 @@ present_training_result(result, console)
 ```python
 from pathlib import Path
 from dlkit.interfaces.cli.adapters.config_adapter import validate_config_path
-from dlkit.shared.errors import ConfigurationError
+from dlkit.common.errors import ConfigurationError
 
 try:
     # Validate before expensive operations
@@ -465,7 +465,7 @@ except ConfigurationError as e:
 - `dlkit.interfaces.api.domain`: Result models and error types
 - `dlkit.interfaces.cli.commands`: CLI commands that use these adapters
 - `dlkit.interfaces.cli.middleware`: Error handler that consumes ConfigurationError
-- `dlkit.tools.config`: Configuration loading infrastructure
+- `dlkit.infrastructure.config`: Configuration loading infrastructure
 - `dlkit.interfaces.cli.presenters`: Prediction summarization utilities
 
 ## Change Log

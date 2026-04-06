@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from dlkit.runtime.workflows.entrypoints._overrides import (
+from dlkit.engine.workflows.entrypoints._overrides import (
     apply_runtime_overrides,
     build_runtime_overrides,
 )
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 def _require_training(settings: GeneralSettings) -> TrainingSettings:

@@ -168,6 +168,12 @@ cython_debug/
 !src/dlkit/runtime/data/*.md
 !src/dlkit/runtime/data/**/*.py
 !src/dlkit/runtime/data/**/*.md
+!src/dlkit/engine/data/
+!src/dlkit/engine/data/**/
+!src/dlkit/engine/data/*.py
+!src/dlkit/engine/data/*.md
+!src/dlkit/engine/data/**/*.py
+!src/dlkit/engine/data/**/*.md
 input/
 output/
 raw/

@@ -14,23 +14,23 @@ import numpy as np
 import pytest
 import torch
 
+from dlkit.common import TrainingResult
 from dlkit.domain.shapes import ModelFamily, create_shape_spec
-from dlkit.shared import TrainingResult
-from dlkit.tools.config import (
+from dlkit.infrastructure.config import (
     DataModuleSettings,
     DatasetSettings,
     GeneralSettings,
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
-from dlkit.tools.config.dataset_settings import IndexSplitSettings
-from dlkit.tools.config.model_components import (
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+from dlkit.infrastructure.config.dataset_settings import IndexSplitSettings
+from dlkit.infrastructure.config.model_components import (
     MetricComponentSettings,
     ModelComponentSettings,
 )
-from dlkit.tools.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
 # Test constants - optimized for speed
 FEATURE_SIZE: int = 4
@@ -222,7 +222,7 @@ def _make_settings(
 
     dataset = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         root=data_dir,
         features=(Feature(name="x", path=data_dir / "features.npy"),),
         targets=(Target(name="y", path=data_dir / "targets.npy"),),
@@ -231,7 +231,7 @@ def _make_settings(
 
     datamodule = DataModuleSettings(
         name="InMemoryModule",
-        module_path="dlkit.runtime.adapters.lightning.datamodules",
+        module_path="dlkit.engine.adapters.lightning.datamodules",
         dataloader=DataloaderSettings(
             num_workers=0,
             batch_size=batch_size,
@@ -328,7 +328,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
     dataset = DatasetSettings.model_validate(
         {
             "name": "GraphDataset",
-            "module_path": "dlkit.runtime.data.datasets.graph",
+            "module_path": "dlkit.engine.data.datasets.graph",
             "root": minimal_graph_dataset["data_dir"],
             "x": minimal_graph_dataset["node_features"],
             "edge_index": minimal_graph_dataset["adjacency"],
@@ -338,7 +338,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
 
     datamodule = DataModuleSettings(
         name="GraphDataModule",
-        module_path="dlkit.runtime.adapters.lightning.datamodules.graph",
+        module_path="dlkit.engine.adapters.lightning.datamodules.graph",
         dataloader=DataloaderSettings(
             num_workers=0,
             batch_size=2,  # Small batch for graph data
@@ -406,7 +406,7 @@ def mlflow_settings(
     minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> GeneralSettings:
     """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
-    import dlkit.runtime.tracking.uri_resolver as uri_resolver
+    import dlkit.engine.tracking.uri_resolver as uri_resolver
 
     base_settings = _make_settings(
         data_dir=minimal_dataset["data_dir"],
@@ -430,7 +430,7 @@ def mlflow_settings(
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
-    from dlkit.tools.config.mlflow_settings import MLflowSettings
+    from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
     mlflow_cfg = MLflowSettings(experiment_name="test_experiment")
     settings_with_mlflow = base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
@@ -441,7 +441,7 @@ def mlflow_settings(
 @pytest.fixture
 def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
     """Create GeneralSettings with Optuna enabled using overrides."""
-    from dlkit.runtime.workflows.entrypoints._overrides import apply_runtime_overrides
+    from dlkit.engine.workflows.entrypoints._overrides import apply_runtime_overrides
 
     # Start with base training settings
     base_settings = _make_settings(
@@ -519,7 +519,7 @@ seed = 42
 
 [DATASET]
 name = "FlexibleDataset"
-module_path = "dlkit.runtime.data.datasets"
+module_path = "dlkit.engine.data.datasets"
 root_dir = "{data_dir.as_posix()}"
 
 [[DATASET.features]]
@@ -535,7 +535,7 @@ filepath = "split.txt"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 num_workers = 0
@@ -637,7 +637,7 @@ def double_precision_settings(training_settings: GeneralSettings) -> GeneralSett
     Returns:
         GeneralSettings with SESSION.precision set to FULL_64.
     """
-    from dlkit.tools.precision import PrecisionStrategy
+    from dlkit.infrastructure.precision import PrecisionStrategy
 
     new_session = training_settings.SESSION.model_copy(
         update={"precision": PrecisionStrategy.FULL_64}

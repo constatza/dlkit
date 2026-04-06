@@ -1,0 +1,31 @@
+digraph {
+"dlkit.common" [label="common"];
+"dlkit.infrastructure" [label="infrastructure" style="bold"];
+"dlkit.infrastructure.config" [label="config"];
+"dlkit.infrastructure.datatypes" [label="datatypes"];
+"dlkit.infrastructure.io" [label="io"];
+"dlkit.infrastructure.path_context_state" [label="path_context_state"];
+"dlkit.infrastructure.registry" [label="registry"];
+"dlkit.infrastructure.tensor_entries" [label="tensor_entries"];
+"dlkit.infrastructure.utils" [label="utils"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.config" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.datatypes" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.io" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.path_context_state" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.registry" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.tensor_entries" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure" -> "dlkit.infrastructure.utils" [style="dashed" color="gray50" arrowhead="none"];
+"dlkit.infrastructure.config" -> "dlkit.infrastructure.datatypes";
+"dlkit.infrastructure.config" -> "dlkit.infrastructure.path_context_state";
+"dlkit.infrastructure.config" -> "dlkit.infrastructure.registry";
+"dlkit.infrastructure.config" -> "dlkit.infrastructure.utils";
+"dlkit.infrastructure.io" -> "dlkit.common";
+"dlkit.infrastructure.io" -> "dlkit.infrastructure.config";
+"dlkit.infrastructure.io" -> "dlkit.infrastructure.datatypes";
+"dlkit.infrastructure.io" -> "dlkit.infrastructure.path_context_state";
+"dlkit.infrastructure.io" -> "dlkit.infrastructure.utils";
+"dlkit.infrastructure.registry" -> "dlkit.infrastructure.utils";
+"dlkit.infrastructure.tensor_entries" -> "dlkit.infrastructure.config";
+"dlkit.infrastructure.tensor_entries" -> "dlkit.infrastructure.io";
+"dlkit.infrastructure.utils" -> "dlkit.common";
+}

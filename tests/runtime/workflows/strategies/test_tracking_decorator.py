@@ -10,14 +10,17 @@ from unittest.mock import Mock
 
 import pytest
 
-from dlkit.runtime.execution import VanillaExecutor
-from dlkit.runtime.execution.components import RuntimeComponents
-from dlkit.runtime.tracking.interfaces import IExperimentTracker, IRunContext
-from dlkit.runtime.tracking.tracking_decorator import TrackingDecorator
-from dlkit.shared import TrainingResult, WorkflowError
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings
-from dlkit.tools.config.workflow_configs import OptimizationWorkflowConfig, TrainingWorkflowConfig
+from dlkit.common import TrainingResult, WorkflowError
+from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
+from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
+from dlkit.engine.training import VanillaExecutor
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
 
 type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -260,7 +263,7 @@ def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_component
     settings_no_mlflow = GeneralSettings()  # No MLFLOW section
 
     # Use NullTracker for the proper "disabled MLflow" scenario
-    from dlkit.runtime.tracking.interfaces import NullTracker
+    from dlkit.engine.tracking.interfaces import NullTracker
 
     decorator = TrackingDecorator(mock_executor, NullTracker())
 

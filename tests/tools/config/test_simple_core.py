@@ -8,12 +8,12 @@ import pytest
 from pydantic import ValidationError
 
 # Direct imports to avoid complex dependency chain
-from dlkit.tools.config.core.base_settings import (
+from dlkit.infrastructure.config.core.base_settings import (
     BasicSettings,
     ComponentSettings,
     HyperParameterSettings,
 )
-from dlkit.tools.config.core.context import BuildContext
+from dlkit.infrastructure.config.core.context import BuildContext
 
 
 class MockBasicSettings(BasicSettings):

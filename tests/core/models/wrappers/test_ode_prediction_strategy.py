@@ -18,7 +18,7 @@ from torch import Tensor, nn
 
 from dlkit.domain.nn.generative.functions.solvers import euler_step
 from dlkit.domain.nn.generative.samplers.noise import GaussianNoiseSampler
-from dlkit.runtime.adapters.lightning.prediction_strategies import ODEPredictionStrategy
+from dlkit.engine.adapters.lightning.prediction_strategies import ODEPredictionStrategy
 
 # ---------------------------------------------------------------------------
 # Named constants

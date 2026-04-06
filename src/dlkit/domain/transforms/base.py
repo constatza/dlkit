@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 if TYPE_CHECKING:
-    from dlkit.shared.shapes import ShapeSpecProtocol
+    from dlkit.common.shapes import ShapeSpecProtocol
 
 
 @runtime_checkable

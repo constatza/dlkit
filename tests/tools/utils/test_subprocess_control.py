@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-import dlkit.tools.utils.subprocess as sp
+import dlkit.infrastructure.utils.subprocess as sp
 
 
 class _Proc:

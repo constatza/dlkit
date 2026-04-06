@@ -12,10 +12,15 @@ from unittest.mock import patch
 
 import pytest
 
-from dlkit.tools.config import BuildContext, ComponentFactory, FactoryProvider, GeneralSettings
-from dlkit.tools.config.core.base_settings import ComponentSettings
-from dlkit.tools.config.core.factories import DefaultComponentFactory
-from dlkit.tools.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config import (
+    BuildContext,
+    ComponentFactory,
+    FactoryProvider,
+    GeneralSettings,
+)
+from dlkit.infrastructure.config.core.base_settings import ComponentSettings
+from dlkit.infrastructure.config.core.factories import DefaultComponentFactory
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -273,7 +278,7 @@ class TestSettingsFactoryIntegration:
         assert result.input_size == 512  # Override applied
         assert result.custom_param == "context_value"  # Context value added
 
-    @patch("dlkit.tools.registry.resolve.import_object")
+    @patch("dlkit.infrastructure.registry.resolve.import_object")
     def test_factory_string_import_integration(
         self, mock_import, sample_build_context: BuildContext
     ) -> None:
@@ -312,7 +317,7 @@ class TestGeneralSettingsEndToEndIntegration:
         Args:
             integration_config_file: Integration config file fixture
         """
-        from dlkit.tools.config import load_settings
+        from dlkit.infrastructure.config import load_settings
 
         settings = load_settings(integration_config_file)
         session = _expect_not_none(settings.SESSION)
@@ -421,7 +426,7 @@ class TestFactoryProviderSingletonIntegration:
             sample_build_context: Build context fixture
         """
         # Register factories for different settings types
-        from dlkit.tools.config.model_components import MetricComponentSettings
+        from dlkit.infrastructure.config.model_components import MetricComponentSettings
 
         model_factory = CustomModelFactory()
 

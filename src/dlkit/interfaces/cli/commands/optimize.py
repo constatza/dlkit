@@ -9,9 +9,9 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.protocols import TrainingSettingsProtocol
 from dlkit.interfaces.api import optimize as api_optimize
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
@@ -104,7 +104,7 @@ def _run_optimization_impl(
         raise
     except Exception as e:
         # Handle DLKit errors (optimization failures, etc.)
-        from dlkit.shared.errors import DLKitError
+        from dlkit.common.errors import DLKitError
 
         if isinstance(e, DLKitError):
             handle_api_error(e, console)

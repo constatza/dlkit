@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.tools.config.trainer_settings import CallbackSettings, LoggerSettings, TrainerSettings
+from dlkit.infrastructure.config.core.context import BuildContext
+from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.infrastructure.config.trainer_settings import (
+    CallbackSettings,
+    LoggerSettings,
+    TrainerSettings,
+)
 
 
 def test_trainer_settings_build_creates_callbacks_and_logger(monkeypatch):
@@ -47,7 +51,8 @@ def test_trainer_settings_build_disables_model_summary_and_respects_progress_bar
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
 
     with patch(
-        "dlkit.tools.config.trainer_settings.should_enable_progress_bar", return_value=False
+        "dlkit.infrastructure.config.trainer_settings.should_enable_progress_bar",
+        return_value=False,
     ):
         trainer = TrainerSettings().build()
 

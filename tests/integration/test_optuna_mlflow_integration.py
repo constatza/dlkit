@@ -12,8 +12,8 @@ import pytest
 from mlflow.tracking import MlflowClient
 
 import dlkit
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.optuna_settings import OptunaSettings
 
 FAST_TEST_TIMEOUT = int(30 * float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0")))
 
@@ -24,7 +24,7 @@ def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch)
 
     Uses sqlite tracking for speed and deterministic isolation.
     """
-    from dlkit.runtime.workflows.entrypoints._overrides import apply_runtime_overrides
+    from dlkit.engine.workflows.entrypoints._overrides import apply_runtime_overrides
 
     # Create isolated MLflow directory per test for proper isolation
     mlruns_dir = tmp_path / "mlruns"
@@ -97,7 +97,7 @@ class TestOptunaMLflowOptimization:
 
     def test_no_optimization_raises_error(self):
         """Test that optimize() raises error when optimization not enabled."""
-        from dlkit.shared import WorkflowError
+        from dlkit.common import WorkflowError
 
         settings = GeneralSettings()  # No OPTUNA enabled
 
@@ -112,7 +112,7 @@ class TestBackwardCompatibility:
 
     def test_vanilla_workflow_raises_error(self):
         """Test that vanilla (no optimization) workflows raise clear error."""
-        from dlkit.shared import WorkflowError
+        from dlkit.common import WorkflowError
 
         settings = GeneralSettings()  # No OPTUNA or MLFLOW
 

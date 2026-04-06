@@ -5,10 +5,10 @@ narrative coupling assessment.
 
 - `coupling-assessment.md`: historical refactoring notes and coupling narrative
 - `diagrams/overview.dot`: direct-submodule overview for the `dlkit` package
-- `diagrams/shared.dot`: shared kernel view under `dlkit.shared`
-- `diagrams/tools.dot`: infrastructure view under `dlkit.tools`
+- `diagrams/shared.dot`: shared kernel view under `dlkit.common`
+- `diagrams/tools.dot`: infrastructure view under `dlkit.infrastructure`
 - `diagrams/domain.dot`: domain package view under `dlkit.domain`
-- `diagrams/runtime.dot`: orchestration package view under `dlkit.runtime`
+- `diagrams/runtime.dot`: orchestration package view under `dlkit.engine`
 - `diagrams/interfaces.dot`: external API and CLI view under `dlkit.interfaces`
 
 ## Canonical Generator
@@ -25,7 +25,7 @@ Regenerate one curated DOT target directly from the actual Tach dependency map:
 
 ```bash
 uv run tach map -o /tmp/dlkit-map.json
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.shared,dlkit.tools,dlkit.domain,dlkit.runtime
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.common,dlkit.infrastructure,dlkit.domain,dlkit.engine
 ```
 
 Regenerate the full curated set under `docs/architecture/diagrams/`:
@@ -33,11 +33,11 @@ Regenerate the full curated set under `docs/architecture/diagrams/`:
 ```bash
 uv run tach map -o /tmp/dlkit-map.json
 uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/overview.dot dlkit
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/shared.dot dlkit.shared
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/tools.dot dlkit.tools dlkit.shared
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/domain.dot dlkit.domain dlkit.shared
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/runtime.dot dlkit.runtime dlkit.shared,dlkit.tools,dlkit.domain
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.shared,dlkit.tools,dlkit.domain,dlkit.runtime
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/shared.dot dlkit.common
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/tools.dot dlkit.infrastructure dlkit.common
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/domain.dot dlkit.domain dlkit.common
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/runtime.dot dlkit.engine dlkit.common,dlkit.infrastructure,dlkit.domain
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.common,dlkit.infrastructure,dlkit.domain,dlkit.engine
 ```
 
 Check architecture constraints:
@@ -51,7 +51,7 @@ to the package view you want:
 
 ```bash
 uv run tach map -o /tmp/dlkit-map.json
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json /tmp/dlkit-domain.dot dlkit.domain dlkit.shared
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json /tmp/dlkit-domain.dot dlkit.domain dlkit.common
 ```
 
 ## Graph Policy

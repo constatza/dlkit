@@ -10,7 +10,7 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from dlkit.tools.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings
 
 if TYPE_CHECKING:
     from loguru._logger import Logger

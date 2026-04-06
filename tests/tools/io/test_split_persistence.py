@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.datatypes.split import IndexSplit
-from dlkit.tools.io.locations import splits_dir
-from dlkit.tools.io.split_provider import get_or_create_split
+from dlkit.infrastructure.io.locations import splits_dir
+from dlkit.infrastructure.io.split_provider import get_or_create_split
+from dlkit.infrastructure.types.split import IndexSplit
 
 
 @pytest.fixture

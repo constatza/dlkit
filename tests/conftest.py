@@ -19,11 +19,13 @@ from typing import Any, cast
 import pytest
 from _pytest.tmpdir import TempPathFactory
 
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.tools.config.environment import env as global_environment
-from dlkit.tools.io import load_config
-from dlkit.tools.registry.public import _reset_for_tests as _reset_component_registry_for_tests
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.infrastructure.config.environment import env as global_environment
+from dlkit.infrastructure.io import load_config
+from dlkit.infrastructure.registry.public import (
+    _reset_for_tests as _reset_component_registry_for_tests,
+)
 
 _ORIGINAL_HOME_ENV = os.environ.get("HOME")
 _ORIGINAL_DLKIT_ROOT_DIR = os.environ.get("DLKIT_ROOT_DIR")
@@ -376,7 +378,7 @@ def test_artifacts_dir() -> Path:
 def _block_mlflow_host_probe():
     """Prevent tests from attaching to any real localhost MLflow server."""
     with unittest.mock.patch(
-        "dlkit.runtime.tracking.uri_resolver.local_host_alive",
+        "dlkit.engine.tracking.uri_resolver.local_host_alive",
         return_value=False,
     ):
         yield

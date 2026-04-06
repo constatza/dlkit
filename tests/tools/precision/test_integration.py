@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.io.arrays import load_array
-from dlkit.tools.precision import PrecisionService, PrecisionStrategy, precision_override
+from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.io.arrays import load_array
+from dlkit.infrastructure.precision import PrecisionService, PrecisionStrategy, precision_override
 
 
 class TestPrecisionIntegration:
@@ -57,7 +57,7 @@ class TestPrecisionIntegration:
         assert tensor_explicit.dtype == torch.float32
 
         # Load with session precision (convenience function)
-        from dlkit.tools.io.arrays import load_array_with_session_precision
+        from dlkit.infrastructure.io.arrays import load_array_with_session_precision
 
         with precision_override(PrecisionStrategy.TRUE_BF16):
             tensor_session = load_array_with_session_precision(sample_data_file)
@@ -159,7 +159,7 @@ class TestPrecisionIntegration:
 
     def test_trainer_settings_precision_integration(self):
         """Test TrainerSettings precision integration."""
-        from dlkit.tools.config.trainer_settings import TrainerSettings
+        from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
         # Trainer with explicit precision
         trainer_explicit = TrainerSettings(precision="16-mixed")

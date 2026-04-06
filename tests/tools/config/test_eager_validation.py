@@ -15,18 +15,18 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.config.model_components import ModelComponentSettings
-from dlkit.tools.config.validators import (
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.validators import (
     ConfigValidationError,
     validate_inference_config_complete,
     validate_optimization_config_complete,
     validate_training_config_complete,
 )
-from dlkit.tools.config.workflow_configs import (
+from dlkit.infrastructure.config.workflow_configs import (
     InferenceWorkflowConfig,
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -61,7 +61,7 @@ class TestEagerValidationSuccessCases:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -288,7 +288,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -343,7 +343,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "MODEL": {
@@ -379,7 +379,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -493,7 +493,7 @@ class TestCompletenessValidation:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -576,7 +576,7 @@ class TestProgrammaticOverrideWorkflow:
 
         datamodule = DataModuleSettings(
             name="InMemoryModule",
-            module_path="dlkit.runtime.adapters.lightning.datamodules",
+            module_path="dlkit.engine.adapters.lightning.datamodules",
             dataloader=DataloaderSettings(batch_size=16),
         )
 
@@ -649,7 +649,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
@@ -712,7 +712,7 @@ class TestEdgeCasesAndErrorMessages:
             },
             "DATAMODULE": {
                 "name": "InMemoryModule",
-                "module_path": "dlkit.runtime.adapters.lightning.datamodules",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {

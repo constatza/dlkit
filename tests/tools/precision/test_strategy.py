@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from dlkit.tools.precision import PrecisionStrategy
-from dlkit.tools.precision.strategy import _PRECISION_ALIAS_MAP
+from dlkit.infrastructure.precision import PrecisionStrategy
+from dlkit.infrastructure.precision.strategy import _PRECISION_ALIAS_MAP
 
 
 class TestPrecisionStrategy:

@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.tools.config import load_settings, update_settings
-from dlkit.tools.config.data_entries import Feature
-from dlkit.tools.config.extras_settings import ExtrasSettings
+from dlkit.infrastructure.config import load_settings, update_settings
+from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.extras_settings import ExtrasSettings
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -39,7 +39,7 @@ name = "original_name"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -85,7 +85,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -137,7 +137,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -197,7 +197,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -256,7 +256,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -313,7 +313,7 @@ name = "original"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -351,7 +351,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -394,7 +394,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -437,7 +437,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -483,7 +483,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -535,7 +535,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -589,7 +589,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -645,7 +645,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -686,7 +686,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -730,7 +730,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32
@@ -784,7 +784,7 @@ name = "test"
 
 [DATAMODULE]
 name = "InMemoryModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 32

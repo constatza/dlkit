@@ -14,9 +14,9 @@ from dlkit.domain.metrics import (
     NormalizedVectorNormError,
     TemporalDerivativeError,
 )
-from dlkit.tools.config import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.tools.config.model_components import MetricComponentSettings
+from dlkit.infrastructure.config import BuildContext
+from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.infrastructure.config.model_components import MetricComponentSettings
 
 
 class TestCustomMetricsIntegration:

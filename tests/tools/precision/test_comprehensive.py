@@ -16,11 +16,11 @@ import torch
 from torch import nn
 
 from dlkit.domain.shapes import create_shape_spec
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.trainer_settings import TrainerSettings
-from dlkit.tools.io.arrays import load_array
-from dlkit.tools.precision import (
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.io.arrays import load_array
+from dlkit.infrastructure.precision import (
     PrecisionStrategy,
     get_precision_service,
     precision_override,
@@ -248,7 +248,7 @@ class TestComprehensivePrecision:
         feature = Feature(name="test", path=sample_datasets["float32"])
 
         # Mock service failure
-        with patch("dlkit.tools.precision.service.get_precision_service") as mock_service:
+        with patch("dlkit.infrastructure.precision.service.get_precision_service") as mock_service:
             mock_service.side_effect = RuntimeError("Service unavailable")
 
             # Should fall back to provided default
@@ -256,7 +256,7 @@ class TestComprehensivePrecision:
             assert dtype == torch.float64
 
         # Test load_array with service failure
-        with patch("dlkit.tools.io.arrays.get_precision_service") as mock_service:
+        with patch("dlkit.infrastructure.io.arrays.get_precision_service") as mock_service:
             mock_service.side_effect = RuntimeError("Service unavailable")
 
             # Should work with explicit dtype

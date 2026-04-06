@@ -266,7 +266,7 @@ module_path = "dlkit.domain.losses"
 # DataModule class name
 # Options: "InMemoryDataModule", "GraphDataModule", "TimeSeriesDataModule"
 name = "InMemoryDataModule"
-module_path = "dlkit.runtime.adapters.lightning.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 
 # -----------------------------------------------------------------------------
@@ -301,7 +301,7 @@ pin_memory = true
 # Dataset class name
 # Options: "FlexibleDataset", "GraphDataset", "TimeSeriesDataset"
 name = "FlexibleDataset"
-module_path = "dlkit.runtime.data.datasets"
+module_path = "dlkit.engine.data.datasets"
 
 # Optional dataset family hint for automatic strategy selection
 # type = "flexible"  # Options: "flexible", "graph", "timeseries"

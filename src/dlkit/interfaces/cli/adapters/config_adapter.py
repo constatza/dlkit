@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dlkit.shared import ConfigurationError
-from dlkit.tools.config import load_settings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
-from dlkit.tools.io.path_context import path_override_context
+from dlkit.common import ConfigurationError
+from dlkit.infrastructure.config import load_settings
+from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
+from dlkit.infrastructure.io.path_context import path_override_context
 
 
 def load_config(
