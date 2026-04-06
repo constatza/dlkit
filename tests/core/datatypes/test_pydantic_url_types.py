@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from dlkit.tools.datatypes.urls import (
+from dlkit.infrastructure.types.urls import (
     ArtifactDestination,
     CloudStorageUrl,
     DatabricksUrl,

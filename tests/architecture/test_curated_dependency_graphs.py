@@ -100,11 +100,16 @@ def test_curated_dependency_graphs_are_acyclic(tmp_path: Path) -> None:
 
     curated_roots = {
         "dlkit": [],
-        "dlkit.shared": [],
-        "dlkit.tools": ["dlkit.shared"],
-        "dlkit.domain": ["dlkit.shared"],
-        "dlkit.runtime": ["dlkit.shared", "dlkit.tools", "dlkit.domain"],
-        "dlkit.interfaces": ["dlkit.shared", "dlkit.tools", "dlkit.domain", "dlkit.runtime"],
+        "dlkit.common": [],
+        "dlkit.infrastructure": ["dlkit.common"],
+        "dlkit.domain": ["dlkit.common"],
+        "dlkit.engine": ["dlkit.common", "dlkit.infrastructure", "dlkit.domain"],
+        "dlkit.interfaces": [
+            "dlkit.common",
+            "dlkit.infrastructure",
+            "dlkit.domain",
+            "dlkit.engine",
+        ],
     }
 
     for root_module, context_modules in curated_roots.items():

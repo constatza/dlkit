@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from dlkit.runtime.adapters.lightning.callbacks import NumpyWriter
+from dlkit.engine.adapters.lightning.callbacks import NumpyWriter
 
 
 @pytest.fixture

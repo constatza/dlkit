@@ -15,8 +15,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from dlkit.interfaces.inference import CheckpointPredictor, PredictorConfig, load_model
-from dlkit.runtime.predictor.loading import (
+from dlkit.engine.inference.loading import (
     build_model_from_checkpoint,
     detect_checkpoint_dtype,
     extract_state_dict,
@@ -24,7 +23,8 @@ from dlkit.runtime.predictor.loading import (
     load_checkpoint,
     validate_checkpoint,
 )
-from dlkit.tools.precision.strategy import PrecisionStrategy
+from dlkit.infrastructure.precision.strategy import PrecisionStrategy
+from dlkit.interfaces.inference import CheckpointPredictor, PredictorConfig, load_model
 
 
 class TestCheckpointLoading:

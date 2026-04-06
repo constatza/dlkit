@@ -9,8 +9,8 @@ import torch
 from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
-from dlkit.runtime.data.datasets.flexible import FlexibleDataset, collate_tensordict
-from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
+from dlkit.engine.data.datasets.flexible import FlexibleDataset, collate_tensordict
+from dlkit.infrastructure.config.data_entries import Feature, SparseFeature, Target
 
 
 def _expect_tensor(value: object) -> torch.Tensor:
@@ -62,11 +62,11 @@ def test_dataloader_uses_stacked_sparse_builder_for_non_shared_pack(
     pack_path = sparse_collation_pack["path"]
     n_samples = len(sparse_collation_pack["matrices"])
 
-    from dlkit.tools.io.sparse._coo_pack import CooPackReader
+    from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
     original_build_stacked = CooPackReader.build_torch_sparse_stacked
     with patch(
-        "dlkit.tools.io.sparse._coo_pack.CooPackReader.build_torch_sparse_stacked",
+        "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse_stacked",
         autospec=True,
         wraps=original_build_stacked,
     ) as mocked_build_stacked:
@@ -130,11 +130,11 @@ def test_shared_sparse_pack_reads_sparse_on_demand_per_item(
 ) -> None:
     n_samples = 4
     pack_path = sparse_shared_pack["path"]
-    from dlkit.tools.io.sparse._coo_pack import CooPackReader
+    from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
     original_build_sparse = CooPackReader.build_torch_sparse
     with patch(
-        "dlkit.tools.io.sparse._coo_pack.CooPackReader.build_torch_sparse",
+        "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse",
         autospec=True,
         wraps=original_build_sparse,
     ) as mocked_build_sparse:

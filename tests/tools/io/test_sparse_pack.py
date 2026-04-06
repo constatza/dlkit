@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from dlkit.tools.io.sparse import (
+from dlkit.infrastructure.io.sparse import (
     PackFiles,
     PackManifest,
     SparsePackReader,
@@ -16,7 +16,7 @@ from dlkit.tools.io.sparse import (
     save_sparse_pack,
     validate_sparse_pack,
 )
-from dlkit.tools.io.sparse._coo_pack import CooPackReader
+from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
 
 def test_coo_codec_roundtrip(

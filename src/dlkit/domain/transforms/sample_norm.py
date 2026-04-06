@@ -13,7 +13,7 @@ from dlkit.domain.transforms.base import Transform
 from dlkit.domain.transforms.shape_inference import register_shape_inference
 
 if TYPE_CHECKING:
-    from dlkit.shared.shapes import ShapeSpecProtocol
+    from dlkit.common.shapes import ShapeSpecProtocol
 
 
 class SampleNormL2(Transform):

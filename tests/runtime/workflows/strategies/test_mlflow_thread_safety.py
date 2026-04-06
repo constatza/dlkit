@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.runtime.tracking.backend import LocalSqliteBackend
-from dlkit.runtime.tracking.mlflow_resource_manager import (
+from dlkit.engine.tracking.backend import LocalSqliteBackend
+from dlkit.engine.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 
 @pytest.fixture

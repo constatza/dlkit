@@ -8,25 +8,25 @@ import numpy as np
 import pytest
 from tensordict import TensorDict
 
-from dlkit.runtime.workflows.factories.build_factory import BuildFactory
-from dlkit.runtime.workflows.factories.model_detection import ModelType
-from dlkit.shared.shapes import ShapeSummary
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import FactoryProvider
-from dlkit.tools.config.data_entries import Feature, Target
-from dlkit.tools.config.datamodule_settings import DataModuleSettings
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.config.enums import DatasetFamily
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.model_components import (
+from dlkit.common.shapes import ShapeSummary
+from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.engine.workflows.factories.model_detection import ModelType
+from dlkit.infrastructure.config.core.context import BuildContext
+from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.enums import DatasetFamily
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
     MetricComponentSettings,
     MetricInputRef,
     ModelComponentSettings,
 )
-from dlkit.tools.config.session_settings import SessionSettings
-from dlkit.tools.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 class _FakeDataset:
@@ -57,9 +57,9 @@ def tmp_checkpoint(tmp_path: Path) -> Path:
 
 def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> GeneralSettings:
     # Minimal flattened settings; we will patch factories to avoid importing real components
-    ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.runtime.data.datasets")
+    ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.engine.data.datasets")
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.domain.nn", checkpoint=ckpt)
     tr = TrainingSettings()
@@ -98,7 +98,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     # Force detection to treat the dummy model as shape-aware so shape inference runs.
     # Patch in flexible_build_strategy's own namespace (it imports detect_model_type directly).
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.flexible_build_strategy.detect_model_type",
+        "dlkit.engine.workflows.factories.flexible_build_strategy.detect_model_type",
         lambda *_: ModelType.SHAPE_AWARE_DLKIT,
     )
 
@@ -111,7 +111,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     # Patch WrapperFactory.create_standard_wrapper on the class object itself —
     # shared by all importers, so the original path still works.
     monkeypatch.setattr(
-        "dlkit.runtime.adapters.lightning.factories.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.adapters.lightning.factories.WrapperFactory.create_standard_wrapper",
         staticmethod(_capture_wrapper),
     )
 
@@ -157,7 +157,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
 
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.GRAPH,
     )
 
@@ -165,7 +165,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         return _FakeModel()
 
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_graph_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_graph_wrapper",
         staticmethod(_capture_graph_wrapper),
     )
 
@@ -201,7 +201,7 @@ def test_build_factory_selects_timeseries_strategy(
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
 
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.TIMESERIES,
     )
 
@@ -212,7 +212,7 @@ def test_build_factory_selects_timeseries_strategy(
         return _FakeModel()
 
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_timeseries_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_timeseries_wrapper",
         staticmethod(_capture_timeseries_wrapper),
     )
 
@@ -227,7 +227,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     """Optimizer/scheduler from TRAINING should be forwarded to wrapper settings."""
-    from dlkit.tools.config.optimizer_settings import OptimizerSettings, SchedulerSettings
+    from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings, SchedulerSettings
 
     # Create custom optimizer and scheduler settings
     custom_optimizer = OptimizerSettings(name="SGD", lr=0.01)
@@ -247,7 +247,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     created_wrapper_settings = []
 
     # Capture the original __init__ method
-    from dlkit.tools.config.model_components import WrapperComponentSettings
+    from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
     original_init = WrapperComponentSettings.__init__
 
@@ -275,7 +275,7 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
         return wrapper_mock
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    from dlkit.runtime.adapters.lightning.factories import WrapperFactory
+    from dlkit.engine.adapters.lightning.factories import WrapperFactory
 
     monkeypatch.setattr(
         WrapperFactory, "create_standard_wrapper", staticmethod(_fake_create_wrapper)
@@ -330,13 +330,13 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
 
     ds = DatasetSettings(
         name="SupervisedArrayDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(Feature(name="x", path=x_path),),
         targets=(Target(name="y", path=y_path),),
         memmap_cache=True,
     )
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
@@ -378,15 +378,15 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         return _FakeModel()
 
     monkeypatch.setattr(
-        "dlkit.runtime.data.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset
+        "dlkit.engine.data.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset
     )
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
@@ -416,12 +416,12 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(Feature(name="x", path=x_path),),
         targets=(Target(name="y", path=y_path),),
     )
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
@@ -447,11 +447,11 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
@@ -483,7 +483,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -498,7 +498,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=TrainingSettings(),
     )
@@ -520,11 +520,11 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(_capture_wrapper),
     )
 
@@ -549,7 +549,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -568,7 +568,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=training,
     )
@@ -585,11 +585,11 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
@@ -612,7 +612,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(
             Feature(name="x", path=x_path),
             Feature(name="matrix", path=matrix_path, model_input=False),
@@ -633,7 +633,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=training,
     )
@@ -650,11 +650,11 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
@@ -675,7 +675,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
 
     ds = DatasetSettings(
         name="FlexibleDataset",
-        module_path="dlkit.runtime.data.datasets",
+        module_path="dlkit.engine.data.datasets",
         features=(Feature(name="matrix", path=matrix_path, model_input=False),),
         targets=(Target(name="y", path=y_path),),
     )
@@ -686,7 +686,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.runtime.adapters.lightning.datamodules"
+            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=TrainingSettings(),
     )
@@ -706,11 +706,11 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.detect_model_type",
+        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
         lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
     )
     monkeypatch.setattr(
-        "dlkit.runtime.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
+        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
@@ -723,7 +723,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     """Test that None scheduler is handled correctly without causing validation errors."""
-    from dlkit.tools.config.optimizer_settings import OptimizerSettings
+    from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
     # Create optimizer but leave scheduler as None
     custom_optimizer = OptimizerSettings(name="Adam", lr=0.001)
@@ -742,7 +742,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     created_wrapper_settings = []
 
     # Capture the original __init__ method
-    from dlkit.tools.config.model_components import WrapperComponentSettings
+    from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
     original_init = WrapperComponentSettings.__init__
 
@@ -767,7 +767,7 @@ def test_build_factory_handles_none_scheduler_correctly(
         return wrapper_mock
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    from dlkit.runtime.adapters.lightning.factories import WrapperFactory
+    from dlkit.engine.adapters.lightning.factories import WrapperFactory
 
     monkeypatch.setattr(
         WrapperFactory, "create_standard_wrapper", staticmethod(_fake_create_wrapper)

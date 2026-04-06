@@ -6,11 +6,11 @@ principles and properly implements context manager protocols.
 
 from contextlib import AbstractContextManager
 
-from dlkit.runtime.workflows.optimization.domain import IExperimentTracker
-from dlkit.runtime.workflows.optimization.infrastructure import (
+from dlkit.engine.workflows.optimization.infrastructure import (
     MLflowTrackingAdapter,
     NullTrackingAdapter,
 )
+from dlkit.engine.workflows.optimization.value_objects import IExperimentTracker
 
 
 class TestContextManagerCompliance:
@@ -93,7 +93,7 @@ class TestSingleResponsibility:
         """OptimizationStrategy does not contain context management logic."""
         import inspect
 
-        from dlkit.runtime.workflows.optimization.strategy import OptimizationStrategy
+        from dlkit.engine.workflows.optimization.strategy import OptimizationStrategy
 
         source = inspect.getsource(OptimizationStrategy.execute_optimization)
 
@@ -114,7 +114,7 @@ class TestSingleResponsibility:
         """The runtime optimization entrypoint owns tracker context lifecycle."""
         import inspect
 
-        from dlkit.runtime.workflows.entrypoints.optimization import optimize
+        from dlkit.engine.workflows.entrypoints.optimization import optimize
 
         source = inspect.getsource(optimize)
 
@@ -132,7 +132,7 @@ class TestDependencyInversion:
         """OptimizationServiceFactory returns uninitialized trackers."""
         import inspect
 
-        from dlkit.runtime.workflows.optimization.factory import OptimizationServiceFactory
+        from dlkit.engine.workflows.optimization.factory import OptimizationServiceFactory
 
         # Check create_experiment_tracker method
         source = inspect.getsource(OptimizationServiceFactory.create_experiment_tracker)

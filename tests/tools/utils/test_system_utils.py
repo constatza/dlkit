@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dlkit.tools.io.paths import (
+from dlkit.infrastructure.io.paths import (
     coerce_root_dir_to_absolute,
     mkdir_for_local,
     normalize_user_path,

@@ -10,9 +10,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
+from dlkit.engine.workflows.entrypoints.convert import convert_checkpoint_to_onnx
 from dlkit.interfaces.cli.adapters.config_adapter import load_config
-from dlkit.runtime.workflows.entrypoints._settings import WorkflowSettings
-from dlkit.runtime.workflows.entrypoints.convert import convert_checkpoint_to_onnx
 
 app = typer.Typer(name="convert", help="🔁 Convert checkpoints to export formats (e.g., ONNX)")
 console = Console()

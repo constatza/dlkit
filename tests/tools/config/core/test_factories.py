@@ -13,9 +13,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from dlkit.tools.config.core.base_settings import ComponentSettings
-from dlkit.tools.config.core.context import BuildContext
-from dlkit.tools.config.core.factories import (
+from dlkit.infrastructure.config.core.base_settings import ComponentSettings
+from dlkit.infrastructure.config.core.context import BuildContext
+from dlkit.infrastructure.config.core.factories import (
     ComponentFactory,
     ComponentRegistry,
     DefaultComponentFactory,
@@ -141,7 +141,7 @@ class TestDefaultComponentFactory:
             param2=200,
         )
 
-        with patch("dlkit.tools.config.core.factories.import_object") as mock_import:
+        with patch("dlkit.infrastructure.config.core.factories.import_object") as mock_import:
             mock_import.return_value = MockTarget
 
             result = factory.create(settings, sample_build_context)
@@ -223,7 +223,7 @@ class TestDefaultComponentFactory:
             module_path="nonexistent.module",
         )
 
-        with patch("dlkit.tools.config.core.factories.import_object") as mock_import:
+        with patch("dlkit.infrastructure.config.core.factories.import_object") as mock_import:
             mock_import.return_value = "not_callable"  # Return non-callable object
 
             with pytest.raises(TypeError, match="must be a class or callable"):

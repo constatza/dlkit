@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import torch
 from sklearn.linear_model import LinearRegression
 
-from dlkit.runtime.tracking.mlflow_run_context import ClientBasedRunContext
+from dlkit.engine.tracking.mlflow_run_context import ClientBasedRunContext
 
 
 def test_log_model_uses_pytorch_flavor_for_torch_modules() -> None:

@@ -1,4 +1,4 @@
-"""Tests for the pure patching functions in dlkit.tools.config.core.patching.
+"""Tests for the pure patching functions in dlkit.infrastructure.config.core.patching.
 
 All test data is created via fixtures.  No inline data construction inside
 test functions (except for expected values in assert statements).
@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from dlkit.tools.config.core.patching import (
+from dlkit.infrastructure.config.core.patching import (
     apply_patch,
     compile_dotted_overrides,
     compile_mixed_overrides,
@@ -455,7 +455,7 @@ class TestExcludedFieldRoundTrip:
 
     def test_value_feature_excluded_field_survives(self) -> None:
         """End-to-end test using actual ValueFeature from dlkit."""
-        from dlkit.tools.config.data_entries import ValueFeature
+        from dlkit.infrastructure.config.data_entries import ValueFeature
 
         arr = np.ones((10, 5), dtype=np.float32)
         feature = ValueFeature(name="x", value=arr)

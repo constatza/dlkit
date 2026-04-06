@@ -83,7 +83,7 @@ def validate_configuration(
         raise
     except Exception as e:
         # Handle DLKit errors (validation failures, etc.)
-        from dlkit.shared.errors import DLKitError
+        from dlkit.common.errors import DLKitError
 
         if isinstance(e, DLKitError):
             handle_api_error(e, console)

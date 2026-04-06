@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, Field
 
-from dlkit.tools.config.model_components import ModelComponentSettings
-from dlkit.tools.config.paths_settings import PathsSettings
-from dlkit.tools.io.config import (
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.paths_settings import PathsSettings
+from dlkit.infrastructure.io.config import (
     ConfigSectionError,
     ConfigValidationError,
     check_section_exists,
@@ -102,7 +102,7 @@ class TestLoadSectionConfig:
     def test_load_existing_section(self, config_file):
         """Test loading an existing section."""
         # Register section mapping for test
-        from dlkit.tools.io.config import register_section_mapping
+        from dlkit.infrastructure.io.config import register_section_mapping
 
         register_section_mapping(PathsTestSettings, "PATHS")
 
@@ -117,7 +117,7 @@ class TestLoadSectionConfig:
 
     def test_load_nonexistent_section(self, config_file):
         """Test loading a section that doesn't exist."""
-        from dlkit.tools.io.config import register_section_mapping
+        from dlkit.infrastructure.io.config import register_section_mapping
 
         register_section_mapping(SampleSectionSettings, "NONEXISTENT")
 
@@ -152,7 +152,7 @@ class TestLoadSectionsConfig:
 
     def test_load_multiple_sections(self, config_file):
         """Test loading multiple sections at once."""
-        from dlkit.tools.io.config import register_section_mapping
+        from dlkit.infrastructure.io.config import register_section_mapping
 
         register_section_mapping(PathsTestSettings, "PATHS")
         register_section_mapping(ModelTestSettings, "MODEL")
@@ -251,7 +251,7 @@ class TestPerformance:
 
     def test_partial_vs_full_loading(self, config_file):
         """Test that partial loading is working (functional test)."""
-        from dlkit.tools.io.config import load_config, register_section_mapping
+        from dlkit.infrastructure.io.config import load_config, register_section_mapping
 
         register_section_mapping(PathsTestSettings, "PATHS")
 
@@ -266,7 +266,7 @@ class TestPerformance:
 
     def test_multiple_sections_efficiency(self, config_file):
         """Test loading multiple sections efficiently."""
-        from dlkit.tools.io.config import register_section_mapping
+        from dlkit.infrastructure.io.config import register_section_mapping
 
         register_section_mapping(PathsTestSettings, "PATHS")
         register_section_mapping(ModelTestSettings, "MODEL")

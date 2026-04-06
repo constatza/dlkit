@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from dlkit.common import ConfigurationError, InferenceResult, TrainingResult
+from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
 from dlkit.interfaces.cli.adapters.config_adapter import (
     load_config,
     validate_config_path,
 )
-from dlkit.shared import ConfigurationError, InferenceResult, TrainingResult
-from dlkit.tools.config.protocols import BaseSettingsProtocol
 
 from ._helpers import (
     create_invalid_toml_config,
@@ -338,8 +338,8 @@ class TestResultPresenterModule:
         """Test that config adapter functions handle error cases properly."""
         from pathlib import Path
 
+        from dlkit.common import ConfigurationError
         from dlkit.interfaces.cli.adapters.config_adapter import load_config, validate_config_path
-        from dlkit.shared import ConfigurationError
 
         # Test that functions handle missing files appropriately
         nonexistent_path = Path("nonexistent_file.toml")

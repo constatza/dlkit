@@ -8,11 +8,11 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from dlkit.common.errors import DLKitError
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.protocols import TrainingSettingsProtocol
 from dlkit.interfaces.api import train as api_train
 from dlkit.interfaces.api import validate_config
-from dlkit.shared.errors import DLKitError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import TrainingSettingsProtocol
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result

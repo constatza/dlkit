@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dlkit.runtime.workflows.factories.feature_dependencies import (
+from dlkit.engine.workflows.factories.feature_dependencies import (
     collect_feature_dependencies,
     select_required_features,
     validate_feature_selection,
 )
-from dlkit.tools.config.data_entries import AutoencoderTarget, Feature, Target
-from dlkit.tools.config.model_components import (
+from dlkit.infrastructure.config.data_entries import AutoencoderTarget, Feature, Target
+from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
     MetricComponentSettings,

@@ -13,8 +13,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from dlkit.runtime.workflows.factories.module_defaults import with_runtime_module_defaults
-from dlkit.tools.config.model_components import (
+from dlkit.engine.workflows.factories.module_defaults import with_runtime_module_defaults
+from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     MetricComponentSettings,
     ModelComponentSettings,
@@ -243,7 +243,7 @@ class TestWrapperComponentSettings:
 
         assert settings.name == "StandardLightningWrapper"
         assert settings.module_path is None
-        assert resolved.module_path == "dlkit.runtime.adapters.lightning"
+        assert resolved.module_path == "dlkit.engine.adapters.lightning"
         assert isinstance(settings.optimizer, object)  # Default factory
         assert isinstance(settings.scheduler, object)  # Default factory
         assert settings.train is True

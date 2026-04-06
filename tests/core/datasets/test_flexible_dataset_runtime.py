@@ -7,8 +7,8 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 
-from dlkit.runtime.data.datasets.flexible import FlexibleDataset
-from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.engine.data.datasets.flexible import FlexibleDataset
+from dlkit.infrastructure.config.data_entries import Feature, Target
 
 
 def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):

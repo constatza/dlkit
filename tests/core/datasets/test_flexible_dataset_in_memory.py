@@ -13,14 +13,14 @@ import pytest
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from dlkit.runtime.data.datasets.flexible import (
+from dlkit.engine.data.datasets.flexible import (
     BatchComplianceError,
     FlexibleDataset,
     PlaceholderNotResolvedError,
     _load_or_convert_tensor,
     _normalize_entries,
 )
-from dlkit.tools.config.data_entries import (
+from dlkit.infrastructure.config.data_entries import (
     Feature,
     PathFeature,
     PathTarget,

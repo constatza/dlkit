@@ -6,14 +6,14 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS: dict[str, tuple[str, str]] = {
-    "ConfigurationError": ("dlkit.shared", "ConfigurationError"),
-    "InferenceResult": ("dlkit.shared", "InferenceResult"),
+    "ConfigurationError": ("dlkit.common", "ConfigurationError"),
+    "InferenceResult": ("dlkit.common", "InferenceResult"),
     "LoggedModelRecord": ("dlkit.interfaces.api.functions", "LoggedModelRecord"),
-    "OptimizationResult": ("dlkit.shared", "OptimizationResult"),
-    "StrategyError": ("dlkit.shared", "StrategyError"),
-    "LifecycleHooks": ("dlkit.shared", "LifecycleHooks"),
-    "TrainingResult": ("dlkit.shared", "TrainingResult"),
-    "WorkflowError": ("dlkit.shared", "WorkflowError"),
+    "OptimizationResult": ("dlkit.common", "OptimizationResult"),
+    "StrategyError": ("dlkit.common", "StrategyError"),
+    "LifecycleHooks": ("dlkit.common", "LifecycleHooks"),
+    "TrainingResult": ("dlkit.common", "TrainingResult"),
+    "WorkflowError": ("dlkit.common", "WorkflowError"),
     "build_logged_model_uri": ("dlkit.interfaces.api.functions", "build_logged_model_uri"),
     "build_registered_model_uri": (
         "dlkit.interfaces.api.functions",

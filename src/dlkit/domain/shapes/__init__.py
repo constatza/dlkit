@@ -19,7 +19,6 @@ Usage:
     )
 """
 
-from .checkpoint_loader import CheckpointShapeLoader
 from .core import GraphShapeSpec, IShapeSpec, NullShapeSpec, ShapeSpec, create_shape_spec
 from .factory import ShapeSystemFactory
 from .inference import (
@@ -108,6 +107,4 @@ __all__ = [
     "SerializationMetadata",
     "SerializedShape",
     "ShapeFormatMigrator",
-    # Checkpoint utilities
-    "CheckpointShapeLoader",
 ]

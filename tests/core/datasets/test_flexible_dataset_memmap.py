@@ -17,12 +17,12 @@ import torch
 from tensordict import TensorDictBase
 from torch.utils.data import DataLoader
 
-from dlkit.runtime.data.datasets.flexible import (
+from dlkit.engine.data.datasets.flexible import (
     FlexibleDataset,
     _build_memmap_cache,
     collate_tensordict,
 )
-from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
+from dlkit.infrastructure.config.data_entries import Feature, SparseFeature, Target
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,7 +126,7 @@ def test_memmap_cache_reused_on_second_instantiation(
     _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
 
     with patch(
-        "dlkit.runtime.data.datasets.flexible._build_memmap_cache", wraps=_build_memmap_cache
+        "dlkit.engine.data.datasets.flexible._build_memmap_cache", wraps=_build_memmap_cache
     ) as mock_build:
         _make_dataset(npy_feature_file, npy_target_file, memmap_cache_dir)
         mock_build.assert_not_called()
@@ -226,7 +226,7 @@ def test_memmap_with_npz_source(tmp_path: Path, memmap_cache_dir: Path) -> None:
 
 def test_memmap_raises_for_value_based_entry(tmp_path: Path, memmap_cache_dir: Path) -> None:
     """ValueError raised when a ValueBasedEntry is used with memmap_cache_dir."""
-    from dlkit.tools.config.data_entries import Feature as ValueFeature
+    from dlkit.infrastructure.config.data_entries import Feature as ValueFeature
 
     tensor_data = torch.randn(10, 3)
     with pytest.raises(ValueError, match="not file-backed"):
@@ -346,18 +346,18 @@ def test_sparse_broadcast_memmap_avoids_batch_sparse_build(
 ) -> None:
     """Broadcast sparse packs should avoid per-chunk build_torch_sparse_batch calls."""
     pack_path = sparse_shared_pack["path"]
-    from dlkit.tools.io.sparse._coo_pack import CooPackReader
+    from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
     original_single_build = CooPackReader.build_torch_sparse
     with (
         patch(
-            "dlkit.tools.io.sparse._coo_pack.CooPackReader.build_torch_sparse_batch",
+            "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse_batch",
             side_effect=AssertionError(
                 "build_torch_sparse_batch should not be used for broadcast packs"
             ),
         ),
         patch(
-            "dlkit.tools.io.sparse._coo_pack.CooPackReader.build_torch_sparse",
+            "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse",
             autospec=True,
             wraps=original_single_build,
         ) as mocked_single_build,

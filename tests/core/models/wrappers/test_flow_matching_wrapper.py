@@ -24,19 +24,16 @@ from torch import Tensor, nn
 from dlkit.domain.nn.generative.functions.solvers import euler_step
 from dlkit.domain.nn.generative.samplers.noise import GaussianNoiseSampler
 from dlkit.domain.nn.generative.supervision import FlowMatchingSupervisionBuilder
-from dlkit.runtime.adapters.lightning.components import (
-    ModelOutputSpec,
-    NamedBatchTransformer,
-    RoutedLossComputer,
-    RoutedMetricsUpdater,
-    TensorDictModelInvoker,
-    WrapperCheckpointMetadata,
-)
-from dlkit.runtime.adapters.lightning.flowmatching import FlowMatchingWrapper
-from dlkit.runtime.adapters.lightning.generator_factories import DeterministicGeneratorFactory
-from dlkit.runtime.adapters.lightning.prediction_strategies import ODEPredictionStrategy
-from dlkit.tools.config.model_components import WrapperComponentSettings
-from dlkit.tools.config.optimizer_settings import OptimizerSettings
+from dlkit.engine.adapters.lightning.flowmatching import FlowMatchingWrapper
+from dlkit.engine.adapters.lightning.generator_factories import DeterministicGeneratorFactory
+from dlkit.engine.adapters.lightning.loss_routing import RoutedLossComputer
+from dlkit.engine.adapters.lightning.metrics_routing import RoutedMetricsUpdater
+from dlkit.engine.adapters.lightning.model_invoker import ModelOutputSpec, TensorDictModelInvoker
+from dlkit.engine.adapters.lightning.prediction_strategies import ODEPredictionStrategy
+from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
+from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
+from dlkit.infrastructure.config.model_components import WrapperComponentSettings
+from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
 # ---------------------------------------------------------------------------
 # Named constants

@@ -9,11 +9,11 @@ from unittest.mock import Mock
 import mlflow
 import pytest
 
-from dlkit.runtime.tracking.mlflow_client_factory import MLflowClientFactory
-from dlkit.runtime.tracking.mlflow_resource_manager import (
+from dlkit.engine.tracking.mlflow_client_factory import MLflowClientFactory
+from dlkit.engine.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +99,7 @@ def mlflow_resource_manager(
 
     This fixture ensures proper setup and cleanup of MLflow resources.
     """
-    from dlkit.runtime.tracking.backend import LocalSqliteBackend
+    from dlkit.engine.tracking.backend import LocalSqliteBackend
 
     db_path = tmp_path / "mlruns" / "mlflow.db"
     backend = LocalSqliteBackend(db_path=db_path)
@@ -110,7 +110,7 @@ def mlflow_resource_manager(
 @pytest.fixture
 def mock_mlflow_resource_manager(mock_mlflow_client, mlflow_test_settings, tmp_path: Path):
     """Provide a mocked MLflow resource manager for unit testing."""
-    from dlkit.runtime.tracking.backend import LocalSqliteBackend
+    from dlkit.engine.tracking.backend import LocalSqliteBackend
 
     db_path = tmp_path / "mlruns" / "mlflow.db"
     backend = LocalSqliteBackend(db_path=db_path)
@@ -131,7 +131,7 @@ def mock_mlflow_resource_manager(mock_mlflow_client, mlflow_test_settings, tmp_p
 @pytest.fixture
 def isolated_mlflow_tracker():
     """Provide an MLflow tracker with proper isolation for testing."""
-    from dlkit.runtime.tracking.mlflow_tracker import MLflowTracker
+    from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 
     # Create tracker with autostart disabled for testing
     tracker = MLflowTracker(disable_autostart=True)

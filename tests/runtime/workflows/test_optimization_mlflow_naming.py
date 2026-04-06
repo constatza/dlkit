@@ -8,15 +8,15 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.tracking.naming import determine_study_name
-from dlkit.runtime.workflows.optimization.domain.models import (
+from dlkit.engine.tracking.naming import determine_study_name
+from dlkit.engine.workflows.optimization.infrastructure.tracking import (
+    MLflowTrackingAdapter,
+)
+from dlkit.engine.workflows.optimization.value_objects.models import (
     OptimizationDirection,
     Study,
 )
-from dlkit.runtime.workflows.optimization.infrastructure.tracking import (
-    MLflowTrackingAdapter,
-)
-from dlkit.tools.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings
 
 
 def _make_settings(run_name: str | None = None) -> GeneralSettings:
@@ -43,7 +43,7 @@ def test_determine_study_name_generates_mlflow_style_random_name() -> None:
     optuna_config = SimpleNamespace(study_name=None)
 
     with patch(
-        "dlkit.runtime.tracking.naming.import_module",
+        "dlkit.engine.tracking.naming.import_module",
         return_value=SimpleNamespace(_generate_random_name=lambda: "lucky-duck-42"),
     ) as import_module:
         assert determine_study_name(settings, optuna_config) == "lucky-duck-42"
@@ -58,7 +58,7 @@ def test_determine_study_name_fallback_without_mlflow(monkeypatch: pytest.Monkey
         raise ModuleNotFoundError(name)
 
     monkeypatch.setattr(
-        "dlkit.runtime.tracking.naming.import_module",
+        "dlkit.engine.tracking.naming.import_module",
         raise_import,
     )
 

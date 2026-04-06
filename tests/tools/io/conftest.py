@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from dlkit.tools.io.sparse import save_sparse_pack
+from dlkit.infrastructure.io.sparse import save_sparse_pack
 
 # ---------------------------------------------------------------------------
 # Sparse pack fixtures

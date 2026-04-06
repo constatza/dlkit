@@ -9,7 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 
 @pytest.fixture

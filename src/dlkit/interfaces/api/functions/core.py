@@ -6,16 +6,16 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+from dlkit.common import (
+    OptimizationResult,
+    TrainingResult,
+)
+from dlkit.engine.workflows.entrypoints import optimize as runtime_optimize
+from dlkit.engine.workflows.entrypoints import train as runtime_train
+from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.interfaces.api.domain.override_types import (
     OptimizationOverrides,
     TrainingOverrides,
-)
-from dlkit.runtime.workflows.entrypoints import optimize as runtime_optimize
-from dlkit.runtime.workflows.entrypoints import train as runtime_train
-from dlkit.runtime.workflows.entrypoints._settings import WorkflowSettings
-from dlkit.shared import (
-    OptimizationResult,
-    TrainingResult,
 )
 
 

@@ -14,7 +14,7 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-from dlkit.tools.config.data_entries import Feature
+from dlkit.infrastructure.config.data_entries import Feature
 
 
 class TestModelInputValidator:

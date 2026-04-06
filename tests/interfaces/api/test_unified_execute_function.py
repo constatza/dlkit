@@ -6,13 +6,13 @@ from unittest.mock import patch
 
 import pytest
 
+from dlkit.common import OptimizationResult, TrainingResult, WorkflowError
+from dlkit.engine.workflows.entrypoints.execution import execute as runtime_execute_impl
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.interfaces.api import execute
-from dlkit.runtime.workflows.entrypoints.execution import execute as runtime_execute_impl
-from dlkit.shared import OptimizationResult, TrainingResult, WorkflowError
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.model_components import ModelComponentSettings
-from dlkit.tools.config.optuna_settings import OptunaSettings
-from dlkit.tools.config.session_settings import SessionSettings
 
 
 class TestUnifiedExecuteFunction:
@@ -73,8 +73,8 @@ class TestUnifiedExecuteFunction:
         )
 
         with (
-            patch("dlkit.runtime.workflows.entrypoints.execution.optimize") as mock_optimize,
-            patch("dlkit.runtime.workflows.entrypoints.execution.train") as mock_train,
+            patch("dlkit.engine.workflows.entrypoints.execution.optimize") as mock_optimize,
+            patch("dlkit.engine.workflows.entrypoints.execution.train") as mock_train,
         ):
             mock_optimize.return_value = OptimizationResult(
                 best_trial={"value": 1.0},

@@ -8,16 +8,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.runtime.execution import ITrainingExecutor, VanillaExecutor
+from dlkit.common import TrainingResult
+from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
+from dlkit.engine.training import ITrainingExecutor, VanillaExecutor
 
 # OptimizationDecorator removed - use clean architecture tests instead
-from dlkit.runtime.execution.components import RuntimeComponents
-from dlkit.runtime.tracking.tracking_decorator import TrackingDecorator
-from dlkit.runtime.workflows.factories.execution_strategy_factory import ExecutionStrategyFactory
-from dlkit.shared import TrainingResult
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings
-from dlkit.tools.config.optuna_settings import OptunaSettings
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.workflows.factories.execution_strategy_factory import ExecutionStrategyFactory
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.optuna_settings import OptunaSettings
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def build_components():
 def test_single_responsibility_principle_integration(build_components, monkeypatch):
     """Test that each component has a single, focused responsibility."""
     # Ensure no local MLflow server is detected and no env var set
-    import dlkit.runtime.tracking.uri_resolver as uri_resolver
+    import dlkit.engine.tracking.uri_resolver as uri_resolver
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
@@ -89,7 +89,7 @@ def test_open_closed_principle_integration(build_components):
         )
     )
 
-    with patch("dlkit.runtime.tracking.mlflow_tracker.MLflowTracker") as mock_tracker_class:
+    with patch("dlkit.engine.tracking.mlflow_tracker.MLflowTracker") as mock_tracker_class:
         mock_tracker = Mock()
         mock_tracker_class.return_value = mock_tracker
 
@@ -145,8 +145,8 @@ def test_liskov_substitution_principle_integration(build_components):
 
 def test_interface_segregation_principle_integration():
     """Test that interfaces are focused and not bloated."""
-    from dlkit.runtime.execution.interfaces import IOptimizationStrategy, ITrainingExecutor
-    from dlkit.runtime.tracking.interfaces import IExperimentTracker
+    from dlkit.engine.tracking.interfaces import IExperimentTracker
+    from dlkit.engine.training.interfaces import IOptimizationStrategy, ITrainingExecutor
 
     # ITrainingExecutor should only have execute method
     training_methods = [method for method in dir(ITrainingExecutor) if not method.startswith("_")]
@@ -213,7 +213,7 @@ def test_pure_solid_architecture_integration(build_components):
 
 def test_error_handling_integration(build_components):
     """Test that error handling works correctly across the architecture."""
-    from dlkit.shared import WorkflowError
+    from dlkit.common import WorkflowError
 
     # Create failing trainer
     class FailingTrainer:

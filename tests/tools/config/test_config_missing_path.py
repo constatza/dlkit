@@ -11,7 +11,7 @@ With the new architecture:
 
 import pytest
 
-from dlkit.tools.config.data_entries import (
+from dlkit.infrastructure.config.data_entries import (
     Feature,
     PathFeature,
     PathTarget,

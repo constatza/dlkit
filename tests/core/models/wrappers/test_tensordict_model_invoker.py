@@ -17,12 +17,12 @@ import torch
 from tensordict import TensorDict
 from torch import Tensor, nn
 
-from dlkit.runtime.adapters.lightning.components import (
+from dlkit.engine.adapters.lightning.model_invoker import (
     ModelOutputSpec,
     TensorDictModelInvoker,
     _build_invoker_from_entries,
 )
-from dlkit.tools.config.data_entries import Feature, FeatureType
+from dlkit.infrastructure.config.data_entries import Feature, FeatureType
 
 # ---------------------------------------------------------------------------
 # Fixtures

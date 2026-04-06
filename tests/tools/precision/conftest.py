@@ -12,7 +12,7 @@ import torch
 from torch import nn
 
 from dlkit.domain.shapes import ModelFamily, ShapeSource, create_shape_spec
-from dlkit.tools.precision import PrecisionStrategy, get_precision_service
+from dlkit.infrastructure.precision import PrecisionStrategy, get_precision_service
 
 
 class PrecisionTestModelProtocol(Protocol):

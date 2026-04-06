@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torch_geometric.typing import Tensor
 
-from dlkit.shared.shapes import ShapeSpecProtocol
+from dlkit.common.shapes import ShapeSpecProtocol
 
 from .gat import GATv2Message
 from .projection_networks import GProjection, ProjectionNetwork

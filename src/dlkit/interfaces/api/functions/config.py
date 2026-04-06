@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from dlkit.runtime.workflows.entrypoints import (
+from dlkit.engine.workflows.entrypoints import (
     TemplateKind,
 )
-from dlkit.runtime.workflows.entrypoints import (
+from dlkit.engine.workflows.entrypoints import (
     generate_template as runtime_generate_template,
 )
-from dlkit.runtime.workflows.entrypoints import (
+from dlkit.engine.workflows.entrypoints import (
     validate_config as runtime_validate_config,
 )
-from dlkit.runtime.workflows.entrypoints import (
+from dlkit.engine.workflows.entrypoints import (
     validate_template as runtime_validate_template,
 )
-from dlkit.tools.config import GeneralSettings
-from dlkit.tools.config.protocols import BaseSettingsProtocol
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
 
 
 def validate_config(

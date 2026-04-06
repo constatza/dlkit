@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from dlkit.common.errors import WorkflowError
 from dlkit.interfaces.cli.app import app as cli_app
-from dlkit.shared.errors import WorkflowError
 
 
 class TestConvertCommandErrors:

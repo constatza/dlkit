@@ -13,8 +13,8 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
-from dlkit.tools.config.general_settings import GeneralSettings
-from dlkit.tools.config.generative_settings import (
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.generative_settings import (
     CNFSettings,
     FlowMatchingSettings,
     GenerativeSettings,
@@ -261,7 +261,7 @@ class TestGenerativeSettingsDocstring:
 
     def test_generative_settings_usage_example(self) -> None:
         """Test that module docstring includes usage example."""
-        from dlkit.tools.config import generative_settings as mod
+        from dlkit.infrastructure.config import generative_settings as mod
 
         assert mod.__doc__ is not None
         assert "TOML" in mod.__doc__

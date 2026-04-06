@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from dlkit.tools.precision import (
+from dlkit.infrastructure.precision import (
     PrecisionContext,
     PrecisionProvider,
     PrecisionService,

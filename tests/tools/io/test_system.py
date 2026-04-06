@@ -1,6 +1,6 @@
 """Tests for system.py module - dynamic imports and class instantiation.
 
-This module tests the core functionality of the dlkit.tools.io.system module,
+This module tests the core functionality of the dlkit.infrastructure.io.system module,
 focusing on good-path scenarios for dynamic imports, path-based loading,
 and class instantiation with parameter filtering.
 """
@@ -16,7 +16,12 @@ from unittest.mock import patch
 
 import pytest
 
-from dlkit.tools.io.system import import_from_module, import_from_path, init_class, load_class
+from dlkit.infrastructure.io.system import (
+    import_from_module,
+    import_from_path,
+    init_class,
+    load_class,
+)
 
 
 class TestImportFromModule:
@@ -310,7 +315,9 @@ class TestInitClass:
             mock_class_with_signature: Fixture providing mock class
             kwargs_test_data: Fixture providing test kwargs
         """
-        with patch("dlkit.tools.io.system.load_class", return_value=mock_class_with_signature):
+        with patch(
+            "dlkit.infrastructure.io.system.load_class", return_value=mock_class_with_signature
+        ):
             result = init_class(
                 name="MockTestClass",
                 module_path="test_module",
@@ -332,8 +339,10 @@ class TestInitClass:
             mock_class_with_signature: Fixture providing mock class
         """
         with (
-            patch("dlkit.tools.io.system.load_class", return_value=mock_class_with_signature),
-            patch("dlkit.tools.io.system.kwargs_compatible_with") as mock_kwargs,
+            patch(
+                "dlkit.infrastructure.io.system.load_class", return_value=mock_class_with_signature
+            ),
+            patch("dlkit.infrastructure.io.system.kwargs_compatible_with") as mock_kwargs,
         ):
             # Mock the kwargs filtering to exclude optional_param
             mock_kwargs.return_value = {"required_param": "test", "another_param": False}
@@ -364,7 +373,9 @@ class TestInitClass:
         settings_dir = tmp_path / "settings"
         settings_dir.mkdir()
 
-        with patch("dlkit.tools.io.system.load_class", return_value=mock_class_with_signature):
+        with patch(
+            "dlkit.infrastructure.io.system.load_class", return_value=mock_class_with_signature
+        ):
             result = init_class(
                 name="MockTestClass",
                 module_path="relative/path/module.py",
@@ -383,7 +394,9 @@ class TestInitClass:
         Args:
             mock_function_with_signature: Fixture providing mock function
         """
-        with patch("dlkit.tools.io.system.load_class", return_value=mock_function_with_signature):
+        with patch(
+            "dlkit.infrastructure.io.system.load_class", return_value=mock_function_with_signature
+        ):
             result = init_class(
                 name="mock_test_function",
                 module_path="test_module",
@@ -401,7 +414,9 @@ class TestInitClass:
         Args:
             mock_class_with_signature: Fixture providing mock class
         """
-        with patch("dlkit.tools.io.system.load_class", return_value=mock_class_with_signature):
+        with patch(
+            "dlkit.infrastructure.io.system.load_class", return_value=mock_class_with_signature
+        ):
             result = init_class(
                 name="MockTestClass", module_path="test_module", required_param="minimal"
             )
@@ -413,7 +428,9 @@ class TestInitClass:
 
     def test_init_class_load_error_propagates(self) -> None:
         """Test that ImportError from load_class is properly propagated."""
-        with patch("dlkit.tools.io.system.load_class", side_effect=ImportError("Module not found")):
+        with patch(
+            "dlkit.infrastructure.io.system.load_class", side_effect=ImportError("Module not found")
+        ):
             with pytest.raises(ImportError, match="Module not found"):
                 init_class(name="SomeClass", module_path="nonexistent", required_param="test")
 
@@ -426,9 +443,11 @@ class TestInitClass:
             mock_class_with_signature: Fixture providing mock class
         """
         with (
-            patch("dlkit.tools.io.system.load_class", return_value=mock_class_with_signature),
             patch(
-                "dlkit.tools.io.system.kwargs_compatible_with",
+                "dlkit.infrastructure.io.system.load_class", return_value=mock_class_with_signature
+            ),
+            patch(
+                "dlkit.infrastructure.io.system.kwargs_compatible_with",
                 side_effect=ValueError("Invalid kwargs"),
             ),
             pytest.raises(ValueError, match="Invalid kwargs"),

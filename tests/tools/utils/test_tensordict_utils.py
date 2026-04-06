@@ -1,11 +1,11 @@
-"""Unit tests for dlkit.tools.utils.tensordict_utils."""
+"""Unit tests for dlkit.infrastructure.utils.tensordict_utils."""
 
 import numpy as np
 import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.tools.utils import tensordict_to_numpy
+from dlkit.infrastructure.utils import tensordict_to_numpy
 
 # ---------------------------------------------------------------------------
 # Fixtures

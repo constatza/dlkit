@@ -14,7 +14,7 @@ from .base import (
 from .errors import TransformChainError, TransformNotFittedError
 
 if TYPE_CHECKING:
-    from dlkit.shared.shapes import ShapeSpecProtocol
+    from dlkit.common.shapes import ShapeSpecProtocol
 
 
 class TransformChain(Transform):
@@ -59,7 +59,7 @@ class TransformChain(Transform):
             then pass the ModuleList here.
 
         Example:
-            >>> from dlkit.runtime.workflows.factories.component_builders import (
+            >>> from dlkit.engine.workflows.factories.component_builders import (
             ...     build_transform_list,
             ... )
             >>> module_list, shape = build_transform_list(settings, shape_spec=spec)

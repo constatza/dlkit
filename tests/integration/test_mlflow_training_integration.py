@@ -28,8 +28,8 @@ from dlkit import (
     search_logged_models,
     search_registered_models,
 )
-from dlkit.runtime.adapters.lightning.base import ProcessingLightningWrapper
-from dlkit.tools.config import GeneralSettings
+from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.infrastructure.config import GeneralSettings
 
 
 def _require_mlflow_settings(settings: GeneralSettings):

@@ -2,7 +2,7 @@ from abc import abstractmethod
 
 from torch import Tensor, nn
 
-from dlkit.shared.shapes import ShapeSpecProtocol
+from dlkit.common.shapes import ShapeSpecProtocol
 
 
 class BaseGraphNetwork(nn.Module):

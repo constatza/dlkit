@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 from lightning.pytorch import LightningModule
 
-from dlkit.runtime.adapters.lightning.callbacks import MLflowEpochLogger
+from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
 
 
 class FakeTensor:

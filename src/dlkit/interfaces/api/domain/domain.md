@@ -10,4 +10,4 @@
 - precision helper re-exports that are still relevant at the API boundary
 
 ## Does Not Live Here
-Workflow results, model state, and shared errors come from `dlkit.shared`.
+Workflow results, model state, and shared errors come from `dlkit.common`.

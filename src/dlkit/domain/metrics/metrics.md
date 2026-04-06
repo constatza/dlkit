@@ -720,10 +720,10 @@ except ValueError as e:
 - [ ] Support for probabilistic metrics (calibration, etc.)
 
 ## Related Modules
-- `dlkit.runtime.adapters.lightning`: Model wrappers use metrics for training/validation
+- `dlkit.engine.adapters.lightning`: Model wrappers use metrics for training/validation
 - `lightning.pytorch.callbacks`: Lightning callbacks log metric values
-- `dlkit.runtime.tracking`: MLflow tracking logs metrics
-- `dlkit.runtime.adapters.lightning.callbacks`: Callbacks compute and log metrics
+- `dlkit.engine.tracking`: MLflow tracking logs metrics
+- `dlkit.engine.adapters.lightning.callbacks`: Callbacks compute and log metrics
 
 ## Change Log
 - **2025-10-03**: Comprehensive documentation with enriched docstrings

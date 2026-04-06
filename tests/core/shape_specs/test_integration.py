@@ -20,7 +20,7 @@ from dlkit.domain.shapes import (
     VersionedShapeSerializer,
     create_shape_spec,
 )
-from dlkit.tools.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 
 
 class TestFullSystemIntegration:

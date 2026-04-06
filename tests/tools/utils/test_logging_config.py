@@ -5,7 +5,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from dlkit.tools.utils.logging_config import (
+from dlkit.infrastructure.utils.logging_config import (
     configure_logging,
     get_effective_log_level,
     should_enable_progress_bar,

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dlkit.tools.config.lr_tuner_settings import LRTunerSettings
-from dlkit.tools.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 class TestTrainingSettingsLRTuner:

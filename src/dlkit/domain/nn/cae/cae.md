@@ -45,7 +45,7 @@ Key architectural decisions:
 - `dlkit.domain.shapes`: `IShapeSpec` protocol for shape specifications
 - `dlkit.domain.nn.encoder.skip`: `SkipEncoder1d`, `SkipDecoder1d` for feature extraction
 - `dlkit.domain.nn.encoder.latent`: `VectorToTensorBlock`, `TensorToVectorBlock` for latent space conversion
-- `dlkit.runtime.data.graph.types`: `NormalizerName` for normalization type hints
+- `dlkit.engine.data.graph.types`: `NormalizerName` for normalization type hints
 
 ### External Dependencies
 - `torch`: PyTorch tensor operations and neural network modules
@@ -575,7 +575,7 @@ except RuntimeError as e:
 - `dlkit.domain.nn.primitives`: Convolution and dense blocks
 - `dlkit.domain.nn.base`: `ShapeAwareModel` base class
 - `dlkit.domain.shapes`: Shape specification system
-- `dlkit.runtime.adapters.lightning`: Lightning wrappers for training CAEs
+- `dlkit.engine.adapters.lightning`: Lightning wrappers for training CAEs
 
 ## Change Log
 - **2025-10-03**: Initial documentation created

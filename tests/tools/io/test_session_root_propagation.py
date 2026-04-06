@@ -1,7 +1,7 @@
-"""Tests for SESSION.root_dir propagation to DLKitEnvironment and path resolution.
+"""Tests for SESSION.root_dir propagation to EnvironmentSettings and path resolution.
 
 This test suite verifies the three-layer defense-in-depth approach:
-1. SESSION.root_dir synced to DLKitEnvironment
+1. SESSION.root_dir synced to EnvironmentSettings
 2. Defensive path context in BuildFactory
 3. Logging and observability
 """
@@ -12,10 +12,10 @@ from typing import cast
 
 import pytest
 
-from dlkit.tools.config import GeneralSettings, load_settings
-from dlkit.tools.config.environment import env as global_environment
-from dlkit.tools.io.config import load_config
-from dlkit.tools.io.locations import output, splits_dir
+from dlkit.infrastructure.config import GeneralSettings, load_settings
+from dlkit.infrastructure.config.environment import env as global_environment
+from dlkit.infrastructure.io.config import load_config
+from dlkit.infrastructure.io.locations import output, splits_dir
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ epochs = 1
 def test_session_root_dir_propagated_to_environment(
     test_config_with_session_root: Path, tmp_path: Path
 ):
-    """Test that SESSION.root_dir is propagated to DLKitEnvironment."""
+    """Test that SESSION.root_dir is propagated to EnvironmentSettings."""
     # Clear any existing DLKIT_ROOT_DIR env var
     original_env = os.environ.pop("DLKIT_ROOT_DIR", None)
 
@@ -100,7 +100,7 @@ def test_session_root_dir_propagated_to_environment(
         assert settings.SESSION.root_dir is not None
         session_root = Path(settings.SESSION.root_dir)
 
-        # Verify it was propagated to DLKitEnvironment
+        # Verify it was propagated to EnvironmentSettings
         assert global_environment.root_dir is not None
         assert Path(global_environment.root_dir).resolve() == session_root.resolve()
 
@@ -126,9 +126,9 @@ def test_env_var_takes_precedence_over_session_root(
         os.environ["DLKIT_ROOT_DIR"] = env_root.as_posix()
 
         # Reset global environment to pick up env var
-        from dlkit.tools.config.environment import DLKitEnvironment
+        from dlkit.infrastructure.config.environment import EnvironmentSettings
 
-        test_env = DLKitEnvironment()
+        test_env = EnvironmentSettings()
 
         # Load config
         settings = cast(
@@ -139,7 +139,7 @@ def test_env_var_takes_precedence_over_session_root(
         assert settings.SESSION.root_dir is not None
         session_root = Path(settings.SESSION.root_dir)
 
-        # Verify env var wins (DLKitEnvironment should use env var, not SESSION.root_dir)
+        # Verify env var wins (EnvironmentSettings should use env var, not SESSION.root_dir)
         assert test_env.get_root_path().resolve() == env_root.resolve()
         assert test_env.get_root_path().resolve() != session_root.resolve()
 
@@ -160,7 +160,7 @@ def test_split_path_respects_session_root_dir(test_config_with_session_root: Pat
         # Reset global environment
         global_environment.root_dir = None
 
-        # Load config (this should sync SESSION.root_dir to DLKitEnvironment)
+        # Load config (this should sync SESSION.root_dir to EnvironmentSettings)
         settings = cast(
             GeneralSettings, load_config(test_config_with_session_root, GeneralSettings)
         )
@@ -233,7 +233,7 @@ def test_load_settings_propagates_session_root(test_config_with_session_root: Pa
         assert session.root_dir is not None
         session_root = Path(session.root_dir)
 
-        # Verify it was propagated to DLKitEnvironment
+        # Verify it was propagated to EnvironmentSettings
         assert global_environment.root_dir is not None
         assert Path(global_environment.root_dir).resolve() == session_root.resolve()
 
