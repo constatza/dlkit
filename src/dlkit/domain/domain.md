@@ -20,6 +20,10 @@ The shape subsystem is split into focused modules:
 - `shape_serializer.py`
 - `shape_migrator.py`
 
+Dataset-driven shape inference normalizes scalar tensors to `(1,)` so class-label
+targets and other zero-rank samples produce valid shape entries instead of
+falling back to defaults.
+
 ## Transforms
 The transform pipeline surface uses `TransformContext` as the runtime-facing
 value object around feature/target transform chains.

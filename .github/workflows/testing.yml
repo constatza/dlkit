@@ -27,7 +27,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Synchronize dependencies
-        run: uv sync --dev
+        run: uv sync --dev --extra cpu
 
       - name: Run Ruff lint
         run: uv run ruff check . --output-format github
@@ -64,7 +64,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Synchronize dependencies
-        run: uv sync --dev
+        run: uv sync --dev --extra cpu
 
       - name: Run pytest
         run: uv run pytest tests --maxfail=1 --disable-warnings -vv

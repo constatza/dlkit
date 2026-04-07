@@ -16,7 +16,6 @@ dependencies = [
     "lightning<3.0.0,>=2.3.2",
     "mlflow>=3.0,<4.0",
     "optuna<5,>=4",
-    "torch>=2.8.0, <2.10.0",
     "loguru>=0.7.3",
     "polars>=1.4.1,<2.0.0",
     "pytorch-forecasting>=1.3.0",
@@ -50,8 +49,10 @@ dev = [
 
 
 [project.optional-dependencies]
-# Linux or Windows GPU build
-gpu = ["torch"]
+# Explicit accelerator selection is required for torch resolution.
+cpu = ["torch>=2.8.0, <2.10.0"]
+cu128 = ["torch>=2.8.0, <2.10.0"]
+cu130 = ["torch>=2.8.0, <2.10.0"]
 
 [project.scripts]
 dlkit = "dlkit.interfaces.cli:cli_main"
@@ -62,21 +63,21 @@ requires = ["uv-build>=0.4.0,<0.11"]
 build-backend = "uv_build"
 
 
-[tool.uv.sources]
-torch = [
-  # Default CPU build on Linux/Windows when no extras
-  { index  = "pytorch-cpu", marker  = "extra == '' and sys_platform == 'linux'" },
-  # macOS uses PyPI (Apple Silicon / CPU wheels are on PyPI)
-  { index  = "pypi",        marker  = "extra == '' and sys_platform == 'darwin'" },
-  # GPU build only when explicitly requested via: uv sync --extra gpu
-  { index  = "pytorch-gpu", extra   = "gpu", marker  = "sys_platform == 'linux' or sys_platform == 'win32'" },
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu128" },
+        { extra = "cu130" },
+    ],
 ]
 
-[[tool.uv.index]]
-name = "pypi"
-url  = "https://pypi.org/simple"
-explicit = true
-
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "cu128" },
+  { index = "pytorch-cu130", extra = "cu130" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -85,8 +86,14 @@ explicit = true
 
 
 [[tool.uv.index]]
-name = "pytorch-gpu"
+name = "pytorch-cu128"
 url  = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url  = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 
