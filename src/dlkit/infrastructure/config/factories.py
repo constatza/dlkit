@@ -171,7 +171,3 @@ def load_sections(
         - `load_settings()`: Load full training configuration (recommended).
     """
     return default_settings_loader.load_sections(config_path, sections, strict=strict)
-
-
-# Backward-compat alias
-PartialSettingsLoader = WorkflowSettingsLoader

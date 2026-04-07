@@ -355,7 +355,7 @@ class TestGeneralSettingsEndToEndIntegration:
 
         # Test configuration access
         training_config = settings.get_training_config()
-        assert training_config.max_epochs == 50
+        assert training_config.epochs == 50
 
         datamodule_config = settings.get_datamodule_config()
         assert datamodule_config.dataloader.batch_size == 64

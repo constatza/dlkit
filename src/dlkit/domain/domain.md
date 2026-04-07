@@ -23,6 +23,8 @@ The shape subsystem is split into focused modules:
 Dataset-driven shape inference normalizes scalar tensors to `(1,)` so class-label
 targets and other zero-rank samples produce valid shape entries instead of
 falling back to defaults.
+Serialized shape payloads use the versioned metadata wrapper; runtime deserialization
+expects that canonical format.
 
 ## Transforms
 The transform pipeline surface uses `TransformContext` as the runtime-facing

@@ -577,20 +577,24 @@ class SparseFeature(PathBasedEntry):
                 f"Not a sparse pack directory: {self.path}. Expected payload files: {self.files}"
             )
         scale_path = self.path / self.files.values_scale
-        if scale_path.exists():
-            raw_scale = np.load(scale_path, allow_pickle=False)
-            if raw_scale.ndim == 0:
-                value_scale = float(raw_scale)
-            elif raw_scale.ndim == 1 and raw_scale.size == 1:
-                value_scale = float(raw_scale[0])
-            else:
-                raise ValueError(
-                    f"SparseFeature values_scale must be scalar or shape (1,), got {raw_scale.shape}"
-                )
-            if not np.isfinite(value_scale) or value_scale <= 0.0:
-                raise ValueError(
-                    f"SparseFeature values_scale must be finite and > 0, got {value_scale}"
-                )
+        if not scale_path.exists():
+            raise ValueError(
+                f"Not a sparse pack directory: {self.path}. Missing payload file: "
+                f"{self.files.values_scale}"
+            )
+        raw_scale = np.load(scale_path, allow_pickle=False)
+        if raw_scale.ndim == 0:
+            value_scale = float(raw_scale)
+        elif raw_scale.ndim == 1 and raw_scale.size == 1:
+            value_scale = float(raw_scale[0])
+        else:
+            raise ValueError(
+                f"SparseFeature values_scale must be scalar or shape (1,), got {raw_scale.shape}"
+            )
+        if not np.isfinite(value_scale) or value_scale <= 0.0:
+            raise ValueError(
+                f"SparseFeature values_scale must be finite and > 0, got {value_scale}"
+            )
         return self
 
 

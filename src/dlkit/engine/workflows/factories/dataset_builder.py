@@ -13,9 +13,7 @@ from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
-    Feature,
     FeatureType,
-    Target,
     TargetType,
 )
 from dlkit.infrastructure.config.enums import DatasetFamily
@@ -51,26 +49,15 @@ class DatasetBuilder:
         selected_features: tuple[DataEntry, ...],
         selected_targets: tuple[DataEntry, ...],
     ) -> object:
-        """Build a flexible dataset with legacy compatibility for x/y fields."""
+        """Build a flexible dataset from explicit feature and target entries."""
         ds_settings = with_runtime_module_defaults(settings.DATASET)
         if ds_settings is None:
             raise ValueError("DATASET settings are required but not configured")
 
-        configured_features = bool(selected_features)
-        configured_targets = bool(selected_targets)
         ds_name = str(getattr(ds_settings, "name", "")).lower()
-        legacy_x = getattr(ds_settings, "x", None)
-        legacy_y = getattr(ds_settings, "y", None)
-        has_flexible_entries = configured_features or configured_targets
         if "supervisedarraydataset" in ds_name:
             from dlkit.engine.data.datasets.flexible import FlexibleDataset
 
-            if (legacy_x is not None) and not has_flexible_entries:
-                return FlexibleDataset(
-                    features=[Feature(name="x", path=legacy_x)],
-                    targets=[Target(name="y", path=legacy_y or legacy_x)],
-                    memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
-                )
             return FlexibleDataset(
                 features=cast(tuple[FeatureType, ...], selected_features),
                 targets=cast(tuple[TargetType, ...], selected_targets),

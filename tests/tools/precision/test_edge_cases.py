@@ -200,39 +200,20 @@ class TestPrecisionEdgeCases:
         finally:
             empty_file.unlink(missing_ok=True)
 
-    def test_precision_lightning_compatibility(self):
-        """Test Lightning precision string compatibility."""
+    def test_lightning_precision_values_are_emitted(self):
+        """Test that strategies emit Lightning-compatible precision values."""
 
-        # Test all known Lightning precision formats
-        lightning_precisions = [
-            "32-true",
-            "32",
-            32,
-            "16-mixed",
-            "16-true",
-            "16",
-            16,
-            "bf16-mixed",
-            "bf16-true",
-            "bf16",
-            "64-true",
-            "64",
-            64,
-        ]
+        lightning_precisions = {
+            PrecisionStrategy.FULL_32: 32,
+            PrecisionStrategy.TRUE_16: "16-true",
+            PrecisionStrategy.MIXED_16: "16-mixed",
+            PrecisionStrategy.TRUE_BF16: "bf16-true",
+            PrecisionStrategy.MIXED_BF16: "bf16-mixed",
+            PrecisionStrategy.FULL_64: 64,
+        }
 
-        for precision_str in lightning_precisions:
-            try:
-                # Should be able to create strategy from Lightning precision
-                strategy = PrecisionStrategy.from_lightning_precision(precision_str)
-                assert isinstance(strategy, PrecisionStrategy)
-
-                # Should be able to convert back
-                converted = strategy.to_lightning_precision()
-                assert converted is not None
-
-            except ValueError:
-                # Some precisions might not be supported, that's OK
-                pass
+        for strategy, expected in lightning_precisions.items():
+            assert strategy.to_lightning_precision() == expected
 
     def test_precision_with_extremely_nested_contexts(self):
         """Test precision with deeply nested context overrides."""

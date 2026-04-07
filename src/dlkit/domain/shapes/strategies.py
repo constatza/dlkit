@@ -101,8 +101,7 @@ class ShapeValidator:
 class ShapeSerializer:
     """Single responsibility: shape serialization and deserialization.
 
-    This class now delegates to the versioned serialization system for
-    enhanced format support and automatic migration.
+    This class delegates to the versioned serialization system.
     """
 
     def __init__(self, versioned_serializer=None):
@@ -141,17 +140,6 @@ class ShapeSerializer:
             ValueError: If data is invalid or missing required fields
         """
         return self._versioned_serializer.deserialize(raw)
-
-    def deserialize_legacy_format(self, legacy_data: dict[str, Any]) -> ShapeData | None:
-        """Deserialize legacy shape_info format.
-
-        Args:
-            legacy_data: Legacy shape_info from old checkpoints
-
-        Returns:
-            ShapeData object or None if conversion fails
-        """
-        return self._versioned_serializer.deserialize_legacy_format(legacy_data)
 
     def get_versioned_serializer(self):
         """Get the underlying versioned serializer."""

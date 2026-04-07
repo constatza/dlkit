@@ -16,11 +16,7 @@ from .serialization_types import (
     SerializationVersion,
     SerializedShape,
 )
-from .shape_migrator import (
-    ShapeFormatMigrator,
-    _V1LegacySerializer,
-    _V3ModernSerializer,
-)
+from .shape_migrator import ShapeFormatMigrator, _V3ModernSerializer
 from .value_objects import ShapeData
 
 
@@ -131,21 +127,6 @@ class VersionedShapeSerializer:
 
         # Deserialize using current format
         return self._current_serializer.deserialize(current_shape.data)
-
-    def deserialize_legacy_format(self, legacy_data: dict[str, Any]) -> ShapeData | None:
-        """Deserialize legacy shape_info format.
-
-        Args:
-            legacy_data: Legacy shape_info data
-
-        Returns:
-            ShapeData object or None if deserialization fails
-        """
-        try:
-            legacy_serializer = _V1LegacySerializer()
-            return legacy_serializer.deserialize(legacy_data)
-        except Exception:
-            return None
 
     def serialize_to_string(self, shape_data: ShapeData) -> str:
         """Serialize shape data to string format.

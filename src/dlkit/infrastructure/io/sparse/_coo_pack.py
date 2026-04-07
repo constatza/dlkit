@@ -283,7 +283,7 @@ class CooPackCodec(SparseCodec):
         path: Path,
         files: PackFiles | None = None,
     ) -> float:
-        """Load value scale payload; returns 1.0 for legacy packs without the file.
+        """Load and validate the value scale payload.
 
         Args:
             path: Pack directory.
@@ -295,8 +295,6 @@ class CooPackCodec(SparseCodec):
         pack_dir = Path(path)
         payload_files = files or PackFiles()
         scale_path = pack_dir / payload_files.values_scale
-        if not scale_path.exists():
-            return 1.0
         raw_scale = np.load(scale_path, allow_pickle=False)
         return _value_scale_from_array(np.asarray(raw_scale))
 
@@ -569,7 +567,3 @@ class CooPackReader(AbstractSparsePackReader):
             is_coalesced=True,
         )
         return sparse.coalesce() if coalesce else sparse
-
-
-# Re-export for backward compatibility with code that referenced the old name.
-CooPackWriter = CooPackCodec

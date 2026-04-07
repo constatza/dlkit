@@ -78,37 +78,6 @@ class TestPrecisionStrategy:
         assert PrecisionStrategy.MIXED_BF16.get_memory_factor() == 0.7
         assert PrecisionStrategy.TRUE_BF16.get_memory_factor() == 0.5
 
-    def test_from_lightning_precision(self):
-        """Test creation from Lightning precision values."""
-        # String values
-        assert PrecisionStrategy.from_lightning_precision("64") == PrecisionStrategy.FULL_64
-        assert PrecisionStrategy.from_lightning_precision("32") == PrecisionStrategy.FULL_32
-        assert PrecisionStrategy.from_lightning_precision("16-mixed") == PrecisionStrategy.MIXED_16
-        assert PrecisionStrategy.from_lightning_precision("16") == PrecisionStrategy.TRUE_16
-        assert (
-            PrecisionStrategy.from_lightning_precision("bf16-mixed") == PrecisionStrategy.MIXED_BF16
-        )
-        assert PrecisionStrategy.from_lightning_precision("bf16") == PrecisionStrategy.TRUE_BF16
-
-        # Legacy integer values
-        assert PrecisionStrategy.from_lightning_precision(64) == PrecisionStrategy.FULL_64
-        assert PrecisionStrategy.from_lightning_precision(32) == PrecisionStrategy.FULL_32
-        assert PrecisionStrategy.from_lightning_precision(16) == PrecisionStrategy.MIXED_16
-        assert PrecisionStrategy.from_lightning_precision("16-true") == PrecisionStrategy.TRUE_16
-        assert PrecisionStrategy.from_lightning_precision("64-true") == PrecisionStrategy.FULL_64
-        assert PrecisionStrategy.from_lightning_precision("32-true") == PrecisionStrategy.FULL_32
-        assert (
-            PrecisionStrategy.from_lightning_precision("bf16-true") == PrecisionStrategy.TRUE_BF16
-        )
-
-    def test_from_lightning_precision_invalid(self):
-        """Test invalid Lightning precision values raise ValueError."""
-        with pytest.raises(ValueError, match="Invalid precision value"):
-            PrecisionStrategy.from_lightning_precision("invalid")
-
-        with pytest.raises(ValueError, match="Invalid Lightning precision integer"):
-            PrecisionStrategy.from_lightning_precision(42)
-
     def test_string_representation(self):
         """Test string representations."""
         assert str(PrecisionStrategy.FULL_32) == "32"
@@ -212,20 +181,6 @@ class TestPrecisionStringAliases:
             with pytest.raises(ValueError, match="Invalid precision value"):
                 PrecisionStrategy.from_string(invalid_value)
 
-    def test_from_lightning_precision_handles_integers(self):
-        """Test that from_lightning_precision handles Lightning's integer format."""
-        # from_lightning_precision should handle integers for backwards compat
-        assert PrecisionStrategy.from_lightning_precision(64) == PrecisionStrategy.FULL_64
-        assert PrecisionStrategy.from_lightning_precision(32) == PrecisionStrategy.FULL_32
-        assert PrecisionStrategy.from_lightning_precision(16) == PrecisionStrategy.MIXED_16
-
-    def test_from_lightning_precision_handles_numeric_strings(self):
-        """Test that from_lightning_precision handles Lightning's numeric string format."""
-        # from_lightning_precision should handle numeric strings like "64"
-        assert PrecisionStrategy.from_lightning_precision("64") == PrecisionStrategy.FULL_64
-        assert PrecisionStrategy.from_lightning_precision("32") == PrecisionStrategy.FULL_32
-        assert PrecisionStrategy.from_lightning_precision("16-mixed") == PrecisionStrategy.MIXED_16
-
     def test_comprehensive_alias_coverage(self):
         """Test comprehensive coverage of all supported aliases.
 
@@ -239,21 +194,13 @@ class TestPrecisionStringAliases:
                 f"Alias '{alias}' should map to {expected_strategy}, got {result}"
             )
 
-    def test_alias_map_accessible(self):
-        """Test that alias map is accessible via get_alias_map()."""
-        alias_map = PrecisionStrategy.get_alias_map()
-
-        # Verify it's the same as the imported map
-        assert alias_map is _PRECISION_ALIAS_MAP
-
-        # Verify some key aliases exist
-        assert alias_map["double"] == PrecisionStrategy.FULL_64
-        assert alias_map["single"] == PrecisionStrategy.FULL_32
-        assert alias_map["half"] == PrecisionStrategy.TRUE_16
-        assert alias_map["float64"] == PrecisionStrategy.FULL_64
-
-        # Verify numeric strings and integers are NOT in the map
-        assert "64" not in alias_map
-        assert "32" not in alias_map
-        assert 64 not in alias_map
-        assert 32 not in alias_map
+    def test_alias_map_contents(self):
+        """Test the internal alias map contents."""
+        assert _PRECISION_ALIAS_MAP["double"] == PrecisionStrategy.FULL_64
+        assert _PRECISION_ALIAS_MAP["single"] == PrecisionStrategy.FULL_32
+        assert _PRECISION_ALIAS_MAP["half"] == PrecisionStrategy.TRUE_16
+        assert _PRECISION_ALIAS_MAP["float64"] == PrecisionStrategy.FULL_64
+        assert "64" not in _PRECISION_ALIAS_MAP
+        assert "32" not in _PRECISION_ALIAS_MAP
+        assert 64 not in _PRECISION_ALIAS_MAP
+        assert 32 not in _PRECISION_ALIAS_MAP

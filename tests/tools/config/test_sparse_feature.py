@@ -62,9 +62,8 @@ def test_sparse_feature_supports_custom_payload_names(tmp_path: Path) -> None:
     assert feature.denormalize is True
 
 
-def test_sparse_feature_allows_legacy_pack_without_values_scale(minimal_sparse_pack: Path) -> None:
+def test_sparse_feature_requires_values_scale(minimal_sparse_pack: Path) -> None:
     (minimal_sparse_pack / "values_scale.npy").unlink()
 
-    feature = SparseFeature(name="matrix", path=minimal_sparse_pack)
-
-    assert feature.path == minimal_sparse_pack
+    with pytest.raises(ValueError, match="Missing payload file"):
+        SparseFeature(name="matrix", path=minimal_sparse_pack)

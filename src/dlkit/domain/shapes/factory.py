@@ -91,25 +91,6 @@ class ShapeSystemFactory:
         except Exception as e:
             raise ValueError(f"Failed to deserialize shape data: {e}") from e
 
-    def create_shape_spec_from_legacy(self, legacy_data: dict[str, Any]) -> IShapeSpec | None:
-        """Create shape specification from legacy checkpoint format.
-
-        Args:
-            legacy_data: Legacy shape_info from old checkpoints
-
-        Returns:
-            IShapeSpec implementation or None if conversion fails
-        """
-        shape_data = self._serializer.deserialize_legacy_format(legacy_data)
-        if shape_data is None:
-            return None
-
-        return create_shape_spec(
-            shapes={name: entry.dimensions for name, entry in shape_data.entries.items()},
-            model_family=shape_data.model_family,
-            source=shape_data.source,
-        )
-
     def get_model_registry(self) -> ModelFamilyRegistry:
         """Get the model family registry."""
         return self._model_registry
