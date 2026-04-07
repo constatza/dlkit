@@ -21,4 +21,5 @@
 ## Notes
 - Dataset-family selection delegates to `runtime.data.families.resolve_family`.
 - `DATASET.family` short-circuits family heuristics when explicitly configured.
+- Flexible dataset assembly consumes explicit `DATASET.features` and `DATASET.targets` only.
 - Runtime builders, not `tools.config`, own default module-path resolution.

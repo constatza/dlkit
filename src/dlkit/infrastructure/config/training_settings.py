@@ -88,15 +88,6 @@ class TrainingSettings(BasicSettings):
         """
         return self.scheduler is not None
 
-    @property
-    def max_epochs(self) -> int:
-        """Get maximum number of epochs (alias for epochs).
-
-        Returns:
-            int: Maximum training epochs
-        """
-        return self.epochs
-
     def get_trainer_config(self) -> dict:
         """Get raw Trainer kwargs without signature filtering.
 

@@ -70,7 +70,7 @@ from dlkit.infrastructure.io.sparse import (
   indices.npy        # int64 (2, total_nnz)
   values.npy         # float dtype
   nnz_ptr.npy        # int64 (n_samples + 1)
-  values_scale.npy   # float64 scalar  (optional — defaults to 1.0 if absent)
+  values_scale.npy   # float64 scalar
   manifest.json      # optional JSON contract
 ```
 
@@ -85,7 +85,7 @@ pack on disk.
 ## Value scale
 
 - Stored values are in stored-space: `A_original = A_stored * value_scale`.
-- `value_scale` defaults to `1.0`.
+- `values_scale.npy` is required for every sparse pack.
 - Denormalization is opt-in: `build_torch_sparse(..., denormalize=True)`.
 
 ## Manifest vs. payload precedence

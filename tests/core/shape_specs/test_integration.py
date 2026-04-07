@@ -185,21 +185,6 @@ class TestFullSystemIntegration:
         assert not result.is_valid
         assert any("maximum allowed" in error for error in result.errors)
 
-    def test_legacy_format_migration_integration(self, shape_factory):
-        """Test legacy format migration integration."""
-        # Create legacy shape_info format
-        legacy_shape_info = {"_type": "dict", "data": {"x": [784], "y": [10]}}
-
-        # Migrate using factory
-        serializer = shape_factory.get_serializer()
-        migrated_data = serializer.deserialize_legacy_format(legacy_shape_info)
-
-        assert migrated_data is not None
-        assert migrated_data.has_entry("x")
-        assert migrated_data.has_entry("y")
-        assert migrated_data.get_dimensions("x") == (784,)
-        assert migrated_data.get_dimensions("y") == (10,)
-
     def test_comprehensive_inference_fallback_chain(self, shape_factory, sample_model_settings):
         """Test comprehensive inference with fallback chain."""
         inference_engine = ShapeInferenceEngine(shape_factory=shape_factory)

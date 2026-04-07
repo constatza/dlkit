@@ -11,12 +11,10 @@ import torch
 from dlkit.infrastructure.io.sparse import (
     PackFiles,
     PackManifest,
-    SparsePackReader,
     open_sparse_pack,
     save_sparse_pack,
     validate_sparse_pack,
 )
-from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
 
 def test_coo_codec_roundtrip(
@@ -66,21 +64,11 @@ def test_custom_payload_filenames_roundtrip(
     )
 
 
-def test_open_sparse_pack_reads_legacy_directory_without_scale_file(
-    saved_sparse_pack: Path,
-    dense_matrices: list[np.ndarray],
-) -> None:
+def test_open_sparse_pack_requires_values_scale_file(saved_sparse_pack: Path) -> None:
     (saved_sparse_pack / "values_scale.npy").unlink()
 
-    reader = open_sparse_pack(saved_sparse_pack)
-
-    assert isinstance(reader, CooPackReader)
-    assert isinstance(reader, SparsePackReader)
-    assert reader.value_scale == 1.0
-    assert torch.allclose(
-        reader.build_torch_sparse(0).to_dense(),
-        torch.from_numpy(dense_matrices[0]).to(dtype=reader.build_torch_sparse(0).dtype),
-    )
+    with pytest.raises(FileNotFoundError):
+        open_sparse_pack(saved_sparse_pack)
 
 
 def test_manifest_contract_precedence_for_value_scale(
@@ -197,11 +185,11 @@ def test_save_sparse_pack_coalesces_duplicate_coordinates_on_write(tmp_path: Pat
     torch.testing.assert_close(sample1.to_dense(), expected1)
 
 
-def test_validate_sparse_pack_accepts_legacy_without_scale_file(
-    saved_sparse_pack: Path,
-) -> None:
+def test_validate_sparse_pack_requires_values_scale_file(saved_sparse_pack: Path) -> None:
     (saved_sparse_pack / "values_scale.npy").unlink()
-    validate_sparse_pack(saved_sparse_pack)
+
+    with pytest.raises(FileNotFoundError):
+        validate_sparse_pack(saved_sparse_pack)
 
 
 @pytest.mark.parametrize("bad_scale", [0.0, -1.0, np.nan, np.inf])
@@ -226,10 +214,9 @@ def test_validate_sparse_pack_rejects_invalid_values_scale_payload(
         validate_sparse_pack(saved_sparse_pack)
 
 
-def test_open_sparse_pack_with_custom_files_without_scale_file(
+def test_open_sparse_pack_with_custom_files_requires_scale_file(
     tmp_path: Path,
     coo_pack_arrays: tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]],
-    dense_matrices: list[np.ndarray],
 ) -> None:
     indices, values, nnz_ptr, size = coo_pack_arrays
     pack_path = tmp_path / "custom_pack"
@@ -237,12 +224,8 @@ def test_open_sparse_pack_with_custom_files_without_scale_file(
     save_sparse_pack(pack_path, indices, values, nnz_ptr, size, files=files)
     (pack_path / "s.npy").unlink()
 
-    reader = open_sparse_pack(pack_path, files=files)
-
-    assert torch.allclose(
-        reader.build_torch_sparse(2).to_dense(),
-        torch.from_numpy(dense_matrices[2]).to(dtype=reader.build_torch_sparse(2).dtype),
-    )
+    with pytest.raises(FileNotFoundError):
+        open_sparse_pack(pack_path, files=files)
 
 
 def test_validate_sparse_pack_detects_mismatched_nnz_ptr(

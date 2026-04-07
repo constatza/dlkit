@@ -31,23 +31,6 @@ from .core import (
 )
 from .core.updater import update_settings
 
-# Main settings
-from .general_settings import GeneralSettings
-from .session_settings import SessionSettings
-
-# Workflow-specific settings (SOLID-compliant)
-from .workflow_settings import (
-    BaseWorkflowSettings,
-    InferenceWorkflowSettings,
-    TrainingWorkflowSettings,
-)
-
-# Backward-compat aliases
-BaseSettings = BaseWorkflowSettings
-WorkflowTrainingSettings = TrainingWorkflowSettings
-InferenceSettings = InferenceWorkflowSettings
-
-
 # Partial loading factories
 # Component settings
 # Utility settings
@@ -56,12 +39,14 @@ from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings, IndexSplitSettings
 from .extras_settings import ExtrasSettings
 from .factories import (
-    PartialSettingsLoader,
     WorkflowSettingsLoader,
     default_settings_loader,
     load_sections,
     load_settings,
 )
+
+# Main settings
+from .general_settings import GeneralSettings
 
 # Generative algorithm settings
 from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSettings
@@ -76,11 +61,19 @@ from .model_components import (
 )
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .optuna_settings import OptunaSettings
+from .session_settings import SessionSettings
 
 # External library settings (unchanged - kept compact as requested)
 from .trainer_settings import TrainerSettings
 from .training_settings import TrainingSettings
 from .transform_settings import TransformSettings
+
+# Workflow-specific settings (SOLID-compliant)
+from .workflow_settings import (
+    BaseWorkflowSettings,
+    InferenceWorkflowSettings,
+    TrainingWorkflowSettings,
+)
 
 __all__ = [
     # Main settings
@@ -90,13 +83,8 @@ __all__ = [
     "BaseWorkflowSettings",
     "TrainingWorkflowSettings",
     "InferenceWorkflowSettings",
-    # Backward-compat aliases
-    "BaseSettings",
-    "WorkflowTrainingSettings",
-    "InferenceSettings",
     # Partial loading factories
     "WorkflowSettingsLoader",
-    "PartialSettingsLoader",
     "default_settings_loader",
     "load_settings",
     "load_sections",
