@@ -46,6 +46,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "set_registered_model_version_tags",
     ),
     "train": ("dlkit.interfaces.api", "train"),
+    "validate_checkpoint": ("dlkit.interfaces.inference", "validate_checkpoint"),
+    "get_checkpoint_info": ("dlkit.interfaces.inference", "get_checkpoint_info"),
     "validate_config": ("dlkit.interfaces.api", "validate_config"),
     "write_config": ("dlkit.infrastructure.io", "write_config"),
 }

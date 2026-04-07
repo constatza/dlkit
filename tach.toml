@@ -205,6 +205,36 @@ depends_on = [
 ]
 
 [[modules]]
+path = "dlkit.nn"
+depends_on = [
+    { path = "dlkit.domain" },
+]
+
+[[modules]]
+path = "dlkit.settings"
+depends_on = [
+    { path = "dlkit.infrastructure" },
+]
+
+[[modules]]
+path = "dlkit.errors"
+depends_on = [
+    { path = "dlkit.common" },
+]
+
+[[modules]]
+path = "dlkit.results"
+depends_on = [
+    { path = "dlkit.common" },
+]
+
+[[modules]]
+path = "dlkit.io"
+depends_on = [
+    { path = "dlkit.infrastructure" },
+]
+
+[[modules]]
 path = "dlkit"
 depends_on = [
     { path = "dlkit.common" },

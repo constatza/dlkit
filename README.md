@@ -78,8 +78,8 @@ uv run dlkit train examples/minimal_e2e/config.toml --epochs 3
 
 ```python
 # Python API
-from dlkit.infrastructure.config import load_settings
-from dlkit.interfaces.api import train
+from dlkit import train
+from dlkit.settings import load_settings
 
 cfg = load_settings("examples/minimal_e2e/config.toml")
 result = train(cfg, epochs=3)
@@ -198,8 +198,8 @@ uv run dlkit train config_with_mlflow.toml --experiment-name MyExp --run-name ru
 ### Python API
 
 ```python
-from dlkit.infrastructure.config import load_settings
-from dlkit.interfaces.api import train
+from dlkit import train
+from dlkit.settings import load_settings
 
 cfg = load_settings("config.toml")
 result = train(
@@ -310,7 +310,7 @@ for name, param in model.named_parameters():
 ### Checkpoint utilities
 
 ```python
-from dlkit.interfaces.inference import validate_checkpoint, get_checkpoint_info
+from dlkit import validate_checkpoint, get_checkpoint_info
 
 info = get_checkpoint_info("model.ckpt")
 print(info.model_class, info.shape_summary)
@@ -461,8 +461,8 @@ uv run dlkit optimize config_with_optuna.toml --trials 100 --study-name ablation
 ### Python API
 
 ```python
-from dlkit.infrastructure.config import load_settings
-from dlkit.interfaces.api import optimize
+from dlkit import optimize
+from dlkit.settings import load_settings
 
 cfg = load_settings("config_with_optuna.toml")
 result = optimize(cfg, trials=50, study_name="my_study")
@@ -527,7 +527,7 @@ Scale contract: `A_original = A_stored × value_scale`. Denormalization applied 
 Sparse pack API:
 
 ```python
-from dlkit.infrastructure.io import open_sparse_pack, save_sparse_pack, validate_sparse_pack
+from dlkit.io import open_sparse_pack, save_sparse_pack, validate_sparse_pack
 ```
 
 See [`src/dlkit/engine/data/datasets/README.md`](src/dlkit/engine/data/datasets/README.md) for full details.
@@ -537,8 +537,7 @@ See [`src/dlkit/engine/data/datasets/README.md`](src/dlkit/engine/data/datasets/
 Pass NumPy arrays directly without creating files:
 
 ```python
-from dlkit.infrastructure.config import DatasetSettings
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.settings import DatasetSettings, Feature, Target
 import numpy as np
 
 dataset_cfg = DatasetSettings(
@@ -644,9 +643,8 @@ lr = 1e-3
 ```
 
 ```python
-from dlkit.infrastructure.config import DatasetSettings, load_settings
-from dlkit.infrastructure.config.data_entries import Feature, Target
-from dlkit.interfaces.api import train
+from dlkit import train
+from dlkit.settings import DatasetSettings, Feature, Target, load_settings
 
 cfg = load_settings("base_config.toml")
 
@@ -712,7 +710,7 @@ for name, data_dir in datasets:
 validated instance:
 
 ```python
-from dlkit.infrastructure.config.core.updater import update_settings
+from dlkit.settings import update_settings
 
 cfg = update_settings(
     cfg,
@@ -803,10 +801,10 @@ DLKit resolves the project root in this order (highest to lowest priority):
 3. Current working directory
 
 Standard subdirectories (`output/`, `checkpoints/`, `mlruns/`, `mlartifacts/`, `splits/`) are
-computed relative to the root via `dlkit.infrastructure.io.locations`:
+computed relative to the root via `dlkit.io.locations`:
 
 ```python
-from dlkit.infrastructure.io import locations
+from dlkit.io import locations
 
 print(locations.output())
 print(locations.checkpoints_dir())
