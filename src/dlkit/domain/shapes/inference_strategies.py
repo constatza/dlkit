@@ -225,6 +225,15 @@ class GraphDatasetStrategy(ShapeInferenceStrategy):
 class DatasetSamplingStrategy(ShapeInferenceStrategy):
     """Strategy to infer shapes by sampling from dataset."""
 
+    @staticmethod
+    def _tensor_dimensions(tensor: Any) -> tuple[int, ...]:
+        """Return a valid shape tuple for inference.
+
+        Scalar tensors are normalized to ``(1,)`` so downstream shape entries stay valid.
+        """
+        shape = tuple(int(d) for d in tensor.shape)
+        return shape or (1,)
+
     def can_infer(self, context: Any) -> bool:
         """Check if dataset is available for sampling.
 
@@ -295,25 +304,25 @@ class DatasetSamplingStrategy(ShapeInferenceStrategy):
                 for i, key in enumerate(feat_td.keys()):
                     tensor = feat_td[key]
                     if isinstance(tensor, Tensor):
-                        shapes[f"x{i}" if i > 0 else "x"] = tuple(int(d) for d in tensor.shape)
+                        shapes[f"x{i}" if i > 0 else "x"] = self._tensor_dimensions(tensor)
                 for i, key in enumerate(targ_td.keys()):
                     tensor = targ_td[key]
                     if isinstance(tensor, Tensor):
-                        shapes[f"y{i}" if i > 0 else "y"] = tuple(int(d) for d in tensor.shape)
+                        shapes[f"y{i}" if i > 0 else "y"] = self._tensor_dimensions(tensor)
                 return shapes if shapes else None
 
         match sample:
             case dict():
                 for name, tensor in sample.items():
                     if isinstance(tensor, Tensor):
-                        shapes[name] = tuple(int(d) for d in tensor.shape)
+                        shapes[name] = self._tensor_dimensions(tensor)
             case list() | tuple():
                 if len(sample) >= 1 and isinstance(sample[0], Tensor):
-                    shapes["x"] = tuple(int(d) for d in sample[0].shape)
+                    shapes["x"] = self._tensor_dimensions(sample[0])
                 if len(sample) > 1 and isinstance(sample[1], Tensor):
-                    shapes["y"] = tuple(int(d) for d in sample[1].shape)
+                    shapes["y"] = self._tensor_dimensions(sample[1])
             case _ if isinstance(sample, Tensor):
-                shapes["x"] = tuple(int(d) for d in sample.shape)
+                shapes["x"] = self._tensor_dimensions(sample)
 
         return shapes if shapes else None
 

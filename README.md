@@ -48,17 +48,20 @@ Key features:
 
 Requires **Python 3.14+**.
 
-Install [uv](https://docs.astral.sh/uv/) first, then add DLKit:
+Install [uv](https://docs.astral.sh/uv/) first, then sync with an explicit accelerator extra:
 
 ```bash
-uv add git+https://github.com/constatza/dlkit
+uv sync --extra cpu
 ```
 
-For GPU support:
+CUDA builds are only published for Linux and Windows. Use one of the explicit CUDA extras when you want a GPU wheel:
 
 ```bash
-uv sync --extra gpu
+uv sync --extra cu128
+uv sync --extra cu130
 ```
+
+DLKit does not define a default PyTorch backend. One of `cpu`, `cu128`, or `cu130` must be selected for project installs and lockfile exports.
 
 ---
 
@@ -75,8 +78,8 @@ uv run dlkit train examples/minimal_e2e/config.toml --epochs 3
 
 ```python
 # Python API
+from dlkit.infrastructure.config import load_settings
 from dlkit.interfaces.api import train
-from dlkit.tools.io import load_settings
 
 cfg = load_settings("examples/minimal_e2e/config.toml")
 result = train(cfg, epochs=3)
@@ -195,8 +198,8 @@ uv run dlkit train config_with_mlflow.toml --experiment-name MyExp --run-name ru
 ### Python API
 
 ```python
+from dlkit.infrastructure.config import load_settings
 from dlkit.interfaces.api import train
-from dlkit.tools.io import load_settings
 
 cfg = load_settings("config.toml")
 result = train(
@@ -458,8 +461,8 @@ uv run dlkit optimize config_with_optuna.toml --trials 100 --study-name ablation
 ### Python API
 
 ```python
+from dlkit.infrastructure.config import load_settings
 from dlkit.interfaces.api import optimize
-from dlkit.tools.io import load_settings
 
 cfg = load_settings("config_with_optuna.toml")
 result = optimize(cfg, trials=50, study_name="my_study")
@@ -524,18 +527,18 @@ Scale contract: `A_original = A_stored × value_scale`. Denormalization applied 
 Sparse pack API:
 
 ```python
-from dlkit.core.datatypes import save_sparse_pack, open_sparse_pack, validate_sparse_pack
+from dlkit.infrastructure.io import open_sparse_pack, save_sparse_pack, validate_sparse_pack
 ```
 
-See [`src/dlkit/core/datasets/README.md`](src/dlkit/core/datasets/README.md) for full details.
+See [`src/dlkit/engine/data/datasets/README.md`](src/dlkit/engine/data/datasets/README.md) for full details.
 
 ### In-memory arrays
 
 Pass NumPy arrays directly without creating files:
 
 ```python
-from dlkit.tools.config import DatasetSettings
-from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.infrastructure.config import DatasetSettings
+from dlkit.infrastructure.config.data_entries import Feature, Target
 import numpy as np
 
 dataset_cfg = DatasetSettings(
@@ -564,15 +567,15 @@ semantics without any glue code.
 name = "x"
 path = "data/features.npy"
 transforms = [
-  { name = "MinMaxScaler", module_path = "dlkit.core.training.transforms.minmax", dim = 0 },
-  { name = "SampleNormL2", module_path = "dlkit.core.training.transforms.sample_norm", eps = 1e-8 },
+  { name = "MinMaxScaler", module_path = "dlkit.domain.transforms.minmax", dim = 0 },
+  { name = "SampleNormL2", module_path = "dlkit.domain.transforms.sample_norm", eps = 1e-8 },
 ]
 
 [[DATASET.targets]]
 name = "y"
 path = "data/targets.npy"
 transforms = [
-  { name = "StandardScaler", module_path = "dlkit.core.training.transforms.standard", dim = 0 },
+  { name = "StandardScaler", module_path = "dlkit.domain.transforms.standard", dim = 0 },
 ]
 ```
 
@@ -588,7 +591,7 @@ transforms = [
 | `TensorSubset` | `transforms.subset` | yes | yes | Extract sub-tensors |
 | `SpectralRadiusNorm` | `transforms.spectral` | no | yes | For matrix inputs |
 
-All module paths are prefixed with `dlkit.core.training.`.
+All module paths are prefixed with `dlkit.domain.`.
 
 ### Transform fitting details
 
@@ -641,9 +644,8 @@ lr = 1e-3
 ```
 
 ```python
-from dlkit.tools.io import load_settings
-from dlkit.tools.config import DatasetSettings
-from dlkit.tools.config.data_entries import Feature, Target
+from dlkit.infrastructure.config import DatasetSettings, load_settings
+from dlkit.infrastructure.config.data_entries import Feature, Target
 from dlkit.interfaces.api import train
 
 cfg = load_settings("base_config.toml")
@@ -710,7 +712,7 @@ for name, data_dir in datasets:
 validated instance:
 
 ```python
-from dlkit.tools.config.core.updater import update_settings
+from dlkit.infrastructure.config.core.updater import update_settings
 
 cfg = update_settings(
     cfg,
@@ -742,8 +744,8 @@ model_input = false    # not passed to model.forward()
 loss_input = "A"       # passed to loss(predictions, target, A=A)
 ```
 
-See [`src/dlkit/core/training/README.md`](src/dlkit/core/training/README.md) and
-[`src/dlkit/core/models/wrappers/README.md`](src/dlkit/core/models/wrappers/README.md) for
+See [`src/dlkit/engine/adapters/lightning/README.md`](src/dlkit/engine/adapters/lightning/README.md) and
+[`src/dlkit/engine/training/execution.md`](src/dlkit/engine/training/execution.md) for
 full loss pairing and metric routing documentation.
 
 ---
@@ -801,10 +803,10 @@ DLKit resolves the project root in this order (highest to lowest priority):
 3. Current working directory
 
 Standard subdirectories (`output/`, `checkpoints/`, `mlruns/`, `mlartifacts/`, `splits/`) are
-computed relative to the root via `dlkit.tools.io.locations`:
+computed relative to the root via `dlkit.infrastructure.io.locations`:
 
 ```python
-from dlkit.tools.io import locations
+from dlkit.infrastructure.io import locations
 
 print(locations.output())
 print(locations.checkpoints_dir())

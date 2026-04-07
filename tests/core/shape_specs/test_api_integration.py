@@ -70,6 +70,32 @@ class TestAPIConceptIntegration:
         assert "x" in all_shapes
         assert "y" in all_shapes
 
+    def test_scalar_targets_are_normalized_during_dataset_inference(self):
+        """Scalar labels should infer as a unit target shape instead of triggering fallback."""
+
+        mock_dataset = Mock()
+        mock_dataset.__getitem__ = Mock(
+            return_value={
+                "x": torch.randn(28, 28),
+                "y": torch.tensor(5),
+            }
+        )
+
+        class ModelSettings:
+            architecture = "FeedForwardNN"
+            class_path = "dlkit.domain.nn.ffnn.simple.FeedForwardNN"
+
+        factory = ShapeSystemFactory.create_production_system()
+        inference_engine = ShapeInferenceEngine(shape_factory=factory)
+
+        shape_spec = inference_engine.infer_from_dataset(
+            dataset=mock_dataset,
+            model_settings=ModelSettings(),
+        )
+
+        assert shape_spec.get_input_shape() == (28, 28)
+        assert shape_spec.get_output_shape() == (1,)
+
     def test_infer_like_workflow_shape_integration(self):
         """Test shape integration in an infer-like workflow."""
         # Simulate what happens in dlkit.infer()
