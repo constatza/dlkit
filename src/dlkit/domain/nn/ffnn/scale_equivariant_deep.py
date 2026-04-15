@@ -5,7 +5,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.domain.nn.ffnn.norm_scaled import NormScaledFFNN
 from dlkit.domain.nn.ffnn.parametric_variants import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthSPDFactorizedFFNN,
@@ -14,10 +13,11 @@ from dlkit.domain.nn.ffnn.parametric_variants import (
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
 )
+from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 
 
-class NormScaledConstantWidthSPDFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by ConstantWidthSPDFFNN.
+class ScaleEquivariantConstantWidthSPDFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by ConstantWidthSPDFFNN.
 
     Args:
         size: Square feature size (in == out).
@@ -43,8 +43,8 @@ class NormScaledConstantWidthSPDFFNN(NormScaledFFNN):
         bias: bool = False,
         min_diag: float = 1e-4,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -68,8 +68,8 @@ class NormScaledConstantWidthSPDFFNN(NormScaledFFNN):
         )
 
 
-class NormScaledConstantWidthSPDFactorizedFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by ConstantWidthSPDFactorizedFFNN.
+class ScaleEquivariantConstantWidthSPDFactorizedFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by ConstantWidthSPDFactorizedFFNN.
 
     Args:
         size: Square feature size (in == out).
@@ -99,8 +99,8 @@ class NormScaledConstantWidthSPDFactorizedFFNN(NormScaledFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -126,8 +126,8 @@ class NormScaledConstantWidthSPDFactorizedFFNN(NormScaledFFNN):
         )
 
 
-class NormScaledConstantWidthFactorizedFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by ConstantWidthFactorizedFFNN.
+class ScaleEquivariantConstantWidthFactorizedFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by ConstantWidthFactorizedFFNN.
 
     Args:
         size: Square feature size (in == out).
@@ -155,8 +155,8 @@ class NormScaledConstantWidthFactorizedFFNN(NormScaledFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = torch.exp,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -181,8 +181,8 @@ class NormScaledConstantWidthFactorizedFFNN(NormScaledFFNN):
         )
 
 
-class NormScaledEmbeddedSPDFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by EmbeddedSPDFFNN.
+class ScaleEquivariantEmbeddedSPDFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by EmbeddedSPDFFNN.
 
     Args:
         in_features: Number of input features.
@@ -212,8 +212,8 @@ class NormScaledEmbeddedSPDFFNN(NormScaledFFNN):
         bias: bool = False,
         min_diag: float = 1e-4,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -239,8 +239,8 @@ class NormScaledEmbeddedSPDFFNN(NormScaledFFNN):
         )
 
 
-class NormScaledEmbeddedSPDFactorizedFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by EmbeddedSPDFactorizedFFNN.
+class ScaleEquivariantEmbeddedSPDFactorizedFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by EmbeddedSPDFactorizedFFNN.
 
     Args:
         in_features: Number of input features.
@@ -274,8 +274,8 @@ class NormScaledEmbeddedSPDFactorizedFFNN(NormScaledFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -303,8 +303,8 @@ class NormScaledEmbeddedSPDFactorizedFFNN(NormScaledFFNN):
         )
 
 
-class NormScaledEmbeddedFactorizedFFNN(NormScaledFFNN):
-    """NormScaledFFNN backed by EmbeddedFactorizedFFNN.
+class ScaleEquivariantEmbeddedFactorizedFFNN(ScaleEquivariantFFNN):
+    """ScaleEquivariantFFNN backed by EmbeddedFactorizedFFNN.
 
     Args:
         in_features: Number of input features.
@@ -336,8 +336,8 @@ class NormScaledEmbeddedFactorizedFFNN(NormScaledFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = torch.exp,
-        norm: str = NormScaledFFNN.DEFAULT_NORM,
-        eps_gain: float = NormScaledFFNN.DEFAULT_EPS_GAIN,
+        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,

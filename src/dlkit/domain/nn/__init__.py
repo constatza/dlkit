@@ -1,23 +1,5 @@
-from . import attention, cae, encoder, ffnn, graph, primitives
+from . import attention, cae, encoder, ffnn, graph, operators, primitives, spectral
 from .ffnn.linear import LinearNetwork
-from .ffnn.norm_scaled import (
-    NormScaledConstantWidthFFNN,
-    NormScaledFactorizedLinear,
-    NormScaledFFNN,
-    NormScaledLinearFFNN,
-    NormScaledSPDFactorizedLinear,
-    NormScaledSPDLinear,
-    NormScaledSymmetricFactorizedLinear,
-    NormScaledSymmetricLinear,
-)
-from .ffnn.norm_scaled_deep import (
-    NormScaledConstantWidthFactorizedFFNN,
-    NormScaledConstantWidthSPDFactorizedFFNN,
-    NormScaledConstantWidthSPDFFNN,
-    NormScaledEmbeddedFactorizedFFNN,
-    NormScaledEmbeddedSPDFactorizedFFNN,
-    NormScaledEmbeddedSPDFFNN,
-)
 from .ffnn.parametric import (
     ConstantWidthParametricFFNN,
     EmbeddedParametricFFNN,
@@ -32,18 +14,40 @@ from .ffnn.parametric_variants import (
     EmbeddedSPDFFNN,
 )
 from .ffnn.plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from .ffnn.scale_equivariant import (
+    ScaleEquivariantConstantWidthFFNN,
+    ScaleEquivariantFFNN,
+)
+from .ffnn.scale_equivariant_deep import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSPDFFNN,
+    ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSPDFFNN,
+)
+from .operators import (
+    DeepONet,
+    FourierNeuralOperator1d,
+    GridOperatorBase,
+    IGridOperator,
+    IOperatorNetwork,
+    IQueryOperator,
+    MLPDeepONet,
+)
+from .spectral import (
+    DualPathFFNN,
+    FourierAugmented,
+    FourierEnhancedFFNN,
+    ISpectralLayer,
+    SpectralDualPath,
+)
 
 __all__ = [
     "LinearNetwork",
-    # NormScaled single-layer
-    "NormScaledFFNN",
-    "NormScaledLinearFFNN",
-    "NormScaledConstantWidthFFNN",
-    "NormScaledSymmetricLinear",
-    "NormScaledSPDLinear",
-    "NormScaledFactorizedLinear",
-    "NormScaledSymmetricFactorizedLinear",
-    "NormScaledSPDFactorizedLinear",
+    # ScaleEquivariant
+    "ScaleEquivariantFFNN",
+    "ScaleEquivariantConstantWidthFFNN",
     # Plain (no residual)
     "SimpleFeedForwardNN",
     "ConstantWidthSimpleFFNN",
@@ -59,18 +63,34 @@ __all__ = [
     "EmbeddedSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    # NormScaled deep variants
-    "NormScaledConstantWidthSPDFFNN",
-    "NormScaledConstantWidthSPDFactorizedFFNN",
-    "NormScaledConstantWidthFactorizedFFNN",
-    "NormScaledEmbeddedSPDFFNN",
-    "NormScaledEmbeddedSPDFactorizedFFNN",
-    "NormScaledEmbeddedFactorizedFFNN",
+    # ScaleEquivariant deep variants
+    "ScaleEquivariantConstantWidthSPDFFNN",
+    "ScaleEquivariantConstantWidthSPDFactorizedFFNN",
+    "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSPDFFNN",
+    "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
+    "ScaleEquivariantEmbeddedFactorizedFFNN",
+    # Spectral / frequency-domain networks
+    "ISpectralLayer",
+    "FourierAugmented",
+    "SpectralDualPath",
+    "FourierEnhancedFFNN",
+    "DualPathFFNN",
+    # Neural operators
+    "IOperatorNetwork",
+    "IGridOperator",
+    "IQueryOperator",
+    "GridOperatorBase",
+    "FourierNeuralOperator1d",
+    "DeepONet",
+    "MLPDeepONet",
     # Submodules
     "attention",
     "cae",
     "encoder",
     "ffnn",
     "graph",
+    "operators",
     "primitives",
+    "spectral",
 ]
