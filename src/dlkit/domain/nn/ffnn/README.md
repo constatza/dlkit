@@ -4,22 +4,33 @@ Multi-layer perceptron architectures for regression and classification tasks.
 
 ## Overview
 
-All models in this module inherit from `ShapeAwareModel` and require a `unified_shape: IShapeSpec` parameter for input/output dimension configuration.
-
 | Model | File | Description |
 |-------|------|-------------|
 | `LinearNetwork` | `linear.py` | Single linear layer with optional normalization |
 | `FeedForwardNN` | `simple.py` | Variable-width MLP with skip connections |
 | `ConstantWidthFFNN` | `simple.py` | Constant-width MLP with residual blocks |
-| `NormScaledFFNN` | `norm_scaled.py` | Abstract base for norm-scaled wrappers |
-| `NormScaledLinearFFNN` | `norm_scaled.py` | Norm-scaled single linear layer |
-| `NormScaledConstantWidthFFNN` | `norm_scaled.py` | Norm-scaled constant-width MLP |
+| `SimpleFeedForwardNN` | `plain.py` | Variable-width MLP, no residual |
+| `ConstantWidthSimpleFFNN` | `plain.py` | Constant-width MLP, no residual |
+| `ScaleEquivariantFFNN` | `scale_equivariant.py` | Wrapper enforcing scale equivariance (wraps any nonlinear base) |
+| `ScaleEquivariantConstantWidthFFNN` | `scale_equivariant.py` | Scale-equivariant constant-width MLP |
+| `ConstantWidthParametricFFNN` | `parametric.py` | Constant-width MLP with constrained weight blocks |
+| `EmbeddedParametricFFNN` | `parametric.py` | Embedded-width variant with constrained blocks |
+| `ConstantWidthSPDFFNN` | `parametric_variants.py` | SPD-constrained blocks |
+| `ConstantWidthSPDFactorizedFFNN` | `parametric_variants.py` | SPD + diagonal scale |
+| `ConstantWidthFactorizedFFNN` | `parametric_variants.py` | Diagonal scale only |
+| `EmbeddedSPDFFNN` | `parametric_variants.py` | Embedded SPD |
+| `EmbeddedSPDFactorizedFFNN` | `parametric_variants.py` | Embedded SPD + diagonal scale |
+| `EmbeddedFactorizedFFNN` | `parametric_variants.py` | Embedded diagonal scale |
+
+> **Note on ScaleEquivariantFFNN and linear layers**: Linear maps are scale-equivariant by construction,
+> so wrapping a purely linear layer in `ScaleEquivariantFFNN` adds no expressive power.
+> `ScaleEquivariantFFNN` is only meaningful when the base model contains nonlinearities.
 
 ---
 
 ## LinearNetwork
 
-A minimal single-layer network for simple transformations.
+A minimal single-layer network for simple transformations or baselines.
 
 ### Architecture
 
@@ -27,258 +38,84 @@ A minimal single-layer network for simple transformations.
 y = Norm(Wx + b)
 ```
 
-Where:
-- `W ∈ ℝ^(output × input)` = weight matrix
-- `b ∈ ℝ^output` = bias vector (optional)
-- `Norm` = BatchNorm, LayerNorm, or Identity
-
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `unified_shape` | `IShapeSpec` | required | Shape specification with input/output dims |
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalization type |
 | `bias` | `bool` | `True` | Include bias term |
-
-### Example
-
-```python
-from dlkit.domain.nn.ffnn import LinearNetwork
-from dlkit.domain.shapes import ShapeSpec
-
-shape = ShapeSpec(x=(128,), y=(10,))
-model = LinearNetwork(unified_shape=shape, normalize="layer")
-```
 
 ---
 
 ## FeedForwardNN
 
-Multi-layer perceptron with variable layer widths and residual connections.
+Variable-width MLP with residual skip connections.
 
 ### Architecture
 
 ```
-h₀ = W_emb · x                           (embedding layer)
-hᵢ = SkipConnection(DenseBlock(hᵢ₋₁))   for i = 1, ..., N-1
-y = W_out · h_{N-1}                      (output layer)
-```
-
-Where each `SkipConnection(DenseBlock(...))` computes:
-```
-hᵢ = W_skip · hᵢ₋₁ + Dropout(Linear(σ(Norm(hᵢ₋₁))))
+h₀ = W_emb · x
+hᵢ = SkipConnection(DenseBlock(hᵢ₋₁))   for i = 1, …, N-1
+y  = W_out · h_{N-1}
 ```
 
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `unified_shape` | `IShapeSpec` | required | Shape specification |
-| `layers` | `Sequence[int]` | required | Hidden layer widths |
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
+| `layers` | `list[int]` | required | Hidden layer widths |
 | `activation` | `Callable` | `F.gelu` | Activation function |
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalization type |
 | `dropout` | `float` | `0.0` | Dropout probability |
-
-### Example
-
-```python
-from dlkit.domain.nn.ffnn import FeedForwardNN
-from dlkit.domain.shapes import ShapeSpec
-
-shape = ShapeSpec(x=(128,), y=(10,))
-model = FeedForwardNN(
-    unified_shape=shape,
-    layers=[256, 128, 64],  # Variable widths
-    normalize="layer",
-    dropout=0.1,
-)
-```
 
 ---
 
 ## ConstantWidthFFNN
 
-Constant-width variant of FeedForwardNN with uniform hidden dimensions.
-
-### Architecture
-
-```
-h₀ = W_emb · x                                      (embedding: input → hidden_size)
-hᵢ = hᵢ₋₁ + DenseBlock(hᵢ₋₁)   for i = 1, ..., N   (residual blocks)
-y = W_out · h_N                                     (output: hidden_size → output)
-```
-
-Since all hidden layers have the same width, the skip projection is `Identity()`.
+Constant-width residual MLP; skip projection is Identity (no extra params).
 
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `unified_shape` | `IShapeSpec` | required | Shape specification |
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
 | `hidden_size` | `int` | required | Width of all hidden layers |
 | `num_layers` | `int` | required | Number of hidden layers |
 | `activation` | `Callable` | `F.gelu` | Activation function |
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalization type |
 | `dropout` | `float` | `0.0` | Dropout probability |
 
-### Example
-
-```python
-from dlkit.domain.nn.ffnn import ConstantWidthFFNN
-from dlkit.domain.shapes import ShapeSpec
-
-shape = ShapeSpec(x=(128,), y=(10,))
-model = ConstantWidthFFNN(
-    unified_shape=shape,
-    hidden_size=256,
-    num_layers=4,
-    normalize="layer",
-    dropout=0.1,
-)
-```
-
 ---
 
-## NormScaledFFNN (Base Class)
+## NormScaledFFNN (Base Wrapper)
 
-Abstract wrapper that enforces homogeneous scaling consistency for problems of the form `Ax = b`.
-
-### Architecture
-
+Wraps any `nn.Module` to enforce scale-equivariance:
 ```
-x = f(b / ‖b‖_p) · ‖b‖_p
+output = base_model(x / ‖x‖_p) · ‖x‖_p
 ```
 
-Where:
-- `b` = input vector (e.g., right-hand side of linear system)
-- `f` = base model operating on normalized input
-- `‖·‖_p` = vector p-norm (L1, L2, or L∞)
-- `x` = output scaled back to original magnitude
-
-### Mathematical Motivation
-
-For scale-equivariant problems where scaling the input should proportionally scale the output:
-```
-f(αb) = αf(b)  for all α > 0
-```
-
-This wrapper ensures the property by:
-1. Normalizing: `b_scaled = b / ‖b‖_p`
-2. Predicting: `x_scaled = base_model(b_scaled)`
-3. Rescaling: `x = x_scaled · ‖b‖_p`
-
-### Supported Norms
-
-| Norm | Formula |
-|------|---------|
-| `"l2"` | `‖b‖₂ = √(Σ bᵢ²)` |
-| `"l1"` | `‖b‖₁ = Σ |bᵢ|` |
-| `"linf"` | `‖b‖∞ = max|bᵢ|` |
+Meaningful only when `base_model` contains nonlinear activations.
 
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `base_model` | `nn.Module` | required | Model operating on normalized input |
-| `unified_shape` | `IShapeSpec` | required | Shape specification |
+| `base_model` | `nn.Module` | required | The nonlinear base network |
 | `norm` | `"l2" \| "l1" \| "linf"` | `"l2"` | Vector norm type |
-| `eps_gain` | `float` | `10.0` | Multiplier for epsilon (numerical stability) |
-| `keep_stats` | `bool` | `False` | Return norm statistics with output |
-
----
-
-## NormScaledLinearFFNN
-
-Norm-scaled wrapper around a single linear layer.
-
-### Architecture
-
-```
-x = (W · (b / ‖b‖_p) + bias) · ‖b‖_p
-```
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `unified_shape` | `IShapeSpec` | required | Shape specification |
-| `bias` | `bool` | `True` | Include bias in linear layer |
-| `norm` | `str` | `"l2"` | Vector norm type |
-| `eps_gain` | `float` | `10.0` | Numerical stability factor |
-| `keep_stats` | `bool` | `False` | Return norm statistics |
-
-### Example
-
-```python
-from dlkit.domain.nn.ffnn import NormScaledLinearFFNN
-from dlkit.domain.shapes import ShapeSpec
-
-shape = ShapeSpec(x=(100,), y=(50,))
-model = NormScaledLinearFFNN(unified_shape=shape, norm="l2")
-```
+| `eps_gain` | `float` | `10.0` | Multiplier for machine epsilon (avoids div-by-zero) |
+| `keep_stats` | `bool` | `False` | Return `(output, {"norm": norms})` when True |
 
 ---
 
 ## NormScaledConstantWidthFFNN
 
-Norm-scaled wrapper around ConstantWidthFFNN.
-
-### Architecture
-
-```
-x = ConstantWidthFFNN(b / ‖b‖_p) · ‖b‖_p
-```
+Convenience wrapper: `NormScaledFFNN(ConstantWidthFFNN(...))`.
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `unified_shape` | `IShapeSpec` | required | Shape specification |
-| `hidden_size` | `int` | required | Hidden layer width |
-| `num_layers` | `int` | required | Number of hidden layers |
-| `norm` | `str` | `"l2"` | Vector norm type |
-| `eps_gain` | `float` | `10.0` | Numerical stability factor |
-| `keep_stats` | `bool` | `False` | Return norm statistics |
-| `activation` | `Callable \| None` | `None` | Activation (default: GELU) |
-| `normalize` | `"batch" \| "layer" \| None` | `None` | Normalization type |
-| `dropout` | `float` | `0.0` | Dropout probability |
-
-### Example
-
-```python
-from dlkit.domain.nn.ffnn import NormScaledConstantWidthFFNN
-from dlkit.domain.shapes import ShapeSpec
-
-shape = ShapeSpec(x=(100,), y=(50,))
-model = NormScaledConstantWidthFFNN(
-    unified_shape=shape,
-    hidden_size=128,
-    num_layers=3,
-    norm="l2",
-    normalize="layer",
-)
-```
-
----
-
-## Shape Specification
-
-All models use `IShapeSpec` for dimension configuration:
-
-```python
-from dlkit.domain.shapes import ShapeSpec
-
-# Standard 1D feature vectors
-shape = ShapeSpec(x=(input_dim,), y=(output_dim,))
-
-# Autoencoder (output = input)
-shape = ShapeSpec(x=(dim,), y=(dim,))
-```
-
-### Shape Validation
-
-Models validate shapes via `accepts_shape()`:
-- Requires both input and output shapes
-- Only supports 1D feature vectors (`len(shape) == 1`)
-- Dimensions must be positive integers
-- Rejects `NullShapeSpec`
+All of `ConstantWidthFFNN` plus `norm`, `eps_gain`, `keep_stats`.

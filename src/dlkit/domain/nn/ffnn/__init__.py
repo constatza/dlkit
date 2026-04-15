@@ -1,22 +1,4 @@
 from .linear import LinearNetwork
-from .norm_scaled import (
-    NormScaledConstantWidthFFNN,
-    NormScaledFactorizedLinear,
-    NormScaledFFNN,
-    NormScaledLinearFFNN,
-    NormScaledSPDFactorizedLinear,
-    NormScaledSPDLinear,
-    NormScaledSymmetricFactorizedLinear,
-    NormScaledSymmetricLinear,
-)
-from .norm_scaled_deep import (
-    NormScaledConstantWidthFactorizedFFNN,
-    NormScaledConstantWidthSPDFactorizedFFNN,
-    NormScaledConstantWidthSPDFFNN,
-    NormScaledEmbeddedFactorizedFFNN,
-    NormScaledEmbeddedSPDFactorizedFFNN,
-    NormScaledEmbeddedSPDFFNN,
-)
 from .parametric import (
     ConstantWidthParametricFFNN,
     EmbeddedParametricFFNN,
@@ -31,6 +13,18 @@ from .parametric_variants import (
     EmbeddedSPDFFNN,
 )
 from .plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from .scale_equivariant import (
+    ScaleEquivariantConstantWidthFFNN,
+    ScaleEquivariantFFNN,
+)
+from .scale_equivariant_deep import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSPDFFNN,
+    ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSPDFFNN,
+)
 from .simple import ConstantWidthFFNN, FeedForwardNN
 
 __all__ = [
@@ -42,15 +36,9 @@ __all__ = [
     "ConstantWidthSimpleFFNN",
     # Linear baseline
     "LinearNetwork",
-    # NormScaled (single-layer)
-    "NormScaledFFNN",
-    "NormScaledLinearFFNN",
-    "NormScaledConstantWidthFFNN",
-    "NormScaledSymmetricLinear",
-    "NormScaledSPDLinear",
-    "NormScaledFactorizedLinear",
-    "NormScaledSymmetricFactorizedLinear",
-    "NormScaledSPDFactorizedLinear",
+    # ScaleEquivariant
+    "ScaleEquivariantFFNN",
+    "ScaleEquivariantConstantWidthFFNN",
     # Parametric base classes
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
@@ -63,11 +51,11 @@ __all__ = [
     "EmbeddedSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    # NormScaled deep variants
-    "NormScaledConstantWidthSPDFFNN",
-    "NormScaledConstantWidthSPDFactorizedFFNN",
-    "NormScaledConstantWidthFactorizedFFNN",
-    "NormScaledEmbeddedSPDFFNN",
-    "NormScaledEmbeddedSPDFactorizedFFNN",
-    "NormScaledEmbeddedFactorizedFFNN",
+    # ScaleEquivariant deep variants
+    "ScaleEquivariantConstantWidthSPDFFNN",
+    "ScaleEquivariantConstantWidthSPDFactorizedFFNN",
+    "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSPDFFNN",
+    "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
+    "ScaleEquivariantEmbeddedFactorizedFFNN",
 ]
