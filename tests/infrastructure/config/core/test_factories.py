@@ -136,7 +136,7 @@ class TestDefaultComponentFactory:
         factory = DefaultComponentFactory()
         settings = MockComponentSettings(
             name="MockTarget",
-            module_path="tests.tools.config.core.test_factories",
+            module_path="tests.infrastructure.config.core.test_factories",
             param1="string_test",
             param2=200,
         )
@@ -150,7 +150,7 @@ class TestDefaultComponentFactory:
             assert result.param1 == "string_test"
             assert result.param2 == 200
             mock_import.assert_called_once_with(
-                "MockTarget", fallback_module="tests.tools.config.core.test_factories"
+                "MockTarget", fallback_module="tests.infrastructure.config.core.test_factories"
             )
 
     def test_create_with_function_target(self, sample_build_context: BuildContext) -> None:

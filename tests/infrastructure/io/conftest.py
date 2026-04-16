@@ -12,7 +12,25 @@ from typing import Any
 import numpy as np
 import pytest
 
+from dlkit.infrastructure.config.environment import env as global_environment
 from dlkit.infrastructure.io.sparse import save_sparse_pack
+
+
+@pytest.fixture(autouse=True)
+def _restore_global_environment_root() -> Any:
+    """Save and restore global_environment.root_dir around each test.
+
+    Tests in this package may temporarily set global_environment.root_dir = None
+    to simulate a clean state. Without restoration the session-level root_dir
+    set by conftest.pytest_configure leaks out and breaks later tests.
+
+    Yields:
+        None
+    """
+    saved = global_environment.root_dir
+    yield
+    global_environment.root_dir = saved
+
 
 # ---------------------------------------------------------------------------
 # Sparse pack fixtures

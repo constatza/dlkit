@@ -6,12 +6,12 @@ import pytest
 import torch
 from torch import nn
 from torch.nn import ModuleList
-from torch.optim import Adam
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config import (
     ModelComponentSettings,
+    OptimizationProgramSettings,
     WrapperComponentSettings,
 )
 from dlkit.infrastructure.config.data_entries import Feature
@@ -31,8 +31,7 @@ def dummy_components(dummy_entry_configs) -> WrapperComponents:
         loss_fn=nn.MSELoss(),
         val_metric_routes=[],
         test_metric_routes=[],
-        optimizer_factory=lambda params: Adam(params, lr=1e-3),
-        scheduler_factory=None,
+        optimization_program_settings=OptimizationProgramSettings(),
         feature_transforms={e.name: ModuleList() for e in dummy_entry_configs if e.name},
         target_transforms={},
     )
@@ -43,7 +42,7 @@ def dummy_model_settings() -> ModelComponentSettings:
     """Create minimal model settings for testing."""
     return ModelComponentSettings(
         name="_DummyModel",
-        module_path="tests.core.models.wrappers.test_checkpoint_version_validation",
+        module_path="tests.engine.adapters.lightning.test_checkpoint_version_validation",
     )
 
 
@@ -125,7 +124,7 @@ def test_checkpoint_load_accepts_legacy_checkpoint(
             "wrapper_type": "StandardLightningWrapper",
             "model_settings": {
                 "name": "_DummyModel",
-                "module_path": "tests.core.models.wrappers.test_checkpoint_version_validation",
+                "module_path": "tests.engine.adapters.lightning.test_checkpoint_version_validation",
                 "params": {"hidden_size": 64},
                 "class_name": "ModelComponentSettings",
             },

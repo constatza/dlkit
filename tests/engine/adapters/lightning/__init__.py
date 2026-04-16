@@ -1,1 +1,1 @@
-"""Package marker for tests.core.models.wrappers."""
+"""Package marker for tests.engine.adapters.lightning."""

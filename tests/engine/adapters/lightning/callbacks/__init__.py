@@ -1,1 +1,1 @@
-"""Package marker for tests.core.training.callbacks."""
+"""Package marker for tests.engine.adapters.lightning.callbacks."""
