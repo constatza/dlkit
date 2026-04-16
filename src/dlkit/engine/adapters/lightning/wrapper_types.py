@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,8 +50,7 @@ class WrapperComponents:
         loss_fn: Instantiated loss function module.
         val_metric_routes: MetricRoute list for validation stage.
         test_metric_routes: MetricRoute list for test stage.
-        optimizer_factory: Callable accepting model parameters, returning Optimizer.
-        scheduler_factory: Callable accepting optimizer, returning LRScheduler; or None.
+        optimization_program_settings: Optimization program configuration for building controller.
         feature_transforms: Pre-built ModuleList per feature entry name (empty → no transforms).
         target_transforms: Pre-built ModuleList per target entry name (empty → no transforms).
     """
@@ -60,7 +58,6 @@ class WrapperComponents:
     loss_fn: nn.Module
     val_metric_routes: list[MetricRoute]
     test_metric_routes: list[MetricRoute]
-    optimizer_factory: Callable[..., Any]
-    scheduler_factory: Callable[..., Any] | None
+    optimization_program_settings: Any
     feature_transforms: dict[str, nn.ModuleList]
     target_transforms: dict[str, nn.ModuleList]

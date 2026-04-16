@@ -85,8 +85,6 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         _loss_function = components.loss_fn
         _val_metrics = MetricCollection([r.metric for r in components.val_metric_routes])
         _test_metrics = MetricCollection([r.metric for r in components.test_metric_routes])
-        optimizer_factory = components.optimizer_factory
-        scheduler_factory = components.scheduler_factory
 
         feature_entries = [e for e in entry_configs if is_feature_entry(e)]
         checkpoint_metadata = WrapperCheckpointMetadata(
@@ -113,6 +111,44 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             predict_target_key="",
         )
 
+        # Build optimization controller for graph models
+        from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+        from dlkit.engine.training.optimization.controllers import (
+            AutomaticOptimizationController,
+            ManualOptimizationController,
+        )
+        from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
+        from dlkit.engine.training.optimization.stepping import StepAllOptimizers
+
+        program = OptimizationProgramBuilder().build(
+            model, components.optimization_program_settings
+        )
+        repository = OptimizationStateRepository()
+
+        # Determine if manual optimization is required
+        def _requires_manual(program: Any) -> bool:
+            """Check if any stage uses LBFGS-like optimizer requiring manual stepping."""
+            from dlkit.engine.training.optimization.state import ActiveStage
+
+            for entry in program.stages:
+                # Check if entry is ActiveStage or ActiveConcurrentGroup
+                if isinstance(entry, ActiveStage):
+                    stages = [entry]
+                else:
+                    stages = entry.stages
+                for stage in stages:
+                    opt_cls = stage.optimizer.__class__.__name__.lower()
+                    if any(x in opt_cls for x in ["lbfgs", "manual"]):
+                        return True
+            return False
+
+        if _requires_manual(program):
+            optimization_controller = ManualOptimizationController(
+                program, repository, StepAllOptimizers()
+            )
+        else:
+            optimization_controller = AutomaticOptimizationController(program, repository)
+
         # super().__init__() must be called before assigning any nn.Module attributes
         super().__init__(
             model=model,
@@ -120,10 +156,7 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             loss_computer=_NullLossComputer(),
             metrics_updater=_NullMetricsUpdater(),
             batch_transformer=_null_transformer,
-            optimizer_settings=settings.optimizer,
-            scheduler_settings=getattr(settings, "scheduler", None),
-            optimizer_factory=optimizer_factory,
-            scheduler_factory=scheduler_factory,
+            optimization_controller=optimization_controller,
             predict_target_key="",
             checkpoint_metadata=checkpoint_metadata,
             prediction_strategy=_prediction_strategy,

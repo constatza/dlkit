@@ -6,9 +6,6 @@ Core wrappers accept WrapperComponents and never call FactoryProvider directly.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from typing import Any
-
 from torch import nn
 from torch.nn import ModuleList
 
@@ -79,47 +76,6 @@ def build_metric_routes(
     return routes
 
 
-def make_optimizer_factory(optimizer_settings: Any) -> Callable[..., Any]:
-    """Return a callable that builds an optimizer from model parameters.
-
-    Args:
-        optimizer_settings: Optimizer configuration.
-
-    Returns:
-        Callable accepting model parameters and returning an Optimizer instance.
-    """
-
-    def _factory(params: Iterable) -> Any:
-        return FactoryProvider.create_component(
-            optimizer_settings,
-            BuildContext(mode="training", overrides={"params": params}),
-        )
-
-    return _factory
-
-
-def make_scheduler_factory(scheduler_settings: Any) -> Callable[..., Any] | None:
-    """Return a callable that builds a scheduler from an optimizer, or None.
-
-    Args:
-        scheduler_settings: Scheduler configuration, or None.
-
-    Returns:
-        Callable accepting an optimizer and returning a scheduler, or None if
-        scheduler_settings is None.
-    """
-    if scheduler_settings is None:
-        return None
-
-    def _factory(optimizer: Any) -> Any:
-        return FactoryProvider.create_component(
-            scheduler_settings,
-            BuildContext(mode="training", overrides={"optimizer": optimizer}),
-        )
-
-    return _factory
-
-
 def build_wrapper_components(
     settings: WrapperComponentSettings,
     entry_configs: tuple[DataEntry, ...],
@@ -150,9 +106,39 @@ def build_wrapper_components(
     val_metric_routes = build_metric_routes(metric_specs, default_target_key)
     test_metric_routes = build_metric_routes(metric_specs, default_target_key)
 
-    # Build optimizer / scheduler factories
-    optimizer_factory = make_optimizer_factory(settings.optimizer)
-    scheduler_factory = make_scheduler_factory(getattr(settings, "scheduler", None))
+    # Build optimization program settings (deferred to wrapper for model access)
+    from dlkit.infrastructure.config.optimization_program import OptimizationProgramSettings
+
+    optimization_program_settings = getattr(settings, "optimization_program", None)
+    if optimization_program_settings is None:
+        # Fallback: build from single optimizer/scheduler settings
+        # Convert OptimizerSettings to OptimizerComponentSettings if needed
+        from dlkit.infrastructure.config.optimizer_component import (
+            OptimizerComponentSettings,
+            SchedulerComponentSettings,
+        )
+
+        default_optimizer = settings.optimizer
+        if not isinstance(default_optimizer, OptimizerComponentSettings):
+            # Wrap OptimizerSettings in OptimizerComponentSettings format
+            if hasattr(default_optimizer, "model_dump"):
+                optimizer_dict = default_optimizer.model_dump()
+                default_optimizer = OptimizerComponentSettings(**optimizer_dict)
+            else:
+                default_optimizer = OptimizerComponentSettings()
+
+        default_scheduler = getattr(settings, "scheduler", None)
+        if default_scheduler is not None and not isinstance(
+            default_scheduler, SchedulerComponentSettings
+        ):
+            if hasattr(default_scheduler, "model_dump"):
+                scheduler_dict = default_scheduler.model_dump()
+                default_scheduler = SchedulerComponentSettings(**scheduler_dict)
+
+        optimization_program_settings = OptimizationProgramSettings(
+            default_optimizer=default_optimizer,
+            default_scheduler=default_scheduler,
+        )
 
     # Build transform ModuleLists (empty ModuleList when no transforms configured)
     feature_transforms: dict[str, ModuleList] = {}
@@ -181,8 +167,7 @@ def build_wrapper_components(
         loss_fn=loss_fn,
         val_metric_routes=val_metric_routes,
         test_metric_routes=test_metric_routes,
-        optimizer_factory=optimizer_factory,
-        scheduler_factory=scheduler_factory,
+        optimization_program_settings=optimization_program_settings,
         feature_transforms=feature_transforms,
         target_transforms=target_transforms,
     )

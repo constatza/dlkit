@@ -6,7 +6,7 @@ is a pure Lightning coordinator.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any, cast
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
@@ -20,7 +20,6 @@ from tensordict import TensorDict
 from torch import Tensor, nn
 
 from dlkit.engine.adapters.lightning.concerns import (
-    ConfigLearningRateManager,
     DLKitCheckpointSerializer,
     LightningStepLogger,
 )
@@ -34,6 +33,7 @@ from dlkit.engine.adapters.lightning.protocols import (
     IPredictionStrategy,
 )
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
+from dlkit.engine.training.optimization.controllers import IOptimizationController
 
 
 def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
@@ -292,8 +292,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
     Attributes:
         model: Underlying PyTorch model.
-        optimizer: Optimizer settings (OptimizerSettings).
-        scheduler: Scheduler settings (SchedulerSettings | None).
     """
 
     def __init__(
@@ -304,10 +302,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         loss_computer: ILossComputer,
         metrics_updater: IMetricsUpdater,
         batch_transformer: IBatchTransformer,
-        optimizer_settings: Any,
-        scheduler_settings: Any = None,
-        optimizer_factory: Callable[..., Any] | None = None,
-        scheduler_factory: Callable[..., Any] | None = None,
+        optimization_controller: IOptimizationController,
         predict_target_key: str,
         checkpoint_metadata: WrapperCheckpointMetadata | None = None,
         prediction_strategy: IPredictionStrategy,
@@ -323,10 +318,7 @@ class ProcessingLightningWrapper(LightningModule, ABC):
             loss_computer: Computes scalar loss from predictions + batch.
             metrics_updater: Accumulates and exposes metric state.
             batch_transformer: Applies transforms to batches (nn.Module for state persistence).
-            optimizer_settings: Optimizer configuration settings.
-            scheduler_settings: Scheduler configuration settings (optional).
-            optimizer_factory: Callable that builds an optimizer from model parameters (optional).
-            scheduler_factory: Callable that builds a scheduler from an optimizer (optional).
+            optimization_controller: Controller managing optimizers and schedulers (IOptimizationController).
             predict_target_key: Target entry name whose chain is inverted at predict time.
             checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
             prediction_strategy: Strategy that implements predict_step logic.
@@ -346,10 +338,8 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self._loss_computer = loss_computer
         self._metrics_updater = metrics_updater
         self._batch_transformer = batch_transformer
-        self.optimizer = optimizer_settings
-        self.scheduler = scheduler_settings
-        self._optimizer_factory = optimizer_factory
-        self._scheduler_factory = scheduler_factory
+        self._optimization_controller = optimization_controller
+        self.automatic_optimization = not optimization_controller.requires_manual_optimization
         self._predict_target_key = predict_target_key
         self._checkpoint_metadata = checkpoint_metadata
         self._prediction_strategy = prediction_strategy
@@ -368,8 +358,9 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         # Initialize concern collaborators
         self._checkpoint_serializer = DLKitCheckpointSerializer(checkpoint_metadata, model)
+
+        # Initialize logging concern
         self._step_logger = LightningStepLogger(self)
-        self._lr_manager = ConfigLearningRateManager(self)
 
         # Apply precision to model immediately after creation
         from dlkit.infrastructure.precision.service import get_precision_service
@@ -378,8 +369,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.model = self.model.to(dtype=dtype)
-
-        self._lr_manager.sync_hparam()
 
     # =========================================================================
     # Lightning Hooks
@@ -424,9 +413,19 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Returns:
             Dictionary containing the training loss.
         """
-        loss, batch_size, _ = self._run_step(batch, batch_idx, "train")
-        self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
-        return {"loss": loss}
+        if not self.automatic_optimization:
+
+            def loss_fn() -> Tensor:
+                loss, _, _ = self._run_step(batch, batch_idx, "train")
+                return loss
+
+            loss = self._optimization_controller.manual_step(loss_fn)
+            self._step_logger.log_stage_outputs("train", loss, batch_size=None)
+            return {"loss": loss}
+        else:
+            loss, batch_size, _ = self._run_step(batch, batch_idx, "train")
+            self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
+            return {"loss": loss}
 
     def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Validation step: delegates to _run_step, updates metrics, logs output.
@@ -512,16 +511,19 @@ class ProcessingLightningWrapper(LightningModule, ABC):
     # =========================================================================
 
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Save DLKit metadata to checkpoint.
+        """Save DLKit metadata and optimization state to checkpoint.
 
         Args:
             checkpoint: Checkpoint dict to augment.
         """
         super().on_save_checkpoint(checkpoint)
         self._checkpoint_serializer.serialize(checkpoint, self.__class__.__name__)
+        # Save optimization state
+        if hasattr(self, "_optimization_controller"):
+            checkpoint["optimization_state"] = self._optimization_controller.state_dict()
 
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
-        """Restore and normalize checkpoint metadata in-place.
+        """Restore checkpoint metadata and optimization state.
 
         Args:
             checkpoint: Checkpoint dict to restore from.
@@ -531,16 +533,21 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         """
         super().on_load_checkpoint(checkpoint)
         self._checkpoint_serializer.deserialize(checkpoint)
+        # Load optimization state
+        if "optimization_state" in checkpoint and hasattr(self, "_optimization_controller"):
+            self._optimization_controller.load_state_dict(checkpoint["optimization_state"])
 
     # =========================================================================
     # Epoch End Hooks
     # =========================================================================
 
     def on_train_epoch_end(self) -> None:
-        """Log current learning rate at epoch end."""
-        if self.trainer and self.trainer.optimizers:
-            lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-            self._step_logger.log_lr(lr)
+        """Log current learning rate at epoch end and update optimization program."""
+        metrics = {
+            k: v.item() if hasattr(v, "item") else float(v)
+            for k, v in self.trainer.callback_metrics.items()
+        }
+        self._optimization_controller.on_epoch_end(self.current_epoch, metrics)
 
     # =========================================================================
     # Learning Rate Properties (delegated to manager)
@@ -548,21 +555,40 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
     @property
     def lr(self) -> float | None:
-        """Expose lr attribute for Lightning LR finder compatibility.
+        """Get current learning rate for Lightning LR finder compatibility.
 
         Returns:
             Current learning rate or None if unavailable.
         """
-        return self._lr_manager.get_lr()
+        from dlkit.engine.training.optimization.controllers import (
+            AutomaticOptimizationController,
+            ManualOptimizationController,
+        )
+        from dlkit.engine.training.optimization.metrics import OptimizationMetricsView
+
+        if hasattr(self, "_optimization_controller"):
+            controller = self._optimization_controller
+            if isinstance(
+                controller, (AutomaticOptimizationController, ManualOptimizationController)
+            ):
+                try:
+                    view = OptimizationMetricsView(controller._program)
+                    rates = view.current_learning_rates()
+                    if rates:
+                        return next(iter(rates.values()))
+                except Exception:
+                    pass
+        return None
 
     @lr.setter
     def lr(self, value: float) -> None:
-        """Set learning rate in config and trainer.
+        """Set learning rate.
 
         Args:
             value: New learning rate value.
         """
-        self._lr_manager.set_lr(value)
+        # Learning rate override at inference time; no-op in checkpoint-aware setting
+        pass
 
     @property
     def learning_rate(self) -> float | None:
@@ -583,25 +609,12 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self.lr = value
 
     def configure_optimizers(self):
-        """Configure optimizer and scheduler from injected factories.
+        """Configure optimizers and schedulers from the optimization controller.
 
         Returns:
-            Dictionary with "optimizer" and optional "lr_scheduler" keys.
+            Lightning-compatible optimizer/scheduler configuration.
         """
-        if self._optimizer_factory is None:
-            raise TypeError("optimizer_factory must be provided via WrapperComponents")
-        optimizer = self._optimizer_factory(self.model.parameters())
-        scheduler = self._scheduler_factory(optimizer) if self._scheduler_factory else None
-        if scheduler is None:
-            return {"optimizer": optimizer}
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "frequency": 1,
-                "monitor": "val_loss",
-            },
-        }
+        return self._optimization_controller.configure_optimizers()
 
     # =========================================================================
     # Logging Helper (delegated to concern)

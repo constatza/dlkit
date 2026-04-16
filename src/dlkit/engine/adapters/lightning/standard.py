@@ -230,8 +230,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         loss_fn = components.loss_fn
         val_metric_routes = components.val_metric_routes
         test_metric_routes = components.test_metric_routes
-        optimizer_factory = components.optimizer_factory
-        scheduler_factory = components.scheduler_factory
         # Build TransformChain from pre-built ModuleLists
         feature_chains: dict[str, Any] = {
             name: (TransformChain(ml) if len(ml) > 0 else Identity())
@@ -291,28 +289,51 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             predict_target_key=predict_target_key,
         )
 
+        # Build optimization controller
+        from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+        from dlkit.engine.training.optimization.controllers import (
+            AutomaticOptimizationController,
+            ManualOptimizationController,
+        )
+        from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
+        from dlkit.engine.training.optimization.stepping import StepAllOptimizers
+
+        program = OptimizationProgramBuilder().build(
+            model, components.optimization_program_settings
+        )
+        repository = OptimizationStateRepository()
+
+        # Determine if manual optimization is required
+        def _requires_manual(program: Any) -> bool:
+            """Check if any stage uses LBFGS-like optimizer requiring manual stepping."""
+            from dlkit.engine.training.optimization.state import ActiveStage
+
+            for entry in program.stages:
+                stages = [entry] if isinstance(entry, ActiveStage) else entry.stages
+                for stage in stages:
+                    opt_cls = stage.optimizer.__class__.__name__.lower()
+                    if any(x in opt_cls for x in ["lbfgs", "manual"]):
+                        return True
+            return False
+
+        if _requires_manual(program):
+            optimization_controller = ManualOptimizationController(
+                program, repository, StepAllOptimizers()
+            )
+        else:
+            optimization_controller = AutomaticOptimizationController(program, repository)
+
         super().__init__(
             model=model,
             model_invoker=model_invoker,
             loss_computer=loss_computer,
             metrics_updater=metrics_updater,
             batch_transformer=batch_transformer,
-            optimizer_settings=settings.optimizer,
-            scheduler_settings=getattr(settings, "scheduler", None),
-            optimizer_factory=optimizer_factory,
-            scheduler_factory=scheduler_factory,
+            optimization_controller=optimization_controller,
             predict_target_key=predict_target_key,
             checkpoint_metadata=checkpoint_metadata,
             prediction_strategy=prediction_strategy,
         )
-
-        # Store protocol objects for use in _run_step and other methods
-        self._model_invoker = model_invoker
-        self._loss_computer = loss_computer
-        self._batch_transformer = batch_transformer
-        self._prediction_strategy = prediction_strategy
-        self._train_generator_factory = self._train_generator_factory
-        self._val_generator_factory = self._val_generator_factory
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the model.
