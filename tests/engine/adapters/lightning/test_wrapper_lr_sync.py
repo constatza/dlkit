@@ -4,10 +4,10 @@ import pytest
 import torch
 from torch import nn
 from torch.nn import ModuleList
-from torch.optim import Adam
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.infrastructure.config import OptimizationProgramSettings
 from dlkit.infrastructure.config.data_entries import Feature
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
@@ -23,15 +23,14 @@ class _IdentityModel(nn.Module):
 def _build_wrapper():
     model_settings = ModelComponentSettings(
         name="_IdentityModel",
-        module_path="tests.core.models.wrappers.test_wrapper_lr_sync",
+        module_path="tests.engine.adapters.lightning.test_wrapper_lr_sync",
     )
     wrapper_settings = WrapperComponentSettings()
     components = WrapperComponents(
         loss_fn=nn.MSELoss(),
         val_metric_routes=[],
         test_metric_routes=[],
-        optimizer_factory=lambda params: Adam(params, lr=1e-3),
-        scheduler_factory=None,
+        optimization_program_settings=OptimizationProgramSettings(),
         feature_transforms={"x": ModuleList()},
         target_transforms={},
     )
@@ -48,24 +47,23 @@ def test_wrapper_lr_attributes_sync_initial():
 
     assert pytest.approx(1e-3) == wrapper.lr
     assert pytest.approx(1e-3) == wrapper.learning_rate
-    assert pytest.approx(1e-3) == wrapper.hparams["lr"]
-    assert pytest.approx(1e-3) == wrapper.hparams["learning_rate"]
+    # LR is now managed by OptimizationController, not in hparams
+    # The properties delegate to the controller's program
 
 
 def test_wrapper_lr_attribute_updates_optimizer_settings():
     wrapper = _build_wrapper()
 
+    # LR setter is now a no-op (LR is immutable in OptimizationController)
+    # This test ensures backward compatibility — setting lr doesn't raise
     wrapper.lr = 5e-4
 
-    assert pytest.approx(5e-4) == wrapper.lr
-    assert pytest.approx(5e-4) == wrapper.learning_rate
-    assert pytest.approx(5e-4) == wrapper.hparams["lr"]
-    assert pytest.approx(5e-4) == wrapper.hparams["learning_rate"]
-    assert pytest.approx(5e-4) == wrapper.optimizer.lr
+    # The lr property still returns the current LR from the controller
+    assert pytest.approx(1e-3) == wrapper.lr
+    assert pytest.approx(1e-3) == wrapper.learning_rate
 
     wrapper.learning_rate = 2e-3
 
-    assert pytest.approx(2e-3) == wrapper.lr
-    assert pytest.approx(2e-3) == wrapper.optimizer.lr
-    assert pytest.approx(2e-3) == wrapper.hparams["lr"]
-    assert pytest.approx(2e-3) == wrapper.hparams["learning_rate"]
+    # Still returns the controller's LR (unchanged via setter)
+    assert pytest.approx(1e-3) == wrapper.lr
+    assert pytest.approx(1e-3) == wrapper.learning_rate

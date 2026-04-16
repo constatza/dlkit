@@ -1,1 +1,1 @@
-"""Package marker for tests.core.postprocessing."""
+"""Package marker for tests.interfaces.cli.presenters."""

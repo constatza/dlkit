@@ -1,1 +1,1 @@
-"""Package marker for tests.core.training.metrics."""
+"""Package marker for tests.domain.metrics."""

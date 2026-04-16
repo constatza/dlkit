@@ -211,7 +211,7 @@ class TestSettingsFactoryIntegration:
         settings = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 256,
                 "output_size": 20,
             }
@@ -239,7 +239,7 @@ class TestSettingsFactoryIntegration:
         settings = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 100,
                 "output_size": 5,
             }
@@ -258,7 +258,7 @@ class TestSettingsFactoryIntegration:
         settings = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 128,
                 "output_size": 10,
             }
@@ -396,14 +396,14 @@ class TestFactoryProviderSingletonIntegration:
         settings1 = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 100,
             }
         )
         settings2 = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 200,
             }
         )
@@ -441,7 +441,7 @@ class TestFactoryProviderSingletonIntegration:
 
         # Test model creation
         model_settings = ModelComponentSettings(
-            name="MockModel", module_path="tests.tools.config.test_integration"
+            name="MockModel", module_path="tests.infrastructure.config.test_integration"
         )
         model = FactoryProvider.create_component(model_settings, sample_build_context)
         assert isinstance(model, MockModel)
@@ -462,7 +462,7 @@ class TestBuildContextIntegration:
         settings = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "tests.tools.config.test_integration",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 100,
             }
         )

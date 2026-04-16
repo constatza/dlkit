@@ -13,10 +13,10 @@ Covers:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 import torch
+import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
@@ -29,6 +29,10 @@ from dlkit.engine.adapters.lightning.base import (
     _unpack_model_output,
 )
 from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
+from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+from dlkit.engine.training.optimization.controllers import AutomaticOptimizationController
+from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
+from dlkit.infrastructure.config import OptimizationProgramSettings
 from dlkit.infrastructure.utils.tensordict_utils import sequence_to_tensordict
 
 
@@ -337,6 +341,19 @@ def batch(bs: int) -> TensorDict:
     )
 
 
+def _make_optimization_controller(model: nn.Module) -> AutomaticOptimizationController:
+    """Build an AutomaticOptimizationController for a model.
+
+    Args:
+        model: The neural network model.
+
+    Returns:
+        Configured AutomaticOptimizationController.
+    """
+    program = OptimizationProgramBuilder().build(model, OptimizationProgramSettings())
+    return AutomaticOptimizationController(program, OptimizationStateRepository())
+
+
 def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     """Build a ProcessingLightningWrapper with a fixed invoker.
 
@@ -351,8 +368,6 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     Returns:
         Configured wrapper instance.
     """
-    from torch import nn
-
     from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
     from dlkit.engine.adapters.lightning.prediction_strategies import (
         DiscriminativePredictionStrategy,
@@ -391,9 +406,7 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
 
         def reset(self, stage: str) -> None: ...
 
-    optimizer_settings = MagicMock()
-    optimizer_settings.lr = 1e-3
-
+    model = nn.Linear(2, 1)
     batch_transformer = NamedBatchTransformer({}, {})
     invoker = _FixedInvoker()
     prediction_strategy = DiscriminativePredictionStrategy(
@@ -403,12 +416,12 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
     )
 
     return _MinimalWrapper(
-        model=nn.Linear(2, 1),
+        model=model,
         model_invoker=invoker,
         loss_computer=_LossComputer(),
         metrics_updater=_MetricsUpdater(),
         batch_transformer=batch_transformer,
-        optimizer_settings=optimizer_settings,
+        optimization_controller=_make_optimization_controller(model),
         predict_target_key="y",
         prediction_strategy=prediction_strategy,
     )

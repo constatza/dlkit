@@ -1,1 +1,1 @@
-"""Package marker for tests.core.models.nn.generative."""
+"""Package marker for tests.domain.nn.generative."""

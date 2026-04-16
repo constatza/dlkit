@@ -1,1 +1,1 @@
-"""Package marker for tests.tools.registry."""
+"""Package marker for tests.infrastructure.registry."""

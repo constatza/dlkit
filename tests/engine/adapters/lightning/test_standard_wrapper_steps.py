@@ -9,10 +9,10 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 from torch.nn import ModuleList
-from torch.optim import Adam
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.infrastructure.config import OptimizationProgramSettings
 from dlkit.infrastructure.config.data_entries import (
     Feature,
     Target,
@@ -73,8 +73,7 @@ def _make_components(
         loss_fn=actual_loss_fn,
         val_metric_routes=[],
         test_metric_routes=[],
-        optimizer_factory=lambda params: Adam(params, lr=1e-3),
-        scheduler_factory=None,
+        optimization_program_settings=OptimizationProgramSettings(),
         feature_transforms={n: ModuleList() for n in feature_names},
         target_transforms={n: ModuleList() for n in target_names},
     )
@@ -82,7 +81,7 @@ def _make_components(
 
 def test_standard_wrapper_basic_steps():
     mdl = ModelComponentSettings(
-        name="_Id", module_path="tests.core.models.wrappers.test_standard_wrapper_steps"
+        name="_Id", module_path="tests.engine.adapters.lightning.test_standard_wrapper_steps"
     )
     wset = WrapperComponentSettings()
     entry_configs = (Feature(name="x"), Target(name="y"))
@@ -107,7 +106,7 @@ def test_standard_wrapper_basic_steps():
 # loss_input routing tests
 # ============================================================================
 
-_MODULE = "tests.core.models.wrappers.test_standard_wrapper_steps"
+_MODULE = "tests.engine.adapters.lightning.test_standard_wrapper_steps"
 
 
 @pytest.fixture

@@ -32,6 +32,10 @@ from dlkit.engine.adapters.lightning.model_invoker import ModelOutputSpec, Tenso
 from dlkit.engine.adapters.lightning.prediction_strategies import ODEPredictionStrategy
 from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
+from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+from dlkit.engine.training.optimization.controllers import AutomaticOptimizationController
+from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
+from dlkit.infrastructure.config import OptimizationProgramSettings
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
@@ -200,6 +204,19 @@ def checkpoint_metadata(
     )
 
 
+def _make_optimization_controller(model: nn.Module) -> AutomaticOptimizationController:
+    """Build an AutomaticOptimizationController for a model.
+
+    Args:
+        model: The neural network model.
+
+    Returns:
+        Configured AutomaticOptimizationController.
+    """
+    program = OptimizationProgramBuilder().build(model, OptimizationProgramSettings())
+    return AutomaticOptimizationController(program, OptimizationStateRepository())
+
+
 @pytest.fixture
 def flow_wrapper(
     velocity_model: _TinyVelocityModel,
@@ -230,7 +247,6 @@ def flow_wrapper(
     )
     metrics_updater = RoutedMetricsUpdater(val_routes=[], test_routes=[])
     batch_transformer = NamedBatchTransformer({}, {})
-    optimizer_settings = OptimizerSettings(name="Adam")
 
     return FlowMatchingWrapper(
         model=velocity_model,
@@ -238,8 +254,7 @@ def flow_wrapper(
         loss_computer=loss_computer,
         metrics_updater=metrics_updater,
         batch_transformer=batch_transformer,
-        optimizer_settings=optimizer_settings,
-        scheduler_settings=None,
+        optimization_controller=_make_optimization_controller(velocity_model),
         predict_target_key="ut",
         checkpoint_metadata=checkpoint_metadata,
         ode_prediction_strategy=ode_strategy,

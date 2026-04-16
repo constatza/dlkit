@@ -1,1 +1,1 @@
-"""Package marker for tests.tools.config."""
+"""Package marker for tests.infrastructure.config."""
