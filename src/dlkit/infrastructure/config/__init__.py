@@ -59,6 +59,21 @@ from .model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
+from .optimization_program import OptimizationProgramSettings
+from .optimization_selector import ParameterSelectorSettings
+from .optimization_stage import (
+    ConcurrentOptimizationSettings,
+    OptimizationStageSettings,
+)
+from .optimization_trigger import (
+    EpochTriggerSettings,
+    PlateauTriggerSettings,
+    TriggerSettings,
+)
+from .optimizer_component import (
+    OptimizerComponentSettings,
+    SchedulerComponentSettings,
+)
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .optuna_settings import OptunaSettings
 from .session_settings import SessionSettings
@@ -109,6 +124,17 @@ __all__ = [
     "MetricComponentSettings",
     "LossComponentSettings",
     "WrapperComponentSettings",
+    # Optimizer and scheduler components
+    "OptimizerComponentSettings",
+    "SchedulerComponentSettings",
+    # Optimization configuration
+    "OptimizationProgramSettings",
+    "OptimizationStageSettings",
+    "ConcurrentOptimizationSettings",
+    "ParameterSelectorSettings",
+    "EpochTriggerSettings",
+    "PlateauTriggerSettings",
+    "TriggerSettings",
     # External library settings
     "TrainerSettings",
     "OptimizerSettings",
