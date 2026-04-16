@@ -41,3 +41,19 @@ class ModelLoadingError(DLKitError):
 
 class PluginError(DLKitError):
     """Plugin configuration or execution error."""
+
+
+class OptimizationProgramError(DLKitError):
+    """Raised when an optimization program cannot be built or executed."""
+
+
+class ParameterPartitionError(DLKitError):
+    """Raised when parameter partitioning produces overlapping or invalid groups."""
+
+
+class StageTransitionError(DLKitError):
+    """Raised when a stage transition cannot be completed."""
+
+
+class UnsupportedOptimizerProgramError(DLKitError):
+    """Raised when an optimization program configuration is not supported."""
