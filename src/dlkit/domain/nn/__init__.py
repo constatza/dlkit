@@ -35,6 +35,8 @@ from .operators import (
     IQueryOperator,
     MLPDeepONet,
 )
+from .parameter_roles import ParameterRole
+from .role_provider import IParameterRoleProvider
 from .spectral import (
     DualPathFFNN,
     FourierAugmented,
@@ -45,6 +47,9 @@ from .spectral import (
 
 __all__ = [
     "LinearNetwork",
+    # Parameter roles and protocols
+    "ParameterRole",
+    "IParameterRoleProvider",
     # ScaleEquivariant
     "ScaleEquivariantFFNN",
     "ScaleEquivariantConstantWidthFFNN",
