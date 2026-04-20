@@ -7,7 +7,7 @@ from torch.nn import ModuleList
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
-from dlkit.infrastructure.config import OptimizationProgramSettings
+from dlkit.infrastructure.config import OptimizerPolicySettings
 from dlkit.infrastructure.config.data_entries import Feature
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
@@ -30,7 +30,7 @@ def _build_wrapper():
         loss_fn=nn.MSELoss(),
         val_metric_routes=[],
         test_metric_routes=[],
-        optimization_program_settings=OptimizationProgramSettings(),
+        optimizer_policy_settings=OptimizerPolicySettings(),
         feature_transforms={"x": ModuleList()},
         target_transforms={},
     )

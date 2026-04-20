@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.engine.training.optimization.state import RunningOptimizationProgram
+from dlkit.engine.training.optimization.state import RunningOptimizerPolicy
 from dlkit.engine.training.optimization.state_repository import (
     OptimizationStateRepository,
 )
@@ -27,7 +27,7 @@ class TestOptimizationStateRepositorySave:
 
     def test_save_contains_active_index(
         self,
-        single_stage_program: RunningOptimizationProgram,
+        single_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify saved state contains active_index.
@@ -42,7 +42,7 @@ class TestOptimizationStateRepositorySave:
 
     def test_save_contains_stages(
         self,
-        single_stage_program: RunningOptimizationProgram,
+        single_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify saved state contains stages list.
@@ -58,7 +58,7 @@ class TestOptimizationStateRepositorySave:
 
     def test_save_stage_has_optimizer_state(
         self,
-        single_stage_program: RunningOptimizationProgram,
+        single_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify each stage state contains optimizer_state dict.
@@ -77,7 +77,7 @@ class TestOptimizationStateRepositorySave:
 
     def test_save_stage_has_trigger_state(
         self,
-        single_stage_program: RunningOptimizationProgram,
+        single_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify each stage state contains trigger_state dict.
@@ -100,7 +100,7 @@ class TestOptimizationStateRepositoryRestore:
 
     def test_restore_restores_active_index(
         self,
-        two_stage_program: RunningOptimizationProgram,
+        two_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify restore sets active_index from checkpoint.
@@ -123,7 +123,7 @@ class TestOptimizationStateRepositoryRestore:
 
     def test_restore_restores_trigger_state(
         self,
-        two_stage_program: RunningOptimizationProgram,
+        two_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify restore loads trigger state and resets _fired flag.
@@ -155,7 +155,7 @@ class TestOptimizationStateRepositoryRestore:
 
     def test_round_trip_preserves_optimizer_state(
         self,
-        single_stage_program: RunningOptimizationProgram,
+        single_stage_program: RunningOptimizerPolicy,
         repository: OptimizationStateRepository,
     ) -> None:
         """Verify optimizer state is preserved through save/restore cycle.

@@ -12,7 +12,7 @@ from dlkit.engine.training.optimization.controllers import (
     ManualOptimizationController,
 )
 from dlkit.engine.training.optimization.state import (
-    RunningOptimizationProgram,
+    RunningOptimizerPolicy,
 )
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
 from dlkit.engine.training.optimization.stepping import StepAllOptimizers
@@ -31,7 +31,7 @@ def repository() -> OptimizationStateRepository:
 
 @pytest.fixture
 def auto_controller(
-    single_stage_program: RunningOptimizationProgram,
+    single_stage_program: RunningOptimizerPolicy,
     repository: OptimizationStateRepository,
 ) -> AutomaticOptimizationController:
     """Create an automatic optimization controller.
@@ -48,7 +48,7 @@ def auto_controller(
 
 @pytest.fixture
 def manual_controller(
-    single_stage_program: RunningOptimizationProgram,
+    single_stage_program: RunningOptimizerPolicy,
     repository: OptimizationStateRepository,
 ) -> ManualOptimizationController:
     """Create a manual optimization controller.
@@ -65,7 +65,7 @@ def manual_controller(
 
 @pytest.fixture
 def auto_controller_two_stages(
-    two_stage_program: RunningOptimizationProgram,
+    two_stage_program: RunningOptimizerPolicy,
     repository: OptimizationStateRepository,
 ) -> AutomaticOptimizationController:
     """Create an automatic controller with two stages.

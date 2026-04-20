@@ -32,10 +32,10 @@ from dlkit.engine.adapters.lightning.model_invoker import ModelOutputSpec, Tenso
 from dlkit.engine.adapters.lightning.prediction_strategies import ODEPredictionStrategy
 from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
-from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
 from dlkit.engine.training.optimization.controllers import AutomaticOptimizationController
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-from dlkit.infrastructure.config import OptimizationProgramSettings
+from dlkit.infrastructure.config import OptimizerPolicySettings
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
@@ -213,7 +213,7 @@ def _make_optimization_controller(model: nn.Module) -> AutomaticOptimizationCont
     Returns:
         Configured AutomaticOptimizationController.
     """
-    program = OptimizationProgramBuilder().build(model, OptimizationProgramSettings())
+    program = OptimizerPolicyBuilder().build(model, OptimizerPolicySettings())
     return AutomaticOptimizationController(program, OptimizationStateRepository())
 
 

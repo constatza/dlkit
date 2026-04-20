@@ -11,7 +11,7 @@ from dlkit.engine.training.optimization.inventory import ParameterDescriptor
 from dlkit.engine.training.optimization.state import (
     ActiveConcurrentGroup,
     ActiveStage,
-    RunningOptimizationProgram,
+    RunningOptimizerPolicy,
 )
 from dlkit.engine.training.optimization.triggers import (
     EpochTransitionTrigger,
@@ -179,33 +179,33 @@ def second_stage(tiny_model: nn.Sequential) -> ActiveStage:
 def two_stage_program(
     epoch_trigger_stage: ActiveStage,
     second_stage: ActiveStage,
-) -> RunningOptimizationProgram:
-    """Two-stage RunningOptimizationProgram: SGD (epoch trigger) → Adam.
+) -> RunningOptimizerPolicy:
+    """Two-stage RunningOptimizerPolicy: SGD (epoch trigger) → Adam.
 
     Args:
         epoch_trigger_stage: First stage with epoch trigger.
         second_stage: Second stage without trigger.
 
     Returns:
-        A RunningOptimizationProgram with two sequential stages.
+        A RunningOptimizerPolicy with two sequential stages.
     """
-    return RunningOptimizationProgram(
+    return RunningOptimizerPolicy(
         stages=(epoch_trigger_stage, second_stage),
         active_index=0,
     )
 
 
 @pytest.fixture
-def single_stage_program(no_trigger_stage: ActiveStage) -> RunningOptimizationProgram:
-    """Single-stage RunningOptimizationProgram.
+def single_stage_program(no_trigger_stage: ActiveStage) -> RunningOptimizerPolicy:
+    """Single-stage RunningOptimizerPolicy.
 
     Args:
         no_trigger_stage: The only stage in the program.
 
     Returns:
-        A RunningOptimizationProgram with one stage.
+        A RunningOptimizerPolicy with one stage.
     """
-    return RunningOptimizationProgram(
+    return RunningOptimizerPolicy(
         stages=(no_trigger_stage,),
         active_index=0,
     )

@@ -1,15 +1,15 @@
-"""Tests for RunningOptimizationProgram state object."""
+"""Tests for RunningOptimizerPolicy state object."""
 
 from __future__ import annotations
 
-from dlkit.engine.training.optimization.state import RunningOptimizationProgram
+from dlkit.engine.training.optimization.state import RunningOptimizerPolicy
 
 
-class TestRunningOptimizationProgramCurrent:
+class TestRunningOptimizerPolicyCurrent:
     """Tests for the current property."""
 
     def test_current_returns_stage_at_active_index(
-        self, two_stage_program: RunningOptimizationProgram
+        self, two_stage_program: RunningOptimizerPolicy
     ) -> None:
         """Verify current returns the stage at active_index.
 
@@ -21,12 +21,10 @@ class TestRunningOptimizationProgramCurrent:
         assert two_stage_program.current is two_stage_program.stages[1]
 
 
-class TestRunningOptimizationProgramAdvance:
+class TestRunningOptimizerPolicyAdvance:
     """Tests for advancing through the program."""
 
-    def test_advance_moves_to_next_stage(
-        self, two_stage_program: RunningOptimizationProgram
-    ) -> None:
+    def test_advance_moves_to_next_stage(self, two_stage_program: RunningOptimizerPolicy) -> None:
         """Verify advance increments active_index and returns True.
 
         Args:
@@ -38,7 +36,7 @@ class TestRunningOptimizationProgramAdvance:
         assert two_stage_program.active_index == 1
 
     def test_advance_returns_false_at_final_stage(
-        self, two_stage_program: RunningOptimizationProgram
+        self, two_stage_program: RunningOptimizerPolicy
     ) -> None:
         """Verify advance returns False when at final stage.
 
@@ -52,11 +50,11 @@ class TestRunningOptimizationProgramAdvance:
         assert two_stage_program.active_index == 1
 
 
-class TestRunningOptimizationProgramFinalStage:
+class TestRunningOptimizerPolicyFinalStage:
     """Tests for final stage detection."""
 
     def test_is_at_final_stage_false_at_start(
-        self, two_stage_program: RunningOptimizationProgram
+        self, two_stage_program: RunningOptimizerPolicy
     ) -> None:
         """Verify is_at_final_stage returns False at start.
 
@@ -66,7 +64,7 @@ class TestRunningOptimizationProgramFinalStage:
         assert two_stage_program.is_at_final_stage is False
 
     def test_is_at_final_stage_true_after_advance(
-        self, two_stage_program: RunningOptimizationProgram
+        self, two_stage_program: RunningOptimizerPolicy
     ) -> None:
         """Verify is_at_final_stage returns True after advancing.
 
@@ -77,7 +75,7 @@ class TestRunningOptimizationProgramFinalStage:
         assert two_stage_program.is_at_final_stage is True
 
     def test_single_stage_program_is_always_at_final(
-        self, single_stage_program: RunningOptimizationProgram
+        self, single_stage_program: RunningOptimizerPolicy
     ) -> None:
         """Verify single-stage program is always at final.
 
