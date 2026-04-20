@@ -29,10 +29,10 @@ from dlkit.engine.adapters.lightning.base import (
     _unpack_model_output,
 )
 from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
-from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
 from dlkit.engine.training.optimization.controllers import AutomaticOptimizationController
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-from dlkit.infrastructure.config import OptimizationProgramSettings
+from dlkit.infrastructure.config import OptimizerPolicySettings
 from dlkit.infrastructure.utils.tensordict_utils import sequence_to_tensordict
 
 
@@ -350,7 +350,7 @@ def _make_optimization_controller(model: nn.Module) -> AutomaticOptimizationCont
     Returns:
         Configured AutomaticOptimizationController.
     """
-    program = OptimizationProgramBuilder().build(model, OptimizationProgramSettings())
+    program = OptimizerPolicyBuilder().build(model, OptimizerPolicySettings())
     return AutomaticOptimizationController(program, OptimizationStateRepository())
 
 

@@ -11,7 +11,7 @@ from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config import (
     ModelComponentSettings,
-    OptimizationProgramSettings,
+    OptimizerPolicySettings,
     WrapperComponentSettings,
 )
 from dlkit.infrastructure.config.data_entries import Feature
@@ -31,7 +31,7 @@ def dummy_components(dummy_entry_configs) -> WrapperComponents:
         loss_fn=nn.MSELoss(),
         val_metric_routes=[],
         test_metric_routes=[],
-        optimization_program_settings=OptimizationProgramSettings(),
+        optimizer_policy_settings=OptimizerPolicySettings(),
         feature_transforms={e.name: ModuleList() for e in dummy_entry_configs if e.name},
         target_transforms={},
     )
