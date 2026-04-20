@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -15,10 +15,12 @@ class EpochTriggerSettings(BasicSettings):
     Transition occurs when the specified epoch is reached.
 
     Attributes:
-        at_epoch: Epoch number (1-indexed) at which to trigger transition.
+        kind: Discriminator tag — always ``"epoch"``.
+        at_epoch: 0-indexed epoch number (Lightning epoch counter) at which to trigger transition.
     """
 
-    at_epoch: int = Field(..., description="Epoch number at which transition fires (1-indexed)")
+    kind: Literal["epoch"] = "epoch"
+    at_epoch: int = Field(..., description="0-indexed epoch number at which transition fires")
 
 
 class PlateauTriggerSettings(BasicSettings):
@@ -27,12 +29,14 @@ class PlateauTriggerSettings(BasicSettings):
     Transition occurs when monitored metric shows no improvement for patience epochs.
 
     Attributes:
+        kind: Discriminator tag — always ``"plateau"``.
         monitor: Metric to monitor. Defaults to "val_loss".
         patience: Epochs without improvement before transition. Defaults to 10.
         min_delta: Minimum change to qualify as improvement. Defaults to 1e-4.
         mode: Optimization direction ("min" or "max"). Defaults to "min".
     """
 
+    kind: Literal["plateau"] = "plateau"
     monitor: str = Field(default="val_loss", description="Metric to monitor")
     patience: int = Field(
         default=10, description="Number of epochs with no improvement before transitioning"
@@ -43,5 +47,13 @@ class PlateauTriggerSettings(BasicSettings):
     )
 
 
-type TriggerSettings = EpochTriggerSettings | PlateauTriggerSettings | None
-"""Type alias for any valid trigger configuration, or None for no trigger."""
+TriggerSpec = Annotated[
+    EpochTriggerSettings | PlateauTriggerSettings,
+    Field(discriminator="kind"),
+]
+"""Discriminated union of all trigger variants.
+
+Use ``TriggerSpec | None`` as a field type where a trigger is optional.
+Pydantic dispatches deserialization to the correct subclass via the
+``kind`` discriminator field.
+"""

@@ -74,15 +74,18 @@ class TorchOptimizerFactory(IOptimizerFactory):
         Raises:
             ImportError: If the optimizer class cannot be imported.
             TypeError: If the optimizer class cannot be instantiated
-                with the provided parameters.
+                with the provided parameters. Passing kwargs that are
+                incompatible with the chosen optimizer raises here rather
+                than being silently dropped.
         """
-        # Resolve the optimizer class
         optimizer_cls = self._resolve_optimizer_class()
 
-        # Build kwargs from settings (exclude name and module_path)
-        kwargs = self._settings.model_dump(exclude={"name", "module_path"})
+        # get_init_kwargs() excludes identity fields (name, module_path), None values,
+        # and unset fields. Only kwargs the user explicitly set are forwarded.
+        # Each optimizer uses its own PyTorch defaults for the rest.
+        # Passing an incompatible kwarg raises TypeError here — intentional, not silent.
+        kwargs = self._settings.get_init_kwargs()
 
-        # Create and return optimizer
         return optimizer_cls(param_groups, **kwargs)
 
     def _resolve_optimizer_class(self) -> Callable[..., torch.optim.Optimizer]:
@@ -211,10 +214,10 @@ class TorchSchedulerFactory(ISchedulerFactory):
         # Resolve the scheduler class
         scheduler_cls = self._resolve_scheduler_class()
 
-        # Build kwargs from settings, excluding Lightning-only metadata and identity fields.
-        # "monitor" and "frequency" are passed back to Lightning via configure_optimizers(),
-        # not to the scheduler constructor itself.
-        kwargs = self._settings.model_dump(exclude={"name", "module_path", "monitor", "frequency"})
+        # get_init_kwargs() excludes identity fields (name, module_path), None values, and
+        # unset fields. "monitor" and "frequency" are also excluded because they are
+        # Lightning metadata forwarded via configure_optimizers(), not scheduler constructor args.
+        kwargs = self._settings.get_init_kwargs(exclude={"monitor", "frequency"})
 
         # Create and return scheduler
         return scheduler_cls(optimizer, **kwargs)

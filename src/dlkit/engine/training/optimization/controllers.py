@@ -7,9 +7,27 @@ from collections.abc import Callable
 
 from torch import Tensor
 
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizationProgram
+from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
 from .state_repository import IOptimizationStateRepository
 from .stepping import IStepPolicy
+
+
+def _flatten_all_stages(program: RunningOptimizerPolicy) -> tuple[ActiveStage, ...]:
+    """Extract all stages from every entry in a program, flattening concurrent groups.
+
+    Args:
+        program: The running optimization program.
+
+    Returns:
+        Tuple of all ActiveStage objects across all entries.
+    """
+    stages: list[ActiveStage] = []
+    for entry in program.stages:
+        if isinstance(entry, ActiveStage):
+            stages.append(entry)
+        elif isinstance(entry, ActiveConcurrentGroup):
+            stages.extend(entry.stages)
+    return tuple(stages)
 
 
 class IOptimizationController(ABC):
@@ -65,6 +83,15 @@ class IOptimizationController(ABC):
         ...
 
     @abstractmethod
+    def current_learning_rates(self) -> dict[str, float]:
+        """Return learning rates for all currently active optimizers.
+
+        Returns:
+            Dict mapping stage keys to their current learning rates.
+        """
+        ...
+
+    @abstractmethod
     def state_dict(self) -> dict[str, object]:
         """Return controller state for checkpointing.
 
@@ -96,7 +123,7 @@ class AutomaticOptimizationController(IOptimizationController):
 
     def __init__(
         self,
-        program: RunningOptimizationProgram,
+        program: RunningOptimizerPolicy,
         repository: IOptimizationStateRepository,
     ) -> None:
         """Initialize the automatic optimization controller.
@@ -121,29 +148,35 @@ class AutomaticOptimizationController(IOptimizationController):
         """Configure optimizers and schedulers for Lightning.
 
         Returns:
-            Dict with "optimizer" and optional "lr_scheduler" keys,
-            or list of optimizers if multiple exist.
+            Dict with "optimizer" and optional "lr_scheduler" keys for a
+            single optimizer, or a list of per-optimizer dicts when multiple
+            concurrent stages are registered.
         """
-        # Flatten all stages to get optimizers
-        all_stages = self._flatten_all_stages()
+        all_stages = _flatten_all_stages(self._program)
 
         if len(all_stages) == 1:
-            # Single optimizer: return dict format
             stage = all_stages[0]
             config: dict[str, object] = {"optimizer": stage.optimizer}
-
             if stage.scheduler is not None:
                 config["lr_scheduler"] = {
                     "scheduler": stage.scheduler,
                     "monitor": stage.scheduler_monitor,
                     "frequency": stage.scheduler_frequency,
                 }
-
             return config
 
-        else:
-            # Multiple optimizers: return list format
-            return [stage.optimizer for stage in all_stages]
+        # Multiple concurrent optimizers: each entry preserves its scheduler.
+        entries: list[object] = []
+        for stage in all_stages:
+            entry: dict[str, object] = {"optimizer": stage.optimizer}
+            if stage.scheduler is not None:
+                entry["lr_scheduler"] = {
+                    "scheduler": stage.scheduler,
+                    "monitor": stage.scheduler_monitor,
+                    "frequency": stage.scheduler_frequency,
+                }
+            entries.append(entry)
+        return entries
 
     def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
         """Raise error (not used in automatic mode).
@@ -168,6 +201,16 @@ class AutomaticOptimizationController(IOptimizationController):
             current.trigger.reset()
             self._program.advance()
 
+    def current_learning_rates(self) -> dict[str, float]:
+        """Return learning rates for all currently active optimizers.
+
+        Returns:
+            Dict mapping stage keys to their current learning rates.
+        """
+        from .metrics import OptimizationMetricsView
+
+        return OptimizationMetricsView(self._program).current_learning_rates()
+
     def state_dict(self) -> dict[str, object]:
         """Return state for checkpointing.
 
@@ -184,20 +227,6 @@ class AutomaticOptimizationController(IOptimizationController):
         """
         self._repository.restore(self._program, state)
 
-    def _flatten_all_stages(self) -> tuple[ActiveStage, ...]:
-        """Extract all stages from program, flattening concurrent groups.
-
-        Returns:
-            Tuple of all ActiveStage objects.
-        """
-        stages: list[ActiveStage] = []
-        for entry in self._program.stages:
-            if isinstance(entry, ActiveStage):
-                stages.append(entry)
-            elif isinstance(entry, ActiveConcurrentGroup):
-                stages.extend(entry.stages)
-        return tuple(stages)
-
 
 class ManualOptimizationController(IOptimizationController):
     """Controller for manual optimization stepping.
@@ -213,7 +242,7 @@ class ManualOptimizationController(IOptimizationController):
 
     def __init__(
         self,
-        program: RunningOptimizationProgram,
+        program: RunningOptimizerPolicy,
         repository: IOptimizationStateRepository,
         step_policy: IStepPolicy,
     ) -> None:
@@ -243,8 +272,7 @@ class ManualOptimizationController(IOptimizationController):
         Returns:
             List of all optimizers (Lightning requires this for manual mode).
         """
-        all_stages = self._flatten_all_stages()
-        return [stage.optimizer for stage in all_stages]
+        return [stage.optimizer for stage in _flatten_all_stages(self._program)]
 
     def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
         """Execute one optimizer step using the step policy.
@@ -269,6 +297,16 @@ class ManualOptimizationController(IOptimizationController):
             current.trigger.reset()
             self._program.advance()
 
+    def current_learning_rates(self) -> dict[str, float]:
+        """Return learning rates for all currently active optimizers.
+
+        Returns:
+            Dict mapping stage keys to their current learning rates.
+        """
+        from .metrics import OptimizationMetricsView
+
+        return OptimizationMetricsView(self._program).current_learning_rates()
+
     def state_dict(self) -> dict[str, object]:
         """Return state for checkpointing.
 
@@ -284,17 +322,3 @@ class ManualOptimizationController(IOptimizationController):
             state: State dict from state_dict().
         """
         self._repository.restore(self._program, state)
-
-    def _flatten_all_stages(self) -> tuple[ActiveStage, ...]:
-        """Extract all stages from program, flattening concurrent groups.
-
-        Returns:
-            Tuple of all ActiveStage objects.
-        """
-        stages: list[ActiveStage] = []
-        for entry in self._program.stages:
-            if isinstance(entry, ActiveStage):
-                stages.append(entry)
-            elif isinstance(entry, ActiveConcurrentGroup):
-                stages.extend(entry.stages)
-        return tuple(stages)

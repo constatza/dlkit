@@ -40,6 +40,64 @@ from .prediction_strategies import DiscriminativePredictionStrategy
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
+    from dlkit.engine.training.optimization.state import RunningOptimizerPolicy
+
+
+def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
+    """Determine whether the given optimization program needs manual stepping.
+
+    Manual optimization is required when:
+    - Any stage uses an LBFGS-family optimizer (needs a closure).
+    - The program has more than one sequential stage (automatic mode would
+      register and step all optimizers every batch, defeating staged training).
+
+    Args:
+        program: The assembled optimization program.
+
+    Returns:
+        True if the Lightning wrapper should set automatic_optimization=False.
+    """
+    from dlkit.engine.training.optimization.state import ActiveStage
+
+    # Sequential multi-stage programs must be stepped manually so that only
+    # the active stage's optimizer is updated at any given training step.
+    sequential_stage_count = sum(1 for entry in program.stages if isinstance(entry, ActiveStage))
+    if sequential_stage_count > 1:
+        return True
+
+    # LBFGS requires a closure — Lightning's automatic mode cannot provide it.
+    for entry in program.stages:
+        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
+        for stage in stages:
+            opt_cls = stage.optimizer.__class__.__name__.lower()
+            if any(x in opt_cls for x in ("lbfgs", "manual")):
+                return True
+
+    return False
+
+
+def _pick_step_policy(program: RunningOptimizerPolicy) -> Any:
+    """Select the appropriate manual-stepping policy for the program.
+
+    Uses LBFGSStageStepper when any stage holds an LBFGS-family optimizer
+    (which requires a closure). Falls back to StepAllOptimizers otherwise.
+
+    Args:
+        program: The running optimization program.
+
+    Returns:
+        An IStepPolicy instance suited to the program's optimizer(s).
+    """
+    from dlkit.engine.training.optimization.state import ActiveStage
+    from dlkit.engine.training.optimization.stepping import LBFGSStageStepper, StepAllOptimizers
+
+    for entry in program.stages:
+        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
+        for stage in stages:
+            if "lbfgs" in stage.optimizer.__class__.__name__.lower():
+                return LBFGSStageStepper()
+
+    return StepAllOptimizers()
 
 
 def _validate_extra_inputs_against_signature(
@@ -290,35 +348,19 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
 
         # Build optimization controller
-        from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+        from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
         from dlkit.engine.training.optimization.controllers import (
             AutomaticOptimizationController,
             ManualOptimizationController,
         )
         from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-        from dlkit.engine.training.optimization.stepping import StepAllOptimizers
 
-        program = OptimizationProgramBuilder().build(
-            model, components.optimization_program_settings
-        )
+        program = OptimizerPolicyBuilder().build(model, components.optimizer_policy_settings)
         repository = OptimizationStateRepository()
 
-        # Determine if manual optimization is required
-        def _requires_manual(program: Any) -> bool:
-            """Check if any stage uses LBFGS-like optimizer requiring manual stepping."""
-            from dlkit.engine.training.optimization.state import ActiveStage
-
-            for entry in program.stages:
-                stages = [entry] if isinstance(entry, ActiveStage) else entry.stages
-                for stage in stages:
-                    opt_cls = stage.optimizer.__class__.__name__.lower()
-                    if any(x in opt_cls for x in ["lbfgs", "manual"]):
-                        return True
-            return False
-
-        if _requires_manual(program):
+        if _requires_manual_optimization(program):
             optimization_controller = ManualOptimizationController(
-                program, repository, StepAllOptimizers()
+                program, repository, _pick_step_policy(program)
             )
         else:
             optimization_controller = AutomaticOptimizationController(program, repository)

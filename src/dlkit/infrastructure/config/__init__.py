@@ -54,26 +54,55 @@ from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSe
 # Flattened functional settings
 from .mlflow_settings import MLflowSettings
 from .model_components import (
+    CrossEntropyLossSettings,
+    HuberLossSettings,
+    L1LossSettings,
     LossComponentSettings,
+    LossSpec,
+    MeanAbsoluteErrorSettings,
+    MeanSquaredErrorSettings,
     MetricComponentSettings,
+    MetricSpec,
     ModelComponentSettings,
+    MSELossSettings,
+    R2ScoreSettings,
     WrapperComponentSettings,
 )
-from .optimization_program import OptimizationProgramSettings
-from .optimization_selector import ParameterSelectorSettings
+from .optimization_selector import (
+    DifferenceSelectorSettings,
+    IntersectionSelectorSettings,
+    ModulePathSelectorSettings,
+    MuonEligibleSelectorSettings,
+    NonMuonSelectorSettings,
+    ParameterSelectorSettings,
+    RoleSelectorSettings,
+    UnionSelectorSettings,
+)
 from .optimization_stage import (
     ConcurrentOptimizationSettings,
     OptimizationStageSettings,
+    StageSpec,
 )
 from .optimization_trigger import (
     EpochTriggerSettings,
     PlateauTriggerSettings,
-    TriggerSettings,
+    TriggerSpec,
 )
 from .optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    CosineAnnealingLRSettings,
+    CosineAnnealingWarmRestartsSettings,
+    LBFGSSettings,
+    MuonSettings,
     OptimizerComponentSettings,
+    OptimizerSpec,
+    ReduceLROnPlateauSettings,
     SchedulerComponentSettings,
+    SchedulerSpec,
+    StepLRSettings,
 )
+from .optimizer_policy import OptimizerPolicySettings
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 from .optuna_settings import OptunaSettings
 from .session_settings import SessionSettings
@@ -124,17 +153,48 @@ __all__ = [
     "MetricComponentSettings",
     "LossComponentSettings",
     "WrapperComponentSettings",
+    # Typed loss function settings
+    "MSELossSettings",
+    "L1LossSettings",
+    "HuberLossSettings",
+    "CrossEntropyLossSettings",
+    "LossSpec",
+    # Typed metric settings
+    "MeanSquaredErrorSettings",
+    "MeanAbsoluteErrorSettings",
+    "R2ScoreSettings",
+    "MetricSpec",
     # Optimizer and scheduler components
+    "AdamSettings",
+    "AdamWSettings",
+    "LBFGSSettings",
+    "MuonSettings",
     "OptimizerComponentSettings",
+    "OptimizerSpec",
+    "CosineAnnealingLRSettings",
+    "CosineAnnealingWarmRestartsSettings",
+    "ReduceLROnPlateauSettings",
     "SchedulerComponentSettings",
+    "SchedulerSpec",
+    "StepLRSettings",
     # Optimization configuration
-    "OptimizationProgramSettings",
+    "OptimizerPolicySettings",
     "OptimizationStageSettings",
     "ConcurrentOptimizationSettings",
+    "StageSpec",
+    # Selector variants + union alias
     "ParameterSelectorSettings",
+    "RoleSelectorSettings",
+    "ModulePathSelectorSettings",
+    "MuonEligibleSelectorSettings",
+    "NonMuonSelectorSettings",
+    "IntersectionSelectorSettings",
+    "UnionSelectorSettings",
+    "DifferenceSelectorSettings",
+    # Trigger variants + union alias
     "EpochTriggerSettings",
     "PlateauTriggerSettings",
-    "TriggerSettings",
+    "TriggerSpec",
     # External library settings
     "TrainerSettings",
     "OptimizerSettings",

@@ -1,8 +1,10 @@
 """Model component settings without build() methods - pure configuration."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
@@ -14,6 +16,7 @@ from .core.base_settings import (
     RequiredNameComponentSettings,
 )
 from .core.types import IntHyperparameter
+from .optimizer_policy import OptimizerPolicySettings
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
 
 
@@ -106,6 +109,70 @@ class MetricComponentSettings(ComponentSettings):
         return v
 
 
+# ---------------------------------------------------------------------------
+# Shared config for all concrete typed metric classes:
+# extra="forbid"  — unknown kwargs raise ValidationError immediately (no silent drops)
+# frozen=True     — immutable after construction
+# ---------------------------------------------------------------------------
+_METRIC_CONFIG = SettingsConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+
+
+class MeanSquaredErrorSettings(MetricComponentSettings):
+    """Settings for torchmetrics MeanSquaredError.
+
+    Attributes:
+        name: Discriminator tag — always "MeanSquaredError".
+        squared: If False, returns RMSE.
+        num_outputs: Number of output channels.
+    """
+
+    model_config = _METRIC_CONFIG
+    name: Literal["MeanSquaredError"] = "MeanSquaredError"
+    module_path: str | None = "torchmetrics.regression"
+    squared: bool = Field(default=True, description="If False, returns RMSE instead of MSE")
+    num_outputs: int = Field(default=1, gt=0, description="Number of output channels")
+
+
+class MeanAbsoluteErrorSettings(MetricComponentSettings):
+    """Settings for torchmetrics MeanAbsoluteError.
+
+    Attributes:
+        name: Discriminator tag — always "MeanAbsoluteError".
+        num_outputs: Number of output channels.
+    """
+
+    model_config = _METRIC_CONFIG
+    name: Literal["MeanAbsoluteError"] = "MeanAbsoluteError"
+    module_path: str | None = "torchmetrics.regression"
+    num_outputs: int = Field(default=1, gt=0, description="Number of output channels")
+
+
+class R2ScoreSettings(MetricComponentSettings):
+    """Settings for torchmetrics R2Score.
+
+    Attributes:
+        name: Discriminator tag — always "R2Score".
+        num_outputs: Number of output channels.
+        adjusted: Number of features for adjusted R2.
+        multioutput: Multi-output aggregation strategy.
+    """
+
+    model_config = _METRIC_CONFIG
+    name: Literal["R2Score"] = "R2Score"
+    module_path: str | None = "torchmetrics.regression"
+    num_outputs: int = Field(default=1, gt=0, description="Number of output channels")
+    adjusted: int = Field(default=0, ge=0, description="Number of features for adjusted R2")
+    multioutput: Literal["raw_values", "uniform_average", "variance_weighted"] = Field(
+        default="uniform_average", description="Multi-output aggregation strategy"
+    )
+
+
+MetricSpec = Annotated[
+    MeanSquaredErrorSettings | MeanAbsoluteErrorSettings | R2ScoreSettings,
+    Field(discriminator="name"),
+]
+
+
 class LossComponentSettings(ComponentSettings):
     """Configuration for loss function components - pure configuration only.
 
@@ -157,6 +224,85 @@ class LossComponentSettings(ComponentSettings):
         if v is not None:
             _validate_batch_key(v)
         return v
+
+
+# ---------------------------------------------------------------------------
+# Shared config for all concrete typed loss classes:
+# extra="forbid"  — unknown kwargs raise ValidationError immediately (no silent drops)
+# frozen=True     — immutable after construction
+# ---------------------------------------------------------------------------
+_LOSS_CONFIG = SettingsConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+
+
+class MSELossSettings(LossComponentSettings):
+    """Settings for mean-squared-error loss (default dlkit functional loss).
+
+    Attributes:
+        name: Discriminator tag — always "mse".
+    """
+
+    model_config = _LOSS_CONFIG
+    name: Literal["mse"] = "mse"
+    module_path: str | None = None  # resolved at runtime by dlkit
+
+
+class L1LossSettings(LossComponentSettings):
+    """Settings for mean-absolute-error (L1) loss.
+
+    Attributes:
+        name: Discriminator tag — always "mae".
+    """
+
+    model_config = _LOSS_CONFIG
+    name: Literal["mae"] = "mae"
+    module_path: str | None = None
+
+
+class HuberLossSettings(LossComponentSettings):
+    """Settings for Huber loss (smooth L1).
+
+    Attributes:
+        name: Discriminator tag — always "huber_loss".
+        reduction: Reduction method.
+        delta: Threshold parameter.
+    """
+
+    model_config = _LOSS_CONFIG
+    name: Literal["huber_loss"] = "huber_loss"
+    module_path: str | None = None
+    reduction: Literal["mean", "sum", "none"] = Field(
+        default="mean", description="Reduction method"
+    )
+    delta: float = Field(default=1.0, gt=0, description="Huber loss delta threshold")
+
+
+class CrossEntropyLossSettings(LossComponentSettings):
+    """Settings for torch.nn.CrossEntropyLoss.
+
+    Attributes:
+        name: Discriminator tag — always "CrossEntropyLoss".
+        module_path: Import path.
+        reduction: Reduction method.
+        label_smoothing: Label smoothing factor.
+        ignore_index: Target value to ignore.
+    """
+
+    model_config = _LOSS_CONFIG
+    name: Literal["CrossEntropyLoss"] = "CrossEntropyLoss"
+    module_path: str | None = "torch.nn"
+    reduction: Literal["mean", "sum", "none"] = Field(
+        default="mean", description="Reduction method"
+    )
+    label_smoothing: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Label smoothing factor"
+    )
+    ignore_index: int = Field(default=-100, description="Target value that is ignored")
+
+
+LossSpec = Annotated[
+    MSELossSettings | L1LossSettings | HuberLossSettings | CrossEntropyLossSettings,
+    Field(discriminator="name"),
+]
 
 
 class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettings):
@@ -265,6 +411,10 @@ class WrapperComponentSettings(ComponentSettings):
     )
     scheduler: SchedulerSettings = Field(
         default_factory=SchedulerSettings, description="Scheduler settings"
+    )
+    optimizer_policy: OptimizerPolicySettings | None = Field(
+        default=None,
+        description="Staged optimizer policy. When set, overrides legacy optimizer/scheduler fields.",
     )
 
     # Training flags

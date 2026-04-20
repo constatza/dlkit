@@ -50,7 +50,7 @@ class WrapperComponents:
         loss_fn: Instantiated loss function module.
         val_metric_routes: MetricRoute list for validation stage.
         test_metric_routes: MetricRoute list for test stage.
-        optimization_program_settings: Optimization program configuration for building controller.
+        optimizer_policy_settings: Optimization program configuration for building controller.
         feature_transforms: Pre-built ModuleList per feature entry name (empty → no transforms).
         target_transforms: Pre-built ModuleList per target entry name (empty → no transforms).
     """
@@ -58,6 +58,6 @@ class WrapperComponents:
     loss_fn: nn.Module
     val_metric_routes: list[MetricRoute]
     test_metric_routes: list[MetricRoute]
-    optimization_program_settings: Any
+    optimizer_policy_settings: Any
     feature_transforms: dict[str, nn.ModuleList]
     target_transforms: dict[str, nn.ModuleList]

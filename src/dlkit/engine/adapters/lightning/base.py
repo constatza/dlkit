@@ -560,24 +560,13 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         Returns:
             Current learning rate or None if unavailable.
         """
-        from dlkit.engine.training.optimization.controllers import (
-            AutomaticOptimizationController,
-            ManualOptimizationController,
-        )
-        from dlkit.engine.training.optimization.metrics import OptimizationMetricsView
-
         if hasattr(self, "_optimization_controller"):
-            controller = self._optimization_controller
-            if isinstance(
-                controller, (AutomaticOptimizationController, ManualOptimizationController)
-            ):
-                try:
-                    view = OptimizationMetricsView(controller._program)
-                    rates = view.current_learning_rates()
-                    if rates:
-                        return next(iter(rates.values()))
-                except Exception:
-                    pass
+            try:
+                rates = self._optimization_controller.current_learning_rates()
+                if rates:
+                    return next(iter(rates.values()))
+            except Exception:
+                pass
         return None
 
     @lr.setter

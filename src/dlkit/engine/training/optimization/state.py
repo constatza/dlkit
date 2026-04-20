@@ -56,7 +56,7 @@ class ActiveConcurrentGroup:
 
 
 @dataclass(kw_only=True)
-class RunningOptimizationProgram:
+class RunningOptimizerPolicy:
     """Top-level mutable state for the active optimization program.
 
     Tracks which stage is currently active and provides the interface
