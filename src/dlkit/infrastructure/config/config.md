@@ -19,6 +19,23 @@ services, and component-construction support.
 - `dataset_settings.py`: dataset config, including explicit `family`
 - `security/uri_types.py`: secure URI/path config types
 - `precision/`: precision strategy and runtime precision services
+- `optimization_trigger.py`: `EpochTriggerSettings`, `PlateauTriggerSettings`, `TriggerSpec` (discriminated union)
+- `optimization_selector.py`: seven focused selector classes + `ParameterSelectorSettings` (discriminated union)
+- `optimization_stage.py`: `OptimizationStageSettings`, `ConcurrentOptimizationSettings`, `StageSpec` (discriminated union)
+- `policy.py`: `OptimizerPolicySettings` — top-level staged optimizer config
+
+## Optimization Discriminated Unions
+
+Trigger, selector, and stage fields use Pydantic discriminated unions.
+The discriminator field must be present when loading from TOML or any dict source.
+
+| Type alias | Discriminator | Variants |
+|---|---|---|
+| `TriggerSpec` | `kind` | `"epoch"`, `"plateau"` |
+| `ParameterSelectorSettings` | `kind` | `"role"`, `"module_path"`, `"muon_eligible"`, `"non_muon"`, `"intersection"`, `"union"`, `"difference"` |
+| `StageSpec` | `kind` | `"stage"`, `"concurrent"` |
+
+Python construction omits the discriminator — all fields have defaults.
 
 ## Ownership Boundary
 - `tools.io` reads TOML files and resolves sections.
