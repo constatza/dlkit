@@ -1,24 +1,46 @@
-"""Builder for assembling RunningOptimizationProgram from model and config."""
+"""Builder for assembling RunningOptimizerPolicy from model and config."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Literal
 
 import torch.nn as nn
 
-from dlkit.infrastructure.config.optimization_program import OptimizationProgramSettings
+from dlkit.domain.nn.parameter_roles import ParameterRole
+from dlkit.infrastructure.config.optimization_selector import (
+    DifferenceSelectorSettings,
+    IntersectionSelectorSettings,
+    ModulePathSelectorSettings,
+    MuonEligibleSelectorSettings,
+    NonMuonSelectorSettings,
+    RoleSelectorSettings,
+    UnionSelectorSettings,
+)
 from dlkit.infrastructure.config.optimization_stage import (
     ConcurrentOptimizationSettings,
     OptimizationStageSettings,
 )
-from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
+from dlkit.infrastructure.config.optimization_trigger import (
+    EpochTriggerSettings,
+    PlateauTriggerSettings,
+    TriggerSpec,
+)
+from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
 from .partitioning import ParameterPartitioner
-from .selectors import IParameterSelector
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizationProgram
+from .selectors import (
+    DifferenceSelector,
+    IntersectionSelector,
+    IParameterSelector,
+    ModulePathSelector,
+    MuonEligibleSelector,
+    NonMuonSelector,
+    RoleSelector,
+    UnionSelector,
+)
+from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
 from .triggers import (
     EpochTransitionTrigger,
     ITransitionTrigger,
@@ -30,28 +52,28 @@ from .triggers import (
 type ParamGroup = dict[str, object]
 
 
-class IOptimizationProgramBuilder(ABC):
+class IOptimizerPolicyBuilder(ABC):
     """Abstract interface for building optimization programs."""
 
     @abstractmethod
     def build(
         self,
         model: nn.Module,
-        settings: OptimizationProgramSettings,
-    ) -> RunningOptimizationProgram:
-        """Build a RunningOptimizationProgram from a model and settings.
+        settings: OptimizerPolicySettings,
+    ) -> RunningOptimizerPolicy:
+        """Build a RunningOptimizerPolicy from a model and settings.
 
         Args:
             model: The neural network model.
             settings: Optimization program configuration.
 
         Returns:
-            A RunningOptimizationProgram ready for execution.
+            A RunningOptimizerPolicy ready for execution.
         """
         ...
 
 
-def _build_trigger(trigger_settings: TriggerSettings) -> ITransitionTrigger:
+def _build_trigger(trigger_settings: TriggerSpec | None) -> ITransitionTrigger:
     """Build a trigger from settings.
 
     Args:
@@ -60,26 +82,20 @@ def _build_trigger(trigger_settings: TriggerSettings) -> ITransitionTrigger:
     Returns:
         An ITransitionTrigger instance.
     """
-    if trigger_settings is None:
-        return NoTransitionTrigger()
-
-    if hasattr(trigger_settings, "at_epoch"):
-        # EpochTriggerSettings
-        at_epoch = getattr(trigger_settings, "at_epoch", 0)
-        return EpochTransitionTrigger(at_epoch=int(at_epoch))
-
-    if hasattr(trigger_settings, "monitor"):
-        # PlateauTriggerSettings
-        mode_str = str(getattr(trigger_settings, "mode", "min"))
-        mode: Literal["min", "max"] = "min" if mode_str == "min" else "max"
-        return PlateauTransitionTrigger(
-            monitor=str(getattr(trigger_settings, "monitor", "val_loss")),
-            patience=int(getattr(trigger_settings, "patience", 3)),
-            min_delta=float(getattr(trigger_settings, "min_delta", 1e-4)),
-            mode=mode,
-        )
-
-    return NoTransitionTrigger()
+    match trigger_settings:
+        case None:
+            return NoTransitionTrigger()
+        case EpochTriggerSettings():
+            return EpochTransitionTrigger(at_epoch=trigger_settings.at_epoch)
+        case PlateauTriggerSettings():
+            return PlateauTransitionTrigger(
+                monitor=trigger_settings.monitor,
+                patience=trigger_settings.patience,
+                min_delta=trigger_settings.min_delta,
+                mode=trigger_settings.mode,
+            )
+        case _:
+            return NoTransitionTrigger()
 
 
 def _params_to_group(descriptors: tuple[ParameterDescriptor, ...]) -> list[ParamGroup]:
@@ -96,10 +112,49 @@ def _params_to_group(descriptors: tuple[ParameterDescriptor, ...]) -> list[Param
     return [{"params": params}]
 
 
-class OptimizationProgramBuilder(IOptimizationProgramBuilder):
+def _selector_from_settings(selector_settings: object) -> IParameterSelector:
+    """Convert a ParameterSelectorSettings instance to an IParameterSelector.
+
+    Args:
+        selector_settings: Any concrete selector settings object.
+
+    Returns:
+        The corresponding IParameterSelector instance.
+
+    Raises:
+        TypeError: If the settings type is not recognised.
+    """
+    match selector_settings:
+        case RoleSelectorSettings():
+            return RoleSelector(ParameterRole[selector_settings.role.upper()])
+        case ModulePathSelectorSettings():
+            return ModulePathSelector(selector_settings.prefix)
+        case MuonEligibleSelectorSettings():
+            return MuonEligibleSelector()
+        case NonMuonSelectorSettings():
+            return NonMuonSelector()
+        case IntersectionSelectorSettings():
+            return IntersectionSelector(
+                *(_selector_from_settings(c) for c in selector_settings.children)
+            )
+        case UnionSelectorSettings():
+            return UnionSelector(*(_selector_from_settings(c) for c in selector_settings.children))
+        case DifferenceSelectorSettings():
+            return DifferenceSelector(
+                _selector_from_settings(selector_settings.include),
+                _selector_from_settings(selector_settings.exclude),
+            )
+        case _:
+            raise TypeError(
+                f"Cannot convert selector settings of type {type(selector_settings).__name__} "
+                "to IParameterSelector. Expected a ParameterSelectorSettings instance."
+            )
+
+
+class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
     """Concrete builder for optimization programs.
 
-    Assembles a RunningOptimizationProgram by:
+    Assembles a RunningOptimizerPolicy by:
     1. Enumerating model parameters via TorchParameterInventory
     2. Partitioning parameters via selectors (or using all if no selector)
     3. Creating optimizers and schedulers via factory pattern
@@ -110,8 +165,8 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
     def build(
         self,
         model: nn.Module,
-        settings: OptimizationProgramSettings,
-    ) -> RunningOptimizationProgram:
+        settings: OptimizerPolicySettings,
+    ) -> RunningOptimizerPolicy:
         """Build the optimization program.
 
         Args:
@@ -119,7 +174,7 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
             settings: Optimization program configuration.
 
         Returns:
-            A RunningOptimizationProgram with stages initialized.
+            A RunningOptimizerPolicy with stages initialized.
         """
         # Empty stages: use default_optimizer + default_scheduler as fallback
         if not settings.stages:
@@ -144,7 +199,7 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
                 name="default",
             )
 
-            return RunningOptimizationProgram(stages=(stage,))
+            return RunningOptimizerPolicy(stages=(stage,))
 
         # Multi-stage: build each stage from config
         stages: list[ActiveStage | ActiveConcurrentGroup] = []
@@ -160,7 +215,7 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
                 group = self._build_concurrent_group(model, stage_config, idx)
                 stages.append(group)
 
-        return RunningOptimizationProgram(stages=tuple(stages))
+        return RunningOptimizerPolicy(stages=tuple(stages))
 
     def _build_single_stage(
         self, model: nn.Module, config: OptimizationStageSettings, stage_index: int
@@ -180,7 +235,7 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
 
         # Partition parameters if selector provided
         if config.selector is not None:
-            selector = self._selector_from_settings(config.selector)
+            selector = _selector_from_settings(config.selector)
             partitioner = ParameterPartitioner()
             partitions = partitioner.partition(inventory, [selector])
             selected_params: tuple[ParameterDescriptor, ...] = partitions[0]
@@ -241,25 +296,4 @@ class OptimizationProgramBuilder(IOptimizationProgramBuilder):
             stages=tuple(stages),
             trigger=trigger,
             group_index=group_index,
-        )
-
-    def _selector_from_settings(self, selector_settings: object) -> IParameterSelector:
-        """Convert selector settings to an IParameterSelector.
-
-        This is a placeholder that expects selector_settings to already be
-        converted to an IParameterSelector elsewhere in the config pipeline.
-
-        Args:
-            selector_settings: Selector configuration object.
-
-        Returns:
-            An IParameterSelector instance.
-        """
-        # Direct passthrough if already an IParameterSelector
-        if isinstance(selector_settings, IParameterSelector):
-            return selector_settings
-
-        # Otherwise raise error (selectors should be resolved earlier in pipeline)
-        raise TypeError(
-            f"Selector settings must be IParameterSelector, got {type(selector_settings)}"
         )

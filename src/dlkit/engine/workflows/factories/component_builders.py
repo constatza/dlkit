@@ -19,6 +19,7 @@ from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     WrapperComponentSettings,
 )
+from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
 from .module_defaults import with_runtime_module_defaults
 
@@ -107,35 +108,55 @@ def build_wrapper_components(
     test_metric_routes = build_metric_routes(metric_specs, default_target_key)
 
     # Build optimization program settings (deferred to wrapper for model access)
-    from dlkit.infrastructure.config.optimization_program import OptimizationProgramSettings
-
-    optimization_program_settings = getattr(settings, "optimization_program", None)
-    if optimization_program_settings is None:
-        # Fallback: build from single optimizer/scheduler settings
-        # Convert OptimizerSettings to OptimizerComponentSettings if needed
+    optimizer_policy_settings = settings.optimizer_policy
+    if optimizer_policy_settings is None:
+        # Fallback: migrate legacy OptimizerSettings → typed OptimizerSpec subclass.
         from dlkit.infrastructure.config.optimizer_component import (
-            OptimizerComponentSettings,
-            SchedulerComponentSettings,
+            AdamSettings,
+            AdamWSettings,
+            LBFGSSettings,
+            MuonSettings,
+            OptimizerSpec,
+            SchedulerSpec,
         )
 
-        default_optimizer = settings.optimizer
-        if not isinstance(default_optimizer, OptimizerComponentSettings):
-            # Wrap OptimizerSettings in OptimizerComponentSettings format
-            if hasattr(default_optimizer, "model_dump"):
-                optimizer_dict = default_optimizer.model_dump()
-                default_optimizer = OptimizerComponentSettings(**optimizer_dict)
-            else:
-                default_optimizer = OptimizerComponentSettings()
+        raw = settings.optimizer
+        name = str(raw.name or "AdamW")
+        lr_raw = raw.lr
+        lr = float(lr_raw) if isinstance(lr_raw, (int, float)) else 1e-3
+        wd_raw = raw.weight_decay
+        wd = float(wd_raw) if isinstance(wd_raw, (int, float)) else 0.0
 
-        default_scheduler = getattr(settings, "scheduler", None)
-        if default_scheduler is not None and not isinstance(
-            default_scheduler, SchedulerComponentSettings
-        ):
-            if hasattr(default_scheduler, "model_dump"):
-                scheduler_dict = default_scheduler.model_dump()
-                default_scheduler = SchedulerComponentSettings(**scheduler_dict)
+        default_optimizer: OptimizerSpec
+        match name.lower():
+            case "adam":
+                default_optimizer = AdamSettings(lr=lr, weight_decay=wd)
+            case "lbfgs":
+                default_optimizer = LBFGSSettings(lr=lr)
+            case "muon":
+                default_optimizer = MuonSettings(lr=lr)
+            case _:
+                default_optimizer = AdamWSettings(lr=lr, weight_decay=wd)
 
-        optimization_program_settings = OptimizationProgramSettings(
+        # Migrate legacy SchedulerSettings to typed subclass.
+        # The SchedulerSettings class from optimizer_settings.py is now legacy.
+        # We convert it to ReduceLROnPlateauSettings (which matches SchedulerSettings defaults).
+        from dlkit.infrastructure.config.optimizer_component import (
+            ReduceLROnPlateauSettings,
+        )
+
+        raw_scheduler = settings.scheduler
+        if raw_scheduler:
+            # Legacy SchedulerSettings has factor, patience, min_lr — map to ReduceLROnPlateauSettings
+            default_scheduler: SchedulerSpec | None = ReduceLROnPlateauSettings(
+                factor=getattr(raw_scheduler, "factor", 0.5),
+                patience=getattr(raw_scheduler, "patience", 1000),
+                min_lr=getattr(raw_scheduler, "min_lr", 1e-8),
+            )
+        else:
+            default_scheduler = None
+
+        optimizer_policy_settings = OptimizerPolicySettings(
             default_optimizer=default_optimizer,
             default_scheduler=default_scheduler,
         )
@@ -167,7 +188,7 @@ def build_wrapper_components(
         loss_fn=loss_fn,
         val_metric_routes=val_metric_routes,
         test_metric_routes=test_metric_routes,
-        optimization_program_settings=optimization_program_settings,
+        optimizer_policy_settings=optimizer_policy_settings,
         feature_transforms=feature_transforms,
         target_transforms=target_transforms,
     )

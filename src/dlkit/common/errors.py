@@ -43,7 +43,7 @@ class PluginError(DLKitError):
     """Plugin configuration or execution error."""
 
 
-class OptimizationProgramError(DLKitError):
+class OptimizerPolicyError(DLKitError):
     """Raised when an optimization program cannot be built or executed."""
 
 
@@ -55,5 +55,5 @@ class StageTransitionError(DLKitError):
     """Raised when a stage transition cannot be completed."""
 
 
-class UnsupportedOptimizerProgramError(DLKitError):
+class UnsupportedOptimizerPolicyError(DLKitError):
     """Raised when an optimization program configuration is not supported."""

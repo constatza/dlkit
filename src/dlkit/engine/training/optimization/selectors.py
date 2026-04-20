@@ -57,7 +57,7 @@ class RoleSelector:
 
 
 class ModulePathSelector:
-    """Selector that matches parameters by module path prefix.
+    """Selector that matches parameters whose module path starts with a given prefix.
 
     Attributes:
         _prefix: The module path prefix to match.
@@ -67,8 +67,7 @@ class ModulePathSelector:
         """Initialize the module path selector.
 
         Args:
-            prefix: The module path prefix. Parameters whose module_path
-                starts with this prefix will match.
+            prefix: Module path prefix. Parameters are matched via ``startswith``.
         """
         self._prefix = prefix
 

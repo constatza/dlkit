@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizationProgram
+from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
 
 
 def _flatten_active_stages(
@@ -32,7 +32,7 @@ class OptimizationMetricsView:
         _program: The running optimization program (stored by reference).
     """
 
-    def __init__(self, program: RunningOptimizationProgram) -> None:
+    def __init__(self, program: RunningOptimizerPolicy) -> None:
         """Initialize the metrics view.
 
         Args:

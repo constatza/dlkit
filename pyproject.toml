@@ -172,3 +172,4 @@ respect-ignore-files = true
 [tool.ty.terminal]
 output-format = "concise"
 error-on-warning = true
+

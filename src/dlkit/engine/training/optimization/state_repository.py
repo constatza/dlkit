@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, cast
 
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizationProgram
+from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
 
 
 class IOptimizationStateRepository(ABC):
@@ -16,7 +16,7 @@ class IOptimizationStateRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, program: RunningOptimizationProgram) -> dict[str, object]:
+    def save(self, program: RunningOptimizerPolicy) -> dict[str, object]:
         """Serialize optimization program state to a checkpoint dict.
 
         Args:
@@ -28,7 +28,7 @@ class IOptimizationStateRepository(ABC):
         ...
 
     @abstractmethod
-    def restore(self, program: RunningOptimizationProgram, state: dict[str, object]) -> None:
+    def restore(self, program: RunningOptimizerPolicy, state: dict[str, object]) -> None:
         """Restore optimization program state from a checkpoint dict.
 
         Args:
@@ -38,7 +38,7 @@ class IOptimizationStateRepository(ABC):
         ...
 
 
-def _flatten_stages(program: RunningOptimizationProgram) -> tuple[ActiveStage, ...]:
+def _flatten_stages(program: RunningOptimizerPolicy) -> tuple[ActiveStage, ...]:
     """Extract all ActiveStage objects from a program, flattening concurrent groups.
 
     Args:
@@ -63,7 +63,7 @@ class OptimizationStateRepository(IOptimizationStateRepository):
     and the active stage index. Restores all components during checkpoint load.
     """
 
-    def save(self, program: RunningOptimizationProgram) -> dict[str, object]:
+    def save(self, program: RunningOptimizerPolicy) -> dict[str, object]:
         """Serialize the running program state.
 
         Args:
@@ -94,7 +94,7 @@ class OptimizationStateRepository(IOptimizationStateRepository):
             "stages": stages_state,
         }
 
-    def restore(self, program: RunningOptimizationProgram, state: dict[str, object]) -> None:
+    def restore(self, program: RunningOptimizerPolicy, state: dict[str, object]) -> None:
         """Restore the program state from a checkpoint dict.
 
         Args:

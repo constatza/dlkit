@@ -19,19 +19,19 @@ Public API:
 - ISchedulerFactory, TorchSchedulerFactory: scheduler instantiation
 - ITransitionTrigger: stage transition control
 - EpochTransitionTrigger, PlateauTransitionTrigger, NoTransitionTrigger: triggers
-- ActiveStage, ActiveConcurrentGroup, RunningOptimizationProgram: state objects
+- ActiveStage, ActiveConcurrentGroup, RunningOptimizerPolicy: state objects
 - IOptimizationStateRepository, OptimizationStateRepository: checkpoint management
 - IStepPolicy, StepAllOptimizers, AlternatingStepPolicy, LBFGSStageStepper: stepping
 - OptimizationMetricsView: read-only state projection
-- IOptimizationProgramBuilder, OptimizationProgramBuilder: assembly
+- IOptimizerPolicyBuilder, OptimizerPolicyBuilder: assembly
 - IOptimizationController, AutomaticOptimizationController, ManualOptimizationController: control
 """
 
 from __future__ import annotations
 
 from .builder import (
-    IOptimizationProgramBuilder,
-    OptimizationProgramBuilder,
+    IOptimizerPolicyBuilder,
+    OptimizerPolicyBuilder,
 )
 from .controllers import (
     AutomaticOptimizationController,
@@ -73,7 +73,7 @@ from .selectors import (
 from .state import (
     ActiveConcurrentGroup,
     ActiveStage,
-    RunningOptimizationProgram,
+    RunningOptimizerPolicy,
 )
 from .state_repository import (
     IOptimizationStateRepository,
@@ -120,7 +120,7 @@ __all__ = [
     "NoTransitionTrigger",
     "ActiveStage",
     "ActiveConcurrentGroup",
-    "RunningOptimizationProgram",
+    "RunningOptimizerPolicy",
     "IOptimizationStateRepository",
     "OptimizationStateRepository",
     "IStepPolicy",
@@ -128,8 +128,8 @@ __all__ = [
     "AlternatingStepPolicy",
     "LBFGSStageStepper",
     "OptimizationMetricsView",
-    "IOptimizationProgramBuilder",
-    "OptimizationProgramBuilder",
+    "IOptimizerPolicyBuilder",
+    "OptimizerPolicyBuilder",
     "IOptimizationController",
     "AutomaticOptimizationController",
     "ManualOptimizationController",

@@ -5,11 +5,11 @@ from __future__ import annotations
 from pydantic import Field
 
 from .core.base_settings import BasicSettings
-from .optimization_stage import ConcurrentOptimizationSettings, OptimizationStageSettings
-from .optimizer_component import OptimizerComponentSettings, SchedulerComponentSettings
+from .optimization_stage import StageSpec
+from .optimizer_component import AdamWSettings, OptimizerSpec, SchedulerSpec
 
 
-class OptimizationProgramSettings(BasicSettings):
+class OptimizerPolicySettings(BasicSettings):
     """Top-level configuration for an optimization program.
 
     Replaces the flat optimizer + scheduler approach from TrainingSettings.
@@ -24,17 +24,18 @@ class OptimizationProgramSettings(BasicSettings):
 
     Attributes:
         stages: Ordered stages (or concurrent groups). Empty = use default_optimizer.
-        default_optimizer: Fallback optimizer when stages is empty.
+            Pydantic dispatches deserialization via the ``kind`` discriminator field.
+        default_optimizer: Fallback optimizer when stages is empty. Defaults to AdamW.
         default_scheduler: Fallback scheduler when stages is empty.
     """
 
-    stages: tuple[OptimizationStageSettings | ConcurrentOptimizationSettings, ...] = Field(
+    stages: tuple[StageSpec, ...] = Field(
         default=(), description="Ordered optimization stages or concurrent groups"
     )
-    default_optimizer: OptimizerComponentSettings = Field(
-        default_factory=OptimizerComponentSettings,
+    default_optimizer: OptimizerSpec = Field(
+        default_factory=AdamWSettings,
         description="Fallback optimizer when stages is empty",
     )
-    default_scheduler: SchedulerComponentSettings | None = Field(
+    default_scheduler: SchedulerSpec | None = Field(
         default=None, description="Fallback scheduler when stages is empty"
     )

@@ -112,7 +112,7 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         )
 
         # Build optimization controller for graph models
-        from dlkit.engine.training.optimization.builder import OptimizationProgramBuilder
+        from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
         from dlkit.engine.training.optimization.controllers import (
             AutomaticOptimizationController,
             ManualOptimizationController,
@@ -120,9 +120,7 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
         from dlkit.engine.training.optimization.stepping import StepAllOptimizers
 
-        program = OptimizationProgramBuilder().build(
-            model, components.optimization_program_settings
-        )
+        program = OptimizerPolicyBuilder().build(model, components.optimizer_policy_settings)
         repository = OptimizationStateRepository()
 
         # Determine if manual optimization is required
