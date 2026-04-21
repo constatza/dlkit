@@ -19,6 +19,8 @@ class TransformSettings(StringNamedComponentSettings):
 
     module_path: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Optional Python module path containing the transform implementation.",
     )
     dim: tuple[int, ...] | int = Field(

@@ -186,28 +186,36 @@ class TestDefaultComponentFactory:
         assert result.param1 == "overridden_value"
         assert result.param2 == 999
 
-    def test_create_filters_incompatible_kwargs(self, sample_build_context: BuildContext) -> None:
-        """Test factory filters out incompatible kwargs.
+    def test_create_raises_for_incompatible_kwargs(
+        self, sample_build_context: BuildContext
+    ) -> None:
+        """Test factory raises TypeError for unrecognized kwargs on strict constructors.
+
+        Meta-fields must be marked Field(exclude=True) on their settings class so that
+        get_init_kwargs() omits them automatically. Any remaining unrecognized kwarg
+        indicates a configuration bug and surfaces as a TypeError.
 
         Args:
             sample_build_context: Sample build context fixture
         """
+
+        class StrictTarget:
+            def __init__(self, param1: str, param2: int = 42) -> None:
+                self.param1 = param1
+                self.param2 = param2
+
         factory = DefaultComponentFactory()
         settings = MockComponentSettings.model_validate(
             {
-                "name": MockTarget,
+                "name": StrictTarget,
                 "param1": "filter_test",
                 "param2": 400,
-                "incompatible_param": "should_be_filtered",
+                "incompatible_param": "should_be_rejected",
             }
         )
 
-        result = factory.create(settings, sample_build_context)
-
-        assert isinstance(result, MockTarget)
-        assert result.param1 == "filter_test"
-        assert result.param2 == 400
-        assert not hasattr(result, "incompatible_param")
+        with pytest.raises(TypeError, match="unexpected keyword arguments"):
+            factory.create(settings, sample_build_context)
 
     def test_create_invalid_target_type_raises_error(
         self, sample_build_context: BuildContext

@@ -8,10 +8,14 @@ URL wrappers here. All parsing and rebuilding is handled via `pydantic_core.Url`
 helpers to guarantee identical semantics to the validators that consume them.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
 from pydantic_core import Url
+
+# RFC 3986 scheme: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+_URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://")
 
 
 def expand_tilde_in_value(value: Any) -> Any:
@@ -48,8 +52,9 @@ def _expand_tilde_in_string(text: str) -> str:
 
     home = _home()
 
-    # Route based on URL vs plain path
-    if "://" in text:
+    # Route based on URL vs plain path.
+    # Use strict RFC 3986 scheme check so paths like "~/://" aren't misclassified.
+    if _URL_SCHEME_RE.match(text):
         return _expand_tilde_in_url(text, home)
 
     return _expand_tilde_in_path(text, home)

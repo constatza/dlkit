@@ -90,38 +90,46 @@ class DatasetSettings(StringNamedComponentSettings):
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="FlexibleDataset", description="Dataset class name"
+        default="FlexibleDataset",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Dataset class name",
     )
     module_path: str | None = Field(
-        default=None, description="Optional module path where the dataset class is located"
+        default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Optional module path where the dataset class is located",
     )
-    # Optional dataset family hint for strategy selection (accepts strings or StrEnum)
+    # Meta-fields: used for routing/path resolution, never forwarded to the dataset constructor.
     family: DatasetFamily | None = Field(
         default=None,
+        exclude=True,
         description="Explicit dataset family (flexible, graph, timeseries)",
     )
     type: DatasetFamily | None = Field(
         default=None,
+        exclude=True,
         description="Dataset family type hint (flexible, graph, timeseries)",
     )
     root: DirectoryPath | None = Field(
-        default=None, description="Root directory of the dataset", alias="root_dir"
+        default=None, exclude=True, description="Root directory of the dataset", alias="root_dir"
     )
     # Flexible entries only: tuples of Feature/Target settings (immutable for consistency)
     features: tuple[FeatureType, ...] = Field(default=(), description="Flexible feature entries")
     targets: tuple[TargetType, ...] = Field(default=(), description="Flexible target entries")
 
     split: IndexSplitSettings = Field(
-        default_factory=IndexSplitSettings, description="Index split configuration"
+        default_factory=IndexSplitSettings,
+        exclude=True,
+        description="Index split configuration (used by DataModule, not dataset constructor)",
     )
     memmap_cache: bool = Field(
         default=False,
+        exclude=True,
         description=(
             "If true, load dataset using OS memory-mapped files. "
-            "Enables out-of-memory datasets that do not fit in RAM. "
-            "All entries must be file-backed (PathBasedEntry). "
-            "Cache stored at platformdirs.user_cache_path('dlkit') / 'memmap'. "
-            "Auto-invalidates when source files or dtype change."
+            "Resolved to memmap_cache_dir at build time."
         ),
     )
 
@@ -217,12 +225,13 @@ class DatasetSettings(StringNamedComponentSettings):
 
     def get_init_kwargs(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Return initialization kwargs preserving nested DataEntry objects."""
-        # Exclude memmap_cache bool — FlexibleDataset uses memmap_cache_dir (resolved Path)
-        base = super().get_init_kwargs(exclude={"memmap_cache", *(exclude or set())})
-        # Preserve DataEntry instances instead of serialized dicts
-        base["features"] = list(self.features)
-        base["targets"] = list(self.targets)
-        base["split"] = self.split
+        base = super().get_init_kwargs(exclude=exclude)
+        # Inject DataEntry instances as objects (not serialized dicts) when non-empty.
+        # Empty tuples are omitted — graph datasets don't accept features/targets kwargs.
+        if self.features:
+            base["features"] = list(self.features)
+        if self.targets:
+            base["targets"] = list(self.targets)
         resolved = self.resolved_memmap_cache_dir
         if resolved is not None:
             base["memmap_cache_dir"] = resolved
