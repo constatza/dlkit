@@ -1,13 +1,9 @@
-"""Modern shape specification system for DLKit.
-
-This module provides a complete rewrite of DLKit's shape handling system
-following SOLID principles and modern design patterns.
+"""Shape specification system for DLKit.
 
 Key Components:
 - Value Objects: Immutable data containers (ShapeEntry, ShapeData)
 - Strategy Pattern: Pluggable validation, serialization, and alias resolution
 - Composition: Lightweight ShapeSpec coordinator
-- Registry Pattern: Extensible model family detection
 
 Usage:
     from dlkit.domain.shapes import create_shape_spec, ModelFamily, ShapeSource
@@ -20,39 +16,6 @@ Usage:
 """
 
 from .core import GraphShapeSpec, IShapeSpec, NullShapeSpec, ShapeSpec, create_shape_spec
-from .factory import ShapeSystemFactory
-from .inference import (
-    CheckpointMetadataStrategy,
-    ConfigurationStrategy,
-    DatasetSamplingStrategy,
-    DefaultFallbackStrategy,
-    GraphDatasetStrategy,
-    InferenceContext,
-    ShapeInferenceChain,
-    ShapeInferenceEngine,
-    ShapeInferenceStrategy,
-)
-from .registry import ModelFamilyDetector, ModelFamilyRegistry, ModelFamilyRegistryFactory
-from .serialization import (
-    SerializationFormat,
-    SerializationMetadata,
-    SerializationVersion,
-    SerializedShape,
-    ShapeFormatMigrator,
-    ShapeFormatSerializer,
-    VersionedShapeSerializer,
-)
-from .specifications import (
-    DimensionRangeSpecification,
-    ModelFamilyCompatibilitySpecification,
-    NonEmptyShapeSpecification,
-    PositiveDimensionsSpecification,
-    RequiredEntriesSpecification,
-    ShapeSpecification,
-    ShapeSpecificationBuilder,
-    ShapeValidationEngine,
-    UniqueEntryNamesSpecification,
-)
 from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator, ValidationResult
 from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
@@ -73,38 +36,4 @@ __all__ = [
     "ShapeSerializer",
     "ShapeAliasResolver",
     "ValidationResult",
-    # Registry system
-    "ModelFamilyRegistry",
-    "ModelFamilyDetector",
-    "ModelFamilyRegistryFactory",
-    # Factory system
-    "ShapeSystemFactory",
-    # Specification system
-    "ShapeSpecification",
-    "ShapeValidationEngine",
-    "ShapeSpecificationBuilder",
-    "RequiredEntriesSpecification",
-    "PositiveDimensionsSpecification",
-    "NonEmptyShapeSpecification",
-    "ModelFamilyCompatibilitySpecification",
-    "DimensionRangeSpecification",
-    "UniqueEntryNamesSpecification",
-    # Inference system
-    "ShapeInferenceStrategy",
-    "ShapeInferenceChain",
-    "ShapeInferenceEngine",
-    "InferenceContext",
-    "CheckpointMetadataStrategy",
-    "ConfigurationStrategy",
-    "DatasetSamplingStrategy",
-    "DefaultFallbackStrategy",
-    "GraphDatasetStrategy",
-    # Serialization system
-    "ShapeFormatSerializer",
-    "VersionedShapeSerializer",
-    "SerializationFormat",
-    "SerializationVersion",
-    "SerializationMetadata",
-    "SerializedShape",
-    "ShapeFormatMigrator",
 ]

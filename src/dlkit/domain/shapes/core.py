@@ -134,18 +134,9 @@ class ShapeSpec(IShapeSpec):
         Raises:
             ValueError: If dictionary format is invalid
         """
-        from .factory import ShapeSystemFactory
-
-        # Use factory to deserialize the data
-        factory = ShapeSystemFactory.create_production_system()
-        shape_data = factory.get_serializer().deserialize(data)
-
-        return cls(
-            data=shape_data,
-            validator=factory.get_validator(),
-            serializer=factory.get_serializer(),
-            alias_resolver=factory.get_alias_resolver(),
-        )
+        serializer = ShapeSerializer()
+        shape_data = serializer.deserialize(data)
+        return cls(data=shape_data)
 
     def with_aliases(self) -> ShapeSpec:
         """Return new ShapeSpec with canonical x/y aliases added if missing.
