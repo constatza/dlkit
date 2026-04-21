@@ -12,8 +12,8 @@ from typing import Any
 
 import torch
 
+from dlkit.domain.shapes._serialization import SerializedShape, VersionedShapeSerializer
 from dlkit.domain.shapes.core import IShapeSpec, create_shape_spec
-from dlkit.domain.shapes.serialization import SerializedShape, VersionedShapeSerializer
 
 logger = logging.getLogger(__name__)
 

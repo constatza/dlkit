@@ -60,8 +60,7 @@ class ShapeValidator:
         Args:
             validation_engine: Optional validation engine (creates default if None)
         """
-        # Import here to avoid circular dependency
-        from .specifications import ShapeValidationEngine
+        from ._specifications import ShapeValidationEngine
 
         self.validation_engine = validation_engine or ShapeValidationEngine()
 
@@ -110,8 +109,7 @@ class ShapeSerializer:
         Args:
             versioned_serializer: Optional versioned serializer (creates default if None)
         """
-        # Import here to avoid circular dependency
-        from .serialization import VersionedShapeSerializer
+        from ._serialization import VersionedShapeSerializer
 
         self._versioned_serializer = versioned_serializer or VersionedShapeSerializer()
 
