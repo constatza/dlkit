@@ -87,17 +87,27 @@ class MetricComponentSettings(ComponentSettings):
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="MeanSquaredError", description="Name of the metric"
+        default="MeanSquaredError",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Name of the metric",
     )
     module_path: str | None = Field(
-        default="torchmetrics.regression", description="Module path to the metric"
+        default="torchmetrics.regression",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Module path to the metric",
     )
     target_key: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Batch key for metric target in 'namespace.entry_name' format. None = first targets/ entry in config.",
     )
     extra_inputs: tuple[MetricInputRef, ...] = Field(
         default=(),
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Extra kwargs passed to the metric, routed from batch.",
     )
 
@@ -203,18 +213,27 @@ class LossComponentSettings(ComponentSettings):
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="mse", description="Name of the loss function (default: mse)"
+        default="mse",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Name of the loss function (default: mse)",
     )
     module_path: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Optional module path to the loss function",
     )
     target_key: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Batch key for loss target in 'namespace.entry_name' format. None = first targets/ entry in config.",
     )
     extra_inputs: tuple[LossInputRef, ...] = Field(
         default=(),
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Extra kwargs passed to the loss function, routed from batch.",
     )
 
@@ -331,11 +350,13 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default=None,
+        exclude=True,
         description="Model namespace path",
         json_schema_extra={"dlkit_init_kwarg": False},
     )
     module_path: str | None = Field(
         default=None,
+        exclude=True,
         description="Optional module path to the model",
         json_schema_extra={"dlkit_init_kwarg": False},
     )
@@ -343,6 +364,7 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
     # Checkpoint for inference (NOT for training resume)
     checkpoint: Path | str | None = Field(
         default=None,
+        exclude=True,
         description=(
             "Checkpoint path for inference workflows (model weights only). "
             "For resuming training, use TRAINING.resume_from_checkpoint instead."
@@ -398,10 +420,15 @@ class WrapperComponentSettings(ComponentSettings):
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="StandardLightningWrapper", description="Name of the wrapper"
+        default="StandardLightningWrapper",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Name of the wrapper",
     )
     module_path: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Optional module path to the wrapper",
     )
 

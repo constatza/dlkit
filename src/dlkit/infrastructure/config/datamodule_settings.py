@@ -27,10 +27,15 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
 
     # Accept either a known StrEnum or any custom string
     name: str | DataModuleName = Field(
-        default=DataModuleName.IN_MEMORY, description="DataModule class name"
+        default=DataModuleName.IN_MEMORY,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="DataModule class name",
     )
     module_path: str | None = Field(
         default=None,
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
         description="Optional module path where the datamodule class is located",
     )
 

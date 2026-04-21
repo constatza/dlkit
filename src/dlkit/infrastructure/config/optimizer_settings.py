@@ -11,10 +11,16 @@ from .core.types import FloatHyperparameter, PositiveFloatHyperparameter
 class OptimizerSettings(ComponentSettings, HyperParameterSettings):
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="AdamW", description="Optimizer name"
+        default="AdamW",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Optimizer name",
     )
     module_path: str | None = Field(
-        default="torch.optim", description="Module path to the optimizer"
+        default="torch.optim",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Module path to the optimizer",
     )
     lr: PositiveFloatHyperparameter = Field(
         default=1e-3, description="Learning rate", alias="learning_rate"
@@ -25,10 +31,16 @@ class OptimizerSettings(ComponentSettings, HyperParameterSettings):
 class SchedulerSettings(ComponentSettings):
     model_config = SettingsConfigDict(extra="allow")
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
-        default="ReduceLROnPlateau", description="Scheduler name"
+        default="ReduceLROnPlateau",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Scheduler name",
     )
     module_path: str | None = Field(
-        default="torch.optim.lr_scheduler", description="Module path to the scheduler"
+        default="torch.optim.lr_scheduler",
+        exclude=True,
+        json_schema_extra={"dlkit_init_kwarg": False},
+        description="Module path to the scheduler",
     )
     factor: float = Field(default=0.5, description="Reduction factor")
     patience: int = Field(

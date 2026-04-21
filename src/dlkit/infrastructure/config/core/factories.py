@@ -176,36 +176,31 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         except Exception:
             # Be resilient to any unexpected structure
             pass
-        filtered_base_kwargs = kwargs_compatible_with(cls, **base_kwargs)
-
-        # Apply context overrides
-        final_kwargs = {**filtered_base_kwargs, **context.overrides}
-
-        # For classes that accept **kwargs, allow context overrides to pass through
-        # For classes that don't, filter overrides as well
+        # For classes that accept **kwargs, allow all kwargs through without checking.
         from inspect import Parameter, signature
 
-        accepts_var_keyword = False
-        if isclass(cls):
-            for base in cls.mro():
-                sig = signature(base.__init__)
-                for param in sig.parameters.values():
-                    if param.kind == Parameter.VAR_KEYWORD:
-                        accepts_var_keyword = True
-                        break
-                if accepts_var_keyword:
-                    break
-        else:
-            sig = signature(cls)
-            for param in sig.parameters.values():
-                if param.kind == Parameter.VAR_KEYWORD:
-                    accepts_var_keyword = True
-                    break
+        try:
+            target_fn = cls.__init__ if isclass(cls) else cls
+            accepts_var_keyword = any(
+                p.kind == Parameter.VAR_KEYWORD for p in signature(target_fn).parameters.values()
+            )
+        except ValueError, TypeError:
+            accepts_var_keyword = True  # can't introspect → assume permissive
 
         if accepts_var_keyword:
-            # Class accepts **kwargs, allow all context overrides
-            return final_kwargs
-        # Class doesn't accept **kwargs, filter everything
+            return {**base_kwargs, **context.overrides}
+
+        # Strict constructor: any kwarg from settings that isn't a recognised
+        # parameter is a configuration error — raise instead of silently dropping.
+        compatible_base = kwargs_compatible_with(cls, **base_kwargs)
+        unrecognized = set(base_kwargs) - set(compatible_base)
+        if unrecognized:
+            raise TypeError(
+                f"{cls.__name__}.__init__() got unexpected keyword arguments: {sorted(unrecognized)}"
+            )
+
+        # Merge with context overrides and filter overrides for compatibility.
+        final_kwargs = {**compatible_base, **context.overrides}
         return kwargs_compatible_with(cls, **final_kwargs)
 
 
