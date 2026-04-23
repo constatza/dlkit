@@ -191,7 +191,7 @@ class Transform(nn.Module):
     """
 
     apply_inverse: bool
-    _fitted: torch.Tensor
+    _fitted: bool
 
     def __init__(self) -> None:
         """Initialize the transform.
@@ -203,7 +203,7 @@ class Transform(nn.Module):
         """
         super().__init__()
         self.apply_inverse = True
-        self.register_buffer("_fitted", torch.zeros(1, requires_grad=False))
+        self._fitted = False
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -304,7 +304,7 @@ class Transform(nn.Module):
         Returns:
             True if fit() has been called and set fitted=True, False otherwise.
         """
-        return self.get_buffer("_fitted").item() == 1
+        return self._fitted
 
     @fitted.setter
     def fitted(self, value: bool) -> None:
@@ -313,4 +313,50 @@ class Transform(nn.Module):
         Args:
             value: True to mark as fitted, False otherwise.
         """
-        self._fitted.fill_(1 if value else 0)
+        self._fitted = value
+
+    def state_dict(self, destination=None, prefix="", keep_vars=False):
+        """Override state_dict to include _fitted bool in the checkpoint.
+
+        Args:
+            destination: Dictionary to accumulate state dict entries.
+            prefix: Prefix for parameter names.
+            keep_vars: Whether to keep variables (for nn.Module compatibility).
+
+        Returns:
+            State dictionary including _fitted bool.
+        """
+        state = super().state_dict(
+            destination=destination or {}, prefix=prefix, keep_vars=keep_vars
+        )
+        # Add _fitted as a plain Python bool (not a tensor)
+        state[f"{prefix}_fitted"] = self._fitted
+        return state
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict,
+        prefix: str,
+        local_metadata: dict,
+        strict: bool,
+        missing_keys: list,
+        unexpected_keys: list,
+        error_msgs: list,
+    ) -> None:
+        """Override _load_from_state_dict to restore _fitted bool from checkpoint.
+
+        Args:
+            state_dict: Full state dictionary.
+            prefix: Module prefix for this module's keys.
+            local_metadata: Local metadata dict.
+            strict: Whether to enforce strict key matching.
+            missing_keys: List to accumulate missing key names.
+            unexpected_keys: List to accumulate unexpected key names.
+            error_msgs: List to accumulate error messages.
+        """
+        fitted_key = f"{prefix}_fitted"
+        if fitted_key in state_dict:
+            self._fitted = bool(state_dict.pop(fitted_key))
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )

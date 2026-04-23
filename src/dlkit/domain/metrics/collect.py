@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import torch
 
-def collect_metrics(source: dict[str, Any] | None) -> dict[str, Any]:
+MetricsPayload = dict[str, float | torch.Tensor]
+
+
+def collect_metrics(source: dict[str, Any] | None) -> MetricsPayload:
     """Convert metric dictionary values to plain Python types.
 
     This utility safely converts metric values (often tensors or special numeric types)
@@ -24,7 +28,7 @@ def collect_metrics(source: dict[str, Any] | None) -> dict[str, Any]:
         >>> collect_metrics(metrics)
         {'loss': 0.5, 'accuracy': 0.95}
     """
-    collected: dict[str, Any] = {}
+    collected: MetricsPayload = {}
     if not source:
         return collected
 

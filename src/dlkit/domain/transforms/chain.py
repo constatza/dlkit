@@ -53,6 +53,10 @@ class TransformChain(Transform):
             shape_spec: Optional shape specification for transforms.
             entry_name: Optional entry name to look up shape in shape_spec.
 
+        Raises:
+            ValueError: If any transform is marked as non-incrementally-fittable
+                (cannot be used in online fit paths).
+
         Note:
             TransformChain no longer builds transforms from settings. Use
             ``component_builders.build_transform_list()`` to instantiate transforms,
@@ -136,11 +140,10 @@ class TransformChain(Transform):
                 continue
 
             if not isinstance(transform, IncrementalFittableTransform):
-                if not getattr(transform, "fitted", False):
+                if not transform.fitted:
                     raise TypeError(
                         f"Incremental fitting for '{transform.__class__.__name__}' is not "
-                        "implemented. Remove this transform from online fit path. "
-                        "TODO: incremental PCA."
+                        "implemented. Remove this transform from online fit path."
                     )
                 continue
 

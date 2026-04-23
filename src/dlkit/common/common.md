@@ -13,7 +13,7 @@ the codebase.
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
 - Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`
-- Shapes: `ShapeSpecProtocol`, `ShapeSummary`
+- Shapes: `ShapeSpecProtocol`, `ShapeSummary` (validates non-empty in_shapes and out_shapes at construction)
 - Hooks: `LifecycleHooks`
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:

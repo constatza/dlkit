@@ -1,5 +1,5 @@
 from functools import wraps
-from typing import cast
+from typing import ClassVar, cast
 
 import torch
 from loguru import logger
@@ -39,6 +39,8 @@ class PCA(Transform):
     The number of components can be validated against input shape via configure_shape(),
     or determined dynamically during fit().
     """
+
+    _NOT_INCREMENTALLY_FITTABLE: ClassVar[bool] = True
 
     def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
@@ -99,7 +101,7 @@ class PCA(Transform):
         total_variance = torch.sum(data_centered.pow(2)) / (n_samples - 1)
 
         # Use torch.pca_lowrank on already centered dataflow by setting center=False.
-        U, S, V = torch.pca_lowrank(
+        _, S, V = torch.pca_lowrank(
             data_centered,
             q=self.n_components,
             center=False,
