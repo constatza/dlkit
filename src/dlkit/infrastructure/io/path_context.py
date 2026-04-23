@@ -61,46 +61,21 @@ def path_override_context(overrides: dict[str, Any]) -> Generator[None]:
 def resolve_with_context(component_path: str, env=None) -> Path:
     """Resolve a component path with current override context.
 
+    This function uses the unified PathResolver which consolidates path
+    resolution logic and provides consistent precedence handling.
+
     Args:
         component_path: Path to resolve (e.g., "output/mlruns")
-        env: Environment instance (uses global if None)
+        env: Environment instance (uses global if None, currently unused
+            as PathResolver reads from global defaults)
 
     Returns:
         Resolved path respecting current override context
     """
-    from loguru import logger
+    from dlkit.infrastructure.io.path_resolver import PathResolver
 
-    from dlkit.infrastructure.config.environment import env as global_env
-    from dlkit.infrastructure.io.resolution.factory import create_default_resolver_system
-
-    effective_env = env if env is not None else global_env
-
-    context = get_current_path_context()
-
-    if context and context.root_dir:
-        effective_root = context.root_dir
-        logger.debug(f"resolve_with_context: Using PathOverrideContext root: {effective_root}")
-    else:
-        effective_root = effective_env.get_root_path()
-        logger.debug(f"resolve_with_context: Using EnvironmentSettings root: {effective_root}")
-
-    if context:
-        if component_path == "output" and context.output_dir:
-            return context.output_dir.resolve()
-        if component_path.startswith("output/") and context.output_dir:
-            relative_path = component_path[7:]
-            return (context.output_dir / relative_path).resolve()
-        if component_path == "dataflow" and context.data_dir:
-            return context.data_dir.resolve()
-        if component_path.startswith("dataflow/") and context.data_dir:
-            relative_path = component_path[5:]
-            return (context.data_dir / relative_path).resolve()
-        if "checkpoint" in component_path and context.checkpoints_dir:
-            return context.checkpoints_dir.resolve()
-
-    registry, resolver_context = create_default_resolver_system(effective_root)
-    resolved = registry.resolve(component_path, resolver_context)
-    return Path(resolved) if resolved is not None else (effective_root / component_path).resolve()
+    resolver = PathResolver.from_defaults()
+    return resolver.resolve_component_path(component_path)
 
 
 __all__ = [

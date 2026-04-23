@@ -25,57 +25,21 @@ if TYPE_CHECKING:
 
 
 def _sync_session_root_to_environment(settings: Any) -> None:
-    """Synchronize SESSION.root_dir to global EnvironmentSettings if appropriate.
+    """Synchronize SESSION.root_dir to global EnvironmentSettings.
 
-    This provides a defensive fallback when PathOverrideContext is not active.
-    Respects precedence: DLKIT_ROOT_DIR env var > SESSION.root_dir > CWD.
+    This wraps the public sync function from environment.py. It provides a
+    defensive fallback when PathOverrideContext is not active.
+
+    With PathResolver in place, this mutation is not strictly required, but
+    we keep it for backward compatibility and to ensure SESSION.root_dir
+    is available as a fallback when PathResolver is used directly.
 
     Args:
         settings: Loaded settings object (GeneralSettings or similar)
     """
-    try:
-        import os
+    from dlkit.infrastructure.config.environment import sync_session_root_to_environment
 
-        from loguru import logger
-
-        from dlkit.infrastructure.config.environment import env as global_environment
-        from dlkit.infrastructure.io.paths import coerce_root_dir_to_absolute
-
-        # Only update if EnvironmentSettings doesn't already have root_dir from env var
-        if os.environ.get("DLKIT_ROOT_DIR"):
-            # Explicit env var takes precedence - don't override
-            return
-
-        # Extract SESSION.root_dir if present
-        session = getattr(settings, "SESSION", None)
-        if session is None:
-            return
-
-        session_root_dir = getattr(session, "root_dir", None)
-        if session_root_dir is None:
-            return
-
-        normalized_root = coerce_root_dir_to_absolute(session_root_dir)
-        if normalized_root is None:
-            logger.debug(
-                "SESSION.root_dir is not absolute; skipping environment sync",
-                session_root_dir=str(session_root_dir),
-            )
-            return
-
-        # Update global environment for fallback resolution
-        # This ensures SESSION.root_dir is respected even when PathOverrideContext is not active
-        global_environment.root_dir = str(normalized_root)
-
-        logger.debug(
-            "Synchronized SESSION.root_dir to EnvironmentSettings for fallback path resolution",
-            session_root_dir=str(normalized_root),
-        )
-    except Exception as e:
-        # Non-fatal - path resolution will fall back to CWD if this fails
-        from loguru import logger
-
-        logger.warning(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")
+    sync_session_root_to_environment(settings)
 
 
 def _resolve_default_settings_class() -> type[BaseModel] | None:
