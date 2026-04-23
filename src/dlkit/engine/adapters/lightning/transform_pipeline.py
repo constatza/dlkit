@@ -15,6 +15,7 @@ from dlkit.domain.transforms.base import (
     IncrementalFittableTransform,
     InvertibleTransform,
 )
+from dlkit.domain.transforms.chain import TransformChain
 
 from .batch_namespace import IBatchNamespaceSpec, StandardBatchNamespace
 
@@ -28,6 +29,33 @@ class _FittableFromDataloader(Protocol):
         dataloader: Any,
         extractor: Callable[..., Any],
     ) -> None: ...
+
+
+def build_batch_transformer(
+    feature_transforms: dict[str, nn.ModuleList],
+    target_transforms: dict[str, nn.ModuleList],
+) -> NamedBatchTransformer:
+    """Construct a NamedBatchTransformer from pre-built ModuleList dicts.
+
+    Wraps each non-empty ModuleList in a TransformChain; replaces empty lists
+    with Identity so the transformer still covers every registered entry.
+
+    Args:
+        feature_transforms: Mapping of feature entry name to its transform ModuleList.
+        target_transforms: Mapping of target entry name to its transform ModuleList.
+
+    Returns:
+        Configured NamedBatchTransformer ready for use in a Lightning wrapper.
+    """
+    feature_chains: dict[str, nn.Module] = {
+        name: (TransformChain(ml) if len(ml) > 0 else nn.Identity())
+        for name, ml in feature_transforms.items()
+    }
+    target_chains: dict[str, nn.Module] = {
+        name: (TransformChain(ml) if len(ml) > 0 else nn.Identity())
+        for name, ml in target_transforms.items()
+    }
+    return NamedBatchTransformer(feature_chains, target_chains)
 
 
 class NamedBatchTransformer(nn.Module):

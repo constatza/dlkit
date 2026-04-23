@@ -219,3 +219,23 @@ def _build_invoker_from_entries(
         output_spec=output_spec,
         kwarg_in_keys=kwarg_in_keys or None,
     )
+
+
+def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:
+    """Return feature entry names in invoker dispatch order.
+
+    Mirrors :func:`_build_invoker_from_entries` ordering: positionals first
+    (sorted by index), then kwargs in entry insertion order.  Used to store
+    ``feature_names`` in checkpoint metadata so inference can map positional
+    tensor args to the correct transform chain.
+
+    Args:
+        feature_entries: Feature DataEntry objects in config-insertion order.
+
+    Returns:
+        Tuple of entry names in the same order the invoker dispatches tensors
+        to ``model.forward()``.
+    """
+    positional, kwarg_map = _classify_feature_entries(feature_entries)
+    positional.sort(key=lambda x: x[0])
+    return tuple(name for _, name in positional) + tuple(kwarg_map.keys())

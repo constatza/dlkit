@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
+from tensordict import TensorDict
 from torch import Tensor
 
+from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry
 from dlkit.infrastructure.config.model_components import LossInputRef
 
 from .batch_namespace import _parse_key
@@ -74,7 +75,7 @@ class RoutedLossComputer:
         """Expose the routed loss callable without leaking route internals."""
         return self._route.loss_fn
 
-    def compute(self, predictions: Tensor, batch: Any) -> Tensor:
+    def compute(self, predictions: Tensor, batch: TensorDict) -> Tensor:
         """Compute loss from predictions and named batch.
 
         Args:
@@ -87,3 +88,66 @@ class RoutedLossComputer:
         target = batch[self._route.target_route].to(dtype=predictions.dtype)
         extra_kwargs = {kwarg: batch[route] for kwarg, route in self._route.extra_routes}
         return self._route.loss_fn(predictions, target, **extra_kwargs)
+
+
+def build_auto_extra_inputs(
+    entry_configs: tuple[DataEntry, ...],
+) -> dict[str, LossInputRef]:
+    """Derive LossInputRef entries from DataEntry objects that declare ``loss_input``.
+
+    Each entry with a non-None ``loss_input`` value is auto-routed as a loss
+    function kwarg.  The kwarg name is the ``loss_input`` string; the batch key
+    is derived from the entry's namespace and name.
+
+    Args:
+        entry_configs: DataEntry objects in config-insertion order.
+
+    Returns:
+        Mapping from kwarg name to LossInputRef, ready to merge with explicit routes.
+
+    Raises:
+        ValueError: If two entries declare the same ``loss_input`` kwarg name.
+    """
+    result: dict[str, LossInputRef] = {}
+    for e in entry_configs:
+        kwarg = getattr(e, "loss_input", None)
+        if kwarg is None or e.name is None:
+            continue
+        if kwarg in result:
+            raise ValueError(
+                f"Duplicate loss_input kwarg '{kwarg}' declared on multiple entries. "
+                "Each kwarg name must appear on exactly one entry."
+            )
+        namespace = "features" if is_feature_entry(e) else "targets"
+        result[kwarg] = LossInputRef(arg=kwarg, key=f"{namespace}.{e.name}")
+    return result
+
+
+def merge_extra_inputs(
+    auto: dict[str, LossInputRef],
+    explicit: tuple[LossInputRef, ...],
+) -> tuple[LossInputRef, ...]:
+    """Merge auto-derived and explicit LossInputRef collections.
+
+    Any overlap between auto-derived (from ``DataEntry.loss_input``) and explicit
+    (from ``LossComponentSettings.extra_inputs``) routes is a configuration error —
+    no silent overrides.
+
+    Args:
+        auto: Auto-derived routes keyed by kwarg name.
+        explicit: Explicitly configured routes from LossComponentSettings.
+
+    Returns:
+        Merged tuple with no duplicate arg names.
+
+    Raises:
+        ValueError: If the same kwarg name appears in both sources.
+    """
+    explicit_by_arg = {r.arg: r for r in explicit}
+    overlap = set(auto) & set(explicit_by_arg)
+    if overlap:
+        raise ValueError(
+            f"Loss kwarg(s) {sorted(overlap)} declared on both DataEntry.loss_input and "
+            "LossComponentSettings.extra_inputs. Remove one declaration — no silent overrides."
+        )
+    return tuple({**auto, **explicit_by_arg}.values())
