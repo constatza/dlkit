@@ -24,7 +24,7 @@ class ILossComputer(Protocol):
     allowing different loss routing strategies without modifying the wrapper.
     """
 
-    def compute(self, predictions: Tensor, batch: Any) -> Tensor:
+    def compute(self, predictions: Tensor, batch: TensorDict) -> Tensor:
         """Compute loss from predictions and batch.
 
         Args:
@@ -45,7 +45,7 @@ class IMetricsUpdater(Protocol):
     Each metric can have its own target key and extra inputs.
     """
 
-    def update(self, predictions: Tensor, batch: Any, stage: str) -> None:
+    def update(self, predictions: Tensor, batch: TensorDict, stage: str) -> None:
         """Update metrics for a given stage.
 
         Args:
@@ -55,14 +55,14 @@ class IMetricsUpdater(Protocol):
         """
         ...
 
-    def compute(self, stage: str) -> dict[str, Any]:
+    def compute(self, stage: str) -> dict[str, float | Tensor]:
         """Compute accumulated metric values.
 
         Args:
             stage: Stage identifier ("val" or "test").
 
         Returns:
-            Dictionary mapping metric names to computed values.
+            Dictionary mapping metric names to computed values (floats or Tensors).
         """
         ...
 
