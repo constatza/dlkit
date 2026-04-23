@@ -1,4 +1,8 @@
-"""Neutral path-context state shared by config and I/O helpers."""
+"""Neutral path-context state shared by config and I/O helpers.
+
+Uses threading.local() for thread-local state, guaranteeing sync-only semantics.
+For async code, migrate to contextvars.ContextVar instead.
+"""
 
 from __future__ import annotations
 

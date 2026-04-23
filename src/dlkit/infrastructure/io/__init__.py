@@ -15,6 +15,7 @@ from .config import (
     write_config,
 )
 from .index import load_split_indices
+from .path_resolver import PathResolver
 from .sparse import (
     PackFiles,
     PackManifest,
@@ -53,7 +54,8 @@ __all__ = [
     "register_section_mapping",
     "ConfigSectionError",
     "ConfigValidationError",
-    # Path locations
+    # Path resolution
+    "PathResolver",
     "locations",
     # Sparse pack I/O
     "open_sparse_pack",
