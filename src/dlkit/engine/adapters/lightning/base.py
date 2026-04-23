@@ -131,7 +131,8 @@ def _normalize_dict(d: dict[str, Any], context: str, batch_size: int, _depth: in
                 normalized[k] = v
             case _:
                 normalized[k] = _normalize_output(v, f"{context}.{k}", batch_size, _depth)
-    return TensorDict(cast(Any, normalized), batch_size=[batch_size])
+    # TensorDict constructor accepts dict[str, Tensor | TensorDict] directly
+    return TensorDict(normalized, batch_size=[batch_size])  # type: ignore[arg-type]
 
 
 def _normalize_sequence(
@@ -283,12 +284,12 @@ def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -
     return build_model(model_cls, shape_summary, hyperparams)
 
 
-class ProcessingLightningWrapper(LightningModule, ABC):
-    """Pure Lightning coordinator. All computation delegated to injected protocols.
+class CoreLightningWrapper(LightningModule, ABC):
+    """Core Lightning coordinator for model, optimization, and checkpoint concerns.
 
-    Accepts pre-built model and protocol objects; delegates every computation
-    step to them. No model building, no direct transform application, no
-    positional batch assumptions live here.
+    Handles model instantiation, optimizer/scheduler management, checkpoint
+    serialization, logging, and precision. Does not handle routing to domain-specific
+    protocols (invoker, loss, metrics, transforms).
 
     Attributes:
         model: Underlying PyTorch model.
@@ -298,58 +299,22 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         self,
         *,
         model: nn.Module,
-        model_invoker: IModelInvoker,
-        loss_computer: ILossComputer,
-        metrics_updater: IMetricsUpdater,
-        batch_transformer: IBatchTransformer,
         optimization_controller: IOptimizationController,
-        predict_target_key: str,
         checkpoint_metadata: WrapperCheckpointMetadata | None = None,
-        prediction_strategy: IPredictionStrategy,
-        batch_transforms: Sequence[IBatchTransform] = (),
-        train_generator_factory: IGeneratorFactory | None = None,
-        val_generator_factory: IGeneratorFactory | None = None,
     ) -> None:
-        """Initialize the wrapper with injected protocol objects.
+        """Initialize the core wrapper.
 
         Args:
             model: Pre-built PyTorch nn.Module.
-            model_invoker: Extracts features and invokes model.
-            loss_computer: Computes scalar loss from predictions + batch.
-            metrics_updater: Accumulates and exposes metric state.
-            batch_transformer: Applies transforms to batches (nn.Module for state persistence).
             optimization_controller: Controller managing optimizers and schedulers (IOptimizationController).
-            predict_target_key: Target entry name whose chain is inverted at predict time.
             checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
-            prediction_strategy: Strategy that implements predict_step logic.
-                Standard models use ``DiscriminativePredictionStrategy``; generative
-                models use ``ODEPredictionStrategy``.
-            batch_transforms: Sequence of coupled supervision transforms applied per batch
-                before the per-slot batch_transformer chains. Empty by default (no-op).
-            train_generator_factory: Produces a generator per training batch for
-                reproducible stochastic transforms. Defaults to NullGeneratorFactory (global RNG).
-            val_generator_factory: Produces a generator per val/test batch. Defaults to
-                NullGeneratorFactory (global RNG).
         """
         super().__init__()
 
         self.model = model
-        self._model_invoker = model_invoker
-        self._loss_computer = loss_computer
-        self._metrics_updater = metrics_updater
-        self._batch_transformer = batch_transformer
         self._optimization_controller = optimization_controller
         self.automatic_optimization = not optimization_controller.requires_manual_optimization
-        self._predict_target_key = predict_target_key
         self._checkpoint_metadata = checkpoint_metadata
-        self._prediction_strategy = prediction_strategy
-        self._batch_transforms: tuple[IBatchTransform, ...] = tuple(batch_transforms)
-
-        from dlkit.engine.adapters.lightning.generator_factories import NullGeneratorFactory
-
-        _null = NullGeneratorFactory()
-        self._train_generator_factory: IGeneratorFactory = train_generator_factory or _null
-        self._val_generator_factory: IGeneratorFactory = val_generator_factory or _null
 
         # Entry configs for subclass access (e.g. graph wrapper target name)
         self._entry_configs: tuple[Any, ...] = (
@@ -383,128 +348,6 @@ class ProcessingLightningWrapper(LightningModule, ABC):
         precision_strategy = precision_service.resolve_precision()
         dtype = precision_strategy.to_torch_dtype()
         self.model = self.model.to(dtype=dtype)
-
-    # =========================================================================
-    # Lightning Step Methods (delegate to abstract _run_step)
-    # =========================================================================
-
-    @abstractmethod
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
-        """Execute one forward+loss step. Must be implemented by subclasses.
-
-        Args:
-            batch: Input batch.
-            batch_idx: Index of the batch.
-            stage: Stage identifier ('train', 'val', 'test').
-
-        Returns:
-            Tuple of (loss, batch_size, enriched_batch). The enriched_batch should
-            contain a "predictions" key for logging and metrics.
-        """
-        ...
-
-    def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Training step: delegates to _run_step and logs output.
-
-        Args:
-            batch: TensorDict batch from dataset.
-            batch_idx: Index of the batch.
-
-        Returns:
-            Dictionary containing the training loss.
-        """
-        if not self.automatic_optimization:
-
-            def loss_fn() -> Tensor:
-                loss, _, _ = self._run_step(batch, batch_idx, "train")
-                return loss
-
-            loss = self._optimization_controller.manual_step(loss_fn)
-            self._step_logger.log_stage_outputs("train", loss, batch_size=None)
-            return {"loss": loss}
-        else:
-            loss, batch_size, _ = self._run_step(batch, batch_idx, "train")
-            self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
-            return {"loss": loss}
-
-    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Validation step: delegates to _run_step, updates metrics, logs output.
-
-        Args:
-            batch: TensorDict batch from dataset.
-            batch_idx: Index of the batch.
-
-        Returns:
-            Dictionary containing validation loss.
-        """
-        loss, batch_size, enriched = self._run_step(batch, batch_idx, "val")
-        self._metrics_updater.update(enriched["predictions"], enriched, stage="val")
-        self._step_logger.log_stage_outputs("val", loss, batch_size=batch_size)
-        return {"val_loss": loss}
-
-    def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
-        """Test step: delegates to _run_step, updates metrics, logs output.
-
-        Args:
-            batch: TensorDict batch from dataset.
-            batch_idx: Index of the batch.
-
-        Returns:
-            Dictionary containing test loss.
-        """
-        loss, batch_size, enriched = self._run_step(batch, batch_idx, "test")
-        self._metrics_updater.update(enriched["predictions"], enriched, stage="test")
-        self._step_logger.log_stage_outputs("test", loss, batch_size=batch_size)
-        return {"test_loss": loss}
-
-    def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
-        """Prediction step returning a TensorDict with predictions, targets and latents.
-
-        When ``_prediction_strategy`` is set (e.g. for generative models), the
-        entire predict logic is delegated to the strategy object.  Otherwise
-        the legacy discriminative path is used (backward compatible).
-
-        Args:
-            batch: TensorDict batch from dataset.
-            batch_idx: Index of the batch.
-
-        Returns:
-            TensorDict with keys ``"predictions"``, ``"targets"``, and
-            ``"latents"`` (zero-size ``(B, 0)`` sentinel when absent).
-        """
-        gen = self._val_generator_factory(batch_idx)
-        return self._prediction_strategy.predict(self.model, batch, gen)
-
-    @staticmethod
-    def collect_targets(predict_outputs: list[Any]) -> list[Any]:
-        """Extract targets from ``trainer.predict()`` outputs.
-
-        Since ``predict_step`` embeds targets inside each output TensorDict,
-        targets are always aligned with predictions — no second dataloader pass
-        needed.
-
-        Args:
-            predict_outputs: List returned by ``trainer.predict()``, where each
-                element is a TensorDict produced by ``predict_step``.
-
-        Returns:
-            List of per-batch target TensorDicts (one entry per batch).
-        """
-        return [batch["targets"] for batch in predict_outputs]
-
-    def on_validation_epoch_end(self) -> None:
-        """Compute and log epoch-level validation metrics, then reset."""
-        metrics = self._metrics_updater.compute("val")
-        if metrics:
-            self._step_logger.log_stage_outputs("val_epoch", None, metrics)
-        self._metrics_updater.reset("val")
-
-    def on_test_epoch_end(self) -> None:
-        """Compute and log epoch-level test metrics, then reset."""
-        metrics = self._metrics_updater.compute("test")
-        if metrics:
-            self._step_logger.log_stage_outputs("test_epoch", None, metrics)
-        self._metrics_updater.reset("test")
 
     # =========================================================================
     # Checkpoint and Metadata Management
@@ -670,3 +513,194 @@ class ProcessingLightningWrapper(LightningModule, ABC):
 
         Subclasses implement the specific input format for their model type.
         """
+
+
+class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
+    """Lightning coordinator with routing to domain-specific protocols.
+
+    Extends CoreLightningWrapper with routing to injected protocol objects:
+    model invoker, loss computer, metrics updater, batch transformer, and
+    prediction strategy. Subclasses implement the template method _run_step.
+
+    Attributes:
+        model: Underlying PyTorch model.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: nn.Module,
+        model_invoker: IModelInvoker,
+        loss_computer: ILossComputer,
+        metrics_updater: IMetricsUpdater,
+        batch_transformer: IBatchTransformer,
+        optimization_controller: IOptimizationController,
+        predict_target_key: str,
+        checkpoint_metadata: WrapperCheckpointMetadata | None = None,
+        prediction_strategy: IPredictionStrategy,
+        batch_transforms: Sequence[IBatchTransform] = (),
+        train_generator_factory: IGeneratorFactory | None = None,
+        val_generator_factory: IGeneratorFactory | None = None,
+    ) -> None:
+        """Initialize the wrapper with injected protocol objects.
+
+        Args:
+            model: Pre-built PyTorch nn.Module.
+            model_invoker: Extracts features and invokes model.
+            loss_computer: Computes scalar loss from predictions + batch.
+            metrics_updater: Accumulates and exposes metric state.
+            batch_transformer: Applies transforms to batches (nn.Module for state persistence).
+            optimization_controller: Controller managing optimizers and schedulers (IOptimizationController).
+            predict_target_key: Target entry name whose chain is inverted at predict time.
+            checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
+            prediction_strategy: Strategy that implements predict_step logic.
+                Standard models use ``DiscriminativePredictionStrategy``; generative
+                models use ``ODEPredictionStrategy``.
+            batch_transforms: Sequence of coupled supervision transforms applied per batch
+                before the per-slot batch_transformer chains. Empty by default (no-op).
+            train_generator_factory: Produces a generator per training batch for
+                reproducible stochastic transforms. Defaults to NullGeneratorFactory (global RNG).
+            val_generator_factory: Produces a generator per val/test batch. Defaults to
+                NullGeneratorFactory (global RNG).
+        """
+        super().__init__(
+            model=model,
+            optimization_controller=optimization_controller,
+            checkpoint_metadata=checkpoint_metadata,
+        )
+
+        self._model_invoker = model_invoker
+        self._loss_computer = loss_computer
+        self._metrics_updater = metrics_updater
+        self._batch_transformer = batch_transformer
+        self._predict_target_key = predict_target_key
+        self._prediction_strategy = prediction_strategy
+        self._batch_transforms: tuple[IBatchTransform, ...] = tuple(batch_transforms)
+
+        from dlkit.engine.adapters.lightning.generator_factories import NullGeneratorFactory
+
+        _null = NullGeneratorFactory()
+        self._train_generator_factory: IGeneratorFactory = train_generator_factory or _null
+        self._val_generator_factory: IGeneratorFactory = val_generator_factory or _null
+
+    # =========================================================================
+    # Lightning Step Methods (delegate to abstract _run_step)
+    # =========================================================================
+
+    @abstractmethod
+    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+        """Execute one forward+loss step. Must be implemented by subclasses.
+
+        Args:
+            batch: Input batch.
+            batch_idx: Index of the batch.
+            stage: Stage identifier ('train', 'val', 'test').
+
+        Returns:
+            Tuple of (loss, batch_size, enriched_batch). The enriched_batch should
+            contain a "predictions" key for logging and metrics.
+        """
+        ...
+
+    def training_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Training step: delegates to _run_step and logs output.
+
+        Args:
+            batch: TensorDict batch from dataset.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing the training loss.
+        """
+        if not self.automatic_optimization:
+
+            def loss_fn() -> Tensor:
+                loss, _, _ = self._run_step(batch, batch_idx, "train")
+                return loss
+
+            loss = self._optimization_controller.manual_step(loss_fn)
+            self._step_logger.log_stage_outputs("train", loss, batch_size=None)
+            return {"loss": loss}
+        else:
+            loss, batch_size, _ = self._run_step(batch, batch_idx, "train")
+            self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
+            return {"loss": loss}
+
+    def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Validation step: delegates to _run_step, updates metrics, logs output.
+
+        Args:
+            batch: TensorDict batch from dataset.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing validation loss.
+        """
+        loss, batch_size, enriched = self._run_step(batch, batch_idx, "val")
+        self._metrics_updater.update(enriched["predictions"], enriched, stage="val")
+        self._step_logger.log_stage_outputs("val", loss, batch_size=batch_size)
+        return {"val_loss": loss}
+
+    def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
+        """Test step: delegates to _run_step, updates metrics, logs output.
+
+        Args:
+            batch: TensorDict batch from dataset.
+            batch_idx: Index of the batch.
+
+        Returns:
+            Dictionary containing test loss.
+        """
+        loss, batch_size, enriched = self._run_step(batch, batch_idx, "test")
+        self._metrics_updater.update(enriched["predictions"], enriched, stage="test")
+        self._step_logger.log_stage_outputs("test", loss, batch_size=batch_size)
+        return {"test_loss": loss}
+
+    def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
+        """Prediction step returning a TensorDict with predictions, targets and latents.
+
+        When ``_prediction_strategy`` is set (e.g. for generative models), the
+        entire predict logic is delegated to the strategy object.  Otherwise
+        the legacy discriminative path is used (backward compatible).
+
+        Args:
+            batch: TensorDict batch from dataset.
+            batch_idx: Index of the batch.
+
+        Returns:
+            TensorDict with keys ``"predictions"``, ``"targets"``, and
+            ``"latents"`` (zero-size ``(B, 0)`` sentinel when absent).
+        """
+        gen = self._val_generator_factory(batch_idx)
+        return self._prediction_strategy.predict(self.model, batch, gen)
+
+    @staticmethod
+    def collect_targets(predict_outputs: list[Any]) -> list[Any]:
+        """Extract targets from ``trainer.predict()`` outputs.
+
+        Since ``predict_step`` embeds targets inside each output TensorDict,
+        targets are always aligned with predictions — no second dataloader pass
+        needed.
+
+        Args:
+            predict_outputs: List returned by ``trainer.predict()``, where each
+                element is a TensorDict produced by ``predict_step``.
+
+        Returns:
+            List of per-batch target TensorDicts (one entry per batch).
+        """
+        return [batch["targets"] for batch in predict_outputs]
+
+    def on_validation_epoch_end(self) -> None:
+        """Compute and log epoch-level validation metrics, then reset."""
+        metrics = self._metrics_updater.compute("val")
+        if metrics:
+            self._step_logger.log_stage_outputs("val_epoch", None, metrics)
+        self._metrics_updater.reset("val")
+
+    def on_test_epoch_end(self) -> None:
+        """Compute and log epoch-level test metrics, then reset."""
+        metrics = self._metrics_updater.compute("test")
+        if metrics:
+            self._step_logger.log_stage_outputs("test_epoch", None, metrics)
+        self._metrics_updater.reset("test")

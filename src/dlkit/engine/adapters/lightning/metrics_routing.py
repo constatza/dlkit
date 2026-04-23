@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
+from tensordict import TensorDict
 from torch import Tensor
 from torchmetrics import Metric
 
@@ -71,7 +72,7 @@ class RoutedMetricsUpdater:
             for stage, routes in self._routes.items()
         }
 
-    def update(self, predictions: Tensor, batch: Any, stage: str) -> None:
+    def update(self, predictions: Tensor, batch: TensorDict, stage: str) -> None:
         """Update metrics for the given stage.
 
         Args:
@@ -84,7 +85,7 @@ class RoutedMetricsUpdater:
             extra = {kwarg: batch[route] for kwarg, route in extra_routes}
             cast(Any, metric).update(predictions, target, **extra)
 
-    def compute(self, stage: str) -> dict[str, Any]:
+    def compute(self, stage: str) -> dict[str, float | Tensor]:
         """Compute accumulated metric values for the given stage.
 
         Args:

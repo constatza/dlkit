@@ -15,7 +15,7 @@ from dlkit.infrastructure.config import (
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .base import ProcessingLightningWrapper
+from .base import CoreLightningWrapper
 from .graph import GraphLightningWrapper
 from .standard import StandardLightningWrapper
 from .timeseries import TimeSeriesLightningWrapper
@@ -48,7 +48,7 @@ class WrapperFactory:
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents | None = None,
         **kwargs: Any,
-    ) -> ProcessingLightningWrapper:
+    ) -> CoreLightningWrapper:
         """Create an appropriate Lightning wrapper for the given configuration.
 
         Args:
@@ -236,7 +236,7 @@ class WrapperFactory:
         checkpoint_path: str,
         wrapper_type: str = "auto",
         **kwargs: Any,
-    ) -> ProcessingLightningWrapper:
+    ) -> CoreLightningWrapper:
         """Create a wrapper and load it from a checkpoint.
 
         Args:
@@ -275,7 +275,7 @@ class WrapperFactory:
         model: nn.Module,
         wrapper_type: str = "auto",
         **kwargs: Any,
-    ) -> ProcessingLightningWrapper:
+    ) -> CoreLightningWrapper:
         """Create a wrapper with sensible defaults for quick experimentation.
 
         Args:

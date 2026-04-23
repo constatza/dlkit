@@ -15,7 +15,6 @@ from torch_geometric.data import Batch as PyGBatch
 from torch_geometric.data import Data
 from torchmetrics import MetricCollection
 
-from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
 from dlkit.engine.adapters.lightning.wrapper_types import (
     WrapperCheckpointMetadata,
     WrapperComponents,
@@ -26,17 +25,16 @@ from dlkit.infrastructure.config import (
 )
 from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry, is_target_entry
 
-from .base import ProcessingLightningWrapper, _build_model_from_settings
-from .prediction_strategies import DiscriminativePredictionStrategy
+from .base import CoreLightningWrapper, _build_model_from_settings
 
 
-class GraphLightningWrapper(ProcessingLightningWrapper):
+class GraphLightningWrapper(CoreLightningWrapper):
     """Lightning wrapper for PyTorch Geometric graph neural networks.
 
     Accepts PyG ``Data``/``Batch`` objects from a PyG DataLoader directly —
     no TensorDict conversion needed. Target is extracted by the first
     target-entry config name (default ``"y"``). All Lightning step methods
-    are overridden; the base protocol objects serve as no-op sentinels.
+    are overridden; does not use the routing components of ProcessingLightningWrapper.
 
     **batch_size semantics**: All step methods pass ``batch_size=predictions.shape[0]``
     (total node count M across the PyG batch) to ``self.log()``. This is
@@ -64,8 +62,8 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
     ) -> None:
         """Initialise the graph wrapper.
 
-        Wires pre-built components and null protocol sentinels into the base class
-        (the step methods below override everything so the sentinels are never invoked).
+        Builds and wires pre-built components. All step methods are overridden
+        to handle PyG Data/Batch objects directly.
 
         Args:
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
@@ -94,21 +92,6 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             feature_names=tuple(e.name for e in feature_entries if e.name is not None),
             predict_target_key="",
             shape_summary=shape_summary,
-        )
-
-        # Create minimal protocol objects (graph overrides all step methods)
-        from dlkit.engine.adapters.lightning.null_components import (
-            _NullLossComputer,
-            _NullMetricsUpdater,
-            _NullModelInvoker,
-        )
-
-        _null_transformer = NamedBatchTransformer({}, {})
-        _null_invoker = _NullModelInvoker()
-        _prediction_strategy = DiscriminativePredictionStrategy(
-            model_invoker=_null_invoker,
-            batch_transformer=_null_transformer,
-            predict_target_key="",
         )
 
         # Build optimization controller for graph models
@@ -150,14 +133,8 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
         # super().__init__() must be called before assigning any nn.Module attributes
         super().__init__(
             model=model,
-            model_invoker=_null_invoker,
-            loss_computer=_NullLossComputer(),
-            metrics_updater=_NullMetricsUpdater(),
-            batch_transformer=_null_transformer,
             optimization_controller=optimization_controller,
-            predict_target_key="",
             checkpoint_metadata=checkpoint_metadata,
-            prediction_strategy=_prediction_strategy,
         )
 
         # Assign nn.Module attributes AFTER super().__init__()
@@ -208,30 +185,6 @@ class GraphLightningWrapper(ProcessingLightningWrapper):
             Model output tensor.
         """
         return self.model(x, edge_index, edge_attr)
-
-    # =========================================================================
-    # Template Method Implementation
-    # =========================================================================
-
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
-        """Execute one forward+loss step for graph data.
-
-        Graph data is not enriched into a TensorDict; this method is provided
-        for API compatibility but should never be called since all step methods
-        are overridden.
-
-        Args:
-            batch: PyG Data or Batch (not used).
-            batch_idx: Batch index (not used).
-            stage: Stage identifier (not used).
-
-        Raises:
-            NotImplementedError: Always, since this should not be called.
-        """
-        raise NotImplementedError(
-            "GraphLightningWrapper overrides all step methods directly. "
-            "_run_step should never be called."
-        )
 
     # =========================================================================
     # Step overrides: PyG Data/Batch → model directly
