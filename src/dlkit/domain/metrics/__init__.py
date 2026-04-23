@@ -57,6 +57,10 @@ Examples:
 # STANDARD METRICS (delegated to external torchmetrics)
 # ============================================================================
 
+# ============================================================================
+# UTILITIES
+# ============================================================================
+from .collect import MetricsPayload
 from .compat import (
     MeanAbsoluteError,
     MeanAbsolutePercentageError,
@@ -109,6 +113,7 @@ from .torchmetrics_wrappers import (
 __all__ = [
     # Type aliases
     "AggregatorFn",
+    "MetricsPayload",
     # Standard metrics (from torchmetrics)
     "MeanSquaredError",
     "MeanAbsoluteError",

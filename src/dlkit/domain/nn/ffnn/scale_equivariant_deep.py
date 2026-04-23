@@ -16,8 +16,22 @@ from dlkit.domain.nn.ffnn.parametric_variants import (
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 
 
-class ScaleEquivariantConstantWidthSPDFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by ConstantWidthSPDFFNN.
+def ScaleEquivariantConstantWidthSPDFFNN(
+    *,
+    size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = False,
+    min_diag: float = 1e-4,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap ConstantWidthSPDFFNN with scale equivariance.
 
     Args:
         size: Square feature size (in == out).
@@ -32,44 +46,46 @@ class ScaleEquivariantConstantWidthSPDFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
+
+    Returns:
+        ScaleEquivariantFFNN instance wrapping ConstantWidthSPDFFNN.
     """
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = False,
-        min_diag: float = 1e-4,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=ConstantWidthSPDFFNN(
-                size=size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                min_diag=min_diag,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    return ScaleEquivariantFFNN(
+        base_model=ConstantWidthSPDFFNN(
+            size=size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            min_diag=min_diag,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )
 
 
-class ScaleEquivariantConstantWidthSPDFactorizedFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by ConstantWidthSPDFactorizedFFNN.
+def ScaleEquivariantConstantWidthSPDFactorizedFFNN(
+    *,
+    size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = False,
+    min_diag: float = 1e-4,
+    mean: float = 0.0,
+    std: float = 0.1,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap ConstantWidthSPDFactorizedFFNN with scale equivariance.
 
     Args:
         size: Square feature size (in == out).
@@ -86,48 +102,47 @@ class ScaleEquivariantConstantWidthSPDFactorizedFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
+
+    Returns:
+        ScaleEquivariantFFNN instance wrapping ConstantWidthSPDFactorizedFFNN.
     """
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = False,
-        min_diag: float = 1e-4,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=ConstantWidthSPDFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    return ScaleEquivariantFFNN(
+        base_model=ConstantWidthSPDFactorizedFFNN(
+            size=size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            min_diag=min_diag,
+            mean=mean,
+            std=std,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )
 
 
-class ScaleEquivariantConstantWidthFactorizedFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by ConstantWidthFactorizedFFNN.
+def ScaleEquivariantConstantWidthFactorizedFFNN(
+    *,
+    size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = True,
+    mean: float = 0.0,
+    std: float = 0.1,
+    pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap ConstantWidthFactorizedFFNN with scale equivariance.
 
     Args:
         size: Square feature size (in == out).
@@ -143,46 +158,47 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
+
+    Returns:
+        ScaleEquivariantFFNN instance wrapping ConstantWidthFactorizedFFNN.
     """
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=ConstantWidthFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    return ScaleEquivariantFFNN(
+        base_model=ConstantWidthFactorizedFFNN(
+            size=size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            mean=mean,
+            std=std,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )
 
 
-class ScaleEquivariantEmbeddedSPDFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by EmbeddedSPDFFNN.
+def ScaleEquivariantEmbeddedSPDFFNN(
+    *,
+    in_features: int,
+    out_features: int,
+    hidden_size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = False,
+    min_diag: float = 1e-4,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap EmbeddedSPDFFNN with scale equivariance.
 
     Args:
         in_features: Number of input features.
@@ -199,48 +215,50 @@ class ScaleEquivariantEmbeddedSPDFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
+
+    Returns:
+        ScaleEquivariantFFNN instance wrapping EmbeddedSPDFFNN.
     """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = False,
-        min_diag: float = 1e-4,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=EmbeddedSPDFFNN(
-                in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                min_diag=min_diag,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    return ScaleEquivariantFFNN(
+        base_model=EmbeddedSPDFFNN(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            min_diag=min_diag,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )
 
 
-class ScaleEquivariantEmbeddedSPDFactorizedFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by EmbeddedSPDFactorizedFFNN.
+def ScaleEquivariantEmbeddedSPDFactorizedFFNN(
+    *,
+    in_features: int,
+    out_features: int,
+    hidden_size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = False,
+    min_diag: float = 1e-4,
+    mean: float = 0.0,
+    std: float = 0.1,
+    pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap EmbeddedSPDFactorizedFFNN with scale equivariance.
 
     Args:
         in_features: Number of input features.
@@ -259,52 +277,51 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
+
+    Returns:
+        ScaleEquivariantFFNN instance wrapping EmbeddedSPDFactorizedFFNN.
     """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = False,
-        min_diag: float = 1e-4,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=EmbeddedSPDFactorizedFFNN(
-                in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    return ScaleEquivariantFFNN(
+        base_model=EmbeddedSPDFactorizedFFNN(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            min_diag=min_diag,
+            mean=mean,
+            std=std,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )
 
 
-class ScaleEquivariantEmbeddedFactorizedFFNN(ScaleEquivariantFFNN):
-    """ScaleEquivariantFFNN backed by EmbeddedFactorizedFFNN.
+def ScaleEquivariantEmbeddedFactorizedFFNN(
+    *,
+    in_features: int,
+    out_features: int,
+    hidden_size: int,
+    num_layers: int,
+    residual: bool = False,
+    bias: bool = True,
+    mean: float = 0.0,
+    std: float = 0.1,
+    pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+    norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
+    eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
+    keep_stats: bool = False,
+    activation: Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+) -> ScaleEquivariantFFNN:
+    """Wrap EmbeddedFactorizedFFNN with scale equivariance.
 
     Args:
         in_features: Number of input features.
@@ -322,43 +339,26 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(ScaleEquivariantFFNN):
         activation: Activation function.
         normalize: Normalization type.
         dropout: Dropout probability.
-    """
 
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int,
-        num_layers: int,
-        residual: bool = False,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
-        norm: str = ScaleEquivariantFFNN.DEFAULT_NORM,
-        eps_gain: float = ScaleEquivariantFFNN.DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=EmbeddedFactorizedFFNN(
-                in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                residual=residual,
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=activation or nn.functional.gelu,
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+    Returns:
+        ScaleEquivariantFFNN instance wrapping EmbeddedFactorizedFFNN.
+    """
+    return ScaleEquivariantFFNN(
+        base_model=EmbeddedFactorizedFFNN(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            residual=residual,
+            bias=bias,
+            mean=mean,
+            std=std,
+            pos_fn=pos_fn,
+            activation=activation or nn.functional.gelu,
+            normalize=normalize,
+            dropout=dropout,
+        ),
+        norm=norm,
+        eps_gain=eps_gain,
+        keep_stats=keep_stats,
+    )

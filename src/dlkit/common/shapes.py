@@ -13,9 +13,26 @@ class ShapeSummary:
     in_shapes: tuple[tuple[int, ...], ...]
     out_shapes: tuple[tuple[int, ...], ...]
 
+    def __post_init__(self) -> None:
+        """Validate that shape tuples are non-empty."""
+        if not self.in_shapes:
+            raise ValueError(
+                "ShapeSummary.in_shapes must be non-empty; "
+                "in_features, in_channels, and in_length accessors depend on index 0"
+            )
+        if not self.out_shapes:
+            raise ValueError(
+                "ShapeSummary.out_shapes must be non-empty; "
+                "out_features accessor depends on index 0"
+            )
+
     @property
     def in_features(self) -> int:
-        """Primary input feature size."""
+        """Primary input feature size.
+
+        Accesses index 0 of in_shapes; assumes in_shapes is non-empty.
+        Validated in __post_init__.
+        """
         return self.in_shapes[0][0]
 
     @property

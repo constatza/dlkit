@@ -63,13 +63,12 @@ class MinMaxScaler(Transform):
 
     def update_fit(self, batch: torch.Tensor) -> None:
         """Accumulate min/max statistics from one batch."""
-        # Normalize dim indices
-        dim = tuple(index % len(batch.shape) for index in self.dim)
-        self.dim = dim
+        # Normalize dim indices without mutating self.dim
+        effective_dim = tuple(index % len(batch.shape) for index in self.dim)
 
         # Compute current batch statistics
-        current_min = torch.amin(input=batch, dim=list(dim), keepdim=True)
-        current_max = torch.amax(input=batch, dim=list(dim), keepdim=True)
+        current_min = torch.amin(input=batch, dim=list(effective_dim), keepdim=True)
+        current_max = torch.amax(input=batch, dim=list(effective_dim), keepdim=True)
 
         if self._fit_min is None or self._fit_max is None:
             self._fit_min = current_min

@@ -1,7 +1,6 @@
 import abc
-from typing import Any
 
-from torch import nn
+from torch import Tensor, nn
 
 
 class CAE(nn.Module):
@@ -12,12 +11,11 @@ class CAE(nn.Module):
     """
 
     @abc.abstractmethod
-    def encode(self, *args: Any, **kwargs: Any) -> Any:
+    def encode(self, x: Tensor) -> Tensor:
         """Encode input to latent space.
 
         Args:
-            *args: Positional arguments.
-            **kwargs: Keyword arguments.
+            x: Input tensor.
 
         Returns:
             Encoded latent representation.
@@ -25,19 +23,18 @@ class CAE(nn.Module):
         ...
 
     @abc.abstractmethod
-    def decode(self, *args: Any, **kwargs: Any) -> Any:
+    def decode(self, x: Tensor) -> Tensor:
         """Decode latent representation back to original space.
 
         Args:
-            *args: Positional arguments.
-            **kwargs: Keyword arguments.
+            x: Latent tensor.
 
         Returns:
             Decoded output.
         """
         ...
 
-    def forward(self, x: Any) -> Any:
+    def forward(self, x: Tensor) -> Tensor:
         """Forward pass through autoencoder (encode -> decode).
 
         Args:
