@@ -15,8 +15,17 @@ Usage:
     )
 """
 
-from .core import GraphShapeSpec, IShapeSpec, NullShapeSpec, ShapeSpec, create_shape_spec
-from .strategies import ShapeAliasResolver, ShapeSerializer, ShapeValidator, ValidationResult
+from .core import (
+    GraphShapeSpec,
+    IShapeSpec,
+    NullShapeSpec,
+    ShapeAliasResolver,
+    ShapeSerializer,
+    ShapeSpec,
+    ShapeValidator,
+    ValidationResult,
+    create_shape_spec,
+)
 from .value_objects import ModelFamily, ShapeData, ShapeEntry, ShapeSource
 
 __all__ = [

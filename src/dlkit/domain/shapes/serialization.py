@@ -1,8 +1,7 @@
-"""Shape serialization — internal implementation.
+"""Shape serialization with versioning and migration support.
 
-This private module consolidates all shape serialization logic:
-enums, metadata containers, format-specific serializers, migration,
-and the versioned serializer.
+This module consolidates all shape serialization logic: enums, metadata
+containers, format-specific serializers, migration, and the versioned serializer.
 """
 
 from __future__ import annotations

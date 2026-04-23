@@ -14,7 +14,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from dlkit.domain.shapes import create_shape_spec
-from dlkit.domain.shapes.strategies import (
+from dlkit.domain.shapes.core import (
     ShapeAliasResolver,
     ShapeSerializer,
     ShapeValidator,

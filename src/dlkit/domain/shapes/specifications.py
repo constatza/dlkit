@@ -1,7 +1,7 @@
-"""Shape specifications — internal implementation.
+"""Shape validation using the Specification pattern.
 
-This private module consolidates the Specification pattern for shape validation:
-base class, composite specs, domain-specific specs, and the validation engine.
+This module consolidates validation logic: base class, composite specs,
+domain-specific specs, and the validation engine.
 """
 
 from __future__ import annotations
@@ -12,23 +12,22 @@ from typing import TYPE_CHECKING
 from .value_objects import ModelFamily, ShapeData
 
 if TYPE_CHECKING:
-    from .strategies import ValidationResult
+    from .core import ValidationResult
 
 
 # ---------------------------------------------------------------------------
-# ValidationResult is defined in strategies.py; import it here lazily to
-# avoid a circular import (strategies → _specifications → strategies).
+# ValidationResult lazy imports to avoid circular dependency
 # ---------------------------------------------------------------------------
 
 
 def _success() -> ValidationResult:
-    from .strategies import ValidationResult
+    from .core import ValidationResult
 
     return ValidationResult.success()
 
 
 def _failure(errors: list[str]) -> ValidationResult:
-    from .strategies import ValidationResult
+    from .core import ValidationResult
 
     return ValidationResult.failure(errors)
 
@@ -36,7 +35,7 @@ def _failure(errors: list[str]) -> ValidationResult:
 def _result(
     *, is_valid: bool, errors: tuple[str, ...], warnings: tuple[str, ...]
 ) -> ValidationResult:
-    from .strategies import ValidationResult
+    from .core import ValidationResult
 
     return ValidationResult(is_valid=is_valid, errors=errors, warnings=warnings)
 
