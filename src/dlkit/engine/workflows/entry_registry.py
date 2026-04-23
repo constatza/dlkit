@@ -20,6 +20,7 @@ from dlkit.infrastructure.config.data_entries import (
     ValueFeature,
     ValueTarget,
 )
+from dlkit.infrastructure.config.entry_base import EntryRole
 
 FeatureEntry = PathFeature | ValueFeature | SparseFeature
 TargetEntry = PathTarget | ValueTarget
@@ -96,10 +97,10 @@ class DataEntryRegistry:
             Dictionary mapping feature names to feature objects
         """
         with self._lock:
-            return {
+            return {  # type: ignore[return-value]
                 name: entry
                 for name, entry in self._entries.items()
-                if isinstance(entry, (PathFeature, ValueFeature, SparseFeature))
+                if entry.entry_role == EntryRole.FEATURE
             }
 
     def get_targets(self) -> dict[str, TargetEntry]:
@@ -109,10 +110,10 @@ class DataEntryRegistry:
             Dictionary mapping target names to target objects
         """
         with self._lock:
-            return {
+            return {  # type: ignore[return-value]
                 name: entry
                 for name, entry in self._entries.items()
-                if isinstance(entry, (PathTarget, ValueTarget))
+                if entry.entry_role == EntryRole.TARGET
             }
 
     def get_latents(self) -> dict[str, Latent]:
@@ -122,8 +123,10 @@ class DataEntryRegistry:
             Dictionary mapping latent names to Latent objects
         """
         with self._lock:
-            return {
-                name: entry for name, entry in self._entries.items() if isinstance(entry, Latent)
+            return {  # type: ignore[return-value]
+                name: entry
+                for name, entry in self._entries.items()
+                if entry.entry_role == EntryRole.LATENT
             }
 
     def get_predictions(self) -> dict[str, Prediction]:
@@ -133,10 +136,10 @@ class DataEntryRegistry:
             Dictionary mapping prediction names to Prediction objects
         """
         with self._lock:
-            return {
+            return {  # type: ignore[return-value]
                 name: entry
                 for name, entry in self._entries.items()
-                if isinstance(entry, Prediction)
+                if entry.entry_role == EntryRole.PREDICTION
             }
 
     def get_entry(self, name: str) -> DataEntry | None:

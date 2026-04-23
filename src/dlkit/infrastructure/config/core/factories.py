@@ -133,19 +133,20 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
                 ModelComponentSettings,
             )
 
-            if isinstance(settings, ModelComponentSettings):
-                return "model"
-            if isinstance(settings, DatasetSettings):
-                return "dataset"
-            if isinstance(settings, DataModuleSettings):
-                return "datamodule"
-            if isinstance(settings, LossComponentSettings):
-                return "loss"
-            if isinstance(settings, MetricComponentSettings):
-                return "metric"
+            _SETTINGS_KIND: dict[type, str] = {
+                ModelComponentSettings: "model",
+                DatasetSettings: "dataset",
+                DataModuleSettings: "datamodule",
+                LossComponentSettings: "loss",
+                MetricComponentSettings: "metric",
+            }
+
+            return next(
+                (kind for cls, kind in _SETTINGS_KIND.items() if isinstance(settings, cls)),
+                None,
+            )
         except Exception:
             return None
-        return None
 
     def _prepare_init_kwargs(
         self, settings: ComponentSettings, context: BuildContext, cls: type
