@@ -12,22 +12,24 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
-from torch.nn import Identity
 
-from dlkit.domain.transforms.chain import TransformChain
-from dlkit.engine.adapters.lightning.loss_routing import RoutedLossComputer
+from dlkit.engine.adapters.lightning.loss_routing import (
+    RoutedLossComputer,
+    build_auto_extra_inputs,
+    merge_extra_inputs,
+)
 from dlkit.engine.adapters.lightning.metrics_routing import RoutedMetricsUpdater
 from dlkit.engine.adapters.lightning.model_invoker import (
     ModelOutputSpec,
     _build_invoker_from_entries,
-    _classify_feature_entries,
 )
 from dlkit.engine.adapters.lightning.protocols import IFittableBatchTransformer
-from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
+from dlkit.engine.adapters.lightning.transform_pipeline import build_batch_transformer
 from dlkit.engine.adapters.lightning.wrapper_types import (
-    WrapperCheckpointMetadata,
     WrapperComponents,
+    build_checkpoint_metadata,
 )
+from dlkit.engine.training.optimization.controllers import build_optimization_controller
 from dlkit.infrastructure.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -40,64 +42,6 @@ from .prediction_strategies import DiscriminativePredictionStrategy
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
-    from dlkit.engine.training.optimization.state import RunningOptimizerPolicy
-
-
-def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
-    """Determine whether the given optimization program needs manual stepping.
-
-    Manual optimization is required when:
-    - Any stage uses an LBFGS-family optimizer (needs a closure).
-    - The program has more than one sequential stage (automatic mode would
-      register and step all optimizers every batch, defeating staged training).
-
-    Args:
-        program: The assembled optimization program.
-
-    Returns:
-        True if the Lightning wrapper should set automatic_optimization=False.
-    """
-    from dlkit.engine.training.optimization.state import ActiveStage
-
-    # Sequential multi-stage programs must be stepped manually so that only
-    # the active stage's optimizer is updated at any given training step.
-    sequential_stage_count = sum(1 for entry in program.stages if isinstance(entry, ActiveStage))
-    if sequential_stage_count > 1:
-        return True
-
-    # LBFGS requires a closure — Lightning's automatic mode cannot provide it.
-    for entry in program.stages:
-        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
-        for stage in stages:
-            opt_cls = stage.optimizer.__class__.__name__.lower()
-            if any(x in opt_cls for x in ("lbfgs", "manual")):
-                return True
-
-    return False
-
-
-def _pick_step_policy(program: RunningOptimizerPolicy) -> Any:
-    """Select the appropriate manual-stepping policy for the program.
-
-    Uses LBFGSStageStepper when any stage holds an LBFGS-family optimizer
-    (which requires a closure). Falls back to StepAllOptimizers otherwise.
-
-    Args:
-        program: The running optimization program.
-
-    Returns:
-        An IStepPolicy instance suited to the program's optimizer(s).
-    """
-    from dlkit.engine.training.optimization.state import ActiveStage
-    from dlkit.engine.training.optimization.stepping import LBFGSStageStepper, StepAllOptimizers
-
-    for entry in program.stages:
-        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
-        for stage in stages:
-            if "lbfgs" in stage.optimizer.__class__.__name__.lower():
-                return LBFGSStageStepper()
-
-    return StepAllOptimizers()
 
 
 def _validate_extra_inputs_against_signature(
@@ -146,89 +90,6 @@ def _validate_extra_inputs_against_signature(
                 f"and cannot be passed as a keyword argument. "
                 f"Rename the parameter or adjust loss routing."
             )
-
-
-def _build_auto_extra_inputs(
-    entry_configs: tuple[DataEntry, ...],
-) -> dict[str, LossInputRef]:
-    """Derive LossInputRef entries from DataEntry objects that declare loss_input.
-
-    Each entry with a non-None loss_input value is auto-routed as a loss function
-    kwarg. The kwarg name is the loss_input string; the batch key is derived from
-    the entry's namespace and name.
-
-    Args:
-        entry_configs: Tuple of DataEntry objects in config-insertion order.
-
-    Returns:
-        Dict mapping kwarg name to LossInputRef, ready to merge with explicit routes.
-
-    Raises:
-        ValueError: If two entries declare the same loss_input kwarg name.
-    """
-    result: dict[str, LossInputRef] = {}
-    for e in entry_configs:
-        kwarg = getattr(e, "loss_input", None)
-        if kwarg is None or e.name is None:
-            continue
-        if kwarg in result:
-            raise ValueError(
-                f"Duplicate loss_input kwarg '{kwarg}' declared on multiple entries. "
-                f"Each kwarg name must appear on exactly one entry."
-            )
-        namespace = "features" if is_feature_entry(e) else "targets"
-        result[kwarg] = LossInputRef(arg=kwarg, key=f"{namespace}.{e.name}")
-    return result
-
-
-def _merge_extra_inputs(
-    auto: dict[str, LossInputRef],
-    explicit: tuple[LossInputRef, ...],
-) -> tuple[LossInputRef, ...]:
-    """Merge auto-derived and explicit LossInputRef collections.
-
-    Any overlap between auto-derived (from DataEntry.loss_input) and explicit
-    (from LossComponentSettings.extra_inputs) routes is a configuration error —
-    no silent overrides.
-
-    Args:
-        auto: Auto-derived routes keyed by kwarg name.
-        explicit: Explicitly configured routes from LossComponentSettings.
-
-    Returns:
-        Merged tuple of LossInputRef with no duplicate arg names.
-
-    Raises:
-        ValueError: If the same kwarg name appears in both auto and explicit routes.
-    """
-    explicit_by_arg = {r.arg: r for r in explicit}
-    overlap = set(auto) & set(explicit_by_arg)
-    if overlap:
-        raise ValueError(
-            f"Loss kwarg(s) {sorted(overlap)} declared on both DataEntry.loss_input and "
-            f"LossComponentSettings.extra_inputs. Remove one declaration — no silent overrides."
-        )
-    return tuple({**auto, **explicit_by_arg}.values())
-
-
-def _ordered_model_input_names(feature_entries: list[DataEntry]) -> tuple[str, ...]:
-    """Return feature entry names in invoker dispatch order.
-
-    Mirrors :func:`_build_invoker_from_entries` ordering: positionals first
-    (sorted by index), then kwargs (entry insertion order).  Used to store
-    ``feature_names`` in checkpoint metadata so inference can map positional
-    tensor args to the correct transform chain.
-
-    Args:
-        feature_entries: Feature DataEntry objects in config-insertion order.
-
-    Returns:
-        Tuple of entry names in the same order that the invoker dispatches
-        tensors to ``model.forward()``.
-    """
-    positional, kwarg_map = _classify_feature_entries(feature_entries)
-    positional.sort(key=lambda x: x[0])
-    return tuple(name for _, name in positional) + tuple(kwarg_map.keys())
 
 
 class StandardLightningWrapper(ProcessingLightningWrapper):
@@ -288,18 +149,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         loss_fn = components.loss_fn
         val_metric_routes = components.val_metric_routes
         test_metric_routes = components.test_metric_routes
-        # Build TransformChain from pre-built ModuleLists
-        feature_chains: dict[str, Any] = {
-            name: (TransformChain(ml) if len(ml) > 0 else Identity())
-            for name, ml in components.feature_transforms.items()
-        }
-        target_chains: dict[str, Any] = {
-            name: (TransformChain(ml) if len(ml) > 0 else Identity())
-            for name, ml in components.target_transforms.items()
-        }
 
-        # --- Build transform transformer (always needed for transform fitting) ---
-        batch_transformer = NamedBatchTransformer(feature_chains, target_chains)
+        # --- Build batch transformer ---
+        batch_transformer = build_batch_transformer(
+            components.feature_transforms, components.target_transforms
+        )
 
         # --- Build model invoker (resolves model_input ordering) ---
         output_spec = ModelOutputSpec()
@@ -307,9 +161,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
 
         # --- Build loss computer ---
         loss_spec = settings.loss_function
-        auto_extra = _build_auto_extra_inputs(entry_configs)
+        auto_extra = build_auto_extra_inputs(entry_configs)
         explicit_extra = tuple(getattr(loss_spec, "extra_inputs", ()) or ())
-        merged_extra = _merge_extra_inputs(auto_extra, explicit_extra)
+        merged_extra = merge_extra_inputs(auto_extra, explicit_extra)
         _validate_extra_inputs_against_signature(loss_fn, merged_extra)
         loss_computer = RoutedLossComputer(
             loss_fn=loss_fn,
@@ -331,11 +185,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
 
         # --- Build checkpoint metadata ---
-        checkpoint_metadata = WrapperCheckpointMetadata(
+        checkpoint_metadata = build_checkpoint_metadata(
             model_settings=model_settings,
             wrapper_settings=settings,
             entry_configs=entry_configs,
-            feature_names=_ordered_model_input_names(feature_entries),
+            feature_entries=feature_entries,
             predict_target_key=predict_target_key,
             shape_summary=shape_summary,
             output_spec=output_spec,
@@ -348,22 +202,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         )
 
         # Build optimization controller
-        from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
-        from dlkit.engine.training.optimization.controllers import (
-            AutomaticOptimizationController,
-            ManualOptimizationController,
+        optimization_controller = build_optimization_controller(
+            model, components.optimizer_policy_settings
         )
-        from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-
-        program = OptimizerPolicyBuilder().build(model, components.optimizer_policy_settings)
-        repository = OptimizationStateRepository()
-
-        if _requires_manual_optimization(program):
-            optimization_controller = ManualOptimizationController(
-                program, repository, _pick_step_policy(program)
-            )
-        else:
-            optimization_controller = AutomaticOptimizationController(program, repository)
 
         super().__init__(
             model=model,
