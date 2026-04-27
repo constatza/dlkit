@@ -23,6 +23,7 @@ class SparseFormat(StrEnum):
     CSR = "csr"
 
 
+@runtime_checkable
 class SparseWriter(Protocol):
     """Protocol for sparse format writers (ISP: write concern only)."""
 
@@ -43,6 +44,7 @@ class SparseWriter(Protocol):
         ...
 
 
+@runtime_checkable
 class SparseLoader(Protocol):
     """Protocol for sparse format loaders (ISP: read concern only)."""
 
