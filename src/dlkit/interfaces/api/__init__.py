@@ -14,6 +14,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "LifecycleHooks": ("dlkit.common", "LifecycleHooks"),
     "TrainingResult": ("dlkit.common", "TrainingResult"),
     "WorkflowError": ("dlkit.common", "WorkflowError"),
+    "build_inference_datamodule": ("dlkit.interfaces.api.functions", "build_inference_datamodule"),
     "build_logged_model_uri": ("dlkit.interfaces.api.functions", "build_logged_model_uri"),
     "build_registered_model_uri": (
         "dlkit.interfaces.api.functions",

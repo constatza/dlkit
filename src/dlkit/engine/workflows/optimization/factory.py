@@ -12,7 +12,6 @@ from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
 )
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -37,7 +36,7 @@ from .value_objects import (
 )
 
 # Settings union accepted by optimization factory methods
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = OptimizationWorkflowConfig | GeneralSettings
 
 logger = get_logger(__name__)
 

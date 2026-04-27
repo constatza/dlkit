@@ -1,3 +1,7 @@
 """Adapters package (legacy placeholders removed)."""
 
-__all__: list[str] = []
+from .workflow_executor import EngineWorkflowExecutor
+
+__all__ = [
+    "EngineWorkflowExecutor",
+]

@@ -19,13 +19,13 @@ from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
 )
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .value_objects import (
     IConfigurationPersistence,
     IExperimentTracker,
+    IHyperparameterApplicator,
     IStudyRepository,
     OptimizationDirection,
     OptimizationResult,
@@ -156,18 +156,30 @@ class TrialExecutor:
     sampling, training execution, and result collection.
     """
 
-    def __init__(self, build_factory: BuildFactory):
+    def __init__(
+        self,
+        build_factory: BuildFactory,
+        hyperparameter_applicator: IHyperparameterApplicator | None = None,
+    ):
         """Initialize trial executor.
 
         Args:
             build_factory: Factory for building training components
+            hyperparameter_applicator: Optional hyperparameter applicator (default: ModelSettingsApplicator)
         """
         self._build_factory = build_factory
+        if hyperparameter_applicator is None:
+            from dlkit.engine.workflows.optimization.infrastructure.applicators import (
+                ModelSettingsApplicator,
+            )
+
+            hyperparameter_applicator = ModelSettingsApplicator()
+        self._hyperparameter_applicator = hyperparameter_applicator
 
     def execute_trial(
         self,
         trial: Trial,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
         hyperparameters: dict[str, Any],
         trial_context: Any = None,
         enable_checkpointing: bool = False,
@@ -221,9 +233,9 @@ class TrialExecutor:
 
     def _apply_hyperparameters(
         self,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
         hyperparameters: dict[str, Any],
-    ) -> GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig:
+    ) -> OptimizationWorkflowConfig | GeneralSettings:
         """Apply hyperparameters to base settings.
 
         Args:
@@ -232,23 +244,23 @@ class TrialExecutor:
 
         Returns:
             Settings with hyperparameters applied
-        """
-        # TODO: Implement proper hyperparameter application
-        # This should use the existing settings sampler logic
-        try:
-            if base_settings.MODEL and hyperparameters:
-                # Apply hyperparameters to model settings
-                updated_model = base_settings.MODEL.patch(hyperparameters)
-                return base_settings.patch({"MODEL": updated_model})
-        except Exception as e:
-            logger.warning("Failed to apply hyperparameters: {}", e)
 
-        return base_settings
+        Raises:
+            WorkflowError: If hyperparameter application fails
+        """
+        # TODO: Add pruning callback injection here
+        try:
+            return self._hyperparameter_applicator.apply(base_settings, hyperparameters)
+        except Exception as e:
+            raise WorkflowError(
+                f"Failed to apply hyperparameters: {e}",
+                {"stage": "hyperparameter_application"},
+            ) from e
 
     def _execute_training(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
         trial_context: Any = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
@@ -396,11 +408,10 @@ class OptimizationOrchestrator:
         self._experiment_tracker = experiment_tracker
         self._config_persister = config_persister
 
-    # TODO: TYPE — union too broad; accept only OptimizationWorkflowConfig
     def execute_optimization(
         self,
         study_name: str,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
         n_trials: int,
         direction: OptimizationDirection,
         sampler_config: dict[str, Any] | None = None,
@@ -462,7 +473,7 @@ class OptimizationOrchestrator:
     def _execute_with_tracking(
         self,
         study: Study,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
     ) -> OptimizationResult:
         """Execute optimization with experiment tracking.
 
@@ -557,9 +568,7 @@ class OptimizationOrchestrator:
             # Retrain with best parameters
             best_trial = study.best_trial
             best_training_result = None
-            best_settings: (
-                GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig | None
-            ) = None
+            best_settings: OptimizationWorkflowConfig | GeneralSettings | None = None
 
             if best_trial:
                 with self._experiment_tracker.create_best_retrain_run(
@@ -613,7 +622,7 @@ class OptimizationOrchestrator:
     def _execute_without_tracking(
         self,
         study: Study,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
         # Similar logic but without tracking context managers
@@ -692,7 +701,7 @@ class OptimizationOrchestrator:
         self,
         trial: Trial,
         study: Study,
-        base_settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        base_settings: OptimizationWorkflowConfig | GeneralSettings,
     ) -> dict[str, Any]:
         """Sample hyperparameters for a trial using Optuna's suggest methods.
 
@@ -705,11 +714,11 @@ class OptimizationOrchestrator:
             Sampled hyperparameters
         """
         # Get the actual Optuna study from repository via study_manager
-        optuna_study: Any = None
-        if hasattr(self._study_manager, "_repository"):
-            repo = self._study_manager._repository
-            study_mapping: dict[str, Any] = getattr(repo, "_study_mapping", {})
-            optuna_study = study_mapping.get(study.study_id)
+        try:
+            optuna_study = self._study_manager._repository.get_optuna_study(study.study_id)
+        except Exception as e:
+            logger.warning("No Optuna study available for sampling: {}", e)
+            return {}
 
         # If we don't have an Optuna study, we can't sample - return empty dict
         if not optuna_study:
@@ -769,14 +778,12 @@ class OptimizationOrchestrator:
             logger.warning("No Optuna trial found for {}; skipping study.tell()", trial.trial_id)
             return
 
-        optuna_study: Any = None
-        if hasattr(self._study_manager, "_repository"):
-            repo = self._study_manager._repository
-            study_mapping_2: dict[str, Any] = getattr(repo, "_study_mapping", {})
-            optuna_study = study_mapping_2.get(study.study_id)
-
-        if not optuna_study:
-            logger.warning("No Optuna study found for {}; skipping study.tell()", study.study_id)
+        try:
+            optuna_study = self._study_manager._repository.get_optuna_study(study.study_id)
+        except Exception as e:
+            logger.warning(
+                "No Optuna study found for {}: {}; skipping study.tell()", study.study_id, e
+            )
             return
 
         try:

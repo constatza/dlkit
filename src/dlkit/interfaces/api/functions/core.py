@@ -6,17 +6,24 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+from lightning.pytorch import LightningDataModule
+
 from dlkit.common import (
     OptimizationResult,
     TrainingResult,
 )
-from dlkit.engine.workflows.entrypoints import optimize as runtime_optimize
-from dlkit.engine.workflows.entrypoints import train as runtime_train
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
+from dlkit.engine.workflows.factories.inference_data_factory import (
+    build_inference_datamodule as _build_inference_datamodule,
+)
+from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.interfaces.api.adapters import EngineWorkflowExecutor
 from dlkit.interfaces.api.domain.override_types import (
     OptimizationOverrides,
     TrainingOverrides,
 )
+
+_executor: EngineWorkflowExecutor = EngineWorkflowExecutor()
 
 
 def _coerce_override_paths(overrides: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -36,12 +43,42 @@ def _coerce_override_paths(overrides: Mapping[str, Any] | None) -> dict[str, Any
 def train(
     settings: WorkflowSettings,
     overrides: TrainingOverrides | None = None,
+    *,
+    mlflow: bool = False,
 ) -> TrainingResult:
-    """Run training with optional overrides."""
-    return runtime_train(
+    """Run training with optional overrides.
+
+    Args:
+        settings: Training workflow configuration settings.
+        overrides: Optional training overrides (paths coerced to Path objects).
+        mlflow: If True, ensure MLFLOW section exists in settings.
+
+    Returns:
+        TrainingResult containing trained model state and metrics.
+    """
+    return _executor.train(
         settings,
-        overrides=cast(Any, _coerce_override_paths(overrides)),
+        overrides=cast(TrainingOverrides, _coerce_override_paths(overrides)),
+        mlflow=mlflow,
     )
+
+
+def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDataModule:
+    """Build a datamodule for inference batch iteration.
+
+    No training wrapper, no loss, no optimizer. Only SESSION, DATASET, DATAMODULE.
+    Pure function: no class, no side effects beyond datamodule construction.
+
+    Args:
+        settings: Inference workflow configuration with DATASET and DATAMODULE sections.
+
+    Returns:
+        Configured LightningDataModule ready for predict_dataloader iteration.
+
+    Raises:
+        ValueError: If DATASET or DATAMODULE sections are not configured.
+    """
+    return _build_inference_datamodule(settings)
 
 
 # REMOVED: Old infer() and predict_with_config() functions
@@ -57,9 +94,21 @@ def train(
 def optimize(
     settings: WorkflowSettings,
     overrides: OptimizationOverrides | None = None,
+    *,
+    mlflow: bool = False,
 ) -> OptimizationResult:
-    """Run Optuna hyperparameter optimization with optional overrides."""
-    return runtime_optimize(
+    """Run Optuna hyperparameter optimization with optional overrides.
+
+    Args:
+        settings: Optimization workflow configuration settings.
+        overrides: Optional optimization overrides (paths coerced to Path objects).
+        mlflow: If True, ensure MLFLOW section exists in settings.
+
+    Returns:
+        OptimizationResult containing best model and trial history.
+    """
+    return _executor.optimize(
         settings,
-        overrides=cast(Any, _coerce_override_paths(overrides)),
+        overrides=cast(OptimizationOverrides, _coerce_override_paths(overrides)),
+        mlflow=mlflow,
     )

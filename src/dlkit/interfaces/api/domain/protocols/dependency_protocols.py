@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from dlkit.infrastructure.config import GeneralSettings
 
@@ -18,6 +18,7 @@ else:
     from loguru import logger as Logger
 
 
+@runtime_checkable
 class SettingsProvider(Protocol):
     """Protocol for components that need access to configuration settings."""
 
@@ -34,6 +35,7 @@ class SettingsProvider(Protocol):
         """Get dataflow directory from settings."""
 
 
+@runtime_checkable
 class LoggingProvider(Protocol):
     """Protocol for components that need logging capabilities."""
 
@@ -42,6 +44,7 @@ class LoggingProvider(Protocol):
         """Get the configured logger instance."""
 
 
+@runtime_checkable
 class CheckpointProvider(Protocol):
     """Protocol for components that need checkpoint management."""
 
@@ -54,6 +57,7 @@ class CheckpointProvider(Protocol):
         """Create new provider with checkpoint path."""
 
 
+@runtime_checkable
 class ResourceProvider(Protocol):
     """Protocol for components that need temporary resources."""
 
@@ -66,6 +70,7 @@ class ResourceProvider(Protocol):
         """Create new provider with temp directory."""
 
 
+@runtime_checkable
 class MetadataProvider(Protocol):
     """Protocol for components that need metadata access."""
 
@@ -82,6 +87,7 @@ class MetadataProvider(Protocol):
         """Create new provider with additional metadata."""
 
 
+@runtime_checkable
 class StrategyProvider(Protocol):
     """Protocol for components that need strategy information."""
 
@@ -90,6 +96,7 @@ class StrategyProvider(Protocol):
         """Get the current execution strategy name."""
 
 
+@runtime_checkable
 class OverrideProvider(Protocol):
     """Protocol for components that need runtime override tracking."""
 

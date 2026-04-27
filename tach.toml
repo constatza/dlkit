@@ -199,12 +199,36 @@ depends_on = [
 ]
 
 [[modules]]
+path = "dlkit.interfaces.api.adapters"
+depends_on = [
+    { path = "dlkit.common" },
+    { path = "dlkit.infrastructure" },
+    { path = "dlkit.infrastructure.precision" },
+    { path = "dlkit.engine.workflows.entrypoints" },
+    { path = "dlkit.engine.workflows.factories" },
+    { path = "dlkit.interfaces.api.domain" },
+]
+
+[[modules]]
+path = "dlkit.interfaces.api.domain"
+depends_on = [
+    { path = "dlkit.common" },
+    { path = "dlkit.infrastructure" },
+    { path = "dlkit.infrastructure.precision" },
+    { path = "dlkit.engine.workflows.entrypoints" },
+]
+
+[[modules]]
 path = "dlkit.interfaces.api.functions"
 depends_on = [
     { path = "dlkit.interfaces" },
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure" },
+    { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.engine.workflows.entrypoints" },
+    { path = "dlkit.engine.workflows.factories" },
+    { path = "dlkit.interfaces.api.adapters" },
+    { path = "dlkit.interfaces.api.domain" },
 ]
 
 [[modules]]

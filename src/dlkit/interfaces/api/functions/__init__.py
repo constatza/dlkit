@@ -1,7 +1,7 @@
 """API functions module."""
 
 from .config import generate_template, validate_config, validate_template
-from .core import optimize, train
+from .core import build_inference_datamodule, optimize, train
 from .execution import execute
 from .model_logged import (
     LoggedModelRecord,
@@ -25,6 +25,7 @@ __all__ = [
     # Core workflow functions
     "train",
     "optimize",
+    "build_inference_datamodule",
     # Configuration functions
     "validate_config",
     "generate_template",

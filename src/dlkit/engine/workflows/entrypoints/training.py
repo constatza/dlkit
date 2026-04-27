@@ -6,17 +6,18 @@ from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.orchestrator import Orchestrator
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
 from ._override_types import TrainingOverrides
-from ._settings import WorkflowSettings
 
 logger = get_logger(__name__)
 
 
 def train(
-    settings: WorkflowSettings,
+    settings: TrainingWorkflowConfig | GeneralSettings,
     overrides: TrainingOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,

@@ -7,15 +7,20 @@ from typing import cast
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
 
 from ._override_types import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
-from ._settings import WorkflowSettings, coerce_general_settings
+from ._settings import coerce_general_settings
 from .optimization import optimize
 from .training import train
 
 
 def execute(
-    settings: WorkflowSettings,
+    settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
