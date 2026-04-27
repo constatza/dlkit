@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dlkit.engine.data.families import resolve_family, resolve_family_from_dataset
 from dlkit.infrastructure.config.enums import DatasetFamily
+
+if TYPE_CHECKING:
+    from lightning import LightningDataModule
+
+    from dlkit.engine.adapters.lightning.base import CoreLightningWrapper
 
 
 class DatasetFamilySelector:
@@ -24,7 +29,7 @@ class DatasetFamilySelector:
         return resolve_family(settings) is DatasetFamily.TIMESERIES
 
     @staticmethod
-    def default_datamodule_class_for(settings: Any) -> Any:
+    def default_datamodule_class_for(settings: Any) -> type[LightningDataModule]:
         """Get default datamodule class for the given settings.
 
         Args:
@@ -37,7 +42,7 @@ class DatasetFamilySelector:
         return DatasetFamilySelector.default_datamodule_class_for_family(family)
 
     @staticmethod
-    def default_wrapper_class_for(settings: Any) -> Any:
+    def default_wrapper_class_for(settings: Any) -> type[CoreLightningWrapper]:
         """Get default wrapper class for the given settings.
 
         Args:
@@ -70,7 +75,7 @@ class DatasetFamilySelector:
         return resolve_family(settings)
 
     @staticmethod
-    def default_datamodule_class_for_family(family: DatasetFamily) -> Any:
+    def default_datamodule_class_for_family(family: DatasetFamily) -> type[LightningDataModule]:
         """Get default datamodule class for the given dataset family.
 
         Args:
@@ -96,7 +101,7 @@ class DatasetFamilySelector:
                 return InMemoryModule
 
     @staticmethod
-    def default_wrapper_class_for_family(family: DatasetFamily) -> Any:
+    def default_wrapper_class_for_family(family: DatasetFamily) -> type[CoreLightningWrapper]:
         """Get default wrapper class for the given dataset family.
 
         Args:

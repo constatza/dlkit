@@ -28,6 +28,11 @@ from .shape_inference_pipeline import ShapeInferencePipeline
 
 type WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
+# Dataset type constants for can_handle() checks
+DATASET_TYPE_FLEXIBLE = "flexible"
+DATASET_TYPE_GRAPH = "graph"
+DATASET_TYPE_TIMESERIES = "timeseries"
+
 
 def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     """Build the trainer when the workflow is in training mode."""
@@ -49,6 +54,34 @@ def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     except Exception:
         pass
     return trainer_settings.build(session=settings.SESSION)
+
+
+def _build_datamodule(
+    settings: WorkflowSettings,
+    dataset_builder: DatasetBuilder,
+    dataset: object,
+    family: DatasetFamily | None = None,
+) -> LightningDataModule:
+    """Shared helper to build split and datamodule for strategies.
+
+    Args:
+        settings: The workflow settings.
+        dataset_builder: The DatasetBuilder instance.
+        dataset: The constructed dataset object.
+        family: Optional DatasetFamily for datamodule defaults.
+
+    Returns:
+        Constructed LightningDataModule.
+    """
+    context = dataset_builder.build_context(settings)
+    index_split = dataset_builder.build_split(settings, dataset)
+    return dataset_builder.build_datamodule(
+        settings,
+        context,
+        dataset,
+        index_split,
+        family=family,
+    )
 
 
 class IBuildStrategy(ABC):
@@ -84,12 +117,10 @@ class GraphBuildStrategy(IBuildStrategy):
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
         context = self._dataset_builder.build_context(settings)
         dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
-        index_split = self._dataset_builder.build_split(settings, dataset)
-        datamodule: LightningDataModule = self._dataset_builder.build_datamodule(
+        datamodule: LightningDataModule = _build_datamodule(
             settings,
-            context,
+            self._dataset_builder,
             dataset,
-            index_split,
             family=DatasetFamily.GRAPH,
         )
 
@@ -143,12 +174,10 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
         context = self._dataset_builder.build_context(settings)
         dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
-        index_split = self._dataset_builder.build_split(settings, dataset)
-        datamodule = self._dataset_builder.build_datamodule(
+        datamodule = _build_datamodule(
             settings,
-            context,
+            self._dataset_builder,
             dataset,
-            index_split,
             family=DatasetFamily.TIMESERIES,
         )
 

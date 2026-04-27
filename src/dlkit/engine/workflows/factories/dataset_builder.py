@@ -79,6 +79,7 @@ class DatasetBuilder:
         ds_overrides: dict[str, Any] = {}
         ds_settings = settings.DATASET
         if ds_settings is not None:
+            family = DatasetFamilySelector.resolve_family(settings)
             features_path = getattr(ds_settings, "features_path", None)
             resolved_features = convert_totensor_entries(getattr(ds_settings, "features", ()) or ())
             resolved_targets = convert_totensor_entries(getattr(ds_settings, "targets", ()) or ())
@@ -88,6 +89,10 @@ class DatasetBuilder:
                 ds_overrides["features"] = features_path
             if resolved_targets:
                 ds_overrides["targets"] = resolved_targets
+            if family is DatasetFamily.GRAPH:
+                dataset_root = getattr(ds_settings, "root", None)
+                if dataset_root is not None:
+                    ds_overrides["root"] = dataset_root
 
         dataset_settings = with_runtime_module_defaults(settings.DATASET)
         if dataset_settings is None:
