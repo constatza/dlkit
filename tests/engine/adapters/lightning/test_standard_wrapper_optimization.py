@@ -18,15 +18,13 @@ import torch
 from torch import nn
 from torch.nn import ModuleList
 
-from dlkit.engine.adapters.lightning.standard import (
-    StandardLightningWrapper,
-    _requires_manual_optimization,
-)
+from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
+    _requires_manual_optimization,
 )
 from dlkit.infrastructure.config import OptimizerPolicySettings
 from dlkit.infrastructure.config.data_entries import Feature, Target

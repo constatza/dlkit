@@ -21,9 +21,9 @@ class TestUnifiedExecuteFunction:
     def test_execute_function_imports_correctly(self) -> None:
         assert callable(execute)
 
-    @patch("dlkit.interfaces.api.functions.execution.runtime_execute")
-    def test_training_workflow_delegates_to_runtime(self, mock_runtime_execute) -> None:
-        mock_runtime_execute.return_value = TrainingResult(
+    @patch("dlkit.interfaces.api.functions.execution._executor.execute")
+    def test_training_workflow_delegates_to_runtime(self, mock_executor_execute) -> None:
+        mock_executor_execute.return_value = TrainingResult(
             model_state=None,
             metrics={"loss": 0.5},
             artifacts={},
@@ -34,18 +34,18 @@ class TestUnifiedExecuteFunction:
         result = execute(settings, overrides={"epochs": 10})
 
         assert isinstance(result, TrainingResult)
-        mock_runtime_execute.assert_called_once()
-        assert mock_runtime_execute.call_args.kwargs["overrides"] == {"epochs": 10}
+        mock_executor_execute.assert_called_once()
+        assert mock_executor_execute.call_args.kwargs["overrides"] == {"epochs": 10}
 
-    @patch("dlkit.interfaces.api.functions.execution.runtime_execute")
-    def test_optimization_workflow_delegates_to_runtime(self, mock_runtime_execute) -> None:
+    @patch("dlkit.interfaces.api.functions.execution._executor.execute")
+    def test_optimization_workflow_delegates_to_runtime(self, mock_executor_execute) -> None:
         training_result = TrainingResult(
             model_state=None,
             metrics={},
             artifacts={},
             duration_seconds=1.0,
         )
-        mock_runtime_execute.return_value = OptimizationResult(
+        mock_executor_execute.return_value = OptimizationResult(
             best_trial={"params": {"lr": 0.01}, "value": 0.95},
             training_result=training_result,
             study_summary={"n_trials": 50},
@@ -58,8 +58,8 @@ class TestUnifiedExecuteFunction:
         result = execute(settings, overrides={"trials": 50})
 
         assert isinstance(result, OptimizationResult)
-        mock_runtime_execute.assert_called_once()
-        assert mock_runtime_execute.call_args.kwargs["overrides"] == {"trials": 50}
+        mock_executor_execute.assert_called_once()
+        assert mock_executor_execute.call_args.kwargs["overrides"] == {"trials": 50}
 
     def test_runtime_execution_prioritizes_optimization(self) -> None:
         settings = GeneralSettings(

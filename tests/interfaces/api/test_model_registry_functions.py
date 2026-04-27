@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from dlkit.interfaces.api.functions._mlflow_context import StubTrackingContext
 from dlkit.interfaces.api.functions.model_registry import (
     build_registered_model_uri,
     get_model_version,
@@ -146,29 +147,45 @@ def test_set_registered_model_version_tags_sets_all(mock_client_cls: Mock) -> No
 @patch("mlflow.pyfunc.load_model")
 @patch("mlflow.sklearn.load_model")
 @patch("mlflow.pytorch.load_model")
-@patch("mlflow.set_tracking_uri")
-@patch("mlflow.get_tracking_uri")
 def test_load_registered_model_uses_alias_and_restores_tracking_uri(
-    mock_get_tracking_uri: Mock,
-    mock_set_tracking_uri: Mock,
     mock_pytorch_load_model: Mock,
     mock_sklearn_load_model: Mock,
     mock_load_model: Mock,
 ) -> None:
-    mock_get_tracking_uri.return_value = "http://old-tracking-uri"
+    """Verify that load_registered_model uses the tracking_uri_context."""
     mock_pytorch_load_model.return_value = object()
 
-    load_registered_model(
-        "ModelA",
-        alias="candidate",
-        tracking_uri="http://new-tracking-uri",
-    )
+    stub_ctx = StubTrackingContext()
 
-    mock_pytorch_load_model.assert_called_once_with("models:/ModelA@candidate")
-    mock_sklearn_load_model.assert_not_called()
-    mock_load_model.assert_not_called()
-    assert mock_set_tracking_uri.call_args_list[0].args[0] == "http://new-tracking-uri"
-    assert mock_set_tracking_uri.call_args_list[-1].args[0] == "http://old-tracking-uri"
+    # Patch tracking_uri_context to use our stub context
+    with patch(
+        "dlkit.interfaces.api.functions.model_registry.tracking_uri_context",
+    ) as mock_ctx_factory:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def stub_context_manager(tracking_uri, ctx=None):
+            if tracking_uri:
+                stub_ctx.enter(tracking_uri)
+            try:
+                yield
+            finally:
+                if tracking_uri:
+                    stub_ctx.exit()
+
+        mock_ctx_factory.side_effect = stub_context_manager
+
+        load_registered_model(
+            "ModelA",
+            alias="candidate",
+            tracking_uri="http://new-tracking-uri",
+        )
+
+        mock_pytorch_load_model.assert_called_once_with("models:/ModelA@candidate")
+        mock_sklearn_load_model.assert_not_called()
+        mock_load_model.assert_not_called()
+        assert stub_ctx.entered_uris == ["http://new-tracking-uri"]
+        assert stub_ctx.exit_count == 1
 
 
 @patch("mlflow.pyfunc.load_model")

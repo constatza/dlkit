@@ -181,20 +181,34 @@ class TestSingleResponsibility:
 class TestArchitecturalConstraints:
     """Test architectural constraints and best practices."""
 
-    def test_fitted_state_uses_tensor_buffer(self):
-        """Fitted state must use torch.Tensor buffer for checkpoint persistence."""
+    def test_fitted_state_persists_through_state_dict(self):
+        """Fitted state must persist through state_dict serialization."""
         scaler = MinMaxScaler(dim=0)
 
-        # Check that _fitted is registered as a buffer
-        assert "_fitted" in scaler._buffers, (
-            "Fitted state must be stored as torch buffer (_fitted) "
-            "for checkpoint persistence and device movement"
+        # Initially not fitted
+        assert scaler.fitted is False
+
+        # Fit the scaler
+        data = torch.randn(10, 5)
+        scaler.update_fit(data)
+        scaler.finalize_fit()
+        assert scaler.fitted is True
+
+        # Check that _fitted is included in state_dict
+        state = scaler.state_dict()
+        assert "_fitted" in state, (
+            "Fitted state must be stored in state_dict for checkpoint persistence"
         )
 
-        # Check that it's a tensor
-        assert isinstance(scaler._buffers["_fitted"], torch.Tensor), (
-            "Fitted buffer must be a torch.Tensor"
+        # Check that it's a Python bool
+        assert isinstance(state["_fitted"], bool), (
+            "Fitted state in state_dict must be a Python bool"
         )
+
+        # Verify it can be restored from state_dict
+        new_scaler = MinMaxScaler(dim=0)
+        new_scaler.load_state_dict(state)
+        assert new_scaler.fitted is True
 
     def test_transform_methods_have_consistent_signatures(self):
         """Transform methods should have consistent parameter names across classes."""

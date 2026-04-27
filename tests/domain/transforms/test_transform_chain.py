@@ -56,7 +56,7 @@ def test_transform_chain_streaming_fit_fails_for_unfitted_non_incremental() -> N
     chain = TransformChain(ModuleList([PCA(n_components=1)]), entry_name="x")
     dataloader = [torch.randn(4, 3), torch.randn(4, 3)]
 
-    with pytest.raises(TypeError, match="TODO: incremental PCA"):
+    with pytest.raises(TypeError, match="Incremental fitting"):
         chain.fit_from_dataloader(dataloader, tensor_selector=lambda batch: batch)
 
 
