@@ -59,7 +59,9 @@ class TestTrainCommandErrorHandling:
                 "dlkit.interfaces.cli.commands.train.load_config",
                 side_effect=ConfigurationError("Invalid config", {}),
             ),
-            patch("dlkit.interfaces.cli.commands.train.handle_api_error") as mock_handle_error,
+            patch(
+                "dlkit.interfaces.cli.middleware.error_handler.handle_api_error"
+            ) as mock_handle_error,
         ):
             result = cli_runner.invoke(cli_app, ["train", str(config_path)])
 
@@ -82,7 +84,9 @@ class TestTrainCommandErrorHandling:
                 "dlkit.interfaces.cli.commands.train.validate_config",
                 side_effect=ConfigurationError("Invalid config", {}),
             ),
-            patch("dlkit.interfaces.cli.commands.train.handle_api_error") as mock_handle_error,
+            patch(
+                "dlkit.interfaces.cli.middleware.error_handler.handle_api_error"
+            ) as mock_handle_error,
         ):
             result = cli_runner.invoke(cli_app, ["train", str(config_path)])
 
@@ -106,7 +110,9 @@ class TestTrainCommandErrorHandling:
                 "dlkit.interfaces.cli.commands.train.api_train",
                 side_effect=WorkflowError("Training failed", {}),
             ),
-            patch("dlkit.interfaces.cli.commands.train.handle_api_error") as mock_handle_error,
+            patch(
+                "dlkit.interfaces.cli.middleware.error_handler.handle_api_error"
+            ) as mock_handle_error,
         ):
             result = cli_runner.invoke(cli_app, ["train", str(config_path)])
 

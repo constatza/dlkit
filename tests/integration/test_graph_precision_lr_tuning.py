@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
+from fsspec.implementations.local import LocalFileSystem
 from loguru import logger
 
 import dlkit
 from dlkit.common import TrainingResult
+from dlkit.engine.workflows.factories.dataset_builder import DatasetBuilder
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 from dlkit.infrastructure.precision import PrecisionStrategy
@@ -107,6 +110,36 @@ class TestGraphPrecisionLRTuning:
                 edge_index=edge_index_path,
                 y=y_path,
             )
+
+    def test_graph_dataset_factory_uses_configured_root_on_windows(
+        self,
+        graph_settings: GeneralSettings,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Graph dataset factory should not fall back to PyG's ``???`` root placeholder."""
+        builder = DatasetBuilder()
+        context = builder.build_context(graph_settings)
+        created_paths: list[str] = []
+        original_makedirs = LocalFileSystem.makedirs
+
+        def _windows_guard(self, path: str, exist_ok: bool = False) -> None:
+            created_paths.append(path)
+            if "???" in path:
+                raise OSError(
+                    22,
+                    "The filename, directory name, or volume label syntax is incorrect",
+                    path,
+                )
+            original_makedirs(self, path, exist_ok=exist_ok)
+
+        monkeypatch.setattr(LocalFileSystem, "makedirs", _windows_guard)
+
+        dataset = builder.build_dataset_with_tensor_entries(graph_settings, context)
+        configured_root = graph_settings.DATASET.root
+        assert configured_root is not None
+        assert Path(dataset.root).resolve() == configured_root.resolve()
+        assert created_paths
+        assert all("???" not in path for path in created_paths)
 
     def test_graph_model_float64_lr_tuning_integration(
         self,

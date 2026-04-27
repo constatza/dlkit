@@ -46,5 +46,5 @@ def test_named_batch_transformer_fit_fails_for_unfitted_pca() -> None:
     transformer = NamedBatchTransformer(feature_chains={"x": chain}, target_chains={})
     dataloader = [_make_batch(torch.randn(4, 3))]
 
-    with pytest.raises(TypeError, match="TODO: incremental PCA"):
+    with pytest.raises(TypeError, match="Incremental fitting"):
         transformer.fit(dataloader)

@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from dlkit.interfaces.api.functions._mlflow_context import StubTrackingContext
 from dlkit.interfaces.api.functions.model_logged import (
     build_logged_model_uri,
     load_logged_model,
@@ -28,32 +29,48 @@ def test_load_logged_model_rejects_ambiguous_inputs() -> None:
 
 
 @patch("mlflow.pyfunc.load_model")
-@patch("mlflow.set_tracking_uri")
-@patch("mlflow.get_tracking_uri")
 @patch("dlkit.interfaces.api.functions.model_logged.create_mlflow_client")
-def test_load_logged_model_from_run_id_and_restores_tracking_uri(
+def test_load_logged_model_from_run_id_uses_tracking_context(
     mock_create_client: Mock,
-    mock_get_tracking_uri: Mock,
-    mock_set_tracking_uri: Mock,
     mock_load_model: Mock,
 ) -> None:
+    """Verify that load_logged_model uses the tracking_uri_context."""
     mock_client = Mock()
     mock_client.get_run.return_value = SimpleNamespace(
         data=SimpleNamespace(tags={"mlflow_logged_model_uri": "models:/m-7"})
     )
     mock_create_client.return_value = mock_client
-    mock_get_tracking_uri.return_value = "http://old-tracking-uri"
     mock_load_model.return_value = object()
 
-    load_logged_model(
-        run_id="run-7",
-        artifact_path="model",
-        tracking_uri="http://new-tracking-uri",
-    )
+    stub_ctx = StubTrackingContext()
 
-    mock_load_model.assert_called_once_with("models:/m-7")
-    assert mock_set_tracking_uri.call_args_list[0].args[0] == "http://new-tracking-uri"
-    assert mock_set_tracking_uri.call_args_list[-1].args[0] == "http://old-tracking-uri"
+    # Patch tracking_uri_context to use our stub context
+    with patch(
+        "dlkit.interfaces.api.functions.model_logged.tracking_uri_context",
+    ) as mock_ctx_factory:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def stub_context_manager(tracking_uri, ctx=None):
+            if tracking_uri:
+                stub_ctx.enter(tracking_uri)
+            try:
+                yield
+            finally:
+                if tracking_uri:
+                    stub_ctx.exit()
+
+        mock_ctx_factory.side_effect = stub_context_manager
+
+        load_logged_model(
+            run_id="run-7",
+            artifact_path="model",
+            tracking_uri="http://new-tracking-uri",
+        )
+
+        mock_load_model.assert_called_once_with("models:/m-7")
+        assert stub_ctx.entered_uris == ["http://new-tracking-uri"]
+        assert stub_ctx.exit_count == 1
 
 
 @patch("dlkit.interfaces.api.functions.model_logged.create_mlflow_client")
