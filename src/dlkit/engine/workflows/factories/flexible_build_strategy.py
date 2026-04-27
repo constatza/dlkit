@@ -12,7 +12,13 @@ from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
-from .build_strategy import IBuildStrategy, WorkflowSettings, build_trainer
+from .build_strategy import (
+    DATASET_TYPE_FLEXIBLE,
+    IBuildStrategy,
+    WorkflowSettings,
+    _build_datamodule,
+    build_trainer,
+)
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
 from .feature_pipeline import FeaturePipeline
@@ -37,7 +43,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
     def can_handle(self, settings: WorkflowSettings) -> bool:
         try:
             ds_type = getattr(settings.DATASET, "type", None)
-            return ds_type is None or str(ds_type).lower() == "flexible"
+            return ds_type is None or str(ds_type).lower() == DATASET_TYPE_FLEXIBLE
         except Exception:
             return True
 
@@ -81,12 +87,10 @@ class FlexibleBuildStrategy(IBuildStrategy):
             selection.features,
             selection.targets,
         )
-        index_split = self._dataset_builder.build_split(settings, dataset)
-        datamodule = self._dataset_builder.build_datamodule(
+        datamodule = _build_datamodule(
             settings,
-            context,
+            self._dataset_builder,
             dataset,
-            index_split,
         )
 
         entry_configs: tuple[DataEntry, ...] = tuple([*selection.features, *selection.targets])

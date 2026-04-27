@@ -22,4 +22,5 @@
 - Dataset-family selection delegates to `runtime.data.families.resolve_family`.
 - `DATASET.family` short-circuits family heuristics when explicitly configured.
 - Flexible dataset assembly consumes explicit `DATASET.features` and `DATASET.targets` only.
+- Graph dataset assembly forwards `DATASET.root` into PyG dataset constructors so processed caches do not fall back to PyG's `???` placeholder root on Windows.
 - Runtime builders, not `tools.config`, own default module-path resolution.

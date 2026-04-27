@@ -35,7 +35,7 @@ class ExecutionStrategyFactory:
 
     def create_executor(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig | GeneralSettings,
         hooks: LifecycleHooks | None = None,
     ) -> ITrainingExecutor:
         """Create composed execution strategy from settings.
