@@ -25,7 +25,7 @@ class IBatchNamespaceSpec(Protocol):
         ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StandardBatchNamespace:
     """Default batch namespace using ``"features"`` and ``"targets"`` keys.
 

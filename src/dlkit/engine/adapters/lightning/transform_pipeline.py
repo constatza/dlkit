@@ -120,6 +120,9 @@ class NamedBatchTransformer(nn.Module):
 
         for k in batch_feature_keys:
             if k not in new_features:
+                # Intentional zero-copy alias: untransformed features are passed through by
+                # reference. Standard loss functions and torchmetrics do not mutate their
+                # inputs; cloning here would add O(batch×features) overhead every training step.
                 new_features[k] = batch[fn, k]
 
         batch_target_keys = set(batch[tn].keys())
@@ -135,6 +138,7 @@ class NamedBatchTransformer(nn.Module):
 
         for k in batch_target_keys:
             if k not in new_targets:
+                # Same zero-copy passthrough rationale as features above.
                 new_targets[k] = batch[tn, k]
 
         return TensorDict(

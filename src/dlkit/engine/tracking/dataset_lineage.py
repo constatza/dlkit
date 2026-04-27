@@ -11,7 +11,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
@@ -77,6 +77,7 @@ def _collect_entry_sources(settings: _WorkflowSettings) -> list[str]:
     return sources
 
 
+@runtime_checkable
 class ISourceExtractionStrategy(Protocol):
     """Config-only path extraction strategy."""
 
@@ -224,6 +225,7 @@ class EntryNumpyPayloadBuilder:
         return None
 
 
+@runtime_checkable
 class IStructuredDatasetLoggingStrategy(Protocol):
     """Strategy interface for structured MLflow dataset logging."""
 

@@ -10,7 +10,7 @@ import torch.optim
 from .triggers import ITransitionTrigger
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ActiveStage:
     """Live execution state for a single optimizer stage.
 
@@ -37,7 +37,7 @@ class ActiveStage:
     scheduler_frequency: int = 1
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ActiveConcurrentGroup:
     """Live execution state for a group of concurrent optimizers.
 
@@ -55,7 +55,7 @@ class ActiveConcurrentGroup:
     group_index: int
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class RunningOptimizerPolicy:
     """Top-level mutable state for the active optimization program.
 
