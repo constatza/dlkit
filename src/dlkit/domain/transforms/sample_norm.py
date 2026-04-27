@@ -134,7 +134,10 @@ class SampleNormL2(Transform):
         # keepdim=True ensures broadcasting works correctly
         norms = torch.norm(x, p=2, dim=self.feature_dims, keepdim=True)
 
-        # Store norms for inverse transformation (detach to avoid backprop issues)
+        # Store norms for inverse transformation.
+        # detach() is sufficient: torch.norm() always returns a fresh tensor (reduction op),
+        # so norms does not alias x's storage. No clone needed — no external reference to
+        # norms's storage exists after forward() returns.
         self._last_norms = norms.detach()
 
         # Normalize: x_normalized = x / ||x||_2

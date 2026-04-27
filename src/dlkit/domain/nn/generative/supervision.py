@@ -94,7 +94,9 @@ class FlowMatchingSupervisionBuilder:
         xt: Tensor = linear_path(x0, x1, t)
         ut: Tensor = displacement_target(x0, x1)
 
-        # Build new features: replace x1 with (xt, t)
+        # Build new features: replace x1 with (xt, t).
+        # Passthrough feature tensors are aliased from the batch by reference; no clone needed
+        # because the supervisor never modifies them and neither does the flow-matching loss.
         new_feature_keys = [k for k in features.keys() if k != self._x1_key]
         new_features_dict: dict[str | tuple[str, ...], Tensor] = {
             k: cast(Tensor, features[k]) for k in new_feature_keys
@@ -103,7 +105,9 @@ class FlowMatchingSupervisionBuilder:
         new_features_dict["t"] = t
         new_features = TensorDict(cast(Any, new_features_dict), batch_size=[batch_size])
 
-        # Build new targets: add ut (keep existing targets)
+        # Build new targets: add ut (keep existing targets).
+        # dict(existing_targets.items()) is a shallow copy mapping; tensor values alias the
+        # batch by reference but are never modified by the supervisor or flow-matching loss.
         existing_targets: TensorDict = batch.get("targets", TensorDict({}, batch_size=[batch_size]))
         new_targets_dict: dict[str, Tensor] = dict(existing_targets.items())
         new_targets_dict["ut"] = ut

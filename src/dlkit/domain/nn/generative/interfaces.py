@@ -142,6 +142,7 @@ class IFixedStepSolver(Protocol):
         ...
 
 
+@runtime_checkable
 class IModelFn(Protocol):
     """Model function consumed by ODE solvers: ``(x, t) -> velocity``."""
 
