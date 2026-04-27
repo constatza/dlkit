@@ -19,6 +19,7 @@ Architecture Principles:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -33,6 +34,61 @@ from .data_entries import PathBasedEntry, PathFeature, PathTarget, ValueBasedEnt
 
 class ConfigValidationError(ValueError):
     """Raised when configuration is incomplete or invalid for workflow execution."""
+
+
+# ============================================================================
+# Private Helper Functions (DRY rule extraction)
+# ============================================================================
+
+
+def _coerce_path(value: str | Path | None) -> Path | None:
+    """Coerce a string or Path to Path, returning None if input is None."""
+    if value is None:
+        return None
+    return Path(value) if isinstance(value, str) else value
+
+
+def _assert_path_exists(path: Path, label: str) -> None:
+    """Raise ConfigValidationError if path does not exist."""
+    if not path.exists():
+        raise ConfigValidationError(f"{label} path does not exist: {path}.")
+
+
+def _validate_path_entry(entry: object, index: int, role: str) -> None:
+    """Validate a single PathFeature/PathTarget entry has a valid existing path."""
+    if isinstance(entry, PathFeature) and entry.path is not None:
+        path = _coerce_path(entry.path)
+        if path is not None:
+            _assert_path_exists(path, f"{role} #{index + 1}")
+    elif isinstance(entry, PathTarget) and entry.path is not None:
+        path = _coerce_path(entry.path)
+        if path is not None:
+            _assert_path_exists(path, f"{role} #{index + 1}")
+
+
+def _validate_entry_has_data(entry: object, index: int, role: str) -> None:
+    """Validate an entry has either a valid path or an in-memory value."""
+    if isinstance(entry, PathBasedEntry) and not entry.has_path():
+        raise ConfigValidationError(
+            f"{role} #{index + 1} is a placeholder without path/value: "
+            f"{getattr(entry, 'name', 'unknown')}"
+        )
+    _validate_path_entry(entry, index, role)
+    if isinstance(entry, ValueBasedEntry) and not entry.has_value():
+        raise ConfigValidationError(
+            f"{role} #{index + 1} is missing in-memory data: {getattr(entry, 'name', 'unknown')}"
+        )
+
+
+def _check_required_sections(config: object, sections: list[str], workflow: str) -> None:
+    """Raise ConfigValidationError listing any missing sections."""
+    missing = [s for s in sections if getattr(config, s, None) is None]
+    if missing:
+        raise ConfigValidationError(
+            f"Missing required sections for {workflow}: {', '.join(missing)}. "
+            "These sections must be provided in TOML config or injected programmatically "
+            "before calling build_components()."
+        )
 
 
 def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
@@ -64,22 +120,7 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
     """
     from . import GeneralSettings
 
-    missing_sections = []
-
-    # Check required sections present
-    if config.DATAMODULE is None:
-        missing_sections.append("DATAMODULE")
-    if config.DATASET is None:
-        missing_sections.append("DATASET")
-    if config.MODEL is None:
-        missing_sections.append("MODEL")
-
-    if missing_sections:
-        raise ConfigValidationError(
-            f"Missing required sections for training: {', '.join(missing_sections)}. "
-            "These sections must be provided in TOML config or injected programmatically "
-            "before calling build_components()."
-        )
+    _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "training")
 
     # DATASET must have at least one feature or target (new format only)
     # Legacy GeneralSettings may use x/y or other dataset construction patterns
@@ -91,60 +132,18 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
             )
 
         # Validate feature paths exist and placeholders are resolved
-        from pathlib import Path
-
         for i, feature in enumerate(config.DATASET.features):
-            if isinstance(feature, PathBasedEntry) and not feature.has_path():
-                raise ConfigValidationError(
-                    f"Feature #{i + 1} is a placeholder without path/value: {feature.name or 'unknown'}"
-                )
-            if isinstance(feature, PathFeature) and feature.path is not None:
-                # Handle both str and Path types (model_construct may bypass coercion)
-                path = Path(feature.path) if isinstance(feature.path, str) else feature.path
-                if not path.exists():
-                    raise ConfigValidationError(
-                        f"Feature #{i + 1} path does not exist: {path}. "
-                        f"Ensure the path is correct or the file has been created."
-                    )
-            if isinstance(feature, ValueBasedEntry) and not feature.has_value():
-                raise ConfigValidationError(
-                    f"Feature #{i + 1} is missing in-memory data: {feature.name or 'unknown'}"
-                )
+            _validate_entry_has_data(feature, i, "Feature")
 
         # Validate target paths exist and placeholders are resolved
         for i, target in enumerate(config.DATASET.targets):
-            if isinstance(target, PathBasedEntry) and not target.has_path():
-                raise ConfigValidationError(
-                    f"Target #{i + 1} is a placeholder without path/value: {target.name or 'unknown'}"
-                )
-            if isinstance(target, PathTarget) and target.path is not None:
-                # Handle both str and Path types (model_construct may bypass coercion)
-                path = Path(target.path) if isinstance(target.path, str) else target.path
-                if not path.exists():
-                    raise ConfigValidationError(
-                        f"Target #{i + 1} path does not exist: {path}. "
-                        f"Ensure the path is correct or the file has been created."
-                    )
-            if isinstance(target, ValueBasedEntry) and not target.has_value():
-                raise ConfigValidationError(
-                    f"Target #{i + 1} is missing in-memory data: {target.name or 'unknown'}"
-                )
+            _validate_entry_has_data(target, i, "Target")
 
     # Validate MODEL checkpoint path if provided
     if config.MODEL is not None and config.MODEL.checkpoint is not None:
-        # Handle both str and Path types
-        from pathlib import Path
-
-        checkpoint_path = (
-            Path(config.MODEL.checkpoint)
-            if isinstance(config.MODEL.checkpoint, str)
-            else config.MODEL.checkpoint
-        )
-        if not checkpoint_path.exists():
-            raise ConfigValidationError(
-                f"Model checkpoint does not exist: {checkpoint_path}. "
-                "Remove the checkpoint field to train from scratch, or provide a valid path."
-            )
+        checkpoint_path = _coerce_path(config.MODEL.checkpoint)
+        if checkpoint_path is not None:
+            _assert_path_exists(checkpoint_path, "Model checkpoint")
 
 
 def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
@@ -186,19 +185,9 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
             "Add 'checkpoint = \"/path/to/model.ckpt\"' under [MODEL] section."
         )
 
-    # Handle both str and Path types
-    from pathlib import Path
-
-    checkpoint_path = (
-        Path(config.MODEL.checkpoint)
-        if isinstance(config.MODEL.checkpoint, str)
-        else config.MODEL.checkpoint
-    )
-    if not checkpoint_path.exists():
-        raise ConfigValidationError(
-            f"Model checkpoint does not exist: {checkpoint_path}. "
-            "Ensure the checkpoint path is correct and the file exists."
-        )
+    checkpoint_path = _coerce_path(config.MODEL.checkpoint)
+    if checkpoint_path is not None:
+        _assert_path_exists(checkpoint_path, "Model checkpoint")
 
     # Validate batch inference config if provided
     if config.DATAMODULE is not None or config.DATASET is not None:
@@ -222,17 +211,8 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
             )
 
         # Validate feature paths
-        from pathlib import Path
-
         for i, feature in enumerate(config.DATASET.features):
-            if isinstance(feature, PathFeature) and feature.path is not None:
-                # Handle both str and Path types (model_construct may bypass coercion)
-                path = Path(feature.path) if isinstance(feature.path, str) else feature.path
-                if not path.exists():
-                    raise ConfigValidationError(
-                        f"Feature #{i + 1} path does not exist: {path}. "
-                        "Ensure the path is correct or the file has been created."
-                    )
+            _validate_path_entry(feature, i, "Feature")
 
 
 def validate_optimization_config_complete(config: OptimizationWorkflowConfig) -> None:
@@ -277,20 +257,7 @@ def validate_optimization_config_complete(config: OptimizationWorkflowConfig) ->
             "Example: [OPTUNA.model]\nlr = [0.0001, 0.01]\nbatch_size = [16, 32, 64]"
         )
 
-    # Check required sections present (same as training)
-    missing_sections = []
-    if config.DATAMODULE is None:
-        missing_sections.append("DATAMODULE")
-    if config.DATASET is None:
-        missing_sections.append("DATASET")
-    if config.MODEL is None:
-        missing_sections.append("MODEL")
-
-    if missing_sections:
-        raise ConfigValidationError(
-            f"Missing required sections for optimization: {', '.join(missing_sections)}. "
-            "Hyperparameter optimization requires complete training configuration."
-        )
+    _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "optimization")
 
     # DATASET must have at least one feature or target
     if config.DATASET is not None:
@@ -301,21 +268,11 @@ def validate_optimization_config_complete(config: OptimizationWorkflowConfig) ->
             )
 
         # Validate paths
-        from pathlib import Path
-
         for i, feature in enumerate(config.DATASET.features):
-            if isinstance(feature, PathFeature) and feature.path is not None:
-                # Handle both str and Path types (model_construct may bypass coercion)
-                path = Path(feature.path) if isinstance(feature.path, str) else feature.path
-                if not path.exists():
-                    raise ConfigValidationError(f"Feature #{i + 1} path does not exist: {path}.")
+            _validate_path_entry(feature, i, "Feature")
 
         for i, target in enumerate(config.DATASET.targets):
-            if isinstance(target, PathTarget) and target.path is not None:
-                # Handle both str and Path types (model_construct may bypass coercion)
-                path = Path(target.path) if isinstance(target.path, str) else target.path
-                if not path.exists():
-                    raise ConfigValidationError(f"Target #{i + 1} path does not exist: {path}.")
+            _validate_path_entry(target, i, "Target")
 
 
 # Convenience function for workflow auto-detection

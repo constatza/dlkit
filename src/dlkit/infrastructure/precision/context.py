@@ -8,11 +8,12 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
 
+@runtime_checkable
 class PrecisionProvider(Protocol):
     """Protocol for objects that can provide precision strategy.
 

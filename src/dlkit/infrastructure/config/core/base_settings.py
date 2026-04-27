@@ -27,7 +27,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dlkit.infrastructure.config.core.patching import patch_model
@@ -169,12 +169,38 @@ class ComponentSettings(BasicSettings):
 
     ``name`` and ``module_path`` are conventional component selector fields
     present on concrete subclasses and accessed via cast in factory code.
+
+    The ``name`` field accepts:
+    - ``str``: Resolved via registry or import
+    - ``type`` or ``Callable``: Used directly
+    - ``dict``: Treated as instance data (legacy; rarely used in practice)
+    - ``None``: No component name specified
     """
 
     model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     name: str | type | Callable[..., object] | dict[str, str | tuple[str, ...]] | None = None
     module_path: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: Any) -> Any:
+        """Validate that name is not an empty dict.
+
+        Empty dicts are invalid since they don't represent a valid component.
+
+        Args:
+            v: The name field value.
+
+        Returns:
+            The validated name value.
+
+        Raises:
+            ValueError: If name is an empty dict.
+        """
+        if isinstance(v, dict) and not v:
+            raise ValueError("name cannot be an empty dict")
+        return v
 
     def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Serialize component settings, excluding meta fields.

@@ -453,6 +453,10 @@ class CooPackReader(AbstractSparsePackReader):
         start = int(self._nnz_ptr[resolved_index])
         end = int(self._nnz_ptr[resolved_index + 1])
 
+        # torch.from_numpy shares storage with self._indices / self._values (numpy views).
+        # No clone: self._indices and self._values are readonly after __init__; nothing in
+        # CooPackReader mutates them, and is_coalesced=True below prevents PyTorch from
+        # sorting/modifying the index tensor in-place during coalesce().
         indices = torch.from_numpy(self._indices[:, start:end])
         values = torch.from_numpy(self._values[start:end])
         target_dtype = dtype or self._default_torch_dtype
@@ -551,6 +555,9 @@ class CooPackReader(AbstractSparsePackReader):
             ]
             cursor += nnz_len_int
 
+        # out_indices_np / out_values_np are locals built in the loop above; torch.from_numpy
+        # shares their storage but once this function returns no external reference to those
+        # numpy arrays remains — the tensor is the sole owner of the storage.  No clone needed.
         out_indices = torch.from_numpy(out_indices_np)
         out_values = torch.from_numpy(out_values_np)
         target_dtype = dtype or self._default_torch_dtype
