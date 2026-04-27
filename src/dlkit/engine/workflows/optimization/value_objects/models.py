@@ -129,7 +129,9 @@ class Study:
     def best_hyperparameters(self) -> dict[str, Any]:
         """Get hyperparameters from best trial."""
         best = self.best_trial
-        return best.hyperparameters if best else {}
+        # Return a shallow copy: frozen=True prevents field reassignment but cannot stop
+        # callers from mutating the dict's contents, which would corrupt the Trial record.
+        return dict(best.hyperparameters) if best else {}
 
     @property
     def best_objective_value(self) -> float | None:
