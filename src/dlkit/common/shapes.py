@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -51,6 +51,7 @@ class ShapeSummary:
         return self.in_shapes[0][1]
 
 
+@runtime_checkable
 class ShapeSpecProtocol(Protocol):
     """Minimal shape-spec contract shared by models and transforms."""
 

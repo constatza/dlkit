@@ -108,8 +108,10 @@ class PCA(Transform):
             niter=self.n_power_iterations,
         )
         # Principal components are the right singular vectors.
-        # V has shape (n_features, n_components); we transpose to (n_components, n_features)
-        components = V.T
+        # V has shape (n_features, n_components); we transpose to (n_components, n_features).
+        # clone(): V.T is a non-contiguous strided view; cloning makes the buffer contiguous
+        # for clean checkpoint serialisation and releases V's storage once fit() returns.
+        components = V.T.clone()
 
         # Compute the explained variance from singular values using Bessel's correction.
         explained_variance = S**2 / (n_samples - 1)
