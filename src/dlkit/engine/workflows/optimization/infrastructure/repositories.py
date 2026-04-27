@@ -180,6 +180,26 @@ class OptunaStudyRepository(IStudyRepository):
                 {"stage": "best_trial_retrieval", "study_id": study_id},
             ) from e
 
+    def get_optuna_study(self, study_id: str) -> Any:
+        """Return the underlying Optuna study object for a domain study ID.
+
+        Args:
+            study_id: Domain study identifier
+
+        Returns:
+            Optuna study object
+
+        Raises:
+            WorkflowError: If Optuna study not found for domain study
+        """
+        optuna_study = self._study_mapping.get(study_id)
+        if optuna_study is None:
+            raise WorkflowError(
+                f"Optuna study not found for domain study {study_id}",
+                {"stage": "optuna_study_retrieval", "study_id": study_id},
+            )
+        return optuna_study
+
     def _build_sampler(self, sampler_config: dict[str, Any]) -> Any:
         """Build Optuna sampler from configuration."""
         sampler_type = sampler_config.get("type", "TPESampler")
@@ -322,3 +342,20 @@ class InMemoryStudyRepository(IStudyRepository):
         """Get best trial from study in memory."""
         study = self._studies.get(study_id)
         return study.best_trial if study else None
+
+    def get_optuna_study(self, study_id: str) -> Any:
+        """In-memory implementation does not have Optuna studies.
+
+        Args:
+            study_id: Domain study identifier
+
+        Returns:
+            Always raises WorkflowError
+
+        Raises:
+            WorkflowError: In-memory repository does not support Optuna studies
+        """
+        raise WorkflowError(
+            f"In-memory repository does not support Optuna studies for {study_id}",
+            {"stage": "optuna_study_retrieval", "study_id": study_id},
+        )

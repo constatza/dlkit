@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from .models import OptimizationDirection, OptimizationResult, Study, Trial
 
@@ -97,6 +97,21 @@ class IStudyRepository(ABC):
 
         Returns:
             Best trial if found, None otherwise
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_optuna_study(self, study_id: str) -> Any:
+        """Return the underlying Optuna study object for a domain study ID.
+
+        Args:
+            study_id: Domain study identifier
+
+        Returns:
+            Optuna study object
+
+        Raises:
+            WorkflowError: If Optuna study not found for domain study
         """
         raise NotImplementedError
 
@@ -334,6 +349,32 @@ class ITrialExecutor(ABC):
         raise NotImplementedError
 
 
+@runtime_checkable
+class IHyperparameterApplicator(Protocol):
+    """Protocol for applying sampled hyperparameters to workflow settings.
+
+    Using Protocol instead of ABC for lightweight structural typing
+    that doesn't require inheritance.
+    """
+
+    def apply(
+        self,
+        base_settings: Any,
+        hyperparameters: dict[str, Any],
+    ) -> Any:
+        """Apply sampled hyperparameters to base settings.
+
+        Args:
+            base_settings: Base workflow settings
+            hyperparameters: Sampled hyperparameters to apply
+
+        Returns:
+            Updated settings with hyperparameters applied
+        """
+        ...
+
+
+@runtime_checkable
 class IObjectiveFunction(Protocol):
     """Protocol for optimization objective functions.
 

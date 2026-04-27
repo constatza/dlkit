@@ -28,12 +28,18 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
     def __init__(self):
         """Initialize TOML persister."""
 
-    def save_best_configuration(self, study: Study, configuration: dict[str, Any]) -> str | None:
+    def save_best_configuration(
+        self,
+        study: Study,
+        configuration: dict[str, Any],
+        output_directory: Path | None = None,
+    ) -> str | None:
         """Save best configuration to TOML file.
 
         Args:
             study: Study domain model
             configuration: Configuration to save
+            output_directory: Optional custom output directory (uses default if None)
 
         Returns:
             Path to saved configuration file if successful, None otherwise
@@ -44,8 +50,11 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
             from dlkit.infrastructure.io import locations
             from dlkit.infrastructure.io.config import write_config
 
-            # Create output directory
-            config_dir = locations.output("optuna_results")
+            # Use custom directory if provided, otherwise use default
+            if output_directory:
+                config_dir = output_directory
+            else:
+                config_dir = locations.output("optuna_results")
             config_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate config file name
@@ -91,12 +100,18 @@ class JSONConfigurationPersister(IConfigurationPersistence):
     def __init__(self):
         """Initialize JSON persister."""
 
-    def save_best_configuration(self, study: Study, configuration: dict[str, Any]) -> str | None:
+    def save_best_configuration(
+        self,
+        study: Study,
+        configuration: dict[str, Any],
+        output_directory: Path | None = None,
+    ) -> str | None:
         """Save best configuration to JSON file.
 
         Args:
             study: Study domain model
             configuration: Configuration to save
+            output_directory: Optional custom output directory (uses default if None)
 
         Returns:
             Path to saved configuration file if successful, None otherwise
@@ -106,8 +121,11 @@ class JSONConfigurationPersister(IConfigurationPersistence):
 
             from dlkit.infrastructure.io import locations
 
-            # Create output directory
-            config_dir = locations.output("optuna_results")
+            # Use custom directory if provided, otherwise use default
+            if output_directory:
+                config_dir = output_directory
+            else:
+                config_dir = locations.output("optuna_results")
             config_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate config file name
@@ -205,22 +223,12 @@ class FileSystemConfigurationPersister(IConfigurationPersistence):
             )
             return None
 
-        # Use custom output directory if specified
-        if self.output_directory:
-            # Temporarily override the locations module behavior
-            try:
-                # This is a bit hacky but works for now
-                # TODO: Improve this by making the persister take directory as parameter
-                result = persister.save_best_configuration(study, configuration)
-                if result and self.output_directory != Path(result).parent:
-                    # Move file to custom directory
-                    self.output_directory.mkdir(parents=True, exist_ok=True)
-                    new_path = self.output_directory / Path(result).name
-                    Path(result).rename(new_path)
-                    return str(new_path)
-                return result
-            except Exception as e:
-                logger.warning("Failed to save to custom directory: {}", e)
-                return None
-        else:
-            return persister.save_best_configuration(study, configuration)
+        try:
+            return persister.save_best_configuration(
+                study,
+                configuration,
+                output_directory=self.output_directory,
+            )
+        except Exception as e:
+            logger.warning("Failed to save configuration: {}", e)
+            return None

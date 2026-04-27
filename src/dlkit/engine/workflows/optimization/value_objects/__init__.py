@@ -29,6 +29,7 @@ from .models import (
 from .protocols import (
     IConfigurationPersistence,
     IExperimentTracker,
+    IHyperparameterApplicator,
     IHyperparameterSampler,
     IObjectiveFunction,
     IPruningStrategy,
@@ -59,4 +60,5 @@ __all__ = [
     "IConfigurationPersistence",
     "ITrialExecutor",
     "IObjectiveFunction",
+    "IHyperparameterApplicator",
 ]
