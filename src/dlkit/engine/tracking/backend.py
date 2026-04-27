@@ -10,13 +10,14 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from dlkit.infrastructure.io import url_resolver
 
 from .discovery import default_sqlite_backend_uri, local_host_alive
 
 
+@runtime_checkable
 class ITrackingBackend(Protocol):
     """Protocol for MLflow tracking backends."""
 
@@ -25,7 +26,7 @@ class ITrackingBackend(Protocol):
     def scheme(self) -> str: ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RemoteServerBackend:
     """Explicit HTTP/HTTPS server configured by the user via env var.
 
@@ -48,7 +49,7 @@ class RemoteServerBackend:
         return "https" if self.uri.startswith("https") else "http"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LocalServerBackend:
     """Auto-detected local MLflow server on 127.0.0.1:5000."""
 
@@ -65,7 +66,7 @@ class LocalServerBackend:
         return "http"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LocalSqliteBackend:
     """Local SQLite backend.
 

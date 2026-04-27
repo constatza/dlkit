@@ -333,7 +333,11 @@ class NumpyWriter(Callback):
             return
         if key not in self._predictions:
             self._predictions[key] = []
-        self._predictions[key].append(value)
+        # detach: release autograd graph references to avoid memory bloat across batches.
+        # clone: own a fresh copy so models that return views into a pre-allocated output
+        # buffer cannot corrupt the accumulated list (all entries would otherwise alias
+        # the same buffer, producing identical last-batch values after torch.cat).
+        self._predictions[key].append(value.detach().clone())
 
     @staticmethod
     def _resolve_default_output_dir() -> tuple[Path, bool]:

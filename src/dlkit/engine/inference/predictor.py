@@ -6,7 +6,7 @@ All loading logic integrated directly - no use case objects.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Self
+from typing import Any, Protocol, Self, runtime_checkable
 
 import torch
 from tensordict import TensorDict
@@ -42,6 +42,7 @@ class PredictorNotLoadedError(PredictorError):
         super().__init__(message, {"error_type": "PredictorNotLoadedError"})
 
 
+@runtime_checkable
 class IPredictor(Protocol):
     """Protocol for stateful inference predictors.
 
