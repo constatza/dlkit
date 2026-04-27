@@ -15,7 +15,6 @@ from dlkit.engine.training.interfaces import IOptimizationStrategy
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
 )
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -36,7 +35,7 @@ class OptimizationStrategy(IOptimizationStrategy):
     def __init__(
         self,
         factory: OptimizationServiceFactory,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
     ):
         """Initialize optimization strategy.
 
@@ -45,13 +44,11 @@ class OptimizationStrategy(IOptimizationStrategy):
             settings: Configuration settings
         """
         self._factory = factory
-        self._settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig = (
-            settings
-        )
+        self._settings: OptimizationWorkflowConfig | GeneralSettings = settings
 
     def execute_optimization(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
     ) -> APIOptimizationResult:
         """Execute optimization using clean architecture.
 

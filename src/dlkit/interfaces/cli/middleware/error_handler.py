@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -14,6 +19,8 @@ from dlkit.common import (
     StrategyError,
     WorkflowError,
 )
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 _ERROR_SUGGESTIONS: dict[type[DLKitError], list[str]] = {
     ConfigurationError: [
@@ -182,3 +189,37 @@ def handle_unexpected_error(error: Exception, console: Console) -> None:
     error_panel = Panel.fit(error_text, title="🐛 Unexpected Error", border_style="red")
 
     console.print(error_panel)
+
+
+def handle_cli_errors(console: Console) -> Callable[[F], F]:
+    """Decorator that wraps CLI commands to handle errors consistently.
+
+    Catches DLKitError and unexpected exceptions, formats them, and exits cleanly.
+
+    Args:
+        console: Rich console for output
+
+    Returns:
+        Decorator function
+    """
+
+    def decorator(fn: F) -> F:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return fn(*args, **kwargs)
+            except typer.Exit:
+                # Re-raise typer.Exit without modification
+                raise
+            except DLKitError as e:
+                # Handle domain errors with formatted suggestions
+                handle_api_error(e, console)
+                raise typer.Exit(1)
+            except Exception as e:
+                # Handle unexpected errors with debug information
+                handle_unexpected_error(e, console)
+                raise typer.Exit(1)
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator

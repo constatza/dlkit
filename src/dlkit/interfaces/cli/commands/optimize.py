@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.protocols import TrainingSettingsProtocol
 from dlkit.interfaces.api import optimize as api_optimize
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
-from ..middleware.error_handler import handle_api_error
+from ..guards import is_training_settings
+from ..middleware.error_handler import handle_cli_errors
 from ..params import (
     CONFIG_PATH_ARG,
     MLFLOW_FLAG,
@@ -33,6 +32,7 @@ app = typer.Typer(
 console = Console()
 
 
+@handle_cli_errors(console)
 def _run_optimization_impl(
     config_path: CONFIG_PATH_ARG,
     trials: Annotated[
@@ -52,65 +52,49 @@ def _run_optimization_impl(
         dlkit optimize config.toml --trials 100 --study-name my_study
         dlkit optimize config.toml --trials 50 --mlflow
     """
-    try:
-        # Load configuration
-        console.print(f"📖 Loading configuration from: {config_path}")
-        _settings = load_config(config_path, root_dir=root_dir, output_dir=output_dir)
-        settings = _settings if isinstance(_settings, TrainingSettingsProtocol) else None
+    # Load configuration
+    console.print(f"📖 Loading configuration from: {config_path}")
+    _settings = load_config(config_path, root_dir=root_dir, output_dir=output_dir)
+    settings = _settings if is_training_settings(_settings) else None
 
-        # Validate Optuna is configured (flattened)
-        if not settings or not settings.OPTUNA or not settings.OPTUNA.enabled:
-            console.print(
-                "[red]Optuna plugin must be enabled in configuration for optimization[/red]"
-            )
-            console.print("Enable [OPTUNA] with enabled = true in config")
-            raise typer.Exit(1)
-
-        # Show optimization parameters
-        console.print("⚡ Starting hyperparameter optimization")
-        if mlflow or settings.MLFLOW:
-            console.print("  With MLflow tracking enabled")
-        console.print(f"  Trials: {trials}")
-        if study_name:
-            console.print(f"  Study name: {study_name}")
-        if root_dir:
-            console.print(f"  Root dir: {root_dir}")
-
-        # --mlflow flag: ensure an [MLFLOW] section exists in settings.
-        if mlflow and not getattr(settings, "MLFLOW", None):
-            settings = cast(GeneralSettings, settings).patch({"MLFLOW": {}})
-
-        # Execute optimization
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(f"Running {trials} optimization trials...", total=None)
-
-            optimization_result = api_optimize(
-                settings,
-                trials=trials,
-                study_name=study_name,
-                root_dir=root_dir,
-            )
-            progress.remove_task(task)
-
-        result = optimization_result
-        console.print("🎉 Optimization completed successfully!")
-        present_optimization_result(result, console)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        # Handle DLKit errors (optimization failures, etc.)
-        from dlkit.common.errors import DLKitError
-
-        if isinstance(e, DLKitError):
-            handle_api_error(e, console)
-        else:
-            console.print(f"[red]Unexpected error during optimization: {e}[/red]")
+    # Validate Optuna is configured (flattened)
+    if not settings or not settings.OPTUNA or not settings.OPTUNA.enabled:
+        console.print("[red]Optuna plugin must be enabled in configuration for optimization[/red]")
+        console.print("Enable [OPTUNA] with enabled = true in config")
         raise typer.Exit(1)
+
+    # Show optimization parameters
+    console.print("⚡ Starting hyperparameter optimization")
+    if mlflow or settings.MLFLOW:
+        console.print("  With MLflow tracking enabled")
+    console.print(f"  Trials: {trials}")
+    if study_name:
+        console.print(f"  Study name: {study_name}")
+    if root_dir:
+        console.print(f"  Root dir: {root_dir}")
+
+    # Execute optimization
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task(f"Running {trials} optimization trials...", total=None)
+
+        optimization_result = api_optimize(
+            settings,
+            overrides={
+                "trials": trials,
+                "study_name": study_name,
+                "root_dir": root_dir,
+            },
+            mlflow=mlflow,
+        )
+        progress.remove_task(task)
+
+    result = optimization_result
+    console.print("🎉 Optimization completed successfully!")
+    present_optimization_result(result, console)
 
 
 # Default optimization command: dlkit optimize config.toml --trials N
@@ -148,6 +132,7 @@ existing study, pass the same `--study-name` to the main command.
 
 
 @app.command("status")
+@handle_cli_errors(console)
 def show_study_status(
     study_name: Annotated[str, typer.Argument(help="Name of the study")],
     storage: Annotated[str, typer.Argument(help="Storage URL for the study")],
@@ -157,51 +142,43 @@ def show_study_status(
     Examples:
         dlkit optimize status my_study sqlite:///study.db
     """
-    try:
-        import optuna
-        from rich.table import Table
+    import optuna
+    from rich.table import Table
 
-        console.print(f"📊 Loading study status: {study_name}")
+    console.print(f"📊 Loading study status: {study_name}")
 
-        # Load study
-        study = optuna.load_study(study_name=study_name, storage=storage)
+    # Load study
+    study = optuna.load_study(study_name=study_name, storage=storage)
 
-        # Create status table
-        table = Table(title=f"Study Status: {study_name}")
-        table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green")
+    # Create status table
+    table = Table(title=f"Study Status: {study_name}")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
 
-        table.add_row("Study Name", study_name)
-        table.add_row("Direction", study.direction.name)
-        table.add_row("Total Trials", str(len(study.trials)))
-        table.add_row(
-            "Complete Trials", str(len([t for t in study.trials if t.state.name == "COMPLETE"]))
-        )
-        table.add_row(
-            "Failed Trials", str(len([t for t in study.trials if t.state.name == "FAIL"]))
-        )
-        table.add_row(
-            "Pruned Trials", str(len([t for t in study.trials if t.state.name == "PRUNED"]))
-        )
+    table.add_row("Study Name", study_name)
+    table.add_row("Direction", study.direction.name)
+    table.add_row("Total Trials", str(len(study.trials)))
+    table.add_row(
+        "Complete Trials", str(len([t for t in study.trials if t.state.name == "COMPLETE"]))
+    )
+    table.add_row("Failed Trials", str(len([t for t in study.trials if t.state.name == "FAIL"])))
+    table.add_row("Pruned Trials", str(len([t for t in study.trials if t.state.name == "PRUNED"])))
 
-        if study.best_trial:
-            table.add_row("Best Value", f"{study.best_trial.value:.6f}")
-            table.add_row("Best Trial", str(study.best_trial.number))
+    if study.best_trial:
+        table.add_row("Best Value", f"{study.best_trial.value:.6f}")
+        table.add_row("Best Trial", str(study.best_trial.number))
 
-        console.print(table)
+    console.print(table)
 
-        # Show best parameters if available
-        if study.best_trial:
-            console.print("\n🏆 Best Parameters:")
-            for param, value in study.best_trial.params.items():
-                console.print(f"  {param}: {value}")
-
-    except Exception as e:
-        console.print(f"[red]Error loading study status: {e}[/red]")
-        raise typer.Exit(1)
+    # Show best parameters if available
+    if study.best_trial:
+        console.print("\n🏆 Best Parameters:")
+        for param, value in study.best_trial.params.items():
+            console.print(f"  {param}: {value}")
 
 
 @app.command("plot")
+@handle_cli_errors(console)
 def plot_study(
     study_name: Annotated[str, typer.Argument(help="Name of the study")],
     storage: Annotated[str, typer.Argument(help="Storage URL for the study")],
@@ -223,45 +200,40 @@ def plot_study(
         dlkit optimize plot my_study sqlite:///study.db --output-dir ./plots
         dlkit optimize plot my_study sqlite:///study.db --type param_importances
     """
-    try:
-        import optuna
-        from optuna.visualization import (
-            plot_optimization_history,
-            plot_parallel_coordinate,
-            plot_param_importances,
-            plot_slice,
-        )
+    import optuna
+    from optuna.visualization import (
+        plot_optimization_history,
+        plot_parallel_coordinate,
+        plot_param_importances,
+        plot_slice,
+    )
 
-        console.print(f"📈 Generating plots for study: {study_name}")
+    console.print(f"📈 Generating plots for study: {study_name}")
 
-        # Create output directory
-        output_dir.mkdir(parents=True, exist_ok=True)
+    # Create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load study
-        study = optuna.load_study(study_name=study_name, storage=storage)
+    # Load study
+    study = optuna.load_study(study_name=study_name, storage=storage)
 
-        # Generate requested plot
-        plot_functions = {
-            "optimization_history": plot_optimization_history,
-            "param_importances": plot_param_importances,
-            "parallel_coordinate": plot_parallel_coordinate,
-            "slice": plot_slice,
-        }
+    # Generate requested plot
+    plot_functions = {
+        "optimization_history": plot_optimization_history,
+        "param_importances": plot_param_importances,
+        "parallel_coordinate": plot_parallel_coordinate,
+        "slice": plot_slice,
+    }
 
-        if plot_type not in plot_functions:
-            console.print(f"[red]Unknown plot type: {plot_type}[/red]")
-            console.print(f"Available types: {', '.join(plot_functions.keys())}")
-            raise typer.Exit(1)
-
-        plot_func = plot_functions[plot_type]
-        fig = plot_func(study)
-
-        # Save plot
-        output_file = output_dir / f"{study_name}_{plot_type}.html"
-        fig.write_html(str(output_file))
-
-        console.print(f"✅ Plot saved to: {output_file}")
-
-    except Exception as e:
-        console.print(f"[red]Error generating plot: {e}[/red]")
+    if plot_type not in plot_functions:
+        console.print(f"[red]Unknown plot type: {plot_type}[/red]")
+        console.print(f"Available types: {', '.join(plot_functions.keys())}")
         raise typer.Exit(1)
+
+    plot_func = plot_functions[plot_type]
+    fig = plot_func(study)
+
+    # Save plot
+    output_file = output_dir / f"{study_name}_{plot_type}.html"
+    fig.write_html(str(output_file))
+
+    console.print(f"✅ Plot saved to: {output_file}")

@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.common.errors import DLKitError
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.protocols import TrainingSettingsProtocol
 from dlkit.interfaces.api import train as api_train
 from dlkit.interfaces.api import validate_config
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result
-from ..middleware.error_handler import handle_api_error
+from ..guards import is_training_settings
+from ..middleware.error_handler import handle_cli_errors
 from ..params import (
     BATCH_SIZE_PARAM,
     CHECKPOINT_PARAM,
@@ -41,6 +37,7 @@ app = typer.Typer(
 console = Console()
 
 
+@handle_cli_errors(console)
 def _run_training_impl(
     config_path: CONFIG_PATH_ARG,
     mlflow: MLFLOW_FLAG = False,
@@ -64,107 +61,90 @@ def _run_training_impl(
         dlkit train config.toml --mlflow --experiment-name test
         dlkit train config.toml --validate-only
     """
-    try:
-        # Load configuration (don't apply output_dir here, let API handle all overrides)
-        console.print(f"📖 Loading configuration from: {config_path}")
-        try:
-            settings = load_config(config_path, root_dir=root_dir, workflow_type="training")
-        except DLKitError as e:
-            handle_api_error(e, console)
-            raise typer.Exit(1)
+    # Load configuration (don't apply output_dir here, let API handle all overrides)
+    console.print(f"📖 Loading configuration from: {config_path}")
+    settings = load_config(config_path, root_dir=root_dir, workflow_type="training")
 
-        training_settings = settings if isinstance(settings, TrainingSettingsProtocol) else None
+    training_settings = settings if is_training_settings(settings) else None
 
-        # Show training mode
-        if mlflow or (training_settings and training_settings.MLFLOW):
-            console.print("🎯 Using [bold]training with MLflow tracking[/bold]")
-        else:
-            console.print("🎯 Using [bold]vanilla training[/bold]")
+    # Show training mode
+    if mlflow or (training_settings and training_settings.MLFLOW):
+        console.print("🎯 Using [bold]training with MLflow tracking[/bold]")
+    else:
+        console.print("🎯 Using [bold]vanilla training[/bold]")
 
-        # Validate configuration
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Validating configuration...", total=None)
-            validate_config(settings)
+    # Validate configuration
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Validating configuration...", total=None)
+        validate_config(settings)
 
-        console.print("✅ Configuration validated successfully")
+    console.print("✅ Configuration validated successfully")
 
-        if validate_only:
-            console.print("🏁 Validation complete (--validate-only specified)")
-            return
+    if validate_only:
+        console.print("🏁 Validation complete (--validate-only specified)")
+        return
 
-        # Execute training with overrides
-        if checkpoint:
-            console.print(f"🔄 Resuming training from checkpoint: {checkpoint}")
-        else:
-            console.print("🚀 Starting training workflow...")
+    # Execute training with overrides
+    if checkpoint:
+        console.print(f"🔄 Resuming training from checkpoint: {checkpoint}")
+    else:
+        console.print("🚀 Starting training workflow...")
 
-        # Show applied overrides
-        override_messages = []
-        if checkpoint:
-            override_messages.append(f"Checkpoint: {checkpoint}")
-        if output_dir:
-            override_messages.append(f"Output dir: {output_dir}")
-        if data_dir:
-            override_messages.append(f"Data dir: {data_dir}")
-        if epochs:
-            override_messages.append(f"Epochs: {epochs}")
-        if batch_size:
-            override_messages.append(f"Batch size: {batch_size}")
-        if learning_rate:
-            override_messages.append(f"Learning rate: {learning_rate}")
-        if experiment_name:
-            override_messages.append(f"Experiment: {experiment_name}")
-        if run_name:
-            override_messages.append(f"Run name: {run_name}")
+    # Show applied overrides
+    override_messages = []
+    if checkpoint:
+        override_messages.append(f"Checkpoint: {checkpoint}")
+    if output_dir:
+        override_messages.append(f"Output dir: {output_dir}")
+    if data_dir:
+        override_messages.append(f"Data dir: {data_dir}")
+    if epochs:
+        override_messages.append(f"Epochs: {epochs}")
+    if batch_size:
+        override_messages.append(f"Batch size: {batch_size}")
+    if learning_rate:
+        override_messages.append(f"Learning rate: {learning_rate}")
+    if experiment_name:
+        override_messages.append(f"Experiment: {experiment_name}")
+    if run_name:
+        override_messages.append(f"Run name: {run_name}")
 
-        if root_dir:
-            override_messages.append(f"Root dir: {root_dir}")
-        if override_messages:
-            console.print("🔧 Parameter overrides:")
-            for msg in override_messages:
-                console.print(f"  • {msg}")
+    if root_dir:
+        override_messages.append(f"Root dir: {root_dir}")
+    if override_messages:
+        console.print("🔧 Parameter overrides:")
+        for msg in override_messages:
+            console.print(f"  • {msg}")
 
-        # --mlflow flag: ensure an [MLFLOW] section exists in settings.
-        # The API has no boolean toggle — MLflow is enabled by config presence.
-        if mlflow and not getattr(settings, "MLFLOW", None):
-            settings = cast(GeneralSettings, settings).patch({"MLFLOW": {}})
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Training in progress...", total=None)
+        training_result = api_train(
+            settings,
+            overrides={
+                "checkpoint_path": checkpoint,
+                "root_dir": root_dir,
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "experiment_name": experiment_name,
+                "run_name": run_name,
+            },
+            mlflow=mlflow,
+        )
+        progress.remove_task(task)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Training in progress...", total=None)
-            training_result = api_train(
-                settings,
-                checkpoint_path=checkpoint,
-                root_dir=root_dir,
-                epochs=epochs,
-                batch_size=batch_size,
-                learning_rate=learning_rate,
-                experiment_name=experiment_name,
-                run_name=run_name,
-            )
-            progress.remove_task(task)
-
-        result = training_result
-        console.print("🎉 Training completed successfully!")
-        present_training_result(result, console)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        # Handle DLKit errors (training failures, validation errors, etc.)
-        if isinstance(e, DLKitError):
-            handle_api_error(e, console)
-        else:
-            console.print(f"[red]Unexpected error during training: {e}[/red]")
-        raise typer.Exit(1)
+    result = training_result
+    console.print("🎉 Training completed successfully!")
+    present_training_result(result, console)
 
 
 # Subcommands removed - functionality moved to main callback with flags:

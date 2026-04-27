@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from dlkit.common import OptimizationResult
 from dlkit.common.errors import WorkflowError
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
 
 from ..optimization.factory import OptimizationServiceFactory
 from ._entrypoint_context import EntrypointContext
 from ._override_types import OptimizationOverrides
-from ._settings import WorkflowSettings
 
 
 def optimize(
-    settings: WorkflowSettings,
+    settings: OptimizationWorkflowConfig | GeneralSettings,
     overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""

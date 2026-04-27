@@ -3,7 +3,7 @@
 from abc import abstractmethod
 
 # Define minimal protocols to avoid circular imports
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .dependency_protocols import (
     CheckpointProvider,
@@ -18,8 +18,10 @@ from .dependency_protocols import (
     StrategyProvider,
     TrainingContext,
 )
+from .workflow_executor import IWorkflowExecutor
 
 
+@runtime_checkable
 class ExecutionStrategy(Protocol):
     """Protocol for execution strategies."""
 
@@ -34,6 +36,7 @@ class ExecutionStrategy(Protocol):
         ...
 
 
+@runtime_checkable
 class StrategyFactory(Protocol):
     """Protocol for strategy factory implementations."""
 
@@ -48,6 +51,7 @@ class StrategyFactory(Protocol):
         ...
 
 
+@runtime_checkable
 class WorkflowOperation(Protocol):
     """Protocol for atomic workflow operations."""
 
@@ -62,6 +66,7 @@ __all__ = [
     "ExecutionStrategy",
     "StrategyFactory",
     "WorkflowOperation",
+    "IWorkflowExecutor",
     # Dependency protocols
     "SettingsProvider",
     "LoggingProvider",

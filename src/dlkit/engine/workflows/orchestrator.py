@@ -30,7 +30,7 @@ class WorkflowExecutionSelector:
 
     def select(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | GeneralSettings,
         explicit: str | None = None,
         hooks: LifecycleHooks | None = None,
     ):
@@ -52,7 +52,7 @@ class WorkflowExecutionSelector:
 
     def select_optimization(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: OptimizationWorkflowConfig | GeneralSettings,
     ):
         """Create optimization strategy from the runtime workflows layer."""
         # Log what features are detected
@@ -83,7 +83,7 @@ class Orchestrator:
 
     def execute_training(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | GeneralSettings,
         hooks: LifecycleHooks | None = None,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")

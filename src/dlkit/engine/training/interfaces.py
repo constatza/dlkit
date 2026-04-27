@@ -45,7 +45,9 @@ class IOptimizationStrategy(ABC):
     """
 
     @abstractmethod
-    def execute_optimization(self, settings: WorkflowSettings) -> OptimizationResult:
+    def execute_optimization(
+        self, settings: OptimizationWorkflowConfig | GeneralSettings
+    ) -> OptimizationResult:
         """Execute optimization workflow.
 
         Args:

@@ -6,9 +6,11 @@ This is the single source of truth used by the CLI and sync tools.
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Literal
 
 from tomlkit import comment, document, dumps, table
+from tomlkit.items import Table
+from tomlkit.toml_document import TOMLDocument
 
 
 def _get_default_optuna_storage() -> str:
@@ -196,7 +198,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
         "SESSION.inference",
     )
 
-    doc = document()
+    doc: TOMLDocument = document()
     need_parent_headers: set[str] = set()
     for key in order:
         if key not in template:
@@ -210,7 +212,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
             parent, child = key.split(".", 1)
             if parent not in doc:
                 doc.add(parent, table())
-            parent_tbl = cast(Any, doc[parent])
+            parent_tbl: Table = doc[parent]  # type: ignore[assignment]
             child_tbl = table()
             for k, v in content.items():
                 dotted = f"{key}.{k}"
@@ -243,7 +245,8 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
                         if dotted in comments:
                             child_tbl.add(comment(comments[dotted]))
                         child_tbl.add(ck, cv)
-                    cast(Any, doc[key]).add(k, child_tbl)
+                    section_tbl: Table = doc[key]  # type: ignore[assignment]
+                    section_tbl.add(k, child_tbl)
     rendered = dumps(doc)
     # Ensure explicit parent headers for purely nested sections (e.g., [TRAINING])
     for sec in need_parent_headers:
