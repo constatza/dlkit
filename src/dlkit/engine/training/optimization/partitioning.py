@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
@@ -91,5 +92,18 @@ class ParameterPartitioner(IParameterPartitioner):
             # Add to assigned set
             assigned_param_ids.update(param_ids_in_partition)
             partitions.append(matched)
+
+        # Warn if any parameters were unmatched
+        all_descriptors = set(all_parameters)
+        matched_descriptors = {d for group in partitions for d in group}
+        unmatched = all_descriptors - matched_descriptors
+        if unmatched:
+            names = ", ".join(sorted(d.name for d in unmatched))
+            warnings.warn(
+                f"ParameterPartitioner: {len(unmatched)} parameter(s) matched no selector "
+                f"and will not be optimized: {names}",
+                UserWarning,
+                stacklevel=2,
+            )
 
         return tuple(partitions)

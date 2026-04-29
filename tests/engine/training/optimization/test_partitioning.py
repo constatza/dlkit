@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 import torch.nn as nn
 
 from dlkit.common.errors import ParameterPartitionError
 from dlkit.domain.nn.parameter_roles import ParameterRole
-from dlkit.engine.training.optimization.inventory import TorchParameterInventory
+from dlkit.engine.training.optimization.inventory import (
+    IParameterInventory,
+    ParameterDescriptor,
+    TorchParameterInventory,
+)
 from dlkit.engine.training.optimization.partitioning import ParameterPartitioner
-from dlkit.engine.training.optimization.selectors import RoleSelector
+from dlkit.engine.training.optimization.selectors import (
+    RoleSelector,
+)
 
 
 @pytest.fixture
@@ -85,3 +93,36 @@ class TestParameterPartitioner:
         result = partitioner.partition(two_selector_inventory, selectors)
 
         assert result == ()
+
+    def test_warns_when_parameters_are_unmatched(
+        self, hidden_2d_descriptor: ParameterDescriptor, bias_1d_descriptor: ParameterDescriptor
+    ) -> None:
+        """Parameters not matched by any selector must emit a UserWarning.
+
+        Args:
+            hidden_2d_descriptor: 2D weight descriptor with HIDDEN role.
+            bias_1d_descriptor: 1D bias descriptor with BIAS role.
+        """
+        from dlkit.engine.training.optimization.selectors import MuonEligibleSelector
+
+        class _StubInventory(IParameterInventory):
+            """Stub inventory for testing."""
+
+            def list_parameters(self) -> tuple[ParameterDescriptor, ...]:
+                """Return stub parameters."""
+                return (hidden_2d_descriptor, bias_1d_descriptor)
+
+        partitioner = ParameterPartitioner()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            partitioner.partition(_StubInventory(), [MuonEligibleSelector()])
+
+        unmatched_warnings = [
+            w
+            for w in caught
+            if issubclass(w.category, UserWarning)
+            and ("matched no" in str(w.message).lower() or "unmatched" in str(w.message).lower())
+        ]
+        assert len(unmatched_warnings) == 1, (
+            f"Expected 1 unmatched warning, got {len(unmatched_warnings)}"
+        )
