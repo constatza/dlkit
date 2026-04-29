@@ -33,7 +33,7 @@ def create_toml_config(
     config_content = f"""
 [SESSION]
 name = "{session_name}"
-inference = false
+workflow = "train"
 seed = 42
 precision = "medium"
 
@@ -104,7 +104,7 @@ def create_json_config(
         enable_optuna: Whether to enable Optuna
     """
     config_data = {
-        "SESSION": {"name": session_name, "inference": False, "seed": 42, "precision": "medium"},
+        "SESSION": {"name": session_name, "workflow": "train", "seed": 42, "precision": "medium"},
         "MODEL": {"name": model_name, "module_path": "test.module"},
         "TRAINING": {"trainer": {"max_epochs": 10, "accelerator": "auto"}},
         "DATAMODULE": {"name": "TestDataModule"},
@@ -152,7 +152,7 @@ def create_minimal_valid_config(output_path: Path) -> None:
     minimal_content = """
 [SESSION]
 name = "minimal_test"
-inference = false
+workflow = "train"
 
 [PATHS]
 output_dir = "./outputs"

@@ -10,9 +10,9 @@ import pytest
 from dlkit.common import TrainingResult, WorkflowError
 from dlkit.engine.training import VanillaExecutor
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 
 
 @pytest.fixture
@@ -55,12 +55,16 @@ def build_components(trainer_stub):
 
 
 @pytest.fixture
-def settings():
+def settings() -> TrainingWorkflowConfig:
     """Create basic settings for testing."""
-    return GeneralSettings(SESSION=SessionSettings(inference=False), TRAINING=TrainingSettings())
+    return TrainingWorkflowConfig(
+        SESSION=SessionSettings(workflow="train"), TRAINING=TrainingSettings()
+    )
 
 
-def test_vanilla_executor_single_responsibility(build_components, settings, trainer_stub):
+def test_vanilla_executor_single_responsibility(
+    build_components: RuntimeComponents, settings: TrainingWorkflowConfig, trainer_stub
+) -> None:
     """Test that VanillaExecutor has single responsibility: pure training execution."""
     executor = VanillaExecutor()
 
@@ -78,7 +82,9 @@ def test_vanilla_executor_single_responsibility(build_components, settings, trai
     assert result.duration_seconds == 0.0
 
 
-def test_vanilla_executor_metric_extraction(build_components, settings, trainer_stub):
+def test_vanilla_executor_metric_extraction(
+    build_components: RuntimeComponents, settings: TrainingWorkflowConfig, trainer_stub
+) -> None:
     """Test metric extraction from trainer."""
     executor = VanillaExecutor()
 
@@ -92,7 +98,7 @@ def test_vanilla_executor_metric_extraction(build_components, settings, trainer_
     assert result.metrics["tensor_val"] == "non_numeric"
 
 
-def test_vanilla_executor_no_trainer_error(settings):
+def test_vanilla_executor_no_trainer_error(settings: TrainingWorkflowConfig) -> None:
     """Test that executor raises WorkflowError when trainer is None."""
     components = RuntimeComponents(
         model=cast(Any, object()),
@@ -111,7 +117,7 @@ def test_vanilla_executor_no_trainer_error(settings):
     assert exc_info.value.context["stage"] == "execute"
 
 
-def test_vanilla_executor_trainer_exception_handling(settings):
+def test_vanilla_executor_trainer_exception_handling(settings: TrainingWorkflowConfig) -> None:
     """Test that trainer exceptions are properly wrapped."""
 
     class FailingTrainer:
@@ -136,7 +142,9 @@ def test_vanilla_executor_trainer_exception_handling(settings):
     assert exc_info.value.context["stage"] == "execute"
 
 
-def test_vanilla_executor_post_training_exception_handling(build_components, settings):
+def test_vanilla_executor_post_training_exception_handling(
+    build_components: RuntimeComponents, settings: TrainingWorkflowConfig
+) -> None:
     """Test that predict/test exceptions don't fail the entire execution."""
 
     class PartiallyFailingTrainer:

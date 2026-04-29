@@ -8,8 +8,8 @@ from dlkit.infrastructure.config import (
     load_sections,
     load_settings,
 )
-from dlkit.infrastructure.config.workflow_settings import (
-    TrainingWorkflowSettings,
+from dlkit.infrastructure.config.workflow_configs import (
+    TrainingWorkflowConfig,
 )
 
 
@@ -19,7 +19,7 @@ def full_config_content():
     return """
 [SESSION]
 name = "test_session"
-inference = false
+workflow = "train"
 
 [MODEL]
 name = "TestModel"
@@ -68,7 +68,7 @@ class TestPartialConfigLoading:
         settings = load_settings(config_file)
 
         # Verify correct type
-        assert isinstance(settings, TrainingWorkflowSettings)
+        assert isinstance(settings, TrainingWorkflowConfig)
 
         # Verify all sections are loaded
         assert hasattr(settings, "SESSION")
@@ -88,7 +88,6 @@ class TestPartialConfigLoading:
         assert settings.TRAINING is not None
 
         # Verify training-specific properties work
-        assert settings.has_training_config is True
         assert settings.mlflow_enabled is False
 
     # REMOVED: Inference workflow removed in breaking change
@@ -139,7 +138,6 @@ class TestPartialConfigLoading:
 
         # Verify training-specific properties
         assert hasattr(settings, "mlflow_enabled")
-        assert hasattr(settings, "has_training_config")
 
         # Verify base properties are available
         assert hasattr(settings, "is_training")
@@ -147,7 +145,6 @@ class TestPartialConfigLoading:
 
         # Test property behavior
         assert settings.mlflow_enabled is False  # Because the MLFLOW section is omitted
-        assert settings.has_training_config is True
         assert settings.is_training is True
         assert settings.has_data_config is True
 
@@ -167,7 +164,7 @@ class TestPartialConfigLoading:
 
     def test_load_sections_with_strict_mode(self, tmp_path: Path):
         """Test that strict mode works correctly."""
-        # Create minimal config without TRAINING section
+        # Create minimal config with required SESSION and TRAINING sections
         minimal_config = """
 [SESSION]
 name = "test"
@@ -180,6 +177,9 @@ name = "TestDataModule"
 
 [DATASET]
 name = "TestDataset"
+
+[TRAINING]
+epochs = 10
 """
 
         config_path = tmp_path / "minimal.toml"
@@ -190,6 +190,6 @@ name = "TestDataset"
         assert settings.MODEL is not None
         assert settings.DATASET is not None
 
-        # Should fail with strict mode when requesting missing sections
+        # Should fail with strict mode when requesting a section that is missing
         with pytest.raises(ValueError, match="Required sections missing"):
-            load_sections(config_path, ["MODEL", "DATASET", "TRAINING"], strict=True)
+            load_sections(config_path, ["MODEL", "DATASET", "MLFLOW"], strict=True)

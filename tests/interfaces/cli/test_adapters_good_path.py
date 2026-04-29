@@ -390,7 +390,10 @@ class TestConfigAdapterIntegration:
         config_path.write_text("""
 [SESSION]
 name = "minimal"
-inference = false
+workflow = "train"
+
+[TRAINING]
+epochs = 1
 """)
 
         settings = load_config(config_path)

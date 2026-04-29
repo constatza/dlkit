@@ -268,7 +268,9 @@ def _make_settings(
         ),
     )
 
-    session = SessionSettings(name="integration_test", inference=inference, seed=42)
+    session = SessionSettings(
+        name="integration_test", workflow="inference" if inference else "train", seed=42
+    )
 
     return GeneralSettings(
         SESSION=session,
@@ -388,7 +390,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
         ),
     )
 
-    session = SessionSettings(name="graph_integration_test", inference=False, seed=42)
+    session = SessionSettings(name="graph_integration_test", workflow="train", seed=42)
 
     return GeneralSettings(
         SESSION=session,
@@ -514,7 +516,7 @@ output_dir = "outputs"
 
 [SESSION]
 name = "integration_test"
-inference = false
+workflow = "train"
 seed = 42
 
 [DATASET]

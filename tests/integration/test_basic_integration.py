@@ -13,6 +13,7 @@ import torch
 
 import dlkit
 from dlkit.infrastructure.config import GeneralSettings
+from dlkit.interfaces.api import train as api_train
 
 
 class TestBasicIntegration:
@@ -25,7 +26,7 @@ class TestBasicIntegration:
             training_settings: Pre-configured settings with minimal dataset.
         """
         # Act - Run training
-        training_result = dlkit.train(training_settings)
+        training_result = api_train(training_settings)
 
         # Assert - Basic validation
         assert training_result.duration_seconds > 0
@@ -38,7 +39,7 @@ class TestBasicIntegration:
             mlflow_settings: Pre-configured settings with MLflow enabled.
         """
         # Act - Run MLflow training
-        training_result = dlkit.train(mlflow_settings)
+        training_result = api_train(mlflow_settings)
 
         # Assert - Validate results
         assert training_result.duration_seconds > 0
@@ -72,7 +73,7 @@ class TestBasicIntegration:
         Args:
             double_precision_settings: Training settings with FULL_64 precision.
         """
-        result = dlkit.train(double_precision_settings)
+        result = api_train(double_precision_settings)
         assert result.duration_seconds > 0
 
     def test_inference_basic_workflow(

@@ -70,7 +70,7 @@ def sample_general_settings_data() -> dict[str, Any]:
     return {
         "SESSION": {
             "name": "test_general_session",
-            "inference": False,  # Training mode
+            "workflow": "train",
             "seed": 42,
             "precision": "medium",
         },
@@ -119,7 +119,7 @@ def inference_config_data(tmp_path) -> dict[str, Any]:
     return {
         "SESSION": {
             "name": "inference_session",
-            "inference": True,  # Inference mode
+            "workflow": "inference",
             "seed": 123,
             "precision": "medium",
         },
@@ -141,7 +141,7 @@ def invalid_inference_config_data() -> dict[str, Any]:
     return {
         "SESSION": {
             "name": "invalid_inference",
-            "inference": True,  # Inference mode
+            "workflow": "inference",
             "seed": 42,
             "precision": "medium",
         },
@@ -163,7 +163,7 @@ def sample_toml_config_advanced() -> str:
     return """
 [SESSION]
 name = "advanced_session"
-inference = false
+workflow = "train"
 seed = 999
 precision = "high"
 
@@ -245,7 +245,7 @@ def malformed_toml_config() -> str:
     return """
 [SESSION
 name = "malformed"
-inference = false
+workflow = "train"
 # Missing closing bracket above
 
 [MODEL]
@@ -265,7 +265,7 @@ def optuna_model_config() -> str:
     return """
 [SESSION]
 name = "optuna_session"
-inference = false
+workflow = "train"
 
 [MODEL]
 name = "OptunaModel"

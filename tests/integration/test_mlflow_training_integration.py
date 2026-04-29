@@ -19,8 +19,10 @@ pytest.importorskip("mlflow")
 import mlflow
 from mlflow.tracking import MlflowClient
 
-import dlkit
-from dlkit import (
+from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.interfaces.api import train as api_train
+from dlkit.mlflow import (
     get_model_version,
     list_model_versions,
     load_logged_model,
@@ -28,8 +30,6 @@ from dlkit import (
     search_logged_models,
     search_registered_models,
 )
-from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
-from dlkit.infrastructure.config import GeneralSettings
 
 
 def _require_mlflow_settings(settings: GeneralSettings):
@@ -81,7 +81,7 @@ class TestMLflowTrainingIntegration:
             update={"MLFLOW": mlflow_cfg_updated}
         )
 
-        result = dlkit.train(settings_with_registration)
+        result = api_train(settings_with_registration)
         tracking_uri = _expected_tracking_uri(result)
         assert result.model_state is not None
         model_name = _resolve_effective_model_name(result.model_state.model)
@@ -180,7 +180,7 @@ class TestMLflowTrainingIntegration:
             update={"MLFLOW": mlflow_cfg_updated}
         )
 
-        result = dlkit.train(settings_without_registration)
+        result = api_train(settings_without_registration)
         tracking_uri = _expected_tracking_uri(result)
         assert result.model_state is not None
         model_name = _resolve_effective_model_name(result.model_state.model)

@@ -126,7 +126,7 @@ def complete_config_data() -> dict[str, Any]:
     return {
         "SESSION": {
             "name": "integration_session",
-            "inference": False,  # Training mode
+            "workflow": "train",
             "seed": 42,
         },
         "MODEL": {
@@ -163,7 +163,7 @@ def integration_config_file(tmp_path: Path, complete_config_data: dict[str, Any]
     config_content = """
 [SESSION]
 name = "integration_session"
-inference = false
+workflow = "train"
 seed = 42
 
 [MODEL]
@@ -366,7 +366,7 @@ class TestGeneralSettingsEndToEndIntegration:
         """Test validation error integration across settings hierarchy."""
         # Test inference mode without checkpoint
         invalid_config = {
-            "SESSION": {"inference": True, "name": "test_session"},
+            "SESSION": {"workflow": "inference", "name": "test_session"},
             "MODEL": {
                 "name": "TestModel"
                 # Missing checkpoint for inference mode

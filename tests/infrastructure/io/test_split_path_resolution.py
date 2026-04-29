@@ -39,7 +39,7 @@ def training_config_with_custom_root(tmp_path: Path) -> tuple[Path, Path]:
 [SESSION]
 name = "integration-test-session"
 root_dir = "{custom_root.as_posix()}"
-inference = false
+workflow = "train"
 seed = 42
 precision = "single"
 

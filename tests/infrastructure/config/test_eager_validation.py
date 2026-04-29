@@ -134,7 +134,7 @@ class TestEagerValidationSuccessCases:
         config_dict = {
             "SESSION": {
                 "name": "test_inference",
-                "inference": True,
+                "workflow": "inference",
                 "seed": 123,
             },
             "MODEL": {
@@ -147,7 +147,7 @@ class TestEagerValidationSuccessCases:
         # Should load successfully
         config = InferenceWorkflowConfig.model_validate(config_dict)
 
-        assert config.SESSION.inference is True
+        assert config.SESSION.is_inference_mode is True
         # Checkpoint can be str or Path - just verify it's set
         assert config.MODEL.checkpoint is not None
         assert str(config.MODEL.checkpoint) == str(checkpoint_path)
@@ -407,7 +407,7 @@ class TestCompletenessValidation:
         config_dict = {
             "SESSION": {
                 "name": "test_inference",
-                "inference": True,
+                "workflow": "inference",
                 "seed": 123,
             },
             "MODEL": {
@@ -427,7 +427,7 @@ class TestCompletenessValidation:
         config_dict = {
             "SESSION": {
                 "name": "test_inference",
-                "inference": True,
+                "workflow": "inference",
                 "seed": 123,
             },
             "MODEL": {
@@ -451,7 +451,7 @@ class TestCompletenessValidation:
         config_dict = {
             "SESSION": {
                 "name": "test_inference",
-                "inference": True,
+                "workflow": "inference",
                 "seed": 123,
             },
             "MODEL": {
@@ -480,7 +480,7 @@ class TestCompletenessValidation:
         np.save(targets_path, np.random.rand(100, 1))
 
         config_dict = {
-            "SESSION": {"name": "test_optim", "seed": 42},
+            "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
             "TRAINING": {
                 "epochs": 10,
                 "optimizer": {"name": "Adam", "lr": 0.001},
@@ -514,7 +514,7 @@ class TestCompletenessValidation:
     def test_validate_optimization_config_optuna_disabled_fails(self):
         """Test optimization completeness validation fails if Optuna disabled."""
         config_dict = {
-            "SESSION": {"name": "test_optim", "seed": 42},
+            "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
             "TRAINING": {
                 "epochs": 10,
                 "optimizer": {"name": "Adam", "lr": 0.001},
