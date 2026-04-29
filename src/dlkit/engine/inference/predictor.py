@@ -6,13 +6,12 @@ All loading logic integrated directly - no use case objects.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Self, runtime_checkable
+from typing import Protocol, Self, runtime_checkable
 
 import torch
 from tensordict import TensorDict
 
 from dlkit.common.errors import WorkflowError
-from dlkit.engine.adapters.lightning.base import _unpack_model_output
 from dlkit.infrastructure.precision import (
     PrecisionService,
     get_precision_service,
@@ -21,7 +20,7 @@ from dlkit.infrastructure.precision import (
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .config import ModelState, PredictorConfig
+from .config import ModelState, PredictionOutput, PredictorConfig
 from .loading import build_model_from_checkpoint, load_checkpoint
 from .shapes import infer_shape_specification
 from .transforms import load_transforms_from_checkpoint
@@ -56,8 +55,18 @@ class IPredictor(Protocol):
         self,
         *args: torch.Tensor,
         **kwargs: torch.Tensor,
-    ) -> torch.Tensor | TensorDict | tuple[Any, ...]:
+    ) -> PredictionOutput:
         """Execute inference, mirroring model.forward() signature."""
+        ...
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        """Ordered feature names restored from checkpoint metadata."""
+        ...
+
+    @property
+    def predict_target_key(self) -> str:
+        """Target key whose inverse transform applies to direct predictions."""
         ...
 
     def is_loaded(self) -> bool:
@@ -81,15 +90,15 @@ class CheckpointPredictor(IPredictor):
         >>> predictor.load()
         >>>
         >>> # Predict many times (no reloading!)
-        >>> result1 = predictor.predict(x_tensor)
-        >>> result2 = predictor.predict(x=x_tensor, edge_attr=ea_tensor)
+        >>> output1 = predictor.predict(x_tensor)
+        >>> output2 = predictor.predict(x=x_tensor, edge_attr=ea_tensor)
         >>>
         >>> # Clean up
         >>> predictor.unload()
 
         >>> # Or with context manager
         >>> with CheckpointPredictor(config, auto_load=True) as predictor:
-        ...     result = predictor.predict(x=inputs)
+        ...     output = predictor.predict(x=inputs)
     """
 
     def __init__(
@@ -199,7 +208,7 @@ class CheckpointPredictor(IPredictor):
         self,
         *args: torch.Tensor,
         **kwargs: torch.Tensor,
-    ) -> torch.Tensor | TensorDict | tuple[Any, ...]:
+    ) -> PredictionOutput:
         """Execute inference, mirroring model.forward() signature.
 
         Applies feature transforms to inputs (by position for args, by name for
@@ -213,9 +222,8 @@ class CheckpointPredictor(IPredictor):
                 transform registered under the same key name.
 
         Returns:
-            Single Tensor or TensorDict for single-output models.
-            tuple for multi-output (first element is the prediction after
-            inverse transform; remaining are latents/auxiliary — returned as-is).
+            PredictionOutput with the primary prediction tensor, optional latent
+            tensors, and raw TensorDict output when the model returned one.
 
         Raises:
             PredictorNotLoadedError: If predictor not loaded.
@@ -240,18 +248,79 @@ class CheckpointPredictor(IPredictor):
             with torch.no_grad():
                 raw_output = self._model_state.model(*args, **kwargs)
 
-            predictions_raw, latents_raw = _unpack_model_output(raw_output)
+            if isinstance(raw_output, list):
+                raise TypeError(
+                    "forward() returned a list. Use a tuple or a TensorDict with a "
+                    "'predictions' key for direct inference outputs."
+                )
+            if isinstance(raw_output, tuple):
+                match len(raw_output):
+                    case 0:
+                        raise ValueError("forward() returned an empty tuple")
+                    case 1:
+                        predictions_raw = raw_output[0]
+                        latents_raw = None
+                    case 2:
+                        predictions_raw = raw_output[0]
+                        latents_raw = raw_output[1]
+                    case _:
+                        predictions_raw = raw_output[0]
+                        latents_raw = raw_output[1:]
+            elif isinstance(raw_output, (dict, TensorDict)) and "predictions" in raw_output:
+                predictions_raw = raw_output["predictions"]
+                latents_raw = (
+                    raw_output.get("latents", None)
+                    if isinstance(raw_output, TensorDict)
+                    else raw_output.get("latents")
+                )
+            else:
+                predictions_raw = raw_output
+                latents_raw = None
 
             if self._config.apply_transforms:
                 predictions_raw = self._apply_output_inverse_transform(predictions_raw)
 
-            if latents_raw is None:
-                return predictions_raw
+            if not isinstance(predictions_raw, torch.Tensor):
+                raise TypeError(
+                    "CheckpointPredictor.predict() requires the primary prediction output "
+                    "to be a torch.Tensor. Return a Tensor directly, a tuple whose first "
+                    "element is a Tensor, or a TensorDict with a 'predictions' tensor."
+                )
 
-            # Unpack latents tuple for clean API: (pred, lat0, lat1, ...)
-            if isinstance(latents_raw, tuple):
-                return (predictions_raw, *latents_raw)
-            return (predictions_raw, latents_raw)
+            latents: tuple[torch.Tensor, ...]
+            if latents_raw is None:
+                latents = ()
+            elif isinstance(latents_raw, tuple):
+                latents = latents_raw
+            else:
+                latents = (latents_raw,)
+
+            if not all(isinstance(latent, torch.Tensor) for latent in latents):
+                raise TypeError(
+                    "CheckpointPredictor.predict() requires all latent outputs to be "
+                    "torch.Tensor instances."
+                )
+
+            raw = raw_output if isinstance(raw_output, TensorDict) else None
+            return PredictionOutput(
+                predictions=predictions_raw,
+                latents=latents,
+                raw=raw,
+            )
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        """Ordered feature names restored from checkpoint metadata."""
+        if self._model_state is None:
+            return ()
+        return self._model_state.feature_names
+
+    @property
+    def predict_target_key(self) -> str:
+        """Target key whose inverse transform applies to direct predictions."""
+        if self._model_state is None:
+            return ""
+        return self._model_state.predict_target_key
 
     def _apply_input_transforms(
         self,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
 import torch
@@ -11,16 +12,15 @@ from typer.testing import CliRunner
 from dlkit.common import ConfigurationError
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.cli.commands.predict import app as predict_app
+from dlkit.interfaces.inference import PredictionOutput
 
 
 def _make_mock_predictor(feature_names: list[str] | None = None) -> MagicMock:
     """Create a mock predictor that returns the predictor's primary tensor output."""
     mock_predictor = MagicMock()
     mock_predictor.is_loaded.return_value = True
-    mock_state = MagicMock()
-    mock_state.metadata = {"feature_names": feature_names or ["x"]}
-    mock_predictor._model_state = mock_state
-    mock_predictor.predict.return_value = torch.tensor([[0.1, 0.9]])
+    mock_predictor.feature_names = tuple(feature_names or ["x"])
+    mock_predictor.predict.return_value = PredictionOutput(predictions=torch.tensor([[0.1, 0.9]]))
     return mock_predictor
 
 
@@ -39,24 +39,25 @@ def _make_mock_datamodule(feature_names: list[str] | None = None) -> MagicMock:
 
 class TestPredictCommand:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
     @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_predict_with_valid_inputs_succeeds(
         self,
         mock_present_result: Mock,
         mock_build_datamodule: Mock,
-        mock_load_model: Mock,
+        mock_load_model_from_settings: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
         sample_settings: GeneralSettings,
     ) -> None:
+        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
-        mock_load_model.return_value = mock_predictor
+        mock_load_model_from_settings.return_value = mock_predictor
 
         mock_build_datamodule.return_value = _make_mock_datamodule()
 
@@ -67,7 +68,7 @@ class TestPredictCommand:
         assert result.exit_code == 0
 
         mock_load_config.assert_called_once()
-        mock_load_model.assert_called_once()
+        mock_load_model_from_settings.assert_called_once()
         mock_predictor.predict.assert_called()
         mock_predictor.unload.assert_called_once()
         mock_present_result.assert_called_once()
@@ -103,14 +104,14 @@ class TestPredictCommand:
         mock_load_config.assert_called_once()
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
     @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_infer_with_parameter_overrides(
         self,
         mock_present_result: Mock,
         mock_build_datamodule: Mock,
-        mock_load_model: Mock,
+        mock_load_model_from_settings: Mock,
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
@@ -118,10 +119,11 @@ class TestPredictCommand:
         sample_settings: GeneralSettings,
         tmp_path: Path,
     ) -> None:
+        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
-        mock_load_model.return_value = mock_predictor
+        mock_load_model_from_settings.return_value = mock_predictor
         mock_build_datamodule.return_value = _make_mock_datamodule()
 
         output_dir = tmp_path / "custom_output"
@@ -217,14 +219,14 @@ class TestPredictMainCallback:
 
 class TestPredictHelperFunctions:
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
     @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_saves_predictions_by_default(
         self,
         mock_present_result: Mock,
         mock_build_datamodule: Mock,
-        mock_load_model: Mock,
+        mock_load_model_from_settings: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
@@ -232,10 +234,11 @@ class TestPredictHelperFunctions:
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
+        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
-        mock_load_model.return_value = mock_predictor
+        mock_load_model_from_settings.return_value = mock_predictor
         mock_build_datamodule.return_value = _make_mock_datamodule()
 
         _run_inference_impl(config_path=sample_config_path, checkpoint=sample_checkpoint_path)
@@ -245,14 +248,14 @@ class TestPredictHelperFunctions:
         assert kwargs.get("save_predictions", True) is True
 
     @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.load_model")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
     @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
     @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
     def test_run_inference_impl_can_disable_prediction_saving(
         self,
         mock_present_result: Mock,
         mock_build_datamodule: Mock,
-        mock_load_model: Mock,
+        mock_load_model_from_settings: Mock,
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
@@ -260,10 +263,11 @@ class TestPredictHelperFunctions:
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
+        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
-        mock_load_model.return_value = mock_predictor
+        mock_load_model_from_settings.return_value = mock_predictor
         mock_build_datamodule.return_value = _make_mock_datamodule()
 
         _run_inference_impl(
@@ -275,3 +279,39 @@ class TestPredictHelperFunctions:
         mock_present_result.assert_called_once()
         args, kwargs = mock_present_result.call_args
         assert kwargs["save_predictions"] is False
+
+    @patch("dlkit.interfaces.cli.commands.predict.load_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
+    @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
+    @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
+    def test_run_inference_impl_uses_public_feature_names_and_settings_loader(
+        self,
+        mock_present_result: Mock,
+        mock_build_datamodule: Mock,
+        mock_load_model_from_settings: Mock,
+        mock_load_config: Mock,
+        sample_config_path: Path,
+        sample_checkpoint_path: Path,
+    ) -> None:
+        from dlkit.interfaces.cli.commands.predict import _run_inference_impl
+
+        settings = SimpleNamespace(has_dataset_config=True)
+        mock_load_config.return_value = settings
+
+        predictor = _make_mock_predictor(feature_names=["x", "z"])
+        mock_load_model_from_settings.return_value = predictor
+        mock_build_datamodule.return_value = _make_mock_datamodule(feature_names=["x", "z"])
+
+        _run_inference_impl(config_path=sample_config_path, checkpoint=sample_checkpoint_path)
+
+        mock_load_model_from_settings.assert_called_once_with(
+            settings,
+            checkpoint_path=sample_checkpoint_path,
+            device="auto",
+            batch_size=32,
+            apply_transforms=True,
+            auto_load=True,
+        )
+        predictor.predict.assert_called_once()
+        called_kwargs = predictor.predict.call_args.kwargs
+        assert sorted(called_kwargs) == ["x", "z"]

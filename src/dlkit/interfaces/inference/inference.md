@@ -7,10 +7,12 @@ implementations.
 
 ## Public Surface
 - `load_model()`
+- `load_model_from_settings()`
 - `validate_checkpoint()`
 - `get_checkpoint_info()`
 - `CheckpointPredictor`
 - `IPredictor`
+- `PredictionOutput`
 - `PredictorConfig`
 
 These symbols are re-exported from `dlkit.engine.inference`.
@@ -31,12 +33,17 @@ These symbols are re-exported from `dlkit.engine.inference`.
 from dlkit import load_model
 
 with load_model("model.ckpt", device="auto") as predictor:
-    prediction = predictor.predict(x=batch)
+    output = predictor.predict(x=batch)
+    predictions = output.predictions
 ```
 
 ## Notes
 - Unified workflow execution no longer handles inference.
 - `execute()` rejects inference settings and points callers to `load_model()`.
+- `load_model_from_settings()` resolves `MODEL.checkpoint` from an
+  `InferenceWorkflowConfig` unless an explicit `checkpoint_path=` override is provided.
+- `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public
+  metadata properties.
 - The runtime predictor owns checkpoint validation, metadata extraction, and
   model lifecycle management.
 

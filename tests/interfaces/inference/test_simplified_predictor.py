@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
+from tensordict import TensorDict
 
 from dlkit.engine.inference.loading import (
     build_model_from_checkpoint,
@@ -24,7 +26,13 @@ from dlkit.engine.inference.loading import (
     validate_checkpoint,
 )
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
-from dlkit.interfaces.inference import CheckpointPredictor, PredictorConfig, load_model
+from dlkit.interfaces.inference import (
+    CheckpointPredictor,
+    PredictionOutput,
+    PredictorConfig,
+    load_model,
+    load_model_from_settings,
+)
 
 
 class TestCheckpointLoading:
@@ -249,8 +257,11 @@ class TestCheckpointPredictor:
         # Positional tensor input — mirrors model.forward(tensor)
         result = predictor.predict(torch.randn(32, 10))
 
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (32, 5)
+        assert isinstance(result, PredictionOutput)
+        assert result.predictions.shape == (32, 5)
+        unpacked = tuple(result)
+        assert unpacked[0].shape == (32, 5)
+        assert result.numpy().shape == (32, 5)
 
     def test_predictor_predict_kwarg(self, simple_checkpoint: Path):
         """Test prediction with a keyword tensor arg."""
@@ -263,8 +274,8 @@ class TestCheckpointPredictor:
         # Kwarg input — mirrors model.forward(weight=tensor)
         result = predictor.predict(input=torch.randn(32, 10))
 
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (32, 5)
+        assert isinstance(result, PredictionOutput)
+        assert result.predictions.shape == (32, 5)
 
     def test_predictor_context_manager(self, simple_checkpoint: Path):
         """Test predictor as context manager."""
@@ -272,9 +283,9 @@ class TestCheckpointPredictor:
 
         with CheckpointPredictor(config) as predictor:
             assert predictor.is_loaded()
-            predictions = predictor.predict(torch.randn(32, 10))
-            assert isinstance(predictions, torch.Tensor)
-            assert predictions.shape == (32, 5)
+            output = predictor.predict(torch.randn(32, 10))
+            assert isinstance(output, PredictionOutput)
+            assert output.predictions.shape == (32, 5)
 
         # Should be unloaded after context exit
         assert not predictor.is_loaded()
@@ -323,11 +334,10 @@ class TestLoadPredictorAPI:
         assert isinstance(predictor, CheckpointPredictor)
         assert predictor.is_loaded()
 
-        # predict() returns Tensor directly for single-output models
         result = predictor.predict(torch.randn(16, 10))
 
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (16, 5)
+        assert isinstance(result, PredictionOutput)
+        assert result.predictions.shape == (16, 5)
 
     def test_load_model_with_precision(self, simple_checkpoint: Path):
         """Test load_model() with precision parameter."""
@@ -340,8 +350,8 @@ class TestLoadPredictorAPI:
         """Test load_model() with context manager."""
         with load_model(simple_checkpoint) as predictor:
             result = predictor.predict(torch.randn(8, 10))
-            assert isinstance(result, torch.Tensor)
-            assert result.shape == (8, 5)
+            assert isinstance(result, PredictionOutput)
+            assert result.predictions.shape == (8, 5)
 
     def test_predictor_preserves_tuple_model_outputs(self, simple_checkpoint: Path):
         """Tuple-valued forward outputs remain supported after Batch cleanup."""
@@ -360,10 +370,70 @@ class TestLoadPredictorAPI:
 
         result = predictor.predict(torch.randn(8, 10))
 
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert result[0].shape == (8, 5)
-        assert result[1].shape == (8, 5)
+        assert isinstance(result, PredictionOutput)
+        assert result.predictions.shape == (8, 5)
+        assert len(result.latents) == 1
+        assert result.latents[0].shape == (8, 5)
+        unpacked = tuple(result)
+        assert unpacked[0].shape == (8, 5)
+        assert unpacked[1].shape == (8, 5)
+
+    def test_predictor_preserves_raw_tensordict_outputs(self, simple_checkpoint: Path):
+        """TensorDict outputs expose the full raw structure alongside predictions."""
+
+        class TensorDictOutputModel(torch.nn.Module):
+            def forward(self, x: torch.Tensor) -> TensorDict:
+                return TensorDict(
+                    {
+                        "predictions": x[:, :5],
+                        "latents": x[:, 5:],
+                    },
+                    batch_size=[x.shape[0]],
+                )
+
+        predictor = load_model(simple_checkpoint, device="cpu")
+        assert predictor._model_state is not None
+
+        predictor._model_state = replace(
+            predictor._model_state,
+            model=TensorDictOutputModel().eval(),
+        )
+
+        result = predictor.predict(torch.randn(8, 10))
+
+        assert isinstance(result, PredictionOutput)
+        assert result.raw is not None
+        assert result.predictions.shape == (8, 5)
+        assert len(result.latents) == 1
+        assert result.latents[0].shape == (8, 5)
+
+    def test_predictor_exposes_checkpoint_metadata_properties(self, simple_checkpoint: Path):
+        """Feature metadata should be available without private state access."""
+        predictor = load_model(simple_checkpoint, device="cpu")
+        assert predictor.feature_names == ()
+        assert predictor.predict_target_key == ""
+
+    def test_load_model_from_settings_uses_explicit_override(self, simple_checkpoint: Path):
+        """Explicit checkpoint override should win over settings."""
+        settings = SimpleNamespace(
+            MODEL=SimpleNamespace(checkpoint=Path("/tmp/ignored.ckpt")),
+        )
+
+        predictor = load_model_from_settings(
+            settings, checkpoint_path=simple_checkpoint, device="cpu"
+        )
+
+        assert predictor.is_loaded()
+        assert predictor._config.checkpoint_path == simple_checkpoint
+
+    def test_load_model_from_settings_requires_checkpoint(self):
+        """Missing checkpoint in both settings and override should raise clearly."""
+        settings = SimpleNamespace(MODEL=SimpleNamespace(checkpoint=None))
+
+        from dlkit.common import ConfigurationError
+
+        with pytest.raises(ConfigurationError, match="No checkpoint path found"):
+            load_model_from_settings(settings)
 
 
 if __name__ == "__main__":

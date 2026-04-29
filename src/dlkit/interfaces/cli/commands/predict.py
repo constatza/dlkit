@@ -15,7 +15,6 @@ Notes:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import cast
 
 import typer
@@ -24,7 +23,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
 from dlkit.interfaces.api import build_inference_datamodule
-from dlkit.interfaces.inference import load_model
+from dlkit.interfaces.inference import load_model_from_settings
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_inference_result
@@ -71,25 +70,9 @@ def _run_inference_impl(
       takes precedence.
     - Overrides: `--output-dir`, `--dataflow-dir`, `--batch-size`.
     """
-    # Load configuration first to resolve optional checkpoint
+    # Load configuration first so checkpoint resolution stays in the inference API.
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = load_config(config_path, root_dir=root_dir)
-
-    # Resolve checkpoint: CLI argument wins; otherwise, use config [MODEL].checkpoint
-    effective_checkpoint: Path | None = checkpoint
-    try:
-        if effective_checkpoint is None and getattr(settings, "MODEL", None) is not None:
-            cfg_ckpt = getattr(settings.MODEL, "checkpoint", None)
-            if cfg_ckpt:
-                from pathlib import Path as _P
-
-                effective_checkpoint = _P(str(cfg_ckpt))
-    except Exception:
-        pass
-
-    if effective_checkpoint is None or not effective_checkpoint.exists():
-        console.print(f"[red]Checkpoint file not found: {checkpoint}[/red]")
-        raise typer.Exit(1)
+    settings = cast(InferenceWorkflowConfig, load_config(config_path, root_dir=root_dir))
 
     # Show applied overrides
     override_messages = []
@@ -107,7 +90,7 @@ def _run_inference_impl(
         for msg in override_messages:
             console.print(f"  • {msg}")
 
-    console.print(f"🔮 Loading model from checkpoint: {effective_checkpoint}")
+    console.print(f"🔮 Loading model from checkpoint: {checkpoint}")
 
     # Execute inference using new stateful predictor API
     with Progress(
@@ -120,8 +103,9 @@ def _run_inference_impl(
 
         effective_batch_size = batch_size if batch_size is not None else 32
 
-        predictor = load_model(
-            checkpoint_path=effective_checkpoint,
+        predictor = load_model_from_settings(
+            settings,
+            checkpoint_path=checkpoint,
             device="auto",
             batch_size=effective_batch_size,
             apply_transforms=True,
@@ -133,15 +117,9 @@ def _run_inference_impl(
         inference_task = progress.add_task("Running inference...", total=None)
 
         # Get ordered feature names for kwarg dispatch (from checkpoint metadata)
-        feature_names: tuple[str, ...] = (
-            predictor._model_state.feature_names if predictor._model_state is not None else ()
-        )
+        feature_names = predictor.feature_names
 
-        datamodule = (
-            build_inference_datamodule(cast(InferenceWorkflowConfig, settings))
-            if getattr(settings, "has_batch_inference_config", False)
-            else None
-        )
+        datamodule = build_inference_datamodule(settings) if settings.has_dataset_config else None
         if datamodule is not None:
             datamodule.setup("predict")
             loader = datamodule.predict_dataloader()
@@ -162,8 +140,7 @@ def _run_inference_impl(
                 feature_kwargs = {k: features_td[k] for k in features_td.keys()}
 
             output = predictor.predict(**feature_kwargs)
-            # Extract primary prediction (first element of tuple, or the tensor itself)
-            prediction = output[0] if isinstance(output, tuple) else output
+            prediction = output.predictions
             if isinstance(prediction, _torch.Tensor):
                 all_predictions.append(prediction)
 

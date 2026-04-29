@@ -20,15 +20,26 @@ class TestPredictorAPIImports:
 
     def test_import_predictor_classes(self):
         """Test importing predictor classes."""
-        from dlkit.interfaces.inference import CheckpointPredictor, IPredictor, PredictorConfig
+        from dlkit.interfaces.inference import (
+            CheckpointPredictor,
+            IPredictor,
+            PredictionOutput,
+            PredictorConfig,
+        )
 
         assert CheckpointPredictor is not None
         assert IPredictor is not None
+        assert PredictionOutput is not None
         assert PredictorConfig is not None
 
     def test_import_utilities(self):
         """Test importing utility functions."""
-        from dlkit.interfaces.inference import get_checkpoint_info, validate_checkpoint
+        from dlkit.interfaces.inference import (
+            get_checkpoint_info,
+            load_model_from_settings,
+            validate_checkpoint,
+        )
 
         assert callable(validate_checkpoint)
         assert callable(get_checkpoint_info)
+        assert callable(load_model_from_settings)
