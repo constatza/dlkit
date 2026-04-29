@@ -17,6 +17,7 @@ import pytest
 from pydantic import BaseModel
 
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.factories import load_settings
 from dlkit.infrastructure.io.config import (
     ConfigValidationError,
     load_sections_config,
@@ -230,3 +231,19 @@ module_path = "torch.nn"
         assert config_obj.DATAMODULE is None
         assert config_obj.DATASET is None
         assert config_obj.MODEL is None
+
+
+class TestWorkflowLoaderParseErrors:
+    """Ensure workflow loading surfaces parse failures instead of defaulting to train."""
+
+    def test_load_settings_raises_config_validation_error_for_malformed_toml(
+        self, tmp_path: Path
+    ) -> None:
+        config = tmp_path / "malformed.toml"
+        config.write_text("""
+[SESSION
+workflow = "optimize"
+""")
+
+        with pytest.raises(ConfigValidationError, match="workflow discriminator"):
+            load_settings(config)

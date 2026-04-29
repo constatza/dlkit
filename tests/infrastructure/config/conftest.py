@@ -72,11 +72,11 @@ def sample_general_settings_data() -> dict[str, Any]:
             "name": "test_general_session",
             "workflow": "train",
             "seed": 42,
-            "precision": "medium",
+            "precision": "single",
         },
         "MODEL": {
             "name": "TestModel",
-            "module_path": "test.models",
+            "module_path": "dlkit.domain.nn.ffnn",
             "heads": 4,
             "num_layers": 3,
             "latent_size": 128,
@@ -88,12 +88,15 @@ def sample_general_settings_data() -> dict[str, Any]:
         "OPTUNA": {"enabled": True, "n_trials": 50},
         "DATAMODULE": {
             "name": "TestDataModule",
-            "module_path": "test.datamodules",
+            "module_path": "dlkit.engine.adapters.lightning.datamodules",
             "dataloader": {
                 "batch_size": 64,
             },
         },
-        "DATASET": {"name": "TestDataset", "module_path": "test.datasets"},
+        "DATASET": {
+            "name": "TestDataset",
+            "module_path": "dlkit.engine.data.datasets",
+        },
         "TRAINING": {
             "epochs": 20,
             "trainer": {"accelerator": "cpu", "devices": 1},
@@ -121,11 +124,11 @@ def inference_config_data(tmp_path) -> dict[str, Any]:
             "name": "inference_session",
             "workflow": "inference",
             "seed": 123,
-            "precision": "medium",
+            "precision": "single",
         },
         "MODEL": {
             "name": "InferenceModel",
-            "module_path": "test.models",
+            "module_path": "dlkit.domain.nn.ffnn",
             "checkpoint": str(checkpoint_file),
         },
     }
@@ -143,11 +146,11 @@ def invalid_inference_config_data() -> dict[str, Any]:
             "name": "invalid_inference",
             "workflow": "inference",
             "seed": 42,
-            "precision": "medium",
+            "precision": "single",
         },
         "MODEL": {
             "name": "InferenceModel",
-            "module_path": "test.models",
+            "module_path": "dlkit.domain.nn.ffnn",
             # Missing required checkpoint for inference
         },
     }
@@ -165,11 +168,11 @@ def sample_toml_config_advanced() -> str:
 name = "advanced_session"
 workflow = "train"
 seed = 999
-precision = "high"
+precision = "single"
 
 [MODEL]
 name = "AdvancedModel"
-module_path = "advanced.models"
+module_path = "dlkit.domain.nn.ffnn"
 heads = 8
 num_layers = 6
 latent_size = 256
@@ -193,7 +196,7 @@ seed = 42
 
 [DATAMODULE]
 name = "AdvancedDataModule"
-module_path = "advanced.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 batch_size = 128
 num_workers = 8
 
@@ -204,7 +207,7 @@ num_workers = 8
 
 [DATASET]
 name = "AdvancedDataset"
-module_path = "advanced.datasets"
+module_path = "dlkit.engine.data.datasets"
 train_split = 0.7
 val_split = 0.2
 test_split = 0.1
@@ -269,7 +272,7 @@ workflow = "train"
 
 [MODEL]
 name = "OptunaModel"
-module_path = "test.models"
+module_path = "dlkit.domain.nn.ffnn"
 
 [OPTUNA]
 enabled = true

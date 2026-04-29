@@ -23,6 +23,7 @@ Note: ``exclude=True`` fields (e.g. ``ValueBasedEntry.value``) are preserved by
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
@@ -45,6 +46,27 @@ def _auto_section_name(cls: type) -> str:
     """
     name = cls.__name__
     return name[:-8].upper() if name.endswith("Settings") else name.upper()
+
+
+def validate_module_path_import(v: str | None) -> str | None:
+    """Validate that a dotted module path can be imported.
+
+    Args:
+        v: Candidate module path.
+
+    Returns:
+        The original value when import succeeds or the value is ``None``.
+
+    Raises:
+        ValueError: If the module cannot be imported.
+    """
+    if v is None:
+        return None
+    try:
+        importlib.import_module(v)
+    except ImportError as exc:
+        raise ValueError(f"module_path '{v}' cannot be imported: {exc}") from exc
+    return v
 
 
 class BasicSettings(BaseSettings):

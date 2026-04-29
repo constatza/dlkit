@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
-from .core.base_settings import ComponentSettings, HyperParameterSettings
+from .core.base_settings import (
+    ComponentSettings,
+    HyperParameterSettings,
+    validate_module_path_import,
+)
 from .dataloader_settings import DataloaderSettings
 from .enums import DataModuleName
 
@@ -42,3 +46,8 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
     dataloader: DataloaderSettings = Field(
         default_factory=DataloaderSettings, description="DataLoader configuration"
     )
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)

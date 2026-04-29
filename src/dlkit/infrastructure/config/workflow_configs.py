@@ -19,7 +19,8 @@ Architecture Principles:
 
 from __future__ import annotations
 
-from typing import Any, Self
+import warnings
+from typing import Any
 
 from pydantic import Field, model_validator
 
@@ -111,20 +112,6 @@ class TrainingWorkflowConfig(BasicSettings):
         description="Free-form user settings (ignored by core)",
     )
 
-    @model_validator(mode="after")
-    def _enforce_workflow_mode(self) -> Self:
-        """Validate that SESSION.workflow matches 'train'.
-
-        Raises:
-            ValueError: If SESSION is present but workflow mode is not 'train'.
-        """
-        if self.SESSION and self.SESSION.workflow != "train":
-            raise ValueError(
-                f"TrainingWorkflowConfig requires SESSION.workflow = 'train', "
-                f"got {self.SESSION.workflow!r}"
-            )
-        return self
-
     # Convenience properties
     @property
     def mlflow_enabled(self) -> bool:
@@ -201,6 +188,13 @@ class InferenceWorkflowConfig(BasicSettings):
         - PATHS: Custom path overrides
         - EXTRAS: Free-form user settings
 
+    For batch prediction, provide both DATASET and DATAMODULE. For
+    single-sample inference, omit both and use ``load_model()`` directly.
+
+    For batch prediction, provide both DATASET and DATAMODULE sections.
+    For single-sample checkpoint inference, omit both and use ``load_model()``
+    or ``load_model_from_settings()`` directly.
+
     Note: Training-specific sections (TRAINING, MLFLOW, OPTUNA) are deliberately
     excluded per Interface Segregation Principle.
 
@@ -246,23 +240,9 @@ class InferenceWorkflowConfig(BasicSettings):
         description="Free-form user settings (ignored by core)",
     )
 
-    @model_validator(mode="after")
-    def _enforce_workflow_mode(self) -> Self:
-        """Validate that SESSION.workflow matches 'inference'.
-
-        Raises:
-            ValueError: If SESSION is present but workflow mode is not 'inference'.
-        """
-        if self.SESSION and self.SESSION.workflow != "inference":
-            raise ValueError(
-                f"InferenceWorkflowConfig requires SESSION.workflow = 'inference', "
-                f"got {self.SESSION.workflow!r}"
-            )
-        return self
-
     @property
-    def has_batch_inference_config(self) -> bool:
-        """Check if batch inference config is available."""
+    def has_dataset_config(self) -> bool:
+        """Check if dataset-backed batch prediction config is available."""
         return self.DATAMODULE is not None and self.DATASET is not None
 
     @property
@@ -375,16 +355,21 @@ class OptimizationWorkflowConfig(BasicSettings):
     )
 
     @model_validator(mode="after")
-    def _enforce_workflow_mode(self) -> Self:
-        """Validate that SESSION.workflow matches 'optimize'.
+    def _validate_optuna_model_keys(self) -> OptimizationWorkflowConfig:
+        """Warn when OPTUNA.model contains keys outside the MODEL schema."""
+        if self.MODEL is None or not self.OPTUNA.model:
+            return self
 
-        Raises:
-            ValueError: If SESSION is present but workflow mode is not 'optimize'.
-        """
-        if self.SESSION and self.SESSION.workflow != "optimize":
-            raise ValueError(
-                f"OptimizationWorkflowConfig requires SESSION.workflow = 'optimize', "
-                f"got {self.SESSION.workflow!r}"
+        model_fields = set(type(self.MODEL).model_fields.keys())
+        model_fields.update((self.MODEL.model_extra or {}).keys())
+        optuna_keys = set(self.OPTUNA.model.keys())
+        unknown = optuna_keys - model_fields - {"lr", "weight_decay"}
+        if unknown:
+            warnings.warn(
+                f"OPTUNA.model contains keys not in MODEL: {sorted(unknown)}. "
+                "These ranges will be ignored.",
+                UserWarning,
+                stacklevel=2,
             )
         return self
 

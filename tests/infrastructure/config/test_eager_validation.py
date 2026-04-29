@@ -9,6 +9,7 @@ This module tests the new eager validation system where:
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,14 @@ from dlkit.infrastructure.config.data_entries import Feature, Target
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.model_components import (
+    LossComponentSettings,
+    MetricComponentSettings,
+    ModelComponentSettings,
+)
+from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
+from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.validators import (
     ConfigValidationError,
     validate_inference_config_complete,
@@ -152,6 +160,28 @@ class TestEagerValidationSuccessCases:
         assert config.MODEL.checkpoint is not None
         assert str(config.MODEL.checkpoint) == str(checkpoint_path)
 
+    def test_inference_config_exposes_has_dataset_config(self, tmp_path: Path):
+        checkpoint_path = tmp_path / "model.ckpt"
+        checkpoint_path.write_text("fake checkpoint")
+
+        config = InferenceWorkflowConfig.model_validate(
+            {
+                "SESSION": {"name": "predict", "workflow": "inference"},
+                "MODEL": {
+                    "name": "LinearNetwork",
+                    "module_path": "dlkit.domain.nn.ffnn",
+                    "checkpoint": str(checkpoint_path),
+                },
+                "DATAMODULE": {
+                    "name": "InMemoryModule",
+                    "module_path": "dlkit.engine.adapters.lightning.datamodules",
+                },
+                "DATASET": {"name": "FlexibleDataset"},
+            }
+        )
+
+        assert config.has_dataset_config is True
+
     def test_programmatic_section_injection_succeeds(self, tmp_path: Path):
         """Test that sections can be injected programmatically after load."""
         # Create real data files
@@ -261,6 +291,84 @@ class TestEagerValidationFailureCases:
 
         error_msg = str(exc_info.value)
         assert "TRAINING" in error_msg
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: DataModuleSettings(module_path="dlkit.not_a_real_module"),
+            lambda: DatasetSettings(
+                name="BrokenDataset",
+                module_path="dlkit.not_a_real_module",
+            ),
+            lambda: ModelComponentSettings(
+                name="BrokenModel",
+                module_path="dlkit.not_a_real_module",
+            ),
+            lambda: OptimizerSettings(module_path="dlkit.not_a_real_module"),
+            lambda: LossComponentSettings(module_path="dlkit.not_a_real_module"),
+            lambda: MetricComponentSettings(module_path="dlkit.not_a_real_module"),
+            lambda: OptunaSettings(sampler={"module_path": "dlkit.not_a_real_module"}),
+            lambda: OptunaSettings(pruner={"module_path": "dlkit.not_a_real_module"}),
+        ],
+    )
+    def test_invalid_module_paths_fail_at_load_time(self, factory) -> None:
+        with pytest.raises(ValidationError, match="module_path"):
+            factory()
+
+
+class TestWorkflowCrossValidation:
+    """Test workflow-level cross-section validation."""
+
+    def test_optimization_config_warns_for_unknown_optuna_model_keys(self) -> None:
+        config_dict = {
+            "SESSION": {"name": "optuna_warning", "workflow": "optimize"},
+            "TRAINING": {"epochs": 2},
+            "OPTUNA": {"enabled": True, "model": {"bogus": {"low": 1, "high": 2}}},
+            "MODEL": {"name": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+        }
+
+        with pytest.warns(UserWarning, match="OPTUNA.model contains keys not in MODEL"):
+            OptimizationWorkflowConfig.model_validate(config_dict)
+
+    def test_optimization_config_allows_optuna_keys_for_model_extra_fields(self) -> None:
+        config_dict = {
+            "SESSION": {"name": "optuna_extra", "workflow": "optimize"},
+            "TRAINING": {"epochs": 2},
+            "OPTUNA": {"enabled": True, "model": {"dropout": {"low": 0.1, "high": 0.5}}},
+            "MODEL": {
+                "name": "LinearNetwork",
+                "module_path": "dlkit.domain.nn.ffnn",
+                "dropout": 0.2,
+            },
+        }
+
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            OptimizationWorkflowConfig.model_validate(config_dict)
+
+        assert not recorded
+
+
+class TestSessionPrecisionAliases:
+    """Ensure session precision accepts Lightning-style aliases."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (32, "32"),
+            ("32", "32"),
+            (16, "16"),
+            ("16", "16"),
+            ("16-mixed", "16-mixed"),
+            (64, "64"),
+            ("64", "64"),
+            ("bf16", "bf16"),
+            ("bf16-mixed", "bf16-mixed"),
+        ],
+    )
+    def test_precision_aliases_are_normalized(self, value: object, expected: str) -> None:
+        settings = SessionSettings(precision=value)
+        assert str(settings.precision) == expected
 
 
 # ============================================================================

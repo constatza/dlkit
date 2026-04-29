@@ -1,10 +1,14 @@
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
-from .core.base_settings import ComponentSettings, HyperParameterSettings
+from .core.base_settings import (
+    ComponentSettings,
+    HyperParameterSettings,
+    validate_module_path_import,
+)
 from .core.types import FloatHyperparameter, PositiveFloatHyperparameter
 
 
@@ -26,6 +30,11 @@ class OptimizerSettings(ComponentSettings, HyperParameterSettings):
         default=1e-3, description="Learning rate", alias="learning_rate"
     )
     weight_decay: FloatHyperparameter = Field(default=0.0, description="Optional weight decay")
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
 
 class SchedulerSettings(ComponentSettings):

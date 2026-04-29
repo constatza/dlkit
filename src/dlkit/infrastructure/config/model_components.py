@@ -14,6 +14,7 @@ from .core.base_settings import (
     ComponentSettings,
     HyperParameterSettings,
     RequiredNameComponentSettings,
+    validate_module_path_import,
 )
 from .core.types import IntHyperparameter
 from .optimizer_policy import OptimizerPolicySettings
@@ -117,6 +118,11 @@ class MetricComponentSettings(ComponentSettings):
         if v is not None:
             _validate_batch_key(v)
         return v
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +249,11 @@ class LossComponentSettings(ComponentSettings):
         if v is not None:
             _validate_batch_key(v)
         return v
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +407,11 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
         default=None, description="Number of output channels"
     )
     num_heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
 
 class WrapperComponentSettings(ComponentSettings):

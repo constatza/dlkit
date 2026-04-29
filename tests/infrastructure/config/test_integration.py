@@ -131,7 +131,7 @@ def complete_config_data() -> dict[str, Any]:
         },
         "MODEL": {
             "name": "IntegrationModel",
-            "module_path": "test.models",
+            "module_path": "dlkit.domain.nn.ffnn",
             "input_size": 128,
             "output_size": 10,
         },
@@ -139,7 +139,7 @@ def complete_config_data() -> dict[str, Any]:
         "OPTUNA": {"enabled": True, "n_trials": 10},
         "DATAMODULE": {
             "name": "IntegrationDataModule",
-            "module_path": "test.datamodules",
+            "module_path": "dlkit.engine.adapters.lightning.datamodules",
             "dataloader": {
                 "batch_size": 64,
                 "num_workers": 8,
@@ -168,7 +168,7 @@ seed = 42
 
 [MODEL]
 name = "IntegrationModel"
-module_path = "test.models"
+module_path = "dlkit.domain.nn.ffnn"
 input_size = 128
 output_size = 10
 
@@ -181,7 +181,7 @@ n_trials = 10
 
 [DATAMODULE]
 name = "IntegrationDataModule"
-module_path = "test.datamodules"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
 batch_size = 64
@@ -293,7 +293,7 @@ class TestSettingsFactoryIntegration:
         settings = ModelComponentSettings.model_validate(
             {
                 "name": "MockModel",
-                "module_path": "test.models.mock",
+                "module_path": "tests.infrastructure.config.test_integration",
                 "input_size": 64,
             }
         )
@@ -303,7 +303,10 @@ class TestSettingsFactoryIntegration:
 
         assert isinstance(result, MockModel)
         assert result.input_size == 64
-        mock_import.assert_called_once_with("MockModel", fallback_module="test.models.mock")
+        mock_import.assert_called_once_with(
+            "MockModel",
+            fallback_module="tests.infrastructure.config.test_integration",
+        )
 
 
 class TestGeneralSettingsEndToEndIntegration:

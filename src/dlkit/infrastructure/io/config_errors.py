@@ -1,6 +1,9 @@
-"""Configuration error types for TOML config loading."""
+"""Configuration error types for TOML config loading.
 
-from typing import Any
+ConfigValidationError is the canonical class; imported here for backward compatibility.
+"""
+
+from dlkit.infrastructure.config.validators import ConfigValidationError
 
 
 class ConfigSectionError(ValueError):
@@ -17,10 +20,4 @@ class ConfigSectionError(ValueError):
         self.available_sections = available_sections or []
 
 
-class ConfigValidationError(ValueError):
-    """Raised when config validation fails."""
-
-    def __init__(self, message: str, model_class: str, section_data: dict[str, Any] | None = None):
-        super().__init__(message)
-        self.model_class = model_class
-        self.section_data = section_data or {}
+__all__ = ["ConfigSectionError", "ConfigValidationError"]

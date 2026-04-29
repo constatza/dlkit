@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
+
+from dlkit.infrastructure.config.validators import ConfigValidationError
 
 from .workflow_configs import (
     InferenceWorkflowConfig,
@@ -37,14 +40,20 @@ class WorkflowSettingsLoader:
 
         path = Path(config_path)
 
-        # Minimal read to determine workflow mode without full validation
+        # Minimal read to determine workflow mode without full validation.
+        # Parse failures here must surface clearly instead of silently falling
+        # back to the training discriminator.
         try:
-            import tomlkit
-
-            raw = tomlkit.loads(path.read_text())
+            raw = tomllib.loads(path.read_text())
             mode = raw.get("SESSION", {}).get("workflow", "train")
-        except Exception:
-            mode = "train"
+        except FileNotFoundError:
+            raise
+        except Exception as exc:
+            raise ConfigValidationError(
+                f"Failed to read workflow discriminator from {path}: {exc}",
+                model_class="WorkflowSettingsLoader",
+                section_data={"config_path": str(path)},
+            ) from exc
 
         # Load full TOML as a dict
         source = DLKitTomlSource(path)
