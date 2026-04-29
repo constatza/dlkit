@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from torch import Tensor, nn
 
 from dlkit.domain.nn.primitives import SkipConnection
 from dlkit.domain.nn.utils import make_norm_layer
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class ParametricDenseBlock(nn.Module):
@@ -152,6 +157,15 @@ class EmbeddedParametricFFNN(nn.Module):
             dropout=dropout,
         )
         self.regression_layer = nn.Linear(hidden_size, out_features)
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> EmbeddedParametricFFNN:
+        """Build the network from a dataset-derived flat shape summary."""
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass: embedding → body → regression.

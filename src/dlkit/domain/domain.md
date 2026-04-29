@@ -28,7 +28,9 @@ expects that canonical format.
 
 ## Transforms
 The transform pipeline surface uses `TransformContext` as the runtime-facing
-value object around feature/target transform chains.
+value object around feature/target transform chains. Capability checks are
+Protocol-based only; `dlkit.domain.transforms.base` is the canonical home for
+`FittableTransform`, `InvertibleTransform`, and `ShapeAwareTransform`.
 
 These modules provide value-level and algorithmic behavior that runtime services
 can consume without pulling orchestration back into the domain layer.

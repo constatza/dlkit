@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -11,6 +14,9 @@ from dlkit.domain.nn.encoder.latent import (
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class SkipCAE1d(CAE):
@@ -73,6 +79,15 @@ class SkipCAE1d(CAE):
             activation=activation,
             dropout=dropout,
             dilation=dilation,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> SkipCAE1d:
+        """Build the autoencoder from a 1-D convolutional shape summary."""
+        return cls(
+            in_channels=shape.in_channels,
+            in_length=shape.in_length,
+            **kwargs,
         )
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:

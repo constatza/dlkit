@@ -6,6 +6,8 @@ and dimension permutation helpers for temporal data.
 
 from __future__ import annotations
 
+import warnings
+
 import torch
 
 from dlkit.domain.nn.attention.basic import SelfAttentionBlock
@@ -110,6 +112,8 @@ class TestTransformerEncoderBlock:
         te2 = TransformerEncoderBlock(embed_dim=4, num_heads=2)
         assert te1.transformer_layer.self_attn.num_heads == 1
         assert te2.transformer_layer.self_attn.num_heads == 2
+        assert te1.transformer_layer.self_attn.batch_first is True
+        assert te2.transformer_layer.self_attn.batch_first is True
 
     def test_configurable_num_layers(self) -> None:
         """Should support different numbers of layers."""
@@ -124,6 +128,15 @@ class TestTransformerEncoderBlock:
         out = te(temporal_input)
         # Transformer should transform the input (not be identity)
         assert not torch.allclose(out, temporal_input, atol=1e-5)
+
+    def test_odd_num_heads_avoids_nested_tensor_warning(self, temporal_input: torch.Tensor) -> None:
+        """Odd-head configurations should disable the unused fast path without warning."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            te = TransformerEncoderBlock(embed_dim=2, num_heads=1, num_layers=1)
+            te(temporal_input)
+
+        assert all("enable_nested_tensor is True" not in str(warning.message) for warning in caught)
 
 
 class TestTransformerDecoderBlock:
@@ -169,6 +182,8 @@ class TestTransformerDecoderBlock:
         td2 = TransformerDecoderBlock(embed_dim=4, num_heads=2)
         assert td1.transformer_layer.self_attn.num_heads == 1
         assert td2.transformer_layer.self_attn.num_heads == 2
+        assert td1.transformer_layer.self_attn.batch_first is True
+        assert td2.transformer_layer.self_attn.batch_first is True
 
     def test_configurable_num_layers(self) -> None:
         """Should support different numbers of layers."""

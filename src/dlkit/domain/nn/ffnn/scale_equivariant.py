@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import torch
 from torch import Tensor, nn
 
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class ScaleEquivariantFFNN(nn.Module):
@@ -153,4 +156,13 @@ class ScaleEquivariantConstantWidthFFNN(ScaleEquivariantFFNN):
             norm=norm,
             eps_gain=eps_gain,
             keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantConstantWidthFFNN:
+        """Build the wrapper from a dataset-derived flat shape summary."""
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
         )

@@ -1,8 +1,13 @@
-from typing import Literal
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
 
 from torch import Tensor, nn
 
 from dlkit.domain.nn.utils import make_norm_layer
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class LinearNetwork(nn.Module):
@@ -29,6 +34,15 @@ class LinearNetwork(nn.Module):
         super().__init__()
         self.linear = nn.Linear(in_features, out_features, bias=bias)
         self.norm: nn.Module = make_norm_layer(normalize, out_features)
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> LinearNetwork:
+        """Build the network from a dataset-derived flat shape summary."""
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the linear network.

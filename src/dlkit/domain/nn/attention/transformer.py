@@ -28,6 +28,12 @@ def _batch_first(x: torch.Tensor) -> torch.Tensor:
     return x.permute(1, 2, 0)
 
 
+def switch_channels_with_time(x: torch.Tensor) -> torch.Tensor:
+    """Swap the channel and time axes in a batch-first temporal tensor."""
+
+    return x.permute(0, 2, 1)
+
+
 class TransformerEncoderBlock(nn.Module):
     """Transformer encoder block for temporal data.
 
@@ -44,9 +50,15 @@ class TransformerEncoderBlock(nn.Module):
             num_layers: Number of transformer encoder layers. Defaults to 1.
         """
         super().__init__()
-        self.transformer_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads)
+        self.transformer_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=num_heads,
+            batch_first=True,
+        )
         self.transformer_encoder = nn.TransformerEncoder(
-            self.transformer_layer, num_layers=num_layers
+            self.transformer_layer,
+            num_layers=num_layers,
+            enable_nested_tensor=num_heads % 2 == 0,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -58,7 +70,7 @@ class TransformerEncoderBlock(nn.Module):
         Returns:
             Encoded tensor of shape (batch, channels, time).
         """
-        return _batch_first(self.transformer_encoder(_seq_first(x)))
+        return switch_channels_with_time(self.transformer_encoder(switch_channels_with_time(x)))
 
 
 class TransformerDecoderBlock(nn.Module):
@@ -77,7 +89,11 @@ class TransformerDecoderBlock(nn.Module):
             num_layers: Number of transformer decoder layers. Defaults to 1.
         """
         super().__init__()
-        self.transformer_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads)
+        self.transformer_layer = nn.TransformerDecoderLayer(
+            d_model=embed_dim,
+            nhead=num_heads,
+            batch_first=True,
+        )
         self.transformer_decoder = nn.TransformerDecoder(
             self.transformer_layer, num_layers=num_layers
         )
@@ -94,4 +110,9 @@ class TransformerDecoderBlock(nn.Module):
             Decoded tensor of shape (batch, channels, time).
         """
         mem = x if memory is None else memory
-        return _batch_first(self.transformer_decoder(_seq_first(x), _seq_first(mem)))
+        return switch_channels_with_time(
+            self.transformer_decoder(
+                switch_channels_with_time(x),
+                switch_channels_with_time(mem),
+            )
+        )

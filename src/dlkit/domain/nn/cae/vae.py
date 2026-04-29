@@ -1,6 +1,9 @@
 """Variational Autoencoder for 1D convolutional data."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -10,6 +13,9 @@ from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBl
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -131,6 +137,15 @@ class VAE1d(nn.Module):
         )
         self.mu_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
         self.logvar_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> VAE1d:
+        """Build the VAE from a 1-D convolutional shape summary."""
+        return cls(
+            in_channels=shape.in_channels,
+            in_length=shape.in_length,
+            **kwargs,
+        )
 
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode input to latent distribution parameters.

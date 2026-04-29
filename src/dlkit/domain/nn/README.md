@@ -24,16 +24,16 @@ parameter contracts. No runtime orchestration or engine concerns belong here.
 ## Model Factory
 
 `dlkit.domain.nn.factory.build_model` constructs any `nn.Module` from a class
-and a `ShapeSummary`. It selects one of four strategies automatically:
+and an optional `ShapeSummary`.
 
-| Strategy | Condition |
-|---|---|
-| **no-shape** | `shape is None` — passes kwargs only |
-| **lazy** | `LazyModuleMixin` subclass — injects output-dim alias |
-| **ffnn** | constructor has `in_features` / `input_dim` / `input_size` |
-| **conv** | constructor has `in_channels` |
+- If the model exposes `from_shape(shape, **kwargs)`, the factory calls that
+  explicit shape-aware constructor.
+- Otherwise the factory calls the model directly with `**kwargs` and performs
+  no implicit shape injection.
 
-Explicit user kwargs always override shape-injected values.
+Built-in flat-input, operator, spectral, and 1-D convolutional entrypoints
+implement `from_shape()` where dataset-driven construction is part of the
+public contract.
 
 ---
 

@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import torch
 import torch.nn.functional as F
@@ -14,6 +16,9 @@ from dlkit.domain.nn.ffnn.parametric_variants import (
     EmbeddedSPDFFNN,
 )
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 def ScaleEquivariantConstantWidthSPDFFNN(
@@ -362,3 +367,25 @@ def ScaleEquivariantEmbeddedFactorizedFFNN(
         eps_gain=eps_gain,
         keep_stats=keep_stats,
     )
+
+
+def _from_flat_shape(factory: Callable[..., ScaleEquivariantFFNN]):
+    def _builder(shape: ShapeSummary, **kwargs: Any) -> ScaleEquivariantFFNN:
+        return factory(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
+        )
+
+    return _builder
+
+
+cast(Any, ScaleEquivariantEmbeddedSPDFFNN).from_shape = _from_flat_shape(
+    ScaleEquivariantEmbeddedSPDFFNN
+)
+cast(Any, ScaleEquivariantEmbeddedSPDFactorizedFFNN).from_shape = _from_flat_shape(
+    ScaleEquivariantEmbeddedSPDFactorizedFFNN
+)
+cast(Any, ScaleEquivariantEmbeddedFactorizedFFNN).from_shape = _from_flat_shape(
+    ScaleEquivariantEmbeddedFactorizedFFNN
+)

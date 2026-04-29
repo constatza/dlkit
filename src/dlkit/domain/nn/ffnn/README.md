@@ -26,6 +26,18 @@ Multi-layer perceptron architectures for regression and classification tasks.
 > so wrapping a purely linear layer in `ScaleEquivariantFFNN` adds no expressive power.
 > `ScaleEquivariantFFNN` is only meaningful when the base model contains nonlinearities.
 
+## Shape-aware construction
+
+Models in this module that require dataset dimensions now opt in explicitly via
+`from_shape(shape, **kwargs)`. The shared model factory no longer guesses
+constructor parameters from names like `in_features` or `out_features`.
+
+- `FeedForwardNN`, `SimpleFeedForwardNN`, `LinearNetwork`,
+  `EmbeddedParametricFFNN`, and their subclasses build from
+  `shape.in_features` / `shape.out_features`.
+- `ScaleEquivariantConstantWidthFFNN` and the embedded
+  scale-equivariant parametric builders expose the same explicit contract.
+
 ---
 
 ## LinearNetwork
