@@ -3,6 +3,9 @@ import builtins
 import pytest
 
 from dlkit.infrastructure.registry import (
+    describe_model,
+    list_registered_datasets,
+    list_registered_models,
     register_datamodule,
     register_dataset,
     register_loss,
@@ -88,3 +91,46 @@ def test_register_metric_and_datamodule_basic():
     assert resolve_component("metric", "MyMetric") is MyMetric
     # Forced selection ignores provided name
     assert resolve_component("datamodule", name="Anything") is MyDM
+
+
+def test_list_registered_models_returns_sorted_canonical_names():
+    class ZedModel:
+        pass
+
+    class AlphaModel:
+        pass
+
+    register_model(name="zed")(ZedModel)
+    register_model(name="alpha", aliases=["a"])(AlphaModel)
+
+    assert list_registered_models() == ["alpha", "zed"]
+
+
+def test_list_registered_datasets_returns_sorted_canonical_names():
+    class DatasetB:
+        pass
+
+    class DatasetA:
+        pass
+
+    register_dataset(name="dataset_b")(DatasetB)
+    register_dataset(name="dataset_a", aliases=["a"])(DatasetA)
+
+    assert list_registered_datasets() == ["dataset_a", "dataset_b"]
+
+
+def test_describe_model_reports_aliases_and_forced_state():
+    class MyModel:
+        pass
+
+    register_model(name="MyModel", aliases=["mynet"], use=True)(MyModel)
+
+    entry = describe_model("mynet")
+
+    assert entry.kind == "model"
+    assert entry.name == "MyModel"
+    assert entry.target is MyModel
+    assert entry.aliases == ("mynet",)
+    assert entry.module_path == MyModel.__module__
+    assert entry.qualname == MyModel.__qualname__
+    assert entry.forced is True
