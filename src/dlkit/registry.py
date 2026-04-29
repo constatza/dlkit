@@ -1,4 +1,9 @@
-from .public import (
+"""User-facing registry namespace.
+
+Curated re-exports for registration decorators and registry introspection.
+"""
+
+from dlkit.infrastructure.registry import (
     RegistryEntry,
     describe_model,
     list_registered_datasets,
