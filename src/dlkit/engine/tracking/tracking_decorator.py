@@ -20,7 +20,6 @@ from dlkit.engine.tracking.metric_logger import MetricLogger
 from dlkit.engine.tracking.result_enricher import ResultEnricher
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.interfaces import ITrainingExecutor
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -81,7 +80,7 @@ class TrackingDecorator(ITrainingExecutor):
     def execute(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> TrainingResult:
         """Execute training with experiment tracking.
 
@@ -130,7 +129,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _execute_with_tracking(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Execute training with tracking - separated for SRP compliance.
@@ -217,7 +216,7 @@ class TrackingDecorator(ITrainingExecutor):
 
     def _setup_tracking(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Setup tracking configuration.
 
@@ -242,7 +241,7 @@ class TrackingDecorator(ITrainingExecutor):
                     raise
 
     def _extract_run_config(
-        self, settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+        self, settings: TrainingWorkflowConfig | OptimizationWorkflowConfig
     ) -> dict:
         """Extract run configuration from settings including merged tags.
 
@@ -293,7 +292,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_configuration(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
         """Log configuration and model parameters.
@@ -317,7 +316,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_dataset_to_run(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
         """Log dataset to MLflow run.
@@ -339,7 +338,7 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         components: RuntimeComponents,
         run_context: IRunContext,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Inject MLflow callbacks into trainer.
 

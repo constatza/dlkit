@@ -107,7 +107,7 @@ class GeneralSettings(BasicSettings):
     @model_validator(mode="after")
     def validate_inference_checkpoint(self):
         """Ensure inference mode has checkpoint path configured using top-level MODEL only."""
-        if self.SESSION.is_inference_mode:
+        if self.SESSION.workflow == "inference":
             if not (self.MODEL and self.MODEL.checkpoint):
                 raise ValueError(
                     "Checkpoint path must be provided when running in inference mode. "
@@ -149,12 +149,12 @@ class GeneralSettings(BasicSettings):
     @property
     def is_training(self) -> bool:
         """True if running training (not inference)."""
-        return not self.SESSION.inference
+        return self.SESSION.workflow == "train"
 
     @property
     def is_inference(self) -> bool:
         """True if running inference."""
-        return bool(self.SESSION.inference)
+        return self.SESSION.workflow == "inference"
 
     @property
     def is_testing(self) -> bool:

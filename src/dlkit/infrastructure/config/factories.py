@@ -2,150 +2,146 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 
-from .workflow_settings import (
-    BaseWorkflowSettings,
-    TrainingWorkflowSettings,
+from .workflow_configs import (
+    InferenceWorkflowConfig,
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
 )
+from .workflow_types import WorkflowConfig
 
 
 class WorkflowSettingsLoader:
     """Factory class for config loading.
 
-    Thin facade over :meth:`TrainingWorkflowSettings.from_toml` that preserves
-    the public ``load_settings`` / ``load_sections`` API surface.
+    Dispatches on SESSION.workflow to return the appropriate workflow config type.
     """
 
-    def load_training_settings(self, config_path: Path | str) -> TrainingWorkflowSettings:
-        """Load full training configuration from a TOML file.
+    def load_settings(self, config_path: Path | str) -> WorkflowConfig:
+        """Load workflow config from TOML, dispatching on SESSION.workflow.
 
         Args:
             config_path: Path to TOML configuration file.
 
         Returns:
-            TrainingWorkflowSettings: Training-specific settings instance.
+            WorkflowConfig: The appropriate workflow config type based on SESSION.workflow.
 
         Raises:
             FileNotFoundError: If config file doesn't exist.
+            ValueError: If SESSION.workflow is unknown.
             pydantic.ValidationError: If validation fails.
         """
-        return TrainingWorkflowSettings.from_toml(config_path)
+        from dlkit.infrastructure.config.core.patching import patch_model
+        from dlkit.infrastructure.config.core.sources import DLKitTomlSource, _read_env_patches
 
-    def create_settings_for_workflow(
-        self, config_path: Path | str, workflow_type: str
-    ) -> BaseWorkflowSettings:
-        """Factory method to create settings based on workflow type.
+        path = Path(config_path)
 
-        Args:
-            config_path: Path to TOML configuration file.
-            workflow_type: Type of workflow. Only ``"training"`` is supported.
+        # Minimal read to determine workflow mode without full validation
+        try:
+            import tomlkit
 
-        Returns:
-            BaseWorkflowSettings: Appropriate settings instance.
+            raw = tomlkit.loads(path.read_text())
+            mode = raw.get("SESSION", {}).get("workflow", "train")
+        except Exception:
+            mode = "train"
 
-        Raises:
-            ValueError: If workflow_type is not supported.
-        """
-        if workflow_type != "training":
-            raise ValueError(
-                f"Unsupported workflow type: {workflow_type}. Available types: ['training']"
-            )
-        return self.load_training_settings(config_path)
+        # Load full TOML as a dict
+        source = DLKitTomlSource(path)
+        toml_data = source()
 
-    def load_sections(
-        self, config_path: Path | str, sections: list[str], *, strict: bool = False
-    ) -> BaseWorkflowSettings:
-        """Load an arbitrary combination of configuration sections.
-
-        Args:
-            config_path: Path to TOML configuration file.
-            sections: List of section names to load.
-            strict: If ``True``, all specified sections must exist in the file.
-
-        Returns:
-            BaseWorkflowSettings: Settings containing only the requested sections.
-
-        Raises:
-            ValueError: If no sections are specified or strict mode detects missing sections.
-            FileNotFoundError: If config file doesn't exist.
-        """
-        if not sections:
-            raise ValueError("At least one section must be specified")
-
-        if strict:
-            available = _get_available_sections(config_path)
-            missing = [s for s in sections if s not in available]
-            if missing:
+        match mode:
+            case "train":
+                config = TrainingWorkflowConfig.model_validate(toml_data)
+            case "optimize":
+                config = OptimizationWorkflowConfig.model_validate(toml_data)
+            case "inference":
+                config = InferenceWorkflowConfig.model_validate(toml_data)
+            case _:
                 raise ValueError(
-                    f"Strict mode: Required sections missing from config file: {missing}"
+                    f"Unknown SESSION.workflow value: {mode!r}. "
+                    "Expected 'train', 'optimize', or 'inference'."
                 )
 
-        return TrainingWorkflowSettings.from_toml(
-            config_path, sections=[s.upper() for s in sections]
-        )
+        # Apply environment variable patches if present
+        if env := _read_env_patches("DLKIT_", "__"):
+            config = patch_model(config, env)
+
+        # Propagate SESSION.root_dir to the global environment if set
+        from dlkit.infrastructure.config.environment import sync_session_root_to_environment
+
+        sync_session_root_to_environment(config)
+
+        return config
 
 
 # Default factory instance for convenience
 default_settings_loader = WorkflowSettingsLoader()
 
 
-def _get_available_sections(config_path: Path | str) -> list[str]:
-    """Return the top-level TOML sections present in a config file."""
-
-    with open(config_path, "rb") as handle:
-        data = tomllib.load(handle)
-    return [key.upper() for key in data if isinstance(key, str)]
+# Convenience function that delegates to the default loader
 
 
-# Convenience functions that delegate to the default loader
+def load_settings(config_path: Path | str) -> WorkflowConfig:
+    """Load workflow configuration from TOML file with automatic dispatching.
 
+    This is the primary API for loading DLKit configurations. It inspects
+    SESSION.workflow to determine the appropriate workflow config type and
+    returns the correctly-typed config.
 
-def load_settings(config_path: Path | str) -> TrainingWorkflowSettings:
-    """Load full training configuration from TOML file.
+    **Dispatching Logic:**
+    - If SESSION.workflow = "train": Returns TrainingWorkflowConfig
+    - If SESSION.workflow = "optimize": Returns OptimizationWorkflowConfig
+    - If SESSION.workflow = "inference": Returns InferenceWorkflowConfig
+    - If unspecified: Defaults to "train"
 
-    This is the primary API for loading DLKit configurations. It loads all
-    standard sections for training workflows with eager validation.
+    **Loaded sections (varies by workflow type):**
 
-    **Loaded sections:**
-    - Required: SESSION, TRAINING
-    - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+    Training:
+        - Required: SESSION, TRAINING
+        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+
+    Optimization:
+        - Required: SESSION, TRAINING, OPTUNA
+        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, PATHS, EXTRAS
+
+    Inference:
+        - Required: SESSION, MODEL
+        - Optional: DATAMODULE, DATASET, PATHS, EXTRAS
 
     Args:
         config_path: Path to TOML configuration file.
 
     Returns:
-        TrainingWorkflowSettings: Complete training settings.
+        WorkflowConfig: One of TrainingWorkflowConfig, OptimizationWorkflowConfig,
+                       or InferenceWorkflowConfig based on SESSION.workflow.
 
     Raises:
         FileNotFoundError: If config file doesn't exist.
-        ConfigSectionError: If required sections are missing.
+        ValueError: If SESSION.workflow is unknown or validation fails.
 
     Examples:
         >>> from dlkit.infrastructure.config import load_settings
-        >>> settings = load_settings("config.toml")
+        >>> config = load_settings("train_config.toml")
+        >>> if isinstance(config, TrainingWorkflowConfig):
+        ...     print("Training mode")
 
     See Also:
-        - `load_sections()`: Load specific sections for custom workflows.
-        - `load_model()`: For inference workflows.
+        - `TrainingWorkflowConfig`: For training-specific configuration
+        - `OptimizationWorkflowConfig`: For optimization-specific configuration
+        - `InferenceWorkflowConfig`: For inference-specific configuration
     """
-    return default_settings_loader.load_training_settings(config_path)
-
-
-# BREAKING CHANGE: load_inference_settings removed
-# Use inference API instead:
-# from dlkit.interfaces.inference import infer
-# result = infer(checkpoint_path, inputs)
+    return default_settings_loader.load_settings(config_path)
 
 
 def load_sections(
     config_path: Path | str, sections: list[str], *, strict: bool = False
-) -> BaseWorkflowSettings:
+) -> WorkflowConfig:
     """Load specific configuration sections for custom workflows.
 
     For most workflows, use `load_settings()` instead. This function is for
-    advanced use cases requiring specific section combinations.
+    advanced use cases requiring specific section combinations. It still dispatches
+    on SESSION.workflow to return the appropriate workflow config type.
 
     Args:
         config_path: Path to TOML configuration file.
@@ -154,12 +150,11 @@ def load_sections(
                missing sections are ignored.
 
     Returns:
-        BaseWorkflowSettings: Settings with only the requested sections.
+        WorkflowConfig: Appropriate workflow config type based on SESSION.workflow.
 
     Raises:
         ValueError: If no valid sections specified or unknown sections requested.
         FileNotFoundError: If config file doesn't exist.
-        ConfigSectionError: If strict=True and required sections are missing.
 
     Examples:
         >>> settings = load_sections("config.toml", ["MODEL", "DATASET"])
@@ -168,6 +163,22 @@ def load_sections(
         >>> settings = load_sections("config.toml", ["MODEL", "DATASET"], strict=True)
 
     See Also:
-        - `load_settings()`: Load full training configuration (recommended).
+        - `load_settings()`: Load full workflow configuration (recommended).
     """
-    return default_settings_loader.load_sections(config_path, sections, strict=strict)
+    if not sections:
+        raise ValueError("At least one section must be specified")
+
+    path = Path(config_path)
+
+    if strict:
+        import tomllib
+
+        with open(path, "rb") as handle:
+            data = tomllib.load(handle)
+        available = [key.upper() for key in data if isinstance(key, str)]
+        missing = [s for s in sections if s not in available]
+        if missing:
+            raise ValueError(f"Strict mode: Required sections missing from config file: {missing}")
+
+    # Still dispatch based on SESSION.workflow
+    return default_settings_loader.load_settings(path)

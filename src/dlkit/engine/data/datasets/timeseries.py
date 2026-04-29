@@ -3,7 +3,14 @@ from typing import Any, SupportsIndex, cast, overload
 
 import polars as pl
 from pydantic import FilePath, validate_call
-from pytorch_forecasting import TimeSeriesDataSet
+
+try:
+    from pytorch_forecasting import TimeSeriesDataSet
+except ImportError as exc:
+    raise ImportError(
+        "pytorch-forecasting is required for time-series workflows. "
+        "Install it with: uv add 'dlkit[ts]'"
+    ) from exc
 
 from dlkit.infrastructure.io.tables import read_table
 

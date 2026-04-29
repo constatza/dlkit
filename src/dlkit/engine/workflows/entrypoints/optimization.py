@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from dlkit.common import OptimizationResult
 from dlkit.common.errors import WorkflowError
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
 
 from ..optimization.factory import OptimizationServiceFactory
@@ -13,20 +14,21 @@ from ._override_types import OptimizationOverrides
 
 
 def optimize(
-    settings: OptimizationWorkflowConfig | GeneralSettings,
+    settings: OptimizationWorkflowConfig,
     overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""
     context = EntrypointContext.prepare(settings, overrides, workflow_name="optimization")
 
     try:
+        opt_settings = cast(OptimizationWorkflowConfig, context.settings)
         base_factory = OptimizationServiceFactory()
-        experiment_tracker = base_factory.create_experiment_tracker(context.settings)
+        experiment_tracker = base_factory.create_experiment_tracker(opt_settings)
         strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
-        optimization_strategy = strategy_factory.create_optimization_strategy(context.settings)
+        optimization_strategy = strategy_factory.create_optimization_strategy(opt_settings)
 
         def run() -> OptimizationResult:
-            return optimization_strategy.execute_optimization(context.settings)
+            return optimization_strategy.execute_optimization(opt_settings)
 
         def run_with_tracker() -> OptimizationResult:
             if experiment_tracker is None:

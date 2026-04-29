@@ -16,7 +16,6 @@ from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
 )
@@ -179,7 +178,7 @@ class TrialExecutor:
     def execute_trial(
         self,
         trial: Trial,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
         hyperparameters: dict[str, Any],
         trial_context: Any = None,
         enable_checkpointing: bool = False,
@@ -233,9 +232,9 @@ class TrialExecutor:
 
     def _apply_hyperparameters(
         self,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
         hyperparameters: dict[str, Any],
-    ) -> OptimizationWorkflowConfig | GeneralSettings:
+    ) -> OptimizationWorkflowConfig:
         """Apply hyperparameters to base settings.
 
         Args:
@@ -260,7 +259,7 @@ class TrialExecutor:
     def _execute_training(
         self,
         components: RuntimeComponents,
-        settings: OptimizationWorkflowConfig | GeneralSettings,
+        settings: OptimizationWorkflowConfig,
         trial_context: Any = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
@@ -411,7 +410,7 @@ class OptimizationOrchestrator:
     def execute_optimization(
         self,
         study_name: str,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
         n_trials: int,
         direction: OptimizationDirection,
         sampler_config: dict[str, Any] | None = None,
@@ -473,7 +472,7 @@ class OptimizationOrchestrator:
     def _execute_with_tracking(
         self,
         study: Study,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
     ) -> OptimizationResult:
         """Execute optimization with experiment tracking.
 
@@ -568,7 +567,7 @@ class OptimizationOrchestrator:
             # Retrain with best parameters
             best_trial = study.best_trial
             best_training_result = None
-            best_settings: OptimizationWorkflowConfig | GeneralSettings | None = None
+            best_settings: OptimizationWorkflowConfig | None = None
 
             if best_trial:
                 with self._experiment_tracker.create_best_retrain_run(
@@ -622,7 +621,7 @@ class OptimizationOrchestrator:
     def _execute_without_tracking(
         self,
         study: Study,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
         # Similar logic but without tracking context managers
@@ -701,7 +700,7 @@ class OptimizationOrchestrator:
         self,
         trial: Trial,
         study: Study,
-        base_settings: OptimizationWorkflowConfig | GeneralSettings,
+        base_settings: OptimizationWorkflowConfig,
     ) -> dict[str, Any]:
         """Sample hyperparameters for a trial using Optuna's suggest methods.
 
@@ -725,9 +724,8 @@ class OptimizationOrchestrator:
             logger.warning("No Optuna study available for sampling, using base settings")
             return {}
 
-        # Get OPTUNA configuration from base settings
         optuna_config = getattr(base_settings, "OPTUNA", None)
-        if not optuna_config or not getattr(optuna_config, "enabled", False):
+        if not optuna_config:
             logger.warning("OPTUNA not enabled in settings, using base settings")
             return {}
 
@@ -739,10 +737,7 @@ class OptimizationOrchestrator:
             from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
 
             settings_sampler = create_settings_sampler(optuna_config)
-            if not isinstance(base_settings, GeneralSettings):
-                logger.warning("Cannot sample hyperparameters without GeneralSettings base config")
-                return {}
-            settings_sampler.sample(optuna_trial, base_settings)
+            base_settings = settings_sampler.sample(optuna_trial, base_settings)
 
             # Extract ALL sampled hyperparameters from optuna_trial.params
             # These are the actual sampled values from Optuna's suggest methods

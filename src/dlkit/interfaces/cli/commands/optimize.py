@@ -54,7 +54,7 @@ def _run_optimization_impl(
     """
     # Load configuration
     console.print(f"📖 Loading configuration from: {config_path}")
-    _settings = load_config(config_path, root_dir=root_dir, output_dir=output_dir)
+    _settings = load_config(config_path, root_dir=root_dir)
     settings = _settings if is_training_settings(_settings) else None
 
     # Validate Optuna is configured (flattened)
@@ -87,6 +87,7 @@ def _run_optimization_impl(
                 "trials": trials,
                 "study_name": study_name,
                 "root_dir": root_dir,
+                "output_dir": output_dir,
             },
             mlflow=mlflow,
         )

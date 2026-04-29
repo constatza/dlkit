@@ -73,7 +73,7 @@ def _run_inference_impl(
     """
     # Load configuration first to resolve optional checkpoint
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = load_config(config_path, root_dir=root_dir, workflow_type="inference")
+    settings = load_config(config_path, root_dir=root_dir)
 
     # Resolve checkpoint: CLI argument wins; otherwise, use config [MODEL].checkpoint
     effective_checkpoint: Path | None = checkpoint

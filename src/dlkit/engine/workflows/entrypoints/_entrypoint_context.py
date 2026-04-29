@@ -3,22 +3,25 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
 
 from dlkit.common.errors import WorkflowError
+from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 from dlkit.infrastructure.io.path_context import get_current_path_context, path_override_context
 
 from ._overrides import apply_runtime_overrides, build_runtime_overrides, validate_runtime_overrides
-from ._settings import WorkflowSettings, coerce_general_settings
+from ._settings import WorkflowSettings
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
 class EntrypointContext:
     """Prepared runtime settings plus shared execution metadata."""
 
-    settings: Any
+    settings: WorkflowConfig
     start_time: float = field(default_factory=time.time)
     path_overrides: dict[str, Any] = field(default_factory=dict)
 
@@ -30,8 +33,8 @@ class EntrypointContext:
         *,
         workflow_name: str,
     ) -> EntrypointContext:
-        """Coerce settings, validate overrides, and derive path context state."""
-        effective = coerce_general_settings(raw_settings)
+        """Validate overrides and derive path context state."""
+        effective = raw_settings
         normalized_overrides = build_runtime_overrides(**dict(overrides or {}))
         errors = validate_runtime_overrides(**normalized_overrides)
         if errors:
@@ -58,7 +61,7 @@ class EntrypointContext:
         """Return elapsed time since preparation."""
         return time.time() - self.start_time
 
-    def run_with_path_context(self, fn):
+    def run_with_path_context(self, fn: Callable[[], T]) -> T:
         """Execute a callback within the derived path override context."""
         if self.path_overrides:
             with path_override_context(self.path_overrides):

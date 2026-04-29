@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 
 from dlkit.common import OptimizationResult as APIOptimizationResult
 from dlkit.common.errors import WorkflowError
+from dlkit.common.results import TrialRecord
 from dlkit.engine.training.interfaces import IOptimizationStrategy
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
 )
@@ -35,7 +35,7 @@ class OptimizationStrategy(IOptimizationStrategy):
     def __init__(
         self,
         factory: OptimizationServiceFactory,
-        settings: OptimizationWorkflowConfig | GeneralSettings,
+        settings: OptimizationWorkflowConfig,
     ):
         """Initialize optimization strategy.
 
@@ -44,11 +44,11 @@ class OptimizationStrategy(IOptimizationStrategy):
             settings: Configuration settings
         """
         self._factory = factory
-        self._settings: OptimizationWorkflowConfig | GeneralSettings = settings
+        self._settings: OptimizationWorkflowConfig = settings
 
     def execute_optimization(
         self,
-        settings: OptimizationWorkflowConfig | GeneralSettings,
+        settings: OptimizationWorkflowConfig,
     ) -> APIOptimizationResult:
         """Execute optimization using clean architecture.
 
@@ -114,53 +114,24 @@ class OptimizationStrategy(IOptimizationStrategy):
         Returns:
             API-compatible optimization result
         """
-        # Create synthetic best trial for API compatibility
-        best_trial_data = None
+        # Create best trial record for API compatibility
+        best_trial_record: TrialRecord | None = None
         if domain_result.best_trial:
-            best_trial_data = _APICompatibleTrial(
-                number=domain_result.best_trial.trial_number,
-                value=domain_result.best_trial.objective_value or 0.0,
-                params=domain_result.best_trial.hyperparameters,
+            trial = domain_result.best_trial
+            best_trial_record = TrialRecord(
+                number=trial.trial_number,
+                value=trial.objective_value,
+                params=trial.hyperparameters,
+                state=trial.state.value if hasattr(trial.state, "value") else str(trial.state),
+                duration_seconds=trial.duration_seconds,
             )
 
         # Calculate total duration
         total_duration = time.time() - start_time
 
         return APIOptimizationResult(
-            best_trial=best_trial_data,
+            best_trial=best_trial_record,
             training_result=domain_result.best_training_result,
             study_summary=domain_result.study_summary,
             duration_seconds=total_duration,
         )
-
-
-class _APICompatibleTrial:
-    """Trial wrapper for API compatibility.
-
-    This provides both attribute and dictionary-style access
-    to trial dataflow for backward compatibility.
-    """
-
-    def __init__(self, number: int, value: float, params: dict):
-        """Initialize API-compatible trial.
-
-        Args:
-            number: Trial number
-            value: Objective value
-            params: Hyperparameters
-        """
-        self.number = number
-        self.value = value
-        self.params = params
-
-    def __getattr__(self, name: str):
-        """Provide attribute access."""
-        if name in ("number", "value", "params"):
-            return getattr(self, name)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-
-    def __getitem__(self, key: str):
-        """Provide dictionary-style access."""
-        if key in ("number", "value", "params"):
-            return getattr(self, key)
-        raise KeyError(key)

@@ -38,8 +38,8 @@ The discriminator field must be present when loading from TOML or any dict sourc
 Python construction omits the discriminator — all fields have defaults.
 
 ## Ownership Boundary
-- `tools.io` reads TOML files and resolves sections.
-- `tools.config` validates those payloads into settings models and applies runtime overrides.
+- `infrastructure.io` reads TOML files and resolves sections.
+- `infrastructure.config` validates those payloads into settings models and applies runtime overrides.
 
 ## Notes
 - `DATASET.family` is the explicit dataset-family override. Runtime heuristics only apply when it is unset.

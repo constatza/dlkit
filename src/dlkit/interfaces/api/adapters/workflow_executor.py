@@ -63,9 +63,9 @@ class EngineWorkflowExecutor:
             TrainingResult containing trained model state and metrics.
         """
         settings_with_mlflow = _apply_mlflow_flag(settings, mlflow)
-        if isinstance(settings_with_mlflow, OptimizationWorkflowConfig):
+        if not isinstance(settings_with_mlflow, TrainingWorkflowConfig):
             raise TypeError(
-                "train() requires training or general settings, not OptimizationWorkflowConfig"
+                f"train() requires TrainingWorkflowConfig, got {type(settings_with_mlflow).__name__}"
             )
         return runtime_train(settings_with_mlflow, overrides=overrides, hooks=hooks)
 
@@ -87,9 +87,9 @@ class EngineWorkflowExecutor:
             OptimizationResult containing best model and trial history.
         """
         settings_with_mlflow = _apply_mlflow_flag(settings, mlflow)
-        if isinstance(settings_with_mlflow, TrainingWorkflowConfig):
+        if not isinstance(settings_with_mlflow, OptimizationWorkflowConfig):
             raise TypeError(
-                "optimize() requires optimization or general settings, not TrainingWorkflowConfig"
+                f"optimize() requires OptimizationWorkflowConfig, got {type(settings_with_mlflow).__name__}"
             )
         return runtime_optimize(settings_with_mlflow, overrides=overrides)
 

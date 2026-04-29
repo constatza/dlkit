@@ -1,7 +1,14 @@
 from typing import TYPE_CHECKING
 
-from pytorch_forecasting import TimeSeriesDataSet
 from torch.utils.data import DataLoader
+
+try:
+    from pytorch_forecasting import TimeSeriesDataSet
+except ImportError as exc:
+    raise ImportError(
+        "pytorch-forecasting is required for time-series workflows. "
+        "Install it with: uv add 'dlkit[ts]'"
+    ) from exc
 
 from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings

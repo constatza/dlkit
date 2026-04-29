@@ -68,9 +68,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         solver_name: str = getattr(gen_cfg, "solver", "euler")
         val_seed: int = getattr(gen_cfg, "val_seed", 42)
         mode = (
-            "inference"
-            if (settings.SESSION and getattr(settings.SESSION, "inference", False))
-            else "training"
+            "inference" if (settings.SESSION and settings.SESSION.is_inference_mode) else "training"
         )
         try:
             cfg_dir = root_path()

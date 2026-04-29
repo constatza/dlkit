@@ -13,6 +13,20 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class TrialRecord:
+    """Serializable record of a completed optimization trial.
+
+    This is a value object that stores trial results for API compatibility.
+    """
+
+    number: int
+    value: float | None
+    params: dict[str, Any]
+    state: str
+    duration_seconds: float | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TrainingResult:
     """Result of a training workflow execution."""
 
@@ -70,7 +84,7 @@ class InferenceResult:
 class OptimizationResult:
     """Result of hyperparameter optimization workflow."""
 
-    best_trial: Any
+    best_trial: TrialRecord | None
     training_result: TrainingResult
     study_summary: dict[str, Any]
     duration_seconds: float

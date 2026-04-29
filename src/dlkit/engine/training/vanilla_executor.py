@@ -14,7 +14,6 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.protocols import IDataModule, ITrainableModule
 from dlkit.domain.metrics.collect import collect_metrics
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.core.updater import update_settings
 from dlkit.infrastructure.config.workflow_configs import (
@@ -56,7 +55,7 @@ class VanillaExecutor(ITrainingExecutor):
     def execute(
         self,
         components: RuntimeComponents,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> TrainingResult:
         """Execute pure training workflow.
 
@@ -137,7 +136,7 @@ class VanillaExecutor(ITrainingExecutor):
         trainer: Trainer,
         model: LightningModule,
         datamodule: LightningDataModule | None,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Apply automatic learning rate tuning if configured.
 
@@ -163,38 +162,66 @@ class VanillaExecutor(ITrainingExecutor):
         try:
             suggested_lr = lr_tuner.tune(trainer, model, lr_tuner_settings, datamodule)
 
-            lr_handled = False
-
-            # Try model-level attribute updates first (Lightning wrappers expose properties)
-            if hasattr(model, "lr"):
-                try:
-                    object.__setattr__(model, "lr", suggested_lr)
-                    optimizer_lr = getattr(getattr(model, "optimizer", None), "lr", None)
-                    if optimizer_lr == suggested_lr:
-                        lr_handled = True
-                        logger.info("Learning rate tuned to {}", suggested_lr)
-                except Exception:
-                    lr_handled = False
-
-            # Fallback to optimizer settings update when attribute path not available or ineffective
-            if not lr_handled and hasattr(model, "optimizer") and hasattr(model.optimizer, "lr"):
-                optimizer_attr = model.optimizer
-                if isinstance(optimizer_attr, BasicSettings):
-                    updated_optimizer = update_settings(optimizer_attr, {"lr": suggested_lr})
-                    object.__setattr__(model, "optimizer", updated_optimizer)
-                    logger.info("Learning rate tuned to {}", suggested_lr)
-                    lr_handled = True
-
-            if not lr_handled:
-                logger.warning(
-                    "Could not update learning rate: model.optimizer.lr not accessible. "
-                    "Ensure your model uses OptimizerSettings with an 'lr' field."
-                )
+            if self._try_set_model_lr(model, suggested_lr):
+                return
+            if self._try_set_optimizer_lr(model, suggested_lr):
+                return
+            logger.warning(
+                "Could not update learning rate: model.optimizer.lr not accessible. "
+                "Ensure your model uses OptimizerSettings with an 'lr' field."
+            )
 
         except Exception as e:
             logger.warning(
                 "Learning rate tuning failed: %s. Continuing with configured learning rate.", e
             )
+
+    def _try_set_model_lr(self, model: LightningModule, lr: float) -> bool:
+        """Try to set learning rate via model attribute.
+
+        Attempts to set model.lr property and verifies that the optimizer
+        learning rate was updated accordingly.
+
+        Args:
+            model: Lightning module
+            lr: Learning rate value to set
+
+        Returns:
+            True if learning rate was successfully set, False otherwise
+        """
+        if not hasattr(model, "lr"):
+            return False
+        try:
+            object.__setattr__(model, "lr", lr)
+            if getattr(getattr(model, "optimizer", None), "lr", None) == lr:
+                logger.info("Learning rate tuned to {}", lr)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _try_set_optimizer_lr(self, model: LightningModule, lr: float) -> bool:
+        """Try to set learning rate via optimizer settings.
+
+        Attempts to update model.optimizer (BasicSettings instance) with
+        the new learning rate value.
+
+        Args:
+            model: Lightning module
+            lr: Learning rate value to set
+
+        Returns:
+            True if learning rate was successfully set, False otherwise
+        """
+        if not hasattr(model, "optimizer") or not hasattr(model.optimizer, "lr"):
+            return False
+        optimizer_attr = model.optimizer
+        if not isinstance(optimizer_attr, BasicSettings):
+            return False
+        updated = update_settings(optimizer_attr, {"lr": lr})
+        object.__setattr__(model, "optimizer", updated)
+        logger.info("Learning rate tuned to {}", lr)
+        return True
 
     def _run_optional_steps(
         self,
@@ -289,7 +316,7 @@ class VanillaExecutor(ITrainingExecutor):
 
     def _get_resume_checkpoint_path(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> str | None:
         """Get checkpoint path for resuming training if configured.
 
