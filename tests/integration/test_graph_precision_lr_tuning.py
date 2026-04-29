@@ -11,12 +11,12 @@ import torch
 from fsspec.implementations.local import LocalFileSystem
 from loguru import logger
 
-import dlkit
 from dlkit.common import TrainingResult
 from dlkit.engine.workflows.factories.dataset_builder import DatasetBuilder
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 from dlkit.infrastructure.precision import PrecisionStrategy
+from dlkit.interfaces.api import train as api_train
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
@@ -147,7 +147,7 @@ class TestGraphPrecisionLRTuning:
     ) -> None:
         """Graph + float64 + LR tuning should train without dtype drift."""
         modified_settings = self._build_graph_settings(graph_settings, enable_lr_tuning=True)
-        result = dlkit.train(modified_settings)
+        result = api_train(modified_settings)
         assert isinstance(result, TrainingResult)
 
         dataset = self._load_dataset(modified_settings)
@@ -164,7 +164,7 @@ class TestGraphPrecisionLRTuning:
             graph_settings,
             enable_lr_tuning=False,
         )
-        result = dlkit.train(modified_settings)
+        result = api_train(modified_settings)
         assert isinstance(result, TrainingResult)
 
         dataset = self._load_dataset(modified_settings)

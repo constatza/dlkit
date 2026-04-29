@@ -111,7 +111,7 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
         'checkpoint = "model.ckpt"\n'
     )
 
-    session_block = '[SESSION]\nname = "test_session"\ninference = false\nseed = 42\n'
+    session_block = '[SESSION]\nname = "test_session"\nworkflow = "train"\nseed = 42\n'
 
     mlflow_block = '[MLFLOW]\nenabled = true\nexperiment_name = "test_experiment"\n'
 

@@ -54,7 +54,7 @@ def sample_config_content(tmp_path: Path) -> str:
 
     return f"""[SESSION]
 name = "test_session"
-inference = false
+workflow = "train"
 seed = 42
 
 [DATASET]
@@ -318,7 +318,7 @@ def sample_settings() -> Mock:
 
     # Mock model_dump to return a proper dict structure
     mock_settings.model_dump.return_value = {
-        "SESSION": {"name": "test_session", "inference": False, "seed": 42},
+        "SESSION": {"name": "test_session", "workflow": "train", "seed": 42},
         "DATASET": {"name": "FlexibleDataset", "root_dir": "."},
         "MODEL": {"name": "ConstantWidthFFNN", "module_path": "dlkit.domain.nn.ffnn.simple"},
         "MLFLOW": {"experiment_name": "test_experiment"},
@@ -470,7 +470,7 @@ def train_config_templates() -> dict[str, str]:
     return {
         "vanilla": """[SESSION]
 name = "vanilla_train"
-inference = false
+workflow = "train"
 seed = 42
 
 [PATHS]
@@ -481,7 +481,7 @@ max_epochs = 10
 """,
         "mlflow": """[SESSION]
 name = "mlflow_train"
-inference = false
+workflow = "train"
 seed = 42
 
 [PATHS]
@@ -498,7 +498,7 @@ max_epochs = 10
 """,
         "optuna": """[SESSION]
 name = "optuna_train"
-inference = false
+workflow = "train"
 seed = 42
 
 [PATHS]
@@ -515,7 +515,7 @@ max_epochs = 5
 """,
         "both": """[SESSION]
 name = "both_train"
-inference = false
+workflow = "train"
 seed = 42
 
 [PATHS]

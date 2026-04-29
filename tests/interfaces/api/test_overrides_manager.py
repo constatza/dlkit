@@ -19,7 +19,7 @@ from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 def _base_settings() -> GeneralSettings:
     return GeneralSettings(
-        SESSION=SessionSettings(inference=False),
+        SESSION=SessionSettings(workflow="train"),
         TRAINING=TrainingSettings(),
         DATAMODULE=DataModuleSettings(dataloader=DataloaderSettings()),
         MLFLOW=MLflowSettings(),

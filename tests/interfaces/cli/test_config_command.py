@@ -20,7 +20,7 @@ def valid_config_content() -> str:
     return """
 [SESSION]
 name = "test"
-inference = false
+workflow = "train"
 
 [PATHS]
 output_dir = "./outputs"

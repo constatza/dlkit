@@ -170,7 +170,10 @@ class TestImportRules:
                     r"dlkit\.train\s*\(",
                     r"dlkit\.infer\s*\(",
                     r"dlkit\.optimize\s*\(",
+                    r"dlkit\.execute\s*\(",
                     r"dlkit\.load_model\s*\(",  # stateful inference API
+                    r"api_train\s*\(",  # train via interfaces.api
+                    r"api_optimize\s*\(",  # optimize via interfaces.api
                 ]
 
                 has_api_usage = any(re.search(pattern, content) for pattern in high_level_apis)

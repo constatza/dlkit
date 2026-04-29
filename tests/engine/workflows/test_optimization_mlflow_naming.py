@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -16,12 +15,13 @@ from dlkit.engine.workflows.optimization.value_objects.models import (
     OptimizationDirection,
     Study,
 )
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 
 def _make_settings(run_name: str | None = None) -> GeneralSettings:
-    mlflow = SimpleNamespace(run_name=run_name) if run_name is not None else None
-    return cast("GeneralSettings", SimpleNamespace(SESSION=None, MLFLOW=mlflow))
+    mlflow = MLflowSettings(run_name=run_name) if run_name is not None else None
+    return GeneralSettings(MLFLOW=mlflow)
 
 
 def test_determine_study_name_prefers_explicit_run_name() -> None:

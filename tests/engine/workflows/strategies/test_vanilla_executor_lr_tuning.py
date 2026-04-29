@@ -9,9 +9,9 @@ import pytest
 
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 
 
 def _trainer_mock(components: RuntimeComponents) -> Mock:
@@ -39,7 +39,7 @@ def mock_components() -> RuntimeComponents:
     mock_trainer.callbacks = []
 
     mock_model = Mock()
-    mock_model.optimizer = OptimizerSettings(lr=0.001)
+    mock_model.optimizer = OptimizerSettings(lr=0.001)  # type: ignore[call-arg]
 
     mock_datamodule = Mock()
 
@@ -53,25 +53,25 @@ def mock_components() -> RuntimeComponents:
 
 
 @pytest.fixture
-def settings_without_lr_tuner() -> GeneralSettings:
+def settings_without_lr_tuner() -> TrainingWorkflowConfig:
     """Settings without LR tuner configured."""
     from dlkit.infrastructure.config.session_settings import SessionSettings
     from dlkit.infrastructure.config.training_settings import TrainingSettings
 
-    return GeneralSettings(
-        SESSION=SessionSettings(seed=42),
+    return TrainingWorkflowConfig(
+        SESSION=SessionSettings(workflow="train", seed=42),
         TRAINING=TrainingSettings(),
     )
 
 
 @pytest.fixture
-def settings_with_lr_tuner() -> GeneralSettings:
+def settings_with_lr_tuner() -> TrainingWorkflowConfig:
     """Settings with LR tuner configured (enabled)."""
     from dlkit.infrastructure.config.session_settings import SessionSettings
     from dlkit.infrastructure.config.training_settings import TrainingSettings
 
-    return GeneralSettings(
-        SESSION=SessionSettings(seed=42),
+    return TrainingWorkflowConfig(
+        SESSION=SessionSettings(workflow="train", seed=42),
         TRAINING=TrainingSettings(
             lr_tuner=LRTunerSettings(
                 min_lr=1e-6,
@@ -88,7 +88,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_without_lr_tuner_configured(
         self,
         mock_components: RuntimeComponents,
-        settings_without_lr_tuner: GeneralSettings,
+        settings_without_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test that training proceeds normally without LR tuner."""
         executor = VanillaExecutor()
@@ -106,7 +106,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_with_lr_tuner_enabled(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: GeneralSettings,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test that LR tuner is called and updates learning rate."""
         executor = VanillaExecutor()
@@ -149,8 +149,8 @@ class TestVanillaExecutorLRTuning:
         from dlkit.infrastructure.config.training_settings import TrainingSettings
 
         # Simulate empty TOML section: [TRAINING.lr_tuner]
-        settings_with_empty_lr_tuner = GeneralSettings(
-            SESSION=SessionSettings(seed=42),
+        settings_with_empty_lr_tuner = TrainingWorkflowConfig(
+            SESSION=SessionSettings(workflow="train", seed=42),
             TRAINING=TrainingSettings.model_validate({"lr_tuner": {}}),
         )
 
@@ -176,7 +176,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_lr_tuner_failure_continues_training(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: GeneralSettings,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test that training continues if LR tuner fails."""
         executor = VanillaExecutor()
@@ -203,7 +203,7 @@ class TestVanillaExecutorLRTuning:
     def test_apply_lr_tuning_helper_method(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: GeneralSettings,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test _apply_lr_tuning helper method in isolation."""
         executor = VanillaExecutor()
@@ -231,12 +231,16 @@ class TestVanillaExecutorLRTuning:
         self,
         mock_components: RuntimeComponents,
     ) -> None:
-        """Test _apply_lr_tuning when TRAINING is None."""
+        """Test _apply_lr_tuning when TRAINING without lr_tuner configured."""
         executor = VanillaExecutor()
 
         from dlkit.infrastructure.config.session_settings import SessionSettings
+        from dlkit.infrastructure.config.training_settings import TrainingSettings
 
-        settings = GeneralSettings(SESSION=SessionSettings(seed=42), TRAINING=None)
+        settings = TrainingWorkflowConfig(
+            SESSION=SessionSettings(workflow="train", seed=42),
+            TRAINING=TrainingSettings(),  # No lr_tuner configured
+        )
 
         mock_lr_tuner = Mock()
 
@@ -260,7 +264,7 @@ class TestVanillaExecutorLRTuning:
     def test_apply_lr_tuning_model_without_optimizer_attribute(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: GeneralSettings,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test graceful handling when model lacks optimizer attribute."""
         executor = VanillaExecutor()
@@ -298,7 +302,7 @@ class TestVanillaExecutorLRTuning:
     def test_mutable_optimizer_update(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: GeneralSettings,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
         """Test that optimizer update uses mutable update_settings.
 

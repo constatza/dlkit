@@ -39,7 +39,7 @@ class TestTrainCommandIntegration:
                 [
                     "[SESSION]",
                     'name = "test_training"',
-                    "inference = false",
+                    'workflow = "train"',
                     "",
                     "[PATHS]",
                     'output_dir = "./outputs"',

@@ -145,21 +145,27 @@ def test_factory_activates_mlflow_when_local_probe_is_mocked_true(factory, monke
     assert isinstance(executor._tracker, MLflowTracker)
 
 
-def test_factory_optuna_detection_logic(factory):
-    """Test Optuna feature detection logic."""
-    # Optuna disabled cases
-    assert not factory._is_optuna_enabled(GeneralSettings())
-    assert not factory._is_optuna_enabled(GeneralSettings(OPTUNA=None))
+def test_factory_optimization_workflow_detection(factory):
+    """Test optimization workflow detection logic."""
+    from dlkit.infrastructure.config.workflow_configs import (
+        OptimizationWorkflowConfig,
+    )
 
-    # Create minimal optuna settings that won't fail
-    from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+    # General settings and training settings are not optimization
+    assert not factory._is_optimization_workflow(GeneralSettings())
 
-    disabled_optuna = OptunaSettings(enabled=False)  # Use disabled constructor
-    assert not factory._is_optuna_enabled(GeneralSettings(OPTUNA=disabled_optuna))
+    # Optimization workflow should be detected using isinstance check
+    # We test the logic with a mock object that satisfies isinstance check
+    class MockOptimizationConfig(OptimizationWorkflowConfig):
+        """Mock config for testing."""
 
-    # Optuna enabled case
-    enabled_optuna = OptunaSettings(enabled=True, n_trials=5)
-    assert factory._is_optuna_enabled(GeneralSettings(OPTUNA=enabled_optuna))
+        def __init__(self):
+            # Bypass pydantic validation
+            pass
+
+    mock_opt = MockOptimizationConfig()
+    assert factory._is_optimization_workflow(mock_opt)
+    assert isinstance(mock_opt, OptimizationWorkflowConfig)
 
 
 def test_factory_direct_usage():

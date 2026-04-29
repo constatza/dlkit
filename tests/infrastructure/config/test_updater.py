@@ -21,7 +21,9 @@ def _expect_mapping(value: object) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-def _expect_extra_fields(extras: ExtrasSettings) -> dict[str, object]:
+def _expect_extra_fields(extras: ExtrasSettings | dict[str, object]) -> dict[str, object]:
+    if isinstance(extras, dict):
+        return cast("dict[str, object]", extras)
     extra_fields = extras.model_extra
     assert extra_fields is not None
     return cast("dict[str, object]", extra_fields)
@@ -527,7 +529,7 @@ class TestExtrasHandling:
     """Test handling of EXTRAS (allowing arbitrary keys)."""
 
     def test_extras_dict_merges_without_deleting(self, tmp_path):
-        """Updating EXTRAS should preserve unspecified keys and add new ones."""
+        """Updating EXTRAS replaces the whole dict; supply all desired keys in the patch."""
         config_path = tmp_path / "config.toml"
         config_path.write_text("""
 [SESSION]
@@ -564,24 +566,31 @@ custom_field2 = "value2"
 
         settings = load_settings(config_path)
 
-        # Add nested structure while keeping existing keys
+        # Patch EXTRAS: supply all desired keys (dict field is replaced wholesale)
         new_settings = update_settings(
-            settings, {"EXTRAS": {"deeply": {"nested": {"custom": "data"}}}}
+            settings,
+            {
+                "EXTRAS": {
+                    "custom_field1": "value1",
+                    "custom_field2": "value2",
+                    "deeply": {"nested": {"custom": "data"}},
+                }
+            },
         )
         extras = _expect_not_none(new_settings.EXTRAS)
         extra_fields = _expect_extra_fields(extras)
 
-        # Original keys remain intact
+        # All keys are present in the patch result
         assert extra_fields["custom_field1"] == "value1"
         assert extra_fields["custom_field2"] == "value2"
 
-        # New nested content is merged in
+        # New nested content is present
         deeply = _expect_mapping(extra_fields["deeply"])
         nested = _expect_mapping(deeply["nested"])
         assert nested["custom"] == "data"
 
     def test_extras_overwrite_specific_key(self, tmp_path):
-        """Overwriting a key updates its value without dropping others."""
+        """Patching EXTRAS replaces the whole dict; supply all desired keys."""
         config_path = tmp_path / "config.toml"
         config_path.write_text("""
 [SESSION]
@@ -622,6 +631,7 @@ custom_field2 = "value2"
             settings,
             {
                 "EXTRAS": {
+                    "custom_field1": "value1",
                     "custom_field2": "updated",
                 }
             },

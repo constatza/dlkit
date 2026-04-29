@@ -63,7 +63,8 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
     )
     mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.domain.nn", checkpoint=ckpt)
     tr = TrainingSettings()
-    sess = SessionSettings(inference=inference)
+    workflow_mode = "inference" if inference else "train"
+    sess = SessionSettings(workflow=workflow_mode)
     settings = GeneralSettings(SESSION=sess, MODEL=mdl, DATASET=ds, DATAMODULE=dm, TRAINING=tr)
     # Attach a fake dataset sample we want to drive shape inference with
     settings.__dict__["_test_sample"] = sample
@@ -140,7 +141,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     dm = DataModuleSettings()
     mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
         DATASET=ds,
         DATAMODULE=dm,
@@ -184,7 +185,7 @@ def test_build_factory_selects_timeseries_strategy(
     dm = DataModuleSettings()
     mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
         DATASET=ds,
         DATAMODULE=dm,
@@ -267,7 +268,7 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
         DATASET=ds,
         DATAMODULE=dm,
@@ -352,7 +353,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
         DATASET=ds,
         DATAMODULE=dm,
@@ -417,7 +418,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         targets=(Target(name="y", path=y_path),),
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=ModelComponentSettings(
             name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
@@ -487,7 +488,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
         )
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=ModelComponentSettings(
             name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
@@ -552,7 +553,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
         )
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=ModelComponentSettings(
             name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),
@@ -605,7 +606,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
         targets=(Target(name="y", path=y_path),),
     )
     settings = GeneralSettings(
-        SESSION=SessionSettings(inference=True),
+        SESSION=SessionSettings(workflow="inference"),
         MODEL=ModelComponentSettings(
             name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
         ),

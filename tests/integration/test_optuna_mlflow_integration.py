@@ -11,9 +11,9 @@ import os
 import pytest
 from mlflow.tracking import MlflowClient
 
-import dlkit
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.interfaces.api import optimize as api_optimize
 
 FAST_TEST_TIMEOUT = int(30 * float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0")))
 
@@ -67,7 +67,7 @@ class TestOptunaMLflowOptimization:
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_combined_settings_optimization(self, combined_settings):
         """Combined Optuna+MLflow workflow should persist multiple MLflow runs."""
-        result = dlkit.optimize(combined_settings)
+        result = api_optimize(combined_settings)
 
         assert result is not None
         assert hasattr(result, "duration_seconds")
@@ -88,7 +88,7 @@ class TestOptunaMLflowOptimization:
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_optuna_only_optimization(self, optuna_only_settings):
         """Optuna-only optimization should succeed without MLflow persistence."""
-        result = dlkit.optimize(optuna_only_settings)
+        result = api_optimize(optuna_only_settings)
 
         assert result is not None
         assert hasattr(result, "duration_seconds")
@@ -102,7 +102,7 @@ class TestOptunaMLflowOptimization:
         settings = GeneralSettings()  # No OPTUNA enabled
 
         with pytest.raises(WorkflowError) as exc_info:
-            dlkit.optimize(settings)
+            api_optimize(settings)
 
         assert "OPTUNA is not enabled" in str(exc_info.value)
 
@@ -117,7 +117,7 @@ class TestBackwardCompatibility:
         settings = GeneralSettings()  # No OPTUNA or MLFLOW
 
         with pytest.raises(WorkflowError) as exc_info:
-            dlkit.optimize(settings)
+            api_optimize(settings)
 
         assert "OPTUNA is not enabled" in str(exc_info.value)
 
@@ -130,6 +130,6 @@ def test_null_object_pattern_through_apis() -> None:
         )
     )
 
-    result = dlkit.optimize(settings_no_mlflow)
+    result = api_optimize(settings_no_mlflow)
     assert result is not None
     assert result.duration_seconds >= 0

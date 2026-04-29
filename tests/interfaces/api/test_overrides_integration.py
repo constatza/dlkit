@@ -36,7 +36,7 @@ def _require_numeric_lr(settings: TrainingSettings) -> int | float:
 @pytest.fixture
 def sample_settings() -> GeneralSettings:
     return GeneralSettings(
-        SESSION=SessionSettings(inference=False),
+        SESSION=SessionSettings(workflow="train"),
         TRAINING=TrainingSettings(epochs=50),
         DATAMODULE=DataModuleSettings(dataloader=DataloaderSettings(batch_size=16)),
     )

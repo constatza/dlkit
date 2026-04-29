@@ -31,7 +31,7 @@ def test_config_with_session_root(tmp_path: Path) -> Path:
 [SESSION]
 name = "test-session"
 root_dir = "{session_root.as_posix()}"
-inference = false
+workflow = "train"
 seed = 42
 
 [DATASET]
