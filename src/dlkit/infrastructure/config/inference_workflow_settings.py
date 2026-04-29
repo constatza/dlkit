@@ -30,7 +30,7 @@ class InferenceWorkflowSettings(BaseWorkflowSettings):
 
     @model_validator(mode="after")
     def validate_inference_checkpoint(self):
-        if self.SESSION and self.SESSION.inference:
+        if self.SESSION and self.SESSION.is_inference_mode:
             if not (self.MODEL and self.MODEL.checkpoint):
                 raise ValueError(
                     "Checkpoint path must be provided when running in inference mode. "

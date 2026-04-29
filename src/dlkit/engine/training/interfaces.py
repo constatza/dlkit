@@ -6,14 +6,13 @@ from abc import ABC, abstractmethod
 
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
 
 # Settings union accepted by training and optimization strategies
-WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class ITrainingExecutor(ABC):
@@ -45,9 +44,7 @@ class IOptimizationStrategy(ABC):
     """
 
     @abstractmethod
-    def execute_optimization(
-        self, settings: OptimizationWorkflowConfig | GeneralSettings
-    ) -> OptimizationResult:
+    def execute_optimization(self, settings: OptimizationWorkflowConfig) -> OptimizationResult:
         """Execute optimization workflow.
 
         Args:

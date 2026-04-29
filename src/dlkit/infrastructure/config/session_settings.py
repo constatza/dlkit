@@ -1,11 +1,13 @@
 """Session settings for controlling execution mode and top-level configuration.
 
-Simplified: use a single boolean flag `inference` to distinguish inference vs.
-training flows. Detailed training/inference configuration lives at the
+Uses an explicit `workflow` discriminator to distinguish train/optimize/inference
+flows. Detailed workflow-specific configuration lives at the
 GeneralSettings top level (TRAINING, DATAMODULE, DATASET, etc.).
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -13,6 +15,8 @@ from dlkit.infrastructure.config.security.uri_types import SecurePath
 from dlkit.infrastructure.precision import PrecisionStrategy
 
 from .core.base_settings import BasicSettings
+
+WorkflowMode = Literal["train", "optimize", "inference"]
 
 
 class SessionSettings(BasicSettings):
@@ -27,15 +31,16 @@ class SessionSettings(BasicSettings):
 
     Args:
         name: Name of the session for identification
-        mode: Execution mode (training, inference, testing)
-        training: (Removed) Training config is defined at GeneralSettings.TRAINING
-        inference: (Removed) Inference config is handled at GeneralSettings and MODEL.checkpoint
+        workflow: Explicit workflow mode discriminator (train, optimize, or inference)
         seed: Random seed for reproducibility
         precision: Precision for computation
     """
 
     name: str = Field(default="dlkit-session", description="Name of the session")
-    inference: bool = Field(default=False, description="Run in inference mode when true")
+    workflow: WorkflowMode = Field(
+        default="train",
+        description="Explicit workflow mode discriminator: 'train', 'optimize', or 'inference'",
+    )
 
     # Global session settings
     seed: int = Field(default=1, description="Random seed for reproducibility")
@@ -94,13 +99,18 @@ class SessionSettings(BasicSettings):
 
     @property
     def is_training_mode(self) -> bool:
-        """True if running training (not inference)."""
-        return not self.inference
+        """True if running training."""
+        return self.workflow == "train"
 
     @property
     def is_inference_mode(self) -> bool:
         """True if running inference."""
-        return self.inference
+        return self.workflow == "inference"
+
+    @property
+    def is_optimization_mode(self) -> bool:
+        """True if running hyperparameter optimization."""
+        return self.workflow == "optimize"
 
     @property
     def is_testing_mode(self) -> bool:

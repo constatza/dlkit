@@ -43,7 +43,7 @@ def build_training_template_dict() -> dict:
     return {
         "SESSION": {
             "name": "my_training_session",
-            "inference": False,
+            "workflow": "train",
             "seed": 42,
             "precision": "32",
             "root_dir": "./",
@@ -70,7 +70,7 @@ def build_inference_template_dict() -> dict:
     return {
         "SESSION": {
             "name": "my_inference_session",
-            "inference": True,
+            "workflow": "inference",
             "seed": 42,
             "precision": "32",
             "root_dir": "./",
@@ -86,7 +86,7 @@ def build_mlflow_template_dict() -> dict:
     return {
         "SESSION": {
             "name": "my_mlflow_session",
-            "inference": False,
+            "workflow": "train",
             "seed": 42,
             "precision": "32",
             "root_dir": "./",
@@ -118,7 +118,7 @@ def build_optuna_template_dict() -> dict:
     return {
         "SESSION": {
             "name": "my_optuna_session",
-            "inference": False,
+            "workflow": "optimize",
             "seed": 42,
             "precision": "32",
             "root_dir": "./",
@@ -166,7 +166,7 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
     """Return a mapping of dotted keys to human-readable comments."""
     base = {
         "SESSION.name": "Human-readable run/session name (for logs and tracking)",
-        "SESSION.inference": "Inference mode flag (false = training)",
+        "SESSION.workflow": "Workflow mode: 'train', 'optimize', or 'inference'",
         "SESSION.seed": "Random seed for reproducibility",
         "SESSION.precision": "Computation precision preset (e.g., '32', '16-mixed')",
         "MODEL.name": "Model class path or registry alias",
@@ -195,7 +195,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
         "TRAINING",
         "DATAMODULE",
         "DATASET",
-        "SESSION.inference",
+        "SESSION.workflow",
     )
 
     doc: TOMLDocument = document()

@@ -63,7 +63,7 @@ def _run_training_impl(
     """
     # Load configuration (don't apply output_dir here, let API handle all overrides)
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = load_config(config_path, root_dir=root_dir, workflow_type="training")
+    settings = load_config(config_path, root_dir=root_dir)
 
     training_settings = settings if is_training_settings(settings) else None
 
@@ -132,6 +132,8 @@ def _run_training_impl(
             overrides={
                 "checkpoint_path": checkpoint,
                 "root_dir": root_dir,
+                "output_dir": output_dir,
+                "data_dir": data_dir,
                 "epochs": epochs,
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,

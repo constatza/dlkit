@@ -30,9 +30,7 @@ class DatasetBuilder:
     def build_context(self, settings: Any) -> BuildContext:
         """Create the shared build context for a workflow."""
         mode = (
-            "inference"
-            if (settings.SESSION and getattr(settings.SESSION, "inference", False))
-            else "training"
+            "inference" if (settings.SESSION and settings.SESSION.is_inference_mode) else "training"
         )
         try:
             from dlkit.infrastructure.io.locations import root as root_path

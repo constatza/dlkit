@@ -10,7 +10,6 @@ from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from dlkit.common.shapes import ShapeSummary
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
@@ -26,7 +25,7 @@ from .model_detection import detect_model_type, requires_shape_spec, should_skip
 from .module_defaults import with_runtime_module_defaults
 from .shape_inference_pipeline import ShapeInferencePipeline
 
-type WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 # Dataset type constants for can_handle() checks
 DATASET_TYPE_FLEXIBLE = "flexible"
@@ -36,11 +35,7 @@ DATASET_TYPE_TIMESERIES = "timeseries"
 
 def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     """Build the trainer when the workflow is in training mode."""
-    if (
-        not settings.SESSION
-        or getattr(settings.SESSION, "inference", False)
-        or not settings.TRAINING
-    ):
+    if not settings.SESSION or settings.SESSION.is_inference_mode or not settings.TRAINING:
         return None
 
     trainer_settings = settings.TRAINING.trainer

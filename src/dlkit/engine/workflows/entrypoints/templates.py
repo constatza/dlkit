@@ -49,7 +49,7 @@ def _build_template_dict(template_type: TemplateKind) -> dict[str, Any]:
     template_dict: dict[str, Any] = {}
     template_dict["SESSION"] = {
         "name": "my_session",
-        "inference": False,
+        "workflow": "train",
         "seed": 42,
         "precision": "medium",
     }
@@ -125,7 +125,7 @@ def _generate_placeholder_value(field_info: FieldInfo) -> Any:
 def _customize_for_training(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = base_dict.copy()
     if "SESSION" in result and isinstance(result["SESSION"], dict):
-        result["SESSION"]["inference"] = False
+        result["SESSION"]["workflow"] = "train"
     result["TRAINING"] = {"trainer": {"max_epochs": 100, "accelerator": "auto"}}
     result["DATAMODULE"] = {"name": "your.datamodule.class"}
     result["DATASET"] = {"name": "your.dataset.class"}
@@ -135,7 +135,7 @@ def _customize_for_training(base_dict: dict[str, Any]) -> dict[str, Any]:
 def _customize_for_inference(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = base_dict.copy()
     if "SESSION" in result and isinstance(result["SESSION"], dict):
-        result["SESSION"]["inference"] = True
+        result["SESSION"]["workflow"] = "inference"
     result["MODEL"]["checkpoint"] = "./model.ckpt"
     return result
 
@@ -170,7 +170,7 @@ def _get_default_optuna_storage() -> str:
 def _get_field_comments(template_type: TemplateKind) -> dict[str, str]:
     base_comments = {
         "SESSION.name": "Human-readable run/session name (for logs and tracking)",
-        "SESSION.inference": "Run in inference mode when true",
+        "SESSION.workflow": "Workflow mode: 'train', 'optimize', or 'inference'",
         "SESSION.seed": "Random seed for reproducibility",
         "SESSION.precision": "Computation precision preset (e.g., medium, high)",
         "MODEL.name": "Model class path or registry alias",
@@ -216,7 +216,7 @@ def _render_toml(template: dict[str, Any], *, kind: TemplateKind) -> str:
         "DATAMODULE",
         "DATASET",
         "EXTRAS",
-        "SESSION.inference",
+        "SESSION.workflow",
     ]
 
     doc = document()

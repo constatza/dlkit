@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dlkit.common import TrainingResult
 from dlkit.common.hooks import LifecycleHooks
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -30,15 +29,11 @@ class WorkflowExecutionSelector:
 
     def select(
         self,
-        settings: TrainingWorkflowConfig | GeneralSettings,
-        explicit: str | None = None,
+        settings: TrainingWorkflowConfig,
         hooks: LifecycleHooks | None = None,
     ):
         """Create execution strategy using SOLID factory composition."""
-        # Log what features are detected
         features = []
-        if settings.OPTUNA and getattr(settings.OPTUNA, "enabled", False):
-            features.append("Optuna optimization")
         if settings.MLFLOW:
             features.append("MLflow tracking")
         if not features:
@@ -52,18 +47,12 @@ class WorkflowExecutionSelector:
 
     def select_optimization(
         self,
-        settings: OptimizationWorkflowConfig | GeneralSettings,
+        settings: OptimizationWorkflowConfig,
     ):
         """Create optimization strategy from the runtime workflows layer."""
-        # Log what features are detected
-        features = []
-        if settings.OPTUNA and getattr(settings.OPTUNA, "enabled", False):
-            features.append("Optuna optimization")
+        features = ["Optuna optimization"]
         if settings.MLFLOW:
             features.append("MLflow tracking")
-        if not features:
-            features.append("vanilla training (adapted)")
-
         feature_str = " + ".join(features)
         logger.info("Creating optimization strategy with {}", feature_str)
 
@@ -83,18 +72,11 @@ class Orchestrator:
 
     def execute_training(
         self,
-        settings: TrainingWorkflowConfig | GeneralSettings,
+        settings: TrainingWorkflowConfig,
         hooks: LifecycleHooks | None = None,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")
         try:
-            # Suspend training (and MLflow/Optuna) when in inference mode
-            if settings.SESSION and getattr(settings.SESSION, "inference", False):
-                logger.warning("Training requested but inference mode is active")
-                raise_error(
-                    "Inference mode active: training, MLflow and Optuna are suspended. Use inference service instead."
-                )
-
             # Build runtime components
             logger.debug("Building runtime components")
             components = self._build_factory.build_components(settings)

@@ -85,11 +85,11 @@ class BaseWorkflowSettings(BasicSettings):
 
     @property
     def is_training(self) -> bool:
-        return not (self.SESSION and self.SESSION.inference)
+        return not (self.SESSION and self.SESSION.is_inference_mode)
 
     @property
     def is_inference(self) -> bool:
-        return bool(self.SESSION and self.SESSION.inference)
+        return bool(self.SESSION and self.SESSION.is_inference_mode)
 
     @property
     def is_testing(self) -> bool:

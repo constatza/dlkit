@@ -11,8 +11,48 @@ import torch
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.workflows.factories.build_factory import FlexibleBuildStrategy
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
 
 from ._settings import WorkflowSettings
+
+
+def _tensor_from_batch(batch: Any) -> torch.Tensor:
+    """Extract a tensor from a batch container.
+
+    Handles dict, tuple, list, and tensor inputs. Raises WorkflowError if no
+    extractable tensor is found.
+
+    Args:
+        batch: A container holding tensor data (dict, list, tuple, or Tensor)
+
+    Returns:
+        Extracted tensor
+
+    Raises:
+        WorkflowError: If no tensor can be found or extracted from batch
+    """
+    if isinstance(batch, dict):
+        tensor = batch.get("x")
+        if tensor is not None:
+            return tensor
+        for value in batch.values():
+            if isinstance(value, torch.Tensor):
+                return value
+        raise WorkflowError("Could not find input tensor 'x' in batch", {"workflow": "convert"})
+    if isinstance(batch, (list, tuple)):
+        tensor = batch[0]
+        if not hasattr(tensor, "shape"):
+            raise WorkflowError("First element of batch has no shape", {"workflow": "convert"})
+        return tensor
+    if not hasattr(batch, "shape"):
+        raise WorkflowError(
+            "Batch object is not a Tensor and not a supported container",
+            {"workflow": "convert"},
+        )
+    return batch
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -160,7 +200,8 @@ def _parse_or_infer_shapes(
         )
 
     strategy = FlexibleBuildStrategy()
-    components = strategy.build(settings)
+    # Cast is safe: convert workflows only accept training/optimization configs
+    components = strategy.build(cast(TrainingWorkflowConfig | OptimizationWorkflowConfig, settings))
     datamodule = components.datamodule
 
     loader = None
@@ -187,28 +228,7 @@ def _parse_or_infer_shapes(
             {"workflow": "convert", "error": str(exc)},
         ) from exc
 
-    shapes: list[tuple[int, ...]] = []
-    if isinstance(batch, dict):
-        tensor = batch.get("x")
-        if tensor is None:
-            for value in batch.values():
-                if isinstance(value, torch.Tensor):
-                    tensor = value
-                    break
-        if tensor is None:
-            raise WorkflowError("Could not find input tensor 'x' in batch", {"workflow": "convert"})
-        shapes.append(tuple(int(dimension) for dimension in tensor.shape))
-    elif isinstance(batch, (list, tuple)):
-        tensor = batch[0]
-        if not hasattr(tensor, "shape"):
-            raise WorkflowError("First element of batch has no shape", {"workflow": "convert"})
-        shapes.append(tuple(int(dimension) for dimension in tensor.shape))
-    else:
-        if not hasattr(batch, "shape"):
-            raise WorkflowError(
-                "Batch object is not a Tensor and not a supported container",
-                {"workflow": "convert"},
-            )
-        shapes.append(tuple(int(dimension) for dimension in batch.shape))
+    tensor = _tensor_from_batch(batch)
+    shapes: list[tuple[int, ...]] = [tuple(int(d) for d in tensor.shape)]
 
     return shapes, True

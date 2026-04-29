@@ -14,19 +14,14 @@ def load_config(
     config_path: Path,
     *,
     root_dir: Path | None = None,
-    output_dir: Path | None = None,
-    workflow_type: str | None = None,
 ) -> BaseSettingsProtocol:
-    """Load configuration from file with CLI-specific error handling and partial loading.
+    """Load configuration from file with CLI-specific error handling.
 
     Uses the new SOLID-compliant configuration system with protocol-based dependency inversion.
-    Supports workflow-specific partial loading for optimal performance.
 
     Args:
         config_path: Path to configuration file
         root_dir: Optional root directory override
-        output_dir: Optional output directory override (deprecated, use path context)
-        workflow_type: Workflow type for partial loading ('training', 'inference', or None for all sections)
 
     Returns:
         BaseSettingsProtocol: Loaded settings object appropriate for the workflow type

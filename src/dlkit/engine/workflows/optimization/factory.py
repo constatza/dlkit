@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
 )
@@ -36,7 +35,7 @@ from .value_objects import (
 )
 
 # Settings union accepted by optimization factory methods
-type _WorkflowSettings = OptimizationWorkflowConfig | GeneralSettings
+type _WorkflowSettings = OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -160,9 +159,8 @@ class OptimizationServiceFactory:
         if self._study_repository_override:
             return self._study_repository_override
 
-        # Check if Optuna is enabled and available
-        optuna_config = getattr(settings, "OPTUNA", None)
-        if optuna_config and getattr(optuna_config, "enabled", False):
+        # Use Optuna repository for optimization workflows
+        if isinstance(settings, OptimizationWorkflowConfig):
             try:
                 return OptunaStudyRepository()
             except WorkflowError as e:
@@ -223,29 +221,28 @@ class OptimizationServiceFactory:
         if self._config_persister_override:
             return self._config_persister_override
 
-        # Check if configuration persistence is enabled
-        # For now, default to TOML persistence if optimization is enabled
+        # Use TOML persistence for optimization workflows
+        # Check for explicit persistence configuration
         optuna_config = getattr(settings, "OPTUNA", None)
-        if optuna_config and getattr(optuna_config, "enabled", False):
-            # Check for explicit persistence configuration
+        if optuna_config:
             persistence_config = getattr(optuna_config, "persistence", None)
             if persistence_config and not getattr(persistence_config, "enabled", True):
                 return NullConfigurationPersister()
 
-            return TOMLConfigurationPersister()
-
-        # Use null persister when optimization is disabled
-        return NullConfigurationPersister()
+        return TOMLConfigurationPersister()
 
     @staticmethod
     def extract_optimization_config(settings: _WorkflowSettings) -> dict:
         """Extract optimization configuration from settings.
 
         Args:
-            settings: Configuration settings
+            settings: Optimization workflow configuration
 
         Returns:
             Optimization configuration dictionary
+
+        Raises:
+            WorkflowError: If OPTUNA configuration is not found or not enabled
         """
         optuna_config = getattr(settings, "OPTUNA", None)
         if not optuna_config:

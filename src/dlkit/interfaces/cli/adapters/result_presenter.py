@@ -93,18 +93,17 @@ def present_optimization_result(result: OptimizationResult, console: Console) ->
     results_text.append(f"Duration: {result.duration_seconds:.2f} seconds\n", style="green")
 
     if result.best_trial:
-        best_value = result.best_trial.get("value", "N/A")
+        best_value = result.best_trial.value if result.best_trial.value is not None else "N/A"
         results_text.append(f"Best value: {best_value}\n", style="cyan")
 
-        best_trial_num = result.best_trial.get("number", "N/A")
-        results_text.append(f"Best trial: #{best_trial_num}\n", style="yellow")
+        results_text.append(f"Best trial: #{result.best_trial.number}\n", style="yellow")
 
     results_panel = Panel.fit(results_text, title="Optimization Summary", border_style="magenta")
     console.print(results_panel)
 
     # Display best parameters
-    if result.best_trial and "params" in result.best_trial:
-        _display_best_parameters(result.best_trial["params"], console)
+    if result.best_trial and result.best_trial.params:
+        _display_best_parameters(result.best_trial.params, console)
 
     # Display study summary
     if result.study_summary:

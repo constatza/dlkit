@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .interfaces import ISettingsSampler
+from .interfaces import ISettingsSampler, NullSettingsSampler, OptunaTrialProtocol
 
 logger = get_logger(__name__)
 
@@ -34,15 +34,17 @@ class OptunaSettingsSampler:
         self._optuna_settings = optuna_settings
         self._validate_optuna_settings()
 
-    def sample(self, trial: Any, base_settings: GeneralSettings) -> GeneralSettings:
+    def sample(
+        self, trial: OptunaTrialProtocol, base_settings: OptimizationWorkflowConfig
+    ) -> OptimizationWorkflowConfig:
         """Sample hyperparameters from OPTUNA.model and merge into base settings.
 
         Args:
             trial: Optuna trial object for suggestions
-            base_settings: Base configuration with concrete default values
+            base_settings: Base optimization workflow configuration with concrete default values
 
         Returns:
-            GeneralSettings with sampled hyperparameters applied to MODEL section
+            Settings with sampled hyperparameters applied to MODEL section
 
         Raises:
             ValueError: If OPTUNA configuration is invalid
@@ -67,7 +69,9 @@ class OptunaSettingsSampler:
             logger.warning("Failed to sample hyperparameters: {}", e)
             return base_settings
 
-    def _sample_model_parameters(self, trial: Any) -> dict[str, Any]:
+    def _sample_model_parameters(
+        self, trial: OptunaTrialProtocol
+    ) -> dict[str, str | int | float | bool]:
         """Sample model parameters from OPTUNA.model ranges.
 
         Args:
@@ -94,8 +98,10 @@ class OptunaSettingsSampler:
         return sampled_params
 
     def _apply_sampled_parameters(
-        self, base_settings: GeneralSettings, sampled_params: dict[str, Any]
-    ) -> GeneralSettings:
+        self,
+        base_settings: OptimizationWorkflowConfig,
+        sampled_params: dict[str, str | int | float | bool],
+    ) -> OptimizationWorkflowConfig:
         """Apply sampled parameters to MODEL section of base settings.
 
         Args:
@@ -103,7 +109,7 @@ class OptunaSettingsSampler:
             sampled_params: Dictionary of sampled parameter values
 
         Returns:
-            Updated GeneralSettings with sampled parameters
+            Updated settings with sampled parameters
         """
         if not base_settings.MODEL:
             logger.debug("No MODEL in base settings, cannot apply sampled parameters")
@@ -123,7 +129,9 @@ class OptunaSettingsSampler:
             logger.warning("Failed to apply sampled parameters: {}", e)
             return base_settings
 
-    def _is_range_specification(self, spec: Any) -> bool:
+    def _is_range_specification(
+        self, spec: str | int | float | bool | list[str | int | float | bool] | dict
+    ) -> bool:
         """Check if a specification defines a hyperparameter range.
 
         Args:
@@ -135,8 +143,11 @@ class OptunaSettingsSampler:
         return isinstance(spec, dict) and (("low" in spec and "high" in spec) or "choices" in spec)
 
     def _get_optuna_suggestion(
-        self, trial: Any, param_name: str, range_spec: dict[str, Any]
-    ) -> Any:
+        self,
+        trial: OptunaTrialProtocol,
+        param_name: str,
+        range_spec: dict[str, str | int | float | bool | list[str | int | float | bool]],
+    ) -> str | int | float | bool:
         """Get Optuna suggestion for a parameter range.
 
         Replaces HyperParameterSettings.get_optuna_suggestion to maintain SRP.
@@ -166,16 +177,28 @@ class OptunaSettingsSampler:
             )
 
         # Handle integer/float ranges
-        if low and high:
-            step = range_spec.get("step", 1)
-            log = range_spec.get("log", False)
+        if low is not None and high is not None:
+            step_val = range_spec.get("step", 1)
+            log_val = range_spec.get("log", False)
             # Determine if this is an integer or float range
-            if all(isinstance(val, int) for val in [low, high, step]):
-                return trial.suggest_int(param_name, low=low, high=high, step=step, log=log)
-            return trial.suggest_float(param_name, low=low, high=high, step=step, log=log)
+            if all(isinstance(val, int) for val in [low, high, step_val]):
+                return trial.suggest_int(
+                    param_name,
+                    low=cast(int, low),
+                    high=cast(int, high),
+                    step=cast(int, step_val),
+                    log=cast(bool, log_val),
+                )
+            return trial.suggest_float(
+                param_name,
+                low=cast(float, low),
+                high=cast(float, high),
+                step=cast(float, step_val) if step_val else None,
+                log=cast(bool, log_val),
+            )
 
         # Handle categorical choices
-        if choices:
+        if choices is not None:
             if not isinstance(choices, (list, tuple)):
                 raise ValueError(f"Choices must be list or tuple for {param_name}: {choices}")
             return trial.suggest_categorical(param_name, choices=list(choices))
@@ -207,8 +230,6 @@ def create_settings_sampler(optuna_settings: OptunaSettings | None = None) -> IS
     Returns:
         ISettingsSampler instance
     """
-    from .interfaces import NullSettingsSampler
-
     if optuna_settings is None or not optuna_settings.enabled:
         return NullSettingsSampler()
 

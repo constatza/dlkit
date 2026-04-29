@@ -150,7 +150,7 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
     """Validate that inference config has all required sections.
 
     This validator ensures the config is ready for inference execution. It checks:
-    1. SESSION.inference is True
+    1. SESSION.workflow == "inference"
     2. MODEL.checkpoint is provided and exists
     3. For batch inference: DATAMODULE and DATASET present with valid paths
 
@@ -172,10 +172,10 @@ def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
         ```
     """
     # Validate inference mode enabled
-    if not config.SESSION.inference:
+    if config.SESSION.workflow != "inference":
         raise ConfigValidationError(
-            "SESSION.inference must be true for inference workflows. "
-            "Add 'inference = true' under [SESSION] section."
+            "SESSION.workflow must be 'inference' for inference workflows. "
+            "Add 'workflow = \"inference\"' under [SESSION] section."
         )
 
     # Validate checkpoint provided and exists
@@ -290,34 +290,47 @@ def validate_config_complete(
         ConfigValidationError: If config is incomplete or invalid
         TypeError: If config type is not recognized
     """
-    from . import GeneralSettings
-    from .workflow_configs import (
-        InferenceWorkflowConfig,
-        OptimizationWorkflowConfig,
-        TrainingWorkflowConfig,
-    )
-    from .workflow_settings import (
-        InferenceWorkflowSettings,
-        TrainingWorkflowSettings,
-    )
+    from .workflow_configs import InferenceWorkflowConfig, OptimizationWorkflowConfig
 
     if isinstance(config, OptimizationWorkflowConfig):
         validate_optimization_config_complete(config)
     elif isinstance(config, InferenceWorkflowConfig):
         validate_inference_config_complete(config)
-    elif isinstance(config, TrainingWorkflowConfig):
-        validate_training_config_complete(config)
-    elif isinstance(config, InferenceWorkflowSettings):
-        validate_inference_config_complete(config)
-    elif isinstance(config, TrainingWorkflowSettings):
-        validate_training_config_complete(config)
-    elif isinstance(config, GeneralSettings):
-        # Legacy GeneralSettings: detect workflow type and validate
-        # For backwards compatibility, treat as training workflow
-        # (most common case and safest assumption)
-        validate_training_config_complete(config)
     else:
-        raise TypeError(
-            f"Unknown config type: {type(config).__name__}. "
-            "Expected TrainingWorkflowConfig, InferenceWorkflowConfig, OptimizationWorkflowConfig, or GeneralSettings."
-        )
+        validate_training_config_complete(config)
+
+
+def validate_runtime_preflight(
+    config: TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig,
+) -> list[str]:
+    """Return a list of preflight error messages (empty list means OK).
+
+    Checks file existence, checkpoint paths, and other runtime-only conditions
+    that cannot be validated at parse time.
+
+    Args:
+        config: Workflow configuration to check
+
+    Returns:
+        List of error message strings; empty if all checks pass
+    """
+    from .workflow_configs import (
+        InferenceWorkflowConfig,
+        OptimizationWorkflowConfig,
+        TrainingWorkflowConfig,
+    )
+
+    errors: list[str] = []
+
+    try:
+        match config:
+            case InferenceWorkflowConfig():
+                validate_inference_config_complete(config)
+            case OptimizationWorkflowConfig():
+                validate_optimization_config_complete(config)
+            case TrainingWorkflowConfig():
+                validate_training_config_complete(config)
+    except ConfigValidationError as e:
+        errors.append(str(e))
+
+    return errors

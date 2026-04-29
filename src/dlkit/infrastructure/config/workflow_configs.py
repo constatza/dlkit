@@ -19,9 +19,9 @@ Architecture Principles:
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .core.base_settings import BasicSettings
 from .datamodule_settings import DataModuleSettings
@@ -111,7 +111,19 @@ class TrainingWorkflowConfig(BasicSettings):
         description="Free-form user settings (ignored by core)",
     )
 
-    _workflow_type: ClassVar[str] = "training"
+    @model_validator(mode="after")
+    def _enforce_workflow_mode(self) -> Self:
+        """Validate that SESSION.workflow matches 'train'.
+
+        Raises:
+            ValueError: If SESSION is present but workflow mode is not 'train'.
+        """
+        if self.SESSION and self.SESSION.workflow != "train":
+            raise ValueError(
+                f"TrainingWorkflowConfig requires SESSION.workflow = 'train', "
+                f"got {self.SESSION.workflow!r}"
+            )
+        return self
 
     # Convenience properties
     @property
@@ -136,13 +148,13 @@ class TrainingWorkflowConfig(BasicSettings):
 
     @property
     def is_training(self) -> bool:
-        """True when not running in inference mode."""
-        return not bool(self.SESSION and self.SESSION.inference)
+        """True when running in training mode."""
+        return self.SESSION.workflow == "train" if self.SESSION else True
 
     @property
     def is_inference(self) -> bool:
         """True when running in inference mode."""
-        return bool(self.SESSION and self.SESSION.inference)
+        return self.SESSION.workflow == "inference" if self.SESSION else False
 
     @property
     def has_data_config(self) -> bool:
@@ -180,7 +192,7 @@ class InferenceWorkflowConfig(BasicSettings):
     """Configuration for inference workflows with eager validation.
 
     Required Sections (at load time):
-        - SESSION: Session control with inference=true
+        - SESSION: Session control with workflow="inference"
         - MODEL: Model config with checkpoint path
 
     Optional Sections (for batch inference):
@@ -208,7 +220,7 @@ class InferenceWorkflowConfig(BasicSettings):
 
     # Required sections
     SESSION: SessionSettings = Field(
-        ..., description="Session control with inference=true (required)"
+        ..., description="Session control with workflow='inference' (required)"
     )
     MODEL: ModelComponentSettings = Field(
         ..., description="Model config with checkpoint (required)"
@@ -234,7 +246,19 @@ class InferenceWorkflowConfig(BasicSettings):
         description="Free-form user settings (ignored by core)",
     )
 
-    _workflow_type: ClassVar[str] = "inference"
+    @model_validator(mode="after")
+    def _enforce_workflow_mode(self) -> Self:
+        """Validate that SESSION.workflow matches 'inference'.
+
+        Raises:
+            ValueError: If SESSION is present but workflow mode is not 'inference'.
+        """
+        if self.SESSION and self.SESSION.workflow != "inference":
+            raise ValueError(
+                f"InferenceWorkflowConfig requires SESSION.workflow = 'inference', "
+                f"got {self.SESSION.workflow!r}"
+            )
+        return self
 
     @property
     def has_batch_inference_config(self) -> bool:
@@ -287,7 +311,7 @@ class OptimizationWorkflowConfig(BasicSettings):
     """Configuration for hyperparameter optimization workflows with eager validation.
 
     Required Sections (at load time):
-        - SESSION: Session control
+        - SESSION: Session control with workflow="optimize"
         - TRAINING: Training config
         - OPTUNA: Optimization config with enabled=true
 
@@ -350,7 +374,19 @@ class OptimizationWorkflowConfig(BasicSettings):
         description="Free-form user settings (ignored by core)",
     )
 
-    _workflow_type: ClassVar[str] = "optimization"
+    @model_validator(mode="after")
+    def _enforce_workflow_mode(self) -> Self:
+        """Validate that SESSION.workflow matches 'optimize'.
+
+        Raises:
+            ValueError: If SESSION is present but workflow mode is not 'optimize'.
+        """
+        if self.SESSION and self.SESSION.workflow != "optimize":
+            raise ValueError(
+                f"OptimizationWorkflowConfig requires SESSION.workflow = 'optimize', "
+                f"got {self.SESSION.workflow!r}"
+            )
+        return self
 
     @property
     def mlflow_enabled(self) -> bool:
@@ -369,13 +405,13 @@ class OptimizationWorkflowConfig(BasicSettings):
 
     @property
     def is_training(self) -> bool:
-        """True when not running in inference mode."""
-        return not bool(self.SESSION and self.SESSION.inference)
+        """True when running in training mode."""
+        return self.SESSION.workflow == "train" if self.SESSION else True
 
     @property
     def is_inference(self) -> bool:
         """True when running in inference mode."""
-        return bool(self.SESSION and self.SESSION.inference)
+        return self.SESSION.workflow == "inference" if self.SESSION else False
 
     @property
     def has_data_config(self) -> bool:

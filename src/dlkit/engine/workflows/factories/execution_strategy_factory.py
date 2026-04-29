@@ -10,7 +10,6 @@ from dlkit.engine.tracking.interfaces import NullTracker
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training import ITrainingExecutor, VanillaExecutor
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -35,7 +34,7 @@ class ExecutionStrategyFactory:
 
     def create_executor(
         self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig | GeneralSettings,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         hooks: LifecycleHooks | None = None,
     ) -> ITrainingExecutor:
         """Create composed execution strategy from settings.
@@ -73,7 +72,7 @@ class ExecutionStrategyFactory:
 
     def _has_mlflow_config(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> bool:
         """Check if MLflow configuration section is present in settings.
 
@@ -84,7 +83,7 @@ class ExecutionStrategyFactory:
 
     def _has_mlflow_config_or_env(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> bool:
         """Check if MLflow should be activated for training.
 
@@ -101,17 +100,16 @@ class ExecutionStrategyFactory:
         )
         return self._has_mlflow_config(settings) or has_user_http_uri or self._probe()
 
-    def _is_optuna_enabled(
+    def _is_optimization_workflow(
         self,
-        settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> bool:
-        """Check if Optuna optimization is enabled in settings."""
-        optuna_config = getattr(settings, "OPTUNA", None)
-        return bool(optuna_config and getattr(optuna_config, "enabled", False))
+        """Check if this is an optimization workflow based on config type."""
+        return isinstance(settings, OptimizationWorkflowConfig)
 
 
 def create_execution_strategy(
-    settings: GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     hooks: LifecycleHooks | None = None,
 ) -> ITrainingExecutor:
     """Convenience function to create a composed execution strategy.

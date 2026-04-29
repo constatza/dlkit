@@ -68,7 +68,7 @@ def validate_configuration(
 
         # Auto-detect strategy if not provided
         if strategy is None:
-            if settings.SESSION and settings.SESSION.inference:
+            if settings.SESSION and settings.SESSION.workflow == "inference":
                 strategy = "inference"
             else:
                 strategy = "training"  # Default
@@ -77,6 +77,19 @@ def validate_configuration(
 
         # Validate configuration
         validate_config(settings)
+
+        # Strategy-specific completeness checks
+        if strategy == "inference":
+            if not getattr(getattr(settings, "MODEL", None), "checkpoint", None):
+                console.print("[red]Inference config requires MODEL.checkpoint[/red]")
+                raise typer.Exit(1)
+        elif strategy in ("training", "optimize", "optimization"):
+            from dlkit.infrastructure.config.validators import validate_training_config_complete
+            from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+
+            if isinstance(settings, TrainingWorkflowConfig):
+                validate_training_config_complete(settings)
+
         console.print("✅ Configuration is valid!")
 
     except typer.Exit:
