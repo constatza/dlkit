@@ -1,87 +1,67 @@
 # Architecture Docs
 
-This directory contains the tracked dependency graphs for `dlkit` and the
-narrative coupling assessment.
+This directory contains the tracked architecture graphs for the current
+`dlkit` package layout.
 
-- `coupling-assessment.md`: historical refactoring notes and coupling narrative
-- `diagrams/overview.dot`: direct-submodule overview for the `dlkit` package
-- `diagrams/shared.dot`: shared kernel view under `dlkit.common`
-- `diagrams/tools.dot`: infrastructure view under `dlkit.infrastructure`
-- `diagrams/domain.dot`: domain package view under `dlkit.domain`
-- `diagrams/runtime.dot`: orchestration package view under `dlkit.engine`
-- `diagrams/interfaces.dot`: external API and CLI view under `dlkit.interfaces`
+## Current Graph Set
 
-## Canonical Generator
+- `diagrams/overview.dot`: top-level `dlkit.*` package overview
+- `diagrams/common.dot`: `dlkit.common`
+- `diagrams/infrastructure.dot`: `dlkit.infrastructure`
+- `diagrams/domain.dot`: `dlkit.domain`
+- `diagrams/engine.dot`: `dlkit.engine`
+- `diagrams/interfaces.dot`: `dlkit.interfaces`
 
-Tach is the source of truth for both architecture checks and the underlying
-real dependency map in this repo. The project-level configuration lives in
-`tach.toml`.
+## Package DAG
 
-These graphs reflect actual current imports, not an idealized target layering.
-If a cross-package edge exists in the codebase, it should appear in the
-generated DOT output.
+The maintained architectural dependency direction is:
 
-Regenerate one curated DOT target directly from the actual Tach dependency map:
-
-```bash
-uv run tach map -o /tmp/dlkit-map.json
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.common,dlkit.infrastructure,dlkit.domain,dlkit.engine
+```text
+interfaces -> engine, domain, infrastructure, common
+engine -> domain, infrastructure, common
+domain -> common
+infrastructure -> common, infrastructure.precision
+common -> (none)
+infrastructure.precision -> (none)
 ```
 
-Regenerate the full curated set under `docs/architecture/diagrams/`:
+These docs describe the current code layout:
+
+- `common`: shared result types, errors, state, hooks, and protocols
+- `infrastructure`: config, IO, registry, utilities, and precision support
+- `domain`: model-local logic, transforms, metrics, losses, and NN families
+- `engine`: runtime orchestration for data, training, inference, tracking, and workflows
+- `interfaces`: public API, CLI, and inference-facing adapters
+
+## Source Of Truth
+
+`tach.toml` is the source of truth for package-level dependency rules.
+
+The tracked DOT files are generated from actual imports rather than from an
+aspirational architecture sketch. If an import edge exists in the codebase, it
+should appear in the generated graph.
+
+## Regeneration
+
+Generate the raw Tach map:
 
 ```bash
 uv run tach map -o /tmp/dlkit-map.json
+```
+
+Render the curated graph set:
+
+```bash
 uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/overview.dot dlkit
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/shared.dot dlkit.common
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/tools.dot dlkit.infrastructure dlkit.common
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/common.dot dlkit.common
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/infrastructure.dot dlkit.infrastructure dlkit.common,dlkit.infrastructure.precision
 uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/domain.dot dlkit.domain dlkit.common
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/runtime.dot dlkit.engine dlkit.common,dlkit.infrastructure,dlkit.domain
+uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/engine.dot dlkit.engine dlkit.common,dlkit.infrastructure,dlkit.domain
 uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json docs/architecture/diagrams/interfaces.dot dlkit.interfaces dlkit.common,dlkit.infrastructure,dlkit.domain,dlkit.engine
 ```
 
-Check architecture constraints:
+Run the architecture checks:
 
 ```bash
 uv run tach check
 ```
-
-For ad hoc internal graphs, first generate the root Tach graph, then filter it
-to the package view you want:
-
-```bash
-uv run tach map -o /tmp/dlkit-map.json
-uv run python scripts/render_tach_dependency_graph.py /tmp/dlkit-map.json /tmp/dlkit-domain.dot dlkit.domain dlkit.common
-```
-
-## Graph Policy
-
-Tracked graph files are DOT only. DOT is the source of truth for the curated
-graphs in this repo. SVG and PNG are not tracked.
-
-The maintained graph set is intentionally small:
-
-- one direct-submodule overview for the whole `dlkit` package
-- one graph for each top-level architectural package
-
-This keeps the graph set stable and readable instead of mirroring the full
-`src/` tree one-to-one.
-
-## Target Definitions
-
-The curated target set is:
-
-- `docs/architecture/diagrams/overview.dot` from the Tach graph for `src/dlkit`, filtered to direct `dlkit.*` submodules
-- `docs/architecture/diagrams/shared.dot` from `src/dlkit/shared`
-- `docs/architecture/diagrams/tools.dot` from `src/dlkit/tools`
-- `docs/architecture/diagrams/domain.dot` from `src/dlkit/domain`
-- `docs/architecture/diagrams/runtime.dot` from `src/dlkit/runtime`
-- `docs/architecture/diagrams/interfaces.dot` from `src/dlkit/interfaces`
-
-These DOT graphs are generated from `tach map` output and then aggregated for
-readability. `coupling-assessment.md` remains the narrative architecture
-document and is not generated by Tach.
-
-## Temporary Output
-
-Transient render artifacts stay outside tracked docs.
