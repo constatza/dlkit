@@ -19,6 +19,30 @@ from dlkit.infrastructure.config.optimizer_component import (
 type ParamGroup = dict[str, object]
 
 
+def _import_optimizer_class(full_path: str, fallback_module: str) -> type:
+    """Import a class by ``'module:ClassName'`` or ``'ClassName'`` notation.
+
+    Args:
+        full_path: Either ``"module:ClassName"`` or just ``"ClassName"``.
+        fallback_module: Module to search when no module prefix is given.
+
+    Returns:
+        The imported class.
+
+    Raises:
+        ModuleNotFoundError: If the module cannot be imported.
+        AttributeError: If the class is not found in the module.
+    """
+    if ":" in full_path:
+        module_name, class_name = full_path.split(":", 1)
+    else:
+        module_name = fallback_module
+        class_name = full_path
+
+    module = import_module(module_name)
+    return getattr(module, class_name)
+
+
 class IOptimizerFactory(ABC):
     """Abstract interface for creating optimizer instances.
 
@@ -115,35 +139,9 @@ class TorchOptimizerFactory(IOptimizerFactory):
         module_path = self._settings.module_path or "torch.optim"
         full_path = f"{module_path}:{name}"
 
-        return self._import_class(full_path, module_path)
-
-    @staticmethod
-    def _import_class(full_path: str, fallback_module: str) -> Callable[..., torch.optim.Optimizer]:
-        """Import a class by module:name or name notation.
-
-        Args:
-            full_path: Import path in format "module:class" or just "class".
-            fallback_module: Module to use if no module is specified.
-
-        Returns:
-            The imported class or callable that creates optimizers.
-
-        Raises:
-            ImportError: If the class cannot be imported.
-        """
-        if ":" in full_path:
-            module_name, class_name = full_path.split(":", 1)
-        else:
-            module_name = fallback_module
-            class_name = full_path
-
-        module = import_module(module_name)
-        cls = getattr(module, class_name)
-
-        if cls is None:
-            raise ImportError(f"Could not find {class_name} in {module_name}")
-
-        return cls
+        return cast(
+            Callable[..., torch.optim.Optimizer], _import_optimizer_class(full_path, module_path)
+        )
 
 
 class IMuonOptimizerFactory(IOptimizerFactory):
@@ -249,32 +247,4 @@ class TorchSchedulerFactory(ISchedulerFactory):
         module_path = self._settings.module_path or "torch.optim.lr_scheduler"
         full_path = f"{module_path}:{name}"
 
-        return self._import_class(full_path, module_path)
-
-    @staticmethod
-    def _import_class(full_path: str, fallback_module: str) -> Callable[..., object]:
-        """Import a class by module:name or name notation.
-
-        Args:
-            full_path: Import path in format "module:class" or just "class".
-            fallback_module: Module to use if no module is specified.
-
-        Returns:
-            The imported class or callable that creates schedulers.
-
-        Raises:
-            ImportError: If the class cannot be imported.
-        """
-        if ":" in full_path:
-            module_name, class_name = full_path.split(":", 1)
-        else:
-            module_name = fallback_module
-            class_name = full_path
-
-        module = import_module(module_name)
-        cls = getattr(module, class_name)
-
-        if cls is None:
-            raise ImportError(f"Could not find {class_name} in {module_name}")
-
-        return cls
+        return cast(Callable[..., object], _import_optimizer_class(full_path, module_path))
