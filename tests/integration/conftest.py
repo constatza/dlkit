@@ -1,7 +1,7 @@
 """Integration test fixtures using direct Settings objects (no TOML).
 
 These fixtures generate tiny synthetic datasets and construct
-`GeneralSettings` instances programmatically to avoid relying on
+typed workflow config instances programmatically to avoid relying on
 TOML parsing. This keeps integration tests fast and robust.
 """
 
@@ -19,7 +19,6 @@ from dlkit.domain.shapes import ModelFamily, create_shape_spec
 from dlkit.infrastructure.config import (
     DataModuleSettings,
     DatasetSettings,
-    GeneralSettings,
     SessionSettings,
     TrainingSettings,
 )
@@ -30,7 +29,12 @@ from dlkit.infrastructure.config.model_components import (
     MetricComponentSettings,
     ModelComponentSettings,
 )
+from dlkit.infrastructure.config.optuna_settings import OptunaSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
 
 # Test constants - optimized for speed
 FEATURE_SIZE: int = 4
@@ -204,20 +208,18 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
     return checkpoint_path
 
 
-def _make_settings(
+def _make_training_settings(
     *,
     data_dir: Path,
     output_dir: Path,
-    inference: bool = False,
     batch_size: int = BATCH_SIZE,
     epochs: int = EPOCHS,
     checkpoint: Path | None = None,
-) -> GeneralSettings:
-    """Build a minimal GeneralSettings for training/inference.
+) -> TrainingWorkflowConfig:
+    """Build a minimal TrainingWorkflowConfig.
 
     Uses FlexibleDataset with X/y entries and a small FFNN model.
     """
-    # Ensure directories exist
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dataset = DatasetSettings(
@@ -244,20 +246,20 @@ def _make_settings(
     model = ModelComponentSettings(
         name="ConstantWidthFFNN",
         module_path="dlkit.domain.nn.ffnn.simple",
-        hidden_size=4,  # Reduced from 8 for faster testing
+        hidden_size=4,
         num_layers=1,
-        checkpoint=checkpoint if inference else None,
+        checkpoint=checkpoint,
     )
 
     training = TrainingSettings(
         epochs=epochs,
         trainer=TrainerSettings.model_validate(
             {
-                "fast_dev_run": True,  # Use fast dev run for ultra-fast testing
+                "fast_dev_run": True,
                 "enable_checkpointing": False,
                 "accelerator": "cpu",
-                "enable_progress_bar": False,  # Disable progress bar for faster tests
-                "enable_model_summary": False,  # Disable model summary for faster tests
+                "enable_progress_bar": False,
+                "enable_model_summary": False,
             }
         ),
         metrics=(
@@ -268,14 +270,10 @@ def _make_settings(
         ),
     )
 
-    session = SessionSettings(
-        name="integration_test", workflow="inference" if inference else "train", seed=42
-    )
+    session = SessionSettings(name="integration_test", workflow="train", seed=42)
 
-    return GeneralSettings(
+    return TrainingWorkflowConfig(
         SESSION=session,
-        MLFLOW=None,
-        OPTUNA=None,
         DATAMODULE=datamodule,
         DATASET=dataset,
         TRAINING=training,
@@ -284,12 +282,11 @@ def _make_settings(
 
 
 @pytest.fixture
-def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
-    """Create GeneralSettings for vanilla training integration tests (no TOML)."""
-    return _make_settings(
+def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> TrainingWorkflowConfig:
+    """Create TrainingWorkflowConfig for vanilla training integration tests (no TOML)."""
+    return _make_training_settings(
         data_dir=minimal_dataset["data_dir"],
         output_dir=tmp_path / "outputs",
-        inference=False,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
     )
@@ -298,12 +295,11 @@ def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> Gener
 @pytest.fixture
 def inference_settings(
     minimal_dataset: dict[str, Path], minimal_model_checkpoint: Path, tmp_path: Path
-) -> GeneralSettings:
-    """Create GeneralSettings for inference integration tests (no TOML)."""
-    return _make_settings(
+) -> TrainingWorkflowConfig:
+    """Create TrainingWorkflowConfig for inference integration tests (no TOML)."""
+    return _make_training_settings(
         data_dir=minimal_dataset["data_dir"],
         output_dir=tmp_path / "outputs",
-        inference=True,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
         checkpoint=minimal_model_checkpoint,
@@ -311,8 +307,10 @@ def inference_settings(
 
 
 @pytest.fixture
-def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
-    """Create GeneralSettings for graph model training integration tests.
+def graph_settings(
+    minimal_graph_dataset: dict[str, Path], tmp_path: Path
+) -> TrainingWorkflowConfig:
+    """Create TrainingWorkflowConfig for graph model training integration tests.
 
     Uses GraphDataset with node features, adjacency matrix, and targets.
     Model is a small GProjection graph neural network.
@@ -322,7 +320,7 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
         tmp_path: Pytest temporary directory fixture
 
     Returns:
-        GeneralSettings configured for graph workflow testing
+        TrainingWorkflowConfig configured for graph workflow testing
     """
     output_dir = tmp_path / "graph_outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -392,10 +390,8 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
 
     session = SessionSettings(name="graph_integration_test", workflow="train", seed=42)
 
-    return GeneralSettings(
+    return TrainingWorkflowConfig(
         SESSION=session,
-        MLFLOW=None,
-        OPTUNA=None,
         DATAMODULE=datamodule,
         DATASET=dataset,
         TRAINING=training,
@@ -406,14 +402,13 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Ge
 @pytest.fixture
 def mlflow_settings(
     minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> GeneralSettings:
-    """Create GeneralSettings with minimal MLflow-like training setup using overrides."""
+) -> TrainingWorkflowConfig:
+    """Create TrainingWorkflowConfig with MLflow enabled."""
     import dlkit.engine.tracking.uri_resolver as uri_resolver
 
-    base_settings = _make_settings(
+    base_settings = _make_training_settings(
         data_dir=minimal_dataset["data_dir"],
         output_dir=tmp_path / "outputs",
-        inference=False,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
     )
@@ -435,42 +430,36 @@ def mlflow_settings(
     from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
     mlflow_cfg = MLflowSettings(experiment_name="test_experiment")
-    settings_with_mlflow = base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
-
-    return settings_with_mlflow
+    return base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
 
 
 @pytest.fixture
-def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> GeneralSettings:
-    """Create GeneralSettings with Optuna enabled using overrides."""
-    from dlkit.engine.workflows.entrypoints._overrides import apply_runtime_overrides
-
-    # Start with base training settings
-    base_settings = _make_settings(
+def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> OptimizationWorkflowConfig:
+    """Create OptimizationWorkflowConfig with Optuna enabled."""
+    base = _make_training_settings(
         data_dir=minimal_dataset["data_dir"],
         output_dir=tmp_path / "outputs",
-        inference=False,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
     )
 
-    # Enable Optuna using overrides
-    optuna_settings = apply_runtime_overrides(
-        base_settings, enable_optuna=True, trials=OPTUNA_TRIALS, study_name="test_study"
+    unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
+    optuna_cfg = OptunaSettings(
+        enabled=True,
+        n_trials=OPTUNA_TRIALS,
+        study_name=f"test_study_{tmp_path.name}",
+        storage=unique_storage,
+        model={"hidden_size": [2, 4]},
     )
-    assert optuna_settings.OPTUNA is not None
-    # Ensure isolated study storage per test to avoid cross-test accumulation
-    try:
-        unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
-        new_optuna = optuna_settings.OPTUNA.model_copy(
-            update={
-                "storage": unique_storage,
-                "study_name": f"test_study_{tmp_path.name}",
-            }
-        )
-        return optuna_settings.model_copy(update={"OPTUNA": new_optuna})
-    except Exception:
-        return optuna_settings
+
+    return OptimizationWorkflowConfig(
+        SESSION=base.SESSION,
+        TRAINING=base.TRAINING,
+        DATAMODULE=base.DATAMODULE,
+        DATASET=base.DATASET,
+        MODEL=base.MODEL,
+        OPTUNA=optuna_cfg,
+    )
 
 
 @pytest.fixture
@@ -627,17 +616,16 @@ def cleanup_mlflow_state():
 
 
 @pytest.fixture
-def double_precision_settings(training_settings: GeneralSettings) -> GeneralSettings:
-    """Create GeneralSettings configured for double (float64) precision training.
-
-    Patches the base training settings to use FULL_64 precision, exercising
-    Lightning's DoublePrecisionPlugin which applies apply_to_collection on batches.
+def double_precision_settings(
+    training_settings: TrainingWorkflowConfig,
+) -> TrainingWorkflowConfig:
+    """Create TrainingWorkflowConfig configured for double (float64) precision training.
 
     Args:
         training_settings: Base training settings fixture.
 
     Returns:
-        GeneralSettings with SESSION.precision set to FULL_64.
+        TrainingWorkflowConfig with SESSION.precision set to FULL_64.
     """
     from dlkit.infrastructure.precision import PrecisionStrategy
 

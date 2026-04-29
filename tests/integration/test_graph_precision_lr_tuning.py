@@ -13,8 +13,8 @@ from loguru import logger
 
 from dlkit.common import TrainingResult
 from dlkit.engine.workflows.factories.dataset_builder import DatasetBuilder
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.infrastructure.precision import PrecisionStrategy
 from dlkit.interfaces.api import train as api_train
 
@@ -29,12 +29,12 @@ class TestGraphPrecisionLRTuning:
 
     @staticmethod
     def _build_graph_settings(
-        graph_settings: GeneralSettings,
+        graph_settings: TrainingWorkflowConfig,
         *,
         precision: PrecisionStrategy = PrecisionStrategy.FULL_64,
         enable_lr_tuning: bool = True,
-    ) -> GeneralSettings:
-        """Create modified GeneralSettings for graph precision scenarios."""
+    ) -> TrainingWorkflowConfig:
+        """Create modified TrainingWorkflowConfig for graph precision scenarios."""
         from dlkit.infrastructure.config.session_settings import SessionSettings
         from dlkit.infrastructure.config.trainer_settings import TrainerSettings
         from dlkit.infrastructure.config.training_settings import TrainingSettings
@@ -80,7 +80,7 @@ class TestGraphPrecisionLRTuning:
         else:
             training = graph_training
 
-        return GeneralSettings(
+        return TrainingWorkflowConfig(
             SESSION=session,
             DATASET=graph_settings.DATASET,
             DATAMODULE=graph_settings.DATAMODULE,
@@ -88,7 +88,7 @@ class TestGraphPrecisionLRTuning:
             TRAINING=training,
         )
 
-    def _load_dataset(self, graph_settings: GeneralSettings) -> Any:
+    def _load_dataset(self, graph_settings: TrainingWorkflowConfig) -> Any:
         from dlkit.engine.data.datasets.graph import GraphDataset
         from dlkit.infrastructure.precision import precision_override
 
@@ -113,7 +113,7 @@ class TestGraphPrecisionLRTuning:
 
     def test_graph_dataset_factory_uses_configured_root_on_windows(
         self,
-        graph_settings: GeneralSettings,
+        graph_settings: TrainingWorkflowConfig,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Graph dataset factory should not fall back to PyG's ``???`` root placeholder."""
@@ -143,7 +143,7 @@ class TestGraphPrecisionLRTuning:
 
     def test_graph_model_float64_lr_tuning_integration(
         self,
-        graph_settings: GeneralSettings,
+        graph_settings: TrainingWorkflowConfig,
     ) -> None:
         """Graph + float64 + LR tuning should train without dtype drift."""
         modified_settings = self._build_graph_settings(graph_settings, enable_lr_tuning=True)
@@ -157,7 +157,7 @@ class TestGraphPrecisionLRTuning:
 
     def test_graph_model_float64_without_lr_tuning_baseline(
         self,
-        graph_settings: GeneralSettings,
+        graph_settings: TrainingWorkflowConfig,
     ) -> None:
         """Baseline: Graph + float64 without LR tuning should still succeed."""
         modified_settings = self._build_graph_settings(
