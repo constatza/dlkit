@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from torch import Tensor, nn
+from torch.optim import LBFGS
 
 from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
 from .state_repository import IOptimizationStateRepository
@@ -52,7 +53,7 @@ def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
     for entry in program.stages:
         stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
         for stage in stages:
-            if any(x in stage.optimizer.__class__.__name__.lower() for x in ("lbfgs", "manual")):
+            if isinstance(stage.optimizer, LBFGS):
                 return True
     return False
 
@@ -72,7 +73,7 @@ def _pick_step_policy(program: RunningOptimizerPolicy) -> IStepPolicy:
     for entry in program.stages:
         stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
         for stage in stages:
-            if "lbfgs" in stage.optimizer.__class__.__name__.lower():
+            if isinstance(stage.optimizer, LBFGS):
                 return LBFGSStageStepper()
     return StepAllOptimizers()
 

@@ -10,12 +10,15 @@ from torch import Tensor
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
+    _requires_manual_optimization,
 )
 from dlkit.engine.training.optimization.state import (
+    ActiveStage,
     RunningOptimizerPolicy,
 )
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
 from dlkit.engine.training.optimization.stepping import StepAllOptimizers
+from dlkit.engine.training.optimization.triggers import NoTransitionTrigger
 
 
 # Local fixtures
@@ -238,3 +241,74 @@ class TestManualOptimizationController:
         # With NoTransitionTrigger, should stay at same index
         manual_controller.on_epoch_end(5, {})
         assert manual_controller._program.active_index == 0
+
+
+# LBFGS detection tests
+class SecondOrderOptimizer(torch.optim.LBFGS):
+    """Subclass whose class name does NOT contain 'lbfgs'."""
+
+    pass
+
+
+class TestLBFGSDetection:
+    """Tests for LBFGS detection using isinstance instead of string matching."""
+
+    def test_requires_manual_for_single_stage_lbfgs(
+        self,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """Verify LBFGS single-stage requires manual optimization.
+
+        Args:
+            tiny_model: Tiny model fixture.
+        """
+        params = list(tiny_model.parameters())
+        opt = torch.optim.LBFGS(params, lr=1.0)
+        stage = ActiveStage(
+            optimizer=opt,
+            scheduler=None,
+            trigger=NoTransitionTrigger(),
+            stage_index=0,
+        )
+        program = RunningOptimizerPolicy(stages=(stage,))
+        assert _requires_manual_optimization(program) is True
+
+    def test_requires_manual_for_lbfgs_subclass_with_different_name(
+        self,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """LBFGS subclass whose name doesn't contain 'lbfgs' must still require manual mode.
+
+        Args:
+            tiny_model: Tiny model fixture.
+        """
+        params = list(tiny_model.parameters())
+        opt = SecondOrderOptimizer(params, lr=1.0)
+        stage = ActiveStage(
+            optimizer=opt,
+            scheduler=None,
+            trigger=NoTransitionTrigger(),
+            stage_index=0,
+        )
+        program = RunningOptimizerPolicy(stages=(stage,))
+        assert _requires_manual_optimization(program) is True
+
+    def test_does_not_require_manual_for_adam(
+        self,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """Verify non-LBFGS optimizer doesn't require manual mode for single stage.
+
+        Args:
+            tiny_model: Tiny model fixture.
+        """
+        params = list(tiny_model.parameters())
+        opt = torch.optim.Adam(params, lr=1e-3)
+        stage = ActiveStage(
+            optimizer=opt,
+            scheduler=None,
+            trigger=NoTransitionTrigger(),
+            stage_index=0,
+        )
+        program = RunningOptimizerPolicy(stages=(stage,))
+        assert _requires_manual_optimization(program) is False
