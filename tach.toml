@@ -274,4 +274,6 @@ depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure" },
     { path = "dlkit.interfaces" },
+    { path = "dlkit.interfaces.inference" },
+    { path = "dlkit.interfaces.api.functions" },
 ]
