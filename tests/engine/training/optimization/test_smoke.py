@@ -13,6 +13,7 @@ from torch import nn
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
+from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
@@ -40,11 +41,21 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
+from dlkit.infrastructure.config.optimization_selector import (
+    MuonEligibleSelectorSettings,
+    NonMuonSelectorSettings,
+)
 from dlkit.infrastructure.config.optimization_stage import (
+    ConcurrentOptimizationSettings,
     OptimizationStageSettings,
 )
 from dlkit.infrastructure.config.optimization_trigger import EpochTriggerSettings
-from dlkit.infrastructure.config.optimizer_component import AdamSettings, LBFGSSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    LBFGSSettings,
+    MuonSettings,
+)
 
 _MODULE = "tests.engine.training.optimization.test_smoke"
 
@@ -299,3 +310,192 @@ class TestAdamAndMuonConcurrent:
         ]
         assert "fc1.weight" in changed, "Muon did not update fc1.weight"
         assert len(changed) > 1, "Only Muon-eligible weight changed — Adam params untouched"
+
+
+# ---------------------------------------------------------------------------
+# Task A: IParameterRoleProvider escape hatch
+# ---------------------------------------------------------------------------
+
+
+class TestCustomRoleProviderEscapeHatch:
+    """Users can implement IParameterRoleProvider to control Muon eligibility for any architecture."""
+
+    @pytest.fixture
+    def custom_model(self) -> nn.Module:
+        """Three-layer model that self-annotates its parameter roles via IParameterRoleProvider.
+
+        Returns:
+            An nn.Module implementing IParameterRoleProvider with explicit role declarations.
+        """
+        from dlkit.domain.nn.parameter_roles import ParameterRole
+        from dlkit.domain.nn.role_provider import IParameterRoleProvider
+
+        class _CustomModel(nn.Module, IParameterRoleProvider):
+            def __init__(self) -> None:
+                super().__init__()
+                self.embed = nn.Linear(4, 8, bias=False)  # marked INPUT
+                self.hidden = nn.Linear(8, 8, bias=False)  # marked HIDDEN → Muon eligible
+                self.head = nn.Linear(8, 2, bias=False)  # marked OUTPUT
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                return self.head(torch.relu(self.hidden(self.embed(x))))
+
+            def parameter_roles(self) -> dict[str, ParameterRole]:
+                """Return explicit per-parameter role annotations.
+
+                Returns:
+                    Mapping of parameter names to their assigned roles.
+                """
+                return {
+                    "embed.weight": ParameterRole.INPUT,
+                    "hidden.weight": ParameterRole.HIDDEN,
+                    "head.weight": ParameterRole.OUTPUT,
+                }
+
+        return _CustomModel()
+
+    @pytest.fixture
+    def custom_policy(self) -> OptimizerPolicySettings:
+        """Concurrent Muon + AdamW policy settings for the custom model.
+
+        Returns:
+            An OptimizerPolicySettings with one ConcurrentOptimizationSettings group.
+        """
+        muon_stage = OptimizationStageSettings(
+            optimizer=MuonSettings(lr=0.02),
+            selector=MuonEligibleSelectorSettings(),
+        )
+        adamw_stage = OptimizationStageSettings(
+            optimizer=AdamWSettings(lr=1e-3),
+            selector=NonMuonSelectorSettings(),
+        )
+        return OptimizerPolicySettings(
+            stages=(ConcurrentOptimizationSettings(optimizers=(muon_stage, adamw_stage)),)
+        )
+
+    def test_custom_role_provider_overrides_ffnn_inference(
+        self,
+        custom_model: nn.Module,
+        custom_policy: OptimizerPolicySettings,
+    ) -> None:
+        """IParameterRoleProvider declarations take precedence over FFNN position inference.
+
+        Args:
+            custom_model: Model implementing IParameterRoleProvider.
+            custom_policy: Config-driven concurrent Muon + AdamW policy.
+        """
+        program = OptimizerPolicyBuilder().build(custom_model, custom_policy)
+        group = program.current
+        assert isinstance(group, ActiveConcurrentGroup)
+
+        muon_params = [p for pg in group.stages[0].optimizer.param_groups for p in pg["params"]]
+        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+
+        def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
+            return any(p is param for p in param_list)
+
+        assert _in(custom_model.hidden.weight, muon_params), "HIDDEN weight must go to Muon"
+        assert not _in(custom_model.embed.weight, muon_params), "INPUT weight must NOT go to Muon"
+        assert not _in(custom_model.head.weight, muon_params), "OUTPUT weight must NOT go to Muon"
+        assert _in(custom_model.embed.weight, adamw_params)
+        assert _in(custom_model.head.weight, adamw_params)
+
+
+# ---------------------------------------------------------------------------
+# Task B: Config-driven Muon constraints
+# ---------------------------------------------------------------------------
+
+
+class TestMuonConstraintsFromConfig:
+    """Config-driven Muon build must never route INPUT or OUTPUT layer params to Muon."""
+
+    @pytest.fixture
+    def three_layer(self) -> _ThreeLayer:
+        """Provide a fresh _ThreeLayer model for each test.
+
+        Returns:
+            A _ThreeLayer with fc0 (INPUT), fc1 (HIDDEN), fc2 (OUTPUT).
+        """
+        return _ThreeLayer()
+
+    @pytest.fixture
+    def concurrent_policy(self) -> OptimizerPolicySettings:
+        """Concurrent Muon + AdamW policy settings.
+
+        Returns:
+            An OptimizerPolicySettings with Muon on HIDDEN params and AdamW on the rest.
+        """
+        muon_stage = OptimizationStageSettings(
+            optimizer=MuonSettings(lr=0.02),
+            selector=MuonEligibleSelectorSettings(),
+        )
+        adamw_stage = OptimizationStageSettings(
+            optimizer=AdamWSettings(lr=1e-3),
+            selector=NonMuonSelectorSettings(),
+        )
+        return OptimizerPolicySettings(
+            stages=(ConcurrentOptimizationSettings(optimizers=(muon_stage, adamw_stage)),)
+        )
+
+    def test_muon_receives_only_hidden_2d_params(
+        self,
+        three_layer: _ThreeLayer,
+        concurrent_policy: OptimizerPolicySettings,
+    ) -> None:
+        """Only the HIDDEN weight (fc1.weight) reaches Muon; INPUT/OUTPUT weights do not.
+
+        Args:
+            three_layer: Three-layer FFNN with fc0/fc1/fc2.
+            concurrent_policy: Concurrent Muon + AdamW policy.
+        """
+        program = OptimizerPolicyBuilder().build(three_layer, concurrent_policy)
+        group = program.current
+        assert isinstance(group, ActiveConcurrentGroup)
+
+        muon_params = [p for pg in group.stages[0].optimizer.param_groups for p in pg["params"]]
+        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+
+        def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
+            return any(p is param for p in param_list)
+
+        named = dict(three_layer.named_parameters())
+        weights_2d = [(n, p) for n, p in named.items() if p.ndim == 2]
+        # _ThreeLayer has 3 linear weights: fc0=INPUT, fc1=HIDDEN, fc2=OUTPUT
+        _, first_weight = weights_2d[0]
+        _, hidden_weight = weights_2d[1]
+        _, last_weight = weights_2d[2]
+
+        assert _in(hidden_weight, muon_params), "HIDDEN weight (fc1) must be in Muon"
+        assert not _in(first_weight, muon_params), "INPUT weight (fc0) must NOT be in Muon"
+        assert not _in(last_weight, muon_params), "OUTPUT weight (fc2) must NOT be in Muon"
+
+        # All biases go to AdamW
+        for name, param in named.items():
+            if "bias" in name:
+                assert _in(param, adamw_params), f"Bias {name} must go to AdamW"
+
+    def test_adamw_receives_input_output_weights_and_biases(
+        self,
+        three_layer: _ThreeLayer,
+        concurrent_policy: OptimizerPolicySettings,
+    ) -> None:
+        """AdamW receives the INPUT and OUTPUT layer weights and all biases.
+
+        Args:
+            three_layer: Three-layer FFNN with fc0/fc1/fc2.
+            concurrent_policy: Concurrent Muon + AdamW policy.
+        """
+        program = OptimizerPolicyBuilder().build(three_layer, concurrent_policy)
+        group = program.current
+        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+
+        def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
+            return any(p is param for p in param_list)
+
+        named = dict(three_layer.named_parameters())
+        weights_2d = [(n, p) for n, p in named.items() if p.ndim == 2]
+        _, first_weight = weights_2d[0]
+        _, last_weight = weights_2d[2]
+
+        assert _in(first_weight, adamw_params), "INPUT weight (fc0) must be in AdamW"
+        assert _in(last_weight, adamw_params), "OUTPUT weight (fc2) must be in AdamW"

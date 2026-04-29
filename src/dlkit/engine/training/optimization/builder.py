@@ -30,6 +30,7 @@ from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
 from .partitioning import ParameterPartitioner
+from .role_inference import make_default_inference_strategy
 from .selectors import (
     DifferenceSelector,
     IntersectionSelector,
@@ -178,7 +179,11 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
         """
         # Empty stages: use default_optimizer + default_scheduler as fallback
         if not settings.stages:
-            inventory = TorchParameterInventory(model)
+            strategy = make_default_inference_strategy(model)
+            inventory = TorchParameterInventory(
+                model,
+                role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+            )
             all_params = inventory.list_parameters()
 
             param_groups = _params_to_group(all_params)
@@ -230,8 +235,12 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
         Returns:
             An ActiveStage instance.
         """
-        # Enumerate parameters
-        inventory = TorchParameterInventory(model)
+        # Enumerate parameters, resolving roles via default strategy
+        strategy = make_default_inference_strategy(model)
+        inventory = TorchParameterInventory(
+            model,
+            role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+        )
 
         # Partition parameters if selector provided
         if config.selector is not None:
