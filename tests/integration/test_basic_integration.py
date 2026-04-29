@@ -93,9 +93,8 @@ class TestBasicIntegration:
         try:
             result = predictor.predict(x=x_input)
 
-            # Assert - predict() returns Tensor (single output) or tuple (multi-output)
             assert result is not None
-            prediction = result[0] if isinstance(result, tuple) else result
+            prediction = result.predictions
             assert isinstance(prediction, torch.Tensor)
             assert prediction.shape[0] == 5
         finally:

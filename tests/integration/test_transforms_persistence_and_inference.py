@@ -152,14 +152,11 @@ def _basic_trainer() -> Trainer:
 def _extract_prediction_tensor(result: Any) -> torch.Tensor:
     """Retrieve the first tensor prediction from inference output.
 
-    Handles the new predict() API: returns Tensor (single output) or
-    tuple[Tensor, ...] (multi-output, first element is the prediction).
+    Handles the direct inference API's ``PredictionOutput`` wrapper.
     """
-    if isinstance(result, torch.Tensor):
-        return result
-    if isinstance(result, tuple) and result and isinstance(result[0], torch.Tensor):
-        return result[0]
-    raise AssertionError(f"Expected Tensor or tuple[Tensor,...] but got {type(result)}: {result}")
+    if hasattr(result, "predictions") and isinstance(result.predictions, torch.Tensor):
+        return result.predictions
+    raise AssertionError(f"Expected PredictionOutput but got {type(result)}: {result}")
 
 
 @pytest.fixture(scope="module")
@@ -281,7 +278,6 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     ) as predictor:
         predictions = predictor.predict(x=x_tensor)
 
-    # predict() returns Tensor for single-output models
     predictions = _extract_prediction_tensor(predictions)
     assert isinstance(predictions, torch.Tensor)
     assert predictions.shape[0] == 8  # Same number of samples as input

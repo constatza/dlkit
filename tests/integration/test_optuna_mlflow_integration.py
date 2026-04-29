@@ -11,52 +11,44 @@ import os
 import pytest
 from mlflow.tracking import MlflowClient
 
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
 from dlkit.interfaces.api import optimize as api_optimize
 
 FAST_TEST_TIMEOUT = int(30 * float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0")))
 
 
 @pytest.fixture
-def combined_settings(training_settings: GeneralSettings, tmp_path, monkeypatch):
-    """Create settings with both Optuna and MLflow enabled via isolated sqlite tracking.
-
-    Uses sqlite tracking for speed and deterministic isolation.
-    """
-    from dlkit.engine.workflows.entrypoints._overrides import apply_runtime_overrides
-
-    # Create isolated MLflow directory per test for proper isolation
+def combined_settings(training_settings: OptimizationWorkflowConfig, tmp_path, monkeypatch):
+    """Create OptimizationWorkflowConfig with both Optuna and MLflow enabled."""
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}")
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
-    # Enable both MLflow and Optuna with tiny sqlite-backed stores.
-    # Use unique experiment name per test to prevent conflicts
-    settings_with_overrides = apply_runtime_overrides(
-        training_settings,
-        enable_mlflow=True,
-        experiment_name=f"test_optuna_mlflow_{tmp_path.name}",  # Unique per test
-        enable_optuna=True,
-        trials=1,  # Minimal trials for speed
-        study_name=f"test_study_{tmp_path.name}",  # Unique per test
-    )
-    assert settings_with_overrides.OPTUNA is not None
-
-    # Ensure optuna has isolated storage per test
+    experiment_name = f"test_optuna_mlflow_{tmp_path.name}"
     unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
-    new_optuna = settings_with_overrides.OPTUNA.model_copy(
-        update={
-            "storage": unique_storage,
-            "study_name": f"test_study_{tmp_path.name}",
-        }
+
+    return OptimizationWorkflowConfig(
+        SESSION=training_settings.SESSION,
+        TRAINING=training_settings.TRAINING,
+        DATAMODULE=training_settings.DATAMODULE,
+        DATASET=training_settings.DATASET,
+        MODEL=training_settings.MODEL,
+        MLFLOW=MLflowSettings(experiment_name=experiment_name),
+        OPTUNA=OptunaSettings(
+            enabled=True,
+            n_trials=1,
+            study_name=f"test_study_{tmp_path.name}",
+            storage=unique_storage,
+            model={"hidden_size": [2, 4]},
+        ),
     )
-    return settings_with_overrides.model_copy(update={"OPTUNA": new_optuna})
 
 
 @pytest.fixture
-def optuna_only_settings(optuna_settings: GeneralSettings):
+def optuna_only_settings(optuna_settings: OptimizationWorkflowConfig):
     """Create settings with only Optuna enabled."""
     return optuna_settings
 
@@ -95,11 +87,18 @@ class TestOptunaMLflowOptimization:
         assert result.duration_seconds >= 0
         assert result.best_trial is not None
 
-    def test_no_optimization_raises_error(self):
-        """Test that optimize() raises error when optimization not enabled."""
+    def test_no_optimization_raises_error(self, training_settings):
+        """Test that optimize() raises error when OPTUNA is not enabled."""
         from dlkit.common import WorkflowError
 
-        settings = GeneralSettings()  # No OPTUNA enabled
+        settings = OptimizationWorkflowConfig(
+            SESSION=training_settings.SESSION,
+            TRAINING=training_settings.TRAINING,
+            DATAMODULE=training_settings.DATAMODULE,
+            DATASET=training_settings.DATASET,
+            MODEL=training_settings.MODEL,
+            OPTUNA=OptunaSettings(enabled=False),
+        )
 
         with pytest.raises(WorkflowError) as exc_info:
             api_optimize(settings)
@@ -108,26 +107,29 @@ class TestOptunaMLflowOptimization:
 
 
 class TestBackwardCompatibility:
-    """Test that changes maintain backward compatibility."""
+    """Test that passing wrong config type raises a clear TypeError."""
 
-    def test_vanilla_workflow_raises_error(self):
-        """Test that vanilla (no optimization) workflows raise clear error."""
-        from dlkit.common import WorkflowError
-
-        settings = GeneralSettings()  # No OPTUNA or MLFLOW
-
-        with pytest.raises(WorkflowError) as exc_info:
-            api_optimize(settings)
-
-        assert "OPTUNA is not enabled" in str(exc_info.value)
+    def test_vanilla_workflow_raises_error(self, training_settings):
+        """Passing TrainingWorkflowConfig to optimize() must raise TypeError."""
+        with pytest.raises(TypeError, match="OptimizationWorkflowConfig"):
+            api_optimize(training_settings)
 
 
-def test_null_object_pattern_through_apis() -> None:
+def test_null_object_pattern_through_apis(training_settings) -> None:
     """Optimization without MLflow should still work through the high-level API."""
-    settings_no_mlflow = GeneralSettings(
+    settings_no_mlflow = OptimizationWorkflowConfig(
+        SESSION=training_settings.SESSION,
+        TRAINING=training_settings.TRAINING,
+        DATAMODULE=training_settings.DATAMODULE,
+        DATASET=training_settings.DATASET,
+        MODEL=training_settings.MODEL,
         OPTUNA=OptunaSettings(
-            enabled=True, n_trials=1, direction="minimize", study_name="test_study"
-        )
+            enabled=True,
+            n_trials=1,
+            direction="minimize",
+            study_name="test_study",
+            model={"hidden_size": [2, 4]},
+        ),
     )
 
     result = api_optimize(settings_no_mlflow)
