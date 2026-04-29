@@ -135,6 +135,11 @@ class MuonSettings(OptimizerComponentSettings):
     Muon (Momentum + Update Orthogonalization) uses Newton–Schulz iterations
     to orthogonalize the weight update matrix.
 
+    For 1-D and non-matrix parameters, use a separate stage:
+    ``OptimizationStageSettings(optimizer=AdamWSettings(...),
+    selector=NonMuonSelectorSettings())`` — do not rely on Muon's built-in
+    AdamW fallback.
+
     Attributes:
         name: Discriminator tag — always ``"Muon"``.
         module_path: Import path.
@@ -142,10 +147,6 @@ class MuonSettings(OptimizerComponentSettings):
         momentum: Momentum coefficient.
         nesterov: Whether to use Nesterov momentum.
         ns_steps: Number of Newton–Schulz iterations.
-        adamw_lr: Learning rate for the embedded AdamW fallback (non-matrix params).
-        adamw_betas: Beta coefficients for the embedded AdamW.
-        adamw_eps: Epsilon for the embedded AdamW.
-        adamw_wd: Weight decay for the embedded AdamW.
     """
 
     model_config = _OPT_CONFIG
@@ -155,12 +156,6 @@ class MuonSettings(OptimizerComponentSettings):
     momentum: float = Field(default=0.95, ge=0, le=1, description="Momentum coefficient")
     nesterov: bool = Field(default=True, description="Use Nesterov momentum")
     ns_steps: int = Field(default=5, gt=0, description="Newton–Schulz iterations")
-    adamw_lr: float = Field(default=3e-4, gt=0, description="AdamW fallback learning rate")
-    adamw_betas: tuple[float, float] = Field(
-        default=(0.95, 0.95), description="AdamW beta coefficients"
-    )
-    adamw_eps: float = Field(default=1e-8, gt=0, description="AdamW epsilon")
-    adamw_wd: float = Field(default=0.0, ge=0, description="AdamW weight decay")
 
 
 # ---------------------------------------------------------------------------
