@@ -10,7 +10,7 @@ from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowCon
 
 from ..optimization.factory import OptimizationServiceFactory
 from ._entrypoint_context import EntrypointContext
-from ._override_types import OptimizationOverrides
+from ._override_types import OptimizationOverrides, require_override_model
 
 
 def optimize(
@@ -18,7 +18,12 @@ def optimize(
     overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""
-    context = EntrypointContext.prepare(settings, overrides, workflow_name="optimization")
+    validated_overrides = require_override_model(overrides, OptimizationOverrides)
+    context = EntrypointContext.prepare(
+        settings,
+        validated_overrides,
+        workflow_name="optimization",
+    )
 
     try:
         opt_settings = cast(OptimizationWorkflowConfig, context.settings)

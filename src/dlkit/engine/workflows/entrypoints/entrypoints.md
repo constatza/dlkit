@@ -4,7 +4,7 @@
 
 ## Responsibilities
 - coerce workflow settings to runtime-ready settings objects
-- accept TypedDict override payloads
+- accept strict Pydantic override payloads
 - validate and apply request-scoped overrides
 - establish path override context
 - measure elapsed time for workflow results
@@ -12,7 +12,7 @@
 
 ## Current Layout
 - `_settings.py`: workflow settings coercion
-- `_override_types.py`: TypedDict override payloads
+- `_override_types.py`: strict override payload models
 - `_entrypoint_context.py`: shared setup for override application, path context, and timing
 - `training.py`: training entrypoint
 - `optimization.py`: optimization entrypoint
@@ -22,3 +22,5 @@
 ## Design Rule
 Entrypoints stay procedural. They normalize request-level concerns and then hand
 control to runtime orchestration and optimization services.
+
+Unknown override keys are rejected at the entrypoint boundary instead of being silently dropped.

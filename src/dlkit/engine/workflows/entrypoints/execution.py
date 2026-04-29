@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
@@ -14,7 +12,12 @@ from dlkit.infrastructure.config.workflow_configs import (
 )
 from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
-from ._override_types import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
+from ._override_types import (
+    ExecutionOverrides,
+    OptimizationOverrides,
+    TrainingOverrides,
+    require_override_model,
+)
 from .optimization import optimize
 from .training import train
 
@@ -26,13 +29,17 @@ def execute(
     hooks: LifecycleHooks | None = None,
 ) -> TrainingResult | OptimizationResult:
     """Dispatch between runtime training and optimization entrypoints."""
+    validated_overrides = require_override_model(overrides, ExecutionOverrides)
+    override_payload = (
+        validated_overrides.model_dump(exclude_none=True) if validated_overrides is not None else {}
+    )
+
     match settings:
         case OptimizationWorkflowConfig():
-            optimization_overrides = cast(
-                OptimizationOverrides,
+            optimization_overrides = OptimizationOverrides.model_validate(
                 {
                     key: value
-                    for key, value in (overrides or {}).items()
+                    for key, value in override_payload.items()
                     if key
                     in {
                         "checkpoint_path",
@@ -47,9 +54,9 @@ def execute(
                         "register_model",
                         "tags",
                     }
-                },
+                }
             )
-            return optimize(settings, optimization_overrides)
+            return optimize(settings, optimization_overrides if override_payload else None)
 
         case InferenceWorkflowConfig():
             raise WorkflowError(
@@ -58,11 +65,10 @@ def execute(
             )
 
         case TrainingWorkflowConfig():
-            training_overrides = cast(
-                TrainingOverrides,
+            training_overrides = TrainingOverrides.model_validate(
                 {
                     key: value
-                    for key, value in (overrides or {}).items()
+                    for key, value in override_payload.items()
                     if key
                     in {
                         "checkpoint_path",
@@ -79,6 +85,6 @@ def execute(
                         "loss_function",
                         "loss_module",
                     }
-                },
+                }
             )
-            return train(settings, training_overrides, hooks=hooks)
+            return train(settings, training_overrides if override_payload else None, hooks=hooks)

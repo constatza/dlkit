@@ -14,6 +14,7 @@ from dlkit.infrastructure.config.workflow_configs import (
     TrainingWorkflowConfig,
 )
 from dlkit.interfaces.api import execute
+from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
 
 
 class TestUnifiedExecuteFunction:
@@ -33,7 +34,7 @@ class TestUnifiedExecuteFunction:
 
         training_config = Mock(spec=TrainingWorkflowConfig)
 
-        result = execute(training_config, overrides={"epochs": 10})
+        result = execute(training_config, overrides=ExecutionOverrides(epochs=10))
 
         assert isinstance(result, TrainingResult)
         mock_executor_execute.assert_called_once()
@@ -55,7 +56,7 @@ class TestUnifiedExecuteFunction:
 
         optimization_config = Mock(spec=OptimizationWorkflowConfig)
 
-        result = execute(optimization_config, overrides={"trials": 50})
+        result = execute(optimization_config, overrides=ExecutionOverrides(trials=50))
 
         assert isinstance(result, OptimizationResult)
         mock_executor_execute.assert_called_once()

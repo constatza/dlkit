@@ -12,7 +12,7 @@ from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
-from ._override_types import TrainingOverrides
+from ._override_types import TrainingOverrides, require_override_model
 
 logger = get_logger(__name__)
 
@@ -24,7 +24,8 @@ def train(
     hooks: LifecycleHooks | None = None,
 ) -> TrainingResult:
     """Run a training workflow through runtime orchestration."""
-    context = EntrypointContext.prepare(settings, overrides, workflow_name="training")
+    validated_overrides = require_override_model(overrides, TrainingOverrides)
+    context = EntrypointContext.prepare(settings, validated_overrides, workflow_name="training")
 
     try:
         orchestrator = Orchestrator()

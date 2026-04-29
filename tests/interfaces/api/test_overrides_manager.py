@@ -15,6 +15,7 @@ from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.interfaces.api.domain.override_types import TrainingOverrides
 
 
 def _base_settings() -> GeneralSettings:
@@ -113,3 +114,8 @@ def test_validate_overrides_checks_checkpoint_existence(tmp_path: Path) -> None:
     ckpt.touch()
     errors = validate_runtime_overrides(checkpoint_path=ckpt)
     assert errors == []
+
+
+def test_training_overrides_reject_unknown_fields() -> None:
+    with pytest.raises(ValidationError, match="epcohs"):
+        TrainingOverrides(epcohs=5)
