@@ -34,7 +34,8 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
     if settings.DATASET is None or settings.DATAMODULE is None:
         raise ValueError(
             "DATASET and DATAMODULE sections are required for batch inference. "
-            "Set has_batch_inference_config=True before calling build_inference_datamodule()."
+            "Ensure settings.has_dataset_config is True before calling "
+            "build_inference_datamodule()."
         )
 
     try:

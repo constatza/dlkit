@@ -9,9 +9,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import torch
+from tensordict import TensorDict
+
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
 if TYPE_CHECKING:
+    import numpy as np
     from torch import nn
 
     from dlkit.common.shapes import ShapeSummary
@@ -37,6 +41,24 @@ class PredictorConfig:
         """Ensure checkpoint_path is a Path object."""
         if isinstance(self.checkpoint_path, str):
             object.__setattr__(self, "checkpoint_path", Path(self.checkpoint_path))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PredictionOutput:
+    """Typed prediction result for direct checkpoint inference."""
+
+    predictions: torch.Tensor
+    latents: tuple[torch.Tensor, ...] = ()
+    raw: TensorDict | None = None
+
+    def numpy(self) -> np.ndarray:
+        """Return primary predictions as a NumPy array on CPU."""
+        return self.predictions.detach().cpu().numpy()
+
+    def __iter__(self):
+        """Support unpacking as ``(predictions, *latents)``."""
+        yield self.predictions
+        yield from self.latents
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

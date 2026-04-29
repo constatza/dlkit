@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dlkit.common import ConfigurationError
+from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
-from .config import PredictorConfig
+from .config import PredictionOutput, PredictorConfig
 from .loading import (
     CheckpointInfo,
     CheckpointValidationResult,
@@ -63,20 +65,21 @@ def load_model(
         >>> # Basic usage (one-shot inference)
         >>> from dlkit import load_model
         >>> with load_model("model.ckpt") as predictor:
-        ...     result = predictor.predict({"x": torch.randn(32, 10)})
+        ...     output = predictor.predict(x=torch.randn(32, 10))
+        ...     predictions = output.predictions
 
         >>> # Efficient multi-inference
         >>> predictor = load_model("model.ckpt", device="cuda")
         >>> for data in dataset:  # No reloading!
-        ...     result = predictor.predict(data)
-        ...     process(result)
+        ...     output = predictor.predict(x=data)
+        ...     process(output.predictions)
         >>> predictor.unload()
 
         >>> # Lazy loading
         >>> predictor = load_model("model.ckpt", auto_load=False)
         >>> # ... do other setup ...
         >>> predictor.load()  # Explicit load
-        >>> result = predictor.predict(data)
+        >>> output = predictor.predict(x=data)
     """
     config = PredictorConfig(
         checkpoint_path=Path(checkpoint_path),
@@ -90,11 +93,40 @@ def load_model(
     return CheckpointPredictor(config)
 
 
+def load_model_from_settings(
+    settings: InferenceWorkflowConfig,
+    *,
+    checkpoint_path: Path | str | None = None,
+    device: str = "auto",
+    batch_size: int = 32,
+    apply_transforms: bool = True,
+    auto_load: bool = True,
+    precision: PrecisionStrategy | None = None,
+) -> CheckpointPredictor:
+    """Resolve a checkpoint from inference settings or an explicit override."""
+    model_settings = settings.MODEL
+    resolved_checkpoint = checkpoint_path or (
+        model_settings.checkpoint if model_settings is not None else None
+    )
+    if resolved_checkpoint is None:
+        raise ConfigurationError("No checkpoint path found in settings or override.")
+    return load_model(
+        checkpoint_path=resolved_checkpoint,
+        device=device,
+        batch_size=batch_size,
+        apply_transforms=apply_transforms,
+        auto_load=auto_load,
+        precision=precision,
+    )
+
+
 # Re-export functions and dataclasses
 __all__ = [
     "CheckpointInfo",
     "CheckpointValidationResult",
+    "PredictionOutput",
     "get_checkpoint_info",
     "load_model",
+    "load_model_from_settings",
     "validate_checkpoint",
 ]

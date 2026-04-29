@@ -1,6 +1,9 @@
-"""Public inference adapter over the runtime predictor subsystem."""
+"""User-facing inference namespace.
 
-from dlkit.engine.inference import (
+Thin re-export of the predictor-facing API.
+"""
+
+from dlkit.interfaces.inference import (
     CheckpointPredictor,
     IPredictor,
     PredictionOutput,
@@ -14,17 +17,14 @@ from dlkit.engine.inference import (
 )
 
 __all__ = [
-    # Main API
     "load_model",
+    "load_model_from_settings",
     "validate_checkpoint",
     "get_checkpoint_info",
-    # Predictor classes
     "CheckpointPredictor",
     "IPredictor",
     "PredictionOutput",
     "PredictorConfig",
-    "load_model_from_settings",
-    # Exceptions
     "PredictorError",
     "PredictorNotLoadedError",
 ]

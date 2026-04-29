@@ -113,7 +113,7 @@ dlkit train config.toml --validate-only
 
 ### Component 2: `predict.py` - Prediction/Inference Commands
 
-**Purpose**: Runs Lightning-based predictions using trained checkpoints and training configurations.
+**Purpose**: Runs dataset-backed batch prediction using a trained checkpoint and an inference configuration.
 
 **Main Command**: `dlkit predict CONFIG.toml CHECKPOINT [options]`
 
@@ -145,9 +145,10 @@ dlkit predict config.toml model.ckpt --no-save
 ```
 
 **Implementation Notes**:
-- Checkpoint path required as CLI argument
-- Can fallback to `[MODEL].checkpoint` from config
-- Uses training config for data loading consistency
+- Checkpoint resolution is delegated to `load_model_from_settings()`
+- Batch prediction requires `settings.has_dataset_config` so `DATASET` and `DATAMODULE` are both present
+- Uses `CheckpointPredictor.feature_names` for feature dispatch instead of private predictor state
+- `CheckpointPredictor.predict()` returns `PredictionOutput`; CLI collects `output.predictions`
 - Progress indicators during inference
 - Results presented via `present_inference_result()`
 
@@ -461,16 +462,6 @@ except Exception as e:
 - Rich console rendering optimized for terminal output
 - Background server mode for non-blocking execution
 
-## Future Improvements / TODOs
-- [ ] Add `dlkit resume` command for automatic checkpoint detection
-- [ ] Batch prediction mode for multiple checkpoints
-- [ ] Configuration diffing: `dlkit config diff config1.toml config2.toml`
-- [ ] Interactive configuration wizard: `dlkit config wizard`
-- [ ] Export command support for TorchScript, CoreML
-- [ ] Server command: `dlkit server logs` for viewing server logs
-- [ ] Optimization: Real-time trial visualization with `--watch` flag
-- [ ] Shell completion generation: `dlkit completion bash/zsh/fish`
-
 ## Related Modules
 - `dlkit.interfaces.api`: API layer that CLI commands delegate to
 - `dlkit.interfaces.cli.adapters`: Configuration and result presentation adapters
@@ -478,8 +469,3 @@ except Exception as e:
 - `dlkit.interfaces.servers`: Server management services
 - `dlkit.infrastructure.config`: Configuration models and validation
 
-## Change Log
-- **2025-10-03**: Comprehensive CLI commands documentation created
-- **2024-10-02**: Added convert command for ONNX export
-- **2024-09-30**: Refactored server commands to use application service
-- **2024-09-24**: Initial CLI structure with train, predict, optimize commands
