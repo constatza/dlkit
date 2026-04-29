@@ -55,7 +55,7 @@ y = activation(SpectralConv1d(x) + Conv1d(x, kernel=1))
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `in_channels` | `int` | required | Input channel count (injected by factory) |
+| `in_channels` | `int` | required | Input channel count |
 | `out_channels` | `int` | required | Output channel count |
 | `width` | `int` | `64` | Latent channel width throughout the body |
 | `n_modes` | `int` | `16` | Fourier modes retained per layer |
@@ -88,7 +88,9 @@ n_modes = 16
 n_layers = 4
 ```
 
-`in_channels` is injected from the dataset shape summary by the "conv" factory strategy.
+`FourierNeuralOperator1d` implements `from_shape(shape, **kwargs)`, so the
+shared model factory builds it explicitly from the dataset-derived channel
+summary.
 
 ---
 
@@ -108,7 +110,7 @@ v_i        = Σ branch_out * trunk_out / trunk_width + bias
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `in_features` | `int` | required | Sensor count (branch input; injected by factory) |
+| `in_features` | `int` | required | Sensor count (branch input) |
 | `out_features` | `int` | required | Output values per query point |
 | `n_coords` | `int` | required | Spatial coordinate dimension for trunk |
 | `trunk_width` | `int` | `64` | Dot-product latent space per output channel |
@@ -130,6 +132,9 @@ model_input = 0   # branch input
 name = "y"
 model_input = 1   # trunk input (query coordinates)
 ```
+
+`MLPDeepONet` implements `from_shape(shape, **kwargs)` and expects the shape
+summary to contain both input entries in branch/trunk order.
 
 ### Example
 

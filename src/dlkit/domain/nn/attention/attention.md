@@ -110,11 +110,12 @@ encoded = encoder(x)  # Shape: (16, 128, 50)
 ```
 
 **Implementation Notes**:
-- Automatically permutes input: (batch, channels, timesteps) → (timesteps, batch, channels)
-- Uses PyTorch's `nn.TransformerEncoderLayer` with default feedforward dimension
+- Automatically permutes input: (batch, channels, timesteps) → (batch, timesteps, channels)
+- Uses PyTorch's `nn.TransformerEncoderLayer(batch_first=True)` with default feedforward dimension
+- Enables nested-tensor fast-path only for even attention-head counts supported by PyTorch
 - Each layer includes self-attention + feedforward network + layer normalization
 - Permutes output back to (batch, channels, timesteps)
-- Default activation is GELU, default dropout is 0.0
+- Default activation is ReLU, default dropout is 0.1
 
 ---
 
@@ -154,11 +155,12 @@ decoded = decoder(target_sequence, memory=encoder_output)  # Shape: (16, 128, 30
 ```
 
 **Implementation Notes**:
-- Automatically permutes input dimensions for PyTorch transformer compatibility
-- Uses PyTorch's `nn.TransformerDecoderLayer` with self-attention and cross-attention
+- Automatically permutes input: (batch, channels, timesteps) → (batch, timesteps, channels)
+- Uses PyTorch's `nn.TransformerDecoderLayer(batch_first=True)` with self-attention and cross-attention
 - If memory is None, uses input sequence for both (pure self-attention)
 - Includes causal masking for autoregressive generation (via PyTorch defaults)
 - Each layer: self-attention + cross-attention + feedforward + layer norm
+- Permutes output back to (batch, channels, timesteps)
 
 ## Usage Patterns
 

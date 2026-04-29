@@ -138,8 +138,9 @@ n_modes = 16
 merge = "concat"
 ```
 
-`in_features` and `out_features` are injected automatically from the dataset
-shape summary (factory "ffnn" strategy).
+`FourierEnhancedFFNN` and `DualPathFFNN` expose `from_shape(shape, **kwargs)`,
+so the shared model factory can build them explicitly from the dataset shape
+summary without constructor-name inspection.
 
 ---
 

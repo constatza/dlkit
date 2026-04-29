@@ -24,13 +24,16 @@ parameters:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 # ---------------------------------------------------------------------------
 # Shared spectral-feature helper (pure function, no learnable parameters)
@@ -229,6 +232,15 @@ class FourierEnhancedFFNN(FourierAugmented):
         )
         super().__init__(backbone=backbone, n_modes=n_modes)
 
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> FourierEnhancedFFNN:
+        """Build the network from a dataset-derived flat shape summary."""
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
+        )
+
 
 class DualPathFFNN(SpectralDualPath):
     """FFNN with parallel spatial and spectral ``ConstantWidthFFNN`` branches.
@@ -288,4 +300,13 @@ class DualPathFFNN(SpectralDualPath):
             projection=projection,
             n_modes=n_modes,
             merge=merge,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> DualPathFFNN:
+        """Build the network from a dataset-derived flat shape summary."""
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
         )

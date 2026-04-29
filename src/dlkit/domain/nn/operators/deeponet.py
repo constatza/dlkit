@@ -21,12 +21,16 @@ Two classes are provided:
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.ffnn.simple import FeedForwardNN
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class DeepONet(nn.Module):
@@ -177,4 +181,19 @@ class MLPDeepONet(DeepONet):
             trunk_net=trunk_net,
             trunk_width=trunk_width,
             out_features=out_features,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> MLPDeepONet:
+        """Build the operator from sensor and query-coordinate shapes."""
+        if len(shape.in_shapes) < 2:
+            raise ValueError(
+                "MLPDeepONet.from_shape() requires two input shapes: "
+                "sensor values and query coordinates."
+            )
+        return cls(
+            in_features=shape.in_shapes[0][0],
+            n_coords=shape.in_shapes[1][-1],
+            out_features=shape.out_features,
+            **kwargs,
         )

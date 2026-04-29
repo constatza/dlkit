@@ -7,12 +7,16 @@ Differential Equations", ICLR 2021. https://arxiv.org/abs/2010.08895
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.operators.base import GridOperatorBase
 from dlkit.domain.nn.spectral.layers import FourierLayer
+
+if TYPE_CHECKING:
+    from dlkit.common.shapes import ShapeSummary
 
 
 class FourierNeuralOperator1d(GridOperatorBase):
@@ -64,4 +68,13 @@ class FourierNeuralOperator1d(GridOperatorBase):
             in_channels=in_channels,
             out_channels=out_channels,
             width=width,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> FourierNeuralOperator1d:
+        """Build the operator from a dataset-derived grid shape summary."""
+        return cls(
+            in_channels=shape.in_channels,
+            out_channels=shape.out_features,
+            **kwargs,
         )

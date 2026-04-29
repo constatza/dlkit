@@ -137,9 +137,17 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         "edge_index": np.zeros((2, 8), dtype=int),
         "y": np.ones((5, 1)),
     }
-    ds = DatasetSettings(name="Any", module_path="x", type=DatasetFamily.GRAPH)
+    ds = DatasetSettings(
+        name="Any",
+        module_path="dlkit.engine.data.datasets",
+        type=DatasetFamily.GRAPH,
+    )
     dm = DataModuleSettings()
-    mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
+    mdl = ModelComponentSettings(
+        name="Dummy",
+        module_path="dlkit.domain.nn.ffnn",
+        checkpoint=tmp_checkpoint,
+    )
     settings = GeneralSettings(
         SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
@@ -181,9 +189,17 @@ def test_build_factory_selects_timeseries_strategy(
 ) -> None:
     # Timeseries hint via type; fallback uses flexible inference
     ts_sample = {"x": np.zeros((12, 2)), "y": np.zeros((1,))}
-    ds = DatasetSettings(name="Any", module_path="x", type=DatasetFamily.TIMESERIES)
+    ds = DatasetSettings(
+        name="Any",
+        module_path="dlkit.engine.data.datasets",
+        type=DatasetFamily.TIMESERIES,
+    )
     dm = DataModuleSettings()
-    mdl = ModelComponentSettings(name="Dummy", module_path="x", checkpoint=tmp_checkpoint)
+    mdl = ModelComponentSettings(
+        name="Dummy",
+        module_path="dlkit.domain.nn.ffnn",
+        checkpoint=tmp_checkpoint,
+    )
     settings = GeneralSettings(
         SESSION=SessionSettings(workflow="inference"),
         MODEL=mdl,
