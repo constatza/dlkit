@@ -11,6 +11,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 from dlkit.infrastructure.io.path_context import get_current_path_context, path_override_context
 
+from ._override_types import RuntimeOverrideModel
 from ._overrides import apply_runtime_overrides, build_runtime_overrides, validate_runtime_overrides
 from ._settings import WorkflowSettings
 
@@ -26,16 +27,27 @@ class EntrypointContext:
     path_overrides: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
+    def _normalize_overrides(
+        cls, overrides: Mapping[str, Any] | RuntimeOverrideModel | None
+    ) -> dict[str, Any]:
+        """Normalize override payloads to a plain dict for runtime helpers."""
+        if overrides is None:
+            return {}
+        if isinstance(overrides, RuntimeOverrideModel):
+            return overrides.to_runtime_kwargs()
+        return dict(overrides)
+
+    @classmethod
     def prepare(
         cls,
         raw_settings: WorkflowSettings,
-        overrides: Mapping[str, Any] | None,
+        overrides: Mapping[str, Any] | RuntimeOverrideModel | None,
         *,
         workflow_name: str,
     ) -> EntrypointContext:
         """Validate overrides and derive path context state."""
         effective = raw_settings
-        normalized_overrides = build_runtime_overrides(**dict(overrides or {}))
+        normalized_overrides = build_runtime_overrides(**cls._normalize_overrides(overrides))
         errors = validate_runtime_overrides(**normalized_overrides)
         if errors:
             raise WorkflowError(

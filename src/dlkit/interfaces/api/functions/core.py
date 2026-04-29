@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-from typing import Any, cast
-
 from lightning.pytorch import LightningDataModule
 
 from dlkit.common import (
@@ -26,20 +22,6 @@ from dlkit.interfaces.api.domain.override_types import (
 _executor: EngineWorkflowExecutor = EngineWorkflowExecutor()
 
 
-def _coerce_override_paths(overrides: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Coerce known path-like override values into ``Path`` objects."""
-    path_fields = {"checkpoint_path", "root_dir", "output_dir", "data_dir"}
-    coerced: dict[str, Any] = {}
-    if overrides is not None:
-        for key, value in overrides.items():
-            coerced[key] = value
-    for field in path_fields:
-        value = coerced.get(field)
-        if isinstance(value, str):
-            coerced[field] = Path(value)
-    return coerced
-
-
 def train(
     settings: WorkflowSettings,
     overrides: TrainingOverrides | None = None,
@@ -58,7 +40,7 @@ def train(
     """
     return _executor.train(
         settings,
-        overrides=cast(TrainingOverrides, _coerce_override_paths(overrides)),
+        overrides=overrides,
         mlflow=mlflow,
     )
 
@@ -109,6 +91,6 @@ def optimize(
     """
     return _executor.optimize(
         settings,
-        overrides=cast(OptimizationOverrides, _coerce_override_paths(overrides)),
+        overrides=overrides,
         mlflow=mlflow,
     )

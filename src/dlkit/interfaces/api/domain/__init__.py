@@ -23,7 +23,12 @@ from dlkit.infrastructure.precision import (
     precision_override,
 )
 
-from .override_types import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
+from .override_types import (
+    ExecutionOverrides,
+    OptimizationOverrides,
+    RuntimeOverrideModel,
+    TrainingOverrides,
+)
 from .protocols import ExecutionStrategy, StrategyFactory, WorkflowOperation
 
 __all__ = [
@@ -35,6 +40,7 @@ __all__ = [
     # Override types
     "ExecutionOverrides",
     "OptimizationOverrides",
+    "RuntimeOverrideModel",
     "TrainingOverrides",
     # Precision
     "PrecisionContext",

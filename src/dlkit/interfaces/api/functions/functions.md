@@ -4,7 +4,7 @@
 
 ## Responsibilities
 - expose the public workflow functions
-- accept TypedDict-style override payloads
+- accept strict Pydantic override payloads (`TrainingOverrides`, `OptimizationOverrides`, `ExecutionOverrides`)
 - coerce known string paths to `Path`
 - forward normalized requests to runtime entrypoints
 
@@ -19,7 +19,8 @@
 ## Example
 ```python
 from dlkit.interfaces.api import execute, train
+from dlkit.interfaces.api.domain import TrainingOverrides, ExecutionOverrides
 
-result = train(settings, overrides={"epochs": 25, "learning_rate": 1e-3})
-result = execute(settings, overrides={"trials": 10})
+result = train(settings, overrides=TrainingOverrides(epochs=25, learning_rate=1e-3))
+result = execute(settings, overrides=ExecutionOverrides(trials=10))
 ```
