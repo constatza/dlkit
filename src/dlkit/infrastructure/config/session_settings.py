@@ -17,6 +17,14 @@ from dlkit.infrastructure.precision import PrecisionStrategy
 from .core.base_settings import BasicSettings
 
 WorkflowMode = Literal["train", "optimize", "inference"]
+_LIGHTNING_PRECISION_ALIASES: dict[str, PrecisionStrategy] = {
+    "64": PrecisionStrategy.FULL_64,
+    "32": PrecisionStrategy.FULL_32,
+    "16": PrecisionStrategy.TRUE_16,
+    "bf16": PrecisionStrategy.TRUE_BF16,
+    "16-mixed": PrecisionStrategy.MIXED_16,
+    "bf16-mixed": PrecisionStrategy.MIXED_BF16,
+}
 
 
 class SessionSettings(BasicSettings):
@@ -63,8 +71,8 @@ class SessionSettings(BasicSettings):
         """Validate and normalize precision input using alias support.
 
         This validator accepts precision values in various formats (enum values,
-        semantic string aliases) and normalizes them to PrecisionStrategy.
-        Integers and numeric strings are rejected.
+        semantic string aliases, and Lightning-style integer/string values) and
+        normalizes them to PrecisionStrategy.
 
         Args:
             v: Precision value from config (string or PrecisionStrategy)
@@ -73,22 +81,23 @@ class SessionSettings(BasicSettings):
             Normalized PrecisionStrategy enum value
 
         Raises:
-            ValueError: If precision value is invalid (e.g., "wtf", 64, "64")
+            ValueError: If precision value is invalid (e.g., "wtf", "unsupported")
 
         Examples:
-            Valid inputs: "double", "float64", "single", "float32", etc.
-            Invalid inputs: "wtf", "foo", 64, "64", etc.
+            Valid inputs: 32, "32", "double", "float64", "16-mixed", etc.
+            Invalid inputs: "wtf", "foo", "unsupported", etc.
         """
         # Already a PrecisionStrategy - pass through
         if isinstance(v, PrecisionStrategy):
             return v
 
-        # Reject integers
         if isinstance(v, int):
-            raise ValueError(
-                "Invalid precision value in [SESSION] configuration: "
-                "Integer values not supported. Use semantic aliases like 'double', 'single', 'float64', etc."
-            )
+            v = str(v)
+
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in _LIGHTNING_PRECISION_ALIASES:
+                return _LIGHTNING_PRECISION_ALIASES[normalized]
 
         # Use from_string to parse and validate (handles str only)
         try:

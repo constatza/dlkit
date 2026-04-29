@@ -23,7 +23,7 @@ workflow = "train"
 
 [MODEL]
 name = "TestModel"
-module_path = "test.model"
+module_path = "dlkit.domain.nn.ffnn"
 
 [DATAMODULE]
 name = "TestDataModule"

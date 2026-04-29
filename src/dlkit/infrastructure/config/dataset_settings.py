@@ -12,10 +12,15 @@ from pydantic import (
     FilePath,
     NonNegativeFloat,
     ValidationInfo,
+    field_validator,
     model_validator,
 )
 
-from .core.base_settings import BasicSettings, StringNamedComponentSettings
+from .core.base_settings import (
+    BasicSettings,
+    StringNamedComponentSettings,
+    validate_module_path_import,
+)
 from .data_entries import (
     FeatureType,
     PathFeature,
@@ -169,6 +174,11 @@ class DatasetSettings(StringNamedComponentSettings):
                 raise ValueError(f"Target path does not exist: {target.path}")
 
         return self
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
     @property
     def resolved_memmap_cache_dir(self) -> Path | None:

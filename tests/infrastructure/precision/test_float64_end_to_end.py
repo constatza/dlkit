@@ -93,11 +93,10 @@ class TestFloat64EndToEnd:
         assert session.precision == PrecisionStrategy.FULL_64
         assert session.get_precision_strategy() == PrecisionStrategy.FULL_64
 
-    def test_precision_string_semantic_only(self):
-        """Test that numeric strings are rejected, only semantic aliases work."""
-        # Numeric strings should be rejected
-        with pytest.raises(ValueError, match="Invalid precision value"):
-            _build_session(precision="64")
+    def test_precision_string_numeric_alias(self):
+        """Test that numeric string '64' maps to FULL_64 via Lightning alias."""
+        session = _build_session(precision="64")
+        assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_string_double(self):
         """Test float64 precision with alias 'double'."""
@@ -119,10 +118,10 @@ class TestFloat64EndToEnd:
         session = _build_session(precision="fp64")
         assert session.precision == PrecisionStrategy.FULL_64
 
-    def test_precision_integer_rejected(self):
-        """Test that integer precision values are rejected."""
-        with pytest.raises(ValueError, match="Integer values not supported"):
-            _build_session(precision=64)
+    def test_precision_integer_alias(self):
+        """Test that integer 64 maps to FULL_64 via Lightning alias."""
+        session = _build_session(precision=64)
+        assert session.precision == PrecisionStrategy.FULL_64
 
     def test_precision_case_insensitive(self):
         """Test that precision strings are case-insensitive."""

@@ -10,6 +10,8 @@ services, and component-construction support.
 - component settings and factory support
 - precision strategies and services
 - security-oriented config types
+- workflow discriminator loading that fails fast on malformed TOML
+- load-time validation for importable component `module_path` values
 
 ## Current Structure
 - `core/`: base settings, patching, factories, context
@@ -43,4 +45,5 @@ Python construction omits the discriminator — all fields have defaults.
 
 ## Notes
 - `DATASET.family` is the explicit dataset-family override. Runtime heuristics only apply when it is unset.
-- Component `module_path` values remain optional; runtime builders apply default module namespaces.
+- Component `module_path` values remain optional; when provided they are validated at config load time, and runtime builders still apply default module namespaces when omitted.
+- `InferenceWorkflowConfig.has_dataset_config` is the explicit predicate for dataset-backed batch prediction.

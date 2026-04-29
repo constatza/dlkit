@@ -30,10 +30,23 @@ if TYPE_CHECKING:
     )
 
 from .data_entries import PathBasedEntry, PathFeature, PathTarget, ValueBasedEntry
+from .enums import DatasetFamily
+
+_NON_FLEXIBLE_DATASET_NAMES: frozenset[str] = frozenset({"GraphDataset", "TimeSeriesDataset"})
 
 
 class ConfigValidationError(ValueError):
     """Raised when configuration is incomplete or invalid for workflow execution."""
+
+    def __init__(
+        self,
+        message: str,
+        model_class: str = "",
+        section_data: dict[str, str] | None = None,
+    ):
+        super().__init__(message)
+        self.model_class = model_class
+        self.section_data = section_data or {}
 
 
 # ============================================================================
@@ -80,6 +93,23 @@ def _validate_entry_has_data(entry: object, index: int, role: str) -> None:
         )
 
 
+def _validate_flexible_dataset_entries(dataset: object) -> None:
+    """Raise ConfigValidationError if a FlexibleDataset has no features or targets."""
+    from .dataset_settings import DatasetSettings
+
+    if not isinstance(dataset, DatasetSettings):
+        return
+    if dataset.family in (DatasetFamily.GRAPH, DatasetFamily.TIMESERIES):
+        return
+    if getattr(dataset, "name", None) in _NON_FLEXIBLE_DATASET_NAMES:
+        return
+    if not (dataset.features or dataset.targets):
+        raise ConfigValidationError(
+            "DATASET must have at least one feature or target. "
+            "Add [[DATASET.features]] or [[DATASET.targets]] sections to your config."
+        )
+
+
 def _check_required_sections(config: object, sections: list[str], workflow: str) -> None:
     """Raise ConfigValidationError listing any missing sections."""
     missing = [s for s in sections if getattr(config, s, None) is None]
@@ -118,18 +148,11 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
         components = BuildFactory().build_components(config)
         ```
     """
-    from . import GeneralSettings
-
     _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "training")
 
-    # DATASET must have at least one feature or target (new format only)
-    # Legacy GeneralSettings may use x/y or other dataset construction patterns
-    if config.DATASET is not None and not isinstance(config, GeneralSettings):
-        if not config.DATASET.features and not config.DATASET.targets:
-            raise ConfigValidationError(
-                "DATASET must have at least one feature or target. "
-                "Add [[DATASET.features]] or [[DATASET.targets]] sections to your config."
-            )
+    # Only FlexibleDataset configs require features/targets; graph/timeseries use own schema.
+    if config.DATASET is not None:
+        _validate_flexible_dataset_entries(config.DATASET)
 
         # Validate feature paths exist and placeholders are resolved
         for i, feature in enumerate(config.DATASET.features):

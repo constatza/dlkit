@@ -138,7 +138,7 @@ class TestModelComponentSettings:
         settings = ModelComponentSettings(**model_component_data)
 
         assert settings.name == "TestModel"
-        assert settings.module_path == "test.models"
+        assert settings.module_path == "dlkit.domain.nn.ffnn"
         assert settings.heads == 8
         assert settings.num_layers == 6
         assert settings.latent_size == 256
@@ -202,6 +202,10 @@ class TestModelComponentSettings:
         settings = ModelComponentSettings(name=TestModel)
 
         assert settings.name == TestModel
+
+    def test_invalid_module_path_fails_eagerly(self) -> None:
+        with pytest.raises(ValidationError, match="module_path"):
+            ModelComponentSettings(name="BrokenModel", module_path="dlkit.not_a_real_module")
 
     def test_get_init_kwargs_excludes_model_specific_fields(
         self, model_component_data: dict[str, Any]

@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import Field, PositiveInt
+from pydantic import Field, PositiveInt, field_validator
 
-from .core.base_settings import BasicSettings, ComponentSettings
+from .core.base_settings import BasicSettings, ComponentSettings, validate_module_path_import
 
 
 class PrunerSettings(ComponentSettings):
@@ -31,6 +31,11 @@ class PrunerSettings(ComponentSettings):
     )
     interval_steps: int | None = Field(default=None, description="Interval between pruning steps")
 
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
+
 
 class SamplerSettings(ComponentSettings):
     """Optuna sampler configuration settings.
@@ -48,6 +53,11 @@ class SamplerSettings(ComponentSettings):
         default="optuna.samplers", description="Module path for the sampler"
     )
     seed: int | None = Field(default=None, description="Optional random seed for reproducibility")
+
+    @field_validator("module_path", mode="after")
+    @classmethod
+    def _validate_module_path(cls, v: str | None) -> str | None:
+        return validate_module_path_import(v)
 
 
 class OptunaSettings(BasicSettings):

@@ -16,7 +16,7 @@ def model_component_data() -> dict[str, Any]:
     """
     return {
         "name": "TestModel",
-        "module_path": "test.models",
+        "module_path": "dlkit.domain.nn.ffnn",
         "heads": 8,
         "num_layers": 6,
         "latent_size": 256,
@@ -43,7 +43,7 @@ def model_component_with_checkpoint_data(tmp_path) -> dict[str, Any]:
 
     return {
         "name": "CheckpointModel",
-        "module_path": "test.models",
+        "module_path": "dlkit.domain.nn.ffnn",
         "checkpoint": str(checkpoint_file),
         "latent_size": 128,
     }
@@ -58,7 +58,7 @@ def hyperparameter_model_data() -> dict[str, Any]:
     """
     return {
         "name": "HyperModel",
-        "module_path": "test.models",
+        "module_path": "dlkit.domain.nn.ffnn",
         "heads": {"low": 4, "high": 16, "step": 4},
         "latent_size": {"low": 64, "high": 512, "step": 64},  # Use low/high/step instead of choices
         "num_layers": {"low": 2, "high": 8, "step": 1},
@@ -138,7 +138,7 @@ def complex_wrapper_data() -> dict[str, Any]:
         "scheduler": {"name": "CosineAnnealingLR", "T_max": 100, "eta_min": 1e-6},
         "loss_function": {
             "name": "FocalLoss",
-            "module_path": "test.losses",
+            "module_path": "dlkit.domain.losses",
             "alpha": 0.25,
             "gamma": 2.0,
         },
