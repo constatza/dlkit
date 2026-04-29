@@ -166,10 +166,6 @@ class TrackingDecorator(ITrainingExecutor):
                 if self._hooks and self._hooks.on_run_created:
                     self._hooks.on_run_created(run_context.run_id, tracking_uri)
 
-                # Log extra params from hooks
-                if self._hooks and self._hooks.extra_params:
-                    run_context.log_params(self._hooks.extra_params(settings))
-
                 # Log metadata and configuration
                 self._log_tracking_metadata(run_context, tracking_uri)
                 self._log_configuration(components, settings, run_context)
@@ -183,6 +179,13 @@ class TrackingDecorator(ITrainingExecutor):
                 # Fire on_training_complete hook
                 if self._hooks and self._hooks.on_training_complete:
                     self._hooks.on_training_complete(result)
+
+                # Log extra params and tags from hooks (post-training, receive result)
+                if self._hooks and self._hooks.extra_params:
+                    run_context.log_params(self._hooks.extra_params(result))
+                if self._hooks and self._hooks.extra_tags:
+                    for key, value in self._hooks.extra_tags(result).items():
+                        run_context.set_tag(key, value)
 
                 # Log final summary metrics (delegate to MetricLogger)
                 self._metric_logger.log_summary_metrics(result, run_context)
@@ -260,17 +263,12 @@ class TrackingDecorator(ITrainingExecutor):
         mlflow_config = accessor.get_mlflow_config()
 
         settings_tags: dict[str, str] = accessor.get_run_tags() or {}
-        hooks_tags: dict[str, str] = (
-            self._hooks.extra_tags(settings) if self._hooks and self._hooks.extra_tags else {}
-        )
-        # hooks win on collision
-        merged_tags = {**settings_tags, **hooks_tags}
 
         return {
             "experiment_name": determine_experiment_name(settings, mlflow_config),
             "run_name": accessor.get_run_name(),
             "nested": self._should_use_nested_runs(),
-            "tags": merged_tags or None,
+            "tags": settings_tags or None,
         }
 
     def _log_tracking_metadata(

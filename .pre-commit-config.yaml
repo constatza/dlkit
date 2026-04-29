@@ -22,7 +22,7 @@ repos:
         pass_filenames: false
       - id: ty
         name: "ty: src"
-        entry: uv run ty check src/dlkit --output-format concise --no-progress
+        entry: bash -c 'uv run ty check --output-format concise --no-progress $(git ls-files src/dlkit/ | grep "\.py$")'
         language: system
         pass_filenames: false
         stages: [pre-commit]

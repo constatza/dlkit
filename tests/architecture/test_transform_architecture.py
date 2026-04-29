@@ -96,6 +96,17 @@ class TestProtocolBasedArchitecture:
         assert isinstance(scaler, ShapeAwareTransform)
         assert isinstance(scaler, Transform)
 
+    def test_interfaces_module_reexports_protocols_without_legacy_abcs(self):
+        """The compatibility module should not expose duplicate ABC contracts."""
+        from dlkit.domain.transforms import interfaces
+
+        assert interfaces.FittableTransform is FittableTransform
+        assert interfaces.InvertibleTransform is InvertibleTransform
+        assert interfaces.ShapeAwareTransform is ShapeAwareTransform
+        assert not hasattr(interfaces, "IFittableTransform")
+        assert not hasattr(interfaces, "IInvertibleTransform")
+        assert not hasattr(interfaces, "IShapeAwareTransform")
+
     def test_non_invertible_transforms_fail_protocol_check(self):
         """Transforms without inverse_transform() fail InvertibleTransform Protocol check."""
 
