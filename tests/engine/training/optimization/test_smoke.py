@@ -14,6 +14,7 @@ from torch import nn
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
@@ -28,7 +29,6 @@ from dlkit.engine.training.optimization.selectors import (
     NonMuonSelector,
 )
 from dlkit.engine.training.optimization.state import (
-    ActiveConcurrentGroup,
     ActiveStage,
     RunningOptimizerPolicy,
 )
@@ -41,18 +41,12 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.optimization_selector import (
-    MuonEligibleSelectorSettings,
-    NonMuonSelectorSettings,
-)
-from dlkit.infrastructure.config.optimization_stage import (
-    ConcurrentOptimizationSettings,
-    OptimizationStageSettings,
-)
-from dlkit.infrastructure.config.optimization_trigger import EpochTriggerSettings
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    ConcurrentOptimizerSettings,
     LBFGSSettings,
     MuonSettings,
 )
@@ -152,7 +146,7 @@ class TestAdamThenLBFGS:
             stages=(
                 OptimizationStageSettings(
                     optimizer=AdamSettings(lr=1e-2),
-                    trigger=EpochTriggerSettings(at_epoch=1),
+                    trigger=TriggerSettings(at_epoch=1),
                 ),
                 OptimizationStageSettings(
                     optimizer=LBFGSSettings(),
@@ -252,16 +246,14 @@ class TestAdamAndMuonConcurrent:
         muon_opt = torch.optim.Muon([{"params": [d.parameter for d in muon_params]}])
         adam_opt = torch.optim.Adam([{"params": [d.parameter for d in adam_params]}], lr=1e-3)
 
-        muon_stage = ActiveStage(
-            optimizer=muon_opt, scheduler=None, trigger=NoTransitionTrigger(), stage_index=0
+        concurrent_optimizer = ConcurrentOptimizer([muon_opt, adam_opt])
+        stage = ActiveStage(
+            optimizer=concurrent_optimizer,
+            scheduler=None,
+            trigger=NoTransitionTrigger(),
+            stage_index=0,
         )
-        adam_stage = ActiveStage(
-            optimizer=adam_opt, scheduler=None, trigger=NoTransitionTrigger(), stage_index=1
-        )
-        group = ActiveConcurrentGroup(
-            stages=(muon_stage, adam_stage), trigger=NoTransitionTrigger(), group_index=0
-        )
-        return RunningOptimizerPolicy(stages=(group,))
+        return RunningOptimizerPolicy(stages=(stage,))
 
     @pytest.fixture
     def controller(self, program: RunningOptimizerPolicy) -> AutomaticOptimizationController:
@@ -279,30 +271,30 @@ class TestAdamAndMuonConcurrent:
         assert len(eligible) == 1
         assert eligible[0].name == "fc1.weight"
 
-    def test_configure_optimizers_returns_two_dicts(
+    def test_configure_optimizers_returns_dict_with_concurrent_optimizer(
         self, controller: AutomaticOptimizationController
     ) -> None:
         config = controller.configure_optimizers()
-        assert isinstance(config, list)
-        assert len(config) == 2  # noqa: PLR2004
-        for entry in config:
-            assert isinstance(entry, dict) and "optimizer" in entry
+        assert isinstance(config, dict)
+        assert "optimizer" in config
+        assert isinstance(config["optimizer"], ConcurrentOptimizer)
 
     def test_both_optimizers_update_parameters(
         self, model: _ThreeLayer, program: RunningOptimizerPolicy
     ) -> None:
-        """Step both optimizers once and confirm fc1.weight and other params changed."""
+        """Step the ConcurrentOptimizer once and confirm fc1.weight and other params changed."""
         params_before = {n: p.data.clone() for n, p in model.named_parameters()}
 
         x = torch.randn(4, 2)
         y = torch.randn(4, 2)
         loss_fn = nn.MSELoss()
 
-        group = program.current
-        assert isinstance(group, ActiveConcurrentGroup)
+        stage = program.current
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
 
         policy = StepAllOptimizers()
-        policy.step(group, lambda: loss_fn(model(x), y))
+        policy.step(stage, lambda: loss_fn(model(x), y))
 
         params_after = dict(model.named_parameters())
         changed = [
@@ -359,18 +351,12 @@ class TestCustomRoleProviderEscapeHatch:
         """Concurrent Muon + AdamW policy settings for the custom model.
 
         Returns:
-            An OptimizerPolicySettings with one ConcurrentOptimizationSettings group.
+            An OptimizerPolicySettings with ConcurrentOptimizerSettings as default_optimizer.
         """
-        muon_stage = OptimizationStageSettings(
-            optimizer=MuonSettings(lr=0.02),
-            selector=MuonEligibleSelectorSettings(),
-        )
-        adamw_stage = OptimizationStageSettings(
-            optimizer=AdamWSettings(lr=1e-3),
-            selector=NonMuonSelectorSettings(),
-        )
         return OptimizerPolicySettings(
-            stages=(ConcurrentOptimizationSettings(optimizers=(muon_stage, adamw_stage)),)
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(MuonSettings(lr=0.02), AdamWSettings(lr=1e-3))
+            )
         )
 
     def test_custom_role_provider_overrides_ffnn_inference(
@@ -385,11 +371,13 @@ class TestCustomRoleProviderEscapeHatch:
             custom_policy: Config-driven concurrent Muon + AdamW policy.
         """
         program = OptimizerPolicyBuilder().build(custom_model, custom_policy)
-        group = program.current
-        assert isinstance(group, ActiveConcurrentGroup)
+        stage = program.current
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
 
-        muon_params = [p for pg in group.stages[0].optimizer.param_groups for p in pg["params"]]
-        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+        sub_opts = stage.optimizer.sub_optimizers
+        muon_params = [p for pg in sub_opts[0].param_groups for p in pg["params"]]
+        adamw_params = [p for pg in sub_opts[1].param_groups for p in pg["params"]]
 
         def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
             return any(p is param for p in param_list)
@@ -423,18 +411,12 @@ class TestMuonConstraintsFromConfig:
         """Concurrent Muon + AdamW policy settings.
 
         Returns:
-            An OptimizerPolicySettings with Muon on HIDDEN params and AdamW on the rest.
+            An OptimizerPolicySettings with ConcurrentOptimizerSettings as default_optimizer.
         """
-        muon_stage = OptimizationStageSettings(
-            optimizer=MuonSettings(lr=0.02),
-            selector=MuonEligibleSelectorSettings(),
-        )
-        adamw_stage = OptimizationStageSettings(
-            optimizer=AdamWSettings(lr=1e-3),
-            selector=NonMuonSelectorSettings(),
-        )
         return OptimizerPolicySettings(
-            stages=(ConcurrentOptimizationSettings(optimizers=(muon_stage, adamw_stage)),)
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(MuonSettings(lr=0.02), AdamWSettings(lr=1e-3))
+            )
         )
 
     def test_muon_receives_only_hidden_2d_params(
@@ -449,11 +431,13 @@ class TestMuonConstraintsFromConfig:
             concurrent_policy: Concurrent Muon + AdamW policy.
         """
         program = OptimizerPolicyBuilder().build(three_layer, concurrent_policy)
-        group = program.current
-        assert isinstance(group, ActiveConcurrentGroup)
+        stage = program.current
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
 
-        muon_params = [p for pg in group.stages[0].optimizer.param_groups for p in pg["params"]]
-        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+        sub_opts = stage.optimizer.sub_optimizers
+        muon_params = [p for pg in sub_opts[0].param_groups for p in pg["params"]]
+        adamw_params = [p for pg in sub_opts[1].param_groups for p in pg["params"]]
 
         def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
             return any(p is param for p in param_list)
@@ -486,8 +470,12 @@ class TestMuonConstraintsFromConfig:
             concurrent_policy: Concurrent Muon + AdamW policy.
         """
         program = OptimizerPolicyBuilder().build(three_layer, concurrent_policy)
-        group = program.current
-        adamw_params = [p for pg in group.stages[1].optimizer.param_groups for p in pg["params"]]
+        stage = program.current
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        adamw_params = [
+            p for pg in stage.optimizer.sub_optimizers[1].param_groups for p in pg["params"]
+        ]
 
         def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
             return any(p is param for p in param_list)

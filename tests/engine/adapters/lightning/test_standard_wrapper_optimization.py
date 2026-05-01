@@ -11,8 +11,6 @@ These tests exercise the full config → program → controller → wrapper path
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 import torch
 from torch import nn
@@ -21,6 +19,7 @@ from torch.nn import ModuleList
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
@@ -32,14 +31,13 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.optimization_stage import (
-    ConcurrentOptimizationSettings,
-    OptimizationStageSettings,
-)
-from dlkit.infrastructure.config.optimization_trigger import EpochTriggerSettings
+from dlkit.infrastructure.config.optimization_selector import ParameterSelectorSettings
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    ConcurrentOptimizerSettings,
     StepLRSettings,
 )
 
@@ -76,12 +74,12 @@ def two_layer_model() -> _TwoLayer:
 
 @pytest.fixture
 def sequential_two_stage_settings() -> OptimizerPolicySettings:
-    """Two sequential stages: SGD (epoch 5 trigger) → Adam (no trigger)."""
+    """Two sequential stages: AdamW (epoch 5 trigger) → Adam (no trigger)."""
     return OptimizerPolicySettings(
         stages=(
             OptimizationStageSettings(
                 optimizer=AdamWSettings(),
-                trigger=EpochTriggerSettings(at_epoch=5),
+                trigger=TriggerSettings(at_epoch=5),
             ),
             OptimizationStageSettings(
                 optimizer=AdamSettings(),
@@ -92,18 +90,13 @@ def sequential_two_stage_settings() -> OptimizerPolicySettings:
 
 @pytest.fixture
 def concurrent_two_optimizer_settings() -> OptimizerPolicySettings:
-    """Single concurrent group with SGD + Adam on all parameters."""
+    """Single concurrent ConcurrentOptimizer: AdamW on fc0, Adam on fc1 (disjoint sets)."""
     return OptimizerPolicySettings(
-        stages=(
-            ConcurrentOptimizationSettings(
-                optimizers=(
-                    OptimizationStageSettings(
-                        optimizer=AdamWSettings(),
-                    ),
-                    OptimizationStageSettings(
-                        optimizer=AdamSettings(),
-                    ),
-                )
+        default_optimizer=ConcurrentOptimizerSettings(
+            optimizers=(AdamWSettings(), AdamSettings()),
+            selectors=(
+                ParameterSelectorSettings(prefix="fc0"),
+                ParameterSelectorSettings(prefix="fc1"),
             ),
         )
     )
@@ -111,19 +104,18 @@ def concurrent_two_optimizer_settings() -> OptimizerPolicySettings:
 
 @pytest.fixture
 def concurrent_with_scheduler_settings() -> OptimizerPolicySettings:
-    """Concurrent group: SGD with StepLR scheduler + Adam, no scheduler."""
+    """Concurrent stage with StepLR scheduler: AdamW on fc0, Adam on fc1 (disjoint sets)."""
     return OptimizerPolicySettings(
         stages=(
-            ConcurrentOptimizationSettings(
-                optimizers=(
-                    OptimizationStageSettings(
-                        optimizer=AdamWSettings(),
-                        scheduler=StepLRSettings(step_size=1),
+            OptimizationStageSettings(
+                optimizer=ConcurrentOptimizerSettings(
+                    optimizers=(AdamWSettings(), AdamSettings()),
+                    selectors=(
+                        ParameterSelectorSettings(prefix="fc0"),
+                        ParameterSelectorSettings(prefix="fc1"),
                     ),
-                    OptimizationStageSettings(
-                        optimizer=AdamSettings(),
-                    ),
-                )
+                ),
+                scheduler=StepLRSettings(step_size=1),
             ),
         )
     )
@@ -240,32 +232,27 @@ class TestConfigureOptimizers:
         assert isinstance(config, list)
         assert len(config) == 2  # noqa: PLR2004
 
-    def test_concurrent_two_optimizers_return_list_of_two_dicts(
+    def test_concurrent_single_stage_returns_dict_with_concurrent_optimizer(
         self,
         concurrent_two_optimizer_settings: OptimizerPolicySettings,
     ) -> None:
         wrapper = _make_wrapper(concurrent_two_optimizer_settings)
         config = wrapper.configure_optimizers()
-        assert isinstance(config, list)
-        assert len(config) == 2  # noqa: PLR2004
-        for entry in config:
-            assert isinstance(entry, dict)
-            assert "optimizer" in entry
+        assert isinstance(config, dict)
+        assert "optimizer" in config
+        assert isinstance(config["optimizer"], ConcurrentOptimizer)
 
-    def test_concurrent_scheduler_preserved_in_config(
+    def test_concurrent_stage_with_scheduler_preserved_in_config(
         self,
         concurrent_with_scheduler_settings: OptimizerPolicySettings,
     ) -> None:
-        """BUG-2 regression: schedulers must not be silently dropped for concurrent groups."""
+        """Scheduler attached to a concurrent stage must appear in configure_optimizers output."""
         wrapper = _make_wrapper(concurrent_with_scheduler_settings)
         config = wrapper.configure_optimizers()
-        assert isinstance(config, list)
-        assert len(config) == 2  # noqa: PLR2004
-        # First entry (SGD) has a scheduler; second (Adam) does not.
-        entry0 = cast(dict[str, object], config[0])
-        entry1 = cast(dict[str, object], config[1])
-        assert "lr_scheduler" in entry0
-        assert "lr_scheduler" not in entry1
+        assert isinstance(config, dict)
+        assert "optimizer" in config
+        assert isinstance(config["optimizer"], ConcurrentOptimizer)
+        assert "lr_scheduler" in config
 
 
 # ---------------------------------------------------------------------------
@@ -290,30 +277,24 @@ class TestBothOptimizersStep:
         self,
         concurrent_two_optimizer_settings: OptimizerPolicySettings,
     ) -> None:
-        """Both concurrent optimizers must produce parameter gradient updates."""
+        """ConcurrentOptimizer must produce parameter gradient updates for all sub-optimizers."""
         wrapper = _make_wrapper(concurrent_two_optimizer_settings)
         assert isinstance(wrapper._optimization_controller, AutomaticOptimizationController)
 
-        # Snapshot parameters before the step
         params_before = {name: p.data.clone() for name, p in wrapper.model.named_parameters()}
 
-        # Simulate a training step for each optimizer (Lightning calls training_step
-        # once per optimizer in automatic multi-optimizer mode, passing optimizer_idx).
-        # Here we directly step the controller to verify both optimizers fire.
         controller = wrapper._optimization_controller
-        all_configs = controller.configure_optimizers()
-        assert isinstance(all_configs, list) and len(all_configs) == 2  # noqa: PLR2004
+        config = controller.configure_optimizers()
+        assert isinstance(config, dict)
+        opt = config["optimizer"]
+        assert isinstance(opt, ConcurrentOptimizer)
 
-        # Step each optimizer manually to simulate what Lightning does
         batch = _make_batch()
-        for opt_config in all_configs:
-            opt = opt_config["optimizer"]  # type: ignore[index]
-            opt.zero_grad()
-            loss, _, _ = wrapper._run_step(batch, 0, "train")
-            loss.backward()
-            opt.step()
+        opt.zero_grad()
+        loss, _, _ = wrapper._run_step(batch, 0, "train")
+        loss.backward()
+        opt.step()
 
-        # At least some parameters must have changed
         params_after = dict(wrapper.model.named_parameters())
         changed = [
             name

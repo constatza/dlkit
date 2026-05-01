@@ -64,7 +64,7 @@ class TestEagerValidationSuccessCases:
             },
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
@@ -112,7 +112,7 @@ class TestEagerValidationSuccessCases:
             },
             "TRAINING": {
                 "epochs": 5,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -195,7 +195,7 @@ class TestEagerValidationSuccessCases:
             "SESSION": {"name": "test_injection", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -231,7 +231,7 @@ class TestEagerValidationFailureCases:
             "SESSION": {"name": "test_bad_path", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATASET": {
@@ -255,7 +255,7 @@ class TestEagerValidationFailureCases:
             "SESSION": {"name": "test_type_error", "seed": 42},
             "TRAINING": {
                 "epochs": "not_an_integer",  # Wrong type!
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -270,7 +270,7 @@ class TestEagerValidationFailureCases:
         config_dict_no_session = {
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -391,7 +391,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_complete", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
@@ -420,7 +420,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_incomplete", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "MODEL": {
@@ -446,7 +446,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_incomplete", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
@@ -482,7 +482,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_incomplete", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
@@ -591,7 +591,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "OPTUNA": {
@@ -625,7 +625,7 @@ class TestCompletenessValidation:
             "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "OPTUNA": {
@@ -660,7 +660,7 @@ class TestProgrammaticOverrideWorkflow:
             "SESSION": {"name": "test_workflow", "seed": 42, "root_dir": str(tmp_path)},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -720,7 +720,7 @@ class TestProgrammaticOverrideWorkflow:
             "SESSION": {"name": "test_validation", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -752,7 +752,7 @@ class TestEdgeCasesAndErrorMessages:
             "SESSION": {"name": "test_empty", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
@@ -784,7 +784,7 @@ class TestEdgeCasesAndErrorMessages:
             "SESSION": {"name": "test_errors", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
@@ -815,7 +815,7 @@ class TestEdgeCasesAndErrorMessages:
             "SESSION": {"name": "test_props", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
-                "optimizer": {"name": "Adam", "lr": 0.001},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {

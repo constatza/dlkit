@@ -37,7 +37,6 @@ from dlkit.engine.training.optimization.controllers import AutomaticOptimization
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
 from dlkit.infrastructure.config import OptimizerPolicySettings
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
-from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 
 # ---------------------------------------------------------------------------
 # Named constants
@@ -191,7 +190,7 @@ def checkpoint_metadata(
     """
     model_settings = MagicMock()
     wrapper_settings = WrapperComponentSettings(
-        optimizer=OptimizerSettings(name="Adam"),
+        optimizer=OptimizerPolicySettings(),
     )
     return WrapperCheckpointMetadata(
         model_settings=model_settings,

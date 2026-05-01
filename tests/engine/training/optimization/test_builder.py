@@ -2,30 +2,25 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn as nn
 
+from dlkit.common.errors import ParameterPartitionError
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
-from dlkit.engine.training.optimization.state import ActiveConcurrentGroup, ActiveStage
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
+from dlkit.engine.training.optimization.state import ActiveStage
 from dlkit.engine.training.optimization.triggers import (
     EpochTransitionTrigger,
     PlateauTransitionTrigger,
 )
-from dlkit.infrastructure.config.optimization_selector import (
-    ModulePathSelectorSettings,
-    RoleSelectorSettings,
-)
-from dlkit.infrastructure.config.optimization_stage import (
-    ConcurrentOptimizationSettings,
-    OptimizationStageSettings,
-)
-from dlkit.infrastructure.config.optimization_trigger import (
-    EpochTriggerSettings,
-    PlateauTriggerSettings,
-)
+from dlkit.infrastructure.config.optimization_selector import ParameterSelectorSettings
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    ConcurrentOptimizerSettings,
     StepLRSettings,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
@@ -112,7 +107,7 @@ class TestOptimizerPolicyBuilder:
         Args:
             tiny_model: Tiny model fixture.
         """
-        trigger_config = EpochTriggerSettings(at_epoch=10)
+        trigger_config = TriggerSettings(at_epoch=10)
         stage_config = OptimizationStageSettings(
             optimizer=AdamWSettings(),
             trigger=trigger_config,
@@ -148,31 +143,71 @@ class TestOptimizerPolicyBuilder:
         assert isinstance(stage_entry.optimizer, torch.optim.AdamW)
 
     def test_builder_concurrent_group(self, tiny_model: nn.Sequential) -> None:
-        """Verify builder produces ActiveConcurrentGroup with correct inner stage indices.
+        """Verify builder produces an ActiveStage with ConcurrentOptimizer for concurrent config.
+
+        tiny_model is Sequential(Linear(4,8), Linear(8,2)) — submodule "0" and "1".
+        Explicit selectors partition params to avoid duplicate-param PyTorch warnings.
 
         Args:
             tiny_model: Tiny two-layer model fixture.
         """
         settings = OptimizerPolicySettings(
-            stages=(
-                ConcurrentOptimizationSettings(
-                    optimizers=(
-                        OptimizationStageSettings(optimizer=AdamWSettings()),
-                        OptimizationStageSettings(optimizer=AdamSettings()),
-                    )
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(AdamWSettings(), AdamSettings()),
+                selectors=(
+                    ParameterSelectorSettings(prefix="0"),
+                    ParameterSelectorSettings(prefix="1"),
                 ),
             )
         )
         program = OptimizerPolicyBuilder().build(tiny_model, settings)
 
         assert len(program.stages) == 1
-        group = program.stages[0]
-        assert isinstance(group, ActiveConcurrentGroup)
-        assert len(group.stages) == 2
-        assert group.stages[0].stage_index == 0
-        assert group.stages[1].stage_index == 1
-        assert isinstance(group.stages[0].optimizer, torch.optim.AdamW)
-        assert isinstance(group.stages[1].optimizer, torch.optim.Adam)
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        sub_opts = stage.optimizer.sub_optimizers
+        assert len(sub_opts) == 2  # noqa: PLR2004
+        assert isinstance(sub_opts[0], torch.optim.AdamW)
+        assert isinstance(sub_opts[1], torch.optim.Adam)
+
+    def test_builder_module_path_selector_with_concurrent_covers_all_params(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """ConcurrentOptimizerSettings with complementary prefix selectors routes params correctly.
+
+        The correct pattern for module-path selective optimization: two sub-optimizers whose
+        prefix selectors are complementary so every parameter is covered exactly once.
+        tiny_model is Sequential(Linear(4,8), Linear(8,2)) — submodule "0" and "1".
+
+        Args:
+            tiny_model: Tiny two-layer model fixture.
+        """
+        settings = OptimizerPolicySettings(
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(AdamWSettings(), AdamWSettings()),
+                selectors=(
+                    ParameterSelectorSettings(prefix="0"),
+                    ParameterSelectorSettings(prefix="1"),
+                ),
+            )
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        sub_opts = stage.optimizer.sub_optimizers
+        assert len(sub_opts) == 2  # noqa: PLR2004
+
+        named = dict(tiny_model.named_parameters())
+        layer0_ids = {id(named["0.weight"]), id(named["0.bias"])}
+        layer1_ids = {id(named["1.weight"]), id(named["1.bias"])}
+
+        sub0_ids = {id(p) for pg in sub_opts[0].param_groups for p in pg["params"]}
+        sub1_ids = {id(p) for pg in sub_opts[1].param_groups for p in pg["params"]}
+
+        assert sub0_ids == layer0_ids, "sub-optimizer 0 must contain exactly layer-0 params"
+        assert sub1_ids == layer1_ids, "sub-optimizer 1 must contain exactly layer-1 params"
 
     def test_builder_plateau_trigger_stage(self, tiny_model: nn.Sequential) -> None:
         """Verify builder creates PlateauTransitionTrigger with correct parameters.
@@ -184,7 +219,7 @@ class TestOptimizerPolicyBuilder:
             stages=(
                 OptimizationStageSettings(
                     optimizer=AdamWSettings(),
-                    trigger=PlateauTriggerSettings(monitor="val_loss", patience=5, min_delta=1e-3),
+                    trigger=TriggerSettings(patience=5, monitor="val_loss", min_delta=1e-3),
                 ),
                 OptimizationStageSettings(optimizer=AdamSettings()),
             )
@@ -219,11 +254,14 @@ class TestOptimizerPolicyBuilder:
         assert stage.scheduler is not None
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
 
-    def test_builder_module_path_selector(self, tiny_model: nn.Sequential) -> None:
-        """Stage with ModulePathSelectorSettings selects only the matching sub-module params.
+    def test_builder_module_path_selector_raises_when_layer_uncovered(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """Stage with a prefix selector that leaves some sub-module params uncovered raises.
 
         tiny_model is Sequential(Linear(4,8), Linear(8,2)).
-        module_path for "0.*" params is "0"; for "1.*" params is "1".
+        prefix="0" covers only layer-0 params; layer-1 params (1.weight, 1.bias) are
+        unmatched, which is a training-correctness error.
 
         Args:
             tiny_model: Tiny two-layer model fixture.
@@ -232,25 +270,21 @@ class TestOptimizerPolicyBuilder:
             stages=(
                 OptimizationStageSettings(
                     optimizer=AdamWSettings(),
-                    selector=ModulePathSelectorSettings(prefix="0"),
+                    selector=ParameterSelectorSettings(prefix="0"),
                 ),
             )
         )
-        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+        with pytest.raises(ParameterPartitionError):
+            OptimizerPolicyBuilder().build(tiny_model, settings)
 
-        stage = program.stages[0]
-        assert isinstance(stage, ActiveStage)
-        opt_params = [p for group in stage.optimizer.param_groups for p in group["params"]]
-        # Only the first linear layer: weight (4x8=32) + bias (8) = 2 tensors
-        assert len(opt_params) == 2  # noqa: PLR2004
-        # The stage-1 params must NOT be in the optimizer
-        layer1_weight = dict(tiny_model.named_parameters())["1.weight"]
-        assert all(p is not layer1_weight for p in opt_params)
+    def test_builder_role_selector_unknown_raises_because_inference_assigns_all_roles(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """RoleSelectorSettings(role='unknown') raises when role inference assigns all params.
 
-    def test_builder_role_selector_unknown_selects_all(self, tiny_model: nn.Sequential) -> None:
-        """RoleSelectorSettings(role='unknown') selects all params when no role resolver is used.
-
-        The builder's TorchParameterInventory assigns UNKNOWN to all params by default.
+        With the default inference strategy active, standard Linear layers receive INPUT,
+        HIDDEN, or OUTPUT roles — none remain UNKNOWN, so the UNKNOWN selector matches 0
+        params while all 4 parameters are left unoptimized, which is a hard error.
 
         Args:
             tiny_model: Tiny two-layer model fixture.
@@ -259,14 +293,9 @@ class TestOptimizerPolicyBuilder:
             stages=(
                 OptimizationStageSettings(
                     optimizer=AdamWSettings(),
-                    selector=RoleSelectorSettings(role="unknown"),
+                    selector=ParameterSelectorSettings(role="unknown"),
                 ),
             )
         )
-        program = OptimizerPolicyBuilder().build(tiny_model, settings)
-
-        stage = program.stages[0]
-        assert isinstance(stage, ActiveStage)
-        opt_params = [p for group in stage.optimizer.param_groups for p in group["params"]]
-        total_params = list(tiny_model.parameters())
-        assert len(opt_params) == len(total_params)
+        with pytest.raises(ParameterPartitionError):
+            OptimizerPolicyBuilder().build(tiny_model, settings)

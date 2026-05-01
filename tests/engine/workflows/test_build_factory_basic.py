@@ -665,10 +665,11 @@ def test_build_factory_handles_none_scheduler_correctly(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     """Test that None scheduler is handled correctly without causing validation errors."""
-    from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
+    from dlkit.infrastructure.config.optimizer_component import AdamSettings
+    from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
-    # Create optimizer but leave scheduler as None
-    custom_optimizer = OptimizerSettings(name="Adam", lr=0.001)
+    # Create optimizer policy but leave scheduler as None
+    custom_optimizer = OptimizerPolicySettings(default_optimizer=AdamSettings(lr=0.001))
 
     # Create training settings with scheduler=None
     training_settings = TrainingSettings(
@@ -727,9 +728,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     # Should have optimizer but not scheduler in kwargs (since it's None)
     assert "optimizer" in wrapper_kwargs
     passed_optimizer = wrapper_kwargs["optimizer"]
-    assert passed_optimizer.name == "Adam", f"Expected Adam optimizer, got {passed_optimizer.name}"
-    assert passed_optimizer.lr == 0.001, f"Expected lr=0.001, got {passed_optimizer.lr}"
-    # Verify we're using custom values: lr=0.001 (which equals 1e-3) is our custom value, not default
-    # The important test is that we got our custom optimizer settings, not defaults
-    # Scheduler should not be in kwargs when None (to use default_factory)
+    assert isinstance(passed_optimizer.default_optimizer, AdamSettings)
+    assert passed_optimizer.default_optimizer.lr == 0.001
+    assert passed_optimizer.default_optimizer.name == "Adam"
     assert "scheduler" not in wrapper_kwargs

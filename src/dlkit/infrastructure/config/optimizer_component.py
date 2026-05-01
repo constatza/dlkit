@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from .core.base_settings import ComponentSettings
+from .core.base_settings import BasicSettings, ComponentSettings
+from .optimization_selector import ParameterSelectorSettings
 
 
 class OptimizerComponentSettings(ComponentSettings):
@@ -158,14 +159,70 @@ class MuonSettings(OptimizerComponentSettings):
     ns_steps: int = Field(default=5, gt=0, description="Newton–Schulz iterations")
 
 
+class ConcurrentOptimizerSettings(BasicSettings):
+    """Settings for running multiple optimizers simultaneously on disjoint parameter sets.
+
+    Fits in ``OptimizerSpec`` like any other optimizer — use as ``default_optimizer``
+    for the common case (no stages needed) or inside ``OptimizationStageSettings.optimizer``
+    when concurrent training is one phase of a sequential program.
+
+    Auto-selector inference: when ``selectors`` is empty and at least one inner
+    optimizer is ``MuonSettings``, the builder assigns ``MuonEligibleSelector`` to
+    each Muon optimizer and ``NonMuonSelector`` to all others. For any other
+    concurrent split (e.g. encoder/decoder by module path) ``selectors`` is required.
+
+    Attributes:
+        name: Discriminator tag — always ``"Concurrent"``.
+        optimizers: Inner optimizers running concurrently. Required; no default.
+        selectors: Per-optimizer parameter selectors (1-to-1 with ``optimizers``).
+            Empty tuple requires at least one ``MuonSettings`` in ``optimizers``
+            (Muon/non-Muon split is auto-inferred). Provide explicit selectors for
+            any other partitioning strategy.
+    """
+
+    model_config = _OPT_CONFIG
+    name: Literal["Concurrent"] = "Concurrent"
+    optimizers: tuple[OptimizerSpec, ...]  # resolved by model_rebuild
+    selectors: tuple[ParameterSelectorSettings | None, ...] = Field(
+        default=(), description="Per-optimizer selectors; empty = auto-infer (Muon only)"
+    )
+
+    @model_validator(mode="after")
+    def _validate_selectors(self) -> ConcurrentOptimizerSettings:
+        """Enforce selector validity.
+
+        Returns:
+            Self after validation.
+
+        Raises:
+            ValueError: If selectors are non-empty with wrong length, or empty without Muon.
+        """
+        if self.selectors and len(self.selectors) != len(self.optimizers):
+            raise ValueError(
+                f"selectors length ({len(self.selectors)}) must match "
+                f"optimizers length ({len(self.optimizers)})."
+            )
+        has_muon = any(isinstance(opt, MuonSettings) for opt in self.optimizers)
+        if not self.selectors and not has_muon:
+            raise ValueError(
+                "ConcurrentOptimizerSettings with no selectors requires at least one "
+                "MuonSettings sub-optimizer (Muon/non-Muon split is auto-inferred). "
+                "For other concurrent splits provide explicit selectors=."
+            )
+        return self
+
+
 # ---------------------------------------------------------------------------
 # Public type alias — use this as the field type wherever an optimizer is configured.
 # Pydantic dispatches deserialization to the correct subclass via the ``name`` discriminator.
 # ---------------------------------------------------------------------------
 OptimizerSpec = Annotated[
-    AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings,
+    AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings | ConcurrentOptimizerSettings,
     Field(discriminator="name"),
 ]
+
+# Resolve the recursive OptimizerSpec reference inside ConcurrentOptimizerSettings.
+ConcurrentOptimizerSettings.model_rebuild(_types_namespace={"OptimizerSpec": OptimizerSpec})
 
 
 class SchedulerComponentSettings(ComponentSettings):

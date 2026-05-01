@@ -28,7 +28,7 @@ def _require_datamodule(settings: GeneralSettings) -> DataModuleSettings:
 
 
 def _require_numeric_lr(settings: TrainingSettings) -> int | float:
-    lr = settings.optimizer.lr
+    lr = settings.optimizer.default_optimizer.lr
     assert isinstance(lr, int | float)
     return lr
 

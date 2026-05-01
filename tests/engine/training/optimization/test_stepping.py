@@ -9,7 +9,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from dlkit.engine.training.optimization.state import ActiveConcurrentGroup, ActiveStage
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
+from dlkit.engine.training.optimization.state import ActiveStage
 from dlkit.engine.training.optimization.stepping import (
     AlternatingStepPolicy,
     LBFGSStageStepper,
@@ -121,15 +122,16 @@ class TestStepAllOptimizers:
 
     def test_step_all_on_concurrent_group_steps_all_stages(
         self,
-        concurrent_group: ActiveConcurrentGroup,
+        concurrent_group: ActiveStage,
         tiny_model: nn.Sequential,
     ) -> None:
-        """Verify step_all steps all optimizers in concurrent group.
+        """Verify step_all steps all sub-optimizers in a ConcurrentOptimizer stage.
 
         Args:
-            concurrent_group: Concurrent group fixture.
+            concurrent_group: Stage fixture with ConcurrentOptimizer.
             tiny_model: Tiny model fixture.
         """
+        assert isinstance(concurrent_group.optimizer, ConcurrentOptimizer)
 
         def loss_fn() -> Tensor:
             x = torch.randn(2, 4)
@@ -147,13 +149,13 @@ class TestAlternatingStepPolicy:
 
     def test_alternating_period_1_rotates_stages(
         self,
-        concurrent_group: ActiveConcurrentGroup,
+        concurrent_group: ActiveStage,
         tiny_model: nn.Sequential,
     ) -> None:
-        """Verify alternating with period=1 rotates through stages.
+        """Verify alternating policy tracks step counter correctly on a concurrent stage.
 
         Args:
-            concurrent_group: Concurrent group fixture.
+            concurrent_group: Stage fixture with ConcurrentOptimizer.
             tiny_model: Tiny model fixture.
         """
 
@@ -164,22 +166,20 @@ class TestAlternatingStepPolicy:
 
         policy = AlternatingStepPolicy(period=1)
 
-        # Step 3 times
         for _ in range(3):
             policy.step(concurrent_group, loss_fn)
 
-        # Verify step counter is 3
         assert policy._step_counter == 3
 
     def test_alternating_period_2_same_stage_for_two_calls(
         self,
-        concurrent_group: ActiveConcurrentGroup,
+        concurrent_group: ActiveStage,
         tiny_model: nn.Sequential,
     ) -> None:
-        """Verify alternating with period=2 stays on stage for 2 calls.
+        """Verify alternating policy with period=2 tracks counter over multiple calls.
 
         Args:
-            concurrent_group: Concurrent group fixture.
+            concurrent_group: Stage fixture with ConcurrentOptimizer.
             tiny_model: Tiny model fixture.
         """
 
@@ -190,14 +190,10 @@ class TestAlternatingStepPolicy:
 
         policy = AlternatingStepPolicy(period=2)
 
-        # First two calls should use stage 0
         policy.step(concurrent_group, loss_fn)
         policy.step(concurrent_group, loss_fn)
-
-        # Third call should use stage 1
         policy.step(concurrent_group, loss_fn)
 
-        # Verify step counter is 3
         assert policy._step_counter == 3
 
     def test_alternating_on_single_stage(
@@ -223,23 +219,25 @@ class TestAlternatingStepPolicy:
 class TestLBFGSStageStepper:
     """Tests for LBFGSStageStepper stepping policy."""
 
-    def test_lbfgs_raises_on_concurrent_group(
+    def test_lbfgs_steps_concurrent_stage_via_closure(
         self,
-        concurrent_group: ActiveConcurrentGroup,
+        concurrent_group: ActiveStage,
+        tiny_model: nn.Sequential,
     ) -> None:
-        """Verify LBFGS raises TypeError on concurrent group.
+        """LBFGSStageStepper works on a ConcurrentOptimizer stage (closure forwarded to sub-opts).
 
         Args:
-            concurrent_group: Concurrent group fixture.
+            concurrent_group: Stage fixture with ConcurrentOptimizer containing SGD sub-opts.
+            tiny_model: Tiny model fixture.
         """
 
         def loss_fn() -> Tensor:
-            return torch.tensor(1.0)
+            x = torch.randn(2, 4)
+            return tiny_model(x).sum()
 
         stepper = LBFGSStageStepper()
-
-        with pytest.raises(TypeError):
-            stepper.step(concurrent_group, loss_fn)
+        loss = stepper.step(concurrent_group, loss_fn)
+        assert isinstance(loss, Tensor)
 
     def test_lbfgs_steps_single_stage(
         self,

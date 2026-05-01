@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
-
 import pytest
 import torch.nn as nn
 
@@ -90,14 +88,14 @@ class TestParameterPartitioner:
         """
         partitioner = ParameterPartitioner()
         selectors: list = []
-        result = partitioner.partition(two_selector_inventory, selectors)
+        result = partitioner.partition(two_selector_inventory, selectors, warn_unmatched=False)
 
         assert result == ()
 
-    def test_warns_when_parameters_are_unmatched(
+    def test_raises_when_parameters_are_unmatched(
         self, hidden_2d_descriptor: ParameterDescriptor, bias_1d_descriptor: ParameterDescriptor
     ) -> None:
-        """Parameters not matched by any selector must emit a UserWarning.
+        """Parameters not matched by any selector must raise ParameterPartitionError.
 
         Args:
             hidden_2d_descriptor: 2D weight descriptor with HIDDEN role.
@@ -113,16 +111,7 @@ class TestParameterPartitioner:
                 return (hidden_2d_descriptor, bias_1d_descriptor)
 
         partitioner = ParameterPartitioner()
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
+        with pytest.raises(ParameterPartitionError) as exc_info:
             partitioner.partition(_StubInventory(), [MuonEligibleSelector()])
 
-        unmatched_warnings = [
-            w
-            for w in caught
-            if issubclass(w.category, UserWarning)
-            and ("matched no" in str(w.message).lower() or "unmatched" in str(w.message).lower())
-        ]
-        assert len(unmatched_warnings) == 1, (
-            f"Expected 1 unmatched warning, got {len(unmatched_warnings)}"
-        )
+        assert "will not be optimized" in str(exc_info.value).lower()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
@@ -54,6 +53,7 @@ class ParameterPartitioner(IParameterPartitioner):
         self,
         inventory: IParameterInventory,
         selectors: Sequence[IParameterSelector],
+        warn_unmatched: bool = True,
     ) -> tuple[tuple[ParameterDescriptor, ...], ...]:
         """Partition parameters into non-overlapping groups.
 
@@ -93,17 +93,16 @@ class ParameterPartitioner(IParameterPartitioner):
             assigned_param_ids.update(param_ids_in_partition)
             partitions.append(matched)
 
-        # Warn if any parameters were unmatched
-        all_descriptors = set(all_parameters)
-        matched_descriptors = {d for group in partitions for d in group}
-        unmatched = all_descriptors - matched_descriptors
-        if unmatched:
-            names = ", ".join(sorted(d.name for d in unmatched))
-            warnings.warn(
-                f"ParameterPartitioner: {len(unmatched)} parameter(s) matched no selector "
-                f"and will not be optimized: {names}",
-                UserWarning,
-                stacklevel=2,
-            )
+        if warn_unmatched:
+            all_descriptors = set(all_parameters)
+            matched_descriptors = {d for group in partitions for d in group}
+            unmatched = all_descriptors - matched_descriptors
+            if unmatched:
+                names = sorted(d.name for d in unmatched)
+                raise ParameterPartitionError(
+                    message=f"ParameterPartitioner: {len(unmatched)} parameter(s) matched no "
+                    "selector and will not be optimized",
+                    context={"unmatched": names},
+                )
 
         return tuple(partitions)

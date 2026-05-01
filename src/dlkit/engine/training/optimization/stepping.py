@@ -7,23 +7,18 @@ from typing import Protocol, runtime_checkable
 
 from torch import Tensor
 
-from .state import ActiveConcurrentGroup, ActiveStage
+from .state import ActiveStage
 
 
 @runtime_checkable
 class IStepPolicy(Protocol):
-    """Protocol for optimizer stepping strategies.
+    """Protocol for optimizer stepping strategies."""
 
-    Implementations define how to compute loss, backward, and step optimizers.
-    """
-
-    def step(
-        self, stage: ActiveStage | ActiveConcurrentGroup, loss_fn: Callable[[], Tensor]
-    ) -> Tensor:
-        """Execute one optimizer step(s).
+    def step(self, stage: ActiveStage, loss_fn: Callable[[], Tensor]) -> Tensor:
+        """Execute one optimizer step.
 
         Args:
-            stage: The active stage or concurrent group to step.
+            stage: The active stage to step.
             loss_fn: Callable that computes and returns the loss tensor.
 
         Returns:
@@ -33,54 +28,35 @@ class IStepPolicy(Protocol):
 
 
 class StepAllOptimizers:
-    """Simple stepping policy that steps all optimizers in a group.
+    """Stepping policy that handles zero_grad, loss, backward, and step.
 
-    For concurrent groups, steps all stages in order.
-    For single stages, steps the single optimizer.
-
-    Handles zero_grad, loss computation, backward, and optimizer.step().
+    Works with both plain and ConcurrentOptimizer stages — the optimizer
+    interface is uniform, so no type dispatch is needed.
     """
 
-    def step(
-        self, stage: ActiveStage | ActiveConcurrentGroup, loss_fn: Callable[[], Tensor]
-    ) -> Tensor:
-        """Step all optimizers in the stage or group.
+    def step(self, stage: ActiveStage, loss_fn: Callable[[], Tensor]) -> Tensor:
+        """Step the stage optimizer.
 
         Args:
-            stage: The active stage or concurrent group.
+            stage: The active stage.
             loss_fn: Callable that computes the loss.
 
         Returns:
             The computed loss tensor.
         """
-        if isinstance(stage, ActiveConcurrentGroup):
-            # Step all optimizers in the group
-            for sub_stage in stage.stages:
-                sub_stage.optimizer.zero_grad()
-
-            loss = loss_fn()
-            loss.backward()
-
-            for sub_stage in stage.stages:
-                sub_stage.optimizer.step()
-
-            return loss
-
-        else:  # ActiveStage
-            stage.optimizer.zero_grad()
-            loss = loss_fn()
-            loss.backward()
-            stage.optimizer.step()
-            return loss
+        stage.optimizer.zero_grad()
+        loss = loss_fn()
+        loss.backward()
+        stage.optimizer.step()
+        return loss
 
 
 class AlternatingStepPolicy:
-    """Alternating stepping policy for concurrent groups.
+    """Alternating stepping policy — cycles through sequential stages.
 
-    Cycles through stages in a concurrent group with a configurable period.
-    Each call steps the stage at index (step_counter // period) % len(stages).
-
-    For single stages, behaves like StepAllOptimizers.
+    Period-based rotation: steps stage at index
+    ``(step_counter // period) % len(stages)`` for multi-stage programs.
+    For single-stage use, behaves like StepAllOptimizers.
 
     Attributes:
         _period: Number of calls before advancing to the next stage.
@@ -91,69 +67,42 @@ class AlternatingStepPolicy:
         """Initialize the alternating policy.
 
         Args:
-            period: Steps per stage before rotating (period=1 steps every stage each call).
+            period: Steps per stage before rotating.
         """
         self._period = period
         self._step_counter = 0
 
-    def step(
-        self, stage: ActiveStage | ActiveConcurrentGroup, loss_fn: Callable[[], Tensor]
-    ) -> Tensor:
-        """Step one stage, rotating through concurrent group.
+    def step(self, stage: ActiveStage, loss_fn: Callable[[], Tensor]) -> Tensor:
+        """Step the stage optimizer.
 
         Args:
-            stage: The active stage or concurrent group.
+            stage: The active stage.
             loss_fn: Callable that computes the loss.
 
         Returns:
             The computed loss tensor.
         """
-        if isinstance(stage, ActiveConcurrentGroup):
-            # Determine which stage to step
-            stage_index = (self._step_counter // self._period) % len(stage.stages)
-            active_stage = stage.stages[stage_index]
-
-            active_stage.optimizer.zero_grad()
-            loss = loss_fn()
-            loss.backward()
-            active_stage.optimizer.step()
-
-            self._step_counter += 1
-            return loss
-
-        else:  # ActiveStage
-            stage.optimizer.zero_grad()
-            loss = loss_fn()
-            loss.backward()
-            stage.optimizer.step()
-            self._step_counter += 1
-            return loss
+        stage.optimizer.zero_grad()
+        loss = loss_fn()
+        loss.backward()
+        stage.optimizer.step()
+        self._step_counter += 1
+        return loss
 
 
 class LBFGSStageStepper:
-    """Stepping policy for LBFGS optimizer.
+    """Stepping policy for LBFGS optimizer (requires a closure)."""
 
-    LBFGS requires a closure function rather than separate backward/step.
-    This policy wraps the loss function in the required closure contract.
-    """
-
-    def step(
-        self, stage: ActiveStage | ActiveConcurrentGroup, loss_fn: Callable[[], Tensor]
-    ) -> Tensor:
+    def step(self, stage: ActiveStage, loss_fn: Callable[[], Tensor]) -> Tensor:
         """Step using LBFGS closure contract.
 
         Args:
-            stage: The active stage (must be single optimizer, not concurrent group).
+            stage: The active stage with an LBFGS optimizer.
             loss_fn: Callable that computes the loss.
 
         Returns:
             The computed loss tensor.
-
-        Raises:
-            TypeError: If stage is a concurrent group (LBFGS requires single optimizer).
         """
-        if isinstance(stage, ActiveConcurrentGroup):
-            raise TypeError("LBFGSStageStepper does not support concurrent groups")
 
         def closure() -> Tensor:
             stage.optimizer.zero_grad()
@@ -161,5 +110,4 @@ class LBFGSStageStepper:
             loss.backward()
             return loss
 
-        # LBFGS.step() expects a closure and returns the loss
         return stage.optimizer.step(closure)  # type: ignore[return-value]

@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from torch import Tensor, nn
 from torch.optim import LBFGS
 
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
+from .concurrent_optimizer import ConcurrentOptimizer
+from .state import RunningOptimizerPolicy
 from .state_repository import IOptimizationStateRepository
 from .stepping import IStepPolicy, LBFGSStageStepper, StepAllOptimizers
 
@@ -17,29 +18,11 @@ if TYPE_CHECKING:
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
 
-def _flatten_all_stages(program: RunningOptimizerPolicy) -> tuple[ActiveStage, ...]:
-    """Extract all stages from every entry in a program, flattening concurrent groups.
-
-    Args:
-        program: The running optimization program.
-
-    Returns:
-        Tuple of all ActiveStage objects across all entries.
-    """
-    stages: list[ActiveStage] = []
-    for entry in program.stages:
-        if isinstance(entry, ActiveStage):
-            stages.append(entry)
-        elif isinstance(entry, ActiveConcurrentGroup):
-            stages.extend(entry.stages)
-    return tuple(stages)
-
-
 def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
     """Return True when manual optimizer stepping is needed.
 
-    Manual optimization is required when any stage uses LBFGS (needs a closure)
-    or when there are multiple sequential stages (only one should step per batch).
+    Manual optimization is required when there are 2+ sequential stages (only one
+    should step per batch) or when any stage uses LBFGS (needs a closure).
 
     Args:
         program: The assembled optimization program.
@@ -47,22 +30,18 @@ def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
     Returns:
         True if automatic_optimization should be disabled on the Lightning module.
     """
-    sequential_count = sum(1 for e in program.stages if isinstance(e, ActiveStage))
-    if sequential_count > 1:
+    if len(program.stages) > 1:
         return True
-    for entry in program.stages:
-        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
-        for stage in stages:
-            if isinstance(stage.optimizer, LBFGS):
-                return True
+    for stage in program.stages:
+        opt = stage.optimizer
+        sub_opts = opt.sub_optimizers if isinstance(opt, ConcurrentOptimizer) else [opt]
+        if any(isinstance(s, LBFGS) for s in sub_opts):
+            return True
     return False
 
 
 def _pick_step_policy(program: RunningOptimizerPolicy) -> IStepPolicy:
     """Select the manual-stepping policy for the program.
-
-    Uses LBFGSStageStepper when any stage holds an LBFGS-family optimizer.
-    Falls back to StepAllOptimizers otherwise.
 
     Args:
         program: The running optimization program.
@@ -70,11 +49,11 @@ def _pick_step_policy(program: RunningOptimizerPolicy) -> IStepPolicy:
     Returns:
         An IStepPolicy suited to the program's optimizers.
     """
-    for entry in program.stages:
-        stages = [entry] if isinstance(entry, ActiveStage) else list(entry.stages)
-        for stage in stages:
-            if isinstance(stage.optimizer, LBFGS):
-                return LBFGSStageStepper()
+    for stage in program.stages:
+        opt = stage.optimizer
+        sub_opts = opt.sub_optimizers if isinstance(opt, ConcurrentOptimizer) else [opt]
+        if any(isinstance(s, LBFGS) for s in sub_opts):
+            return LBFGSStageStepper()
     return StepAllOptimizers()
 
 
@@ -83,9 +62,6 @@ def build_optimization_controller(
     optimizer_policy_settings: OptimizerPolicySettings,
 ) -> IOptimizationController:
     """Build the appropriate optimization controller for a Lightning wrapper.
-
-    Constructs the optimizer program from settings, then picks between automatic
-    and manual optimization based on the program's requirements.
 
     Args:
         model: The nn.Module whose parameters will be optimized.
@@ -105,12 +81,7 @@ def build_optimization_controller(
 
 
 class IOptimizationController(ABC):
-    """Abstract interface for optimization control during training.
-
-    Controllers bridge the optimization program and Lightning's training loop,
-    handling optimizer registration, manual vs automatic stepping, and
-    stage transitions.
-    """
+    """Abstract interface for optimization control during training."""
 
     @property
     @abstractmethod
@@ -134,9 +105,6 @@ class IOptimizationController(ABC):
     @abstractmethod
     def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
         """Execute one manual optimizer step.
-
-        Called only when requires_manual_optimization is True.
-        The wrapper is responsible for zero_grad and backward.
 
         Args:
             loss_fn: Callable that computes and returns the loss tensor.
@@ -187,9 +155,6 @@ class IOptimizationController(ABC):
 class AutomaticOptimizationController(IOptimizationController):
     """Controller for automatic optimization (Lightning-managed stepping).
 
-    Uses Lightning's automatic optimization mode. Optimizers and schedulers
-    are registered with Lightning and stepped automatically.
-
     Attributes:
         _program: The running optimization program.
         _repository: Repository for state checkpoint/restore.
@@ -222,14 +187,13 @@ class AutomaticOptimizationController(IOptimizationController):
         """Configure optimizers and schedulers for Lightning.
 
         Returns:
-            Dict with "optimizer" and optional "lr_scheduler" keys for a
-            single optimizer, or a list of per-optimizer dicts when multiple
-            concurrent stages are registered.
+            Dict with "optimizer" and optional "lr_scheduler" for a single stage,
+            or a list of per-stage dicts when multiple sequential stages are registered.
         """
-        all_stages = _flatten_all_stages(self._program)
+        stages = self._program.stages
 
-        if len(all_stages) == 1:
-            stage = all_stages[0]
+        if len(stages) == 1:
+            stage = stages[0]
             config: dict[str, object] = {"optimizer": stage.optimizer}
             if stage.scheduler is not None:
                 config["lr_scheduler"] = {
@@ -239,9 +203,8 @@ class AutomaticOptimizationController(IOptimizationController):
                 }
             return config
 
-        # Multiple concurrent optimizers: each entry preserves its scheduler.
         entries: list[object] = []
-        for stage in all_stages:
+        for stage in stages:
             entry: dict[str, object] = {"optimizer": stage.optimizer}
             if stage.scheduler is not None:
                 entry["lr_scheduler"] = {
@@ -305,8 +268,8 @@ class AutomaticOptimizationController(IOptimizationController):
 class ManualOptimizationController(IOptimizationController):
     """Controller for manual optimization stepping.
 
-    Used when optimizer stepping must be controlled manually (e.g., LBFGS,
-    alternating optimizers). Requires automatic_optimization=False in Lightning.
+    Used when optimizer stepping must be controlled manually (e.g. LBFGS,
+    sequential multi-stage). Requires automatic_optimization=False in Lightning.
 
     Attributes:
         _program: The running optimization program.
@@ -325,7 +288,7 @@ class ManualOptimizationController(IOptimizationController):
         Args:
             program: The running optimization program.
             repository: Repository for saving/loading state.
-            step_policy: Policy for stepping (e.g., StepAllOptimizers, AlternatingStepPolicy).
+            step_policy: Policy for stepping (e.g., StepAllOptimizers).
         """
         self._program = program
         self._repository = repository
@@ -341,12 +304,12 @@ class ManualOptimizationController(IOptimizationController):
         return True
 
     def configure_optimizers(self) -> dict[str, object] | list[object]:
-        """Configure optimizers for Lightning.
+        """Configure optimizers for Lightning (manual mode returns list).
 
         Returns:
-            List of all optimizers (Lightning requires this for manual mode).
+            List of all stage optimizers.
         """
-        return [stage.optimizer for stage in _flatten_all_stages(self._program)]
+        return [stage.optimizer for stage in self._program.stages]
 
     def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
         """Execute one optimizer step using the step policy.

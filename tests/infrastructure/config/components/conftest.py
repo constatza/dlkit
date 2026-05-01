@@ -105,7 +105,7 @@ def wrapper_component_data() -> dict[str, Any]:
     return {
         "name": "StandardWrapper",
         "module_path": "test.wrappers",
-        "optimizer": {"name": "Adam", "lr": 0.001, "weight_decay": 0.01},
+        "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001, "weight_decay": 0.01}},
         "scheduler": {"name": "StepLR", "step_size": 10, "gamma": 0.9},
         "train": True,
         "test": True,
@@ -130,10 +130,12 @@ def complex_wrapper_data() -> dict[str, Any]:
         "name": "ComplexWrapper",
         "module_path": "test.wrappers.complex",
         "optimizer": {
-            "name": "AdamW",
-            "lr": 0.001,  # Use plain value instead of hyperparameter dict
-            "weight_decay": 0.01,  # Use plain value instead of hyperparameter dict
-            "betas": (0.9, 0.999),
+            "default_optimizer": {
+                "name": "AdamW",
+                "lr": 0.001,
+                "weight_decay": 0.01,
+                "betas": (0.9, 0.999),
+            }
         },
         "scheduler": {"name": "CosineAnnealingLR", "T_max": 100, "eta_min": 1e-6},
         "loss_function": {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, cast
 
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
+from .state import ActiveStage, RunningOptimizerPolicy
 
 
 class IOptimizationStateRepository(ABC):
@@ -39,21 +39,15 @@ class IOptimizationStateRepository(ABC):
 
 
 def _flatten_stages(program: RunningOptimizerPolicy) -> tuple[ActiveStage, ...]:
-    """Extract all ActiveStage objects from a program, flattening concurrent groups.
+    """Return all ActiveStage objects from a program.
 
     Args:
-        program: The program to flatten.
+        program: The program to read.
 
     Returns:
         Tuple of all ActiveStage objects in the program.
     """
-    stages: list[ActiveStage] = []
-    for entry in program.stages:
-        if isinstance(entry, ActiveStage):
-            stages.append(entry)
-        elif isinstance(entry, ActiveConcurrentGroup):
-            stages.extend(entry.stages)
-    return tuple(stages)
+    return program.stages
 
 
 class OptimizationStateRepository(IOptimizationStateRepository):

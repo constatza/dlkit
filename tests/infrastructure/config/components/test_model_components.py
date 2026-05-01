@@ -265,7 +265,7 @@ class TestWrapperComponentSettings:
         settings = WrapperComponentSettings(**wrapper_component_data)
 
         assert settings.name == "StandardWrapper"
-        assert settings.optimizer.name == "Adam"
+        assert settings.optimizer.default_optimizer.name == "Adam"
         assert settings.scheduler.name == "StepLR"
         assert settings.train is True
         assert settings.predict is False
@@ -282,8 +282,8 @@ class TestWrapperComponentSettings:
         settings = WrapperComponentSettings(**complex_wrapper_data)
 
         assert settings.is_autoencoder is True
-        assert settings.optimizer.lr == 0.001
-        assert settings.optimizer.weight_decay == 0.01
+        assert settings.optimizer.default_optimizer.lr == 0.001
+        assert settings.optimizer.default_optimizer.weight_decay == 0.01
 
     def test_has_metrics_property(self, wrapper_component_data: dict[str, Any]) -> None:
         """Test has_metrics property works correctly.
@@ -308,8 +308,8 @@ class TestWrapperComponentSettings:
         settings = WrapperComponentSettings(**wrapper_component_data)
 
         # Optimizer settings should be properly initialized
-        assert settings.optimizer.name == "Adam"
-        assert settings.optimizer.lr == 0.001
+        assert settings.optimizer.default_optimizer.name == "Adam"
+        assert settings.optimizer.default_optimizer.lr == 0.001
 
         # Loss function settings should be properly initialized
         assert settings.loss_function.name == "mse_loss"

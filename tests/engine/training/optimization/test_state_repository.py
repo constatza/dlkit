@@ -6,7 +6,8 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.engine.training.optimization.state import RunningOptimizerPolicy
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
+from dlkit.engine.training.optimization.state import ActiveStage, RunningOptimizerPolicy
 from dlkit.engine.training.optimization.state_repository import (
     OptimizationStateRepository,
 )
@@ -199,3 +200,85 @@ class TestOptimizationStateRepositoryRestore:
 
         # Verify optimizer state is restored (has state entries)
         assert len(optimizer.state) > 0
+
+
+# ---------------------------------------------------------------------------
+# Task C: Concurrent group checkpoint / restore round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentGroupRoundTrip:
+    """State repository round-trip for an ActiveStage with ConcurrentOptimizer."""
+
+    def test_restore_preserves_all_sub_optimizer_learning_rates(
+        self,
+        concurrent_group: ActiveStage,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Save / restore must recover original LRs for every sub-optimizer.
+
+        Args:
+            concurrent_group: Stage fixture with ConcurrentOptimizer containing two SGDs.
+            repository: Fresh repository fixture.
+        """
+        assert isinstance(concurrent_group.optimizer, ConcurrentOptimizer)
+        program = RunningOptimizerPolicy(stages=(concurrent_group,))
+
+        sub_opts = concurrent_group.optimizer.sub_optimizers
+        original_lrs = [opt.param_groups[0]["lr"] for opt in sub_opts]
+
+        saved = repository.save(program)
+
+        # Corrupt all LRs to a sentinel value
+        for opt in sub_opts:
+            for pg in opt.param_groups:
+                pg["lr"] = 0.999
+
+        repository.restore(program, saved)
+
+        for i, opt in enumerate(sub_opts):
+            assert opt.param_groups[0]["lr"] == pytest.approx(original_lrs[i])
+
+    def test_restore_preserves_active_index(
+        self,
+        concurrent_group: ActiveStage,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Save / restore must recover the program's active_index correctly.
+
+        Args:
+            concurrent_group: Stage fixture with ConcurrentOptimizer.
+            repository: Fresh repository fixture.
+        """
+        program = RunningOptimizerPolicy(stages=(concurrent_group,), active_index=0)
+        saved = repository.save(program)
+
+        program.active_index = 99
+
+        repository.restore(program, saved)
+        assert program.active_index == 0
+
+    def test_save_concurrent_stage_serializes_optimizer_state(
+        self,
+        concurrent_group: ActiveStage,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Save must serialize the ConcurrentOptimizer state (sub_optimizers key).
+
+        Args:
+            concurrent_group: Stage fixture with ConcurrentOptimizer.
+            repository: Fresh repository fixture.
+        """
+        assert isinstance(concurrent_group.optimizer, ConcurrentOptimizer)
+        program = RunningOptimizerPolicy(stages=(concurrent_group,))
+        saved = repository.save(program)
+
+        stages_state = cast(list[Any], saved["stages"])
+        assert len(stages_state) == 1
+        stage_dict = cast(dict[str, Any], stages_state[0])
+        assert "optimizer_state" in stage_dict
+        assert "trigger_state" in stage_dict
+        # ConcurrentOptimizer.state_dict() has "sub_optimizers" key
+        opt_state = cast(dict[str, Any], stage_dict["optimizer_state"])
+        assert "sub_optimizers" in opt_state
+        assert len(opt_state["sub_optimizers"]) == 2  # noqa: PLR2004

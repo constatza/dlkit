@@ -9,7 +9,8 @@ from pydantic import Field, PositiveInt
 from .core.base_settings import BasicSettings
 from .lr_tuner_settings import LRTunerSettings
 from .model_components import LossComponentSettings, MetricComponentSettings
-from .optimizer_settings import OptimizerSettings, SchedulerSettings
+from .optimizer_policy import OptimizerPolicySettings
+from .optimizer_settings import SchedulerSettings
 from .trainer_settings import TrainerSettings
 
 
@@ -41,8 +42,8 @@ class TrainingSettings(BasicSettings):
     trainer: TrainerSettings = Field(
         default_factory=TrainerSettings, description="PyTorch Lightning trainer settings"
     )
-    optimizer: OptimizerSettings = Field(
-        default_factory=OptimizerSettings, description="Optimizer settings"
+    optimizer: OptimizerPolicySettings = Field(
+        default_factory=OptimizerPolicySettings, description="Optimizer policy settings"
     )
     scheduler: SchedulerSettings | None = Field(
         default=None, description="Learning rate scheduler settings"

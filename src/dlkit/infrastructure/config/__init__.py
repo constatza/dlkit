@@ -71,29 +71,13 @@ from .model_components import (
     R2ScoreSettings,
     WrapperComponentSettings,
 )
-from .optimization_selector import (
-    DifferenceSelectorSettings,
-    IntersectionSelectorSettings,
-    ModulePathSelectorSettings,
-    MuonEligibleSelectorSettings,
-    NonMuonSelectorSettings,
-    ParameterSelectorSettings,
-    RoleSelectorSettings,
-    UnionSelectorSettings,
-)
-from .optimization_stage import (
-    ConcurrentOptimizationSettings,
-    OptimizationStageSettings,
-    StageSpec,
-)
-from .optimization_trigger import (
-    EpochTriggerSettings,
-    PlateauTriggerSettings,
-    TriggerSpec,
-)
+from .optimization_selector import ParameterSelectorSettings
+from .optimization_stage import OptimizationStageSettings
+from .optimization_trigger import TriggerSettings
 from .optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    ConcurrentOptimizerSettings,
     CosineAnnealingLRSettings,
     CosineAnnealingWarmRestartsSettings,
     LBFGSSettings,
@@ -172,6 +156,7 @@ __all__ = [
     # Optimizer and scheduler components
     "AdamSettings",
     "AdamWSettings",
+    "ConcurrentOptimizerSettings",
     "LBFGSSettings",
     "MuonSettings",
     "OptimizerComponentSettings",
@@ -185,21 +170,11 @@ __all__ = [
     # Optimization configuration
     "OptimizerPolicySettings",
     "OptimizationStageSettings",
-    "ConcurrentOptimizationSettings",
-    "StageSpec",
-    # Selector variants + union alias
+    "ConcurrentOptimizerSettings",
+    # Selector
     "ParameterSelectorSettings",
-    "RoleSelectorSettings",
-    "ModulePathSelectorSettings",
-    "MuonEligibleSelectorSettings",
-    "NonMuonSelectorSettings",
-    "IntersectionSelectorSettings",
-    "UnionSelectorSettings",
-    "DifferenceSelectorSettings",
-    # Trigger variants + union alias
-    "EpochTriggerSettings",
-    "PlateauTriggerSettings",
-    "TriggerSpec",
+    # Trigger
+    "TriggerSettings",
     # External library settings
     "TrainerSettings",
     "OptimizerSettings",

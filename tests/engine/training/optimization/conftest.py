@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 
 from dlkit.domain.nn.parameter_roles import ParameterRole
+from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
 from dlkit.engine.training.optimization.inventory import ParameterDescriptor
 from dlkit.engine.training.optimization.state import (
-    ActiveConcurrentGroup,
     ActiveStage,
     RunningOptimizerPolicy,
 )
@@ -212,33 +212,22 @@ def single_stage_program(no_trigger_stage: ActiveStage) -> RunningOptimizerPolic
 
 
 @pytest.fixture
-def concurrent_group(tiny_model: nn.Sequential) -> ActiveConcurrentGroup:
-    """Concurrent group with two SGD optimizers on the same model parameters.
+def concurrent_group(tiny_model: nn.Sequential) -> ActiveStage:
+    """ActiveStage with a ConcurrentOptimizer wrapping two SGD sub-optimizers.
 
     Args:
         tiny_model: The tiny model fixture.
 
     Returns:
-        An ActiveConcurrentGroup with two stages.
+        An ActiveStage whose optimizer is a ConcurrentOptimizer with two SGD instances.
     """
     params = list(tiny_model.parameters())
     opt_a = torch.optim.SGD(params[:1], lr=0.01)
     opt_b = torch.optim.SGD(params[1:], lr=0.01)
-
-    stage_a = ActiveStage(
-        optimizer=opt_a,
+    concurrent_optimizer = ConcurrentOptimizer([opt_a, opt_b])
+    return ActiveStage(
+        optimizer=concurrent_optimizer,
         scheduler=None,
         trigger=NoTransitionTrigger(),
         stage_index=0,
-    )
-    stage_b = ActiveStage(
-        optimizer=opt_b,
-        scheduler=None,
-        trigger=NoTransitionTrigger(),
-        stage_index=1,
-    )
-    return ActiveConcurrentGroup(
-        stages=(stage_a, stage_b),
-        trigger=NoTransitionTrigger(),
-        group_index=0,
     )

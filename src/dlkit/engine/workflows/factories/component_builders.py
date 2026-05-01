@@ -19,7 +19,6 @@ from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
 from .module_defaults import with_runtime_module_defaults
 
@@ -108,58 +107,7 @@ def build_wrapper_components(
     test_metric_routes = build_metric_routes(metric_specs, default_target_key)
 
     # Build optimization program settings (deferred to wrapper for model access)
-    optimizer_policy_settings = settings.optimizer_policy
-    if optimizer_policy_settings is None:
-        # Fallback: migrate legacy OptimizerSettings → typed OptimizerSpec subclass.
-        from dlkit.infrastructure.config.optimizer_component import (
-            AdamSettings,
-            AdamWSettings,
-            LBFGSSettings,
-            MuonSettings,
-            OptimizerSpec,
-            SchedulerSpec,
-        )
-
-        raw = settings.optimizer
-        name = str(raw.name or "AdamW")
-        lr_raw = raw.lr
-        lr = float(lr_raw) if isinstance(lr_raw, (int, float)) else 1e-3
-        wd_raw = raw.weight_decay
-        wd = float(wd_raw) if isinstance(wd_raw, (int, float)) else 0.0
-
-        default_optimizer: OptimizerSpec
-        match name.lower():
-            case "adam":
-                default_optimizer = AdamSettings(lr=lr, weight_decay=wd)
-            case "lbfgs":
-                default_optimizer = LBFGSSettings(lr=lr)
-            case "muon":
-                default_optimizer = MuonSettings(lr=lr)
-            case _:
-                default_optimizer = AdamWSettings(lr=lr, weight_decay=wd)
-
-        # Migrate legacy SchedulerSettings to typed subclass.
-        # The SchedulerSettings class from optimizer_settings.py is now legacy.
-        # We convert it to ReduceLROnPlateauSettings (which matches SchedulerSettings defaults).
-        from dlkit.infrastructure.config.optimizer_component import (
-            ReduceLROnPlateauSettings,
-        )
-
-        raw_scheduler = settings.scheduler
-        if raw_scheduler:
-            # Legacy SchedulerSettings has factor, patience, min_lr — map to ReduceLROnPlateauSettings
-            default_scheduler: SchedulerSpec | None = ReduceLROnPlateauSettings(
-                factor=getattr(raw_scheduler, "factor", 0.5),
-                patience=getattr(raw_scheduler, "patience", 1000),
-                min_lr=getattr(raw_scheduler, "min_lr", 1e-8),
-            )
-        else:
-            default_scheduler = None
-
-        optimizer_policy_settings = OptimizerPolicySettings(
-            default_optimizer=default_optimizer,
-            default_scheduler=default_scheduler,
-        )
+    optimizer_policy_settings = settings.optimizer
 
     # Build transform ModuleLists (empty ModuleList when no transforms configured)
     feature_transforms: dict[str, ModuleList] = {}

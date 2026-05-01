@@ -5,32 +5,29 @@ from __future__ import annotations
 from pydantic import Field
 
 from .core.base_settings import BasicSettings
-from .optimization_stage import StageSpec
+from .optimization_stage import OptimizationStageSettings
 from .optimizer_component import AdamWSettings, OptimizerSpec, SchedulerSpec
 
 
 class OptimizerPolicySettings(BasicSettings):
     """Top-level configuration for an optimization program.
 
-    Replaces the flat optimizer + scheduler approach from TrainingSettings.
-    Supports multi-stage optimization with state transitions and concurrent optimizers.
+    Supports single-optimizer training (``default_optimizer``), concurrent
+    optimizers via ``ConcurrentOptimizerSettings`` as the ``default_optimizer``,
+    and sequential multi-stage programs via ``stages``.
 
-    When stages is empty, uses default_optimizer and default_scheduler as a fallback
-    for simple single-optimizer training.
-
-    The intended usage pattern:
-    - Simple training: Empty stages, use default_optimizer/default_scheduler
-    - Multi-stage training: Populate stages, leave default_optimizer/scheduler unchanged
+    When ``stages`` is empty, uses ``default_optimizer`` and ``default_scheduler``
+    as a fallback for simple single-optimizer (or concurrent) training.
 
     Attributes:
-        stages: Ordered stages (or concurrent groups). Empty = use default_optimizer.
-            Pydantic dispatches deserialization via the ``kind`` discriminator field.
+        stages: Ordered sequential stages. Empty = use default_optimizer.
         default_optimizer: Fallback optimizer when stages is empty. Defaults to AdamW.
+            Can be a ``ConcurrentOptimizerSettings`` for concurrent training without stages.
         default_scheduler: Fallback scheduler when stages is empty.
     """
 
-    stages: tuple[StageSpec, ...] = Field(
-        default=(), description="Ordered optimization stages or concurrent groups"
+    stages: tuple[OptimizationStageSettings, ...] = Field(
+        default=(), description="Ordered optimization stages"
     )
     default_optimizer: OptimizerSpec = Field(
         default_factory=AdamWSettings,

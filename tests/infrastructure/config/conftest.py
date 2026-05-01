@@ -100,7 +100,7 @@ def sample_general_settings_data() -> dict[str, Any]:
         "TRAINING": {
             "epochs": 20,
             "trainer": {"accelerator": "cpu", "devices": 1},
-            "optimizer": {"name": "Adam", "lr": 0.001},
+            "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
         },
     }
 
@@ -222,7 +222,7 @@ devices = 2
 strategy = "ddp"
 precision = "16-mixed"
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "AdamW"
 lr = 0.0001
 weight_decay = 0.01

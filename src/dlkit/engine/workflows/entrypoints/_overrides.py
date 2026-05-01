@@ -89,7 +89,7 @@ def _build_patch(settings: Any, overrides: dict[str, Any]) -> dict[str, Any]:
             patch["TRAINING.epochs"] = epochs
             patch["TRAINING.trainer.max_epochs"] = epochs
         if (lr := overrides.get("learning_rate")) is not None:
-            patch["TRAINING.optimizer.lr"] = float(lr)
+            patch["TRAINING.optimizer.default_optimizer.lr"] = float(lr)
         if loss := overrides.get("loss_function"):
             patch["TRAINING.loss_function"] = {
                 "name": loss,

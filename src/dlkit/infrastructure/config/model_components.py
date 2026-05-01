@@ -18,7 +18,7 @@ from .core.base_settings import (
 )
 from .core.types import IntHyperparameter
 from .optimizer_policy import OptimizerPolicySettings
-from .optimizer_settings import OptimizerSettings, SchedulerSettings
+from .optimizer_settings import SchedulerSettings
 
 
 def _validate_batch_key(v: str) -> str:
@@ -449,15 +449,11 @@ class WrapperComponentSettings(ComponentSettings):
     )
 
     # Training components
-    optimizer: OptimizerSettings = Field(
-        default_factory=OptimizerSettings, description="Optimizer settings"
+    optimizer: OptimizerPolicySettings = Field(
+        default_factory=OptimizerPolicySettings, description="Optimizer policy settings"
     )
     scheduler: SchedulerSettings = Field(
         default_factory=SchedulerSettings, description="Scheduler settings"
-    )
-    optimizer_policy: OptimizerPolicySettings | None = Field(
-        default=None,
-        description="Staged optimizer policy. When set, overrides legacy optimizer/scheduler fields.",
     )
 
     # Training flags

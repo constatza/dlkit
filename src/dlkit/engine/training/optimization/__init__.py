@@ -19,7 +19,8 @@ Public API:
 - ISchedulerFactory, TorchSchedulerFactory: scheduler instantiation
 - ITransitionTrigger: stage transition control
 - EpochTransitionTrigger, PlateauTransitionTrigger, NoTransitionTrigger: triggers
-- ActiveStage, ActiveConcurrentGroup, RunningOptimizerPolicy: state objects
+- ConcurrentOptimizer: real torch.optim.Optimizer wrapping multiple sub-optimizers
+- ActiveStage, RunningOptimizerPolicy: state objects
 - IOptimizationStateRepository, OptimizationStateRepository: checkpoint management
 - IStepPolicy, StepAllOptimizers, AlternatingStepPolicy, LBFGSStageStepper: stepping
 - OptimizationMetricsView: read-only state projection
@@ -33,6 +34,7 @@ from .builder import (
     IOptimizerPolicyBuilder,
     OptimizerPolicyBuilder,
 )
+from .concurrent_optimizer import ConcurrentOptimizer
 from .controllers import (
     AutomaticOptimizationController,
     IOptimizationController,
@@ -71,7 +73,6 @@ from .selectors import (
     UnionSelector,
 )
 from .state import (
-    ActiveConcurrentGroup,
     ActiveStage,
     RunningOptimizerPolicy,
 )
@@ -118,8 +119,8 @@ __all__ = [
     "EpochTransitionTrigger",
     "PlateauTransitionTrigger",
     "NoTransitionTrigger",
+    "ConcurrentOptimizer",
     "ActiveStage",
-    "ActiveConcurrentGroup",
     "RunningOptimizerPolicy",
     "IOptimizationStateRepository",
     "OptimizationStateRepository",

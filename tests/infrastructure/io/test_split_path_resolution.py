@@ -78,7 +78,7 @@ epochs = 1
     accelerator = "cpu"
     max_epochs = 1
 
-    [TRAINING.optimizer]
+    [TRAINING.optimizer.default_optimizer]
     name = "Adam"
     lr = 0.001
 

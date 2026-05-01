@@ -63,7 +63,7 @@ hidden_dims = [64, 32]
 [TRAINING]
 epochs = 1
 
-    [TRAINING.optimizer]
+    [TRAINING.optimizer.default_optimizer]
     name = "Adam"
     lr = 0.001
 

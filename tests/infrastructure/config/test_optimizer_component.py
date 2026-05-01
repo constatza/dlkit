@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
-from dlkit.infrastructure.config.optimizer_component import MuonSettings
+from dlkit.infrastructure.config.optimization_selector import ParameterSelectorSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    ConcurrentOptimizerSettings,
+    MuonSettings,
+)
 
 
 class TestMuonSettingsFields:
@@ -60,3 +67,52 @@ class TestMuonSettingsFields:
         s = MuonSettings()
         with pytest.raises(Exception):  # Pydantic raises ValidationError or similar
             s.lr = 0.01
+
+
+class TestConcurrentOptimizerSettingsValidation:
+    """Tests for ConcurrentOptimizerSettings validator constraints."""
+
+    def test_muon_with_other_no_selectors_is_valid(self) -> None:
+        """Empty selectors are valid when at least one sub-optimizer is MuonSettings.
+
+        Returns:
+            None
+        """
+        settings = ConcurrentOptimizerSettings(optimizers=(MuonSettings(), AdamWSettings()))
+        assert settings.selectors == ()
+
+    def test_explicit_selectors_without_muon_is_valid(self) -> None:
+        """Explicit selectors of matching length are valid for any optimizer combination.
+
+        Returns:
+            None
+        """
+        settings = ConcurrentOptimizerSettings(
+            optimizers=(AdamWSettings(), AdamSettings()),
+            selectors=(
+                ParameterSelectorSettings(prefix="encoder"),
+                ParameterSelectorSettings(prefix="decoder"),
+            ),
+        )
+        assert len(settings.selectors) == 2  # noqa: PLR2004
+
+    def test_no_muon_no_selectors_raises(self) -> None:
+        """Empty selectors without any MuonSettings must raise ValidationError.
+
+        Returns:
+            None
+        """
+        with pytest.raises(ValidationError, match="selectors"):
+            ConcurrentOptimizerSettings(optimizers=(AdamWSettings(), AdamSettings()))
+
+    def test_mismatched_selector_length_raises(self) -> None:
+        """Selectors length differing from optimizers length must raise ValidationError.
+
+        Returns:
+            None
+        """
+        with pytest.raises(ValidationError, match="selectors length"):
+            ConcurrentOptimizerSettings(
+                optimizers=(MuonSettings(), AdamWSettings()),
+                selectors=(ParameterSelectorSettings(prefix="encoder"),),
+            )

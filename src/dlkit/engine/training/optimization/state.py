@@ -14,11 +14,13 @@ from .triggers import ITransitionTrigger
 class ActiveStage:
     """Live execution state for a single optimizer stage.
 
-    Holds the running optimizer, optional scheduler, and the trigger
-    that controls when this stage yields to the next one.
+    Holds the running optimizer (which may be a ``ConcurrentOptimizer`` for
+    concurrent parameter groups), optional scheduler, and the trigger that
+    controls when this stage yields to the next one.
 
     Attributes:
-        optimizer: The active torch.optim.Optimizer instance.
+        optimizer: The active optimizer. May be a ``ConcurrentOptimizer`` wrapping
+            multiple sub-optimizers on disjoint parameter sets.
         scheduler: Optional learning rate scheduler (lr_scheduler or None).
         trigger: Transition trigger that signals advancing to the next stage.
         stage_index: Zero-indexed position in the overall program.
@@ -38,24 +40,6 @@ class ActiveStage:
 
 
 @dataclass(kw_only=True, slots=True)
-class ActiveConcurrentGroup:
-    """Live execution state for a group of concurrent optimizers.
-
-    All optimizers in the group are stepped on every training step,
-    operating on disjoint parameter sets.
-
-    Attributes:
-        stages: Tuple of ActiveStage objects running concurrently.
-        trigger: Transition trigger that signals advancing beyond this group.
-        group_index: Zero-indexed position in the overall program.
-    """
-
-    stages: tuple[ActiveStage, ...]
-    trigger: ITransitionTrigger
-    group_index: int
-
-
-@dataclass(kw_only=True, slots=True)
 class RunningOptimizerPolicy:
     """Top-level mutable state for the active optimization program.
 
@@ -63,19 +47,19 @@ class RunningOptimizerPolicy:
     for the controller to advance through the program.
 
     Attributes:
-        stages: Tuple of ActiveStage or ActiveConcurrentGroup objects.
-        active_index: Zero-based index of the currently active stage/group.
+        stages: Tuple of ActiveStage objects (each may hold a ConcurrentOptimizer).
+        active_index: Zero-based index of the currently active stage.
     """
 
-    stages: tuple[ActiveStage | ActiveConcurrentGroup, ...]
+    stages: tuple[ActiveStage, ...]
     active_index: int = 0
 
     @property
-    def current(self) -> ActiveStage | ActiveConcurrentGroup:
-        """Return the currently active stage or concurrent group.
+    def current(self) -> ActiveStage:
+        """Return the currently active stage.
 
         Returns:
-            The ActiveStage or ActiveConcurrentGroup at active_index.
+            The ActiveStage at active_index.
         """
         return self.stages[self.active_index]
 

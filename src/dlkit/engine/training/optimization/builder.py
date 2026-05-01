@@ -5,43 +5,34 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import torch.nn as nn
+import torch.optim
 
+from dlkit.common.errors import ParameterPartitionError
 from dlkit.domain.nn.parameter_roles import ParameterRole
 from dlkit.infrastructure.config.optimization_selector import (
-    DifferenceSelectorSettings,
-    IntersectionSelectorSettings,
-    ModulePathSelectorSettings,
-    MuonEligibleSelectorSettings,
-    NonMuonSelectorSettings,
-    RoleSelectorSettings,
-    UnionSelectorSettings,
+    ParameterSelectorSettings,
 )
-from dlkit.infrastructure.config.optimization_stage import (
-    ConcurrentOptimizationSettings,
-    OptimizationStageSettings,
-)
-from dlkit.infrastructure.config.optimization_trigger import (
-    EpochTriggerSettings,
-    PlateauTriggerSettings,
-    TriggerSpec,
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    ConcurrentOptimizerSettings,
+    MuonSettings,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
+from .concurrent_optimizer import ConcurrentOptimizer
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
 from .partitioning import ParameterPartitioner
 from .role_inference import make_default_inference_strategy
 from .selectors import (
-    DifferenceSelector,
-    IntersectionSelector,
     IParameterSelector,
     ModulePathSelector,
     MuonEligibleSelector,
     NonMuonSelector,
     RoleSelector,
-    UnionSelector,
 )
-from .state import ActiveConcurrentGroup, ActiveStage, RunningOptimizerPolicy
+from .state import ActiveStage, RunningOptimizerPolicy
 from .triggers import (
     EpochTransitionTrigger,
     ITransitionTrigger,
@@ -74,29 +65,27 @@ class IOptimizerPolicyBuilder(ABC):
         ...
 
 
-def _build_trigger(trigger_settings: TriggerSpec | None) -> ITransitionTrigger:
-    """Build a trigger from settings.
+def _build_trigger(trigger_settings: TriggerSettings | None) -> ITransitionTrigger:
+    """Build a transition trigger from settings.
 
     Args:
-        trigger_settings: Trigger configuration (or None).
+        trigger_settings: Trigger configuration (or None for no transition).
 
     Returns:
         An ITransitionTrigger instance.
     """
-    match trigger_settings:
-        case None:
-            return NoTransitionTrigger()
-        case EpochTriggerSettings():
-            return EpochTransitionTrigger(at_epoch=trigger_settings.at_epoch)
-        case PlateauTriggerSettings():
-            return PlateauTransitionTrigger(
-                monitor=trigger_settings.monitor,
-                patience=trigger_settings.patience,
-                min_delta=trigger_settings.min_delta,
-                mode=trigger_settings.mode,
-            )
-        case _:
-            return NoTransitionTrigger()
+    if trigger_settings is None:
+        return NoTransitionTrigger()
+    if trigger_settings.at_epoch is not None:
+        return EpochTransitionTrigger(at_epoch=trigger_settings.at_epoch)
+    if trigger_settings.patience is not None:
+        return PlateauTransitionTrigger(
+            monitor=trigger_settings.monitor,
+            patience=trigger_settings.patience,
+            min_delta=trigger_settings.min_delta,
+            mode=trigger_settings.mode,
+        )
+    return NoTransitionTrigger()
 
 
 def _params_to_group(descriptors: tuple[ParameterDescriptor, ...]) -> list[ParamGroup]:
@@ -108,48 +97,43 @@ def _params_to_group(descriptors: tuple[ParameterDescriptor, ...]) -> list[Param
     Returns:
         List with one param group containing all descriptors' parameters.
     """
-    # Extract .parameter attribute from each descriptor
     params = [d.parameter for d in descriptors]
     return [{"params": params}]
 
 
-def _selector_from_settings(selector_settings: object) -> IParameterSelector:
+def _selector_from_settings(selector_settings: ParameterSelectorSettings) -> IParameterSelector:
     """Convert a ParameterSelectorSettings instance to an IParameterSelector.
 
     Args:
-        selector_settings: Any concrete selector settings object.
+        selector_settings: Selector settings with role or prefix set.
 
     Returns:
         The corresponding IParameterSelector instance.
 
     Raises:
-        TypeError: If the settings type is not recognised.
+        ValueError: If the settings have neither role nor prefix set.
     """
-    match selector_settings:
-        case RoleSelectorSettings():
-            return RoleSelector(ParameterRole[selector_settings.role.upper()])
-        case ModulePathSelectorSettings():
-            return ModulePathSelector(selector_settings.prefix)
-        case MuonEligibleSelectorSettings():
-            return MuonEligibleSelector()
-        case NonMuonSelectorSettings():
-            return NonMuonSelector()
-        case IntersectionSelectorSettings():
-            return IntersectionSelector(
-                *(_selector_from_settings(c) for c in selector_settings.children)
-            )
-        case UnionSelectorSettings():
-            return UnionSelector(*(_selector_from_settings(c) for c in selector_settings.children))
-        case DifferenceSelectorSettings():
-            return DifferenceSelector(
-                _selector_from_settings(selector_settings.include),
-                _selector_from_settings(selector_settings.exclude),
-            )
-        case _:
-            raise TypeError(
-                f"Cannot convert selector settings of type {type(selector_settings).__name__} "
-                "to IParameterSelector. Expected a ParameterSelectorSettings instance."
-            )
+    if selector_settings.role is not None:
+        return RoleSelector(ParameterRole[selector_settings.role.upper()])
+    if selector_settings.prefix is not None:
+        return ModulePathSelector(selector_settings.prefix)
+    raise ValueError("ParameterSelectorSettings has neither role nor prefix set.")
+
+
+def _make_inventory(model: nn.Module) -> TorchParameterInventory:
+    """Build a parameter inventory with default role inference for a model.
+
+    Args:
+        model: The neural network model.
+
+    Returns:
+        TorchParameterInventory with role resolver applied.
+    """
+    strategy = make_default_inference_strategy(model)
+    return TorchParameterInventory(
+        model,
+        role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+    )
 
 
 class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
@@ -160,7 +144,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
     2. Partitioning parameters via selectors (or using all if no selector)
     3. Creating optimizers and schedulers via factory pattern
     4. Building triggers for stage transitions
-    5. Wrapping in ActiveStage or ActiveConcurrentGroup objects
+    5. Wrapping in ActiveStage objects (ConcurrentOptimizer handles concurrent stages)
     """
 
     def build(
@@ -177,55 +161,55 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
         Returns:
             A RunningOptimizerPolicy with stages initialized.
         """
-        # Empty stages: use default_optimizer + default_scheduler as fallback
         if not settings.stages:
-            strategy = make_default_inference_strategy(model)
-            inventory = TorchParameterInventory(
-                model,
-                role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
-            )
-            all_params = inventory.list_parameters()
+            return self._build_default(model, settings)
 
-            param_groups = _params_to_group(all_params)
-
-            optimizer = TorchOptimizerFactory(settings.default_optimizer).create(param_groups)
-
-            scheduler = None
-            if settings.default_scheduler is not None:
-                scheduler = TorchSchedulerFactory(settings.default_scheduler).create(optimizer)
-
-            trigger = NoTransitionTrigger()
-
-            stage = ActiveStage(
-                optimizer=optimizer,
-                scheduler=scheduler,
-                trigger=trigger,
-                stage_index=0,
-                name="default",
-            )
-
-            return RunningOptimizerPolicy(stages=(stage,))
-
-        # Multi-stage: build each stage from config
-        stages: list[ActiveStage | ActiveConcurrentGroup] = []
-
+        stages: list[ActiveStage] = []
         for idx, stage_config in enumerate(settings.stages):
-            if isinstance(stage_config, OptimizationStageSettings):
-                # Single optimizer stage
-                stage = self._build_single_stage(model, stage_config, idx)
-                stages.append(stage)
-
-            elif isinstance(stage_config, ConcurrentOptimizationSettings):
-                # Concurrent optimizers
-                group = self._build_concurrent_group(model, stage_config, idx)
-                stages.append(group)
-
+            stages.append(self._build_stage(model, stage_config, idx))
         return RunningOptimizerPolicy(stages=tuple(stages))
 
-    def _build_single_stage(
-        self, model: nn.Module, config: OptimizationStageSettings, stage_index: int
+    def _build_default(
+        self, model: nn.Module, settings: OptimizerPolicySettings
+    ) -> RunningOptimizerPolicy:
+        """Build the single-stage default program from default_optimizer/scheduler.
+
+        Args:
+            model: The neural network model.
+            settings: Policy settings (stages must be empty).
+
+        Returns:
+            A RunningOptimizerPolicy with one default stage.
+        """
+        if isinstance(settings.default_optimizer, ConcurrentOptimizerSettings):
+            optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
+                model, settings.default_optimizer
+            )
+        else:
+            inventory = _make_inventory(model)
+            param_groups = _params_to_group(inventory.list_parameters())
+            optimizer = TorchOptimizerFactory(settings.default_optimizer).create(param_groups)
+
+        scheduler = None
+        if settings.default_scheduler is not None:
+            scheduler = TorchSchedulerFactory(settings.default_scheduler).create(optimizer)
+
+        stage = ActiveStage(
+            optimizer=optimizer,
+            scheduler=scheduler,
+            trigger=NoTransitionTrigger(),
+            stage_index=0,
+            name="default",
+        )
+        return RunningOptimizerPolicy(stages=(stage,))
+
+    def _build_stage(
+        self,
+        model: nn.Module,
+        config: OptimizationStageSettings,
+        stage_index: int,
     ) -> ActiveStage:
-        """Build a single optimizer stage.
+        """Build a single optimization stage.
 
         Args:
             model: The neural network model.
@@ -235,39 +219,30 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
         Returns:
             An ActiveStage instance.
         """
-        # Enumerate parameters, resolving roles via default strategy
-        strategy = make_default_inference_strategy(model)
-        inventory = TorchParameterInventory(
-            model,
-            role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
-        )
+        trigger = _build_trigger(config.trigger)
+        monitor = config.scheduler.monitor if config.scheduler is not None else "val_loss"
+        frequency = config.scheduler.frequency if config.scheduler is not None else 1
 
-        # Partition parameters if selector provided
-        if config.selector is not None:
-            selector = _selector_from_settings(config.selector)
-            partitioner = ParameterPartitioner()
-            partitions = partitioner.partition(inventory, [selector])
-            selected_params: tuple[ParameterDescriptor, ...] = partitions[0]
+        if isinstance(config.optimizer, ConcurrentOptimizerSettings):
+            optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
+                model, config.optimizer
+            )
         else:
-            # Use all parameters
-            selected_params = inventory.list_parameters()
+            inventory = _make_inventory(model)
+            if config.selector is not None:
+                selector = _selector_from_settings(config.selector)
+                partitioner = ParameterPartitioner()
+                partitions = partitioner.partition(inventory, [selector])
+                selected_params = partitions[0]
+            else:
+                selected_params = inventory.list_parameters()
 
-        # Build param groups
-        param_groups = _params_to_group(selected_params)
+            param_groups = _params_to_group(selected_params)
+            optimizer = TorchOptimizerFactory(config.optimizer).create(param_groups)
 
-        # Create optimizer
-        optimizer = TorchOptimizerFactory(config.optimizer).create(param_groups)
-
-        # Create scheduler if provided
         scheduler = None
         if config.scheduler is not None:
             scheduler = TorchSchedulerFactory(config.scheduler).create(optimizer)
-
-        # Build trigger
-        trigger = _build_trigger(config.trigger)
-
-        monitor = config.scheduler.monitor if config.scheduler is not None else "val_loss"
-        frequency = config.scheduler.frequency if config.scheduler is not None else 1
 
         return ActiveStage(
             optimizer=optimizer,
@@ -279,30 +254,63 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             scheduler_frequency=frequency,
         )
 
-    def _build_concurrent_group(
-        self, model: nn.Module, config: ConcurrentOptimizationSettings, group_index: int
-    ) -> ActiveConcurrentGroup:
-        """Build a concurrent optimizer group.
+    def _build_concurrent_optimizer(
+        self,
+        model: nn.Module,
+        config: ConcurrentOptimizerSettings,
+    ) -> ConcurrentOptimizer:
+        """Build a ConcurrentOptimizer from a ConcurrentOptimizerSettings.
+
+        When ``config.selectors`` is empty and any optimizer is MuonSettings,
+        assigns MuonEligibleSelector to Muon and NonMuonSelector to all others.
+        Otherwise uses the provided selectors (None = all parameters).
 
         Args:
             model: The neural network model.
-            config: Concurrent group configuration.
-            group_index: Zero-based group index.
+            config: Concurrent optimizer configuration.
 
         Returns:
-            An ActiveConcurrentGroup instance.
+            A ConcurrentOptimizer wrapping per-sub-optimizer instances.
         """
-        stages: list[ActiveStage] = []
+        inventory = _make_inventory(model)
 
-        for idx, stage_config in enumerate(config.optimizers):
-            stage = self._build_single_stage(model, stage_config, stage_index=idx)
-            stages.append(stage)
+        selectors: list[IParameterSelector | None]
+        if config.selectors:
+            selectors = [
+                _selector_from_settings(s) if s is not None else None for s in config.selectors
+            ]
+        else:
+            has_muon = any(isinstance(opt, MuonSettings) for opt in config.optimizers)
+            if has_muon:
+                selectors = [
+                    MuonEligibleSelector() if isinstance(opt, MuonSettings) else NonMuonSelector()
+                    for opt in config.optimizers
+                ]
+            else:
+                selectors = [None] * len(config.optimizers)
 
-        # Build trigger for the group
-        trigger = _build_trigger(config.trigger)
+        sub_optimizers: list[torch.optim.Optimizer] = []
+        for opt_config, selector in zip(config.optimizers, selectors, strict=True):
+            if selector is not None:
+                partitioner = ParameterPartitioner()
+                partitions = partitioner.partition(inventory, [selector], warn_unmatched=False)
+                selected_params = partitions[0]
+            else:
+                selected_params = inventory.list_parameters()
 
-        return ActiveConcurrentGroup(
-            stages=tuple(stages),
-            trigger=trigger,
-            group_index=group_index,
-        )
+            param_groups = _params_to_group(selected_params)
+            sub_optimizers.append(TorchOptimizerFactory(opt_config).create(param_groups))
+
+        all_param_ids = {id(p) for p in model.parameters()}
+        covered_ids = {
+            id(p) for opt in sub_optimizers for pg in opt.param_groups for p in pg["params"]
+        }
+        uncovered = all_param_ids - covered_ids
+        if uncovered:
+            raise ParameterPartitionError(
+                message=f"ConcurrentOptimizer: {len(uncovered)} parameter(s) are not covered "
+                "by any sub-optimizer and will not be optimized",
+                context={"uncovered_count": len(uncovered)},
+            )
+
+        return ConcurrentOptimizer(sub_optimizers)

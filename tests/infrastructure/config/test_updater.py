@@ -55,7 +55,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -101,7 +101,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -128,7 +128,9 @@ max_epochs = 100
 
         # Other TRAINING fields should be preserved
         assert new_training.epochs == training.epochs
-        assert new_training.optimizer.lr == training.optimizer.lr
+        assert (
+            new_training.optimizer.default_optimizer.lr == training.optimizer.default_optimizer.lr
+        )
 
     def test_multiple_sections_at_once(self, tmp_path):
         """Test updating multiple top-level sections simultaneously."""
@@ -153,7 +155,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -184,7 +186,10 @@ module_path = "torch.nn"
         assert datamodule.dataloader.batch_size == 64
 
         # Unspecified fields preserved
-        assert training_updated.optimizer.lr == training.optimizer.lr
+        assert (
+            training_updated.optimizer.default_optimizer.lr
+            == training.optimizer.default_optimizer.lr
+        )
 
 
 class TestPartialUpdatesPreservation:
@@ -213,7 +218,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 weight_decay = 0.01
@@ -227,17 +232,22 @@ module_path = "torch.nn"
         training = _expect_not_none(settings.TRAINING)
 
         # Update only lr
-        new_settings = update_settings(settings, {"TRAINING": {"optimizer": {"lr": 0.01}}})
+        new_settings = update_settings(
+            settings, {"TRAINING": {"optimizer": {"default_optimizer": {"lr": 0.01}}}}
+        )
         new_training = _expect_not_none(new_settings.TRAINING)
 
         # lr should be updated
-        assert new_training.optimizer.lr == 0.01
+        assert new_training.optimizer.default_optimizer.lr == 0.01
 
         # weight_decay should be preserved
-        assert new_training.optimizer.weight_decay == 0.01
+        assert new_training.optimizer.default_optimizer.weight_decay == 0.01
 
         # optimizer.name should be preserved
-        assert new_training.optimizer.name == training.optimizer.name
+        assert (
+            new_training.optimizer.default_optimizer.name
+            == training.optimizer.default_optimizer.name
+        )
 
 
 class TestNonDictTypes:
@@ -276,7 +286,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -329,7 +339,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -367,7 +377,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -411,7 +421,7 @@ checkpoint = "{ckpt1.as_posix()}"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -453,7 +463,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.005
 weight_decay = 0.1
@@ -465,19 +475,19 @@ module_path = "torch.nn"
 
         settings = load_settings(config_path)
         training = _expect_not_none(settings.TRAINING)
-        assert training.optimizer.name == "Adam"
-        assert training.optimizer.lr == 0.005
-        assert training.optimizer.weight_decay == 0.1
+        assert training.optimizer.default_optimizer.name == "Adam"
+        assert training.optimizer.default_optimizer.lr == 0.005
+        assert training.optimizer.default_optimizer.weight_decay == 0.1
 
         updated = update_settings(settings, {"TRAINING": {"epochs": 50}})
         updated_training = _expect_not_none(updated.TRAINING)
 
-        assert updated_training.optimizer.name == "Adam"
-        assert updated_training.optimizer.lr == pytest.approx(0.005)
-        assert updated_training.optimizer.weight_decay == pytest.approx(0.1)
+        assert updated_training.optimizer.default_optimizer.name == "Adam"
+        assert updated_training.optimizer.default_optimizer.lr == pytest.approx(0.005)
+        assert updated_training.optimizer.default_optimizer.weight_decay == pytest.approx(0.1)
 
     def test_optimizer_model_update_preserves_existing_fields(self, tmp_path):
-        """Applying OptimizerSettings instance merges into existing optimizer config."""
+        """Applying optimizer policy patch merges into existing optimizer config."""
         config_path = tmp_path / "config.toml"
         config_path.write_text("""
 [SESSION]
@@ -499,8 +509,8 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
-name = "SGD"
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
 lr = 0.01
 weight_decay = 0.2
 
@@ -511,18 +521,18 @@ module_path = "torch.nn"
 
         settings = load_settings(config_path)
         training = _expect_not_none(settings.TRAINING)
-        assert training.optimizer.name == "SGD"
-        assert training.optimizer.weight_decay == 0.2
+        assert training.optimizer.default_optimizer.name == "AdamW"
+        assert training.optimizer.default_optimizer.weight_decay == 0.2
 
         updated = update_settings(
             settings,
-            {"TRAINING": {"optimizer": {"lr": 0.123}}},
+            {"TRAINING": {"optimizer": {"default_optimizer": {"lr": 0.123}}}},
         )
         updated_training = _expect_not_none(updated.TRAINING)
 
-        assert updated_training.optimizer.name == "SGD"
-        assert updated_training.optimizer.weight_decay == pytest.approx(0.2)
-        assert updated_training.optimizer.lr == pytest.approx(0.123)
+        assert updated_training.optimizer.default_optimizer.name == "AdamW"
+        assert updated_training.optimizer.default_optimizer.weight_decay == pytest.approx(0.2)
+        assert updated_training.optimizer.default_optimizer.lr == pytest.approx(0.123)
 
 
 class TestExtrasHandling:
@@ -551,7 +561,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -612,7 +622,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -669,7 +679,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -710,7 +720,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -754,7 +764,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -808,7 +818,7 @@ module_path = "dlkit.domain.nn.ffnn"
 [TRAINING]
 epochs = 10
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
@@ -838,7 +848,7 @@ name = "instance_helper"
 [TRAINING]
 epochs = 1
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
