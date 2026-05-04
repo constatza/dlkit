@@ -38,6 +38,7 @@ from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
     ConcurrentOptimizerSettings,
+    ReduceLROnPlateauSettings,
     StepLRSettings,
 )
 
@@ -118,6 +119,15 @@ def concurrent_with_scheduler_settings() -> OptimizerPolicySettings:
                 scheduler=StepLRSettings(step_size=1),
             ),
         )
+    )
+
+
+@pytest.fixture
+def single_stage_default_scheduler_settings() -> OptimizerPolicySettings:
+    """Single automatic stage with default scheduler."""
+    return OptimizerPolicySettings(
+        default_optimizer=AdamWSettings(),
+        default_scheduler=ReduceLROnPlateauSettings(patience=2, factor=0.5),
     )
 
 
@@ -252,6 +262,17 @@ class TestConfigureOptimizers:
         assert isinstance(config, dict)
         assert "optimizer" in config
         assert isinstance(config["optimizer"], ConcurrentOptimizer)
+        assert "lr_scheduler" in config
+
+    def test_single_stage_default_scheduler_preserved_in_config(
+        self,
+        single_stage_default_scheduler_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Default single-stage scheduler must appear in automatic config output."""
+        wrapper = _make_wrapper(single_stage_default_scheduler_settings)
+        config = wrapper.configure_optimizers()
+        assert isinstance(config, dict)
+        assert "optimizer" in config
         assert "lr_scheduler" in config
 
 

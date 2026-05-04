@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from torch import Tensor, nn
 from torch.optim import LBFGS
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+from dlkit.common.errors import WorkflowError
 
 from .concurrent_optimizer import ConcurrentOptimizer
-from .state import RunningOptimizerPolicy
+from .state import ActiveStage, RunningOptimizerPolicy
 from .state_repository import IOptimizationStateRepository
 from .stepping import IStepPolicy, LBFGSStageStepper, StepAllOptimizers
 
@@ -55,6 +58,53 @@ def _pick_step_policy(program: RunningOptimizerPolicy) -> IStepPolicy:
         if any(isinstance(s, LBFGS) for s in sub_opts):
             return LBFGSStageStepper()
     return StepAllOptimizers()
+
+
+def _step_stage_scheduler(stage: ActiveStage, epoch: int, metrics: dict[str, float]) -> None:
+    """Step the active stage scheduler for the completed epoch when due.
+
+    Args:
+        stage: The stage that was active during the epoch that just finished.
+        epoch: Zero-based epoch index that just completed.
+        metrics: Epoch-end metrics collected from Lightning.
+
+    Raises:
+        WorkflowError: If a plateau scheduler is due to step but its monitor
+            metric is missing from ``metrics``.
+    """
+    scheduler = stage.scheduler
+    if scheduler is None:
+        return
+
+    frequency = max(stage.scheduler_frequency, 1)
+    if (epoch + 1) % frequency != 0:
+        return
+
+    if isinstance(scheduler, ReduceLROnPlateau):
+        current = metrics.get(stage.scheduler_monitor)
+        if current is None:
+            raise WorkflowError(
+                f"Scheduler monitor '{stage.scheduler_monitor}' is missing for stage "
+                f"{stage.stage_index}",
+                {
+                    "stage": "scheduler_step",
+                    "stage_index": stage.stage_index,
+                    "scheduler_monitor": stage.scheduler_monitor,
+                },
+            )
+        scheduler.step(current)
+        return
+
+    step_method = getattr(scheduler, "step", None)
+    if not callable(step_method):
+        raise WorkflowError(
+            f"Scheduler for stage {stage.stage_index} does not expose a callable step() method",
+            {
+                "stage": "scheduler_step",
+                "stage_index": stage.stage_index,
+            },
+        )
+    cast(Callable[[], None], step_method)()
 
 
 def build_optimization_controller(
@@ -330,6 +380,7 @@ class ManualOptimizationController(IOptimizationController):
             metrics: Dict of current metrics.
         """
         current = self._program.current
+        _step_stage_scheduler(current, epoch, metrics)
         if current.trigger.update(epoch, metrics):
             current.trigger.reset()
             self._program.advance()

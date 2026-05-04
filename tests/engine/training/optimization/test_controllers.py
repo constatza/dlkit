@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from dlkit.common.errors import WorkflowError
 from dlkit.engine.training.optimization.controllers import (
     AutomaticOptimizationController,
     ManualOptimizationController,
@@ -19,6 +20,22 @@ from dlkit.engine.training.optimization.state import (
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
 from dlkit.engine.training.optimization.stepping import StepAllOptimizers
 from dlkit.engine.training.optimization.triggers import NoTransitionTrigger
+
+
+class SchedulerSpy:
+    """Minimal scheduler spy for controller tests."""
+
+    def __init__(self) -> None:
+        self.step_calls = 0
+
+    def step(self) -> None:
+        self.step_calls += 1
+
+    def state_dict(self) -> dict[str, int]:
+        return {"step_calls": self.step_calls}
+
+    def load_state_dict(self, state: dict[str, int]) -> None:
+        self.step_calls = state["step_calls"]
 
 
 # Local fixtures
@@ -241,6 +258,191 @@ class TestManualOptimizationController:
         # With NoTransitionTrigger, should stay at same index
         manual_controller.on_epoch_end(5, {})
         assert manual_controller._program.active_index == 0
+
+    def test_manual_steps_active_stage_scheduler_before_transition(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Scheduler on the active stage must step before stage advancement."""
+        optimizer_stage_0 = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        optimizer_stage_1 = torch.optim.Adam(tiny_model.parameters(), lr=1e-3)
+        scheduler_stage_0 = SchedulerSpy()
+        scheduler_stage_1 = SchedulerSpy()
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer_stage_0,
+                    scheduler=scheduler_stage_0,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                    scheduler_frequency=1,
+                ),
+                ActiveStage(
+                    optimizer=optimizer_stage_1,
+                    scheduler=scheduler_stage_1,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=1,
+                    scheduler_frequency=1,
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {})
+
+        assert scheduler_stage_0.step_calls == 1
+        assert scheduler_stage_1.step_calls == 0
+        assert controller._program.active_index == 0
+
+    def test_manual_honors_scheduler_frequency(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Manual mode should step only on epochs matching scheduler_frequency."""
+        optimizer = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        scheduler = SchedulerSpy()
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                    scheduler_frequency=2,
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {})
+        controller.on_epoch_end(1, {})
+        controller.on_epoch_end(2, {})
+
+        assert scheduler.step_calls == 1
+
+    def test_manual_steps_current_stage_only_after_transition(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Current stage scheduler steps; newly advanced stage waits until next epoch."""
+        optimizer_stage_0 = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        optimizer_stage_1 = torch.optim.Adam(tiny_model.parameters(), lr=1e-3)
+        scheduler_stage_0 = SchedulerSpy()
+        scheduler_stage_1 = SchedulerSpy()
+        trigger = NoTransitionTrigger()
+        trigger.update = lambda epoch, metrics: True  # type: ignore[method-assign]
+
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer_stage_0,
+                    scheduler=scheduler_stage_0,
+                    trigger=trigger,
+                    stage_index=0,
+                    scheduler_frequency=1,
+                ),
+                ActiveStage(
+                    optimizer=optimizer_stage_1,
+                    scheduler=scheduler_stage_1,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=1,
+                    scheduler_frequency=1,
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {})
+
+        assert scheduler_stage_0.step_calls == 1
+        assert scheduler_stage_1.step_calls == 0
+        assert controller._program.active_index == 1
+
+        controller.on_epoch_end(1, {})
+
+        assert scheduler_stage_0.step_calls == 1
+        assert scheduler_stage_1.step_calls == 1
+
+    def test_manual_steps_lbfgs_scheduler(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Schedulers must still step for LBFGS-backed manual programs."""
+        optimizer = torch.optim.LBFGS(tiny_model.parameters(), lr=1.0)
+        scheduler = SchedulerSpy()
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {})
+
+        assert scheduler.step_calls == 1
+
+    def test_manual_reduce_on_plateau_uses_monitored_metric(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Plateau schedulers must receive the configured monitor value."""
+        optimizer = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=0
+        )
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                    scheduler_monitor="val_loss",
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {"val_loss": 1.0})
+        controller.on_epoch_end(1, {"val_loss": 1.1})
+
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
+
+    def test_manual_reduce_on_plateau_missing_metric_raises(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Missing scheduler monitor must raise instead of silently skipping."""
+        optimizer = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=0
+        )
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                    scheduler_monitor="val_loss",
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        with pytest.raises(WorkflowError, match="Scheduler monitor 'val_loss' is missing"):
+            controller.on_epoch_end(0, {})
 
 
 # LBFGS detection tests

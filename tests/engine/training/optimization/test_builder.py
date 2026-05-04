@@ -21,6 +21,7 @@ from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
     ConcurrentOptimizerSettings,
+    ReduceLROnPlateauSettings,
     StepLRSettings,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
@@ -252,6 +253,61 @@ class TestOptimizerPolicyBuilder:
         stage = program.stages[0]
         assert isinstance(stage, ActiveStage)
         assert stage.scheduler is not None
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
+
+    def test_builder_default_scheduler_exists_at_runtime(self, tiny_model: nn.Sequential) -> None:
+        """Verify default_scheduler creates a live scheduler on the default stage."""
+        settings = OptimizerPolicySettings(
+            default_optimizer=AdamWSettings(),
+            default_scheduler=ReduceLROnPlateauSettings(patience=2, factor=0.5),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert stage.scheduler is not None
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+
+    def test_builder_all_configured_stage_schedulers_exist_at_runtime(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """Every configured stage scheduler must be instantiated on its stage."""
+        settings = OptimizerPolicySettings(
+            stages=(
+                OptimizationStageSettings(
+                    optimizer=AdamWSettings(),
+                    scheduler=StepLRSettings(step_size=5, gamma=0.5),
+                ),
+                OptimizationStageSettings(
+                    optimizer=AdamSettings(),
+                    scheduler=ReduceLROnPlateauSettings(patience=2, factor=0.5),
+                ),
+            )
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        assert isinstance(program.stages[0].scheduler, torch.optim.lr_scheduler.StepLR)
+        assert isinstance(program.stages[1].scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+
+    def test_builder_concurrent_default_scheduler_exists_at_runtime(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """Concurrent single-stage programs must still materialize their scheduler."""
+        settings = OptimizerPolicySettings(
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(AdamWSettings(), AdamSettings()),
+                selectors=(
+                    ParameterSelectorSettings(prefix="0"),
+                    ParameterSelectorSettings(prefix="1"),
+                ),
+            ),
+            default_scheduler=StepLRSettings(step_size=5, gamma=0.5),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
 
     def test_builder_module_path_selector_raises_when_layer_uncovered(
