@@ -11,7 +11,7 @@ import torch
 from torch import nn
 
 from dlkit.domain.nn.ffnn.linear import LinearNetwork
-from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN, FeedForwardNN
+from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 
 
 @pytest.fixture

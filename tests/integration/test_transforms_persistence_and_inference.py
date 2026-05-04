@@ -10,7 +10,7 @@ from lightning.pytorch import Trainer
 from torch import Tensor
 
 import dlkit
-from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
+from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
 from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
 from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
@@ -24,7 +24,7 @@ from dlkit.infrastructure.config.model_components import (
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.types.split import IndexSplit
 
-MODEL_MODULE_PATH = "dlkit.domain.nn.ffnn.simple"
+MODEL_MODULE_PATH = "dlkit.domain.nn.ffnn.residual"
 MODEL_NAME = "ConstantWidthFFNN"
 
 

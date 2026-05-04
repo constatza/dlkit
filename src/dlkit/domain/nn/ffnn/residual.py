@@ -5,26 +5,14 @@ from typing import TYPE_CHECKING, Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.primitives import DenseBlock
+from dlkit.domain.nn.primitives import DenseBlock, SkipConnection
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
 
 
-class SimpleFeedForwardNN(nn.Module):
-    """Feed-forward neural network without skip connections.
-
-    Mirrors FeedForwardNN but uses bare DenseBlocks instead of SkipConnection
-    wrappers, giving a plain sequential architecture.
-
-    Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
-        layers: Sequence of hidden layer sizes.
-        activation: Activation function to use (default: gelu).
-        normalize: Type of normalization ('batch', 'layer', or None).
-        dropout: Dropout probability (default: 0.0).
-    """
+class FeedForwardNN(nn.Module):
+    """Feed-forward neural network with residual skip connections."""
 
     def __init__(
         self,
@@ -37,23 +25,30 @@ class SimpleFeedForwardNN(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
+        self.num_layers = len(layers)
+        self.activation = activation
+
+        self.layers = nn.ModuleList()
         self.embedding_layer = nn.Linear(in_features, layers[0])
 
-        self.layers = nn.ModuleList(
-            DenseBlock(
-                layers[i],
-                layers[i + 1],
-                activation=activation,
-                normalize=normalize,
-                dropout=dropout,
+        for i in range(self.num_layers - 1):
+            self.layers.append(
+                SkipConnection(
+                    DenseBlock(
+                        layers[i],
+                        layers[i + 1],
+                        activation=activation,
+                        normalize=normalize,
+                        dropout=dropout,
+                    ),
+                    layer_type="linear",
+                )
             )
-            for i in range(len(layers) - 1)
-        )
 
         self.regression_layer = nn.Linear(layers[-1], out_features)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> SimpleFeedForwardNN:
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> FeedForwardNN:
         """Build the network from a dataset-derived flat shape summary."""
         return cls(
             in_features=shape.in_features,
@@ -62,32 +57,14 @@ class SimpleFeedForwardNN(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass through the network.
-
-        Args:
-            x: Input tensor of shape (batch_size, in_features).
-
-        Returns:
-            Output tensor of shape (batch_size, out_features).
-        """
         x = self.embedding_layer(x)
         for layer in self.layers:
             x = layer(x)
         return self.regression_layer(x)
 
 
-class ConstantWidthSimpleFFNN(SimpleFeedForwardNN):
-    """Plain feed-forward network with constant-width hidden layers and no residual connections.
-
-    Args:
-        in_features: Number of input features.
-        out_features: Number of output features.
-        hidden_size: Size of all hidden layers.
-        num_layers: Number of hidden layers (must be > 0).
-        activation: Activation function (default: gelu).
-        normalize: Type of normalization ('batch', 'layer', or None).
-        dropout: Dropout probability (default: 0.0).
-    """
+class ConstantWidthFFNN(FeedForwardNN):
+    """Residual feed-forward network with constant-width hidden layers."""
 
     def __init__(
         self,

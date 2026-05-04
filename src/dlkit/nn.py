@@ -1,27 +1,25 @@
-"""User-facing neural network namespace.
-
-Thin re-export of ``dlkit.domain.nn`` so users can write::
-
-    from dlkit.nn import ConstantWidthFFNN, ScaleEquivariantFFNN
-    import dlkit.nn as nn
-
-instead of::
-
-    from dlkit.domain.nn import ConstantWidthFFNN
-"""
+"""User-facing neural network namespace."""
 
 from dlkit.domain.nn import (
     ConstantWidthFactorizedFFNN,
+    ConstantWidthFFNN,
     ConstantWidthParametricFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     ConstantWidthSimpleFFNN,
+    ConstantWidthSimpleSPDFactorizedFFNN,
+    ConstantWidthSimpleSPDFFNN,
     ConstantWidthSPDFactorizedFFNN,
     ConstantWidthSPDFFNN,
     DeepONet,
     DualPathFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
+    EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleSPDFactorizedFFNN,
+    EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
+    FeedForwardNN,
     FourierAugmented,
     FourierEnhancedFFNN,
     FourierNeuralOperator1d,
@@ -35,9 +33,16 @@ from dlkit.domain.nn import (
     ParametricDenseBlock,
     ScaleEquivariantConstantWidthFactorizedFFNN,
     ScaleEquivariantConstantWidthFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFFNN,
     ScaleEquivariantConstantWidthSPDFactorizedFFNN,
     ScaleEquivariantConstantWidthSPDFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFFNN,
@@ -55,31 +60,46 @@ from dlkit.domain.nn import (
 
 __all__ = [
     "LinearNetwork",
-    # ScaleEquivariant
+    "FeedForwardNN",
+    "ConstantWidthFFNN",
+    # ScaleEquivariant dense variants
     "ScaleEquivariantFFNN",
     "ScaleEquivariantConstantWidthFFNN",
-    # Plain
+    "ScaleEquivariantConstantWidthSimpleFFNN",
+    # Plain dense variants
     "SimpleFeedForwardNN",
     "ConstantWidthSimpleFFNN",
-    # Parametric base classes
+    # Constrained low-level builders
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
     "EmbeddedParametricFFNN",
-    # Constant-width parametric variants
+    # Constant-width constrained variants
     "ConstantWidthSPDFFNN",
+    "ConstantWidthSimpleSPDFFNN",
     "ConstantWidthSPDFactorizedFFNN",
+    "ConstantWidthSimpleSPDFactorizedFFNN",
     "ConstantWidthFactorizedFFNN",
-    # Embedded parametric variants
+    "ConstantWidthSimpleFactorizedFFNN",
+    # Embedded constrained variants
     "EmbeddedSPDFFNN",
+    "EmbeddedSimpleSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
+    "EmbeddedSimpleSPDFactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    # ScaleEquivariant deep variants
+    "EmbeddedSimpleFactorizedFFNN",
+    # ScaleEquivariant constrained variants
     "ScaleEquivariantConstantWidthSPDFFNN",
+    "ScaleEquivariantConstantWidthSimpleSPDFFNN",
     "ScaleEquivariantConstantWidthSPDFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN",
     "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
     "ScaleEquivariantEmbeddedSPDFFNN",
+    "ScaleEquivariantEmbeddedSimpleSPDFFNN",
     "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
     "ScaleEquivariantEmbeddedFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

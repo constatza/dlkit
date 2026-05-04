@@ -27,7 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.domain.nn.ffnn.simple import FeedForwardNN
+from dlkit.domain.nn.ffnn.residual import FeedForwardNN
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary

@@ -6,6 +6,7 @@ pure configuration without build methods, following SOLID principles.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import pytest
@@ -222,6 +223,26 @@ class TestModelComponentSettings:
         assert "module_path" not in kwargs
         assert "heads" in kwargs
         assert "num_layers" in kwargs
+
+    def test_ffnn_config_can_resolve_plain_and_residual_constrained_variants(self) -> None:
+        module = importlib.import_module("dlkit.domain.nn.ffnn")
+
+        residual = ModelComponentSettings(
+            name="EmbeddedFactorizedFFNN",
+            module_path="dlkit.domain.nn.ffnn",
+            hidden_size=8,
+            num_layers=2,
+        )
+        plain = ModelComponentSettings(
+            name="EmbeddedSimpleFactorizedFFNN",
+            module_path="dlkit.domain.nn.ffnn",
+            hidden_size=8,
+            num_layers=2,
+        )
+
+        assert getattr(module, str(residual.name)).__name__ == "EmbeddedFactorizedFFNN"
+        assert getattr(module, str(plain.name)).__name__ == "EmbeddedSimpleFactorizedFFNN"
+        assert residual.name != plain.name
 
     @given(st.integers(min_value=1, max_value=16), st.integers(min_value=1, max_value=10))
     def test_model_property_hyperparameter_values(self, heads: int, layers: int) -> None:

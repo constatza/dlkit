@@ -107,7 +107,7 @@ def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> Non
     model_block = (
         "[MODEL]\n"
         'name = "ConstantWidthFFNN"\n'
-        'module_path = "dlkit.domain.nn.ffnn.simple"\n'
+        'module_path = "dlkit.domain.nn.ffnn.residual"\n'
         'checkpoint = "model.ckpt"\n'
     )
 

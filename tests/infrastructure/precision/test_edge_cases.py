@@ -7,7 +7,7 @@ import time
 import pytest
 import torch
 
-from dlkit.domain.nn.ffnn.simple import ConstantWidthFFNN
+from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
 from dlkit.infrastructure.config.data_entries import Feature
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.io.arrays import load_array

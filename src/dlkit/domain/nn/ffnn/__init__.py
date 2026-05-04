@@ -1,61 +1,83 @@
-from .linear import LinearNetwork
-from .parametric import (
-    ConstantWidthParametricFFNN,
-    EmbeddedParametricFFNN,
-    ParametricDenseBlock,
-)
-from .parametric_variants import (
+from .constrained import (
     ConstantWidthFactorizedFFNN,
+    ConstantWidthParametricFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
+    ConstantWidthSimpleSPDFactorizedFFNN,
+    ConstantWidthSimpleSPDFFNN,
     ConstantWidthSPDFactorizedFFNN,
     ConstantWidthSPDFFNN,
     EmbeddedFactorizedFFNN,
+    EmbeddedParametricFFNN,
+    EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleSPDFactorizedFFNN,
+    EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
+    ParametricDenseBlock,
 )
-from .plain import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from .linear import LinearNetwork
+from .residual import ConstantWidthFFNN, FeedForwardNN
 from .scale_equivariant import (
-    ScaleEquivariantConstantWidthFFNN,
-    ScaleEquivariantFFNN,
-)
-from .scale_equivariant_deep import (
     ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFFNN,
     ScaleEquivariantConstantWidthSPDFactorizedFFNN,
     ScaleEquivariantConstantWidthSPDFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
+    ScaleEquivariantFFNN,
 )
-from .simple import ConstantWidthFFNN, FeedForwardNN
+from .simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 
 __all__ = [
-    # Residual networks
+    # Residual dense networks
     "FeedForwardNN",
     "ConstantWidthFFNN",
-    # Plain (no residual) networks
+    # Plain dense networks
     "SimpleFeedForwardNN",
     "ConstantWidthSimpleFFNN",
     # Linear baseline
     "LinearNetwork",
-    # ScaleEquivariant
+    # Scale-equivariant dense variants
     "ScaleEquivariantFFNN",
     "ScaleEquivariantConstantWidthFFNN",
-    # Parametric base classes
+    "ScaleEquivariantConstantWidthSimpleFFNN",
+    # Constrained low-level builders
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
     "EmbeddedParametricFFNN",
-    # Constant-width parametric variants
+    # Constant-width constrained variants
     "ConstantWidthSPDFFNN",
+    "ConstantWidthSimpleSPDFFNN",
     "ConstantWidthSPDFactorizedFFNN",
+    "ConstantWidthSimpleSPDFactorizedFFNN",
     "ConstantWidthFactorizedFFNN",
-    # Embedded parametric variants
+    "ConstantWidthSimpleFactorizedFFNN",
+    # Embedded constrained variants
     "EmbeddedSPDFFNN",
+    "EmbeddedSimpleSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
+    "EmbeddedSimpleSPDFactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    # ScaleEquivariant deep variants
+    "EmbeddedSimpleFactorizedFFNN",
+    # Scale-equivariant constrained variants
     "ScaleEquivariantConstantWidthSPDFFNN",
+    "ScaleEquivariantConstantWidthSimpleSPDFFNN",
     "ScaleEquivariantConstantWidthSPDFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN",
     "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
     "ScaleEquivariantEmbeddedSPDFFNN",
+    "ScaleEquivariantEmbeddedSimpleSPDFFNN",
     "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
     "ScaleEquivariantEmbeddedFactorizedFFNN",
+    "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
 ]
