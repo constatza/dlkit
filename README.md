@@ -1,119 +1,114 @@
 # DLKit
 
-DLKit is a typed, configuration-driven training and inference toolkit built on
-PyTorch and Lightning. The repository currently exposes training, optimization,
-checkpoint-based inference, config/template utilities, and MLflow model helpers.
+[![Tests](https://github.com/constatza/dlkit/actions/workflows/testing.yml/badge.svg)](https://github.com/constatza/dlkit/actions/workflows/testing.yml)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue?style=flat-square)](#installation)
 
-## Current Surface
+Typed, configuration-driven training, optimization, and checkpoint inference on top of PyTorch and Lightning.
 
-The current public surface is:
+[Installation](#installation) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Training](#training) • [Optimization](#optimization) • [Outputs and MLflow](#outputs-and-mlflow) • [Inference](#inference) • [Python API](#python-api)
 
-- top-level `dlkit`: `train`, `optimize`, `load_model`, `validate_config`,
-  MLflow model helpers, registry helpers, and config I/O helpers
-- `dlkit.settings`: `load_settings`, `load_sections`, `GeneralSettings`,
-  `TrainingWorkflowSettings`, and related typed settings models
-- `dlkit.interfaces.api`: `train`, `optimize`, and `execute`
+## Features
 
-Important current-state notes:
+DLKit is built for projects that want reproducible ML workflows without giving up programmatic control.
 
-- `execute()` is available from `dlkit.interfaces.api`, not from top-level `dlkit`
-- `load_settings()` currently returns `TrainingWorkflowSettings`
-- the repository does not currently ship a checked-in top-level `examples/` directory
-- CLI prediction is currently exposed as `dlkit predict entry ...`; for the most
-  stable inference workflow, prefer Python `load_model()`
+- Train models from TOML configs or Python.
+- Run Optuna studies from the same configuration surface.
+- Track runs and model artifacts with MLflow.
+- Load checkpoints for direct Python inference or config-driven batch prediction.
+- Use simple single-optimizer training, sequential multi-stage optimizer programs, or concurrent optimizers on disjoint parameter sets.
+- Keep workflow configuration typed and immutable, with explicit patching instead of hidden mutation.
 
 ## Installation
 
-DLKit requires Python `3.14.x`.
+DLKit currently targets Python `>=3.14,<3.15`.
 
-Install dependencies with an explicit Torch extra:
+PyTorch is selected through extras and is **not** installed by default. Choose exactly one of:
+- `cpu`
+- `cu128`
+- `cu130`
+
+### Add To A Project
+
+Use this when you want the Python API (`import dlkit`) inside your project.
+
+For CPU:
 
 ```bash
-uv sync --extra cpu
+uv add "dlkit[cpu] @ git+ssh://git@github.com/constatza/dlkit.git"
 ```
 
-GPU extras are also available:
+For CUDA 12.8:
 
 ```bash
-uv sync --extra cu128
-uv sync --extra cu130
+uv add "dlkit[cu128] @ git+ssh://git@github.com/constatza/dlkit.git"
 ```
 
-The project does not define a default Torch backend; one of `cpu`, `cu128`, or
-`cu130` must be selected.
+For CUDA 13.0:
+
+```bash
+uv add "dlkit[cu130] @ git+ssh://git@github.com/constatza/dlkit.git"
+```
+
+### Install The CLI As A Tool
+
+Use this when you only want the `dlkit` command for config-driven workflows.
+
+For CPU:
+
+```bash
+uv tool install "dlkit[cpu] @ git+ssh://git@github.com/constatza/dlkit.git"
+```
+
+For CUDA 12.8:
+
+```bash
+uv tool install "dlkit[cu128] @ git+ssh://git@github.com/constatza/dlkit.git"
+```
+
+For CUDA 13.0:
+
+```bash
+uv tool install "dlkit[cu130] @ git+ssh://git@github.com/constatza/dlkit.git"
+```
 
 ## Quick Start
 
-Generate a training template:
+The shortest verified path today is:
 
 ```bash
-uv run dlkit config create --output config.toml --type training
+uv run dlkit config create --output train.toml --type training
+uv run dlkit config validate train.toml
+
+uv run dlkit config create --output inference.toml --type inference
+uv run dlkit predict inference.toml path/to/model.ckpt
 ```
 
-Train from the CLI:
-
-```bash
-uv run dlkit train config.toml
-uv run dlkit train config.toml --epochs 5 --batch-size 32 --learning-rate 5e-4
-```
-
-Train from Python:
+If you installed the CLI as a tool instead, use `dlkit ...` directly.
 
 ```python
 from dlkit import train
 from dlkit.settings import load_settings
 
-settings = load_settings("config.toml")
-result = train(
-    settings,
-    overrides={
-        "epochs": 5,
-        "batch_size": 32,
-        "learning_rate": 5e-4,
-    },
-)
+settings = load_settings("train.toml")
+result = train(settings)
 
-print(result.metrics)
 print(result.checkpoint_path)
+print(result.metrics)
 ```
 
-Run checkpoint inference from Python:
-
-```python
-from dlkit import load_model
-import torch
-
-with load_model("model.ckpt", device="auto") as predictor:
-    output = predictor.predict(x=torch.randn(8, 10))
-```
-
-Current CLI prediction entrypoint:
-
-```bash
-uv run dlkit predict entry config.toml model.ckpt --batch-size 64
-```
-
-## Configuration
-
-DLKit ships template generators for:
-
-- `training`
+DLKit is TOML-first for workflow execution. `SESSION.workflow` selects the runtime path:
+- `train`
+- `optimize`
 - `inference`
-- `mlflow`
-- `optuna`
 
-Example:
+## Minimal Training Config
 
-```bash
-uv run dlkit config create --output optuna.toml --type optuna
-```
-
-The generated training template currently looks like this:
+A minimal training config follows the current generated template shape:
 
 ```toml
 [SESSION]
 name = "my_session"
-inference = false
+workflow = "train"
 seed = 42
 precision = "medium"
 
@@ -129,101 +124,297 @@ name = "your.datamodule.class"
 
 [DATASET]
 name = "your.dataset.class"
-
-[EXTRAS]
-example_key = "user_defined_value"
 ```
 
-## Settings Model Reality
+For a larger example, see [docs/examples/full_config_example.toml](docs/examples/full_config_example.toml).
 
-The current settings story is not yet fully unified:
+## Configuration
 
-- `dlkit.settings.load_settings("config.toml")` returns `TrainingWorkflowSettings`
-- runtime workflow APIs accept
-  `GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig`
-- runtime coercion converts workflow config variants into `GeneralSettings`
-  before execution
-- `GeneralSettings.from_toml_file("config.toml")` is the current flattened-model
-  loader
+DLKit supports two ways of working with settings.
 
-That means the repository exposes both a flattened settings model and
-workflow-specific settings models today.
+### 1. Config-Driven Workflows
 
-## API and CLI Entry Points
+This is the recommended default for reproducible training, optimization, and inference.
 
-Primary current entry points:
+- Use `dlkit config create` to scaffold a starting point.
+- Keep workflow selection in `SESSION.workflow`.
+- Use `[MLFLOW]` when you want run tracking.
+- Use `[OPTUNA]` when you want hyperparameter optimization.
+- Use `MODEL.checkpoint` for inference configs, not for resuming training.
 
-- CLI training: `dlkit train CONFIG.toml`
-- CLI optimization: `dlkit optimize CONFIG.toml`
-- Python training: `from dlkit import train`
-- Python optimization: `from dlkit import optimize`
-- Unified Python execution: `from dlkit.interfaces.api import execute`
-- Checkpoint inference: `from dlkit import load_model`
+Currently exposed template families:
+- `training`
+- `inference`
+- `mlflow`
+- `optuna`
 
-Common CLI training overrides:
+For optimization templates, verify that the generated config uses `SESSION.workflow = "optimize"` before running it.
 
-| Override | Flag |
-|---|---|
-| epochs | `--epochs` |
-| batch size | `--batch-size` |
-| learning rate | `--learning-rate` |
-| checkpoint | `--checkpoint` |
-| root directory | `--root-dir` |
-| output directory | `--output-dir` |
-| dataflow directory | `--dataflow-dir` |
-| MLflow experiment name | `--experiment-name` |
-| MLflow run name | `--run-name` |
+### 2. Programmatic Workflows
 
-Programmatic overrides are passed as `overrides={...}` dictionaries, not as
-direct keyword override arguments.
+Use Python when you want typed overrides, environment-aware orchestration, or application-specific setup around the workflow.
 
-## MLflow and Optuna
+- `dlkit.settings.load_settings("config.toml")` loads the correct workflow config based on `SESSION.workflow`.
+- Settings objects are immutable; use `.patch(...)` when you want to derive a modified config.
+- `dlkit.config` exposes workflow-specific loaders if you prefer concrete entry points.
 
-Tracking and optimization are configured by adding `[MLFLOW]` or `[OPTUNA]`
-sections to the config. Current behavior:
+## Training
 
-- MLflow tracking is activated by presence of the `[MLFLOW]` section
-- Optuna optimization requires `[OPTUNA].enabled = true`
-- CLI optimization uses `dlkit optimize ...`
-- unified Python execution can route to optimization when `OPTUNA.enabled` is true
-
-These capabilities are configurable at runtime, but their packages are currently
-installed as default dependencies rather than optional extras.
-
-## Validation
-
-You can validate a loaded settings object from Python:
+The most reliable training path today is the Python API:
 
 ```python
-from dlkit import validate_config
+from dlkit import train
+from dlkit.interfaces.api.domain import TrainingOverrides
 from dlkit.settings import load_settings
 
-settings = load_settings("config.toml")
-validate_config(settings)
+settings = load_settings("train.toml")
+
+result = train(
+    settings,
+    overrides=TrainingOverrides(
+        epochs=10,
+        batch_size=32,
+        learning_rate=5e-4,
+    ),
+)
 ```
 
-CLI validation:
+A `dlkit train` CLI command also exists, but the runtime override layer is currently typed around `TrainingOverrides`. For now, prefer the Python API when you want the verified training path.
+
+Current training overrides supported by `TrainingOverrides` include:
+- `epochs`
+- `batch_size`
+- `learning_rate`
+- `checkpoint_path`
+- `root_dir`
+- `output_dir`
+- `data_dir`
+- `experiment_name`
+- `run_name`
+- `register_model`
+- `tags`
+- `loss_function`
+- `loss_module`
+
+The CLI surface currently exposes these flags:
 
 ```bash
-uv run dlkit config validate config.toml
+uv run dlkit train train.toml
+uv run dlkit train train.toml --epochs 10 --batch-size 32 --learning-rate 5e-4
+uv run dlkit train train.toml --checkpoint path/to/last.ckpt
 ```
 
-## Architecture
+The current CLI surface exposes these flags:
+- `--epochs`
+- `--batch-size`
+- `--learning-rate`
+- `--checkpoint`
+- `--root-dir`
+- `--output-dir`
+- `--experiment-name`
+- `--run-name`
+- `--mlflow`
 
-The repository is organized around this package DAG:
+### Two-Stage Optimizer Programs
 
-```text
-interfaces -> engine, domain, infrastructure, common
-engine -> domain, infrastructure, common
-domain -> common
-infrastructure -> common, infrastructure.precision
-common -> (none)
-infrastructure.precision -> (none)
+DLKit supports sequential optimizer stages through `TRAINING.optimizer.stages`.
+
+```toml
+[[TRAINING.optimizer.stages]]
+optimizer = {name = "AdamW", lr = 1e-3}
+trigger = {at_epoch = 10}
+
+[[TRAINING.optimizer.stages]]
+optimizer = {name = "LBFGS", lr = 1.0}
 ```
 
-## Related Docs
+This is useful for schedules such as:
+- warm up with AdamW, then refine with LBFGS
+- coarse stage, then low-learning-rate fine tuning
+- plateau-triggered stage switching
 
-- `docs/architecture/README.md`
-- `docs/external_ux_architecture_review.md`
-- `src/dlkit/interfaces/api/api.md`
-- `src/dlkit/interfaces/inference/README.md`
+DLKit also supports concurrent optimizers on disjoint parameter sets through `name = "Concurrent"`. For deeper optimizer-policy examples, see [src/dlkit/engine/training/optimization/README.md](src/dlkit/engine/training/optimization/README.md).
+
+### Training Resume vs Inference Checkpoints
+
+These are separate concepts in the current config model:
+
+- Use `TRAINING.resume_from_checkpoint` to resume training state.
+- Use `MODEL.checkpoint` for inference workflows.
+
+## Optimization
+
+Optimization is a distinct workflow, not just a flag on training.
+
+A verified optimization config needs:
+- `SESSION.workflow = "optimize"`
+- an `[OPTUNA]` section
+- `OPTUNA.enabled = true`
+- an `[OPTUNA.model]` section with search ranges
+
+Example:
+
+```toml
+[SESSION]
+name = "search_run"
+workflow = "optimize"
+seed = 42
+precision = "medium"
+
+[MODEL]
+name = "your.model.class"
+hidden_size = 128
+
+[OPTUNA]
+enabled = true
+n_trials = 50
+direction = "minimize"
+study_name = "baseline_search"
+
+[OPTUNA.model]
+hidden_size = [64, 512]
+num_layers = [2, 8]
+```
+
+Run it from Python with the typed optimization API:
+
+```python
+from dlkit import optimize
+from dlkit.interfaces.api.domain import OptimizationOverrides
+from dlkit.settings import load_settings
+
+settings = load_settings("optimize.toml")
+
+result = optimize(
+    settings,
+    overrides=OptimizationOverrides(
+        trials=50,
+        study_name="baseline_search",
+    ),
+)
+
+print(result.best_trial)
+print(result.study_summary)
+```
+
+Notes:
+- `OPTUNA.enabled = true` is required by the optimization workflow.
+- `OPTUNA.model` should mirror tunable fields from `MODEL`.
+- `study_name` controls persistent study naming when storage is configured.
+- A `dlkit optimize` CLI command exists, but for the verified optimization path today, prefer the Python API with `OptimizationOverrides`.
+- The CLI also exposes `dlkit optimize status ...` and `dlkit optimize plot ...` for existing studies.
+
+## Outputs and MLflow
+
+### Local Workflow Results
+
+In Python, training returns a `TrainingResult` that exposes:
+- `metrics`
+- `artifacts`
+- `checkpoint_path`
+- `predictions`
+- `mlflow_run_id`
+- `mlflow_tracking_uri`
+
+`checkpoint_path` resolves to the best checkpoint when available, and otherwise falls back to the last checkpoint if one was collected from Lightning checkpoint callbacks.
+
+### MLflow Tracking
+
+MLflow is enabled by the **presence** of an `[MLFLOW]` section. There is no `enabled` flag.
+
+```toml
+[MLFLOW]
+experiment_name = "my_experiment"
+run_name = "baseline"
+register_model = true
+registered_model_name = "my_model"
+```
+
+Infrastructure endpoints are environment-driven:
+
+```bash
+export MLFLOW_TRACKING_URI=http://localhost:5000
+export MLFLOW_ARTIFACT_URI=file:///absolute/path/to/mlruns
+```
+
+You can also force tracking from Python or the CLI:
+- Python: `train(..., mlflow=True)` or `optimize(..., mlflow=True)`
+- CLI surfaces also expose `--mlflow` on training and optimization commands
+
+For advanced logged-model and registry workflows, use the `dlkit.mlflow` namespace:
+- `search_logged_models`
+- `load_logged_model`
+- `register_logged_model`
+- `search_registered_models`
+- `load_registered_model`
+
+## Inference
+
+DLKit exposes two verified inference paths.
+
+### Config-Driven Batch Inference
+
+```bash
+uv run dlkit predict inference.toml path/to/model.ckpt
+```
+
+Current CLI behavior requires an explicit checkpoint argument. The inference config may also include `MODEL.checkpoint`, but the CLI command still takes a concrete checkpoint path today.
+
+### Direct Python Inference
+
+```python
+from dlkit import load_model
+
+with load_model("path/to/model.ckpt", device="auto") as predictor:
+    output = predictor.predict(x=batch)
+    predictions = output.predictions
+```
+
+Additional user-facing inference helpers are available under `dlkit.inference`:
+- `load_model`
+- `load_model_from_settings`
+- `validate_checkpoint`
+- `get_checkpoint_info`
+
+## Python API
+
+A minimal typed Python workflow looks like this:
+
+```python
+from dlkit import load_model, train
+from dlkit.interfaces.api.domain import TrainingOverrides
+from dlkit.settings import load_settings
+
+settings = load_settings("train.toml")
+
+result = train(
+    settings,
+    overrides=TrainingOverrides(
+        epochs=10,
+        batch_size=32,
+        learning_rate=5e-4,
+    ),
+)
+
+print(result.metrics)
+print(result.checkpoint_path)
+print(result.mlflow_run_id)
+
+with load_model(result.checkpoint_path, device="auto") as predictor:
+    output = predictor.predict(x=batch)
+```
+
+Useful public namespaces:
+- `dlkit`: curated top-level workflow and inference surface
+- `dlkit.config`: user-facing configuration types and loaders
+- `dlkit.settings`: settings models plus `load_settings()`
+- `dlkit.mlflow`: MLflow run-artifact and model-registry helpers
+- `dlkit.registry`: decorators and registry introspection for custom components
+
+## More Documentation
+
+For deeper reference material:
+- [Configuration reference](src/dlkit/infrastructure/config/README.md)
+- [Optimizer policy reference](src/dlkit/engine/training/optimization/README.md)
+- [Architecture overview](docs/architecture/README.md)
+- [Testing notes](tests/TESTING.md)
