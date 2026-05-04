@@ -1,5 +1,30 @@
 # Feed-Forward Neural Network (FFNN) Module
 
+## Model Catalog
+
+Multi-layer perceptron architectures for regression and classification tasks.
+
+| Model | File | Description |
+|---|---|---|
+| `LinearNetwork` | `linear.py` | Single linear layer with optional normalization |
+| `FeedForwardNN` | `simple.py` | Variable-width MLP with skip connections |
+| `ConstantWidthFFNN` | `simple.py` | Constant-width MLP with residual blocks |
+| `SimpleFeedForwardNN` | `plain.py` | Variable-width MLP, no residual |
+| `ConstantWidthSimpleFFNN` | `plain.py` | Constant-width MLP, no residual |
+| `ScaleEquivariantFFNN` | `scale_equivariant.py` | Wrapper enforcing scale equivariance |
+| `ScaleEquivariantConstantWidthFFNN` | `scale_equivariant.py` | Scale-equivariant constant-width MLP |
+| `ConstantWidthParametricFFNN` | `parametric.py` | Constant-width MLP with constrained weight blocks |
+| `EmbeddedParametricFFNN` | `parametric.py` | Embedded-width variant with constrained blocks |
+| `ConstantWidthSPDFFNN` | `parametric_variants.py` | SPD-constrained blocks |
+| `ConstantWidthSPDFactorizedFFNN` | `parametric_variants.py` | SPD plus diagonal scale |
+| `ConstantWidthFactorizedFFNN` | `parametric_variants.py` | Diagonal scale only |
+| `EmbeddedSPDFFNN` | `parametric_variants.py` | Embedded SPD |
+| `EmbeddedSPDFactorizedFFNN` | `parametric_variants.py` | Embedded SPD plus diagonal scale |
+| `EmbeddedFactorizedFFNN` | `parametric_variants.py` | Embedded diagonal scale |
+
+Linear maps are already scale-equivariant, so wrapping a purely linear model in
+`ScaleEquivariantFFNN` does not add expressive power.
+
 ## Overview
 The FFNN module provides fully-connected neural network architectures for supervised learning tasks, including flexible multi-layer networks, simple linear models, and norm-scaled variants for physics-informed learning. These models excel at learning mappings from fixed-size feature vectors to target outputs.
 

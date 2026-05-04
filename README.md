@@ -228,12 +228,32 @@ trigger = {at_epoch = 10}
 optimizer = {name = "LBFGS", lr = 1.0}
 ```
 
+Schedulers follow the optimizer-policy shape:
+
+- use `TRAINING.optimizer.default_scheduler` for single-stage programs with no
+  explicit `stages`
+- use `TRAINING.optimizer.stages[*].scheduler` for staged programs
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+```
+
 This is useful for schedules such as:
 - warm up with AdamW, then refine with LBFGS
 - coarse stage, then low-learning-rate fine tuning
 - plateau-triggered stage switching
 
-DLKit also supports concurrent optimizers on disjoint parameter sets through `name = "Concurrent"`. For deeper optimizer-policy examples, see [src/dlkit/engine/training/optimization/README.md](src/dlkit/engine/training/optimization/README.md).
+DLKit also supports concurrent optimizers on disjoint parameter sets through
+`name = "Concurrent"`. For deeper staged and concurrent examples, see
+[src/dlkit/engine/training/optimization/optimization.md](src/dlkit/engine/training/optimization/optimization.md).
 
 ### Training Resume vs Inference Checkpoints
 
@@ -414,7 +434,7 @@ Useful public namespaces:
 ## More Documentation
 
 For deeper reference material:
-- [Configuration reference](src/dlkit/infrastructure/config/README.md)
-- [Optimizer policy reference](src/dlkit/engine/training/optimization/README.md)
+- [Configuration reference](src/dlkit/infrastructure/config/config.md)
+- [Optimizer policy reference](src/dlkit/engine/training/optimization/optimization.md)
 - [Architecture overview](docs/architecture/README.md)
 - [Testing notes](tests/TESTING.md)

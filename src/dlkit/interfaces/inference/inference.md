@@ -1,8 +1,13 @@
 # Inference Module
 
+`dlkit.interfaces.inference` is the public checkpoint-inference adapter.
+Implementation lives in `dlkit.engine.inference`; this package re-exports that
+runtime predictor surface for users.
+
 ## Overview
-`dlkit.interfaces.inference` is now a thin public adapter over `dlkit.engine.inference`.
-The interface layer no longer owns separate predictor, loading, shape, or transform
+
+The interface layer is a thin public adapter over `dlkit.engine.inference`.
+It does not own separate predictor, loading, shape, or transform
 implementations.
 
 ## Public Surface
@@ -17,16 +22,6 @@ implementations.
 
 These symbols are re-exported from `dlkit.engine.inference`.
 
-## Dependency Direction
-
-`interfaces.inference -> runtime.predictor -> runtime/core/nn/tools/shared`
-
-## Design Rules
-- keep this package as a public adapter only
-- do not duplicate runtime predictor implementation modules here
-- use the runtime predictor as the single source of truth for checkpoint loading,
-  transform reconstruction, shape inference, and precision-aware prediction
-
 ## Usage
 
 ```python
@@ -37,6 +32,17 @@ with load_model("model.ckpt", device="auto") as predictor:
     predictions = output.predictions
 ```
 
+## Dependency Direction
+
+`interfaces.inference -> runtime.predictor -> runtime/core/nn/tools/shared`
+
+## Design Rules
+- keep this package as a public adapter only
+- do not duplicate runtime predictor implementation modules here
+- use the runtime predictor as the single source of truth for checkpoint
+  loading, transform reconstruction, shape inference, and precision-aware
+  prediction
+
 ## Notes
 - Unified workflow execution no longer handles inference.
 - `execute()` rejects inference settings and points callers to `load_model()`.
@@ -46,7 +52,3 @@ with load_model("model.ckpt", device="auto") as predictor:
   metadata properties.
 - The runtime predictor owns checkpoint validation, metadata extraction, and
   model lifecycle management.
-
-## Related Modules
-- [`README.md`](README.md)
-- [`../../runtime/predictor/__init__.py`](../../runtime/predictor/__init__.py)
