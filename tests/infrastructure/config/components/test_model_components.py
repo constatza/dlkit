@@ -21,6 +21,7 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
+from dlkit.infrastructure.config.optimizer_component import AdamSettings, AdamWSettings
 
 
 class TestMetricComponentSettings:
@@ -303,6 +304,7 @@ class TestWrapperComponentSettings:
         settings = WrapperComponentSettings(**complex_wrapper_data)
 
         assert settings.is_autoencoder is True
+        assert isinstance(settings.optimizer.default_optimizer, AdamWSettings | AdamSettings)
         assert settings.optimizer.default_optimizer.lr == 0.001
         assert settings.optimizer.default_optimizer.weight_decay == 0.01
 
@@ -329,6 +331,7 @@ class TestWrapperComponentSettings:
         settings = WrapperComponentSettings(**wrapper_component_data)
 
         # Optimizer settings should be properly initialized
+        assert isinstance(settings.optimizer.default_optimizer, AdamSettings)
         assert settings.optimizer.default_optimizer.name == "Adam"
         assert settings.optimizer.default_optimizer.lr == 0.001
 

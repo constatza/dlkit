@@ -133,13 +133,11 @@ class TestOptimizationStateRepositoryRestore:
             two_stage_program: Two-stage fixture.
             repository: Repository fixture.
         """
-        from dlkit.engine.training.optimization.state import ActiveStage
-
         # Save initial state (trigger not fired)
         saved = repository.save(two_stage_program)
 
         # Fire the trigger by calling update at target epoch
-        stage = cast(ActiveStage, two_stage_program.stages[0])
+        stage = two_stage_program.stages[0]
         trigger = stage.trigger
         trigger.update(5, {})
         trigger_state_after_fire = trigger.state_dict()
@@ -167,9 +165,7 @@ class TestOptimizationStateRepositoryRestore:
         """
         import torch
 
-        from dlkit.engine.training.optimization.state import ActiveStage
-
-        stage = cast(ActiveStage, single_stage_program.stages[0])
+        stage = single_stage_program.stages[0]
         optimizer = stage.optimizer
 
         # Run an optimization step to populate optimizer state

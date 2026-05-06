@@ -11,7 +11,7 @@ def _load_tach_map(tmp_path: Path) -> Path:
     repo_root = Path(__file__).resolve().parents[2]
     map_path = tmp_path / "tach-map.json"
     subprocess.run(
-        ["tach", "map", "-o", str(map_path)],
+        [sys.executable, "-m", "tach", "map", "-o", str(map_path)],
         cwd=repo_root,
         check=True,
         capture_output=True,

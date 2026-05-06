@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import torch
@@ -25,6 +24,9 @@ from dlkit.engine.inference.loading import (
     load_checkpoint,
     validate_checkpoint,
 )
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from dlkit.interfaces.inference import (
     CheckpointPredictor,
@@ -33,6 +35,18 @@ from dlkit.interfaces.inference import (
     load_model,
     load_model_from_settings,
 )
+
+
+def _make_inference_settings(checkpoint: Path | None) -> InferenceWorkflowConfig:
+    """Build minimal inference settings for load_model_from_settings tests."""
+    return InferenceWorkflowConfig(
+        SESSION=SessionSettings(workflow="inference"),
+        MODEL=ModelComponentSettings(
+            name="Linear",
+            module_path="torch.nn",
+            checkpoint=checkpoint,
+        ),
+    )
 
 
 class TestCheckpointLoading:
@@ -415,9 +429,7 @@ class TestLoadPredictorAPI:
 
     def test_load_model_from_settings_uses_explicit_override(self, simple_checkpoint: Path):
         """Explicit checkpoint override should win over settings."""
-        settings = SimpleNamespace(
-            MODEL=SimpleNamespace(checkpoint=Path("/tmp/ignored.ckpt")),
-        )
+        settings = _make_inference_settings(Path("/tmp/ignored.ckpt"))
 
         predictor = load_model_from_settings(
             settings, checkpoint_path=simple_checkpoint, device="cpu"
@@ -428,7 +440,7 @@ class TestLoadPredictorAPI:
 
     def test_load_model_from_settings_requires_checkpoint(self):
         """Missing checkpoint in both settings and override should raise clearly."""
-        settings = SimpleNamespace(MODEL=SimpleNamespace(checkpoint=None))
+        settings = _make_inference_settings(checkpoint=None)
 
         from dlkit.common import ConfigurationError
 

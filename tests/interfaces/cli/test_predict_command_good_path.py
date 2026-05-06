@@ -10,7 +10,6 @@ import torch
 from typer.testing import CliRunner
 
 from dlkit.common import ConfigurationError
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.cli.commands.predict import app as predict_app
 from dlkit.interfaces.inference import PredictionOutput
 
@@ -51,7 +50,7 @@ class TestPredictCommand:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: GeneralSettings,
+        sample_settings: Mock,
     ) -> None:
         sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
@@ -116,7 +115,7 @@ class TestPredictCommand:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: GeneralSettings,
+        sample_settings: Mock,
         tmp_path: Path,
     ) -> None:
         sample_settings.has_dataset_config = True
@@ -230,7 +229,7 @@ class TestPredictHelperFunctions:
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: GeneralSettings,
+        sample_settings: Mock,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
@@ -259,7 +258,7 @@ class TestPredictHelperFunctions:
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: GeneralSettings,
+        sample_settings: Mock,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 

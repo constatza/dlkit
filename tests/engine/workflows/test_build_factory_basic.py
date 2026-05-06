@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
 from tensordict import TensorDict
 
 from dlkit.common.shapes import ShapeSummary
-from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.engine.workflows.factories.build_factory import BuildFactory, WorkflowSettings
 from dlkit.engine.workflows.factories.model_detection import ModelType
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
@@ -46,6 +46,10 @@ class _FakeDataModule:
 
 class _FakeModel:
     pass
+
+
+def _as_workflow_settings(settings: GeneralSettings) -> WorkflowSettings:
+    return cast(WorkflowSettings, settings)
 
 
 @pytest.fixture
@@ -116,7 +120,7 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
         staticmethod(_capture_wrapper),
     )
 
-    comps = BuildFactory().build_components(settings)
+    comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert isinstance(comps.datamodule, _FakeDataModule)
     assert isinstance(comps.model, _FakeModel)
@@ -178,7 +182,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         staticmethod(_capture_graph_wrapper),
     )
 
-    comps = BuildFactory().build_components(settings)
+    comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert comps.meta.get("dataset_type") == "graph"
     assert comps.shape_spec is None  # graph strategy returns None shape_spec
@@ -233,7 +237,7 @@ def test_build_factory_selects_timeseries_strategy(
         staticmethod(_capture_timeseries_wrapper),
     )
 
-    comps = BuildFactory().build_components(settings)
+    comps = BuildFactory().build_components(_as_workflow_settings(settings))
     assert comps.meta.get("dataset_type") == "timeseries"
     # Timeseries dataset returns dict sample, so shape inference returns None
     assert comps.shape_spec is None
@@ -332,7 +336,7 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    comps = BuildFactory().build_components(settings)
+    comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert isinstance(comps.datamodule, _FakeDataModule)
     assert captured["memmap_cache_dir"] is not None
@@ -397,7 +401,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(settings)
+    BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert captured["features"]
     assert captured["targets"]
@@ -470,7 +474,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         staticmethod(_capture_wrapper),
     )
 
-    BuildFactory().build_components(settings)
+    BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert captured["dataset_feature_names"] == ["x"]
     assert captured["dataset_target_names"] == ["y"]
@@ -535,7 +539,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(settings)
+    BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert captured["dataset_feature_names"] == ["x", "matrix"]
 
@@ -600,7 +604,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(settings)
+    BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert captured["dataset_feature_names"] == ["x", "matrix"]
 
@@ -656,7 +660,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(settings)
+    BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert captured["dataset_feature_names"] == ["matrix"]
 
@@ -717,7 +721,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     )
 
     # This should not raise any validation errors
-    comps = BuildFactory().build_components(settings)
+    comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert hasattr(comps, "model")
 

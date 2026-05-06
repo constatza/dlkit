@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
@@ -12,6 +14,16 @@ from dlkit.engine.workflows.factories.execution_strategy_factory import Executio
 from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
+
+type _ExecutionSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+
+
+def _as_execution_settings(settings: GeneralSettings) -> _ExecutionSettings:
+    return cast(_ExecutionSettings, settings)
 
 
 @pytest.fixture
@@ -29,7 +41,7 @@ def test_factory_creates_vanilla_executor_by_default(factory, monkeypatch):
     )
     settings = GeneralSettings()  # No MLFLOW or OPTUNA
 
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     # Factory now always returns TrackingDecorator (null object pattern)
     assert isinstance(executor, TrackingDecorator)
@@ -48,7 +60,7 @@ def test_factory_creates_tracking_decorator_for_mlflow(factory):
         )
     )
 
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     assert isinstance(executor, TrackingDecorator)
     # Verify it wraps a VanillaExecutor
@@ -66,7 +78,7 @@ def test_factory_creates_optimization_decorator_for_optuna(factory, monkeypatch)
         OPTUNA=OptunaSettings(enabled=True, n_trials=10, direction="minimize")
     )
 
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     # create_executor always returns TrackingDecorator, not OptimizationDecorator
     # OptimizationDecorator is created by create_optimization_strategy
@@ -88,7 +100,7 @@ def test_factory_creates_composed_executor_for_both_features(factory):
         OPTUNA=OptunaSettings(enabled=True, n_trials=5, direction="minimize"),
     )
 
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     # create_executor only creates TrackingDecorator wrapping VanillaExecutor
     # OptimizationDecorator is handled by create_optimization_strategy
@@ -108,9 +120,9 @@ def test_factory_follows_open_closed_principle(factory):
     mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings())
     optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=3))
 
-    vanilla_executor = factory.create_executor(vanilla_settings)
-    mlflow_executor = factory.create_executor(mlflow_settings)
-    optuna_executor = factory.create_executor(optuna_settings)
+    vanilla_executor = factory.create_executor(_as_execution_settings(vanilla_settings))
+    mlflow_executor = factory.create_executor(_as_execution_settings(mlflow_settings))
+    optuna_executor = factory.create_executor(_as_execution_settings(optuna_settings))
 
     # All should implement the same interface
     assert isinstance(vanilla_executor, ITrainingExecutor)
@@ -137,7 +149,7 @@ def test_factory_activates_mlflow_when_local_probe_is_mocked_true(factory, monke
     )
     settings = GeneralSettings()  # No MLFLOW section, no env var
 
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     assert isinstance(executor, TrackingDecorator)
     from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
@@ -177,7 +189,7 @@ def test_factory_direct_usage():
     settings = GeneralSettings(MLFLOW=MLflowSettings())
 
     factory = ExecutionStrategyFactory()
-    executor = factory.create_executor(settings)
+    executor = factory.create_executor(_as_execution_settings(settings))
 
     assert isinstance(executor, TrackingDecorator)
     assert isinstance(executor, ITrainingExecutor)
@@ -191,8 +203,8 @@ def test_factory_dependency_injection_ready():
 
     settings = GeneralSettings()
 
-    executor1 = factory1.create_executor(settings)
-    executor2 = factory2.create_executor(settings)
+    executor1 = factory1.create_executor(_as_execution_settings(settings))
+    executor2 = factory2.create_executor(_as_execution_settings(settings))
 
     # Should create equivalent executors
     assert type(executor1) is type(executor2)
@@ -206,13 +218,13 @@ def test_factory_handles_partial_configurations():
     minimal_mlflow = GeneralSettings(
         MLFLOW=MLflowSettings()  # Minimal flat config
     )
-    executor = ExecutionStrategyFactory().create_executor(minimal_mlflow)
+    executor = ExecutionStrategyFactory().create_executor(_as_execution_settings(minimal_mlflow))
     assert isinstance(executor, TrackingDecorator)
 
     # Optuna with minimal config
     minimal_optuna = GeneralSettings(
         OPTUNA=OptunaSettings(enabled=True)  # No n_trials specified
     )
-    executor = ExecutionStrategyFactory().create_executor(minimal_optuna)
+    executor = ExecutionStrategyFactory().create_executor(_as_execution_settings(minimal_optuna))
     # create_executor always returns TrackingDecorator regardless of Optuna settings
     assert isinstance(executor, TrackingDecorator)

@@ -26,7 +26,11 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
 )
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
-from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.optuna_settings import (
+    OptunaSettings,
+    PrunerSettings,
+    SamplerSettings,
+)
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.validators import (
     ConfigValidationError,
@@ -39,6 +43,7 @@ from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
+from dlkit.infrastructure.precision import PrecisionStrategy
 
 # ============================================================================
 # Success Cases: Valid Configs Load Successfully
@@ -307,8 +312,8 @@ class TestEagerValidationFailureCases:
             lambda: OptimizerSettings(module_path="dlkit.not_a_real_module"),
             lambda: LossComponentSettings(module_path="dlkit.not_a_real_module"),
             lambda: MetricComponentSettings(module_path="dlkit.not_a_real_module"),
-            lambda: OptunaSettings(sampler={"module_path": "dlkit.not_a_real_module"}),
-            lambda: OptunaSettings(pruner={"module_path": "dlkit.not_a_real_module"}),
+            lambda: OptunaSettings(sampler=SamplerSettings(module_path="dlkit.not_a_real_module")),
+            lambda: OptunaSettings(pruner=PrunerSettings(module_path="dlkit.not_a_real_module")),
         ],
     )
     def test_invalid_module_paths_fail_at_load_time(self, factory) -> None:
@@ -367,7 +372,8 @@ class TestSessionPrecisionAliases:
         ],
     )
     def test_precision_aliases_are_normalized(self, value: object, expected: str) -> None:
-        settings = SessionSettings(precision=value)
+        settings = SessionSettings.model_validate({"precision": value})
+        assert isinstance(settings.precision, PrecisionStrategy)
         assert str(settings.precision) == expected
 
 

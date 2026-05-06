@@ -6,6 +6,7 @@ import pytest
 
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
     AdamWSettings,
     MuonSettings,
     ReduceLROnPlateauSettings,
@@ -51,7 +52,7 @@ class TestWrapperOptimizerPolicyWiring:
         )
         built = _build_policy(WrapperComponentSettings(optimizer=policy))
 
-        assert built.default_scheduler is not None
+        assert isinstance(built.default_scheduler, ReduceLROnPlateauSettings)
         assert built.default_scheduler.mode == "max"
         assert built.default_scheduler.threshold == pytest.approx(1e-3)
         assert built.default_scheduler.patience == 5
@@ -75,4 +76,5 @@ class TestTrainingSettingsOptimizerPolicyField:
         policy = OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=5e-4))
         settings = TrainingSettings(optimizer=policy)
 
+        assert isinstance(settings.optimizer.default_optimizer, AdamWSettings | AdamSettings)
         assert settings.optimizer.default_optimizer.lr == pytest.approx(5e-4)

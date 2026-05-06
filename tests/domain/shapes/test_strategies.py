@@ -7,7 +7,7 @@ from the old spec/serialization/migrator subsystem.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from hypothesis import given, settings
@@ -250,7 +250,7 @@ class TestValidationResultImmutability:
         """
         result = ValidationResult.success()
         with pytest.raises((AttributeError, TypeError)):
-            result.is_valid = False  # type: ignore[misc]
+            result.is_valid = False
 
     def test_cannot_set_errors(self) -> None:
         """Attempting to set errors on a ValidationResult raises AttributeError.
@@ -260,7 +260,7 @@ class TestValidationResultImmutability:
         """
         result = ValidationResult.success()
         with pytest.raises((AttributeError, TypeError)):
-            result.errors = ("new",)  # type: ignore[misc]
+            result.errors = ("new",)
 
 
 # ===========================================================================
@@ -898,6 +898,10 @@ def positive_dims(draw: st.DrawFn) -> tuple[int, ...]:
     return dims
 
 
+def _positive_dims_strategy() -> Any:
+    return cast(Any, positive_dims)()
+
+
 @st.composite
 def shape_entry_pair(draw: st.DrawFn) -> tuple[ShapeEntry, ShapeEntry]:
     """Hypothesis strategy: a pair of ShapeEntry objects named x and y.
@@ -908,15 +912,19 @@ def shape_entry_pair(draw: st.DrawFn) -> tuple[ShapeEntry, ShapeEntry]:
     Returns:
         tuple[ShapeEntry, ShapeEntry]: (entry_x, entry_y) pair.
     """
-    x_dims = draw(positive_dims())
-    y_dims = draw(positive_dims())
+    x_dims = draw(_positive_dims_strategy())
+    y_dims = draw(_positive_dims_strategy())
     return (
         ShapeEntry(name="x", dimensions=x_dims),
         ShapeEntry(name="y", dimensions=y_dims),
     )
 
 
-@given(shape_entry_pair())
+def _shape_entry_pair_strategy() -> Any:
+    return cast(Any, shape_entry_pair)()
+
+
+@given(_shape_entry_pair_strategy())
 @settings(max_examples=40)
 def test_validation_result_add_error_always_invalid(pair: tuple[ShapeEntry, ShapeEntry]) -> None:
     """Property: add_error on success always yields is_valid=False regardless of entry shape.
@@ -928,7 +936,7 @@ def test_validation_result_add_error_always_invalid(pair: tuple[ShapeEntry, Shap
     assert result.is_valid is False
 
 
-@given(shape_entry_pair())
+@given(_shape_entry_pair_strategy())
 @settings(max_examples=40)
 def test_validation_result_add_warning_always_valid(pair: tuple[ShapeEntry, ShapeEntry]) -> None:
     """Property: add_warning on success always preserves is_valid=True.
@@ -940,7 +948,7 @@ def test_validation_result_add_warning_always_valid(pair: tuple[ShapeEntry, Shap
     assert result.is_valid is True
 
 
-@given(shape_entry_pair())
+@given(_shape_entry_pair_strategy())
 @settings(max_examples=40)
 def test_serializer_round_trip_property(pair: tuple[ShapeEntry, ShapeEntry]) -> None:
     """Property: serialize/deserialize preserves x and y dimensions for any valid entry pair.
@@ -960,7 +968,7 @@ def test_serializer_round_trip_property(pair: tuple[ShapeEntry, ShapeEntry]) -> 
     assert restored.entries["y"].dimensions == entry_y.dimensions
 
 
-@given(shape_entry_pair())
+@given(_shape_entry_pair_strategy())
 @settings(max_examples=40)
 def test_alias_resolver_always_adds_x_y_for_named_pair(
     pair: tuple[ShapeEntry, ShapeEntry],
@@ -982,7 +990,7 @@ def test_alias_resolver_always_adds_x_y_for_named_pair(
     assert "y" in resolved.entries
 
 
-@given(positive_dims())
+@given(_positive_dims_strategy())
 @settings(max_examples=40)
 def test_alias_resolver_single_entry_duplicates_to_y(dims: tuple[int, ...]) -> None:
     """Property: for any valid single-entry data, resolve_aliases creates matching x and y dims.

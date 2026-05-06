@@ -6,6 +6,7 @@ with explicit precedence.
 """
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ from dlkit.infrastructure.io.path_resolver import PathResolver
 
 
 @pytest.fixture
-def clean_env() -> None:
+def clean_env() -> Iterator[None]:
     """Clean environment for isolation between tests."""
     original_env = os.environ.pop("DLKIT_ROOT_DIR", None)
     yield

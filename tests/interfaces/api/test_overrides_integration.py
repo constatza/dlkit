@@ -11,6 +11,12 @@ from dlkit.engine.workflows.entrypoints._overrides import (
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    LBFGSSettings,
+    MuonSettings,
+)
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
 
@@ -28,7 +34,9 @@ def _require_datamodule(settings: GeneralSettings) -> DataModuleSettings:
 
 
 def _require_numeric_lr(settings: TrainingSettings) -> int | float:
-    lr = settings.optimizer.default_optimizer.lr
+    optimizer = settings.optimizer.default_optimizer
+    assert isinstance(optimizer, AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings)
+    lr = optimizer.lr
     assert isinstance(lr, int | float)
     return lr
 

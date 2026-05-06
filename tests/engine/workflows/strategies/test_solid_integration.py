@@ -18,6 +18,16 @@ from dlkit.engine.workflows.factories.execution_strategy_factory import Executio
 from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.optuna_settings import OptunaSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
+
+type _ExecutionSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+
+
+def _as_execution_settings(settings: GeneralSettings) -> _ExecutionSettings:
+    return cast(_ExecutionSettings, settings)
 
 
 @pytest.fixture
@@ -67,13 +77,13 @@ def test_single_responsibility_principle_integration(build_components, monkeypat
 
     # Factory creates TrackingDecorator with NullTracker when no features enabled
     vanilla_settings = GeneralSettings()
-    vanilla_executor = factory.create_executor(vanilla_settings)
+    vanilla_executor = factory.create_executor(_as_execution_settings(vanilla_settings))
 
     # Factory now always returns TrackingDecorator (null object pattern)
     assert isinstance(vanilla_executor, TrackingDecorator)
     assert isinstance(vanilla_executor._executor, VanillaExecutor)
 
-    result = vanilla_executor.execute(build_components, vanilla_settings)
+    result = vanilla_executor.execute(build_components, _as_execution_settings(vanilla_settings))
     assert isinstance(result, TrainingResult)
     assert result.metrics["val_loss"] == 0.45
 
@@ -105,10 +115,10 @@ def test_open_closed_principle_integration(build_components):
         mock_tracker.get_tracking_uri = Mock(return_value=None)
         mock_tracker.is_local = Mock(return_value=False)
 
-        executor = factory.create_executor(mlflow_settings)
+        executor = factory.create_executor(_as_execution_settings(mlflow_settings))
 
         assert isinstance(executor, TrackingDecorator)
-        result = executor.execute(build_components, mlflow_settings)
+        result = executor.execute(build_components, _as_execution_settings(mlflow_settings))
 
         # Core functionality preserved
         assert isinstance(result, TrainingResult)
@@ -129,10 +139,10 @@ def test_liskov_substitution_principle_integration(build_components):
     )
 
     executors = [
-        factory.create_executor(vanilla_settings),
-        factory.create_executor(mlflow_settings),
-        factory.create_executor(optuna_settings),
-        factory.create_executor(both_settings),
+        factory.create_executor(_as_execution_settings(vanilla_settings)),
+        factory.create_executor(_as_execution_settings(mlflow_settings)),
+        factory.create_executor(_as_execution_settings(optuna_settings)),
+        factory.create_executor(_as_execution_settings(both_settings)),
     ]
 
     # All should be substitutable for ITrainingExecutor
@@ -186,7 +196,7 @@ def test_dependency_inversion_principle_integration(build_components):
     # Should be able to inject any implementation
     settings = GeneralSettings(MLFLOW=MLflowSettings())
 
-    result = tracking_decorator.execute(build_components, settings)
+    result = tracking_decorator.execute(build_components, _as_execution_settings(settings))
     assert isinstance(result, TrainingResult)
 
     # Mock tracker should have been used
@@ -199,15 +209,15 @@ def test_pure_solid_architecture_integration(build_components):
 
     # Pure SOLID interface
     vanilla_executor = VanillaExecutor()
-    result = vanilla_executor.execute(build_components, settings)  # New method name
+    result = vanilla_executor.execute(build_components, _as_execution_settings(settings))
 
     assert isinstance(result, TrainingResult)
     assert build_components.trainer.called["fit"] == 1
 
     # Factory-created executor should also work
     factory = ExecutionStrategyFactory()
-    factory_executor = factory.create_executor(settings)
-    result2 = factory_executor.execute(build_components, settings)
+    factory_executor = factory.create_executor(_as_execution_settings(settings))
+    result2 = factory_executor.execute(build_components, _as_execution_settings(settings))
     assert isinstance(result2, TrainingResult)
 
 
@@ -229,11 +239,11 @@ def test_error_handling_integration(build_components):
     )
 
     factory = ExecutionStrategyFactory()
-    executor = factory.create_executor(GeneralSettings())
+    executor = factory.create_executor(_as_execution_settings(GeneralSettings()))
 
     # Error should be properly wrapped
     with pytest.raises(WorkflowError) as exc_info:
-        executor.execute(failing_components, GeneralSettings())
+        executor.execute(failing_components, _as_execution_settings(GeneralSettings()))
 
     assert "Vanilla execution failed" in str(exc_info.value.message)
     assert "Training failed" in str(exc_info.value.message)
@@ -251,7 +261,7 @@ def test_end_to_end_solid_workflow():
     )
 
     # Factory's create_executor only creates TrackingDecorator
-    executor = factory.create_executor(full_settings)
+    executor = factory.create_executor(_as_execution_settings(full_settings))
 
     # create_executor returns TrackingDecorator regardless of Optuna settings
     # OptimizationDecorator is handled by create_optimization_strategy

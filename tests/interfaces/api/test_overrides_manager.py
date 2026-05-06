@@ -13,6 +13,12 @@ from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    LBFGSSettings,
+    MuonSettings,
+)
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
 from dlkit.interfaces.api.domain.override_types import TrainingOverrides
@@ -46,7 +52,9 @@ def _require_mlflow(settings: GeneralSettings) -> MLflowSettings:
 
 
 def _require_numeric_lr(settings: TrainingSettings) -> int | float:
-    lr = settings.optimizer.default_optimizer.lr
+    optimizer = settings.optimizer.default_optimizer
+    assert isinstance(optimizer, AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings)
+    lr = optimizer.lr
     assert isinstance(lr, int | float)
     return lr
 
@@ -118,4 +126,4 @@ def test_validate_overrides_checks_checkpoint_existence(tmp_path: Path) -> None:
 
 def test_training_overrides_reject_unknown_fields() -> None:
     with pytest.raises(ValidationError, match="epcohs"):
-        TrainingOverrides(epcohs=5)
+        TrainingOverrides.model_validate({"epcohs": 5})

@@ -177,13 +177,18 @@ def mock_tracker():
 
 
 @pytest.fixture
-def mlflow_settings():
+def mlflow_settings() -> TrainingWorkflowConfig:
     """Create MLflow settings for testing."""
-    return GeneralSettings(
+    from dlkit.infrastructure.config.session_settings import SessionSettings
+    from dlkit.infrastructure.config.training_settings import TrainingSettings
+
+    return TrainingWorkflowConfig(
+        SESSION=SessionSettings(workflow="train"),
+        TRAINING=TrainingSettings(),
         MLFLOW=MLflowSettings(
             experiment_name="test_experiment",
             run_name="test_run",
-        )
+        ),
     )
 
 
@@ -260,7 +265,13 @@ def test_tracking_decorator_composition_pattern(mock_tracker, mlflow_settings, b
 
 def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_components):
     """Test that decorator works gracefully when MLflow is not configured."""
-    settings_no_mlflow = GeneralSettings()  # No MLFLOW section
+    from dlkit.infrastructure.config.session_settings import SessionSettings
+    from dlkit.infrastructure.config.training_settings import TrainingSettings
+
+    settings_no_mlflow = TrainingWorkflowConfig(
+        SESSION=SessionSettings(workflow="train"),
+        TRAINING=TrainingSettings(),
+    )
 
     # Use NullTracker for the proper "disabled MLflow" scenario
     from dlkit.engine.tracking.interfaces import NullTracker

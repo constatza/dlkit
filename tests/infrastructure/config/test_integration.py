@@ -21,11 +21,23 @@ from dlkit.infrastructure.config import (
 from dlkit.infrastructure.config.core.base_settings import ComponentSettings
 from dlkit.infrastructure.config.core.factories import DefaultComponentFactory
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
+from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
 def _expect_not_none[T](value: T | None) -> T:
     assert value is not None
     return value
+
+
+def _expect_tracking_workflow(
+    settings: WorkflowConfig,
+) -> TrainingWorkflowConfig | OptimizationWorkflowConfig:
+    assert isinstance(settings, TrainingWorkflowConfig | OptimizationWorkflowConfig)
+    return settings
 
 
 # Mock components for integration testing
@@ -322,10 +334,10 @@ class TestGeneralSettingsEndToEndIntegration:
         """
         from dlkit.infrastructure.config import load_settings
 
-        settings = load_settings(integration_config_file)
-        session = _expect_not_none(settings.SESSION)
+        settings = _expect_tracking_workflow(load_settings(integration_config_file))
+        session = settings.SESSION
         model = _expect_not_none(settings.MODEL)
-        optuna = _expect_not_none(settings.OPTUNA)
+        optuna = settings.OPTUNA
         datamodule = _expect_not_none(settings.DATAMODULE)
 
         # Verify all components are properly loaded

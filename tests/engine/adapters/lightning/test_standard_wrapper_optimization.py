@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 import torch
+from tensordict import TensorDict
 from torch import nn
 from torch.nn import ModuleList
 
@@ -281,9 +282,7 @@ class TestConfigureOptimizers:
 # ---------------------------------------------------------------------------
 
 
-def _make_batch(batch_size: int = 4, dim: int = 4) -> torch.Tensor:
-    from tensordict import TensorDict
-
+def _make_batch(batch_size: int = 4, dim: int = 4) -> TensorDict:
     return TensorDict(
         {
             "features": TensorDict({"x": torch.randn(batch_size, dim)}, batch_size=[batch_size]),

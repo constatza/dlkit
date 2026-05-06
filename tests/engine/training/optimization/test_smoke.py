@@ -6,6 +6,8 @@ No Lightning Trainer is used — training_step() is called directly.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -88,6 +90,28 @@ class _ThreeLayer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.fc2(torch.relu(self.fc1(torch.relu(self.fc0(x)))))
+
+
+class _CustomRoleModel(nn.Module):
+    """Three-layer model with explicit role annotations via IParameterRoleProvider."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.embed = nn.Linear(4, 8, bias=False)
+        self.hidden = nn.Linear(8, 8, bias=False)
+        self.head = nn.Linear(8, 2, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(torch.relu(self.hidden(self.embed(x))))
+
+    def parameter_roles(self) -> dict[str, object]:
+        from dlkit.domain.nn.parameter_roles import ParameterRole
+
+        return {
+            "embed.weight": ParameterRole.INPUT,
+            "hidden.weight": ParameterRole.HIDDEN,
+            "head.weight": ParameterRole.OUTPUT,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -313,38 +337,16 @@ class TestCustomRoleProviderEscapeHatch:
     """Users can implement IParameterRoleProvider to control Muon eligibility for any architecture."""
 
     @pytest.fixture
-    def custom_model(self) -> nn.Module:
+    def custom_model(self) -> _CustomRoleModel:
         """Three-layer model that self-annotates its parameter roles via IParameterRoleProvider.
 
         Returns:
             An nn.Module implementing IParameterRoleProvider with explicit role declarations.
         """
-        from dlkit.domain.nn.parameter_roles import ParameterRole
         from dlkit.domain.nn.role_provider import IParameterRoleProvider
 
-        class _CustomModel(nn.Module, IParameterRoleProvider):
-            def __init__(self) -> None:
-                super().__init__()
-                self.embed = nn.Linear(4, 8, bias=False)  # marked INPUT
-                self.hidden = nn.Linear(8, 8, bias=False)  # marked HIDDEN → Muon eligible
-                self.head = nn.Linear(8, 2, bias=False)  # marked OUTPUT
-
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                return self.head(torch.relu(self.hidden(self.embed(x))))
-
-            def parameter_roles(self) -> dict[str, ParameterRole]:
-                """Return explicit per-parameter role annotations.
-
-                Returns:
-                    Mapping of parameter names to their assigned roles.
-                """
-                return {
-                    "embed.weight": ParameterRole.INPUT,
-                    "hidden.weight": ParameterRole.HIDDEN,
-                    "head.weight": ParameterRole.OUTPUT,
-                }
-
-        return _CustomModel()
+        assert issubclass(_CustomRoleModel, IParameterRoleProvider)
+        return _CustomRoleModel()
 
     @pytest.fixture
     def custom_policy(self) -> OptimizerPolicySettings:
@@ -361,7 +363,7 @@ class TestCustomRoleProviderEscapeHatch:
 
     def test_custom_role_provider_overrides_ffnn_inference(
         self,
-        custom_model: nn.Module,
+        custom_model: _CustomRoleModel,
         custom_policy: OptimizerPolicySettings,
     ) -> None:
         """IParameterRoleProvider declarations take precedence over FFNN position inference.
@@ -382,11 +384,15 @@ class TestCustomRoleProviderEscapeHatch:
         def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
             return any(p is param for p in param_list)
 
-        assert _in(custom_model.hidden.weight, muon_params), "HIDDEN weight must go to Muon"
-        assert not _in(custom_model.embed.weight, muon_params), "INPUT weight must NOT go to Muon"
-        assert not _in(custom_model.head.weight, muon_params), "OUTPUT weight must NOT go to Muon"
-        assert _in(custom_model.embed.weight, adamw_params)
-        assert _in(custom_model.head.weight, adamw_params)
+        hidden_weight = cast(nn.Parameter, custom_model.hidden.weight)
+        embed_weight = cast(nn.Parameter, custom_model.embed.weight)
+        head_weight = cast(nn.Parameter, custom_model.head.weight)
+
+        assert _in(hidden_weight, muon_params), "HIDDEN weight must go to Muon"
+        assert not _in(embed_weight, muon_params), "INPUT weight must NOT go to Muon"
+        assert not _in(head_weight, muon_params), "OUTPUT weight must NOT go to Muon"
+        assert _in(embed_weight, adamw_params)
+        assert _in(head_weight, adamw_params)
 
 
 # ---------------------------------------------------------------------------

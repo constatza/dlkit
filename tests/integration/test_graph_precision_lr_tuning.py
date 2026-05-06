@@ -135,9 +135,13 @@ class TestGraphPrecisionLRTuning:
         monkeypatch.setattr(LocalFileSystem, "makedirs", _windows_guard)
 
         dataset = builder.build_dataset_with_tensor_entries(graph_settings, context)
-        configured_root = graph_settings.DATASET.root
+        dataset_settings = graph_settings.DATASET
+        assert dataset_settings is not None
+        configured_root = dataset_settings.root
         assert configured_root is not None
-        assert Path(dataset.root).resolve() == configured_root.resolve()
+        dataset_root = getattr(dataset, "root", None)
+        assert isinstance(dataset_root, str | Path)
+        assert Path(dataset_root).resolve() == configured_root.resolve()
         assert created_paths
         assert all("???" not in path for path in created_paths)
 

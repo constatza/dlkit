@@ -11,6 +11,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
+from typing import cast
 
 import numpy as np
 import torch
@@ -18,9 +19,9 @@ from loguru import logger
 from torch.utils.data import DataLoader
 
 from dlkit.domain.losses import relative_energy_norm_loss
-from dlkit.runtime.data.datasets.flexible import FlexibleDataset, collate_tensordict
-from dlkit.tools.config.data_entries import Feature, SparseFeature, Target
-from dlkit.tools.io.sparse import open_sparse_pack, save_sparse_pack
+from dlkit.engine.data.datasets.flexible import FlexibleDataset, collate_tensordict
+from dlkit.infrastructure.config.data_entries import Feature, SparseFeature, Target
+from dlkit.infrastructure.io import open_sparse_pack, save_sparse_pack
 
 
 def log_benchmark(name: str, **payload: object) -> None:
@@ -214,8 +215,12 @@ def main() -> None:
         sec_per_step=sparse_loader_elapsed / max(sparse_steps, 1),
     )
 
-    matrix_sparse = sparse_prebatched["features"]["matrix"]
-    matrix_dense, _ = time_once("sparse_matrix_to_dense_once", lambda: matrix_sparse.to_dense())
+    feature_batch = cast(dict[str, torch.Tensor], sparse_prebatched["features"])
+    matrix_sparse = feature_batch["matrix"]
+    matrix_dense, _ = time_once(
+        "sparse_matrix_to_dense_once",
+        lambda: matrix_sparse.to_dense(),
+    )
     preds = torch.randn(batch_size, matrix_dim)
     target = torch.randn(batch_size, matrix_dim)
 

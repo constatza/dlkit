@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Literal
 
 import pytest
 
@@ -528,7 +528,7 @@ def test_plateau_trigger_mode_behavior(
         monitor="metric",
         patience=2,
         min_delta=1e-4,
-        mode=cast(Literal["min", "max"], mode),
+        mode=mode,
     )
 
     # Act & Assert - Update with each metric and check fire state

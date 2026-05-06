@@ -9,6 +9,18 @@ from pydantic import ValidationError
 from dlkit.infrastructure.config import load_settings, update_settings
 from dlkit.infrastructure.config.data_entries import Feature
 from dlkit.infrastructure.config.extras_settings import ExtrasSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    LBFGSSettings,
+    MuonSettings,
+)
+from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
+from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -23,10 +35,31 @@ def _expect_mapping(value: object) -> dict[str, object]:
 
 def _expect_extra_fields(extras: ExtrasSettings | dict[str, object]) -> dict[str, object]:
     if isinstance(extras, dict):
-        return cast("dict[str, object]", extras)
+        return extras
     extra_fields = extras.model_extra
     assert extra_fields is not None
     return cast("dict[str, object]", extra_fields)
+
+
+def _expect_training_settings(settings: WorkflowConfig) -> TrainingSettings:
+    assert isinstance(settings, TrainingWorkflowConfig | OptimizationWorkflowConfig)
+    return settings.TRAINING
+
+
+def _expect_optimizer_with_lr(
+    training: TrainingSettings,
+) -> AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings:
+    optimizer = training.optimizer.default_optimizer
+    assert isinstance(optimizer, AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings)
+    return optimizer
+
+
+def _expect_optimizer_with_weight_decay(
+    training: TrainingSettings,
+) -> AdamWSettings | AdamSettings:
+    optimizer = training.optimizer.default_optimizer
+    assert isinstance(optimizer, AdamWSettings | AdamSettings)
+    return optimizer
 
 
 class TestBasicUpdates:
@@ -114,11 +147,11 @@ max_epochs = 100
 """)
 
         settings = load_settings(config_path)
-        training = _expect_not_none(settings.TRAINING)
+        training = _expect_training_settings(settings)
 
         # Update TRAINING.trainer.max_epochs
         new_settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": 200}}})
-        new_training = _expect_not_none(new_settings.TRAINING)
+        new_training = _expect_training_settings(new_settings)
 
         # max_epochs should be updated
         assert new_training.trainer.max_epochs == 200
@@ -128,9 +161,7 @@ max_epochs = 100
 
         # Other TRAINING fields should be preserved
         assert new_training.epochs == training.epochs
-        assert (
-            new_training.optimizer.default_optimizer.lr == training.optimizer.default_optimizer.lr
-        )
+        assert _expect_optimizer_with_lr(new_training).lr == _expect_optimizer_with_lr(training).lr
 
     def test_multiple_sections_at_once(self, tmp_path):
         """Test updating multiple top-level sections simultaneously."""
@@ -165,7 +196,7 @@ module_path = "torch.nn"
 """)
 
         settings = load_settings(config_path)
-        training = _expect_not_none(settings.TRAINING)
+        training = _expect_training_settings(settings)
 
         # Update multiple sections
         new_settings = update_settings(
@@ -177,7 +208,7 @@ module_path = "torch.nn"
             },
         )
         session = _expect_not_none(new_settings.SESSION)
-        training_updated = _expect_not_none(new_settings.TRAINING)
+        training_updated = _expect_training_settings(new_settings)
         datamodule = _expect_not_none(new_settings.DATAMODULE)
 
         # All updates should be applied
@@ -187,8 +218,7 @@ module_path = "torch.nn"
 
         # Unspecified fields preserved
         assert (
-            training_updated.optimizer.default_optimizer.lr
-            == training.optimizer.default_optimizer.lr
+            _expect_optimizer_with_lr(training_updated).lr == _expect_optimizer_with_lr(training).lr
         )
 
 
@@ -229,19 +259,19 @@ module_path = "torch.nn"
 """)
 
         settings = load_settings(config_path)
-        training = _expect_not_none(settings.TRAINING)
+        training = _expect_training_settings(settings)
 
         # Update only lr
         new_settings = update_settings(
             settings, {"TRAINING": {"optimizer": {"default_optimizer": {"lr": 0.01}}}}
         )
-        new_training = _expect_not_none(new_settings.TRAINING)
+        new_training = _expect_training_settings(new_settings)
 
         # lr should be updated
-        assert new_training.optimizer.default_optimizer.lr == 0.01
+        assert _expect_optimizer_with_lr(new_training).lr == 0.01
 
         # weight_decay should be preserved
-        assert new_training.optimizer.default_optimizer.weight_decay == 0.01
+        assert _expect_optimizer_with_weight_decay(new_training).weight_decay == 0.01
 
         # optimizer.name should be preserved
         assert (
@@ -390,7 +420,7 @@ module_path = "torch.nn"
 
         new_settings = update_settings(settings, {"TRAINING": {"epochs": 999}})
 
-        assert _expect_not_none(new_settings.TRAINING).epochs == 999
+        assert _expect_training_settings(new_settings).epochs == 999
 
     def test_path_overwrite(self, tmp_path):
         """Test that Path objects are overwritten."""
@@ -474,17 +504,19 @@ module_path = "torch.nn"
 """)
 
         settings = load_settings(config_path)
-        training = _expect_not_none(settings.TRAINING)
+        training = _expect_training_settings(settings)
         assert training.optimizer.default_optimizer.name == "Adam"
-        assert training.optimizer.default_optimizer.lr == 0.005
-        assert training.optimizer.default_optimizer.weight_decay == 0.1
+        assert _expect_optimizer_with_lr(training).lr == 0.005
+        assert _expect_optimizer_with_weight_decay(training).weight_decay == 0.1
 
         updated = update_settings(settings, {"TRAINING": {"epochs": 50}})
-        updated_training = _expect_not_none(updated.TRAINING)
+        updated_training = _expect_training_settings(updated)
 
         assert updated_training.optimizer.default_optimizer.name == "Adam"
-        assert updated_training.optimizer.default_optimizer.lr == pytest.approx(0.005)
-        assert updated_training.optimizer.default_optimizer.weight_decay == pytest.approx(0.1)
+        assert _expect_optimizer_with_lr(updated_training).lr == pytest.approx(0.005)
+        assert _expect_optimizer_with_weight_decay(updated_training).weight_decay == pytest.approx(
+            0.1
+        )
 
     def test_optimizer_model_update_preserves_existing_fields(self, tmp_path):
         """Applying optimizer policy patch merges into existing optimizer config."""
@@ -520,19 +552,21 @@ module_path = "torch.nn"
 """)
 
         settings = load_settings(config_path)
-        training = _expect_not_none(settings.TRAINING)
+        training = _expect_training_settings(settings)
         assert training.optimizer.default_optimizer.name == "AdamW"
-        assert training.optimizer.default_optimizer.weight_decay == 0.2
+        assert _expect_optimizer_with_weight_decay(training).weight_decay == 0.2
 
         updated = update_settings(
             settings,
             {"TRAINING": {"optimizer": {"default_optimizer": {"lr": 0.123}}}},
         )
-        updated_training = _expect_not_none(updated.TRAINING)
+        updated_training = _expect_training_settings(updated)
 
         assert updated_training.optimizer.default_optimizer.name == "AdamW"
-        assert updated_training.optimizer.default_optimizer.weight_decay == pytest.approx(0.2)
-        assert updated_training.optimizer.default_optimizer.lr == pytest.approx(0.123)
+        assert _expect_optimizer_with_weight_decay(updated_training).weight_decay == pytest.approx(
+            0.2
+        )
+        assert _expect_optimizer_with_lr(updated_training).lr == pytest.approx(0.123)
 
 
 class TestExtrasHandling:

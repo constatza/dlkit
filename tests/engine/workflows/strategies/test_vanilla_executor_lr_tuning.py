@@ -39,7 +39,7 @@ def mock_components() -> RuntimeComponents:
     mock_trainer.callbacks = []
 
     mock_model = Mock()
-    mock_model.optimizer = OptimizerSettings(lr=0.001)  # type: ignore[call-arg]
+    mock_model.optimizer = OptimizerSettings(lr=0.001)
 
     mock_datamodule = Mock()
 

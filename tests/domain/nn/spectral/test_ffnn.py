@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Literal, cast
+
 import pytest
 import torch
 from torch import nn
@@ -57,10 +59,15 @@ class TestFourierEnhancedFFNN:
 
 class TestDualPathFFNN:
     @pytest.fixture(params=["add", "concat"])
-    def merge_mode(self, request: pytest.FixtureRequest) -> str:
-        return request.param  # type: ignore[return-value]
+    def merge_mode(self, request: pytest.FixtureRequest) -> Literal["add", "concat"]:
+        return cast(Literal["add", "concat"], request.param)
 
-    def test_output_shape(self, flat_input: torch.Tensor, n_modes: int, merge_mode: str) -> None:
+    def test_output_shape(
+        self,
+        flat_input: torch.Tensor,
+        n_modes: int,
+        merge_mode: Literal["add", "concat"],
+    ) -> None:
         model = DualPathFFNN(
             in_features=16,
             out_features=4,
@@ -85,7 +92,7 @@ class TestDualPathFFNN:
                 hidden_size=16,
                 num_layers=2,
                 n_modes=4,
-                merge="invalid",  # type: ignore[arg-type]
+                merge=cast(Any, "invalid"),
             )
 
     def test_is_differentiable(self, flat_input: torch.Tensor, n_modes: int) -> None:
@@ -172,7 +179,7 @@ class TestSpectralDualPath:
                 spectral_branch=nn.Identity(),
                 projection=nn.Identity(),
                 n_modes=n_modes,
-                merge="invalid",  # type: ignore[arg-type]
+                merge=cast(Any, "invalid"),
             )
 
     def test_is_differentiable(
