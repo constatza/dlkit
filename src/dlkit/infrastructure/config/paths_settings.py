@@ -15,12 +15,16 @@ All fields are optional and extras are allowed for maximum flexibility.
 
 from __future__ import annotations
 
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.infrastructure.config.security.uri_types import SecurePath
 
 from .core.base_settings import BasicSettings
+
+_PATH_VALUE_ADAPTER = TypeAdapter(SecurePath | None)
 
 
 class PathsSettings(BasicSettings):
@@ -32,9 +36,9 @@ class PathsSettings(BasicSettings):
 
     Features:
     - All fields are optional to avoid breaking existing configs
-    - Extras allowed for custom user-defined paths
-    - Automatic path resolution via SecurePath
-    - Type safety for predefined common fields
+    - Extras allowed for custom user-defined path names
+    - Automatic path normalization via SecurePath for declared fields and extras
+    - Canonical runtime representation uses normalized POSIX-style strings
 
     Args:
         output_dir: Output directory for results
@@ -69,6 +73,33 @@ class PathsSettings(BasicSettings):
         default=None, description="Path to additional config files"
     )
 
+    @model_validator(mode="after")
+    def normalize_extra_paths(self) -> Self:
+        """Normalize extra PATHS values with the same SecurePath contract.
+
+        Declared fields are validated by Pydantic field annotations. Extras have
+        no field annotation, so normalize them here to keep the whole PATHS
+        section on a single contract: every value must be a path-like string or
+        ``None`` and is stored as a normalized POSIX-style string.
+        """
+        extra = self.model_extra
+        if not extra:
+            return self
+
+        normalized_extras: dict[str, SecurePath | None] = {}
+        for field_name, value in extra.items():
+            try:
+                normalized_extras[field_name] = _PATH_VALUE_ADAPTER.validate_python(value)
+            except ValidationError as exc:
+                raise ValueError(
+                    f"PATHS.{field_name} must be a path-like string or None; "
+                    "use EXTRAS for non-path arbitrary values"
+                ) from exc
+
+        extra.clear()
+        extra.update(normalized_extras)
+        return self
+
     def get_path(self, field_name: str) -> SecurePath | None:
         """Get a path field by name, supporting both predefined and extra fields.
 
@@ -76,7 +107,8 @@ class PathsSettings(BasicSettings):
             field_name: Name of the path field to retrieve
 
         Returns:
-            SecurePath if the field exists and is not None, otherwise None
+            Normalized POSIX-style path string if the field exists and is not
+            None, otherwise None
 
         Example:
             >>> paths = PathsSettings(matrix_path="data/matrix.txt", custom_data="data/custom.txt")
@@ -84,7 +116,11 @@ class PathsSettings(BasicSettings):
             >>> paths.get_path("custom_data")  # Returns custom path if it exists
             >>> paths.get_path("nonexistent")  # Returns None
         """
-        return getattr(self, field_name, None)
+        if field_name in type(self).model_fields:
+            return getattr(self, field_name)
+
+        extra = self.model_extra or {}
+        return extra.get(field_name)
 
     def has_path(self, field_name: str) -> bool:
         """Check if a path field exists and is not None.

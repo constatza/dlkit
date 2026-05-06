@@ -50,6 +50,14 @@ When resolving paths, PathResolver applies this priority order:
 - Old `_sync_session_root_to_environment()` simplified to wrapper (mutation no longer required as PathResolver handles it)
 - `locations.py` functions use PathResolver for all path resolution
 
+### `PATHS` Integration
+- The config layer normalizes every `PATHS` value, including extra user-defined
+  keys, to the same POSIX-style string representation.
+- `SESSION.root_dir` remains the only root-setting authority for config-driven
+  paths; `PATHS` does not define a competing project-root concept.
+- `PathResolver` continues to own precedence and conversion from stored config
+  strings to concrete `Path` values.
+
 ## Ownership Boundary
 - `tools.io` owns raw config loading and section resolution.
 - `tools.config` owns typed settings, validation, patching, and workflow models.

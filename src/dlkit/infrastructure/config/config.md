@@ -157,6 +157,20 @@ new_settings = update_settings(
 - `infrastructure.config` validates those payloads into typed settings models
   and applies runtime overrides.
 
+## `PATHS` Contract
+
+`PATHS` is a path-only settings section.
+
+- Declared fields such as `output_dir` and `data_dir` use the `SecurePath`
+  contract.
+- Extra keys are allowed for user-defined path names, but they are normalized
+  with the same `SecurePath` rules as declared fields.
+- Canonical runtime representation is a normalized POSIX-style string.
+- Non-path arbitrary values do not belong in `PATHS`; put them in `EXTRAS`.
+- `SESSION.root_dir` remains the only root-setting authority. `PATHS` values are
+  resolved relative to the existing path-resolution precedence, but `PATHS`
+  does not define an alternate project root.
+
 ## Notes
 
 - `DATASET.family` is the explicit dataset-family override. Runtime heuristics
