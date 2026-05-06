@@ -21,6 +21,8 @@ Public API:
 - EpochTransitionTrigger, PlateauTransitionTrigger, NoTransitionTrigger: triggers
 - ConcurrentOptimizer: real torch.optim.Optimizer wrapping multiple sub-optimizers
 - MuonMixedOptimizer: ConcurrentOptimizer pre-wired for Muon + AdamW companion split
+- IManualOptimizationHost, IManualOptimizer: narrow protocols for Lightning-aware
+  manual stepping without depending on concrete wrapper classes
 - ActiveStage, RunningOptimizerPolicy: state objects
 - IOptimizationStateRepository, OptimizationStateRepository: checkpoint management
 - IStepPolicy, StepAllOptimizers, AlternatingStepPolicy, LBFGSStageStepper: stepping
@@ -53,6 +55,7 @@ from .inventory import (
     ParameterDescriptor,
     TorchParameterInventory,
 )
+from .manual_host import IManualOptimizationHost, IManualOptimizer
 from .metrics import OptimizationMetricsView
 from .partitioning import (
     IParameterPartitioner,
@@ -136,4 +139,6 @@ __all__ = [
     "IOptimizationController",
     "AutomaticOptimizationController",
     "ManualOptimizationController",
+    "IManualOptimizationHost",
+    "IManualOptimizer",
 ]

@@ -30,6 +30,12 @@ ProcessingLightningWrapper (base)
   predict_step():  capture raw targets → transform → invoke → inverse_transform → TensorDict
 ```
 
+For manual optimization programs, `training_step()` remains a thin coordinator:
+- it builds a loss closure
+- it delegates stepping to the optimization controller
+- the controller uses the wrapper only through the narrow manual-host seam
+  (`manual_backward()` and `optimizers(use_pl_optimizer=True)`)
+
 **Files**
 
 | File | Purpose |

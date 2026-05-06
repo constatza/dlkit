@@ -34,6 +34,7 @@ from dlkit.engine.adapters.lightning.protocols import (
 )
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
 from dlkit.engine.training.optimization.controllers import IOptimizationController
+from dlkit.engine.training.optimization.manual_host import IManualOptimizationHost
 
 
 def _unpack_model_output(raw_output: Any) -> tuple[Any, Any]:
@@ -618,7 +619,9 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
                 loss, _, _ = self._run_step(batch, batch_idx, "train")
                 return loss
 
-            loss = self._optimization_controller.manual_step(loss_fn)
+            loss = self._optimization_controller.manual_step(
+                loss_fn, cast(IManualOptimizationHost, self)
+            )
             self._step_logger.log_stage_outputs("train", loss, batch_size=None)
             return {"loss": loss}
         else:

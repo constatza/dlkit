@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 import torch
 import torch.nn as nn
@@ -36,6 +38,50 @@ class SchedulerSpy:
 
     def load_state_dict(self, state: dict[str, int]) -> None:
         self.step_calls = state["step_calls"]
+
+
+class ManualHostOptimizerSpy:
+    """Minimal Lightning-style optimizer wrapper for manual host tests."""
+
+    def __init__(self, optimizer: torch.optim.Optimizer) -> None:
+        self._optimizer = optimizer
+        self.zero_grad_calls = 0
+        self.step_calls = 0
+        self.toggle_calls = 0
+
+    @property
+    def param_groups(self) -> list[dict[str, object]]:
+        return self._optimizer.param_groups
+
+    def zero_grad(self) -> None:
+        self.zero_grad_calls += 1
+        self._optimizer.zero_grad()
+
+    def step(self, closure=None, **kwargs):  # noqa: ANN001,ANN003
+        self.step_calls += 1
+        if closure is None:
+            return self._optimizer.step(**kwargs)
+        return self._optimizer.step(closure=closure, **kwargs)
+
+    @contextmanager
+    def toggle_model(self, sync_grad: bool = True):  # noqa: ARG002
+        self.toggle_calls += 1
+        yield
+
+
+class ManualHostSpy:
+    """Minimal manual-optimization host exposing Lightning-like methods."""
+
+    def __init__(self, optimizers: list[ManualHostOptimizerSpy]) -> None:
+        self._optimizers = optimizers
+        self.manual_backward_calls = 0
+
+    def manual_backward(self, loss: Tensor, *args, **kwargs) -> None:  # noqa: ANN002,ANN003
+        self.manual_backward_calls += 1
+        loss.backward(*args, **kwargs)
+
+    def optimizers(self, use_pl_optimizer: bool = True):  # noqa: FBT001,ARG002
+        return self._optimizers
 
 
 # Local fixtures
@@ -245,6 +291,28 @@ class TestManualOptimizationController:
         loss = manual_controller.manual_step(loss_fn)
         assert isinstance(loss, Tensor)
         assert loss.item() is not None
+
+    def test_manual_step_uses_host_manual_backward(
+        self,
+        manual_controller: ManualOptimizationController,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """Manual stepping should use host.manual_backward when a host is provided."""
+        wrapped = ManualHostOptimizerSpy(manual_controller._program.current.optimizer)
+        host = ManualHostSpy([wrapped])
+
+        def loss_fn() -> Tensor:
+            x = torch.randn(2, 4)
+            output = tiny_model(x)
+            return output.sum()
+
+        loss = manual_controller.manual_step(loss_fn, host)
+
+        assert isinstance(loss, Tensor)
+        assert host.manual_backward_calls == 1
+        assert wrapped.zero_grad_calls == 1
+        assert wrapped.step_calls == 1
+        assert wrapped.toggle_calls == 1
 
     def test_manual_on_epoch_end_behavior(
         self,

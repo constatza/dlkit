@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from dlkit.common.errors import WorkflowError
 
 from .concurrent_optimizer import ConcurrentOptimizer
+from .manual_host import IManualOptimizationHost
 from .state import ActiveStage, RunningOptimizerPolicy
 from .state_repository import IOptimizationStateRepository
 from .stepping import IStepPolicy, LBFGSStageStepper, StepAllOptimizers
@@ -153,11 +154,16 @@ class IOptimizationController(ABC):
         ...
 
     @abstractmethod
-    def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
+    def manual_step(
+        self,
+        loss_fn: Callable[[], Tensor],
+        host: IManualOptimizationHost | None = None,
+    ) -> Tensor:
         """Execute one manual optimizer step.
 
         Args:
             loss_fn: Callable that computes and returns the loss tensor.
+            host: Optional Lightning-aware manual optimization host.
 
         Returns:
             The computed loss tensor.
@@ -265,11 +271,16 @@ class AutomaticOptimizationController(IOptimizationController):
             entries.append(entry)
         return entries
 
-    def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
+    def manual_step(
+        self,
+        loss_fn: Callable[[], Tensor],
+        host: IManualOptimizationHost | None = None,
+    ) -> Tensor:
         """Raise error (not used in automatic mode).
 
         Args:
             loss_fn: Unused.
+            host: Unused.
 
         Raises:
             RuntimeError: Always raised.
@@ -361,16 +372,21 @@ class ManualOptimizationController(IOptimizationController):
         """
         return [stage.optimizer for stage in self._program.stages]
 
-    def manual_step(self, loss_fn: Callable[[], Tensor]) -> Tensor:
+    def manual_step(
+        self,
+        loss_fn: Callable[[], Tensor],
+        host: IManualOptimizationHost | None = None,
+    ) -> Tensor:
         """Execute one optimizer step using the step policy.
 
         Args:
             loss_fn: Callable that computes the loss.
+            host: Optional Lightning-aware manual optimization host.
 
         Returns:
             The computed loss tensor.
         """
-        return self._step_policy.step(self._program.current, loss_fn)
+        return self._step_policy.step(self._program.current, loss_fn, host)
 
     def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None:
         """Evaluate triggers and advance to next stage if needed.

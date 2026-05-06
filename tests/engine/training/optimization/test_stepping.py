@@ -300,3 +300,63 @@ class TestLBFGSStageStepper:
         # LBFGS calls closure multiple times, but should return a loss
         assert isinstance(loss, Tensor)
         assert call_count > 0  # Closure was called
+
+
+class ClosureSpySGD(torch.optim.SGD):
+    """SGD variant that records whether a closure was forwarded to step()."""
+
+    def __init__(self, params, lr: float = 0.1) -> None:  # noqa: ANN001
+        super().__init__(params, lr=lr)
+        self.received_closure = False
+
+    def step(self, closure=None):  # noqa: ANN001
+        self.received_closure = closure is not None
+        return super().step(closure=closure)
+
+
+class TestConcurrentOptimizerClosureRouting:
+    """Tests for ConcurrentOptimizer closure handling."""
+
+    def test_concurrent_optimizer_routes_closure_only_to_lbfgs(
+        self,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """LBFGS should consume the closure while plain optimizers step without it."""
+        lbfgs = torch.optim.LBFGS(tiny_model[0].parameters(), lr=0.1)
+        sgd = ClosureSpySGD(tiny_model[1].parameters(), lr=0.1)
+        optimizer = ConcurrentOptimizer([lbfgs, sgd])
+        call_count = 0
+
+        def closure() -> Tensor:
+            nonlocal call_count
+            call_count += 1
+            optimizer.zero_grad()
+            x = torch.randn(2, 4)
+            loss = tiny_model(x).sum()
+            loss.backward()
+            return loss
+
+        loss = optimizer.step(closure)
+
+        assert isinstance(loss, Tensor)
+        assert call_count > 0
+        assert not sgd.received_closure
+
+    def test_concurrent_optimizer_rejects_multiple_lbfgs_closure_consumers(
+        self,
+        grad_model: nn.Linear,
+    ) -> None:
+        """Multiple LBFGS sub-optimizers with a closure should raise clearly."""
+        first = torch.optim.LBFGS([grad_model.weight], lr=0.1)
+        second = torch.optim.LBFGS([grad_model.bias], lr=0.1)
+        optimizer = ConcurrentOptimizer([first, second])
+
+        def closure() -> Tensor:
+            optimizer.zero_grad()
+            x = torch.ones(1, 2)
+            loss = grad_model(x).sum()
+            loss.backward()
+            return loss
+
+        with pytest.raises(RuntimeError, match="at most one LBFGS"):
+            optimizer.step(closure)

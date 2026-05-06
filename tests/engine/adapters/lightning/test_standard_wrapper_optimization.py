@@ -11,6 +11,8 @@ These tests exercise the full config → program → controller → wrapper path
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -61,6 +63,35 @@ class _TwoLayer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.fc1(torch.relu(self.fc0(x)))
+
+
+class _ManualOptimizerWrapper:
+    """Tiny Lightning-style optimizer wrapper used for host-path tests."""
+
+    def __init__(self, optimizer: torch.optim.Optimizer) -> None:
+        self._optimizer = optimizer
+        self.zero_grad_calls = 0
+        self.step_calls = 0
+        self.toggle_calls = 0
+
+    @property
+    def param_groups(self) -> list[dict[str, object]]:
+        return self._optimizer.param_groups
+
+    def zero_grad(self) -> None:
+        self.zero_grad_calls += 1
+        self._optimizer.zero_grad()
+
+    def step(self, closure=None, **kwargs):  # noqa: ANN001,ANN003
+        self.step_calls += 1
+        if closure is None:
+            return self._optimizer.step(**kwargs)
+        return self._optimizer.step(closure=closure, **kwargs)
+
+    @contextmanager
+    def toggle_model(self, sync_grad: bool = True):  # noqa: ARG002
+        self.toggle_calls += 1
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +384,44 @@ class TestBothOptimizersStep:
 
         # Stage index must still be 0 (trigger fires at epoch 5, not after 1 step)
         assert controller._program.active_index == 0
+
+    def test_manual_wrapper_path_uses_manual_backward_host_api(
+        self,
+        sequential_two_stage_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Wrapper manual mode should use the host manual-backward API when available."""
+        wrapper = _make_wrapper(sequential_two_stage_settings)
+        assert isinstance(wrapper._optimization_controller, ManualOptimizationController)
+
+        wrapped_optimizers = [
+            _ManualOptimizerWrapper(stage.optimizer)
+            for stage in wrapper._optimization_controller._program.stages
+        ]
+        manual_backward_calls = {"count": 0}
+
+        def manual_backward(loss: torch.Tensor, *args, **kwargs) -> None:  # noqa: ANN002,ANN003
+            manual_backward_calls["count"] += 1
+            loss.backward(*args, **kwargs)
+
+        wrapper.optimizers = lambda use_pl_optimizer=True: wrapped_optimizers  # type: ignore[method-assign]
+        wrapper.manual_backward = manual_backward  # type: ignore[method-assign]
+
+        params_before = {name: p.data.clone() for name, p in wrapper.model.named_parameters()}
+        result = wrapper.training_step(_make_batch(), 0)
+
+        params_after = dict(wrapper.model.named_parameters())
+        changed = [
+            name
+            for name, before in params_before.items()
+            if not torch.allclose(before, params_after[name].data)
+        ]
+
+        assert "loss" in result
+        assert changed
+        assert manual_backward_calls["count"] == 1
+        assert wrapped_optimizers[0].step_calls == 1
+        assert wrapped_optimizers[0].toggle_calls == 1
+        assert wrapped_optimizers[1].step_calls == 0
 
     def test_stage_advances_when_epoch_trigger_fires(
         self,

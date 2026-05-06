@@ -7,6 +7,7 @@ from typing import Any, overload
 
 import torch
 import torch.optim
+from torch.optim import LBFGS
 
 
 class ConcurrentOptimizer(torch.optim.Optimizer):
@@ -67,12 +68,49 @@ class ConcurrentOptimizer(torch.optim.Optimizer):
         Returns:
             Loss value from the last sub-optimizer that returns one, or None.
         """
+        if closure is None:
+            return self._step_all_without_closure()
+
+        lbfgs_optimizers, plain_optimizers = self._classify_sub_optimizers()
+        if not lbfgs_optimizers:
+            return self._step_all_without_closure()
+        if len(lbfgs_optimizers) > 1:
+            raise RuntimeError(
+                "ConcurrentOptimizer supports at most one LBFGS sub-optimizer when a closure is provided."
+            )
+
+        loss: float | None = None
+        for opt in plain_optimizers:
+            result = opt.step()
+            if result is not None:
+                loss = result
+
+        result = lbfgs_optimizers[0].step(closure)
+        if result is not None:
+            loss = result
+        return loss
+
+    def _step_all_without_closure(self) -> float | None:
+        """Step all sub-optimizers without passing a closure."""
         loss: float | None = None
         for opt in self._sub_optimizers:
-            result = opt.step(closure)
+            result = opt.step()
             if result is not None:
                 loss = result
         return loss
+
+    def _classify_sub_optimizers(self) -> tuple[list[LBFGS], list[torch.optim.Optimizer]]:
+        """Split sub-optimizers into closure consumers and plain optimizers."""
+        lbfgs_optimizers: list[LBFGS] = []
+        plain_optimizers: list[torch.optim.Optimizer] = []
+
+        for optimizer in self._sub_optimizers:
+            if isinstance(optimizer, LBFGS):
+                lbfgs_optimizers.append(optimizer)
+                continue
+            plain_optimizers.append(optimizer)
+
+        return lbfgs_optimizers, plain_optimizers
 
     def zero_grad(self, set_to_none: bool = True) -> None:
         """Zero gradients for all sub-optimizers.

@@ -20,6 +20,16 @@ Sequential stages always use manual optimization. Only the current stage
 optimizer is stepped per batch; inactive stages remain idle until the program
 advances.
 
+When a staged/manual program runs inside a Lightning trainer, DLKit uses
+Lightning's manual-optimization APIs for the active stage:
+- `manual_backward()` drives backward so precision/strategy hooks remain active
+- `optimizers(use_pl_optimizer=True)` resolves the active Lightning optimizer
+- the active optimizer runs inside Lightning's `toggle_model()` scope
+
+When no trainer is attached, the same step policies fall back to raw PyTorch
+`zero_grad()`, `backward()`, and `step()`. This keeps direct unit tests and
+isolated controller tests working without a Trainer.
+
 ## Scheduler Semantics
 
 Schedulers are attached to optimizer-policy stages.
@@ -43,6 +53,17 @@ The manual epoch-end order is:
 
 Automatic mode is unchanged: Lightning owns scheduler stepping through
 `configure_optimizers()`.
+
+## Concurrent Closure Semantics
+
+`ConcurrentOptimizer` forwards closures selectively:
+- with no closure, all sub-optimizers step normally
+- with a closure and no LBFGS sub-optimizer, all sub-optimizers still step
+  without a closure
+- with exactly one LBFGS sub-optimizer, only that LBFGS optimizer receives the
+  closure; all others step normally
+- with multiple LBFGS sub-optimizers, training raises immediately instead of
+  duplicating closure execution across sub-optimizers
 
 ## Config Patterns
 
