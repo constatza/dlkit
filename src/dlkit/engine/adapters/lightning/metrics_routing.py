@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tensordict import TensorDict
-from torch import Tensor
+from torch import Tensor, nn
 from torchmetrics import Metric
 
 from dlkit.infrastructure.config.model_components import MetricInputRef
@@ -31,14 +31,19 @@ class MetricRoute:
     extra_inputs: tuple[MetricInputRef, ...]
 
 
-class RoutedMetricsUpdater:
+class RoutedMetricsUpdater(nn.Module):
     """Routes each metric to its configured target key and extra inputs.
+
+    Extends nn.Module so that metric state tensors follow device placement
+    when the parent LightningModule is moved to GPU via .to(device).
 
     Does NOT use MetricCollection.update() because that broadcasts the same
     target to all metrics — per-metric target routing requires individual calls.
 
     Attributes:
         _routes: Dict mapping stage ('val', 'test') to list of MetricRoute.
+        _stage_metrics: ModuleDict of ModuleLists registering metrics in the
+            nn.Module tree for automatic device tracking.
         _parsed_extra: Pre-parsed extra input routes for fast lookup during update.
     """
 
@@ -53,10 +58,17 @@ class RoutedMetricsUpdater:
             val_routes: Metric routes for validation stage.
             test_routes: Metric routes for test stage.
         """
+        super().__init__()
         self._routes: dict[str, list[MetricRoute]] = {
             "val": val_routes,
             "test": test_routes,
         }
+        self._stage_metrics: nn.ModuleDict = nn.ModuleDict(
+            {
+                stage: nn.ModuleList([r.metric for r in routes])
+                for stage, routes in self._routes.items()
+            }
+        )
         self._parsed_extra: dict[
             str, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]
         ] = {
