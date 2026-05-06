@@ -58,10 +58,11 @@ Automatic mode is unchanged: Lightning owns scheduler stepping through
 
 `ConcurrentOptimizer` forwards closures selectively:
 - with no closure, all sub-optimizers step normally
-- with a closure and no LBFGS sub-optimizer, all sub-optimizers still step
-  without a closure
+- with a closure and no LBFGS sub-optimizer, the closure is executed exactly
+  once before all sub-optimizers step
 - with exactly one LBFGS sub-optimizer, only that LBFGS optimizer receives the
-  closure; all others step normally
+  closure; after its final closure evaluation, all other sub-optimizers step on
+  the resulting gradients
 - with multiple LBFGS sub-optimizers, training raises immediately instead of
   duplicating closure execution across sub-optimizers
 

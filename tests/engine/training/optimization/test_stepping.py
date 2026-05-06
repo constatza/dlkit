@@ -317,6 +317,32 @@ class ClosureSpySGD(torch.optim.SGD):
 class TestConcurrentOptimizerClosureRouting:
     """Tests for ConcurrentOptimizer closure handling."""
 
+    def test_concurrent_optimizer_executes_plain_closure_once(
+        self,
+        tiny_model: nn.Sequential,
+    ) -> None:
+        """Plain sub-optimizers must still honor the closure contract."""
+        first = ClosureSpySGD(tiny_model[0].parameters(), lr=0.1)
+        second = ClosureSpySGD(tiny_model[1].parameters(), lr=0.1)
+        optimizer = ConcurrentOptimizer([first, second])
+        call_count = 0
+
+        def closure() -> Tensor:
+            nonlocal call_count
+            call_count += 1
+            optimizer.zero_grad()
+            x = torch.randn(2, 4)
+            loss = tiny_model(x).sum()
+            loss.backward()
+            return loss
+
+        loss = optimizer.step(closure)
+
+        assert isinstance(loss, Tensor)
+        assert call_count == 1
+        assert not first.received_closure
+        assert not second.received_closure
+
     def test_concurrent_optimizer_routes_closure_only_to_lbfgs(
         self,
         tiny_model: nn.Sequential,

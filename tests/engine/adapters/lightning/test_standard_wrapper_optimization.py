@@ -15,9 +15,11 @@ from contextlib import contextmanager
 
 import pytest
 import torch
+from lightning.pytorch import Trainer
 from tensordict import TensorDict
 from torch import nn
 from torch.nn import ModuleList
+from torch.utils.data import DataLoader, IterableDataset
 
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
@@ -323,6 +325,18 @@ def _make_batch(batch_size: int = 4, dim: int = 4) -> TensorDict:
     )
 
 
+class _SingleBatchDataset(IterableDataset[TensorDict]):
+    """Yield a single pre-batched TensorDict for Lightning fit() regression tests."""
+
+    def __iter__(self):
+        yield _make_batch()
+
+
+def _identity_collate(batch: TensorDict) -> TensorDict:
+    """Preserve a pre-batched TensorDict when DataLoader auto-collation is disabled."""
+    return batch
+
+
 class TestBothOptimizersStep:
     def test_concurrent_both_optimizers_update_parameters(
         self,
@@ -352,7 +366,40 @@ class TestBothOptimizersStep:
             for name, before in params_before.items()
             if not torch.allclose(before, params_after[name].data)
         ]
-        assert len(changed) > 0, "No parameters were updated — optimizers did not step"
+        assert len(changed) > 0, "No parameters were updated - optimizers did not step"
+
+    def test_concurrent_optimizer_supports_lightning_automatic_closure(
+        self,
+        concurrent_two_optimizer_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Automatic optimization must work through Trainer.fit with concurrent optimizers."""
+        wrapper = _make_wrapper(concurrent_two_optimizer_settings)
+        params_before = {name: p.data.clone() for name, p in wrapper.model.named_parameters()}
+        trainer = Trainer(
+            max_epochs=1,
+            logger=False,
+            enable_checkpointing=False,
+            limit_train_batches=1,
+            limit_val_batches=0,
+            enable_progress_bar=False,
+            accelerator="cpu",
+            devices=1,
+        )
+        dataloader = DataLoader(
+            _SingleBatchDataset(),
+            batch_size=None,
+            collate_fn=_identity_collate,
+        )
+
+        trainer.fit(wrapper, train_dataloaders=dataloader)
+
+        params_after = dict(wrapper.model.named_parameters())
+        changed = [
+            name
+            for name, before in params_before.items()
+            if not torch.allclose(before, params_after[name].data)
+        ]
+        assert changed
 
     def test_sequential_two_stages_step_only_active_optimizer(
         self,

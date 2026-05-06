@@ -73,21 +73,20 @@ class ConcurrentOptimizer(torch.optim.Optimizer):
 
         lbfgs_optimizers, plain_optimizers = self._classify_sub_optimizers()
         if not lbfgs_optimizers:
-            return self._step_all_without_closure()
+            loss = closure()
+            self._step_all_without_closure()
+            return loss
         if len(lbfgs_optimizers) > 1:
             raise RuntimeError(
                 "ConcurrentOptimizer supports at most one LBFGS sub-optimizer when a closure is provided."
             )
 
-        loss: float | None = None
+        result = lbfgs_optimizers[0].step(closure)
+        loss: float | None = result
         for opt in plain_optimizers:
             result = opt.step()
             if result is not None:
                 loss = result
-
-        result = lbfgs_optimizers[0].step(closure)
-        if result is not None:
-            loss = result
         return loss
 
     def _step_all_without_closure(self) -> float | None:
