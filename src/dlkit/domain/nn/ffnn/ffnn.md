@@ -73,6 +73,10 @@ The classes that naturally map dataset feature counts to `in_features` and
 - scale-equivariant embedded FFNNs
 - scale-equivariant constant-width dense FFNNs
 
+When `from_shape()` is used, `shape.in_features` and `shape.out_features`
+take precedence. Duplicate `in_features` or `out_features` values passed
+through config kwargs are ignored rather than forwarded twice.
+
 Square constant-width constrained bodies use `size`, so they are configured
 explicitly rather than through `from_shape()`.
 
@@ -100,7 +104,5 @@ num_layers = 4
 [MODEL]
 name = "ScaleEquivariantFeedForwardNN"
 module_path = "dlkit.domain.nn"
-in_features = 64
-out_features = 32
 layers = [128, 128]
 ```

@@ -6,9 +6,16 @@ from typing import Any, cast
 import pytest
 import torch
 
+from dlkit.common.shapes import ShapeSummary
 from dlkit.domain.nn.ffnn import (
     ScaleEquivariantConstantWidthFFNN,
     ScaleEquivariantConstantWidthSimpleFFNN,
+    ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSimpleSPDFFNN,
+    ScaleEquivariantEmbeddedSPDFactorizedFFNN,
+    ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFeedForwardNN,
     ScaleEquivariantSimpleFeedForwardNN,
 )
@@ -117,3 +124,37 @@ def test_scale_equivariant_constant_width_simple_ffnn_is_scale_equivariant_for_p
     base_solution = module(rhs)
     scaled_solution = module(rhs * scale)
     assert torch.allclose(scaled_solution, base_solution * scale, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("model_cls", "kwargs"),
+    [
+        (ScaleEquivariantConstantWidthFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantConstantWidthSimpleFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantFeedForwardNN, {"layers": [8, 8]}),
+        (ScaleEquivariantSimpleFeedForwardNN, {"layers": [8, 8]}),
+        (ScaleEquivariantEmbeddedSPDFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantEmbeddedSimpleSPDFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantEmbeddedSPDFactorizedFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantEmbeddedFactorizedFFNN, {"hidden_size": 8, "num_layers": 2}),
+        (ScaleEquivariantEmbeddedSimpleFactorizedFFNN, {"hidden_size": 8, "num_layers": 2}),
+    ],
+)
+def test_scale_equivariant_from_shape_ignores_duplicate_feature_kwargs(
+    model_cls: type[torch.nn.Module], kwargs: dict[str, object]
+) -> None:
+    shape = ShapeSummary(in_shapes=((3,),), out_shapes=((2,),))
+
+    module = cast(
+        Any,
+        model_cls.from_shape(
+            shape,
+            in_features=99,
+            out_features=101,
+            **kwargs,
+        ),
+    )
+
+    assert module.base_model.embedding_layer.in_features == shape.in_features
+    assert module.base_model.regression_layer.out_features == shape.out_features
