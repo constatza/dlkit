@@ -46,7 +46,7 @@ class ParametricDenseBlock(nn.Module):
         return self.dropout(x)
 
 
-class ConstantWidthParametricFFNN(nn.Module):
+class _ConstantWidthParametricBody(nn.Module):
     """Low-level constant-width constrained FFNN body."""
 
     def __init__(
@@ -55,7 +55,7 @@ class ConstantWidthParametricFFNN(nn.Module):
         size: int,
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
-        residual: bool = False,
+        _residual: bool = False,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -66,7 +66,7 @@ class ConstantWidthParametricFFNN(nn.Module):
             raise ValueError("num_layers must be a positive integer")
 
         super().__init__()
-        self.residual = residual
+        self.residual = _residual
 
         blocks: list[nn.Module] = []
         for _ in range(num_layers):
@@ -77,7 +77,7 @@ class ConstantWidthParametricFFNN(nn.Module):
                 normalize=normalize,
                 dropout=dropout,
             )
-            blocks.append(SkipConnection(block, layer_type="linear") if residual else block)
+            blocks.append(SkipConnection(block, layer_type="linear") if _residual else block)
 
         self.blocks = nn.ModuleList(blocks)
 
@@ -87,7 +87,55 @@ class ConstantWidthParametricFFNN(nn.Module):
         return x
 
 
-class EmbeddedParametricFFNN(nn.Module):
+class ConstantWidthParametricFFNN(_ConstantWidthParametricBody):
+    """Residual constant-width constrained FFNN body."""
+
+    def __init__(
+        self,
+        *,
+        size: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            size=size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=True,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+
+class ConstantWidthSimpleParametricFFNN(_ConstantWidthParametricBody):
+    """Plain constant-width constrained FFNN body."""
+
+    def __init__(
+        self,
+        *,
+        size: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            size=size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+
+class _EmbeddedParametricBody(nn.Module):
     """Low-level constrained FFNN with embedding and regression projections."""
 
     def __init__(
@@ -98,23 +146,56 @@ class EmbeddedParametricFFNN(nn.Module):
         hidden_size: int,
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
-        residual: bool = False,
+        _residual: bool = False,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.embedding_layer = nn.Linear(in_features, hidden_size)
-        self.body = ConstantWidthParametricFFNN(
+        self.body = _ConstantWidthParametricBody(
             size=hidden_size,
             num_layers=num_layers,
             layer_factory=layer_factory,
-            residual=residual,
+            _residual=_residual,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
         self.regression_layer = nn.Linear(hidden_size, out_features)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.embedding_layer(x)
+        x = self.body(x)
+        return self.regression_layer(x)
+
+
+class EmbeddedParametricFFNN(_EmbeddedParametricBody):
+    """Residual constrained FFNN with embedding and regression projections."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=True,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> EmbeddedParametricFFNN:
@@ -124,10 +205,41 @@ class EmbeddedParametricFFNN(nn.Module):
             **kwargs,
         )
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.embedding_layer(x)
-        x = self.body(x)
-        return self.regression_layer(x)
+
+class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
+    """Plain constrained FFNN with embedding and regression projections."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs) -> EmbeddedSimpleParametricFFNN:
+        return cls(
+            in_features=shape.in_features,
+            out_features=shape.out_features,
+            **kwargs,
+        )
 
 
 def _spd_layer_factory(
@@ -186,14 +298,13 @@ class ConstantWidthSPDFFNN(ConstantWidthParametricFFNN):
             size=size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class ConstantWidthSimpleSPDFFNN(ConstantWidthParametricFFNN):
+class ConstantWidthSimpleSPDFFNN(ConstantWidthSimpleParametricFFNN):
     """Plain constant-width FFNN with SPD-constrained body layers."""
 
     def __init__(
@@ -212,7 +323,6 @@ class ConstantWidthSimpleSPDFFNN(ConstantWidthParametricFFNN):
             size=size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
@@ -246,14 +356,13 @@ class ConstantWidthSPDFactorizedFFNN(ConstantWidthParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class ConstantWidthSimpleSPDFactorizedFFNN(ConstantWidthParametricFFNN):
+class ConstantWidthSimpleSPDFactorizedFFNN(ConstantWidthSimpleParametricFFNN):
     """Plain constant-width FFNN with SPD-factorized body layers."""
 
     def __init__(
@@ -280,7 +389,6 @@ class ConstantWidthSimpleSPDFactorizedFFNN(ConstantWidthParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
@@ -312,14 +420,13 @@ class ConstantWidthFactorizedFFNN(ConstantWidthParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class ConstantWidthSimpleFactorizedFFNN(ConstantWidthParametricFFNN):
+class ConstantWidthSimpleFactorizedFFNN(ConstantWidthSimpleParametricFFNN):
     """Plain constant-width FFNN with factorized body layers."""
 
     def __init__(
@@ -344,7 +451,6 @@ class ConstantWidthSimpleFactorizedFFNN(ConstantWidthParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
@@ -374,14 +480,13 @@ class EmbeddedSPDFFNN(EmbeddedParametricFFNN):
             hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class EmbeddedSimpleSPDFFNN(EmbeddedParametricFFNN):
+class EmbeddedSimpleSPDFFNN(EmbeddedSimpleParametricFFNN):
     """Plain embedded FFNN with SPD-constrained body layers."""
 
     def __init__(
@@ -404,7 +509,6 @@ class EmbeddedSimpleSPDFFNN(EmbeddedParametricFFNN):
             hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
@@ -442,14 +546,13 @@ class EmbeddedSPDFactorizedFFNN(EmbeddedParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedParametricFFNN):
+class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedSimpleParametricFFNN):
     """Plain embedded FFNN with SPD-factorized body layers."""
 
     def __init__(
@@ -480,7 +583,6 @@ class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
@@ -516,14 +618,13 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
 
-class EmbeddedSimpleFactorizedFFNN(EmbeddedParametricFFNN):
+class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
     """Plain embedded FFNN with factorized body layers."""
 
     def __init__(
@@ -552,7 +653,6 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
-            residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,

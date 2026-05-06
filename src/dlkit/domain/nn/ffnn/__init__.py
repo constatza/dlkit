@@ -2,6 +2,7 @@ from .constrained import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthParametricFFNN,
     ConstantWidthSimpleFactorizedFFNN,
+    ConstantWidthSimpleParametricFFNN,
     ConstantWidthSimpleSPDFactorizedFFNN,
     ConstantWidthSimpleSPDFFNN,
     ConstantWidthSPDFactorizedFFNN,
@@ -9,6 +10,7 @@ from .constrained import (
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleParametricFFNN,
     EmbeddedSimpleSPDFactorizedFFNN,
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
@@ -32,7 +34,8 @@ from .scale_equivariant import (
     ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
-    ScaleEquivariantFFNN,
+    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantSimpleFeedForwardNN,
 )
 from .simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 
@@ -45,14 +48,18 @@ __all__ = [
     "ConstantWidthSimpleFFNN",
     # Linear baseline
     "LinearNetwork",
-    # Scale-equivariant dense variants
-    "ScaleEquivariantFFNN",
+    # Scale-equivariant dense variants (variable-width)
+    "ScaleEquivariantFeedForwardNN",
+    "ScaleEquivariantSimpleFeedForwardNN",
+    # Scale-equivariant dense variants (constant-width)
     "ScaleEquivariantConstantWidthFFNN",
     "ScaleEquivariantConstantWidthSimpleFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
+    "ConstantWidthSimpleParametricFFNN",
     "EmbeddedParametricFFNN",
+    "EmbeddedSimpleParametricFFNN",
     # Constant-width constrained variants
     "ConstantWidthSPDFFNN",
     "ConstantWidthSimpleSPDFFNN",

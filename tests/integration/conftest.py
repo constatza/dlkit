@@ -191,7 +191,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
             },
             "model_settings": {
                 "name": "ConstantWidthFFNN",
-                "module_path": "dlkit.domain.nn.ffnn.residual",
+                "module_path": "dlkit.domain.nn",
                 "params": {
                     "hidden_size": FEATURE_SIZE,
                     "num_layers": 1,
@@ -245,7 +245,7 @@ def _make_training_settings(
 
     model = ModelComponentSettings(
         name="ConstantWidthFFNN",
-        module_path="dlkit.domain.nn.ffnn.residual",
+        module_path="dlkit.domain.nn",
         hidden_size=4,
         num_layers=1,
         checkpoint=checkpoint,
@@ -537,7 +537,7 @@ persistent_workers = false
 
 [MODEL]
 name = "ConstantWidthFFNN"
-module_path = "dlkit.domain.nn.ffnn.residual"
+module_path = "dlkit.domain.nn"
 hidden_size = 4
 num_layers = 1
 

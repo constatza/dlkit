@@ -4,7 +4,8 @@ mode = "inference"
 seed = 42
 
 [model]
-name = "ffnn.simple:ConstantWidthFFNN"
+name = "ConstantWidthSimpleFFNN"
+module_path = "dlkit.domain.nn"
 hidden_size = 3
 num_layers = 1
 

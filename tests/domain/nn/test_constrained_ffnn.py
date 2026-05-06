@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, cast
 
 import pytest
@@ -33,7 +34,18 @@ from dlkit.domain.nn import (
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
 )
+from dlkit.domain.nn.ffnn.constrained import (
+    ConstantWidthParametricFFNN,
+    ConstantWidthSimpleParametricFFNN,
+    EmbeddedParametricFFNN,
+    EmbeddedSimpleParametricFFNN,
+)
 from dlkit.domain.nn.primitives import SkipConnection
+
+
+def _dummy_factory(n: int) -> nn.Module:
+    return nn.Linear(n, n)
+
 
 CONSTANT_WIDTH_VARIANT_PAIRS = [
     (ConstantWidthSPDFFNN, ConstantWidthSimpleSPDFFNN),
@@ -151,3 +163,50 @@ def test_embedded_variants_support_from_shape(model_cls: type[nn.Module]) -> Non
     model = cast(Any, model_cls).from_shape(shape, hidden_size=4, num_layers=2)
     x = torch.randn(4, 3)
     assert model(x).shape == (4, 2)
+
+
+def test_constant_width_parametric_ffnn_is_residual() -> None:
+    m = ConstantWidthParametricFFNN(size=8, num_layers=2, layer_factory=_dummy_factory)
+    assert isinstance(cast(Any, m).blocks[0], SkipConnection)
+
+
+def test_constant_width_simple_parametric_ffnn_is_plain() -> None:
+    m = ConstantWidthSimpleParametricFFNN(size=8, num_layers=2, layer_factory=_dummy_factory)
+    assert not isinstance(cast(Any, m).blocks[0], SkipConnection)
+
+
+def test_constant_width_parametric_ffnn_has_no_residual_param() -> None:
+    sig = inspect.signature(ConstantWidthParametricFFNN.__init__)
+    assert "residual" not in sig.parameters
+
+
+def test_constant_width_simple_parametric_ffnn_has_no_residual_param() -> None:
+    sig = inspect.signature(ConstantWidthSimpleParametricFFNN.__init__)
+    assert "residual" not in sig.parameters
+
+
+def test_embedded_parametric_ffnn_is_residual() -> None:
+    m = EmbeddedParametricFFNN(
+        in_features=4,
+        out_features=2,
+        hidden_size=8,
+        num_layers=2,
+        layer_factory=_dummy_factory,
+    )
+    assert isinstance(cast(Any, m).body.blocks[0], SkipConnection)
+
+
+def test_embedded_simple_parametric_ffnn_is_plain() -> None:
+    m = EmbeddedSimpleParametricFFNN(
+        in_features=4,
+        out_features=2,
+        hidden_size=8,
+        num_layers=2,
+        layer_factory=_dummy_factory,
+    )
+    assert not isinstance(cast(Any, m).body.blocks[0], SkipConnection)
+
+
+def test_embedded_parametric_ffnn_has_no_residual_param() -> None:
+    sig = inspect.signature(EmbeddedParametricFFNN.__init__)
+    assert "residual" not in sig.parameters

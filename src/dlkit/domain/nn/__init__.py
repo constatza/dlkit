@@ -3,6 +3,7 @@ from .ffnn.constrained import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthParametricFFNN,
     ConstantWidthSimpleFactorizedFFNN,
+    ConstantWidthSimpleParametricFFNN,
     ConstantWidthSimpleSPDFactorizedFFNN,
     ConstantWidthSimpleSPDFFNN,
     ConstantWidthSPDFactorizedFFNN,
@@ -10,6 +11,7 @@ from .ffnn.constrained import (
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleParametricFFNN,
     EmbeddedSimpleSPDFactorizedFFNN,
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
@@ -33,9 +35,18 @@ from .ffnn.scale_equivariant import (
     ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
-    ScaleEquivariantFFNN,
+    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantSimpleFeedForwardNN,
 )
 from .ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from .graph import (
+    GATv2Message,
+    GATv2Projection,
+    ScaledGATv2Projection,
+    ScaledSimpleGATv2Projection,
+    SimpleGATv2Message,
+    SimpleGATv2Projection,
+)
 from .operators import (
     DeepONet,
     FourierNeuralOperator1d,
@@ -62,8 +73,10 @@ __all__ = [
     # Parameter roles and protocols
     "ParameterRole",
     "IParameterRoleProvider",
-    # ScaleEquivariant dense variants
-    "ScaleEquivariantFFNN",
+    # ScaleEquivariant dense variants (variable-width)
+    "ScaleEquivariantFeedForwardNN",
+    "ScaleEquivariantSimpleFeedForwardNN",
+    # ScaleEquivariant dense variants (constant-width)
     "ScaleEquivariantConstantWidthFFNN",
     "ScaleEquivariantConstantWidthSimpleFFNN",
     # Plain dense variants
@@ -72,7 +85,9 @@ __all__ = [
     # Constrained low-level builders
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
+    "ConstantWidthSimpleParametricFFNN",
     "EmbeddedParametricFFNN",
+    "EmbeddedSimpleParametricFFNN",
     # Constant-width constrained variants
     "ConstantWidthSPDFFNN",
     "ConstantWidthSimpleSPDFFNN",
@@ -100,6 +115,13 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
     "ScaleEquivariantEmbeddedFactorizedFFNN",
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
+    # Graph neural networks
+    "GATv2Message",
+    "SimpleGATv2Message",
+    "GATv2Projection",
+    "SimpleGATv2Projection",
+    "ScaledGATv2Projection",
+    "ScaledSimpleGATv2Projection",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

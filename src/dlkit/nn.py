@@ -6,6 +6,7 @@ from dlkit.domain.nn import (
     ConstantWidthParametricFFNN,
     ConstantWidthSimpleFactorizedFFNN,
     ConstantWidthSimpleFFNN,
+    ConstantWidthSimpleParametricFFNN,
     ConstantWidthSimpleSPDFactorizedFFNN,
     ConstantWidthSimpleSPDFFNN,
     ConstantWidthSPDFactorizedFFNN,
@@ -15,6 +16,7 @@ from dlkit.domain.nn import (
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleParametricFFNN,
     EmbeddedSimpleSPDFactorizedFFNN,
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
@@ -23,6 +25,8 @@ from dlkit.domain.nn import (
     FourierAugmented,
     FourierEnhancedFFNN,
     FourierNeuralOperator1d,
+    GATv2Message,
+    GATv2Projection,
     GridOperatorBase,
     IGridOperator,
     IOperatorNetwork,
@@ -31,6 +35,8 @@ from dlkit.domain.nn import (
     LinearNetwork,
     MLPDeepONet,
     ParametricDenseBlock,
+    ScaledGATv2Projection,
+    ScaledSimpleGATv2Projection,
     ScaleEquivariantConstantWidthFactorizedFFNN,
     ScaleEquivariantConstantWidthFFNN,
     ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
@@ -45,8 +51,11 @@ from dlkit.domain.nn import (
     ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
-    ScaleEquivariantFFNN,
+    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantSimpleFeedForwardNN,
     SimpleFeedForwardNN,
+    SimpleGATv2Message,
+    SimpleGATv2Projection,
     SpectralDualPath,
     attention,
     cae,
@@ -62,8 +71,10 @@ __all__ = [
     "LinearNetwork",
     "FeedForwardNN",
     "ConstantWidthFFNN",
-    # ScaleEquivariant dense variants
-    "ScaleEquivariantFFNN",
+    # ScaleEquivariant dense variants (variable-width)
+    "ScaleEquivariantFeedForwardNN",
+    "ScaleEquivariantSimpleFeedForwardNN",
+    # ScaleEquivariant dense variants (constant-width)
     "ScaleEquivariantConstantWidthFFNN",
     "ScaleEquivariantConstantWidthSimpleFFNN",
     # Plain dense variants
@@ -72,7 +83,9 @@ __all__ = [
     # Constrained low-level builders
     "ParametricDenseBlock",
     "ConstantWidthParametricFFNN",
+    "ConstantWidthSimpleParametricFFNN",
     "EmbeddedParametricFFNN",
+    "EmbeddedSimpleParametricFFNN",
     # Constant-width constrained variants
     "ConstantWidthSPDFFNN",
     "ConstantWidthSimpleSPDFFNN",
@@ -100,6 +113,13 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
     "ScaleEquivariantEmbeddedFactorizedFFNN",
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
+    # Graph neural networks
+    "GATv2Message",
+    "SimpleGATv2Message",
+    "GATv2Projection",
+    "SimpleGATv2Projection",
+    "ScaledGATv2Projection",
+    "ScaledSimpleGATv2Projection",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

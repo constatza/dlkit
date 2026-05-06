@@ -29,9 +29,30 @@ The FFNN family is organized symmetrically around architecture and naming:
 Representative exports from `dlkit.domain.nn` include:
 - dense: `FeedForwardNN`, `SimpleFeedForwardNN`, `ConstantWidthFFNN`, `ConstantWidthSimpleFFNN`
 - constrained: `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
-- scale-equivariant: `ScaleEquivariantConstantWidthFFNN`, `ScaleEquivariantConstantWidthSimpleFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN`
+- scale-equivariant: `ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`, `ScaleEquivariantConstantWidthFFNN`, `ScaleEquivariantConstantWidthSimpleFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN`
 
 For the full matrix, see `ffnn/ffnn.md`.
+
+## Residual/plain family matrix
+
+| Family | Residual | Plain |
+|---|---|---|
+| Dense (variable-width) | `FeedForwardNN` | `SimpleFeedForwardNN` |
+| Dense (constant-width) | `ConstantWidthFFNN` | `ConstantWidthSimpleFFNN` |
+| Graph (GAT) | `GATv2Projection`, `ScaledGATv2Projection` | `SimpleGATv2Projection`, `ScaledSimpleGATv2Projection` |
+
+## Graph NN surface
+
+The graph family follows the same residual/plain naming convention as FFNN:
+- No `Simple` prefix means residual connections active
+- `Simple...` prefix means plain, no residual connections
+- `Scaled...` means column-wise input scaling applied
+
+Representative exports from `dlkit.domain.nn` include:
+- residual: `GATv2Projection`, `ScaledGATv2Projection`
+- plain: `SimpleGATv2Projection`, `ScaledSimpleGATv2Projection`
+
+For the full matrix, see `graph/graph.md`.
 
 ## Model factory
 

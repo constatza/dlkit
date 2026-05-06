@@ -23,7 +23,7 @@ The package distinguishes:
 
 | Architecture | Plain | Residual | Scale-equivariant plain | Scale-equivariant residual |
 |---|---|---|---|---|
-| Variable-width | `SimpleFeedForwardNN` | `FeedForwardNN` | Use `ScaleEquivariantFFNN(base_model=...)` | Use `ScaleEquivariantFFNN(base_model=...)` |
+| Variable-width | `SimpleFeedForwardNN` | `FeedForwardNN` | `ScaleEquivariantSimpleFeedForwardNN` | `ScaleEquivariantFeedForwardNN` |
 | Constant-width | `ConstantWidthSimpleFFNN` | `ConstantWidthFFNN` | `ScaleEquivariantConstantWidthSimpleFFNN` | `ScaleEquivariantConstantWidthFFNN` |
 
 ### Constrained constant-width
@@ -46,8 +46,10 @@ The package distinguishes:
 
 `constrained.py` also keeps the reusable builder-oriented classes:
 - `ParametricDenseBlock`
-- `ConstantWidthParametricFFNN`
-- `EmbeddedParametricFFNN`
+- `ConstantWidthParametricFFNN` — residual body (no `residual:` param)
+- `ConstantWidthSimpleParametricFFNN` — plain body (no `residual:` param)
+- `EmbeddedParametricFFNN` — residual embedded body (no `residual:` param)
+- `EmbeddedSimpleParametricFFNN` — plain embedded body (no `residual:` param)
 
 These remain available for custom compositions, but the preferred public model
 surface is the explicit plain/residual class matrix above.
@@ -67,6 +69,7 @@ The classes that naturally map dataset feature counts to `in_features` and
 `out_features` implement `from_shape(shape, **kwargs)`. This includes:
 - dense FFNNs
 - embedded constrained FFNNs
+- scale-equivariant variable-width dense FFNNs (`ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`)
 - scale-equivariant embedded FFNNs
 - scale-equivariant constant-width dense FFNNs
 
@@ -75,22 +78,29 @@ explicitly rather than through `from_shape()`.
 
 ## Configuration guidance
 
-For config-driven construction, prefer the package export surface:
+For config-driven construction, prefer the top-level package export surface:
 
 ```toml
 [MODEL]
 name = "EmbeddedSimpleFactorizedFFNN"
-module_path = "dlkit.domain.nn.ffnn"
+module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
 ```
 
-If you want the concrete dense residual implementation module directly:
-
 ```toml
 [MODEL]
 name = "ConstantWidthFFNN"
-module_path = "dlkit.domain.nn.ffnn.residual"
+module_path = "dlkit.domain.nn"
 hidden_size = 128
 num_layers = 4
+```
+
+```toml
+[MODEL]
+name = "ScaleEquivariantFeedForwardNN"
+module_path = "dlkit.domain.nn"
+in_features = 64
+out_features = 32
+layers = [128, 128]
 ```

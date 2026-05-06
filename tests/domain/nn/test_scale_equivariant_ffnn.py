@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, cast
 
 import pytest
@@ -8,27 +9,66 @@ import torch
 from dlkit.domain.nn.ffnn import (
     ScaleEquivariantConstantWidthFFNN,
     ScaleEquivariantConstantWidthSimpleFFNN,
-    ScaleEquivariantFFNN,
+    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantSimpleFeedForwardNN,
 )
+from dlkit.domain.nn.primitives import SkipConnection
 
 
-def test_scale_equivariant_ffnn_rejects_non_module_base_model() -> None:
-    with pytest.raises(TypeError, match="base_model must be an instance"):
-        ScaleEquivariantFFNN(base_model=cast(Any, "not_a_module"))
+def test_scale_equivariant_feed_forward_nn_is_residual() -> None:
+    module = ScaleEquivariantFeedForwardNN(
+        in_features=4,
+        out_features=2,
+        layers=[8, 8],
+    )
+    assert isinstance(cast(Any, module.base_model).layers[0], SkipConnection)
 
 
-def test_scale_equivariant_ffnn_rejects_invalid_norm() -> None:
+def test_scale_equivariant_simple_feed_forward_nn_is_plain() -> None:
+    module = ScaleEquivariantSimpleFeedForwardNN(
+        in_features=4,
+        out_features=2,
+        layers=[8, 8],
+    )
+    assert not isinstance(cast(Any, module.base_model).layers[0], SkipConnection)
+
+
+def test_scale_equivariant_feed_forward_nn_has_no_residual_param() -> None:
+    sig = inspect.signature(ScaleEquivariantFeedForwardNN.__init__)
+    assert "residual" not in sig.parameters
+
+
+def test_scale_equivariant_simple_feed_forward_nn_has_no_residual_param() -> None:
+    sig = inspect.signature(ScaleEquivariantSimpleFeedForwardNN.__init__)
+    assert "residual" not in sig.parameters
+
+
+def test_scale_equivariant_feed_forward_nn_rejects_invalid_norm() -> None:
     with pytest.raises(ValueError, match="norm must be one of"):
-        ScaleEquivariantFFNN(base_model=torch.nn.Linear(2, 2), norm="l3")
+        ScaleEquivariantFeedForwardNN(
+            in_features=2,
+            out_features=2,
+            layers=[4, 4],
+            norm="l3",
+        )
 
 
-def test_scale_equivariant_ffnn_rejects_non_positive_eps_gain() -> None:
+def test_scale_equivariant_feed_forward_nn_rejects_non_positive_eps_gain() -> None:
     with pytest.raises(ValueError, match="eps_gain must be > 0"):
-        ScaleEquivariantFFNN(base_model=torch.nn.Linear(2, 2), eps_gain=0.0)
+        ScaleEquivariantFeedForwardNN(
+            in_features=2,
+            out_features=2,
+            layers=[4, 4],
+            eps_gain=0.0,
+        )
 
 
-def test_scale_equivariant_ffnn_rejects_integer_inputs() -> None:
-    module = ScaleEquivariantFFNN(base_model=torch.nn.Linear(2, 2))
+def test_scale_equivariant_feed_forward_nn_rejects_integer_inputs() -> None:
+    module = ScaleEquivariantFeedForwardNN(
+        in_features=2,
+        out_features=2,
+        layers=[4, 4],
+    )
     rhs = torch.tensor([1, 2], dtype=torch.int32)
     with pytest.raises(TypeError, match="Expected floating point tensor"):
         module.forward(rhs)
