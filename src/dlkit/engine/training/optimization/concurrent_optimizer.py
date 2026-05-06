@@ -99,3 +99,39 @@ class ConcurrentOptimizer(torch.optim.Optimizer):
         """
         for opt, sd in zip(self._sub_optimizers, state_dict["sub_optimizers"], strict=True):
             opt.load_state_dict(sd)
+
+
+class MuonMixedOptimizer(ConcurrentOptimizer):
+    """ConcurrentOptimizer pre-wired for Muon + companion (AdamW) parameter split.
+
+    Per the official PyTorch documentation, **Muon is an optimizer for 2D parameters
+    of neural network hidden layers only.**  Non-2D parameters — biases, layer
+    normalization weights, embeddings, scale vectors, input-layer weights, and
+    output-layer weights — must be optimized by a separate optimizer (AdamW is the
+    recommended companion).
+
+    This class formalises that split: the first sub-optimizer is always Muon
+    (restricted to ``ndim == 2`` hidden-weight matrices); the second is the companion
+    optimizer for every other parameter.  The parameter partition is performed by the
+    builder via ``MuonEligibleSelector`` / ``NonMuonSelector`` before the two
+    sub-optimizers are handed in here.
+
+    Constructed automatically by ``OptimizerPolicyBuilder`` when ``MuonSettings`` is
+    set as the sole ``default_optimizer`` and the model contains non-Muon-eligible
+    parameters.  For explicit control use ``ConcurrentOptimizerSettings`` instead.
+
+    References:
+        - `torch.optim.Muon <https://docs.pytorch.org/docs/main/generated/torch.optim.Muon.html>`_
+        - Kosson et al., *Muon is Scalable for LLM Training* (arXiv:2502.16982)
+
+    Args:
+        muon_optimizer: Pre-built Muon optimizer restricted to 2D hidden-layer parameters.
+        companion_optimizer: Pre-built optimizer (typically AdamW) for all other parameters.
+    """
+
+    def __init__(
+        self,
+        muon_optimizer: torch.optim.Optimizer,
+        companion_optimizer: torch.optim.Optimizer,
+    ) -> None:
+        super().__init__([muon_optimizer, companion_optimizer])

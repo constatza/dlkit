@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 
 import torch.nn as nn
 import torch.optim
+
+_logger = logging.getLogger(__name__)
 
 from dlkit.common.errors import ParameterPartitionError
 from dlkit.domain.nn.parameter_roles import ParameterRole
@@ -20,7 +23,7 @@ from dlkit.infrastructure.config.optimizer_component import (
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
-from .concurrent_optimizer import ConcurrentOptimizer
+from .concurrent_optimizer import ConcurrentOptimizer, MuonMixedOptimizer
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
 from .partitioning import ParameterPartitioner
@@ -185,6 +188,8 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
                 model, settings.default_optimizer
             )
+        elif isinstance(settings.default_optimizer, MuonSettings):
+            optimizer = self._build_muon_mixed(model, settings.default_optimizer)
         else:
             inventory = _make_inventory(model)
             param_groups = _params_to_group(inventory.list_parameters())
@@ -253,6 +258,49 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             scheduler_monitor=monitor,
             scheduler_frequency=frequency,
         )
+
+    def _build_muon_mixed(self, model: nn.Module, settings: MuonSettings) -> torch.optim.Optimizer:
+        """Build a MuonMixedOptimizer when Muon is the sole default_optimizer.
+
+        Per the official PyTorch Muon documentation, Muon only supports 2D hidden-layer
+        weight matrices.  This method partitions the model's parameters using
+        ``MuonEligibleSelector`` (2D HIDDEN) and ``NonMuonSelector`` (everything else),
+        creates a Muon sub-optimizer for the eligible set, and pairs it with a companion
+        AdamW sub-optimizer (same learning rate) for the remaining parameters.
+
+        If all parameters happen to be Muon-eligible, a plain Muon optimizer is returned
+        and no companion is created.
+
+        Args:
+            model: The neural network model.
+            settings: Muon optimizer configuration.
+
+        Returns:
+            A ``MuonMixedOptimizer`` wrapping Muon + AdamW when non-eligible parameters
+            exist, or a plain Muon optimizer when every parameter is eligible.
+        """
+        inventory = _make_inventory(model)
+        partitioner = ParameterPartitioner()
+        muon_params, fallback_params = partitioner.partition(
+            inventory,
+            [MuonEligibleSelector(), NonMuonSelector()],
+            warn_unmatched=False,
+        )
+
+        muon_opt = TorchOptimizerFactory(settings).create(_params_to_group(muon_params))
+
+        if not fallback_params:
+            return muon_opt
+
+        _logger.warning(
+            "Muon auto-split: %d eligible params → Muon, %d non-eligible params → AdamW "
+            "(lr=%s). Use ConcurrentOptimizerSettings to configure the companion optimizer.",
+            len(muon_params),
+            len(fallback_params),
+            settings.lr,
+        )
+        companion_opt = torch.optim.AdamW([d.parameter for d in fallback_params], lr=settings.lr)
+        return MuonMixedOptimizer(muon_opt, companion_opt)
 
     def _build_concurrent_optimizer(
         self,

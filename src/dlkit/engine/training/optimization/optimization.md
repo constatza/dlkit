@@ -69,6 +69,20 @@ factor = 0.5
 patience = 10
 ```
 
+### Default Muon with automatic companion split
+
+When `default_optimizer` is a lone `MuonSettings`, the builder partitions the
+model automatically. Muon receives only 2D hidden-layer weights selected by
+`MuonEligibleSelector`; every remaining parameter is routed to an AdamW
+companion at the same learning rate. If every parameter is Muon-eligible, the
+builder returns a plain Muon optimizer with no companion wrapper.
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "Muon"
+lr = 0.02
+```
+
 ### Sequential stages
 
 ```toml
@@ -163,6 +177,10 @@ program = OptimizerPolicySettings(
             ParameterSelectorSettings(prefix="decoder"),
         ),
     )
+)
+
+program = OptimizerPolicySettings(
+    default_optimizer=MuonSettings(lr=0.02)
 )
 
 program = OptimizerPolicySettings(

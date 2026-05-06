@@ -20,6 +20,7 @@ Public API:
 - ITransitionTrigger: stage transition control
 - EpochTransitionTrigger, PlateauTransitionTrigger, NoTransitionTrigger: triggers
 - ConcurrentOptimizer: real torch.optim.Optimizer wrapping multiple sub-optimizers
+- MuonMixedOptimizer: ConcurrentOptimizer pre-wired for Muon + AdamW companion split
 - ActiveStage, RunningOptimizerPolicy: state objects
 - IOptimizationStateRepository, OptimizationStateRepository: checkpoint management
 - IStepPolicy, StepAllOptimizers, AlternatingStepPolicy, LBFGSStageStepper: stepping
@@ -34,7 +35,7 @@ from .builder import (
     IOptimizerPolicyBuilder,
     OptimizerPolicyBuilder,
 )
-from .concurrent_optimizer import ConcurrentOptimizer
+from .concurrent_optimizer import ConcurrentOptimizer, MuonMixedOptimizer
 from .controllers import (
     AutomaticOptimizationController,
     IOptimizationController,
@@ -120,6 +121,7 @@ __all__ = [
     "PlateauTransitionTrigger",
     "NoTransitionTrigger",
     "ConcurrentOptimizer",
+    "MuonMixedOptimizer",
     "ActiveStage",
     "RunningOptimizerPolicy",
     "IOptimizationStateRepository",
