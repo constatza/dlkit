@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import typer
 from rich.console import Console
@@ -220,6 +220,6 @@ def handle_cli_errors(console: Console) -> Callable[[F], F]:
                 handle_unexpected_error(e, console)
                 raise typer.Exit(1)
 
-        return wrapper  # type: ignore[return-value]
+        return cast(F, wrapper)
 
     return decorator

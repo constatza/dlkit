@@ -20,9 +20,11 @@ from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
     ConcurrentOptimizerSettings,
     MuonSettings,
+    OptimizerSpec,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
+from .batched_muon import BatchedMuon
 from .concurrent_optimizer import ConcurrentOptimizer, MuonMixedOptimizer
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
@@ -137,6 +139,41 @@ def _make_inventory(model: nn.Module) -> TorchParameterInventory:
         model,
         role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
     )
+
+
+def _create_optimizer(
+    opt_config: OptimizerSpec,
+    param_groups: list[ParamGroup],
+) -> torch.optim.Optimizer:
+    """Instantiate an optimizer, routing MuonSettings to BatchedMuon.
+
+    Args:
+        opt_config: Optimizer settings instance.
+        param_groups: Parameter groups in torch format.
+
+    Returns:
+        Constructed optimizer.
+
+    Raises:
+        AssertionError: If a nested ConcurrentOptimizerSettings is passed directly
+            (must be handled by _build_concurrent_optimizer instead).
+    """
+    if isinstance(opt_config, MuonSettings):
+        return BatchedMuon(
+            param_groups,
+            lr=opt_config.lr,
+            weight_decay=opt_config.weight_decay,
+            momentum=opt_config.momentum,
+            nesterov=opt_config.nesterov,
+            ns_steps=opt_config.ns_steps,
+            eps=opt_config.eps,
+            ns_coefficients=opt_config.ns_coefficients,
+            adjust_lr_fn=opt_config.adjust_lr_fn,
+        )
+    assert not isinstance(opt_config, ConcurrentOptimizerSettings), (
+        "Nested ConcurrentOptimizerSettings must be handled by _build_concurrent_optimizer"
+    )
+    return TorchOptimizerFactory(opt_config).create(param_groups)
 
 
 class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
@@ -287,7 +324,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             warn_unmatched=False,
         )
 
-        muon_opt = TorchOptimizerFactory(settings).create(_params_to_group(muon_params))
+        muon_opt = _create_optimizer(settings, _params_to_group(muon_params))
 
         if not fallback_params:
             return muon_opt
@@ -347,7 +384,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
                 selected_params = inventory.list_parameters()
 
             param_groups = _params_to_group(selected_params)
-            sub_optimizers.append(TorchOptimizerFactory(opt_config).create(param_groups))
+            sub_optimizers.append(_create_optimizer(opt_config, param_groups))
 
         all_param_ids = {id(p) for p in model.parameters()}
         covered_ids = {

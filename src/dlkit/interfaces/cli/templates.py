@@ -6,7 +6,7 @@ This is the single source of truth used by the CLI and sync tools.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from tomlkit import comment, document, dumps, table
 from tomlkit.items import Table
@@ -212,7 +212,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
             parent, child = key.split(".", 1)
             if parent not in doc:
                 doc.add(parent, table())
-            parent_tbl: Table = doc[parent]  # type: ignore[assignment]
+            parent_tbl = cast(Table, doc[parent])
             child_tbl = table()
             for k, v in content.items():
                 dotted = f"{key}.{k}"
@@ -245,7 +245,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
                         if dotted in comments:
                             child_tbl.add(comment(comments[dotted]))
                         child_tbl.add(ck, cv)
-                    section_tbl: Table = doc[key]  # type: ignore[assignment]
+                    section_tbl = cast(Table, doc[key])
                     section_tbl.add(k, child_tbl)
     rendered = dumps(doc)
     # Ensure explicit parent headers for purely nested sections (e.g., [TRAINING])

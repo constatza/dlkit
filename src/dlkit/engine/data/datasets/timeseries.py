@@ -176,8 +176,8 @@ class ForecastingDataset(BaseDataset[pl.DataFrame]):
         # Build conjunction over group_id columns
         expr: pl.Expr | None = None
         for col, val in zip(self.group_ids, key, strict=True):
-            cond = pl.col(col) == val
-            expr = cond if expr is None else (expr & cond)
+            cond = cast(pl.Expr, pl.col(col) == val)
+            expr = cond if expr is None else expr & cond
         return self.df.filter(expr) if expr is not None else self.df.head(0)
 
     def _filter_by_keys(self, keys: list[tuple[object, ...]]) -> pl.DataFrame:
@@ -188,8 +188,8 @@ class ForecastingDataset(BaseDataset[pl.DataFrame]):
         for key in keys:
             conj: pl.Expr | None = None
             for col, val in zip(self.group_ids, key, strict=True):
-                cond = pl.col(col) == val
-                conj = cond if conj is None else (conj & cond)
+                cond = cast(pl.Expr, pl.col(col) == val)
+                conj = cond if conj is None else conj & cond
             if conj is None:
                 continue
             disj = conj if disj is None else (disj | conj)

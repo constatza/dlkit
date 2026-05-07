@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from .core.base_settings import BasicSettings, ComponentSettings
@@ -134,29 +134,70 @@ class MuonSettings(OptimizerComponentSettings):
     """Settings for ``torch.optim.Muon``.
 
     Muon (Momentum + Update Orthogonalization) uses Newton–Schulz iterations
-    to orthogonalize the weight update matrix.
+    to orthogonalize the weight update matrix before applying the update.
 
-    For 1-D and non-matrix parameters, use a separate stage:
-    ``OptimizationStageSettings(optimizer=AdamWSettings(...),
-    selector=NonMuonSelectorSettings())`` — do not rely on Muon's built-in
-    AdamW fallback.
+    .. warning::
+        Muon supports **only 2-D parameters** (hidden-layer weight matrices).
+        Biases, embeddings, layer-norm weights, and all other non-matrix
+        parameters must be assigned to a companion optimizer (AdamW is
+        recommended).  Pass them via ``ConcurrentOptimizerSettings`` or
+        rely on the auto-split in ``OptimizerPolicyBuilder``.
+
+    .. note::
+        ``foreach`` is not supported by ``torch.optim.Muon``; attempting to
+        enable it raises ``RuntimeError``.  Complex parameters and sparse
+        gradients are also unsupported.
 
     Attributes:
         name: Discriminator tag — always ``"Muon"``.
         module_path: Import path.
         lr: Learning rate for the Muon update.
+        weight_decay: Decoupled weight decay.  Muon's default (0.1) differs
+            from AdamW's default (0.01).
         momentum: Momentum coefficient.
         nesterov: Whether to use Nesterov momentum.
         ns_steps: Number of Newton–Schulz iterations.
+        eps: Spectral-norm floor added for Newton-Schulz numerical stability.
+        ns_coefficients: Quintic polynomial coefficients ``(a, b, c)`` for
+            the Newton–Schulz orthogonalization.
+        adjust_lr_fn: Learning-rate shape adjustment strategy.  ``None`` and
+            ``"original"`` both apply ``lr * sqrt(max(1, A/B))``;
+            ``"match_rms_adamw"`` applies ``0.2 * lr * sqrt(max(A, B))``
+            so that Muon can reuse AdamW-tuned hyperparameters directly.
     """
 
     model_config = _OPT_CONFIG
     name: Literal["Muon"] = "Muon"
     module_path: str | None = "torch.optim"
     lr: float = Field(default=0.02, gt=0, description="Muon learning rate")
+    weight_decay: float = Field(
+        default=0.1, ge=0, description="Decoupled weight decay (Muon default: 0.1, not 0.01)"
+    )
     momentum: float = Field(default=0.95, ge=0, le=1, description="Momentum coefficient")
     nesterov: bool = Field(default=True, description="Use Nesterov momentum")
     ns_steps: int = Field(default=5, gt=0, description="Newton–Schulz iterations")
+    eps: float = Field(
+        default=1e-7, gt=0, description="Spectral-norm floor for Newton-Schulz numerical stability"
+    )
+    ns_coefficients: tuple[float, float, float] = Field(
+        default=(3.4445, -4.775, 2.0315),
+        description="Quintic polynomial coefficients (a, b, c) for Newton-Schulz orthogonalization",
+    )
+    adjust_lr_fn: str | None = Field(
+        default=None,
+        description=(
+            "LR shape adjustment: None/'original' applies lr*sqrt(max(1,A/B)); "
+            "'match_rms_adamw' applies 0.2*lr*sqrt(max(A,B))"
+        ),
+    )
+
+    @field_validator("adjust_lr_fn")
+    @classmethod
+    def _validate_adjust_lr_fn(cls, v: str | None) -> str | None:
+        allowed = {None, "original", "match_rms_adamw"}
+        if v not in allowed:
+            raise ValueError(f"adjust_lr_fn must be one of {allowed!r}, got {v!r}")
+        return v
 
 
 class ConcurrentOptimizerSettings(BasicSettings):

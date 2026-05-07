@@ -109,7 +109,9 @@ class FlowMatchingSupervisionBuilder:
         # dict(existing_targets.items()) is a shallow copy mapping; tensor values alias the
         # batch by reference but are never modified by the supervisor or flow-matching loss.
         existing_targets: TensorDict = batch.get("targets", TensorDict({}, batch_size=[batch_size]))
-        new_targets_dict: dict[str, Tensor] = dict(existing_targets.items())
+        new_targets_dict: dict[str, Tensor] = {
+            k: cast(Tensor, v) for k, v in existing_targets.items()
+        }
         new_targets_dict["ut"] = ut
         new_targets = TensorDict(cast(Any, new_targets_dict), batch_size=[batch_size])
 

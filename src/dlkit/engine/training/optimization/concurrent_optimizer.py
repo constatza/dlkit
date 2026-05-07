@@ -18,7 +18,16 @@ class ConcurrentOptimizer(torch.optim.Optimizer):
     ``param_groups`` exposes the combined groups from all sub-optimizers.
 
     Typical use case: Muon on matrix parameters + AdamW on the rest, partitioned
-    at construction time by the builder.
+    at construction time by the builder via ``MuonEligibleSelector`` /
+    ``NonMuonSelector``.
+
+    .. note::
+        When one of the sub-optimizers is ``Muon`` (or ``BatchedMuon``), all
+        parameters assigned to it **must be 2-D** (hidden-layer weight matrices).
+        Biases, embeddings, and other non-matrix tensors must go to a companion
+        sub-optimizer.  The builder enforces this automatically when
+        ``ConcurrentOptimizerSettings`` includes a ``MuonSettings`` entry and
+        no explicit selectors are provided.
 
     Attributes:
         _sub_optimizers: The wrapped sub-optimizers.
@@ -142,16 +151,20 @@ class MuonMixedOptimizer(ConcurrentOptimizer):
     """ConcurrentOptimizer pre-wired for Muon + companion (AdamW) parameter split.
 
     Per the official PyTorch documentation, **Muon is an optimizer for 2D parameters
-    of neural network hidden layers only.**  Non-2D parameters — biases, layer
-    normalization weights, embeddings, scale vectors, input-layer weights, and
-    output-layer weights — must be optimized by a separate optimizer (AdamW is the
-    recommended companion).
+    of neural network hidden layers only.**  The following parameter categories are
+    **not supported** by Muon and must go to the companion optimizer:
 
-    This class formalises that split: the first sub-optimizer is always Muon
+    - Biases and scalar parameters (``ndim != 2``)
+    - Embedding matrices (input/output layer weights)
+    - Layer-normalisation weights and scale vectors
+    - Complex-valued parameters (``RuntimeError``)
+    - Parameters with sparse gradients (``RuntimeError``)
+
+    This class formalises the Muon/AdamW split: the first sub-optimizer is Muon
     (restricted to ``ndim == 2`` hidden-weight matrices); the second is the companion
-    optimizer for every other parameter.  The parameter partition is performed by the
-    builder via ``MuonEligibleSelector`` / ``NonMuonSelector`` before the two
-    sub-optimizers are handed in here.
+    for everything else.  The partition is performed by the builder via
+    ``MuonEligibleSelector`` / ``NonMuonSelector`` before the two sub-optimizers
+    are handed in here.
 
     Constructed automatically by ``OptimizerPolicyBuilder`` when ``MuonSettings`` is
     set as the sole ``default_optimizer`` and the model contains non-Muon-eligible

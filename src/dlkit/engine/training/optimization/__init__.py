@@ -19,6 +19,7 @@ Public API:
 - ISchedulerFactory, TorchSchedulerFactory: scheduler instantiation
 - ITransitionTrigger: stage transition control
 - EpochTransitionTrigger, PlateauTransitionTrigger, NoTransitionTrigger: triggers
+- BatchedMuon: drop-in torch.optim.Muon subclass with grouped bmm Newton-Schulz (faster)
 - ConcurrentOptimizer: real torch.optim.Optimizer wrapping multiple sub-optimizers
 - MuonMixedOptimizer: ConcurrentOptimizer pre-wired for Muon + AdamW companion split
 - IManualOptimizationHost, IManualOptimizer: narrow protocols for Lightning-aware
@@ -33,6 +34,7 @@ Public API:
 
 from __future__ import annotations
 
+from .batched_muon import BatchedMuon
 from .builder import (
     IOptimizerPolicyBuilder,
     OptimizerPolicyBuilder,
@@ -123,6 +125,7 @@ __all__ = [
     "EpochTransitionTrigger",
     "PlateauTransitionTrigger",
     "NoTransitionTrigger",
+    "BatchedMuon",
     "ConcurrentOptimizer",
     "MuonMixedOptimizer",
     "ActiveStage",

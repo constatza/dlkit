@@ -50,9 +50,9 @@ dev = [
 
 [project.optional-dependencies]
 # Explicit accelerator selection is required for torch resolution.
-cpu = ["torch>=2.8.0, <2.10.0"]
-cu128 = ["torch>=2.8.0, <2.10.0"]
-cu130 = ["torch>=2.8.0, <2.10.0"]
+cpu = ["torch>=2.8.0, <3.0"]
+cu128 = ["torch>=2.8.0, <3.0"]
+cu130 = ["torch>=2.8.0, <3.0"]
 
 [project.scripts]
 dlkit = "dlkit.interfaces.cli:cli_main"

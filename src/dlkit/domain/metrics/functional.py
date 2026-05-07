@@ -618,7 +618,7 @@ def _normalized_vector_norm_update(
     )
 
 
-def _normalized_vector_norm_compute(sum_errors: Tensor, total: int) -> Tensor:
+def _normalized_vector_norm_compute(sum_errors: Tensor, total: Tensor) -> Tensor:
     """Compute final mean from accumulated state.
 
     Shape:
@@ -665,7 +665,7 @@ def _temporal_derivative_update(
     return torch.pow(derivative_error, 2)
 
 
-def _temporal_derivative_compute(sum_squared_errors: Tensor, total: int) -> Tensor:
+def _temporal_derivative_compute(sum_squared_errors: Tensor, total: Tensor) -> Tensor:
     """Compute final mean squared derivative error from accumulated state.
 
     Shape:
@@ -712,7 +712,7 @@ def _absolute_vector_norm_update(preds: Tensor, target: Tensor, ord: int, dim: i
     )
 
 
-def _absolute_vector_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+def _absolute_vector_norm_compute(sum_norms: Tensor, total: Tensor) -> Tensor:
     """Compute final mean absolute vector norm error from accumulated state.
 
     Shape:
@@ -757,7 +757,7 @@ def _energy_norm_update(preds: Tensor, target: Tensor, matrix: Tensor) -> Tensor
     )
 
 
-def _energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+def _energy_norm_compute(sum_norms: Tensor, total: Tensor) -> Tensor:
     """Compute final mean energy norm error from accumulated state.
 
     Shape:
@@ -801,7 +801,7 @@ def _relative_energy_norm_update(
     return safe_divide(error_norms, target_norms, eps=eps)
 
 
-def _relative_energy_norm_compute(sum_norms: Tensor, total: int) -> Tensor:
+def _relative_energy_norm_compute(sum_norms: Tensor, total: Tensor) -> Tensor:
     """Compute final mean relative energy norm error from accumulated state.
 
     Shape:

@@ -81,6 +81,9 @@ class NormalizedVectorNormError(Metric):
         >>> results = metrics.compute()
     """
 
+    sum_errors: Tensor
+    total: Tensor
+
     def __init__(
         self,
         vector_dim: int = -1,
@@ -185,6 +188,9 @@ class TemporalDerivativeError(Metric):
         ... )
     """
 
+    sum_squared_errors: Tensor
+    total: Tensor
+
     def __init__(
         self,
         n: int = 1,
@@ -251,6 +257,9 @@ class AbsoluteVectorNormError(Metric):
         **kwargs: Additional arguments passed to torchmetrics.Metric
     """
 
+    sum_norms: Tensor
+    total: Tensor
+
     def __init__(self, vector_dim: int = -1, norm_ord: int = 2, **kwargs):
         """Initialize absolute vector norm error metric."""
         super().__init__(**kwargs)
@@ -298,6 +307,9 @@ class EnergyNormError(Metric):
     Args:
         **kwargs: Additional arguments passed to torchmetrics.Metric
     """
+
+    sum_norms: Tensor
+    total: Tensor
 
     def __init__(self, **kwargs):
         """Initialize energy norm error metric."""
@@ -347,6 +359,9 @@ class RelativeEnergyNormError(Metric):
         eps: Numerical stability epsilon for division (default: 1e-8)
         **kwargs: Additional arguments passed to torchmetrics.Metric
     """
+
+    sum_norms: Tensor
+    total: Tensor
 
     def __init__(self, eps: float = 1e-8, **kwargs):
         """Initialize relative energy norm error metric."""

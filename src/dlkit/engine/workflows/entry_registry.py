@@ -8,7 +8,7 @@ that data entries should be accessible after dataset creation.
 from __future__ import annotations
 
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
@@ -97,11 +97,10 @@ class DataEntryRegistry:
             Dictionary mapping feature names to feature objects
         """
         with self._lock:
-            return {  # type: ignore[return-value]
-                name: entry
-                for name, entry in self._entries.items()
-                if entry.entry_role == EntryRole.FEATURE
-            }
+            return cast(
+                dict[str, FeatureEntry],
+                {n: e for n, e in self._entries.items() if e.entry_role == EntryRole.FEATURE},
+            )
 
     def get_targets(self) -> dict[str, TargetEntry]:
         """Get all target entries.
@@ -110,11 +109,10 @@ class DataEntryRegistry:
             Dictionary mapping target names to target objects
         """
         with self._lock:
-            return {  # type: ignore[return-value]
-                name: entry
-                for name, entry in self._entries.items()
-                if entry.entry_role == EntryRole.TARGET
-            }
+            return cast(
+                dict[str, TargetEntry],
+                {n: e for n, e in self._entries.items() if e.entry_role == EntryRole.TARGET},
+            )
 
     def get_latents(self) -> dict[str, Latent]:
         """Get all latent entries.
@@ -123,11 +121,10 @@ class DataEntryRegistry:
             Dictionary mapping latent names to Latent objects
         """
         with self._lock:
-            return {  # type: ignore[return-value]
-                name: entry
-                for name, entry in self._entries.items()
-                if entry.entry_role == EntryRole.LATENT
-            }
+            return cast(
+                dict[str, Latent],
+                {n: e for n, e in self._entries.items() if e.entry_role == EntryRole.LATENT},
+            )
 
     def get_predictions(self) -> dict[str, Prediction]:
         """Get all prediction entries.
@@ -136,11 +133,10 @@ class DataEntryRegistry:
             Dictionary mapping prediction names to Prediction objects
         """
         with self._lock:
-            return {  # type: ignore[return-value]
-                name: entry
-                for name, entry in self._entries.items()
-                if entry.entry_role == EntryRole.PREDICTION
-            }
+            return cast(
+                dict[str, Prediction],
+                {n: e for n, e in self._entries.items() if e.entry_role == EntryRole.PREDICTION},
+            )
 
     def get_entry(self, name: str) -> DataEntry | None:
         """Get a specific entry by name.

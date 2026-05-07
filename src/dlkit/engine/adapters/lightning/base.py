@@ -125,15 +125,14 @@ def _normalize_dict(d: dict[str, Any], context: str, batch_size: int, _depth: in
     Returns:
         TensorDict with ``batch_size=[batch_size]``.
     """
-    normalized: dict[str, Tensor | TensorDict] = {}
+    td = TensorDict(None, batch_size=[batch_size])
     for k, v in d.items():
         match v:
             case torch.Tensor() | TensorDict():
-                normalized[k] = v
+                td[k] = v
             case _:
-                normalized[k] = _normalize_output(v, f"{context}.{k}", batch_size, _depth)
-    # TensorDict constructor accepts dict[str, Tensor | TensorDict] directly
-    return TensorDict(normalized, batch_size=[batch_size])  # type: ignore[arg-type]
+                td[k] = _normalize_output(v, f"{context}.{k}", batch_size, _depth)
+    return td
 
 
 def _normalize_sequence(

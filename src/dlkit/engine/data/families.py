@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 from dlkit.infrastructure.config.enums import DatasetFamily
 
@@ -42,7 +43,7 @@ def resolve_family_from_dataset(dataset: object) -> DatasetFamily:
         if isinstance(dataset, pyg_dataset):
             return DatasetFamily.GRAPH
         try:
-            sample = dataset[0]  # type: ignore[index]
+            sample = cast(Sequence[object], dataset)[0]
             if isinstance(sample, pyg_data):
                 return DatasetFamily.GRAPH
         except Exception:

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import cast
 
 from dlkit.infrastructure.types.split import IndexSplit
@@ -96,4 +97,4 @@ class _SubsetDataset:
 
     def __getitem__(self, i: int) -> object:
         base_idx = self._indices[i]
-        return self._base[base_idx]  # type: ignore[index]  # base is typed as object
+        return cast(Sequence[object], self._base)[base_idx]
