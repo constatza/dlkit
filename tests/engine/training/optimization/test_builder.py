@@ -20,7 +20,9 @@ from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
+    MuonSettings,
     ReduceLROnPlateauSettings,
     StepLRSettings,
 )
@@ -171,6 +173,37 @@ class TestOptimizerPolicyBuilder:
         assert len(sub_opts) == 2  # noqa: PLR2004
         assert isinstance(sub_opts[0], torch.optim.AdamW)
         assert isinstance(sub_opts[1], torch.optim.Adam)
+
+    def test_builder_batched_muon_default_optimizer(self, tiny_model: nn.Sequential) -> None:
+        """Verify lone BatchedMuon default optimizer becomes a concurrent Muon-family split."""
+        settings = OptimizerPolicySettings(default_optimizer=BatchedMuonSettings(lr=0.02))
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        assert len(program.stages) == 1
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        assert len(stage.optimizer.sub_optimizers) == 2  # noqa: PLR2004
+
+    def test_builder_muon_stage_auto_splits_params(self, tiny_model: nn.Sequential) -> None:
+        """Lone MuonSettings in an explicit stage auto-splits like the default path.
+
+        tiny_model has biases (1-D params) that torch.optim.Muon rejects.
+        The builder must apply the same MuonEligibleSelector / NonMuonSelector
+        split it uses in _build_default, producing a ConcurrentOptimizer.
+
+        Args:
+            tiny_model: Tiny two-layer model fixture.
+        """
+        settings = OptimizerPolicySettings(
+            stages=(OptimizationStageSettings(optimizer=MuonSettings()),)
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        assert len(program.stages) == 1
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
 
     def test_builder_module_path_selector_with_concurrent_covers_all_params(
         self, tiny_model: nn.Sequential

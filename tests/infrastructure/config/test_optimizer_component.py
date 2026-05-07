@@ -9,6 +9,7 @@ from dlkit.infrastructure.config.optimization_selector import ParameterSelectorS
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
     MuonSettings,
 )
@@ -81,6 +82,11 @@ class TestConcurrentOptimizerSettingsValidation:
         settings = ConcurrentOptimizerSettings(optimizers=(MuonSettings(), AdamWSettings()))
         assert settings.selectors == ()
 
+    def test_batched_muon_with_other_no_selectors_is_valid(self) -> None:
+        """Empty selectors are valid when at least one sub-optimizer is BatchedMuonSettings."""
+        settings = ConcurrentOptimizerSettings(optimizers=(BatchedMuonSettings(), AdamWSettings()))
+        assert settings.selectors == ()
+
     def test_explicit_selectors_without_muon_is_valid(self) -> None:
         """Explicit selectors of matching length are valid for any optimizer combination.
 
@@ -116,3 +122,12 @@ class TestConcurrentOptimizerSettingsValidation:
                 optimizers=(MuonSettings(), AdamWSettings()),
                 selectors=(ParameterSelectorSettings(prefix="encoder"),),
             )
+
+    def test_two_muon_no_selectors_raises(self) -> None:
+        """Two Muon-family optimizers with empty selectors must raise ValidationError.
+
+        Auto-selector inference assigns MuonEligibleSelector to every Muon-family
+        optimizer, producing duplicate parameter groups when there is more than one.
+        """
+        with pytest.raises(ValidationError, match="exactly one Muon-family"):
+            ConcurrentOptimizerSettings(optimizers=(MuonSettings(), BatchedMuonSettings()))
