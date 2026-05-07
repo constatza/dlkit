@@ -91,17 +91,24 @@ factor = 0.5
 patience = 10
 ```
 
-### Default Muon with automatic companion split
+### Default Muon-family with automatic companion split
 
-When `default_optimizer` is a lone `MuonSettings`, the builder partitions the
-model automatically. Muon receives only 2D hidden-layer weights selected by
-`MuonEligibleSelector`; every remaining parameter is routed to an AdamW
-companion at the same learning rate. If every parameter is Muon-eligible, the
-builder returns a plain Muon optimizer with no companion wrapper.
+When `default_optimizer` is a lone `MuonSettings` or `BatchedMuonSettings`,
+the builder partitions the model automatically. The Muon-family optimizer
+receives only 2D hidden-layer weights selected by `MuonEligibleSelector`;
+every remaining parameter is routed to an AdamW companion at the same learning
+rate. If every parameter is Muon-eligible, the builder returns a plain
+Muon-family optimizer with no companion wrapper.
 
 ```toml
 [TRAINING.optimizer.default_optimizer]
 name = "Muon"
+lr = 0.02
+```
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "BatchedMuon"
 lr = 0.02
 ```
 
@@ -115,6 +122,11 @@ trigger = {at_epoch = 10}
 [[TRAINING.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-4}
 ```
+
+A lone `Muon` or `BatchedMuon` in a stage receives the same automatic
+`MuonEligibleSelector` / `NonMuonSelector` split as in the default path.
+Use `ConcurrentOptimizerSettings` when explicit control over the companion
+optimizer is needed.
 
 ### Sequential with plateau trigger and per-stage scheduler
 
@@ -132,9 +144,12 @@ scheduler = {name = "ReduceLROnPlateau", factor = 0.5, patience = 3, monitor = "
 ### Concurrent optimizers
 
 `ConcurrentOptimizerSettings` fits anywhere an optimizer fits. When `selectors`
-are omitted and at least one sub-optimizer is `MuonSettings`, the builder
-auto-assigns `MuonEligibleSelector` to Muon and `NonMuonSelector` to the rest.
-For any other concurrent split, explicit selectors are required.
+are omitted and **exactly one** sub-optimizer is `MuonSettings` or
+`BatchedMuonSettings`, the builder auto-assigns `MuonEligibleSelector` to that
+optimizer and `NonMuonSelector` to the rest. Two or more Muon-family optimizers
+with empty selectors raise `ValidationError` at config construction time (both
+would receive identical parameter sets). For any other concurrent split, explicit
+selectors are required.
 
 ```toml
 [TRAINING.optimizer.default_optimizer]
@@ -166,6 +181,7 @@ from dlkit.infrastructure.config import (
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
     MuonSettings,
     ReduceLROnPlateauSettings,
@@ -203,6 +219,10 @@ program = OptimizerPolicySettings(
 
 program = OptimizerPolicySettings(
     default_optimizer=MuonSettings(lr=0.02)
+)
+
+program = OptimizerPolicySettings(
+    default_optimizer=BatchedMuonSettings(lr=0.02)
 )
 
 program = OptimizerPolicySettings(

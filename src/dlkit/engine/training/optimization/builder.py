@@ -18,6 +18,7 @@ from dlkit.infrastructure.config.optimization_selector import (
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
     MuonSettings,
     OptimizerSpec,
@@ -145,7 +146,7 @@ def _create_optimizer(
     opt_config: OptimizerSpec,
     param_groups: list[ParamGroup],
 ) -> torch.optim.Optimizer:
-    """Instantiate an optimizer, routing MuonSettings to BatchedMuon.
+    """Instantiate an optimizer, routing Muon-family settings to BatchedMuon.
 
     Args:
         opt_config: Optimizer settings instance.
@@ -158,7 +159,7 @@ def _create_optimizer(
         AssertionError: If a nested ConcurrentOptimizerSettings is passed directly
             (must be handled by _build_concurrent_optimizer instead).
     """
-    if isinstance(opt_config, MuonSettings):
+    if isinstance(opt_config, MuonSettings | BatchedMuonSettings):
         return BatchedMuon(
             param_groups,
             lr=opt_config.lr,
@@ -225,7 +226,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
                 model, settings.default_optimizer
             )
-        elif isinstance(settings.default_optimizer, MuonSettings):
+        elif isinstance(settings.default_optimizer, MuonSettings | BatchedMuonSettings):
             optimizer = self._build_muon_mixed(model, settings.default_optimizer)
         else:
             inventory = _make_inventory(model)
@@ -269,6 +270,8 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
                 model, config.optimizer
             )
+        elif isinstance(config.optimizer, MuonSettings | BatchedMuonSettings):
+            optimizer = self._build_muon_mixed(model, config.optimizer)
         else:
             inventory = _make_inventory(model)
             if config.selector is not None:
@@ -296,25 +299,29 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             scheduler_frequency=frequency,
         )
 
-    def _build_muon_mixed(self, model: nn.Module, settings: MuonSettings) -> torch.optim.Optimizer:
-        """Build a MuonMixedOptimizer when Muon is the sole default_optimizer.
+    def _build_muon_mixed(
+        self, model: nn.Module, settings: MuonSettings | BatchedMuonSettings
+    ) -> torch.optim.Optimizer:
+        """Build a MuonMixedOptimizer when Muon-family is the sole default_optimizer.
 
         Per the official PyTorch Muon documentation, Muon only supports 2D hidden-layer
         weight matrices.  This method partitions the model's parameters using
         ``MuonEligibleSelector`` (2D HIDDEN) and ``NonMuonSelector`` (everything else),
-        creates a Muon sub-optimizer for the eligible set, and pairs it with a companion
-        AdamW sub-optimizer (same learning rate) for the remaining parameters.
+        creates a Muon-family sub-optimizer for the eligible set, and pairs it
+        with a companion AdamW sub-optimizer (same learning rate) for the
+        remaining parameters.
 
         If all parameters happen to be Muon-eligible, a plain Muon optimizer is returned
         and no companion is created.
 
         Args:
             model: The neural network model.
-            settings: Muon optimizer configuration.
+            settings: Muon-family optimizer configuration.
 
         Returns:
-            A ``MuonMixedOptimizer`` wrapping Muon + AdamW when non-eligible parameters
-            exist, or a plain Muon optimizer when every parameter is eligible.
+            A ``MuonMixedOptimizer`` wrapping Muon-family + AdamW when
+            non-eligible parameters exist, or a plain Muon-family optimizer
+            when every parameter is eligible.
         """
         inventory = _make_inventory(model)
         partitioner = ParameterPartitioner()
@@ -330,9 +337,10 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             return muon_opt
 
         _logger.warning(
-            "Muon auto-split: %d eligible params → Muon, %d non-eligible params → AdamW "
+            "Muon auto-split: %d eligible params → %s, %d non-eligible params → AdamW "
             "(lr=%s). Use ConcurrentOptimizerSettings to configure the companion optimizer.",
             len(muon_params),
+            type(settings).__name__.removesuffix("Settings"),
             len(fallback_params),
             settings.lr,
         )
@@ -346,8 +354,9 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
     ) -> ConcurrentOptimizer:
         """Build a ConcurrentOptimizer from a ConcurrentOptimizerSettings.
 
-        When ``config.selectors`` is empty and any optimizer is MuonSettings,
-        assigns MuonEligibleSelector to Muon and NonMuonSelector to all others.
+        When ``config.selectors`` is empty and any optimizer is MuonSettings or
+        BatchedMuonSettings, assigns MuonEligibleSelector to the Muon-family
+        optimizer and NonMuonSelector to all others.
         Otherwise uses the provided selectors (None = all parameters).
 
         Args:
@@ -365,10 +374,14 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
                 _selector_from_settings(s) if s is not None else None for s in config.selectors
             ]
         else:
-            has_muon = any(isinstance(opt, MuonSettings) for opt in config.optimizers)
+            has_muon = any(
+                isinstance(opt, MuonSettings | BatchedMuonSettings) for opt in config.optimizers
+            )
             if has_muon:
                 selectors = [
-                    MuonEligibleSelector() if isinstance(opt, MuonSettings) else NonMuonSelector()
+                    MuonEligibleSelector()
+                    if isinstance(opt, MuonSettings | BatchedMuonSettings)
+                    else NonMuonSelector()
                     for opt in config.optimizers
                 ]
             else:

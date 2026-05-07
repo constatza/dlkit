@@ -46,6 +46,7 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 - `"Adam"`
 - `"LBFGS"`
 - `"Muon"`
+- `"BatchedMuon"`
 - `"Concurrent"`
 
 ```toml
@@ -59,6 +60,12 @@ weight_decay = 0.01
 [TRAINING.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [{name = "Muon", lr = 0.02}, {name = "AdamW", lr = 3e-4}]
+```
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "BatchedMuon"
+lr = 0.02
 ```
 
 ### Adding a scheduler
@@ -97,7 +104,10 @@ optimizer = {name = "AdamW", lr = 1e-4}
 
 `ConcurrentOptimizerSettings` fits anywhere an optimizer fits.
 
-- Omit `selectors` only when at least one sub-optimizer is `"Muon"`.
+- Omit `selectors` only when **exactly one** sub-optimizer is `"Muon"` or `"BatchedMuon"`.
+  The builder assigns `MuonEligibleSelector` to that single Muon-family optimizer and
+  `NonMuonSelector` to the rest. Having two Muon-family optimizers with no selectors
+  raises `ValidationError` because both would receive the same parameters.
 - For all other concurrent splits, provide one selector per optimizer.
 
 ```toml
@@ -114,6 +124,7 @@ from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
     MuonSettings,
     ReduceLROnPlateauSettings,
@@ -136,6 +147,12 @@ settings = TrainingSettings(
         default_optimizer=ConcurrentOptimizerSettings(
             optimizers=(MuonSettings(lr=0.02), AdamSettings(lr=3e-4))
         )
+    )
+)
+
+settings = TrainingSettings(
+    optimizer=OptimizerPolicySettings(
+        default_optimizer=BatchedMuonSettings(lr=0.02)
     )
 )
 ```
