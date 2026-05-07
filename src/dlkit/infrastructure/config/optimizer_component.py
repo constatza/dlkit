@@ -224,7 +224,9 @@ class BatchedMuonSettings(_MuonBaseSettings):
     """
 
     name: Literal["BatchedMuon"] = "BatchedMuon"
-    module_path: str | None = "dlkit.engine.training.optimization.batched_muon"
+    module_path: str | None = (
+        None  # never resolved via factory; builder routes directly to BatchedMuon
+    )
 
 
 class ConcurrentOptimizerSettings(BasicSettings):
