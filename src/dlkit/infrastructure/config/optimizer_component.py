@@ -135,6 +135,16 @@ class _MuonBaseSettings(OptimizerComponentSettings):
 
     Do not instantiate directly; use ``MuonSettings`` or ``BatchedMuonSettings``.
 
+    PyTorch's official Muon guidance is:
+    - use Muon only for 2-D hidden-layer weights
+    - optimize other parameters such as bias and embedding with a standard
+      optimizer such as AdamW
+    - use ``adjust_lr_fn="match_rms_adamw"`` when you want Muon to reuse
+      AdamW-tuned learning rate and weight decay values
+
+    DLKit follows that recommendation by defaulting ``adjust_lr_fn`` to
+    ``"match_rms_adamw"``.
+
     Attributes:
         lr: Learning rate for the Muon update.
         weight_decay: Decoupled weight decay.  Muon's default (0.1) differs
@@ -145,10 +155,11 @@ class _MuonBaseSettings(OptimizerComponentSettings):
         eps: Spectral-norm floor added for Newton-Schulz numerical stability.
         ns_coefficients: Quintic polynomial coefficients ``(a, b, c)`` for
             the Newton–Schulz orthogonalization.
-        adjust_lr_fn: Learning-rate shape adjustment strategy.  ``None`` and
-            ``"original"`` both apply ``lr * sqrt(max(1, A/B))``;
-            ``"match_rms_adamw"`` applies ``0.2 * lr * sqrt(max(A, B))``
-            so that Muon can reuse AdamW-tuned hyperparameters directly.
+        adjust_lr_fn: Learning-rate shape adjustment strategy. ``"match_rms_adamw"``
+            is the default so Muon can reuse AdamW-tuned learning rate and
+            weight decay values directly. ``None`` and ``"original"`` both apply
+            ``lr * sqrt(max(1, A/B))``; ``"match_rms_adamw"`` applies
+            ``0.2 * lr * sqrt(max(A, B))``.
     """
 
     model_config = _OPT_CONFIG
@@ -167,10 +178,11 @@ class _MuonBaseSettings(OptimizerComponentSettings):
         description="Quintic polynomial coefficients (a, b, c) for Newton-Schulz orthogonalization",
     )
     adjust_lr_fn: str | None = Field(
-        default=None,
+        default="match_rms_adamw",
         description=(
             "LR shape adjustment: None/'original' applies lr*sqrt(max(1,A/B)); "
-            "'match_rms_adamw' applies 0.2*lr*sqrt(max(A,B))"
+            "'match_rms_adamw' applies 0.2*lr*sqrt(max(A,B)); default is "
+            "'match_rms_adamw' so Muon can reuse AdamW-tuned hyperparameters"
         ),
     )
 
@@ -195,6 +207,11 @@ class MuonSettings(_MuonBaseSettings):
         parameters must be assigned to a companion optimizer (AdamW is
         recommended).  Pass them via ``ConcurrentOptimizerSettings`` or
         rely on the auto-split in ``OptimizerPolicyBuilder``.
+
+    .. note::
+        PyTorch documents ``adjust_lr_fn="match_rms_adamw"`` as the mode for
+        reusing AdamW-tuned learning rate and weight decay values. DLKit uses
+        that mode by default.
 
     .. note::
         ``foreach`` is not supported by ``torch.optim.Muon``; attempting to

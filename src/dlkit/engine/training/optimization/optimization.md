@@ -97,8 +97,14 @@ When `default_optimizer` is a lone `MuonSettings` or `BatchedMuonSettings`,
 the builder partitions the model automatically. The Muon-family optimizer
 receives only 2D hidden-layer weights selected by `MuonEligibleSelector`;
 every remaining parameter is routed to an AdamW companion at the same learning
-rate. If every parameter is Muon-eligible, the builder returns a plain
+rate. Muon-family settings default `adjust_lr_fn` to `"match_rms_adamw"`, so
+this auto-split path follows the PyTorch-recommended mode for reusing
+AdamW-tuned learning rate and weight decay values on the Muon side. If every
+parameter is Muon-eligible, the builder returns a plain
 Muon-family optimizer with no companion wrapper.
+
+This is the convenience path: it optimizes for user-friendliness, not maximum
+companion-optimizer configurability.
 
 ```toml
 [TRAINING.optimizer.default_optimizer]
@@ -151,10 +157,23 @@ with empty selectors raise `ValidationError` at config construction time (both
 would receive identical parameter sets). For any other concurrent split, explicit
 selectors are required.
 
+This is the explicit path: use it when you want independent control over the
+Muon-family optimizer and the companion AdamW settings such as raw `lr`,
+`weight_decay`, or future companion choices.
+
 ```toml
 [TRAINING.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [{name = "Muon", lr = 0.02}, {name = "AdamW", lr = 3e-4}]
+```
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "Concurrent"
+optimizers = [
+  {name = "Muon", lr = 0.02, adjust_lr_fn = "match_rms_adamw"},
+  {name = "AdamW", lr = 3e-4, weight_decay = 0.01},
+]
 ```
 
 ### Concurrent as one stage of a sequential program

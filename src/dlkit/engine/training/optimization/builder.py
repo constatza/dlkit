@@ -308,8 +308,15 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
         weight matrices.  This method partitions the model's parameters using
         ``MuonEligibleSelector`` (2D HIDDEN) and ``NonMuonSelector`` (everything else),
         creates a Muon-family sub-optimizer for the eligible set, and pairs it
-        with a companion AdamW sub-optimizer (same learning rate) for the
-        remaining parameters.
+        with a companion AdamW sub-optimizer for the remaining parameters.
+
+        PyTorch also documents ``adjust_lr_fn="match_rms_adamw"`` as the mode
+        for reusing AdamW-tuned learning rate and weight decay values on the
+        Muon side. DLKit defaults Muon-family settings to that mode. In the
+        auto-split path, DLKit therefore keeps one configured ``lr`` value for
+        both the Muon-family side and the companion AdamW side; Muon applies its
+        own internal RMS-matching adjustment while AdamW uses the configured
+        ``lr`` directly.
 
         If all parameters happen to be Muon-eligible, a plain Muon optimizer is returned
         and no companion is created.

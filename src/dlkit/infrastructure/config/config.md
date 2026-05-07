@@ -100,6 +100,24 @@ trigger = {at_epoch = 10}
 optimizer = {name = "AdamW", lr = 1e-4}
 ```
 
+### Muon learning-rate defaults
+
+`MuonSettings` and `BatchedMuonSettings` default `adjust_lr_fn` to
+`"match_rms_adamw"`. This follows the PyTorch Muon mode intended for reusing
+AdamW-tuned learning rate and weight decay values.
+
+DLKit supports two Muon configuration modes:
+
+- Convenience mode: a lone `MuonSettings` / `BatchedMuonSettings` auto-splits
+  into Muon-family plus internal companion AdamW.
+- Explicit mode: `ConcurrentOptimizerSettings(optimizers=(MuonSettings(...), AdamWSettings(...)))`
+  gives independent control over Muon and companion AdamW settings.
+
+In convenience mode, DLKit keeps one configured `lr` for both the Muon-family
+side and the companion AdamW side. The Muon-family side applies its own
+RMS-matching adjustment internally; the companion AdamW side uses the configured
+`lr` directly.
+
 ### Concurrent optimizers
 
 `ConcurrentOptimizerSettings` fits anywhere an optimizer fits.
@@ -115,6 +133,15 @@ optimizer = {name = "AdamW", lr = 1e-4}
 name = "Concurrent"
 optimizers = [{name = "Adam", lr = 1e-3}, {name = "Adam", lr = 5e-4}]
 selectors  = [{prefix = "encoder"}, {prefix = "decoder"}]
+```
+
+```toml
+[TRAINING.optimizer.default_optimizer]
+name = "Concurrent"
+optimizers = [
+  {name = "Muon", lr = 0.02, adjust_lr_fn = "match_rms_adamw"},
+  {name = "AdamW", lr = 3e-4, weight_decay = 0.01},
+]
 ```
 
 ### Python API
