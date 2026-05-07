@@ -4,6 +4,21 @@
 manual/automatic optimization control, scheduler wiring, transition triggers,
 parameter partitioning, and optimization-state checkpoint round-tripping.
 
+## Parameter Role Classification
+
+Default Muon role classification is graph-based and model-agnostic.
+
+- `GraphParameterRoleClassifier` inspects the `nn.Module` tree and uses
+  `torch.fx` to classify executed parameter-owning sites as `INPUT`,
+  `HIDDEN`, or `OUTPUT`.
+- Structural roles such as `BIAS`, `NORMALIZATION`, and `EMBEDDING` are
+  assigned from exact module ownership before graph boundary reduction.
+- Composite wrappers are traced through to the fundamental parameter-owning
+  sublayers that actually sit on the executed input/output boundary.
+- No default naming heuristics are used.
+- Ambiguous, unsupported, shared, tied, or untraceable parameters remain
+  `UNKNOWN` and therefore stay on the general-purpose optimizer.
+
 ## Mode Selection
 
 The Lightning wrapper inspects the assembled optimizer program and chooses the

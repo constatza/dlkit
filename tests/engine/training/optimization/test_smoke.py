@@ -6,8 +6,6 @@ No Lightning Trainer is used — training_step() is called directly.
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 import torch
 from tensordict import TensorDict
@@ -23,9 +21,7 @@ from dlkit.engine.training.optimization.controllers import (
 )
 from dlkit.engine.training.optimization.inventory import TorchParameterInventory
 from dlkit.engine.training.optimization.partitioning import ParameterPartitioner
-from dlkit.engine.training.optimization.role_inference import (
-    make_default_inference_strategy,
-)
+from dlkit.engine.training.optimization.role_classifier import classify_parameter_roles
 from dlkit.engine.training.optimization.selectors import (
     MuonEligibleSelector,
     NonMuonSelector,
@@ -75,7 +71,7 @@ class _Linear2D(nn.Module):
 class _ThreeLayer(nn.Module):
     """Three linear layers: 2→4→4→2.
 
-    FFNNRoleInferenceStrategy assigns:
+    GraphParameterRoleClassifier assigns:
       fc0.weight → INPUT   (2-D, not Muon-eligible)
       fc1.weight → HIDDEN  (2-D, Muon-eligible)
       fc2.weight → OUTPUT  (2-D, not Muon-eligible)
@@ -90,28 +86,6 @@ class _ThreeLayer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.fc2(torch.relu(self.fc1(torch.relu(self.fc0(x)))))
-
-
-class _CustomRoleModel(nn.Module):
-    """Three-layer model with explicit role annotations via IParameterRoleProvider."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.embed = nn.Linear(4, 8, bias=False)
-        self.hidden = nn.Linear(8, 8, bias=False)
-        self.head = nn.Linear(8, 2, bias=False)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.head(torch.relu(self.hidden(self.embed(x))))
-
-    def parameter_roles(self) -> dict[str, object]:
-        from dlkit.domain.nn.parameter_roles import ParameterRole
-
-        return {
-            "embed.weight": ParameterRole.INPUT,
-            "hidden.weight": ParameterRole.HIDDEN,
-            "head.weight": ParameterRole.OUTPUT,
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +229,10 @@ class TestAdamAndMuonConcurrent:
     @pytest.fixture
     def program(self, model: _ThreeLayer) -> RunningOptimizerPolicy:
         """Build a concurrent program with Muon on fc1.weight, Adam on rest."""
-        strategy = make_default_inference_strategy(model)
+        roles = classify_parameter_roles(model)
         inventory = TorchParameterInventory(
             model,
-            role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+            role_resolver=lambda d: roles.get(d.name, d.role),
         )
 
         muon_selector = MuonEligibleSelector()
@@ -285,10 +259,10 @@ class TestAdamAndMuonConcurrent:
 
     def test_muon_eligible_params_identified(self, model: _ThreeLayer) -> None:
         """fc1.weight must be the only Muon-eligible parameter."""
-        strategy = make_default_inference_strategy(model)
+        roles = classify_parameter_roles(model)
         inventory = TorchParameterInventory(
             model,
-            role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+            role_resolver=lambda d: roles.get(d.name, d.role),
         )
         selector = MuonEligibleSelector()
         eligible = [d for d in inventory.list_parameters() if selector.is_satisfied_by(d)]
@@ -329,74 +303,7 @@ class TestAdamAndMuonConcurrent:
 
 
 # ---------------------------------------------------------------------------
-# Task A: IParameterRoleProvider escape hatch
-# ---------------------------------------------------------------------------
-
-
-class TestCustomRoleProviderEscapeHatch:
-    """Users can implement IParameterRoleProvider to control Muon eligibility for any architecture."""
-
-    @pytest.fixture
-    def custom_model(self) -> _CustomRoleModel:
-        """Three-layer model that self-annotates its parameter roles via IParameterRoleProvider.
-
-        Returns:
-            An nn.Module implementing IParameterRoleProvider with explicit role declarations.
-        """
-        from dlkit.domain.nn.role_provider import IParameterRoleProvider
-
-        assert issubclass(_CustomRoleModel, IParameterRoleProvider)
-        return _CustomRoleModel()
-
-    @pytest.fixture
-    def custom_policy(self) -> OptimizerPolicySettings:
-        """Concurrent Muon + AdamW policy settings for the custom model.
-
-        Returns:
-            An OptimizerPolicySettings with ConcurrentOptimizerSettings as default_optimizer.
-        """
-        return OptimizerPolicySettings(
-            default_optimizer=ConcurrentOptimizerSettings(
-                optimizers=(MuonSettings(lr=0.02), AdamWSettings(lr=1e-3))
-            )
-        )
-
-    def test_custom_role_provider_overrides_ffnn_inference(
-        self,
-        custom_model: _CustomRoleModel,
-        custom_policy: OptimizerPolicySettings,
-    ) -> None:
-        """IParameterRoleProvider declarations take precedence over FFNN position inference.
-
-        Args:
-            custom_model: Model implementing IParameterRoleProvider.
-            custom_policy: Config-driven concurrent Muon + AdamW policy.
-        """
-        program = OptimizerPolicyBuilder().build(custom_model, custom_policy)
-        stage = program.current
-        assert isinstance(stage, ActiveStage)
-        assert isinstance(stage.optimizer, ConcurrentOptimizer)
-
-        sub_opts = stage.optimizer.sub_optimizers
-        muon_params = [p for pg in sub_opts[0].param_groups for p in pg["params"]]
-        adamw_params = [p for pg in sub_opts[1].param_groups for p in pg["params"]]
-
-        def _in(param: nn.Parameter, param_list: list[nn.Parameter]) -> bool:
-            return any(p is param for p in param_list)
-
-        hidden_weight = cast(nn.Parameter, custom_model.hidden.weight)
-        embed_weight = cast(nn.Parameter, custom_model.embed.weight)
-        head_weight = cast(nn.Parameter, custom_model.head.weight)
-
-        assert _in(hidden_weight, muon_params), "HIDDEN weight must go to Muon"
-        assert not _in(embed_weight, muon_params), "INPUT weight must NOT go to Muon"
-        assert not _in(head_weight, muon_params), "OUTPUT weight must NOT go to Muon"
-        assert _in(embed_weight, adamw_params)
-        assert _in(head_weight, adamw_params)
-
-
-# ---------------------------------------------------------------------------
-# Task B: Config-driven Muon constraints
+# Config-driven Muon constraints
 # ---------------------------------------------------------------------------
 
 

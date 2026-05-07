@@ -10,8 +10,7 @@ This package provides infrastructure for multi-stage optimization including:
 Public API:
 - IParameterInventory, TorchParameterInventory: parameter enumeration
 - ParameterDescriptor: individual parameter metadata
-- IParameterRoleInferenceStrategy: role classification interface
-- CompositeParameterRoleInferenceStrategy, make_default_inference_strategy: role inference
+- GraphParameterRoleClassifier, classify_parameter_roles: role classification
 - IParameterSelector: parameter filtering interface
 - RoleSelector, ModulePathSelector, MuonEligibleSelector, etc.: concrete selectors
 - IParameterPartitioner, ParameterPartitioner: parameter grouping
@@ -63,10 +62,9 @@ from .partitioning import (
     IParameterPartitioner,
     ParameterPartitioner,
 )
-from .role_inference import (
-    CompositeParameterRoleInferenceStrategy,
-    IParameterRoleInferenceStrategy,
-    make_default_inference_strategy,
+from .role_classifier import (
+    GraphParameterRoleClassifier,
+    classify_parameter_roles,
 )
 from .selectors import (
     DifferenceSelector,
@@ -103,9 +101,8 @@ __all__ = [
     "IParameterInventory",
     "ParameterDescriptor",
     "TorchParameterInventory",
-    "IParameterRoleInferenceStrategy",
-    "CompositeParameterRoleInferenceStrategy",
-    "make_default_inference_strategy",
+    "GraphParameterRoleClassifier",
+    "classify_parameter_roles",
     "IParameterSelector",
     "RoleSelector",
     "ModulePathSelector",

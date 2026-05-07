@@ -30,7 +30,7 @@ from .concurrent_optimizer import ConcurrentOptimizer, MuonMixedOptimizer
 from .factories import TorchOptimizerFactory, TorchSchedulerFactory
 from .inventory import ParameterDescriptor, TorchParameterInventory
 from .partitioning import ParameterPartitioner
-from .role_inference import make_default_inference_strategy
+from .role_classifier import GraphParameterRoleClassifier
 from .selectors import (
     IParameterSelector,
     ModulePathSelector,
@@ -135,10 +135,10 @@ def _make_inventory(model: nn.Module) -> TorchParameterInventory:
     Returns:
         TorchParameterInventory with role resolver applied.
     """
-    strategy = make_default_inference_strategy(model)
+    roles = GraphParameterRoleClassifier().classify(model)
     return TorchParameterInventory(
         model,
-        role_resolver=lambda d: strategy.infer(model, d.name, d.parameter) or d.role,
+        role_resolver=lambda d: roles.get(d.name, d.role),
     )
 
 

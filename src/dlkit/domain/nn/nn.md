@@ -70,9 +70,8 @@ public contract.
 
 ## Parameter role contracts
 
-Two thin modules expose the semantic vocabulary used by the engine's
-optimization subsystem. Domain defines what roles exist; engine defines how
-to infer them.
+Domain defines the semantic vocabulary used by the engine's optimization
+subsystem. Runtime classification belongs to the engine.
 
 ### `ParameterRole` (`parameter_roles.py`)
 
@@ -90,12 +89,15 @@ class ParameterRole(Enum):
 ```
 
 `UNKNOWN` is the safe fallback: the engine assigns those parameters to the
-general-purpose optimizer rather than specialized heuristics.
+general-purpose optimizer rather than the Muon-specialized path.
 
-### `IParameterRoleProvider` (`role_provider.py`)
-
-Optional `@runtime_checkable` protocol. Models can implement it to provide an
-explicit parameter-role mapping and bypass engine-side inference heuristics.
+The default classifier is graph-based and model-agnostic:
+- it uses official `nn.Module` structure APIs
+- it uses `torch.fx` to classify executed parameter-owning sites
+- it does not require model-side protocols or naming conventions
+- it traces through composite wrappers to the fundamental parameter-owning
+  sublayers that actually sit on the input/output boundary
+- ambiguous or unsupported cases remain `UNKNOWN`
 
 ### What must not live here
 
