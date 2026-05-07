@@ -185,6 +185,44 @@ class TestOptimizerPolicyBuilder:
         assert isinstance(stage.optimizer, ConcurrentOptimizer)
         assert len(stage.optimizer.sub_optimizers) == 2  # noqa: PLR2004
 
+    def test_builder_muon_default_auto_split_shares_lr_with_companion_and_one_scheduler(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """Default Muon auto-split uses one scheduler, one configured lr, and AdamW-RMS matching.
+
+        Expected behavior in DLKit today:
+        - lone ``MuonSettings`` auto-splits into Muon-family + companion AdamW
+        - the companion AdamW is created with the same configured ``lr`` as Muon
+        - Muon defaults ``adjust_lr_fn`` to ``"match_rms_adamw"``, which is the
+          PyTorch-recommended mode for reusing AdamW-tuned lr / weight decay
+        - one stage scheduler is attached to the outer ``ConcurrentOptimizer``
+        - stepping that single scheduler decays both inner optimizer lrs
+        """
+        settings = OptimizerPolicySettings(
+            default_optimizer=MuonSettings(lr=0.02),
+            default_scheduler=StepLRSettings(step_size=1, gamma=0.5),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
+
+        sub_opts = stage.optimizer.sub_optimizers
+        assert len(sub_opts) == 2  # noqa: PLR2004
+        assert isinstance(sub_opts[1], torch.optim.AdamW)
+        assert sub_opts[0].param_groups[0]["lr"] == pytest.approx(0.02)
+        assert sub_opts[0].param_groups[0]["adjust_lr_fn"] == "match_rms_adamw"
+        assert sub_opts[1].param_groups[0]["lr"] == pytest.approx(0.02)
+
+        stage.optimizer.zero_grad()
+        stage.optimizer.step()
+        stage.scheduler.step()
+
+        assert sub_opts[0].param_groups[0]["lr"] == pytest.approx(0.01)
+        assert sub_opts[1].param_groups[0]["lr"] == pytest.approx(0.01)
+
     def test_builder_muon_stage_auto_splits_params(self, tiny_model: nn.Sequential) -> None:
         """Lone MuonSettings in an explicit stage auto-splits like the default path.
 
@@ -204,6 +242,48 @@ class TestOptimizerPolicyBuilder:
         stage = program.stages[0]
         assert isinstance(stage, ActiveStage)
         assert isinstance(stage.optimizer, ConcurrentOptimizer)
+
+    def test_builder_explicit_concurrent_muon_and_adamw_preserve_distinct_lrs_under_one_scheduler(
+        self, tiny_model: nn.Sequential
+    ) -> None:
+        """Explicit Muon + AdamW keeps separate lrs and one scheduler decays both groups.
+
+        This matches the PyTorch Muon guidance that non-2D params should use a
+        standard optimizer such as AdamW. When callers configure the companion
+        explicitly, DLKit preserves the distinct lrs instead of forcing them to
+        match; callers can also request ``adjust_lr_fn='match_rms_adamw'`` on the
+        Muon side when they want to reuse AdamW-tuned lr/weight-decay values.
+        """
+        settings = OptimizerPolicySettings(
+            default_optimizer=ConcurrentOptimizerSettings(
+                optimizers=(
+                    MuonSettings(lr=0.02, adjust_lr_fn="match_rms_adamw"),
+                    AdamWSettings(lr=1e-3, weight_decay=0.123),
+                )
+            ),
+            default_scheduler=StepLRSettings(step_size=1, gamma=0.5),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage, ActiveStage)
+        assert isinstance(stage.optimizer, ConcurrentOptimizer)
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
+
+        sub_opts = stage.optimizer.sub_optimizers
+        assert len(sub_opts) == 2  # noqa: PLR2004
+        assert isinstance(sub_opts[1], torch.optim.AdamW)
+        assert sub_opts[0].param_groups[0]["lr"] == pytest.approx(0.02)
+        assert sub_opts[0].param_groups[0]["adjust_lr_fn"] == "match_rms_adamw"
+        assert sub_opts[1].param_groups[0]["lr"] == pytest.approx(1e-3)
+        assert sub_opts[1].param_groups[0]["weight_decay"] == pytest.approx(0.123)
+
+        stage.optimizer.zero_grad()
+        stage.optimizer.step()
+        stage.scheduler.step()
+
+        assert sub_opts[0].param_groups[0]["lr"] == pytest.approx(0.01)
+        assert sub_opts[1].param_groups[0]["lr"] == pytest.approx(5e-4)
 
     def test_builder_module_path_selector_with_concurrent_covers_all_params(
         self, tiny_model: nn.Sequential

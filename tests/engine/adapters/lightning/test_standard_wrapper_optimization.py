@@ -5,6 +5,8 @@ These tests exercise the full config → program → controller → wrapper path
   (so Lightning does NOT step inactive-stage optimizers automatically).
 - Concurrent 2-optimizer groups are routed to AutomaticOptimizationController
   and return both optimizer configs (with schedulers preserved).
+- Scheduler regressions work through Trainer.fit() for both sequential and
+  concurrent optimizer programs without relying on parameter updates.
 - _requires_manual_optimization detects LBFGS correctly.
 - Both optimizers in a concurrent group actually update parameters when stepped.
 """
@@ -16,6 +18,7 @@ from contextlib import contextmanager
 import pytest
 import torch
 from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import Callback
 from tensordict import TensorDict
 from torch import nn
 from torch.nn import ModuleList
@@ -67,6 +70,37 @@ class _TwoLayer(nn.Module):
         return self.fc1(torch.relu(self.fc0(x)))
 
 
+class _ParameterLeaf(nn.Module):
+    """Single-parameter leaf module used for selector-based optimizer partitioning."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.tensor(0.0))
+
+
+class _SingleParameterModel(nn.Module):
+    """Minimal model with one parameter for staged scheduler tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stage_param = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+
+class _ConcurrentParameterModel(nn.Module):
+    """Minimal model with two named parameter groups for concurrent scheduler tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fc0 = _ParameterLeaf()
+        self.fc1 = _ParameterLeaf()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+
 class _ManualOptimizerWrapper:
     """Tiny Lightning-style optimizer wrapper used for host-path tests."""
 
@@ -94,6 +128,35 @@ class _ManualOptimizerWrapper:
     def toggle_model(self, sync_grad: bool = True):  # noqa: ARG002
         self.toggle_calls += 1
         yield
+
+
+class _ConstantLossLightningWrapper(StandardLightningWrapper):
+    """Standard wrapper variant whose training loss is a constant scalar."""
+
+    def _run_step(self, batch, batch_idx, stage):  # noqa: ANN001,ANN201
+        param = next(self.model.parameters(), None)
+        device = param.device if param is not None else torch.device("cpu")
+        loss = torch.tensor(1.0, device=device, requires_grad=True)
+        return loss, 1, batch
+
+
+class _StageLRCaptureCallback(Callback):
+    """Capture staged optimizer learning rates across epoch boundaries."""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, float | int]] = []
+
+    def on_train_epoch_start(self, trainer, pl_module) -> None:  # noqa: ANN001
+        controller = pl_module._optimization_controller
+        self.records.append(
+            {
+                "event": 0,
+                "epoch": trainer.current_epoch,
+                "active_index": controller._program.active_index,
+                "stage_0_lr": controller._program.stages[0].optimizer.param_groups[0]["lr"],
+                "stage_1_lr": controller._program.stages[1].optimizer.param_groups[0]["lr"],
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -144,13 +207,59 @@ def concurrent_with_scheduler_settings() -> OptimizerPolicySettings:
         stages=(
             OptimizationStageSettings(
                 optimizer=ConcurrentOptimizerSettings(
-                    optimizers=(AdamWSettings(), AdamSettings()),
+                    optimizers=(AdamWSettings(lr=0.2), AdamSettings(lr=0.05)),
                     selectors=(
                         ParameterSelectorSettings(prefix="fc0"),
                         ParameterSelectorSettings(prefix="fc1"),
                     ),
                 ),
-                scheduler=StepLRSettings(step_size=1),
+                scheduler=StepLRSettings(step_size=1, gamma=0.5),
+            ),
+        )
+    )
+
+
+@pytest.fixture
+def sequential_two_stage_with_schedulers_settings() -> OptimizerPolicySettings:
+    """Two manual stages with per-stage StepLR schedulers.
+
+    Expected behavior: because stage 0 never transitions within the test window,
+    only stage 0's scheduler steps. Stage 1 keeps its configured ``lr=0.05``
+    unchanged until it becomes the active stage.
+    """
+    return OptimizerPolicySettings(
+        stages=(
+            OptimizationStageSettings(
+                optimizer=AdamWSettings(lr=0.2),
+                scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                trigger=TriggerSettings(at_epoch=99),
+            ),
+            OptimizationStageSettings(
+                optimizer=AdamSettings(lr=0.05),
+                scheduler=StepLRSettings(step_size=1, gamma=0.5),
+            ),
+        )
+    )
+
+
+@pytest.fixture
+def sequential_two_stage_transition_schedulers_settings() -> OptimizerPolicySettings:
+    """Two manual stages that transition after the first epoch.
+
+    Expected behavior: stage 0 decays once and then yields control. Stage 1
+    starts from its own configured ``lr=0.05`` when activated; it does not
+    inherit stage 0's decayed learning rate.
+    """
+    return OptimizerPolicySettings(
+        stages=(
+            OptimizationStageSettings(
+                optimizer=AdamWSettings(lr=0.2),
+                scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                trigger=TriggerSettings(at_epoch=0),
+            ),
+            OptimizationStageSettings(
+                optimizer=AdamSettings(lr=0.05),
+                scheduler=StepLRSettings(step_size=1, gamma=0.5),
             ),
         )
     )
@@ -177,6 +286,28 @@ def _make_wrapper(settings: OptimizerPolicySettings) -> StandardLightningWrapper
     )
     return StandardLightningWrapper(
         model_settings=ModelComponentSettings(name="_TwoLayer", module_path=_MODULE),
+        settings=WrapperComponentSettings(),
+        components=components,
+        entry_configs=(Feature(name="x"), Target(name="y")),
+    )
+
+
+def _make_scheduler_probe_wrapper(
+    settings: OptimizerPolicySettings,
+    *,
+    model_name: str,
+) -> StandardLightningWrapper:
+    """Build a constant-loss wrapper that exercises real optimizer wiring only."""
+    components = WrapperComponents(
+        loss_fn=nn.MSELoss(),
+        val_metric_routes=[],
+        test_metric_routes=[],
+        optimizer_policy_settings=settings,
+        feature_transforms={"x": ModuleList()},
+        target_transforms={"y": ModuleList()},
+    )
+    return _ConstantLossLightningWrapper(
+        model_settings=ModelComponentSettings(name=model_name, module_path=_MODULE),
         settings=WrapperComponentSettings(),
         components=components,
         entry_configs=(Feature(name="x"), Target(name="y")),
@@ -325,16 +456,57 @@ def _make_batch(batch_size: int = 4, dim: int = 4) -> TensorDict:
     )
 
 
+def _make_probe_batch() -> TensorDict:
+    """Smallest batch shape needed for fit-level scheduler tests."""
+    return TensorDict(
+        {
+            "features": TensorDict({"x": torch.zeros(1, 1)}, batch_size=[1]),
+            "targets": TensorDict({"y": torch.zeros(1, 1)}, batch_size=[1]),
+        },
+        batch_size=[1],
+    )
+
+
 class _SingleBatchDataset(IterableDataset[TensorDict]):
     """Yield a single pre-batched TensorDict for Lightning fit() regression tests."""
 
+    def __init__(self, batch: TensorDict | None = None) -> None:
+        self._batch = batch if batch is not None else _make_batch()
+
     def __iter__(self):
-        yield _make_batch()
+        yield self._batch
 
 
 def _identity_collate(batch: TensorDict) -> TensorDict:
     """Preserve a pre-batched TensorDict when DataLoader auto-collation is disabled."""
     return batch
+
+
+def _fit_single_batch_wrapper(
+    wrapper: StandardLightningWrapper,
+    *,
+    max_epochs: int,
+    batch: TensorDict | None = None,
+    callbacks: list[Callback] | None = None,
+) -> None:
+    """Run a minimal CPU Trainer.fit loop against one repeated pre-batched sample."""
+    trainer = Trainer(
+        max_epochs=max_epochs,
+        logger=False,
+        enable_checkpointing=False,
+        limit_train_batches=1,
+        limit_val_batches=0,
+        enable_progress_bar=False,
+        accelerator="cpu",
+        devices=1,
+        callbacks=callbacks or [],
+    )
+    dataloader = DataLoader(
+        _SingleBatchDataset(batch=batch),
+        batch_size=None,
+        collate_fn=_identity_collate,
+    )
+    trainer.fit(wrapper, train_dataloaders=dataloader)
 
 
 class TestBothOptimizersStep:
@@ -375,23 +547,7 @@ class TestBothOptimizersStep:
         """Automatic optimization must work through Trainer.fit with concurrent optimizers."""
         wrapper = _make_wrapper(concurrent_two_optimizer_settings)
         params_before = {name: p.data.clone() for name, p in wrapper.model.named_parameters()}
-        trainer = Trainer(
-            max_epochs=1,
-            logger=False,
-            enable_checkpointing=False,
-            limit_train_batches=1,
-            limit_val_batches=0,
-            enable_progress_bar=False,
-            accelerator="cpu",
-            devices=1,
-        )
-        dataloader = DataLoader(
-            _SingleBatchDataset(),
-            batch_size=None,
-            collate_fn=_identity_collate,
-        )
-
-        trainer.fit(wrapper, train_dataloaders=dataloader)
+        _fit_single_batch_wrapper(wrapper, max_epochs=1)
 
         params_after = dict(wrapper.model.named_parameters())
         changed = [
@@ -492,3 +648,117 @@ class TestBothOptimizersStep:
         # Epoch 5: trigger fires → advance to stage 1
         controller.on_epoch_end(5, {})
         assert controller._program.active_index == 1, "Stage did not advance at at_epoch=5"
+
+    def test_sequential_two_stage_fit_steps_only_active_stage_scheduler(
+        self,
+        sequential_two_stage_with_schedulers_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Trainer.fit should step only the active stage scheduler in manual mode.
+
+        Expected behavior: with no transition, stage 0 decays from ``0.2`` to
+        ``0.05`` over two epochs, while stage 1 remains at its configured
+        ``0.05`` because inactive staged schedulers do not step.
+        """
+        wrapper = _make_scheduler_probe_wrapper(
+            sequential_two_stage_with_schedulers_settings,
+            model_name="_SingleParameterModel",
+        )
+        controller = wrapper._optimization_controller
+        assert isinstance(controller, ManualOptimizationController)
+
+        stage_0 = controller._program.stages[0]
+        stage_1 = controller._program.stages[1]
+        assert stage_0.optimizer.param_groups[0]["lr"] == pytest.approx(0.2)
+        assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
+        assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(
+            sequential_two_stage_with_schedulers_settings.stages[1].optimizer.lr
+        )
+
+        _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
+
+        assert controller._program.active_index == 0
+        assert stage_0.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
+        assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
+        assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(
+            sequential_two_stage_with_schedulers_settings.stages[1].optimizer.lr
+        )
+
+    def test_concurrent_stage_fit_steps_scheduler_for_all_inner_optimizers(
+        self,
+        concurrent_with_scheduler_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Trainer.fit must decay LR across all sub-optimizers in a concurrent stage."""
+        wrapper = _make_scheduler_probe_wrapper(
+            concurrent_with_scheduler_settings,
+            model_name="_ConcurrentParameterModel",
+        )
+        controller = wrapper._optimization_controller
+        assert isinstance(controller, AutomaticOptimizationController)
+
+        optimizer = controller._program.current.optimizer
+        assert isinstance(optimizer, ConcurrentOptimizer)
+        assert optimizer.sub_optimizers[0].param_groups[0]["lr"] == pytest.approx(0.2)
+        assert optimizer.sub_optimizers[1].param_groups[0]["lr"] == pytest.approx(0.05)
+
+        _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
+
+        assert optimizer.sub_optimizers[0].param_groups[0]["lr"] == pytest.approx(0.05)
+        assert optimizer.sub_optimizers[1].param_groups[0]["lr"] == pytest.approx(0.0125)
+
+    def test_sequential_transition_activates_stage_1_at_its_configured_lr(
+        self,
+        sequential_two_stage_transition_schedulers_settings: OptimizerPolicySettings,
+    ) -> None:
+        """Stage 1 should start from its configured LR and then decay under its scheduler.
+
+        Expected behavior:
+        - epoch 0 uses stage 0 at ``lr=0.2``
+        - epoch 0 end decays stage 0 to ``0.1`` and advances to stage 1
+        - epoch 1 starts with stage 1 still at its configured ``lr=0.05``
+        - epoch 1 end decays stage 1 to ``0.025``
+
+        This verifies that a later stage does not inherit the previous stage's
+        decayed learning rate on activation.
+        """
+        wrapper = _make_scheduler_probe_wrapper(
+            sequential_two_stage_transition_schedulers_settings,
+            model_name="_SingleParameterModel",
+        )
+        controller = wrapper._optimization_controller
+        assert isinstance(controller, ManualOptimizationController)
+
+        callback = _StageLRCaptureCallback()
+        _fit_single_batch_wrapper(
+            wrapper,
+            max_epochs=2,
+            batch=_make_probe_batch(),
+            callbacks=[callback],
+        )
+
+        assert len(callback.records) == 2  # noqa: PLR2004
+        epoch_0_start = callback.records[0]
+        epoch_1_start = callback.records[1]
+
+        assert epoch_0_start["active_index"] == 0
+        assert epoch_0_start["stage_0_lr"] == pytest.approx(0.2)
+        assert epoch_0_start["stage_1_lr"] == pytest.approx(0.05)
+
+        assert epoch_1_start["active_index"] == 1
+        assert epoch_1_start["stage_0_lr"] == pytest.approx(0.1)
+        assert epoch_1_start["stage_0_lr"] == pytest.approx(
+            sequential_two_stage_transition_schedulers_settings.stages[0].optimizer.lr * 0.5
+        )
+        assert epoch_1_start["stage_1_lr"] == pytest.approx(0.05)
+        assert epoch_1_start["stage_1_lr"] == pytest.approx(
+            sequential_two_stage_transition_schedulers_settings.stages[1].optimizer.lr
+        )
+
+        assert controller._program.active_index == 1
+        assert controller._program.stages[0].optimizer.param_groups[0]["lr"] == pytest.approx(0.1)
+        assert controller._program.stages[0].optimizer.param_groups[0]["lr"] == pytest.approx(
+            sequential_two_stage_transition_schedulers_settings.stages[0].optimizer.lr * 0.5
+        )
+        assert controller._program.stages[1].optimizer.param_groups[0]["lr"] == pytest.approx(0.025)
+        assert controller._program.stages[1].optimizer.param_groups[0]["lr"] == pytest.approx(
+            sequential_two_stage_transition_schedulers_settings.stages[1].optimizer.lr * 0.5
+        )

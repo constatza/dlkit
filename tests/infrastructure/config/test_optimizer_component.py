@@ -42,6 +42,13 @@ class TestMuonSettingsFields:
         assert s.momentum == pytest.approx(0.95)
         assert s.nesterov is True
         assert s.ns_steps == 5
+        assert s.adjust_lr_fn == "match_rms_adamw"
+
+    def test_batched_muon_settings_has_no_adamw_fields(self) -> None:
+        """BatchedMuonSettings must stay Muon-only; companion AdamW config lives elsewhere."""
+        settings = BatchedMuonSettings()
+        adamw_fields = [n for n in type(settings).model_fields if n.startswith("adamw_")]
+        assert adamw_fields == []
 
     def test_muon_settings_name_and_module(self) -> None:
         """Verify MuonSettings has correct name and module_path.
