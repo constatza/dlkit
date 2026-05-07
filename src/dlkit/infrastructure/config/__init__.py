@@ -77,6 +77,7 @@ from .optimization_trigger import TriggerSettings
 from .optimizer_component import (
     AdamSettings,
     AdamWSettings,
+    BatchedMuonSettings,
     ConcurrentOptimizerSettings,
     CosineAnnealingLRSettings,
     CosineAnnealingWarmRestartsSettings,
@@ -156,6 +157,7 @@ __all__ = [
     # Optimizer and scheduler components
     "AdamSettings",
     "AdamWSettings",
+    "BatchedMuonSettings",
     "ConcurrentOptimizerSettings",
     "LBFGSSettings",
     "MuonSettings",

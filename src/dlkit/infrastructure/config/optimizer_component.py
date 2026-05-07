@@ -130,27 +130,12 @@ class LBFGSSettings(OptimizerComponentSettings):
     line_search_fn: str | None = Field(default=None, description="Line search algorithm")
 
 
-class MuonSettings(OptimizerComponentSettings):
-    """Settings for ``torch.optim.Muon``.
+class _MuonBaseSettings(OptimizerComponentSettings):
+    """Shared hyperparameters for all Muon-family optimizers.
 
-    Muon (Momentum + Update Orthogonalization) uses Newton–Schulz iterations
-    to orthogonalize the weight update matrix before applying the update.
-
-    .. warning::
-        Muon supports **only 2-D parameters** (hidden-layer weight matrices).
-        Biases, embeddings, layer-norm weights, and all other non-matrix
-        parameters must be assigned to a companion optimizer (AdamW is
-        recommended).  Pass them via ``ConcurrentOptimizerSettings`` or
-        rely on the auto-split in ``OptimizerPolicyBuilder``.
-
-    .. note::
-        ``foreach`` is not supported by ``torch.optim.Muon``; attempting to
-        enable it raises ``RuntimeError``.  Complex parameters and sparse
-        gradients are also unsupported.
+    Do not instantiate directly; use ``MuonSettings`` or ``BatchedMuonSettings``.
 
     Attributes:
-        name: Discriminator tag — always ``"Muon"``.
-        module_path: Import path.
         lr: Learning rate for the Muon update.
         weight_decay: Decoupled weight decay.  Muon's default (0.1) differs
             from AdamW's default (0.01).
@@ -167,9 +152,7 @@ class MuonSettings(OptimizerComponentSettings):
     """
 
     model_config = _OPT_CONFIG
-    name: Literal["Muon"] = "Muon"
-    module_path: str | None = "torch.optim"
-    lr: float = Field(default=0.02, gt=0, description="Muon learning rate")
+    lr: float = Field(default=0.02, gt=0, description="Muon-family learning rate")
     weight_decay: float = Field(
         default=0.1, ge=0, description="Decoupled weight decay (Muon default: 0.1, not 0.01)"
     )
@@ -198,6 +181,50 @@ class MuonSettings(OptimizerComponentSettings):
         if v not in allowed:
             raise ValueError(f"adjust_lr_fn must be one of {allowed!r}, got {v!r}")
         return v
+
+
+class MuonSettings(_MuonBaseSettings):
+    """Settings for ``torch.optim.Muon``.
+
+    Muon (Momentum + Update Orthogonalization) uses Newton–Schulz iterations
+    to orthogonalize the weight update matrix before applying the update.
+
+    .. warning::
+        Muon supports **only 2-D parameters** (hidden-layer weight matrices).
+        Biases, embeddings, layer-norm weights, and all other non-matrix
+        parameters must be assigned to a companion optimizer (AdamW is
+        recommended).  Pass them via ``ConcurrentOptimizerSettings`` or
+        rely on the auto-split in ``OptimizerPolicyBuilder``.
+
+    .. note::
+        ``foreach`` is not supported by ``torch.optim.Muon``; attempting to
+        enable it raises ``RuntimeError``.  Complex parameters and sparse
+        gradients are also unsupported.
+
+    Attributes:
+        name: Discriminator tag — always ``"Muon"``.
+        module_path: Import path.
+    """
+
+    name: Literal["Muon"] = "Muon"
+    module_path: str | None = "torch.optim"
+
+
+class BatchedMuonSettings(_MuonBaseSettings):
+    """Settings for ``dlkit.engine.training.optimization.BatchedMuon``.
+
+    BatchedMuon is a drop-in Muon replacement that groups same-shape matrices
+    and runs Newton-Schulz orthogonalization via batched matrix multiplies.
+    The update rule matches Muon; only the inner orthogonalization execution
+    strategy changes.
+
+    Attributes:
+        name: Discriminator tag — always ``"BatchedMuon"``.
+        module_path: Import path.
+    """
+
+    name: Literal["BatchedMuon"] = "BatchedMuon"
+    module_path: str | None = "dlkit.engine.training.optimization.batched_muon"
 
 
 class ConcurrentOptimizerSettings(BasicSettings):
@@ -236,19 +263,30 @@ class ConcurrentOptimizerSettings(BasicSettings):
             Self after validation.
 
         Raises:
-            ValueError: If selectors are non-empty with wrong length, or empty without Muon.
+            ValueError: If selectors are non-empty with wrong length, empty without Muon,
+                or empty with more than one Muon-family optimizer.
         """
         if self.selectors and len(self.selectors) != len(self.optimizers):
             raise ValueError(
                 f"selectors length ({len(self.selectors)}) must match "
                 f"optimizers length ({len(self.optimizers)})."
             )
-        has_muon = any(isinstance(opt, MuonSettings) for opt in self.optimizers)
-        if not self.selectors and not has_muon:
+        if self.selectors:
+            return self
+        muon_count = sum(
+            isinstance(opt, MuonSettings | BatchedMuonSettings) for opt in self.optimizers
+        )
+        if muon_count == 0:
             raise ValueError(
                 "ConcurrentOptimizerSettings with no selectors requires at least one "
-                "MuonSettings sub-optimizer (Muon/non-Muon split is auto-inferred). "
+                "MuonSettings/BatchedMuonSettings sub-optimizer "
+                "(Muon/non-Muon split is auto-inferred). "
                 "For other concurrent splits provide explicit selectors=."
+            )
+        if muon_count > 1:
+            raise ValueError(
+                f"Auto-selector inference requires exactly one Muon-family optimizer; "
+                f"found {muon_count}. Provide explicit selectors= to partition parameters."
             )
         return self
 
@@ -258,7 +296,12 @@ class ConcurrentOptimizerSettings(BasicSettings):
 # Pydantic dispatches deserialization to the correct subclass via the ``name`` discriminator.
 # ---------------------------------------------------------------------------
 OptimizerSpec = Annotated[
-    AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings | ConcurrentOptimizerSettings,
+    AdamWSettings
+    | AdamSettings
+    | LBFGSSettings
+    | MuonSettings
+    | BatchedMuonSettings
+    | ConcurrentOptimizerSettings,
     Field(discriminator="name"),
 ]
 
