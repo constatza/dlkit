@@ -102,3 +102,16 @@ assert Path(p).as_posix() in other_path.as_posix()
 # Wrong
 assert str(path_a) == str(path_b)
 ```
+
+---
+
+## Pre-Push Selection
+
+The `pre-push` hook runs affected fast tests with `pytest-testmon` instead of the full fast suite.
+
+- The first `pre-push` run after a fresh clone or after deleting `.testmondata` will execute the full
+  fast suite and build the dependency database.
+- Later `pre-push` runs execute only tests affected by your changes, still filtered by
+  `-m "not slow"`.
+- If you need to refresh the dependency graph deliberately, run:
+  `uv run pytest tests --testmon-noselect -m "not slow"`

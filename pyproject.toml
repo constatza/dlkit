@@ -40,6 +40,7 @@ dev = [
     "pytest<9.0.0,>=8.2.2",
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.14.0",
+    "pytest-testmon>=2.2.0",
     "pytest-timeout>=2.4.0",
     "ruff>=0.13.1",
     "tach>=0.34.0",
@@ -172,4 +173,3 @@ respect-ignore-files = true
 [tool.ty.terminal]
 output-format = "concise"
 error-on-warning = true
-
