@@ -466,3 +466,22 @@ SchedulerSpec = Annotated[
     | CosineAnnealingWarmRestartsSettings,
     Field(discriminator="name"),
 ]
+
+
+def optimizer_requires_closure(spec: OptimizerSpec) -> bool:
+    """Return True if this optimizer requires a closure (uses internal line search).
+
+    Closure-based optimizers (e.g. LBFGS) are incompatible with LR range tests
+    and external LR schedulers. ConcurrentOptimizerSettings is checked recursively.
+
+    Args:
+        spec: Optimizer specification to inspect.
+
+    Returns:
+        True if any optimizer in the spec requires a closure.
+    """
+    if isinstance(spec, LBFGSSettings):
+        return True
+    if isinstance(spec, ConcurrentOptimizerSettings):
+        return any(optimizer_requires_closure(sub) for sub in spec.optimizers)
+    return False

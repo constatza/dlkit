@@ -11,7 +11,9 @@ from dlkit.infrastructure.config.optimizer_component import (
     AdamWSettings,
     BatchedMuonSettings,
     ConcurrentOptimizerSettings,
+    LBFGSSettings,
     MuonSettings,
+    optimizer_requires_closure,
 )
 
 
@@ -138,3 +140,39 @@ class TestConcurrentOptimizerSettingsValidation:
         """
         with pytest.raises(ValidationError, match="exactly one Muon-family"):
             ConcurrentOptimizerSettings(optimizers=(MuonSettings(), BatchedMuonSettings()))
+
+
+class TestOptimizerRequiresClosure:
+    """Tests for optimizer_requires_closure predicate."""
+
+    def test_lbfgs_requires_closure(self) -> None:
+        """LBFGSSettings always requires a closure."""
+        assert optimizer_requires_closure(LBFGSSettings()) is True
+
+    def test_adamw_does_not_require_closure(self) -> None:
+        """AdamWSettings never requires a closure."""
+        assert optimizer_requires_closure(AdamWSettings()) is False
+
+    def test_adam_does_not_require_closure(self) -> None:
+        """AdamSettings never requires a closure."""
+        assert optimizer_requires_closure(AdamSettings()) is False
+
+    def test_muon_does_not_require_closure(self) -> None:
+        """MuonSettings never requires a closure."""
+        assert optimizer_requires_closure(MuonSettings()) is False
+
+    def test_concurrent_with_lbfgs_requires_closure(self) -> None:
+        """ConcurrentOptimizerSettings containing LBFGS reports requires_closure=True."""
+        spec = ConcurrentOptimizerSettings(
+            optimizers=(LBFGSSettings(), AdamWSettings()),
+            selectors=(
+                ParameterSelectorSettings(prefix="encoder"),
+                ParameterSelectorSettings(prefix="decoder"),
+            ),
+        )
+        assert optimizer_requires_closure(spec) is True
+
+    def test_concurrent_without_lbfgs_does_not_require_closure(self) -> None:
+        """ConcurrentOptimizerSettings with no closure-based optimizer returns False."""
+        spec = ConcurrentOptimizerSettings(optimizers=(MuonSettings(), AdamWSettings()))
+        assert optimizer_requires_closure(spec) is False

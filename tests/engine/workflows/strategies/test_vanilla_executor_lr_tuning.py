@@ -9,6 +9,8 @@ import pytest
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.optimizer_component import LBFGSSettings
+from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 
 
@@ -260,6 +262,36 @@ class TestVanillaExecutorLRTuning:
         # Tuner still ran, update was skipped gracefully
         mock_lr_tuner.tune.assert_called_once()
         assert not hasattr(components_no_lr.model, "lr")
+
+    def test_apply_lr_tuning_skips_for_lbfgs(
+        self,
+        mock_components: RuntimeComponents,
+    ) -> None:
+        """LR tuner is not called when the configured optimizer requires a closure (LBFGS)."""
+        from dlkit.infrastructure.config.session_settings import SessionSettings
+        from dlkit.infrastructure.config.training_settings import TrainingSettings
+
+        settings = TrainingWorkflowConfig(
+            SESSION=SessionSettings(workflow="train", seed=42),
+            TRAINING=TrainingSettings(
+                lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),
+                optimizer=OptimizerPolicySettings(default_optimizer=LBFGSSettings()),
+            ),
+        )
+
+        executor = VanillaExecutor()
+        mock_lr_tuner = Mock()
+
+        with patch("pytorch_lightning.seed_everything"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
+                with patch(
+                    "dlkit.engine.training.tuning.LRTuner",
+                    return_value=mock_lr_tuner,
+                ):
+                    executor.execute(mock_components, settings)
+
+        mock_lr_tuner.tune.assert_not_called()
+        mock_components.trainer.fit.assert_called_once()
 
     def test_apply_lr_tuning_noop_setter_leaves_lr_unchanged(
         self,

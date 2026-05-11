@@ -22,6 +22,8 @@ from dlkit.infrastructure.config.optimizer_component import (
     ConcurrentOptimizerSettings,
     MuonSettings,
     OptimizerSpec,
+    SchedulerSpec,
+    optimizer_requires_closure,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
@@ -142,6 +144,33 @@ def _make_inventory(model: nn.Module) -> TorchParameterInventory:
     )
 
 
+def _build_scheduler(
+    optimizer_spec: OptimizerSpec,
+    scheduler_settings: SchedulerSpec | None,
+    optimizer: torch.optim.Optimizer,
+) -> object | None:
+    """Create a scheduler, or None when the optimizer requires a closure.
+
+    Args:
+        optimizer_spec: Optimizer settings used to check closure compatibility.
+        scheduler_settings: Scheduler configuration, or None.
+        optimizer: The live optimizer instance to wrap.
+
+    Returns:
+        Instantiated scheduler, or None if not configured or incompatible.
+    """
+    if scheduler_settings is None:
+        return None
+    if optimizer_requires_closure(optimizer_spec):
+        _logger.warning(
+            "%s uses an internal line search; LR scheduler '%s' will be ignored.",
+            type(optimizer_spec).__name__.removesuffix("Settings"),
+            scheduler_settings.name,
+        )
+        return None
+    return TorchSchedulerFactory(scheduler_settings).create(optimizer)
+
+
 def _create_optimizer(
     opt_config: OptimizerSpec,
     param_groups: list[ParamGroup],
@@ -233,9 +262,9 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             param_groups = _params_to_group(inventory.list_parameters())
             optimizer = TorchOptimizerFactory(settings.default_optimizer).create(param_groups)
 
-        scheduler = None
-        if settings.default_scheduler is not None:
-            scheduler = TorchSchedulerFactory(settings.default_scheduler).create(optimizer)
+        scheduler = _build_scheduler(
+            settings.default_optimizer, settings.default_scheduler, optimizer
+        )
 
         stage = ActiveStage(
             optimizer=optimizer,
@@ -285,9 +314,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             param_groups = _params_to_group(selected_params)
             optimizer = TorchOptimizerFactory(config.optimizer).create(param_groups)
 
-        scheduler = None
-        if config.scheduler is not None:
-            scheduler = TorchSchedulerFactory(config.scheduler).create(optimizer)
+        scheduler = _build_scheduler(config.optimizer, config.scheduler, optimizer)
 
         return ActiveStage(
             optimizer=optimizer,

@@ -22,6 +22,7 @@ from dlkit.infrastructure.config.optimizer_component import (
     AdamWSettings,
     BatchedMuonSettings,
     ConcurrentOptimizerSettings,
+    LBFGSSettings,
     MuonSettings,
     ReduceLROnPlateauSettings,
     StepLRSettings,
@@ -468,3 +469,40 @@ class TestOptimizerPolicyBuilder:
         )
         with pytest.raises(ParameterPartitionError):
             OptimizerPolicyBuilder().build(tiny_model, settings)
+
+    def test_build_default_skips_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
+        """LBFGS default optimizer: scheduler is ignored even when configured."""
+        settings = OptimizerPolicySettings(
+            default_optimizer=LBFGSSettings(),
+            default_scheduler=ReduceLROnPlateauSettings(),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert stage.scheduler is None
+
+    def test_build_default_keeps_scheduler_for_adamw(self, tiny_model: nn.Sequential) -> None:
+        """AdamW default optimizer: scheduler is attached normally."""
+        settings = OptimizerPolicySettings(
+            default_optimizer=AdamWSettings(),
+            default_scheduler=ReduceLROnPlateauSettings(),
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+
+    def test_build_stage_skips_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
+        """LBFGS in an explicit stage: scheduler is ignored even when configured."""
+        settings = OptimizerPolicySettings(
+            stages=(
+                OptimizationStageSettings(
+                    optimizer=LBFGSSettings(),
+                    scheduler=StepLRSettings(step_size=5, gamma=0.5),
+                ),
+            )
+        )
+        program = OptimizerPolicyBuilder().build(tiny_model, settings)
+
+        stage = program.stages[0]
+        assert stage.scheduler is None

@@ -169,6 +169,16 @@ class VanillaExecutor(ITrainingExecutor):
         if lr_tuner_settings is None:
             return
 
+        from dlkit.infrastructure.config.optimizer_component import optimizer_requires_closure
+
+        optimizer_spec = settings.TRAINING.optimizer.default_optimizer
+        if optimizer_requires_closure(optimizer_spec):
+            logger.warning(
+                "%s uses an internal line search; LR range test is not supported. Skipping LR tuner.",
+                type(optimizer_spec).__name__.removesuffix("Settings"),
+            )
+            return
+
         from dlkit.engine.training.tuning import LRTuner
 
         lr_tuner = LRTuner()
