@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
@@ -26,11 +26,16 @@ from .interfaces import ITrainingExecutor
 logger = get_logger(__name__)
 
 
-class _IHasLR(Protocol):
-    """Protocol for models that expose a settable float lr property."""
+@runtime_checkable
+class ILRTunable(Protocol):
+    """Model that exposes a settable float learning rate for LR tuner compatibility.
+
+    Implemented by CoreLightningWrapper. Used by the training executor to detect
+    and update the learning rate after automatic LR tuning.
+    """
 
     @property
-    def lr(self) -> float: ...
+    def lr(self) -> float | None: ...
 
     @lr.setter
     def lr(self, value: float) -> None: ...
@@ -170,14 +175,14 @@ class VanillaExecutor(ITrainingExecutor):
         try:
             suggested_lr: float = lr_tuner.tune(trainer, model, lr_tuner_settings, datamodule)
 
-            if not hasattr(model, "lr"):
+            if not isinstance(model, ILRTunable):
                 logger.warning(
-                    "Could not update learning rate: model has no lr property. "
+                    "Could not update learning rate: model does not implement ILRTunable. "
                     "Ensure your model extends CoreLightningWrapper."
                 )
                 return
 
-            cast(_IHasLR, model).lr = suggested_lr
+            cast(ILRTunable, model).lr = suggested_lr
 
             actual_lr = getattr(model, "lr", None)
             if actual_lr != suggested_lr:
