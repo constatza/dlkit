@@ -51,19 +51,18 @@ def test_wrapper_lr_attributes_sync_initial():
     # The properties delegate to the controller's program
 
 
-def test_wrapper_lr_attribute_updates_optimizer_settings():
+def test_wrapper_lr_setter_delegates_to_controller():
+    """Setting lr/learning_rate delegates to OptimizationController.update_learning_rate()."""
     wrapper = _build_wrapper()
 
-    # LR setter is now a no-op (LR is immutable in OptimizationController)
-    # This test ensures backward compatibility — setting lr doesn't raise
+    # Setter delegates to the controller — lr changes immediately
     wrapper.lr = 5e-4
 
-    # The lr property still returns the current LR from the controller
-    assert pytest.approx(1e-3) == wrapper.lr
-    assert pytest.approx(1e-3) == wrapper.learning_rate
+    assert pytest.approx(5e-4) == wrapper.lr
+    assert pytest.approx(5e-4) == wrapper.learning_rate
 
+    # learning_rate alias also delegates through the same setter
     wrapper.learning_rate = 2e-3
 
-    # Still returns the controller's LR (unchanged via setter)
-    assert pytest.approx(1e-3) == wrapper.lr
-    assert pytest.approx(1e-3) == wrapper.learning_rate
+    assert pytest.approx(2e-3) == wrapper.lr
+    assert pytest.approx(2e-3) == wrapper.learning_rate

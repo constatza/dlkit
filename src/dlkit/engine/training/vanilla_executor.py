@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
@@ -14,8 +14,6 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.protocols import IDataModule, ITrainableModule
 from dlkit.domain.metrics.collect import collect_metrics
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.core.base_settings import BasicSettings
-from dlkit.infrastructure.config.core.updater import update_settings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -26,6 +24,16 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .interfaces import ITrainingExecutor
 
 logger = get_logger(__name__)
+
+
+class _IHasLR(Protocol):
+    """Protocol for models that expose a settable float lr property."""
+
+    @property
+    def lr(self) -> float: ...
+
+    @lr.setter
+    def lr(self, value: float) -> None: ...
 
 
 @contextmanager
@@ -160,68 +168,32 @@ class VanillaExecutor(ITrainingExecutor):
 
         lr_tuner = LRTuner()
         try:
-            suggested_lr = lr_tuner.tune(trainer, model, lr_tuner_settings, datamodule)
+            suggested_lr: float = lr_tuner.tune(trainer, model, lr_tuner_settings, datamodule)
 
-            if self._try_set_model_lr(model, suggested_lr):
+            if not hasattr(model, "lr"):
+                logger.warning(
+                    "Could not update learning rate: model has no lr property. "
+                    "Ensure your model extends CoreLightningWrapper."
+                )
                 return
-            if self._try_set_optimizer_lr(model, suggested_lr):
-                return
-            logger.warning(
-                "Could not update learning rate: model.optimizer.lr not accessible. "
-                "Ensure your model uses OptimizerSettings with an 'lr' field."
-            )
+
+            cast(_IHasLR, model).lr = suggested_lr
+
+            actual_lr = getattr(model, "lr", None)
+            if actual_lr != suggested_lr:
+                logger.warning(
+                    "LR tuner suggested {} but model.lr reports {} after update. "
+                    "Training will proceed with the un-tuned rate.",
+                    suggested_lr,
+                    actual_lr,
+                )
+            else:
+                logger.info("Learning rate set to {}", suggested_lr)
 
         except Exception as e:
             logger.warning(
                 "Learning rate tuning failed: %s. Continuing with configured learning rate.", e
             )
-
-    def _try_set_model_lr(self, model: LightningModule, lr: float) -> bool:
-        """Try to set learning rate via model attribute.
-
-        Attempts to set model.lr property and verifies that the optimizer
-        learning rate was updated accordingly.
-
-        Args:
-            model: Lightning module
-            lr: Learning rate value to set
-
-        Returns:
-            True if learning rate was successfully set, False otherwise
-        """
-        if not hasattr(model, "lr"):
-            return False
-        try:
-            object.__setattr__(model, "lr", lr)
-            if getattr(getattr(model, "optimizer", None), "lr", None) == lr:
-                logger.info("Learning rate tuned to {}", lr)
-                return True
-        except Exception:
-            pass
-        return False
-
-    def _try_set_optimizer_lr(self, model: LightningModule, lr: float) -> bool:
-        """Try to set learning rate via optimizer settings.
-
-        Attempts to update model.optimizer (BasicSettings instance) with
-        the new learning rate value.
-
-        Args:
-            model: Lightning module
-            lr: Learning rate value to set
-
-        Returns:
-            True if learning rate was successfully set, False otherwise
-        """
-        if not hasattr(model, "optimizer") or not hasattr(model.optimizer, "lr"):
-            return False
-        optimizer_attr = model.optimizer
-        if not isinstance(optimizer_attr, BasicSettings):
-            return False
-        updated = update_settings(optimizer_attr, {"lr": lr})
-        object.__setattr__(model, "optimizer", updated)
-        logger.info("Learning rate tuned to {}", lr)
-        return True
 
     def _run_optional_steps(
         self,

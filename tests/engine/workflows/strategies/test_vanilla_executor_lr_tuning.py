@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,20 +9,7 @@ import pytest
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
 from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
-
-
-def _trainer_mock(components: RuntimeComponents) -> Mock:
-    trainer = components.trainer
-    assert trainer is not None
-    return cast(Mock, trainer)
-
-
-def _optimizer_settings(components: RuntimeComponents) -> OptimizerSettings:
-    optimizer = components.model.optimizer
-    assert isinstance(optimizer, OptimizerSettings)
-    return optimizer
 
 
 @pytest.fixture
@@ -39,7 +25,7 @@ def mock_components() -> RuntimeComponents:
     mock_trainer.callbacks = []
 
     mock_model = Mock()
-    mock_model.optimizer = OptimizerSettings(lr=0.001)
+    mock_model.lr = 0.001
 
     mock_datamodule = Mock()
 
@@ -90,28 +76,24 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
         settings_without_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test that training proceeds normally without LR tuner."""
+        """Training proceeds normally without LR tuner; lr is not changed."""
         executor = VanillaExecutor()
 
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 executor.execute(mock_components, settings_without_lr_tuner)
 
-        # Verify training was called
-        _trainer_mock(mock_components).fit.assert_called_once()
-
-        # Verify original LR was NOT modified
-        assert _optimizer_settings(mock_components).lr == 0.001
+        mock_components.trainer.fit.assert_called_once()
+        assert mock_components.model.lr == 0.001
 
     def test_execute_with_lr_tuner_enabled(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test that LR tuner is called and updates learning rate."""
+        """LR tuner is called and model.lr is updated to the suggested value."""
         executor = VanillaExecutor()
 
-        # Mock the LRTuner
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.005
 
@@ -123,10 +105,7 @@ class TestVanillaExecutorLRTuning:
                 ):
                     executor.execute(mock_components, settings_with_lr_tuner)
 
-        # Verify LR tuner was called
         mock_lr_tuner.tune.assert_called_once()
-
-        # Verify tuner was called with correct arguments
         call_args = mock_lr_tuner.tune.call_args
         assert call_args[0][0] == mock_components.trainer
         assert call_args[0][1] == mock_components.model
@@ -134,28 +113,23 @@ class TestVanillaExecutorLRTuning:
         assert call_args[0][2].max_lr == 0.1
         assert call_args[0][2].num_training == 50
 
-        # Verify learning rate was updated
-        assert _optimizer_settings(mock_components).lr == 0.005
-
-        # Verify training was called after tuning
-        _trainer_mock(mock_components).fit.assert_called_once()
+        assert mock_components.model.lr == 0.005
+        mock_components.trainer.fit.assert_called_once()
 
     def test_execute_with_lr_tuner_empty_config(
         self,
         mock_components: RuntimeComponents,
     ) -> None:
-        """Test that LR tuner is called with empty dict config (all defaults)."""
+        """Empty [TRAINING.lr_tuner] section creates LRTunerSettings with defaults."""
         from dlkit.infrastructure.config.session_settings import SessionSettings
         from dlkit.infrastructure.config.training_settings import TrainingSettings
 
-        # Simulate empty TOML section: [TRAINING.lr_tuner]
         settings_with_empty_lr_tuner = TrainingWorkflowConfig(
             SESSION=SessionSettings(workflow="train", seed=42),
             TRAINING=TrainingSettings.model_validate({"lr_tuner": {}}),
         )
 
         executor = VanillaExecutor()
-
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.003
 
@@ -167,21 +141,17 @@ class TestVanillaExecutorLRTuning:
                 ):
                     executor.execute(mock_components, settings_with_empty_lr_tuner)
 
-        # Verify LR tuner WAS called (empty dict creates LRTunerSettings with defaults)
         mock_lr_tuner.tune.assert_called_once()
-
-        # Verify LR was updated
-        assert _optimizer_settings(mock_components).lr == 0.003
+        assert mock_components.model.lr == 0.003
 
     def test_execute_lr_tuner_failure_continues_training(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test that training continues if LR tuner fails."""
+        """Training continues if LR tuner raises; original lr is preserved."""
         executor = VanillaExecutor()
 
-        # Mock LRTuner to raise exception
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.side_effect = RuntimeError("Tuning failed")
 
@@ -191,21 +161,17 @@ class TestVanillaExecutorLRTuning:
                     "dlkit.engine.training.tuning.LRTuner",
                     return_value=mock_lr_tuner,
                 ):
-                    # Should not raise - graceful degradation
                     executor.execute(mock_components, settings_with_lr_tuner)
 
-        # Verify training still proceeded
-        _trainer_mock(mock_components).fit.assert_called_once()
+        mock_components.trainer.fit.assert_called_once()
+        assert mock_components.model.lr == 0.001
 
-        # Verify original LR was preserved
-        assert _optimizer_settings(mock_components).lr == 0.001
-
-    def test_apply_lr_tuning_helper_method(
+    def test_apply_lr_tuning_sets_model_lr(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test _apply_lr_tuning helper method in isolation."""
+        """_apply_lr_tuning sets model.lr to the suggested value."""
         executor = VanillaExecutor()
 
         mock_lr_tuner = Mock()
@@ -224,14 +190,13 @@ class TestVanillaExecutorLRTuning:
                 settings_with_lr_tuner,
             )
 
-        # Verify LR was updated
-        assert _optimizer_settings(mock_components).lr == 0.007
+        assert mock_components.model.lr == 0.007
 
-    def test_apply_lr_tuning_with_no_training_settings(
+    def test_apply_lr_tuning_skips_when_no_lr_tuner_setting(
         self,
         mock_components: RuntimeComponents,
     ) -> None:
-        """Test _apply_lr_tuning when TRAINING without lr_tuner configured."""
+        """_apply_lr_tuning skips when TRAINING section has no lr_tuner."""
         executor = VanillaExecutor()
 
         from dlkit.infrastructure.config.session_settings import SessionSettings
@@ -239,7 +204,7 @@ class TestVanillaExecutorLRTuning:
 
         settings = TrainingWorkflowConfig(
             SESSION=SessionSettings(workflow="train", seed=42),
-            TRAINING=TrainingSettings(),  # No lr_tuner configured
+            TRAINING=TrainingSettings(),
         )
 
         mock_lr_tuner = Mock()
@@ -250,7 +215,6 @@ class TestVanillaExecutorLRTuning:
             "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
-            # Should not raise
             executor._apply_lr_tuning(
                 trainer,
                 mock_components.model,
@@ -258,21 +222,19 @@ class TestVanillaExecutorLRTuning:
                 settings,
             )
 
-        # Verify tuner was not called
         mock_lr_tuner.tune.assert_not_called()
 
-    def test_apply_lr_tuning_model_without_optimizer_attribute(
+    def test_apply_lr_tuning_model_without_lr_skips_update(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test graceful handling when model lacks optimizer attribute."""
+        """When model has no lr attribute, tuner still runs but update is skipped."""
         executor = VanillaExecutor()
 
-        # Model without optimizer attribute
-        mock_model_no_opt = Mock(spec=[])
-        components_no_opt = RuntimeComponents(
-            model=mock_model_no_opt,
+        mock_model_no_lr = Mock(spec=[])
+        components_no_lr = RuntimeComponents(
+            model=mock_model_no_lr,
             datamodule=mock_components.datamodule,
             trainer=mock_components.trainer,
             shape_spec=None,
@@ -282,40 +244,48 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner = Mock()
         mock_lr_tuner.tune.return_value = 0.008
 
-        trainer = components_no_opt.trainer
+        trainer = components_no_lr.trainer
         assert trainer is not None
         with patch(
             "dlkit.engine.training.tuning.LRTuner",
             return_value=mock_lr_tuner,
         ):
-            # Should not raise - logs warning instead
             executor._apply_lr_tuning(
                 trainer,
-                components_no_opt.model,
-                components_no_opt.datamodule,
+                components_no_lr.model,
+                components_no_lr.datamodule,
                 settings_with_lr_tuner,
             )
 
-        # Verify tuner was still called
+        # Tuner still ran, update was skipped gracefully
         mock_lr_tuner.tune.assert_called_once()
+        assert not hasattr(components_no_lr.model, "lr")
 
-    def test_mutable_optimizer_update(
+    def test_apply_lr_tuning_noop_setter_leaves_lr_unchanged(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """Test that optimizer update uses mutable update_settings.
-
-        With frozen=True, update_settings returns a new OptimizerSettings instance
-        which is assigned back to model.optimizer.
-        """
+        """When model.lr setter is a no-op, model.lr stays at original value after tuning."""
         executor = VanillaExecutor()
 
-        original_optimizer = _optimizer_settings(mock_components)
-        original_lr = original_optimizer.lr
+        class _NoOpLRModel:
+            """Model whose lr setter is intentionally a no-op (like the old broken design)."""
+
+            _lr: float = 0.001
+
+            @property
+            def lr(self) -> float:
+                return self._lr
+
+            @lr.setter
+            def lr(self, value: float) -> None:
+                pass  # no-op: does not store value
+
+        noop_model = _NoOpLRModel()
 
         mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.009
+        mock_lr_tuner.tune.return_value = 0.05
 
         trainer = mock_components.trainer
         assert trainer is not None
@@ -325,13 +295,12 @@ class TestVanillaExecutorLRTuning:
         ):
             executor._apply_lr_tuning(
                 trainer,
-                mock_components.model,
+                noop_model,  # type: ignore[arg-type]
                 mock_components.datamodule,
                 settings_with_lr_tuner,
             )
 
-        # Verify new LR is set on the (new) optimizer instance
-        assert _optimizer_settings(mock_components).lr == 0.009
-
-        # Original optimizer object is unchanged (immutable semantics)
-        assert original_optimizer.lr == original_lr
+        mock_lr_tuner.tune.assert_called_once()
+        # lr was NOT updated because the setter is a no-op
+        assert noop_model.lr == 0.001
+        assert noop_model.lr != 0.05

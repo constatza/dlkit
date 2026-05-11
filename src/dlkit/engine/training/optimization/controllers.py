@@ -190,6 +190,18 @@ class IOptimizationController(ABC):
         ...
 
     @abstractmethod
+    def update_learning_rate(self, lr: float) -> None:
+        """Override the learning rate on the currently active optimizer stage.
+
+        Mutates param_groups in-place so the next configure_optimizers() call
+        reflects the new rate. Intended for use by the LR tuner before training.
+
+        Args:
+            lr: New learning rate value.
+        """
+        ...
+
+    @abstractmethod
     def state_dict(self) -> dict[str, object]:
         """Return controller state for checkpointing.
 
@@ -309,6 +321,15 @@ class AutomaticOptimizationController(IOptimizationController):
 
         return OptimizationMetricsView(self._program).current_learning_rates()
 
+    def update_learning_rate(self, lr: float) -> None:
+        """Update param_groups on the active stage's optimizer.
+
+        Args:
+            lr: New learning rate value.
+        """
+        for param_group in self._program.current.optimizer.param_groups:
+            param_group["lr"] = lr
+
     def state_dict(self) -> dict[str, object]:
         """Return state for checkpointing.
 
@@ -410,6 +431,15 @@ class ManualOptimizationController(IOptimizationController):
         from .metrics import OptimizationMetricsView
 
         return OptimizationMetricsView(self._program).current_learning_rates()
+
+    def update_learning_rate(self, lr: float) -> None:
+        """Update param_groups on the active stage's optimizer.
+
+        Args:
+            lr: New learning rate value.
+        """
+        for param_group in self._program.current.optimizer.param_groups:
+            param_group["lr"] = lr
 
     def state_dict(self) -> dict[str, object]:
         """Return state for checkpointing.

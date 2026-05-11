@@ -414,13 +414,13 @@ class CoreLightningWrapper(LightningModule, ABC):
 
     @lr.setter
     def lr(self, value: float) -> None:
-        """Set learning rate.
+        """Set learning rate by delegating to the optimization controller.
 
         Args:
             value: New learning rate value.
         """
-        # Learning rate override at inference time; no-op in checkpoint-aware setting
-        pass
+        if hasattr(self, "_optimization_controller"):
+            self._optimization_controller.update_learning_rate(value)
 
     @property
     def learning_rate(self) -> float | None:

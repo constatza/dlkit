@@ -100,7 +100,7 @@ class LRTuner:
 
         logger.info("Learning rate tuner suggested: %s", suggested_lr)
 
-        return suggested_lr
+        return float(suggested_lr)
 
     def _get_safe_globals(self) -> list[type[object]]:
         """Get list of dlkit classes to register as safe globals for checkpoint loading.

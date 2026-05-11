@@ -243,6 +243,25 @@ class TestAutomaticOptimizationController:
         assert "active_index" in state
         assert state["active_index"] == 0
 
+    def test_auto_update_learning_rate_changes_param_groups(
+        self,
+        auto_controller: AutomaticOptimizationController,
+    ) -> None:
+        """update_learning_rate must mutate the active optimizer param_groups."""
+        auto_controller.update_learning_rate(0.05)
+        optimizer = auto_controller._program.current.optimizer
+        for group in optimizer.param_groups:
+            assert group["lr"] == pytest.approx(0.05)
+
+    def test_auto_update_learning_rate_reflected_by_current_learning_rates(
+        self,
+        auto_controller: AutomaticOptimizationController,
+    ) -> None:
+        """current_learning_rates() must return the updated value after update_learning_rate()."""
+        auto_controller.update_learning_rate(0.123)
+        rates = auto_controller.current_learning_rates()
+        assert all(v == pytest.approx(0.123) for v in rates.values())
+
 
 # Test ManualOptimizationController
 class TestManualOptimizationController:
@@ -485,6 +504,16 @@ class TestManualOptimizationController:
         controller.on_epoch_end(1, {"val_loss": 1.1})
 
         assert optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
+
+    def test_manual_update_learning_rate_changes_param_groups(
+        self,
+        manual_controller: ManualOptimizationController,
+    ) -> None:
+        """update_learning_rate must mutate the active optimizer param_groups in manual mode."""
+        manual_controller.update_learning_rate(0.07)
+        optimizer = manual_controller._program.current.optimizer
+        for group in optimizer.param_groups:
+            assert group["lr"] == pytest.approx(0.07)
 
     def test_manual_reduce_on_plateau_missing_metric_raises(
         self,
