@@ -386,6 +386,9 @@ class CoreLightningWrapper(LightningModule, ABC):
 
     def on_train_epoch_end(self) -> None:
         """Log current learning rate at epoch end and update optimization program."""
+        current_lr = self.lr
+        if current_lr is not None:
+            self._step_logger.log_lr(current_lr)
         metrics = {
             k: v.item() if hasattr(v, "item") else float(v)
             for k, v in self.trainer.callback_metrics.items()
