@@ -24,13 +24,22 @@ class ConvolutionBlock1d(nn.Module):
         dilation: int = 1,
         groups: int = 1,
     ):
-        """A residual transposed convolutional block with upsampling.
+        """A 1-D causal convolutional block applying Norm → Conv → Act → Dropout.
 
-        Parameters:
-        - in_channels (int): Number of input channels.
-        - out_channels (int): Number of output channels.
-        - kernel_size (int): Kernel size for transposed convolutions.
-        - batch_norm (bool): Whether to use batch normalization.
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            in_timesteps (int): Number of input timesteps (used for LayerNorm).
+            kernel_size (int, optional): Convolution kernel size. Defaults to 3.
+            stride (int, optional): Convolution stride. Defaults to 1.
+            padding (str | int, optional): Padding mode or amount. Defaults to "same".
+            activation (Callable | nn.Module, optional): Activation function.
+                Defaults to ``nn.functional.gelu``.
+            normalize (NormalizerName | None, optional): Normalization type
+                (``"layer"`` or ``"batch"``). Defaults to None.
+            dropout (float, optional): Dropout probability. Defaults to 0.0.
+            dilation (int, optional): Dilation rate. Defaults to 1.
+            groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
         """
         super().__init__()
         self.activation = activation
@@ -71,24 +80,40 @@ class DeconvolutionBlock1d(nn.Module):
         output_padding: int = 0,
         groups: int = 1,
         activation: Callable | nn.Module | None = None,
+        normalize: NormalizerName | None = None,
+        dropout: float = 0.0,
     ):
-        """A residual transposed convolutional block with upsampling.
+        """A 1-D transposed convolutional block applying Norm → ConvTranspose → Act → Dropout.
 
-        Parameters:
+        Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
-            in_timesteps (int): Number of input timesteps.
+            in_timesteps (int): Number of input timesteps (used for LayerNorm).
             kernel_size (int, optional): Kernel size for transposed convolutions. Defaults to 3.
             dilation (int, optional): Dilation rate. Defaults to 1.
             stride (int, optional): Stride of the convolution. Defaults to 1.
-            padding (str | int, optional): Padding mode. Defaults to "same".
-            output_padding (int, optional): Additional size added to output. Defaults to 0.
+            padding (str | int, optional): Padding mode or amount. ``"same"`` maps to
+                ``effective_padding = (kernel_size - 1) // 2 * dilation`` so that the output
+                length equals the input length when ``stride=1``. Defaults to ``"same"``.
+            output_padding (int, optional): Additional size added to one side of the output.
+                Defaults to 0.
             groups (int, optional): Number of groups for grouped convolutions. Defaults to 1.
-            activation (Callable | nn.Module, optional): Activation function. Defaults to nn.GELU().
+            activation (Callable | nn.Module | None, optional): Activation function.
+                Defaults to ``nn.GELU()``.
+            normalize (NormalizerName | None, optional): Normalization type
+                (``"layer"`` or ``"batch"``). Applied before the convolution. Defaults to None.
+            dropout (float, optional): Dropout probability applied after activation.
+                Defaults to 0.0.
         """
         super().__init__()
+        if padding == "same" and stride != 1:
+            raise ValueError(
+                '"same" padding for DeconvolutionBlock1d is only supported when stride=1.'
+            )
         self.activation = nn.GELU() if activation is None else activation
-        effective_padding: int = 0 if padding == "same" else int(padding)
+        effective_padding: int = (
+            (kernel_size - 1) // 2 * dilation if padding == "same" else int(padding)
+        )
         self.conv1 = nn.ConvTranspose1d(
             in_channels,
             out_channels,
@@ -99,14 +124,17 @@ class DeconvolutionBlock1d(nn.Module):
             groups=groups,
             output_padding=output_padding,
         )
-
+        self.norm = make_norm_layer(normalize, in_channels, in_timesteps)
+        self.dropout = nn.Dropout1d(dropout) if dropout > 0.0 else nn.Identity()
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.in_timesteps = in_timesteps
 
     def forward(self, x):
-        x = self.activation(x)
+        x = self.norm(x)
         x = self.conv1(x)
+        x = self.activation(x)
+        x = self.dropout(x)
         return x
 
 
