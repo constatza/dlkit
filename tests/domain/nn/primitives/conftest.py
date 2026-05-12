@@ -26,3 +26,21 @@ def linear_skip_concat() -> SkipConnection:
 def skip_input() -> torch.Tensor:
     """Batch of 3 samples with 4 features."""
     return torch.randn(3, 4)
+
+
+@pytest.fixture
+def hidden_input() -> torch.Tensor:
+    """Batch of hidden states: (batch=4, hidden_size=8)."""
+    return torch.randn(4, 8)
+
+
+@pytest.fixture
+def original_input() -> torch.Tensor:
+    """Batch of original inputs: (batch=4, in_features=6)."""
+    return torch.randn(4, 6)
+
+
+@pytest.fixture
+def conv_gate_input() -> torch.Tensor:
+    """Batch for gated conv blocks: (batch=4, channels=8, length=16)."""
+    return torch.randn(4, 8, 16)
