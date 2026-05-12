@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from typing import Literal, Protocol, cast
 
 import torch
@@ -53,7 +52,6 @@ class SkipConnection(nn.Module):
         module: nn.Module,
         how: Literal["sum", "concat"] = "sum",
         layer_type: Literal["conv1d", "conv2d", "linear"] = "conv1d",
-        activation: Callable[[torch.Tensor], torch.Tensor] | None = None,
         in_channels: int | None = None,
         out_channels: int | None = None,
         kernel_size: int = 1,
@@ -64,9 +62,9 @@ class SkipConnection(nn.Module):
 
         Args:
             module (nn.Module): The module to apply to the input.
-            how (Literal["sum", "concat"], optional): Aggregation method. Defaults to "sum".
+            how (Literal["sum", "concat"], optional): Aggregation method. "sum" adds skip to output;
+                "concat" concatenates along dim=1, producing 2×out_channels total width. Defaults to "sum".
             layer_type (Literal["conv1d", "conv2d", "linear"], optional): Type of layer for adaptation. Defaults to "conv1d".
-            activation (Callable, optional): Activation function. Defaults to nn.Identity().
             in_channels (int | None, optional): Input channels. Auto-detected if not provided. Defaults to None.
             out_channels (int | None, optional): Output channels. Auto-detected if not provided. Defaults to None.
             kernel_size (int, optional): Kernel size. Defaults to 1.
@@ -94,7 +92,6 @@ class SkipConnection(nn.Module):
             bias=bias,
         )
         self.kernel_size = kernel_size
-        self.activation = nn.Identity() if activation is None else activation
         self.layer_type = layer_type
         self.module = module
 
@@ -104,7 +101,7 @@ class SkipConnection(nn.Module):
         x_out = self.module(x_in)
         skip = self.reduce_layer(x_in)
         agg_out = self.aggregation_function(skip, x_out)
-        return self.activation(agg_out)
+        return agg_out
 
 
 def select_skip_layers(

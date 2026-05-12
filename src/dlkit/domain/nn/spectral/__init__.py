@@ -1,6 +1,7 @@
 from .base import ISpectralLayer
 from .ffnn import DualPathFFNN, FourierAugmented, FourierEnhancedFFNN, SpectralDualPath
 from .layers import FourierLayer, SpectralConv1d
+from .pinn import FourierFeatureNetwork, ModifiedMLP, SirenFFNN
 
 __all__ = [
     # Protocol
@@ -14,4 +15,8 @@ __all__ = [
     # Convenience constructors
     "FourierEnhancedFFNN",
     "DualPathFFNN",
+    # PINN networks
+    "FourierFeatureNetwork",
+    "SirenFFNN",
+    "ModifiedMLP",
 ]

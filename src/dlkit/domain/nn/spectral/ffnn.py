@@ -43,9 +43,16 @@ if TYPE_CHECKING:
 def _spectral_features(x: Tensor, n_modes: int) -> Tensor:
     """Compute zero-padded real+imag Fourier features of length ``n_modes * 2``.
 
-    The real FFT spectrum is truncated or zero-padded so the output always
-    has fixed width ``n_modes * 2``, regardless of the input length.  This
-    keeps the downstream module's input dimension constant.
+    Treats the last dimension of *x* as a 1-D signal and returns the truncated
+    real FFT stacked as ``[real₀…real_{m-1}, imag₀…imag_{m-1}]``.  The
+    spectrum is truncated or zero-padded so the output width is always
+    ``n_modes * 2``, keeping the downstream module's input dimension constant.
+
+    **When to use:** Appropriate when input features ARE samples of a signal at
+    equally-spaced indices (e.g. time-series channels, FNO-style inputs).  For
+    PDE coordinate inputs such as ``(x, y, t)`` the DFT of the feature vector
+    has no physical meaning — use :class:`~dlkit.domain.nn.spectral.pinn.FourierFeatureNetwork`
+    instead, which applies a coordinate-wise sinusoidal mapping γ(x) = [sin(2πBx), cos(2πBx)].
 
     Args:
         x: Input tensor of shape ``(batch, in_features)``.

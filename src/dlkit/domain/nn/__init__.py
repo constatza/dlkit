@@ -61,7 +61,10 @@ from .spectral import (
     DualPathFFNN,
     FourierAugmented,
     FourierEnhancedFFNN,
+    FourierFeatureNetwork,
     ISpectralLayer,
+    ModifiedMLP,
+    SirenFFNN,
     SpectralDualPath,
 )
 
@@ -126,6 +129,10 @@ __all__ = [
     "SpectralDualPath",
     "FourierEnhancedFFNN",
     "DualPathFFNN",
+    # PINN networks
+    "FourierFeatureNetwork",
+    "SirenFFNN",
+    "ModifiedMLP",
     # Neural operators
     "IOperatorNetwork",
     "IGridOperator",

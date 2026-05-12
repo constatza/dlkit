@@ -57,7 +57,16 @@ class SimpleFeedForwardNN(nn.Module):
 
 
 class ConstantWidthSimpleFFNN(SimpleFeedForwardNN):
-    """Plain feed-forward network with constant-width hidden layers."""
+    """Plain feed-forward network with constant-width hidden layers.
+
+    Note:
+        ``num_layers`` is the number of hidden width entries passed to
+        :class:`SimpleFeedForwardNN`.  The number of nonlinear ``DenseBlock``
+        layers created is ``num_layers - 1`` (transitions between adjacent
+        entries).  With ``num_layers=1`` the network is an embedding linear
+        followed immediately by the regression linear — no nonlinearity.  Use
+        ``num_layers >= 2`` for a genuinely nonlinear network.
+    """
 
     def __init__(
         self,

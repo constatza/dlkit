@@ -69,7 +69,7 @@ Residual connection wrapper that adds skip paths around any module.
 
 ### Architecture
 
-The skip path is **purely linear** — it passes through only a projection layer (no activation). No post-aggregation activation is used in any callsite in this codebase; the `activation` parameter defaults to `nn.Identity()` and remains unused in practice.
+The skip path is **purely linear** — it passes through only a projection layer (no activation). There is no post-aggregation activation; the aggregated output is returned directly.
 
 **Sum aggregation** (default):
 
@@ -118,7 +118,6 @@ The skip projection $W_{\text{skip}}$ is selected automatically:
 | `module` | `nn.Module` | required | Module to wrap |
 | `how` | `"sum" \| "concat"` | `"sum"` | Aggregation method |
 | `layer_type` | `"conv1d" \| "conv2d" \| "linear"` | `"conv1d"` | Projection layer type |
-| `activation` | `Callable` | `Identity()` | Post-aggregation activation (unused in practice — defaults to no-op) |
 | `in_channels` | `int \| None` | `None` | Input channels (auto-detected from module) |
 | `out_channels` | `int \| None` | `None` | Output channels (auto-detected from module) |
 | `stride` | `int` | `1` | Stride for projection layer |
@@ -136,12 +135,11 @@ residual_block = SkipConnection(
     layer_type="linear",
 )
 
-# With dimension change and activation
+# With dimension change (concat doubles output width to 256)
 residual_block = SkipConnection(
-    DenseBlock(128, 256, normalize="layer"),
-    how="sum",
+    DenseBlock(128, 128, normalize="layer"),
+    how="concat",
     layer_type="linear",
-    activation=nn.GELU(),
 )
 ```
 

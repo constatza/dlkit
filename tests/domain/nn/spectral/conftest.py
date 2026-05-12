@@ -52,3 +52,9 @@ def flat_input(batch_size: int, n_features: int) -> torch.Tensor:
     Shape: (4, 16)
     """
     return torch.randn(batch_size, n_features)
+
+
+@pytest.fixture
+def coords() -> torch.Tensor:
+    """8 samples with 3 spatial coordinates."""
+    return torch.randn(8, 3)
