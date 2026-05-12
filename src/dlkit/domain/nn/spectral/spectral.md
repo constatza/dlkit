@@ -119,6 +119,102 @@ model = DualPathFFNN(
 
 ---
 
+## PINN Coordinate Networks
+
+Networks from the physics-informed ML literature that address spectral bias at
+the coordinate level rather than through Fourier convolutions.  All three
+implement `from_shape(shape, **kwargs)` for factory-compatible construction.
+
+### FourierFeatureNetwork
+
+Projects input coordinates through a random (or learned) frequency matrix
+before an MLP, directly countering spectral bias (Tancik et al. 2020).
+
+```
+γ(x) = [sin(2π B x), cos(2π B x)]  ∈ ℝ^{2m}
+output = ConstantWidthFFNN(γ(x))
+```
+
+where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_features` | `int` | required | Coordinate input dimension |
+| `out_features` | `int` | required | Network output dimension |
+| `hidden_size` | `int` | required | Width of the internal MLP |
+| `num_layers` | `int` | required | Number of hidden MLP layers |
+| `n_frequencies` | `int` | required | Frequency vectors `m`; encoding output is `2m` |
+| `sigma` | `float` | `1.0` | Std-dev for sampling `B` |
+| `learnable_B` | `bool` | `False` | If `True`, `B` is an `nn.Parameter` |
+| `activation` | `Callable` | `F.gelu` | Activation for the internal MLP |
+| `normalize` | `"batch" \| "layer" \| None` | `None` | Normalisation for the internal MLP |
+| `dropout` | `float` | `0.0` | Dropout for the internal MLP |
+
+`from_shape` sets `in_features` and `out_features` from the shape summary.
+
+### SirenFFNN
+
+Sinusoidal representation network (Sitzmann et al. 2020).  Uses `sin`
+activations throughout with layer-specific weight initialisation that promotes
+well-conditioned gradients.
+
+```
+x₀ = sin(ω₀ · W₀ x)
+xₖ = sin(Wₖ xₖ₋₁)   for k = 1, …, L−1
+output = W_out x_{L-1}
+```
+
+Initialisation:
+- First layer: `W ~ U(-1/d, 1/d)` where `d = in_features`
+- Hidden layers: `W ~ U(-sqrt(6/d)/ω₀, sqrt(6/d)/ω₀)`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
+| `hidden_size` | `int` | required | Width of all hidden layers |
+| `num_layers` | `int` | required | Number of hidden layers (>= 1) |
+| `omega0` | `float` | `30.0` | First-layer frequency multiplier |
+
+Raises `ValueError` if `num_layers < 1`.  `from_shape` is supported.
+
+### ModifiedMLP
+
+U/V encoder gating (Wang et al. 2022).  Two encoder branches modulate each
+hidden state, shown to accelerate PINN convergence over a plain MLP.
+
+```
+U = σ(W_u x + b_u)
+V = σ(W_v x + b_v)
+h₀ = σ(W₀ x + b₀)
+zₖ = σ(Wₖ hₖ + bₖ)
+hₖ₊₁ = zₖ ⊙ U + (1 − zₖ) ⊙ V
+output = W_out h_L + b_out
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
+| `hidden_size` | `int` | required | Width of all hidden layers |
+| `num_layers` | `int` | required | Hidden linear layers (>= 2) |
+| `activation` | `Callable` | `torch.sigmoid` | Gating activation σ |
+
+Raises `ValueError` if `num_layers < 2`.  `from_shape` is supported.
+
+```python
+from dlkit.domain.nn.spectral import ModifiedMLP
+
+model = ModifiedMLP(
+    in_features=2,
+    out_features=1,
+    hidden_size=128,
+    num_layers=4,
+)
+```
+
+---
+
 ## TOML configuration
 
 ```toml

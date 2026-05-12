@@ -15,7 +15,7 @@ semantic parameter contracts. No engine orchestration belongs here.
 | `generative/` | VAE and generative samplers |
 | `spectral/` | Spectral convolution and Fourier-enhanced MLPs |
 | `operators/` | Physics-informed operator networks |
-| `primitives/` | Reusable low-level blocks and constrained linear layers |
+| `primitives/` | Reusable low-level blocks, constrained linear layers, and gating mechanisms |
 
 ## FFNN surface
 
@@ -30,6 +30,7 @@ Representative exports from `dlkit.domain.nn` include:
 - dense: `FeedForwardNN`, `SimpleFeedForwardNN`, `ConstantWidthFFNN`, `ConstantWidthSimpleFFNN`
 - constrained: `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
 - scale-equivariant: `ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`, `ScaleEquivariantConstantWidthFFNN`, `ScaleEquivariantConstantWidthSimpleFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN`
+- gated: `GatedMLP`
 
 For the full matrix, see `ffnn/ffnn.md`.
 

@@ -135,7 +135,8 @@ residual_block = SkipConnection(
     layer_type="linear",
 )
 
-# With dimension change (concat doubles output width to 256)
+# Concat mode: output channels = 2 × out_channels (skip ‖ main)
+# DenseBlock(128, 128) → SkipConnection output width is 256
 residual_block = SkipConnection(
     DenseBlock(128, 128, normalize="layer"),
     how="concat",
@@ -217,6 +218,10 @@ Where $\star$ denotes the 1D transposed convolution (fractionally-strided convol
 $$L_{\text{out}} = (L_{\text{in}} - 1) \cdot s - 2p + d(k - 1) + p_{\text{out}} + 1$$
 
 Where $p_{\text{out}}$ is `output_padding`.
+
+> **Constraint**: `padding="same"` is only supported when `stride=1`.  Passing
+> `padding="same"` with `stride != 1` raises `ValueError` at construction time.
+> Use an explicit integer padding value when upsampling with stride > 1.
 
 ### Parameters
 
@@ -492,3 +497,72 @@ register_spd(module, tensor_name="weight", *, min_diag=1e-4, pos_fn=F.softplus)
 register_symmetric_factorized(module, size, *, mean=0.0, std=0.1)
 register_spd_factorized(module, size, *, min_diag=1e-4, mean=0.0, std=0.1, pos_fn=F.softplus)
 ```
+
+---
+
+## Gating Mechanisms
+
+`gated.py` provides a protocol and four concrete gate classes, plus two gated
+convolutional blocks built on top of them.
+
+### `IGatingMechanism`
+
+`@runtime_checkable` protocol.  Any gate must implement:
+
+```python
+def forward(self, h: Tensor, x: Tensor) -> Tensor: ...
+```
+
+`h` is the hidden state; `x` is the context (some gates ignore it).
+
+### Gate classes
+
+| Class | Formula | Context `x` used? | Key params |
+|-------|---------|-------------------|------------|
+| `GLUGate` | `content(h) ⊙ σ(gate(h))` | No | `hidden_size` |
+| `SwiGLUGate` | `content(h) ⊙ silu(gate(h))` | No | `hidden_size` |
+| `GRNGate` | `LayerNorm(h + dropout(eta2 ⊙ σ(W4(eta1))))` where `eta1 = ELU(W1(h) + ctx(x))` | Yes | `hidden_size`, `context_size`, `dropout` |
+| `UVGate` | `σ(gate(h)) ⊙ σ(U(x)) + (1−σ(gate(h))) ⊙ σ(V(x))` | Yes | `in_features`, `hidden_size`, `activation` |
+
+`GLUGate` and `SwiGLUGate` accept but ignore `x`; they satisfy the protocol
+for uniform use in `GatedMLP`.
+
+`GRNGate` (Lim et al. 2021, TFT):
+- `context_size=None` means `x` is expected to have `hidden_size` features.
+- Explicit `context_size` projects `x` from `context_size → hidden_size`.
+
+`UVGate` (Wang et al. 2022):
+- `in_features` must match the `in_features` of the enclosing model, because
+  `x` is the raw network input forwarded from `GatedMLP.forward`.
+
+### GatedConvolutionBlock1d
+
+```
+Norm(x) → Conv1d(in → 2·out) → split → content ⊙ σ(gate) → Dropout
+```
+
+Output shape: `(B, out_channels, T')`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_channels` | `int` | required | Input channels |
+| `out_channels` | `int` | required | Output channels |
+| `in_timesteps` | `int` | required | Sequence length (for LayerNorm) |
+| `kernel_size` | `int` | `3` | Kernel size |
+| `stride` | `int` | `1` | Stride |
+| `padding` | `str \| int` | `"same"` | Padding |
+| `normalize` | `NormalizerName \| None` | `None` | Normalisation before conv |
+| `dropout` | `float` | `0.0` | Dropout after gating |
+| `dilation` | `int` | `1` | Dilation rate |
+| `groups` | `int` | `1` | Grouped convolution |
+
+### GatedDeconvolutionBlock1d
+
+```
+Norm(x) → ConvTranspose1d(in → 2·out) → split → content ⊙ σ(gate) → Dropout
+```
+
+Same parameter table as `GatedConvolutionBlock1d` plus `output_padding: int = 0`.
+
+> **Constraint**: `padding="same"` is only valid when `stride=1`.  `ValueError`
+> is raised otherwise — use an explicit integer padding for strided upsampling.

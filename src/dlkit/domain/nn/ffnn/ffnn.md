@@ -16,6 +16,7 @@ The package distinguishes:
 | `residual.py` | Residual dense FFNNs with skip connections |
 | `constrained.py` | Constrained linear FFNN builders and explicit plain/residual variants |
 | `scale_equivariant.py` | Class-based scale-equivariant wrappers for dense and constrained FFNNs |
+| `gated.py` | Pluggable-gate feed-forward network (`GatedMLP`) |
 
 ## Variant matrix
 
@@ -106,3 +107,72 @@ name = "ScaleEquivariantFeedForwardNN"
 module_path = "dlkit.domain.nn"
 layers = [128, 128]
 ```
+
+---
+
+## Gated Networks
+
+### GatedMLP
+
+Feed-forward network where each hidden layer is a pluggable gating unit.  The
+raw input `x` is forwarded as context into every gate, enabling
+context-sensitive gates (GRN, UV) to modulate hidden states against the
+original features.
+
+**Architecture:**
+
+```
+h = Linear(x)                    # embedding, no activation
+for gate, norm, drop in layers:
+    h = drop(norm(gate(h, x)))   # x forwarded as context
+return Linear(h)                 # output projection
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_features` | `int` | required | Input dimension |
+| `out_features` | `int` | required | Output dimension |
+| `hidden_size` | `int` | required | Width of all hidden layers |
+| `num_layers` | `int` | required | Number of gated hidden layers (>= 1) |
+| `gate_factory` | `Callable[[], IGatingMechanism]` | required | Zero-arg factory called once per layer |
+| `normalize` | `NormalizerName \| None` | `None` | Normalisation after each gate |
+| `dropout` | `float` | `0.0` | Dropout after normalisation |
+
+Raises `ValueError` if `num_layers < 1`.  Supports `from_shape(shape, **kwargs)`.
+
+**Example — context-free gating with SwiGLU:**
+
+```python
+from dlkit.domain.nn.ffnn import GatedMLP
+from dlkit.domain.nn.primitives import SwiGLUGate
+
+model = GatedMLP(
+    in_features=64,
+    out_features=16,
+    hidden_size=128,
+    num_layers=3,
+    gate_factory=lambda: SwiGLUGate(hidden_size=128),
+)
+```
+
+**Example — context-sensitive gating with UVGate:**
+
+```python
+from dlkit.domain.nn.primitives import UVGate
+
+model = GatedMLP(
+    in_features=64,
+    out_features=16,
+    hidden_size=128,
+    num_layers=3,
+    gate_factory=lambda: UVGate(in_features=64, hidden_size=128),
+)
+```
+
+> **Note on context-sensitive gates**: `GRNGate` and `UVGate` receive
+> `x` of shape `(batch, in_features)` from `GatedMLP.forward`.  Construct
+> them with `in_features` (for `UVGate`) or `context_size=in_features`
+> (for `GRNGate` with explicit context) matching the model's `in_features`.
+> `GLUGate` and `SwiGLUGate` ignore `x` and only require `hidden_size`.
