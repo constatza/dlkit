@@ -39,15 +39,15 @@ class TestSelfAttentionBlock:
         """Dropout should be configurable."""
         sa0 = SelfAttentionBlock(embed_dim=2, num_heads=1, dropout=0.0)
         sa5 = SelfAttentionBlock(embed_dim=2, num_heads=1, dropout=0.5)
-        assert sa0.multihead_attn.dropout == 0.0
-        assert sa5.multihead_attn.dropout == 0.5
+        assert sa0.attn.dropout == 0.0
+        assert sa5.attn.dropout == 0.5
 
     def test_num_heads_parameter(self) -> None:
         """Should support different numbers of heads."""
         sa1 = SelfAttentionBlock(embed_dim=4, num_heads=1)
         sa2 = SelfAttentionBlock(embed_dim=4, num_heads=2)
-        assert sa1.multihead_attn.num_heads == 1
-        assert sa2.multihead_attn.num_heads == 2
+        assert sa1.attn.num_heads == 1
+        assert sa2.attn.num_heads == 2
 
     def test_permute_attribute_stored(self) -> None:
         """Permute flag should be stored."""

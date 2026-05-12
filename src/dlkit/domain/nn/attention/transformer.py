@@ -54,6 +54,7 @@ class TransformerEncoderBlock(nn.Module):
             d_model=embed_dim,
             nhead=num_heads,
             batch_first=True,
+            norm_first=True,
         )
         self.transformer_encoder = nn.TransformerEncoder(
             self.transformer_layer,
@@ -93,6 +94,7 @@ class TransformerDecoderBlock(nn.Module):
             d_model=embed_dim,
             nhead=num_heads,
             batch_first=True,
+            norm_first=True,
         )
         self.transformer_decoder = nn.TransformerDecoder(
             self.transformer_layer, num_layers=num_layers

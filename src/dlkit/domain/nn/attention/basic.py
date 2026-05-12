@@ -5,10 +5,11 @@ from torch import nn
 
 
 class SelfAttentionBlock(nn.Module):
-    """Self-attention block with optional permutation for temporal data.
+    """Self-attention block with LayerNorm and residual connection.
 
-    This module applies multihead self-attention, optionally permuting the input
-    from (batch, channels, time) to (time, batch, channels) format if requested.
+    This module applies multihead self-attention with layer normalization and
+    residual connection, optionally permuting the input from (batch, channels, time)
+    to (batch, time, channels) format if requested.
     """
 
     def __init__(
@@ -24,23 +25,26 @@ class SelfAttentionBlock(nn.Module):
         """
         super().__init__()
         self.permute = permute
-        self.multihead_attn = nn.MultiheadAttention(
-            embed_dim=embed_dim, num_heads=num_heads, dropout=dropout
+        self.attn = nn.MultiheadAttention(
+            embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, batch_first=True
         )
+        self.norm = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply self-attention.
+        """Apply self-attention with residual connection and layer normalization.
 
         Args:
-            x: Input tensor of shape (batch, channels, time) or (time, batch, channels)
-                depending on the permute setting.
+            x: Input tensor of shape (batch, channels, time) if permute=True,
+                or (batch, time, embed_dim) if permute=False.
 
         Returns:
             Attention output with the same shape as input.
         """
         if self.permute:
-            x = x.permute(2, 0, 1)
-        x, _ = self.multihead_attn(x, x, x)
-        if not self.permute:
-            return x
-        return x.permute(1, 2, 0)
+            x = x.permute(0, 2, 1)  # (B,C,T) → (B,T,C)
+        attn_out, _ = self.attn(x, x, x)
+        x = self.norm(x + self.dropout(attn_out))
+        if self.permute:
+            x = x.permute(0, 2, 1)  # (B,T,C) → (B,C,T)
+        return x
