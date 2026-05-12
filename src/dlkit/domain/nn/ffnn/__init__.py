@@ -17,6 +17,7 @@ from .constrained import (
     EmbeddedSPDFFNN,
     ParametricDenseBlock,
 )
+from .gated import GatedMLP
 from .linear import LinearNetwork
 from .residual import ConstantWidthFFNN, FeedForwardNN
 from .scale_equivariant import (
@@ -43,6 +44,8 @@ __all__ = [
     # Residual dense networks
     "FeedForwardNN",
     "ConstantWidthFFNN",
+    # Gated networks
+    "GatedMLP",
     # Plain dense networks
     "SimpleFeedForwardNN",
     "ConstantWidthSimpleFFNN",

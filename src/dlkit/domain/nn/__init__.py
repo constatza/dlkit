@@ -18,6 +18,7 @@ from .ffnn.constrained import (
     EmbeddedSPDFFNN,
     ParametricDenseBlock,
 )
+from .ffnn.gated import GatedMLP
 from .ffnn.linear import LinearNetwork
 from .ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from .ffnn.scale_equivariant import (
@@ -57,6 +58,15 @@ from .operators import (
     MLPDeepONet,
 )
 from .parameter_roles import ParameterRole
+from .primitives import (
+    GatedConvolutionBlock1d,
+    GatedDeconvolutionBlock1d,
+    GLUGate,
+    GRNGate,
+    IGatingMechanism,
+    SwiGLUGate,
+    UVGate,
+)
 from .spectral import (
     DualPathFFNN,
     FourierAugmented,
@@ -72,6 +82,7 @@ __all__ = [
     "LinearNetwork",
     "FeedForwardNN",
     "ConstantWidthFFNN",
+    "GatedMLP",
     # Parameter roles
     "ParameterRole",
     # ScaleEquivariant dense variants (variable-width)
@@ -141,6 +152,14 @@ __all__ = [
     "FourierNeuralOperator1d",
     "DeepONet",
     "MLPDeepONet",
+    # Gating mechanisms and gated building blocks
+    "IGatingMechanism",
+    "GLUGate",
+    "SwiGLUGate",
+    "GRNGate",
+    "UVGate",
+    "GatedConvolutionBlock1d",
+    "GatedDeconvolutionBlock1d",
     # Submodules
     "attention",
     "cae",
