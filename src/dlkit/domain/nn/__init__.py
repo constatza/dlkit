@@ -72,6 +72,7 @@ from .spectral import (
     FourierAugmented,
     FourierEnhancedFFNN,
     FourierFeatureNetwork,
+    HashEncodingNetwork,
     ISpectralLayer,
     ModifiedMLP,
     ScaleEquivariantFourierFeatureNetwork,
@@ -145,6 +146,7 @@ __all__ = [
     "DualPathFFNN",
     # Coordinate spectral-bias networks
     "FourierFeatureNetwork",
+    "HashEncodingNetwork",
     "Siren",
     "ModifiedMLP",
     "ScaleEquivariantFourierFeatureNetwork",

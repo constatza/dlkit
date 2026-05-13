@@ -11,6 +11,7 @@ from dlkit.common.shapes import ShapeSummary
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantConstantWidthFFNN
 from dlkit.domain.nn.spectral.coordinate import (
     FourierFeatureNetwork,
+    HashEncodingNetwork,
     ModifiedMLP,
     ScaleEquivariantFourierFeatureNetwork,
     ScaleEquivariantModifiedMLP,
@@ -93,6 +94,67 @@ class TestSiren:
         net = Siren.from_shape(shape, hidden_size=16, num_layers=3)
         x = torch.randn(4, 2)
         assert net(x).shape == (4, 1)
+
+
+class TestHashEncodingNetwork:
+    def test_output_shape(self, coords: torch.Tensor) -> None:
+        net = HashEncodingNetwork(
+            in_features=3,
+            out_features=2,
+            hidden_size=32,
+            num_layers=3,
+        )
+        assert net(coords).shape == (8, 2)
+
+    def test_is_differentiable(self, coords: torch.Tensor) -> None:
+        net = HashEncodingNetwork(
+            in_features=3,
+            out_features=2,
+            hidden_size=16,
+            num_layers=2,
+        )
+        coords = coords.requires_grad_(True)
+        out = net(coords)
+        out.sum().backward()
+        assert coords.grad is not None
+
+    def test_from_shape(self) -> None:
+        shape = ShapeSummary(in_shapes=((3,),), out_shapes=((1,),))
+        net = HashEncodingNetwork.from_shape(shape, hidden_size=16, num_layers=2)
+        x = torch.randn(4, 3)
+        assert net(x).shape == (4, 1)
+
+    def test_rejects_mismatched_bounds(self) -> None:
+        with pytest.raises(ValueError, match="exactly one"):
+            HashEncodingNetwork(
+                in_features=3,
+                out_features=1,
+                hidden_size=16,
+                num_layers=2,
+                bounds=((-1.0, 1.0),),
+            )
+
+    def test_include_input_changes_encoding_width(self) -> None:
+        with_input = HashEncodingNetwork(
+            in_features=3,
+            out_features=1,
+            hidden_size=8,
+            num_layers=2,
+            num_levels=4,
+            features_per_level=2,
+            include_input=True,
+        )
+        without_input = HashEncodingNetwork(
+            in_features=3,
+            out_features=1,
+            hidden_size=8,
+            num_layers=2,
+            num_levels=4,
+            features_per_level=2,
+            include_input=False,
+        )
+        assert with_input.encoding.output_dim == 11
+        assert without_input.encoding.output_dim == 8
 
 
 class TestModifiedMLP:
@@ -224,6 +286,11 @@ class TestShapeAwareScaleEquivariantCoordinateNetworks:
     def test_modified_mlp_from_shape(self) -> None:
         shape = ShapeSummary(in_shapes=((3,),), out_shapes=((2,),))
         net = ScaleEquivariantModifiedMLP.from_shape(shape, hidden_size=16, num_layers=3)
+        assert net(torch.randn(4, 3)).shape == (4, 2)
+
+    def test_hash_encoding_from_shape(self) -> None:
+        shape = ShapeSummary(in_shapes=((3,),), out_shapes=((2,),))
+        net = HashEncodingNetwork.from_shape(shape, hidden_size=16, num_layers=2)
         assert net(torch.randn(4, 3)).shape == (4, 2)
 
 

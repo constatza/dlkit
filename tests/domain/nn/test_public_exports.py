@@ -28,6 +28,7 @@ def test_scale_equivariant_ffnn_not_exported():
 def test_coordinate_spectral_bias_models_exported():
     names = (
         "FourierFeatureNetwork",
+        "HashEncodingNetwork",
         "ModifiedMLP",
         "Siren",
         "ScaleEquivariantFourierFeatureNetwork",

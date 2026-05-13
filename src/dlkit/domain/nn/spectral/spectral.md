@@ -20,6 +20,7 @@ the network learn high-frequency structure without relying on depth alone.
 | `FourierEnhancedFFNN` | `ffnn.py` | Single-branch MLP with spectral feature concatenation |
 | `DualPathFFNN` | `ffnn.py` | Parallel spatial + spectral MLP branches |
 | `FourierFeatureNetwork` | `coordinate.py` | Coordinate Fourier feature encoder followed by an MLP |
+| `HashEncodingNetwork` | `coordinate.py` | Multiresolution hashed grid encoder plus MLP head |
 | `Siren` | `coordinate.py` | Sinusoidal coordinate network with SIREN initialisation |
 | `ModifiedMLP` | `coordinate.py` | Coordinate network with U/V gating |
 | `ScaleEquivariantFourierFeatureNetwork` | `coordinate.py` | Norm-scaled wrapper over `FourierFeatureNetwork` |
@@ -155,6 +156,41 @@ where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
 | `activation` | `Callable` | `F.gelu` | Activation for the internal MLP |
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalisation for the internal MLP |
 | `dropout` | `float` | `0.0` | Dropout for the internal MLP |
+
+`from_shape` sets `in_features` and `out_features` from the shape summary.
+
+### HashEncodingNetwork
+
+Multiresolution hashed grid encoder in the style of Instant-NGP. The input is
+first normalized into a bounded coordinate box, encoded across multiple hash
+tables at increasing resolutions, concatenated with the raw input by default,
+and then passed through a residual MLP head.
+
+```
+encoded = [x, hash_level_0(x), ..., hash_level_{L-1}(x)]
+output  = ConstantWidthFFNN(encoded)
+```
+
+This representation is strongest when the input space is genuinely
+coordinate-like and local neighborhoods in that space are semantically
+meaningful.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `in_features` | `int` | required | Coordinate input dimension |
+| `out_features` | `int` | required | Output dimension |
+| `hidden_size` | `int` | required | Width of the MLP head |
+| `num_layers` | `int` | required | Number of hidden MLP layers |
+| `num_levels` | `int` | `16` | Number of hash-grid resolutions |
+| `features_per_level` | `int` | `2` | Feature channels stored per level |
+| `log2_hashmap_size` | `int` | `19` | Hash table size per level as `2^k` |
+| `base_resolution` | `int` | `16` | Lowest grid resolution |
+| `finest_resolution` | `int` | `512` | Highest grid resolution |
+| `bounds` | `tuple[(float, float), ...] \| None` | `None` | Per-dimension input bounds; defaults to `(-1, 1)` |
+| `include_input` | `bool` | `True` | Concatenate raw input with hashed features |
+| `activation` | `Callable` | `F.gelu` | Activation in the MLP head |
+| `normalize` | `"batch" \| "layer" \| None` | `None` | Normalisation for the MLP head |
+| `dropout` | `float` | `0.0` | Dropout for the MLP head |
 
 `from_shape` sets `in_features` and `out_features` from the shape summary.
 

@@ -1,6 +1,7 @@
 from .base import ISpectralLayer
 from .coordinate import (
     FourierFeatureNetwork,
+    HashEncodingNetwork,
     ModifiedMLP,
     ScaleEquivariantFourierFeatureNetwork,
     ScaleEquivariantModifiedMLP,
@@ -24,6 +25,7 @@ __all__ = [
     "DualPathFFNN",
     # Coordinate spectral-bias networks
     "FourierFeatureNetwork",
+    "HashEncodingNetwork",
     "Siren",
     "ModifiedMLP",
     "ScaleEquivariantFourierFeatureNetwork",

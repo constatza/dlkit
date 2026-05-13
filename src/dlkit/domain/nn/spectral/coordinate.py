@@ -1,10 +1,15 @@
 """Coordinate spectral-bias networks.
 
-Implements three architectures commonly used to counter spectral bias:
+Implements coordinate encoders and architectures commonly used to counter
+spectral bias:
 
 ``FourierFeatureNetwork`` (Tancik et al. 2020)
     Projects each coordinate through a random or learned frequency matrix
     before the MLP, directly countering spectral bias.
+
+``HashEncodingNetwork`` (in the style of Instant-NGP, Müller et al. 2022)
+    Encodes coordinates through a multiresolution hashed feature grid before a
+    small MLP head.
 
 ``Siren`` (Sitzmann et al. 2020)
     MLP using ``sin`` activations with the initialisation from the original
@@ -19,7 +24,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import torch
 import torch.nn.functional as F
@@ -38,6 +43,16 @@ if TYPE_CHECKING:
 
 _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
+_DEFAULT_HASH_PRIMES = (
+    1,
+    2_654_435_761,
+    805_459_861,
+    36_776_121,
+    20_909_719,
+    1_437_569,
+    1_934_966_399,
+    83_492_791,
+)
 
 
 class FourierFeatureNetwork(nn.Module):
@@ -118,6 +133,189 @@ class FourierFeatureNetwork(nn.Module):
         Returns:
             Constructed FourierFeatureNetwork.
         """
+        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+
+
+class MultiresolutionHashEncoding(nn.Module):
+    """Multiresolution hashed grid encoding for low-dimensional coordinates."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_levels: int = 16,
+        features_per_level: int = 2,
+        log2_hashmap_size: int = 19,
+        base_resolution: int = 16,
+        finest_resolution: int = 512,
+        bounds: tuple[tuple[float, float], ...] | None = None,
+        include_input: bool = True,
+    ) -> None:
+        if in_features <= 0:
+            raise ValueError("in_features must be positive")
+        if num_levels <= 0:
+            raise ValueError("num_levels must be positive")
+        if features_per_level <= 0:
+            raise ValueError("features_per_level must be positive")
+        if log2_hashmap_size <= 0:
+            raise ValueError("log2_hashmap_size must be positive")
+        if base_resolution <= 0:
+            raise ValueError("base_resolution must be positive")
+        if finest_resolution < base_resolution:
+            raise ValueError("finest_resolution must be >= base_resolution")
+
+        super().__init__()
+        self.in_features = in_features
+        self.num_levels = num_levels
+        self.features_per_level = features_per_level
+        self.include_input = include_input
+        self.hashmap_size = 1 << log2_hashmap_size
+
+        bounds_value = bounds or tuple((-1.0, 1.0) for _ in range(in_features))
+        if len(bounds_value) != in_features:
+            raise ValueError("bounds must provide exactly one (min, max) pair per input feature")
+
+        mins = []
+        maxs = []
+        for low, high in bounds_value:
+            if high <= low:
+                raise ValueError("each bounds pair must satisfy low < high")
+            mins.append(low)
+            maxs.append(high)
+
+        bounds_min = torch.tensor(mins, dtype=torch.float32)
+        self.register_buffer("bounds_min", bounds_min)
+        self.register_buffer("bounds_range", torch.tensor(maxs, dtype=torch.float32) - bounds_min)
+        self.register_buffer(
+            "hash_primes",
+            torch.tensor(
+                [_DEFAULT_HASH_PRIMES[i % len(_DEFAULT_HASH_PRIMES)] for i in range(in_features)],
+                dtype=torch.long,
+            ),
+        )
+
+        if num_levels == 1:
+            resolutions = [base_resolution]
+        else:
+            growth = math.exp(math.log(finest_resolution / base_resolution) / (num_levels - 1))
+            resolutions = [
+                int(math.floor(base_resolution * (growth**level))) for level in range(num_levels)
+            ]
+        self.resolutions = tuple(max(1, resolution) for resolution in resolutions)
+
+        self.tables = nn.ParameterList(
+            [
+                nn.Parameter(torch.empty(self.hashmap_size, features_per_level))
+                for _ in range(num_levels)
+            ]
+        )
+        for table in self.tables:
+            nn.init.uniform_(table, -1e-4, 1e-4)
+
+        input_width = in_features if include_input else 0
+        self.output_dim = input_width + num_levels * features_per_level
+
+    def _normalize(self, x: Tensor) -> Tensor:
+        bounds_min = cast(Tensor, self.bounds_min).to(device=x.device, dtype=x.dtype)
+        bounds_range = cast(Tensor, self.bounds_range).to(device=x.device, dtype=x.dtype)
+        return ((x - bounds_min) / bounds_range).clamp(0.0, 1.0)
+
+    def _hash_indices(self, grid_indices: Tensor) -> Tensor:
+        hashed = torch.zeros_like(grid_indices[..., 0], dtype=torch.long)
+        hash_primes = cast(Tensor, self.hash_primes)
+        for dim in range(self.in_features):
+            hashed ^= grid_indices[..., dim] * hash_primes[dim]
+        return hashed.remainder(self.hashmap_size)
+
+    def _interpolate_level(self, normalized: Tensor, *, level: int) -> Tensor:
+        resolution = self.resolutions[level]
+        table = cast(Tensor, self.tables[level])
+        scaled = normalized * resolution
+        lower = torch.floor(scaled).to(dtype=torch.long).clamp(0, max(resolution - 1, 0))
+        frac = (scaled - lower.to(dtype=normalized.dtype)).clamp(0.0, 1.0)
+
+        encoded = torch.zeros(
+            *normalized.shape[:-1],
+            self.features_per_level,
+            device=normalized.device,
+            dtype=table.dtype,
+        )
+        for corner in range(1 << self.in_features):
+            weight = torch.ones_like(frac[..., 0])
+            offset_components: list[Tensor] = []
+            for dim in range(self.in_features):
+                bit = (corner >> dim) & 1
+                if bit:
+                    weight = weight * frac[..., dim]
+                    offset_components.append(torch.ones_like(lower[..., dim]))
+                else:
+                    weight = weight * (1.0 - frac[..., dim])
+                    offset_components.append(torch.zeros_like(lower[..., dim]))
+
+            offsets = torch.stack(offset_components, dim=-1)
+            hashed = self._hash_indices(lower + offsets)
+            encoded = encoded + weight.unsqueeze(-1) * table[hashed]
+        return encoded
+
+    def forward(self, x: Tensor) -> Tensor:
+        if x.shape[-1] != self.in_features:
+            raise ValueError(f"Expected x.shape[-1] == {self.in_features}, got {x.shape[-1]}.")
+        normalized = self._normalize(x)
+        levels = [
+            self._interpolate_level(normalized, level=level) for level in range(self.num_levels)
+        ]
+        if self.include_input:
+            return torch.cat([x, *levels], dim=-1)
+        return torch.cat(levels, dim=-1)
+
+
+class HashEncodingNetwork(nn.Module):
+    """Coordinate network using a multiresolution hashed grid encoder."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        num_levels: int = 16,
+        features_per_level: int = 2,
+        log2_hashmap_size: int = 19,
+        base_resolution: int = 16,
+        finest_resolution: int = 512,
+        bounds: tuple[tuple[float, float], ...] | None = None,
+        include_input: bool = True,
+        activation: Callable[[Tensor], Tensor] = F.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.encoding = MultiresolutionHashEncoding(
+            in_features=in_features,
+            num_levels=num_levels,
+            features_per_level=features_per_level,
+            log2_hashmap_size=log2_hashmap_size,
+            base_resolution=base_resolution,
+            finest_resolution=finest_resolution,
+            bounds=bounds,
+            include_input=include_input,
+        )
+        self.mlp = ConstantWidthFFNN(
+            in_features=self.encoding.output_dim,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.mlp(self.encoding(x))
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
         return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
 
 
