@@ -51,7 +51,7 @@ def _spectral_features(x: Tensor, n_modes: int) -> Tensor:
     **When to use:** Appropriate when input features ARE samples of a signal at
     equally-spaced indices (e.g. time-series channels, FNO-style inputs).  For
     PDE coordinate inputs such as ``(x, y, t)`` the DFT of the feature vector
-    has no physical meaning — use :class:`~dlkit.domain.nn.spectral.pinn.FourierFeatureNetwork`
+    has no physical meaning — use :class:`~dlkit.domain.nn.spectral.coordinate.FourierFeatureNetwork`
     instead, which applies a coordinate-wise sinusoidal mapping γ(x) = [sin(2πBx), cos(2πBx)].
 
     Args:

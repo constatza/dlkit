@@ -12,6 +12,7 @@ This module provides fundamental components that serve as building blocks for la
 | `SkipConnection` | `skip.py` | Residual connection wrapper with flexible aggregation |
 | `ConvolutionBlock1d` | `convolutional.py` | 1D convolution with normalization and dropout |
 | `DeconvolutionBlock1d` | `convolutional.py` | 1D transposed convolution for upsampling |
+| `ScaleEquivariantWrapper` | `scale_equivariant.py` | Shared norm-scaled wrapper for positive scale equivariance |
 | `TransformMixin` | `transform.py` | Lightning callback for transform chains |
 
 ---
@@ -143,6 +144,23 @@ residual_block = SkipConnection(
     layer_type="linear",
 )
 ```
+
+---
+
+## ScaleEquivariantWrapper
+
+Reusable wrapper that enforces positive scale equivariance by normalizing the
+input by a per-sample norm, delegating to a wrapped module, and rescaling the
+output by the original norm.
+
+Code notation:
+```
+norm = ||x||
+y = norm * f(x / max(norm, eps))
+```
+
+The wrapper is intentionally model-agnostic. Dense and coordinate spectral-bias
+models reuse the same implementation rather than duplicating norm-scaling logic.
 
 ---
 

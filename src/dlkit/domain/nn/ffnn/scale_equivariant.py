@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 import torch
 import torch.nn.functional as F
@@ -23,87 +23,28 @@ from dlkit.domain.nn.ffnn.constrained import (
 )
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from dlkit.domain.nn.primitives import (
+    DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
+    DEFAULT_SCALE_EQUIVARIANT_NORM,
+    ScaleEquivariantWrapper,
+    shape_aware_kwargs,
+)
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
 
-_DEFAULT_NORM = "l2"
-_DEFAULT_EPS_GAIN = 10.0
+_DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
+_DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
 
 
-class _ScaleEquivariantBase(nn.Module):
+class _ScaleEquivariantBase(ScaleEquivariantWrapper):
     """Wrap a base FFNN with input/output norm scaling to enforce scale equivariance."""
-
-    SUPPORTED_NORMS = {"l2", "l1", "linf"}
-
-    def __init__(
-        self,
-        *,
-        base_model: nn.Module,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-    ) -> None:
-        if not isinstance(base_model, nn.Module):
-            raise TypeError("base_model must be an instance of torch.nn.Module")
-        if norm not in self.SUPPORTED_NORMS:
-            raise ValueError(f"norm must be one of {self.SUPPORTED_NORMS}, got {norm!r}.")
-        if eps_gain <= 0:
-            raise ValueError("eps_gain must be > 0.")
-
-        super().__init__()
-        self.base_model = base_model
-        self.norm = norm
-        self.eps_gain = float(eps_gain)
-        self.keep_stats = keep_stats
-
-    @staticmethod
-    def _compute_eps(x: Tensor, gain: float) -> float:
-        finfo = torch.finfo(x.dtype)
-        return float(gain * finfo.eps)
-
-    def _vector_norm(self, x: Tensor) -> Tensor:
-        match self.norm:
-            case "l2":
-                return torch.linalg.vector_norm(x, ord=2, dim=-1, keepdim=True)
-            case "l1":
-                return torch.linalg.vector_norm(x, ord=1, dim=-1, keepdim=True)
-            case _:
-                return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
-
-    def forward(self, x: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
-        if not torch.is_floating_point(x):
-            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
-        if x.ndim < 1:
-            raise ValueError(
-                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
-            )
-
-        norms = self._vector_norm(x)
-        eps = self._compute_eps(x, self.eps_gain)
-        safe_div = norms.clamp_min(eps)
-        x_scaled = self.base_model(x / safe_div) * norms
-
-        if self.keep_stats:
-            return x_scaled, {"norm": norms}
-        return x_scaled
 
 
 def _default_activation(
     activation: Callable[[Tensor], Tensor] | None,
 ) -> Callable[[Tensor], Tensor]:
     return activation if activation is not None else nn.functional.gelu
-
-
-def _shape_aware_kwargs(shape: ShapeSummary, kwargs: dict[str, Any]) -> dict[str, Any]:
-    shape_kwargs = dict(kwargs)
-    shape_kwargs.pop("in_features", None)
-    shape_kwargs.pop("out_features", None)
-    return {
-        "in_features": shape.in_features,
-        "out_features": shape.out_features,
-        **shape_kwargs,
-    }
 
 
 class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
@@ -140,7 +81,7 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantConstantWidthFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
@@ -177,7 +118,7 @@ class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantConstantWidthSimpleFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
@@ -212,7 +153,7 @@ class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantFeedForwardNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
@@ -247,7 +188,7 @@ class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantSimpleFeedForwardNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantConstantWidthSPDFFNN(_ScaleEquivariantBase):
@@ -512,7 +453,7 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSPDFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
@@ -555,7 +496,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSimpleSPDFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -602,7 +543,7 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSPDFactorizedFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -651,7 +592,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
     def from_shape(
         cls, shape: ShapeSummary, **kwargs
     ) -> ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
@@ -696,7 +637,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedFactorizedFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))
 
 
 class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
@@ -743,4 +684,4 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
     def from_shape(
         cls, shape: ShapeSummary, **kwargs
     ) -> ScaleEquivariantEmbeddedSimpleFactorizedFFNN:
-        return cls(**_shape_aware_kwargs(shape, kwargs))
+        return cls(**shape_aware_kwargs(shape, kwargs))

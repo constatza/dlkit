@@ -28,9 +28,17 @@ from .parametrized_layers import (
     register_symmetric,
     register_symmetric_factorized,
 )
+from .scale_equivariant import (
+    DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
+    DEFAULT_SCALE_EQUIVARIANT_NORM,
+    ScaleEquivariantWrapper,
+    shape_aware_kwargs,
+)
 from .skip import SkipConnection
 
 __all__ = [
+    "DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN",
+    "DEFAULT_SCALE_EQUIVARIANT_NORM",
     "SPD",
     "ConvolutionBlock1d",
     "DenseBlock",
@@ -52,6 +60,8 @@ __all__ = [
     "SymmetricFactorizedLinear",
     "SymmetricLinear",
     "UVGate",
+    "ScaleEquivariantWrapper",
+    "shape_aware_kwargs",
     "register_spd",
     "register_spd_factorized",
     "register_symmetric",

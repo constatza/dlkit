@@ -13,7 +13,7 @@ semantic parameter contracts. No engine orchestration belongs here.
 | `attention/` | Self-attention and transformer blocks |
 | `graph/` | PyG-based graph neural networks |
 | `generative/` | VAE and generative samplers |
-| `spectral/` | Spectral convolution and Fourier-enhanced MLPs |
+| `spectral/` | Spectral convolution, Fourier-enhanced models, and coordinate spectral-bias networks |
 | `operators/` | Physics-informed operator networks |
 | `primitives/` | Reusable low-level blocks, constrained linear layers, and gating mechanisms |
 

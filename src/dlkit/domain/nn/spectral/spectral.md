@@ -19,6 +19,12 @@ the network learn high-frequency structure without relying on depth alone.
 | `FourierLayer` | `layers.py` | FNO building block: spectral conv + local Conv1d skip |
 | `FourierEnhancedFFNN` | `ffnn.py` | Single-branch MLP with spectral feature concatenation |
 | `DualPathFFNN` | `ffnn.py` | Parallel spatial + spectral MLP branches |
+| `FourierFeatureNetwork` | `coordinate.py` | Coordinate Fourier feature encoder followed by an MLP |
+| `Siren` | `coordinate.py` | Sinusoidal coordinate network with SIREN initialisation |
+| `ModifiedMLP` | `coordinate.py` | Coordinate network with U/V gating |
+| `ScaleEquivariantFourierFeatureNetwork` | `coordinate.py` | Norm-scaled wrapper over `FourierFeatureNetwork` |
+| `ScaleEquivariantSiren` | `coordinate.py` | Norm-scaled wrapper over `Siren` |
+| `ScaleEquivariantModifiedMLP` | `coordinate.py` | Norm-scaled wrapper over `ModifiedMLP` |
 
 ---
 
@@ -119,10 +125,10 @@ model = DualPathFFNN(
 
 ---
 
-## PINN Coordinate Networks
+## Coordinate Spectral-Bias Networks
 
-Networks from the physics-informed ML literature that address spectral bias at
-the coordinate level rather than through Fourier convolutions.  All three
+These architectures address spectral bias at the coordinate level rather than
+through Fourier convolutions. All three
 implement `from_shape(shape, **kwargs)` for factory-compatible construction.
 
 ### FourierFeatureNetwork
@@ -152,7 +158,7 @@ where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
 
 `from_shape` sets `in_features` and `out_features` from the shape summary.
 
-### SirenFFNN
+### Siren
 
 Sinusoidal representation network (Sitzmann et al. 2020).  Uses `sin`
 activations throughout with layer-specific weight initialisation that promotes
@@ -181,7 +187,7 @@ Raises `ValueError` if `num_layers < 1`.  `from_shape` is supported.
 ### ModifiedMLP
 
 U/V encoder gating (Wang et al. 2022).  Two encoder branches modulate each
-hidden state, shown to accelerate PINN convergence over a plain MLP.
+hidden state to provide richer coordinate-conditioned gating than a plain MLP.
 
 ```
 U = σ(W_u x + b_u)
@@ -212,6 +218,20 @@ model = ModifiedMLP(
     num_layers=4,
 )
 ```
+
+### Scale-Equivariant Wrappers
+
+`ScaleEquivariantFourierFeatureNetwork`, `ScaleEquivariantSiren`, and
+`ScaleEquivariantModifiedMLP` compose the corresponding base architecture with
+shared norm-based input/output scaling:
+
+```
+norm = ||x||
+output = norm * base_model(x / max(norm, eps))
+```
+
+This keeps scale-equivariant behavior in one reusable primitive rather than
+reimplementing it in each spectral-bias model.
 
 ---
 

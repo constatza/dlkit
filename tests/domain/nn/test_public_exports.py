@@ -25,6 +25,25 @@ def test_scale_equivariant_ffnn_not_exported():
     assert not hasattr(public_nn, "ScaleEquivariantFFNN")
 
 
+def test_coordinate_spectral_bias_models_exported():
+    names = (
+        "FourierFeatureNetwork",
+        "ModifiedMLP",
+        "Siren",
+        "ScaleEquivariantFourierFeatureNetwork",
+        "ScaleEquivariantModifiedMLP",
+        "ScaleEquivariantSiren",
+    )
+    for name in names:
+        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
+        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+
+
+def test_legacy_siren_name_not_exported():
+    assert not hasattr(domain_nn, "SirenFFNN")
+    assert not hasattr(public_nn, "SirenFFNN")
+
+
 def test_named_parametric_bases_exported():
     for ns in (domain_nn, public_nn):
         assert hasattr(ns, "ConstantWidthParametricFFNN")

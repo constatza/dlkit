@@ -1,18 +1,18 @@
-"""PINN-oriented frequency and coordinate encoding networks.
+"""Coordinate spectral-bias networks.
 
-Implements three primitives from the physics-informed ML literature:
+Implements three architectures commonly used to counter spectral bias:
 
 ``FourierFeatureNetwork`` (Tancik et al. 2020)
     Projects each coordinate through a random or learned frequency matrix
     before the MLP, directly countering spectral bias.
 
-``SirenFFNN`` (Sitzmann et al. 2020)
+``Siren`` (Sitzmann et al. 2020)
     MLP using ``sin`` activations with the initialisation from the original
-    paper; particularly effective for PDE solutions and implicit representations.
+    paper; particularly effective for high-frequency and implicit representations.
 
 ``ModifiedMLP`` (Wang et al. 2022)
-    Adds U/V encoder branches that gate hidden states; shown to accelerate
-    PINN convergence significantly vs. standard MLP.
+    Adds U/V encoder branches that gate hidden states for richer
+    coordinate-conditioned representations.
 """
 
 from __future__ import annotations
@@ -26,9 +26,18 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
+from dlkit.domain.nn.primitives import (
+    DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
+    DEFAULT_SCALE_EQUIVARIANT_NORM,
+    ScaleEquivariantWrapper,
+    shape_aware_kwargs,
+)
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
+
+_DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
+_DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
 
 
 class FourierFeatureNetwork(nn.Module):
@@ -112,7 +121,7 @@ class FourierFeatureNetwork(nn.Module):
         return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
 
 
-class SirenFFNN(nn.Module):
+class Siren(nn.Module):
     """Sinusoidal representation network (Sitzmann et al. 2020, NeurIPS).
 
     Uses sin activations throughout with layer-specific weight initialisation:
@@ -191,7 +200,7 @@ class SirenFFNN(nn.Module):
             **kwargs: Additional constructor arguments.
 
         Returns:
-            Constructed SirenFFNN.
+            Constructed Siren.
         """
         return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
 
@@ -215,7 +224,7 @@ class ModifiedMLP(nn.Module):
         in_features: Input dimension.
         out_features: Output dimension.
         hidden_size: Width of all hidden layers.
-        num_layers: Number of hidden linear layers (>= 1).
+        num_layers: Number of hidden linear layers (>= 2).
         activation: Gating activation σ. Defaults to torch.sigmoid.
     """
 
@@ -271,3 +280,116 @@ class ModifiedMLP(nn.Module):
             Constructed ModifiedMLP.
         """
         return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+
+
+class _ScaleEquivariantCoordinateBase(ScaleEquivariantWrapper):
+    """Shared scale-equivariant wrapper for coordinate spectral-bias models."""
+
+
+class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
+    """Scale-equivariant Fourier feature network."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        n_frequencies: int,
+        sigma: float = 1.0,
+        learnable_B: bool = False,
+        activation: Callable[[Tensor], Tensor] = F.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+    ) -> None:
+        super().__init__(
+            base_model=FourierFeatureNetwork(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                n_frequencies=n_frequencies,
+                sigma=sigma,
+                learnable_B=learnable_B,
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
+        return cls(**shape_aware_kwargs(shape, kwargs))
+
+
+class ScaleEquivariantSiren(_ScaleEquivariantCoordinateBase):
+    """Scale-equivariant sinusoidal representation network."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        omega0: float = 30.0,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+    ) -> None:
+        super().__init__(
+            base_model=Siren(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                omega0=omega0,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
+        return cls(**shape_aware_kwargs(shape, kwargs))
+
+
+class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
+    """Scale-equivariant modified MLP with U/V gating."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        activation: Callable[[Tensor], Tensor] = torch.sigmoid,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+    ) -> None:
+        super().__init__(
+            base_model=ModifiedMLP(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                activation=activation,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
+        return cls(**shape_aware_kwargs(shape, kwargs))

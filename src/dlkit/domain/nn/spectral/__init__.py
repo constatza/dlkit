@@ -1,7 +1,14 @@
 from .base import ISpectralLayer
+from .coordinate import (
+    FourierFeatureNetwork,
+    ModifiedMLP,
+    ScaleEquivariantFourierFeatureNetwork,
+    ScaleEquivariantModifiedMLP,
+    ScaleEquivariantSiren,
+    Siren,
+)
 from .ffnn import DualPathFFNN, FourierAugmented, FourierEnhancedFFNN, SpectralDualPath
 from .layers import FourierLayer, SpectralConv1d
-from .pinn import FourierFeatureNetwork, ModifiedMLP, SirenFFNN
 
 __all__ = [
     # Protocol
@@ -15,8 +22,11 @@ __all__ = [
     # Convenience constructors
     "FourierEnhancedFFNN",
     "DualPathFFNN",
-    # PINN networks
+    # Coordinate spectral-bias networks
     "FourierFeatureNetwork",
-    "SirenFFNN",
+    "Siren",
     "ModifiedMLP",
+    "ScaleEquivariantFourierFeatureNetwork",
+    "ScaleEquivariantSiren",
+    "ScaleEquivariantModifiedMLP",
 ]
