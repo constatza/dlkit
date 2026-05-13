@@ -6,6 +6,7 @@ from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
+from lightning.fabric.utilities.exceptions import MisconfigurationException
 
 from dlkit.engine.training.tuning import LRTuner
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
@@ -32,7 +33,9 @@ def custom_lr_tuner_settings() -> LRTunerSettings:
 @pytest.fixture
 def mock_trainer() -> Mock:
     """Mock PyTorch Lightning trainer."""
-    return Mock()
+    trainer = Mock()
+    trainer.callbacks = []
+    return trainer
 
 
 @pytest.fixture
@@ -203,3 +206,48 @@ class TestLRTuner:
             # Verify datamodule=None was passed
             call_kwargs = mock_tuner_instance.lr_find.call_args[1]
             assert call_kwargs["datamodule"] is None
+
+    def test_tune_restores_callbacks_after_lightning_failure(
+        self,
+        mock_trainer: Mock,
+        mock_model: Mock,
+        lr_tuner_settings: LRTunerSettings,
+    ) -> None:
+        """Temporary LR finder callbacks are removed when Lightning crashes."""
+        original_callback = object()
+        mock_trainer.callbacks = [original_callback]
+
+        def _raise_with_callback_pollution(*args: object, **kwargs: object) -> None:
+            mock_trainer.callbacks.append(object())
+            raise IndexError("list index out of range")
+
+        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+            mock_tuner_instance = Mock()
+            mock_tuner_instance.lr_find.side_effect = _raise_with_callback_pollution
+            MockTuner.return_value = mock_tuner_instance
+
+            tuner = LRTuner()
+
+            with pytest.raises(RuntimeError, match="failed inside Lightning"):
+                tuner.tune(mock_trainer, mock_model, lr_tuner_settings, None)
+
+        assert mock_trainer.callbacks == [original_callback]
+
+    def test_tune_wraps_lightning_multi_optimizer_misconfiguration(
+        self,
+        mock_trainer: Mock,
+        mock_model: Mock,
+        lr_tuner_settings: LRTunerSettings,
+    ) -> None:
+        """Lightning multi-optimizer failures are translated into a DLKit error."""
+        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+            mock_tuner_instance = Mock()
+            mock_tuner_instance.lr_find.side_effect = MisconfigurationException(
+                "learning rate finder only works with single optimizer"
+            )
+            MockTuner.return_value = mock_tuner_instance
+
+            tuner = LRTuner()
+
+            with pytest.raises(RuntimeError, match="only supports a single optimizer"):
+                tuner.tune(mock_trainer, mock_model, lr_tuner_settings, None)

@@ -356,4 +356,6 @@ model-input entries (those with `model_input ≠ False/None`), in the same order
 
 Graph models bypass these protocols entirely — `GraphLightningWrapper` overrides
 all step methods and uses null sentinels (`_NullModelInvoker`, etc.) as base-class
-placeholders.
+placeholders. Graph wrappers still share the same optimization-controller builder
+as standard wrappers, so staged/concurrent optimizer policies resolve manual vs
+automatic optimization through one source of truth.

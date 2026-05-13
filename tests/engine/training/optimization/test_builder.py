@@ -470,8 +470,8 @@ class TestOptimizerPolicyBuilder:
         with pytest.raises(ParameterPartitionError):
             OptimizerPolicyBuilder().build(tiny_model, settings)
 
-    def test_build_default_skips_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
-        """LBFGS default optimizer: scheduler is ignored even when configured."""
+    def test_build_default_keeps_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
+        """LBFGS default optimizer should retain configured schedulers."""
         settings = OptimizerPolicySettings(
             default_optimizer=LBFGSSettings(),
             default_scheduler=ReduceLROnPlateauSettings(),
@@ -479,7 +479,7 @@ class TestOptimizerPolicyBuilder:
         program = OptimizerPolicyBuilder().build(tiny_model, settings)
 
         stage = program.stages[0]
-        assert stage.scheduler is None
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
 
     def test_build_default_keeps_scheduler_for_adamw(self, tiny_model: nn.Sequential) -> None:
         """AdamW default optimizer: scheduler is attached normally."""
@@ -492,8 +492,8 @@ class TestOptimizerPolicyBuilder:
         stage = program.stages[0]
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
 
-    def test_build_stage_skips_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
-        """LBFGS in an explicit stage: scheduler is ignored even when configured."""
+    def test_build_stage_keeps_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
+        """LBFGS in an explicit stage should retain configured schedulers."""
         settings = OptimizerPolicySettings(
             stages=(
                 OptimizationStageSettings(
@@ -505,4 +505,4 @@ class TestOptimizerPolicyBuilder:
         program = OptimizerPolicyBuilder().build(tiny_model, settings)
 
         stage = program.stages[0]
-        assert stage.scheduler is None
+        assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)

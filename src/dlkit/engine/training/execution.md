@@ -136,6 +136,9 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 - Sets reproducible seed from `settings.SESSION.seed` before training
 - Applies model precision via `ensure_precision_applied()` if available
 - Logs precision configuration for debugging
+- Builds a temporary first-stage-only tuning wrapper when LR finder is enabled for a staged optimizer policy
+- Applies the suggested learning rate back to stage 0 of the real training policy
+- Restores trainer callbacks if Lightning's LR finder aborts before training starts
 - Executes `trainer.fit()` as core training step
 - Post-training `predict()` and `test()` are best-effort (silent failure)
 - Metrics collected from multiple trainer sources (callback_metrics, progress_bar_metrics, logged_metrics)

@@ -53,6 +53,8 @@ Schedulers are attached to optimizer-policy stages.
 - Use `TRAINING.optimizer.stages[*].scheduler` for staged programs.
 - A concurrent stage still has exactly one stage scheduler, attached to the
   `ConcurrentOptimizer` wrapper that owns all sub-optimizers.
+- LBFGS stages can use schedulers; closure-based stepping affects optimizer
+  execution semantics, not scheduler compatibility.
 - In manual mode, the current stage scheduler is stepped at `on_epoch_end` for
   the epoch that just finished, before any trigger evaluation or stage advance.
 - `scheduler_frequency` is treated as an epoch cadence in manual mode.
@@ -68,6 +70,20 @@ The manual epoch-end order is:
 
 Automatic mode is unchanged: Lightning owns scheduler stepping through
 `configure_optimizers()`.
+
+## LR Tuning Semantics
+
+Lightning LR finder works only with a single optimizer view. DLKit therefore
+keeps LR tuning separate from the live optimization program:
+
+- single-stage policies are tuned directly
+- sequential staged policies are tuned through a temporary projection that
+  contains only stage 0
+- the suggested learning rate is written back only to stage 0 of the real
+  policy before training starts
+- later stages keep their configured learning rates unchanged
+- concurrent stage-0 policies and closure-based stage-0 optimizers are rejected
+  explicitly for LR finder in v1
 
 ## Concurrent Closure Semantics
 

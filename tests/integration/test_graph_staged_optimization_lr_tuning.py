@@ -1,0 +1,102 @@
+"""Integration tests for graph staged optimization and LR tuning behavior."""
+
+from __future__ import annotations
+
+from dlkit.common import TrainingResult
+from dlkit.engine.training.optimization.controllers import ManualOptimizationController
+from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    StepLRSettings,
+)
+from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+from dlkit.interfaces.api import train as api_train
+
+
+def _build_staged_graph_settings(
+    graph_settings: TrainingWorkflowConfig,
+    *,
+    enable_lr_tuning: bool,
+) -> TrainingWorkflowConfig:
+    """Create a graph workflow with sequential staged optimizers."""
+    assert graph_settings.TRAINING is not None
+    lr_tuner = (
+        LRTunerSettings(min_lr=1e-6, max_lr=0.1, num_training=2) if enable_lr_tuning else None
+    )
+    training = graph_settings.TRAINING.model_copy(
+        update={
+            "epochs": 1,
+            "lr_tuner": lr_tuner,
+            "trainer": TrainerSettings.model_validate(
+                {
+                    "fast_dev_run": False,
+                    "enable_checkpointing": False,
+                    "accelerator": "cpu",
+                    "enable_progress_bar": False,
+                    "enable_model_summary": False,
+                    "limit_train_batches": 2,
+                    "max_epochs": 1,
+                }
+            ),
+            "optimizer": OptimizerPolicySettings(
+                stages=(
+                    OptimizationStageSettings(
+                        optimizer=AdamWSettings(lr=1e-3),
+                        scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                        trigger=TriggerSettings(at_epoch=5),
+                    ),
+                    OptimizationStageSettings(
+                        optimizer=AdamSettings(lr=1e-3),
+                        scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                    ),
+                )
+            ),
+        }
+    )
+    return TrainingWorkflowConfig(
+        SESSION=graph_settings.SESSION,
+        DATASET=graph_settings.DATASET,
+        DATAMODULE=graph_settings.DATAMODULE,
+        MODEL=graph_settings.MODEL,
+        TRAINING=training,
+    )
+
+
+def test_graph_staged_wrapper_uses_manual_controller(
+    graph_settings: TrainingWorkflowConfig,
+) -> None:
+    """Graph staged policies should build a manual controller before training starts."""
+    settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=False)
+    components = BuildFactory().build_components(settings)
+    model = components.model
+
+    assert isinstance(model._optimization_controller, ManualOptimizationController)
+    assert not model.automatic_optimization
+
+
+def test_graph_staged_training_succeeds_without_lr_tuning(
+    graph_settings: TrainingWorkflowConfig,
+) -> None:
+    """Sequential graph staged training should complete successfully."""
+    settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=False)
+
+    result = api_train(settings)
+
+    assert isinstance(result, TrainingResult)
+
+
+def test_graph_staged_training_succeeds_with_lr_tuning(
+    graph_settings: TrainingWorkflowConfig,
+) -> None:
+    """Sequential graph staged training should complete even when LR tuning is enabled."""
+    settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=True)
+
+    result = api_train(settings)
+
+    assert isinstance(result, TrainingResult)

@@ -94,41 +94,13 @@ class GraphLightningWrapper(CoreLightningWrapper):
             shape_summary=shape_summary,
         )
 
-        # Build optimization controller for graph models
-        from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
-        from dlkit.engine.training.optimization.controllers import (
-            AutomaticOptimizationController,
-            ManualOptimizationController,
+        # Graph wrappers use the same optimization-controller selection rules
+        # as the standard wrapper so staged policies stay architecture-consistent.
+        from dlkit.engine.training.optimization.controllers import build_optimization_controller
+
+        optimization_controller = build_optimization_controller(
+            model, components.optimizer_policy_settings
         )
-        from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-        from dlkit.engine.training.optimization.stepping import StepAllOptimizers
-
-        program = OptimizerPolicyBuilder().build(model, components.optimizer_policy_settings)
-        repository = OptimizationStateRepository()
-
-        # Determine if manual optimization is required
-        def _requires_manual(program: Any) -> bool:
-            """Check if any stage uses LBFGS-like optimizer requiring manual stepping."""
-            from dlkit.engine.training.optimization.state import ActiveStage
-
-            for entry in program.stages:
-                # Check if entry is ActiveStage or ActiveConcurrentGroup
-                if isinstance(entry, ActiveStage):
-                    stages = [entry]
-                else:
-                    stages = entry.stages
-                for stage in stages:
-                    opt_cls = stage.optimizer.__class__.__name__.lower()
-                    if any(x in opt_cls for x in ["lbfgs", "manual"]):
-                        return True
-            return False
-
-        if _requires_manual(program):
-            optimization_controller = ManualOptimizationController(
-                program, repository, StepAllOptimizers()
-            )
-        else:
-            optimization_controller = AutomaticOptimizationController(program, repository)
 
         # super().__init__() must be called before assigning any nn.Module attributes
         super().__init__(
