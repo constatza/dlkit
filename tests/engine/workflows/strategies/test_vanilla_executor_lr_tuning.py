@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-from dlkit.infrastructure.config.optimizer_component import LBFGSSettings
+from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
+from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
+from dlkit.infrastructure.config.optimizer_component import (
+    AdamSettings,
+    AdamWSettings,
+    LBFGSSettings,
+    StepLRSettings,
+)
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 
@@ -65,7 +72,7 @@ def settings_with_lr_tuner() -> TrainingWorkflowConfig:
                 min_lr=1e-6,
                 max_lr=0.1,
                 num_training=50,
-            )
+            ),
         ),
     )
 
@@ -96,25 +103,14 @@ class TestVanillaExecutorLRTuning:
         """LR tuner is called and model.lr is updated to the suggested value."""
         executor = VanillaExecutor()
 
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.005
-
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
-                with patch(
-                    "dlkit.engine.training.tuning.LRTuner",
-                    return_value=mock_lr_tuner,
-                ):
+                with patch.object(
+                    executor, "_find_lr_with_projected_policy", return_value=0.005
+                ) as find_lr:
                     executor.execute(mock_components, settings_with_lr_tuner)
 
-        mock_lr_tuner.tune.assert_called_once()
-        call_args = mock_lr_tuner.tune.call_args
-        assert call_args[0][0] == mock_components.trainer
-        assert call_args[0][1] == mock_components.model
-        assert call_args[0][2].min_lr == 1e-6
-        assert call_args[0][2].max_lr == 0.1
-        assert call_args[0][2].num_training == 50
-
+        find_lr.assert_called_once()
         assert mock_components.model.lr == 0.005
         mock_components.trainer.fit.assert_called_once()
 
@@ -132,18 +128,12 @@ class TestVanillaExecutorLRTuning:
         )
 
         executor = VanillaExecutor()
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.003
 
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
-                with patch(
-                    "dlkit.engine.training.tuning.LRTuner",
-                    return_value=mock_lr_tuner,
-                ):
+                with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.003):
                     executor.execute(mock_components, settings_with_empty_lr_tuner)
 
-        mock_lr_tuner.tune.assert_called_once()
         assert mock_components.model.lr == 0.003
 
     def test_execute_lr_tuner_failure_continues_training(
@@ -154,14 +144,12 @@ class TestVanillaExecutorLRTuning:
         """Training continues if LR tuner raises; original lr is preserved."""
         executor = VanillaExecutor()
 
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.side_effect = RuntimeError("Tuning failed")
-
         with patch("pytorch_lightning.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
-                with patch(
-                    "dlkit.engine.training.tuning.LRTuner",
-                    return_value=mock_lr_tuner,
+                with patch.object(
+                    executor,
+                    "_find_lr_with_projected_policy",
+                    side_effect=RuntimeError("Tuning failed"),
                 ):
                     executor.execute(mock_components, settings_with_lr_tuner)
 
@@ -176,17 +164,8 @@ class TestVanillaExecutorLRTuning:
         """_apply_lr_tuning sets model.lr to the suggested value."""
         executor = VanillaExecutor()
 
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.007
-
-        trainer = mock_components.trainer
-        assert trainer is not None
-        with patch(
-            "dlkit.engine.training.tuning.LRTuner",
-            return_value=mock_lr_tuner,
-        ):
+        with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.007):
             executor._apply_lr_tuning(
-                trainer,
                 mock_components.model,
                 mock_components.datamodule,
                 settings_with_lr_tuner,
@@ -199,69 +178,42 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """_apply_lr_tuning skips when TRAINING section has no lr_tuner."""
-        executor = VanillaExecutor()
-
         from dlkit.infrastructure.config.session_settings import SessionSettings
         from dlkit.infrastructure.config.training_settings import TrainingSettings
 
+        executor = VanillaExecutor()
         settings = TrainingWorkflowConfig(
             SESSION=SessionSettings(workflow="train", seed=42),
             TRAINING=TrainingSettings(),
         )
 
-        mock_lr_tuner = Mock()
-
-        trainer = mock_components.trainer
-        assert trainer is not None
-        with patch(
-            "dlkit.engine.training.tuning.LRTuner",
-            return_value=mock_lr_tuner,
-        ):
+        with patch.object(executor, "_find_lr_with_projected_policy") as find_lr:
             executor._apply_lr_tuning(
-                trainer,
                 mock_components.model,
                 mock_components.datamodule,
                 settings,
             )
 
-        mock_lr_tuner.tune.assert_not_called()
+        find_lr.assert_not_called()
 
     def test_apply_lr_tuning_model_without_lr_skips_update(
         self,
         mock_components: RuntimeComponents,
         settings_with_lr_tuner: TrainingWorkflowConfig,
     ) -> None:
-        """When model has no lr attribute, tuner still runs but update is skipped."""
+        """When model does not implement ILRTunable, LR tuning is skipped entirely."""
         executor = VanillaExecutor()
-
         mock_model_no_lr = Mock(spec=[])
-        components_no_lr = RuntimeComponents(
-            model=mock_model_no_lr,
-            datamodule=mock_components.datamodule,
-            trainer=mock_components.trainer,
-            shape_spec=None,
-            meta={},
-        )
 
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.008
-
-        trainer = components_no_lr.trainer
-        assert trainer is not None
-        with patch(
-            "dlkit.engine.training.tuning.LRTuner",
-            return_value=mock_lr_tuner,
-        ):
+        with patch.object(executor, "_find_lr_with_projected_policy") as find_lr:
             executor._apply_lr_tuning(
-                trainer,
-                components_no_lr.model,
-                components_no_lr.datamodule,
+                mock_model_no_lr,
+                mock_components.datamodule,
                 settings_with_lr_tuner,
             )
 
-        # Tuner still ran, update was skipped gracefully
-        mock_lr_tuner.tune.assert_called_once()
-        assert not hasattr(components_no_lr.model, "lr")
+        find_lr.assert_not_called()
+        assert not hasattr(mock_model_no_lr, "lr")
 
     def test_apply_lr_tuning_skips_for_lbfgs(
         self,
@@ -293,6 +245,47 @@ class TestVanillaExecutorLRTuning:
         mock_lr_tuner.tune.assert_not_called()
         mock_components.trainer.fit.assert_called_once()
 
+    def test_apply_lr_tuning_projects_multi_stage_policy_to_temporary_wrapper(
+        self,
+        mock_components: RuntimeComponents,
+    ) -> None:
+        """Sequential staged policies should tune through a temporary stage-0 projection."""
+        from dlkit.infrastructure.config.session_settings import SessionSettings
+        from dlkit.infrastructure.config.training_settings import TrainingSettings
+
+        settings = TrainingWorkflowConfig(
+            SESSION=SessionSettings(workflow="train", seed=42),
+            TRAINING=TrainingSettings(
+                lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),
+                optimizer=OptimizerPolicySettings(
+                    stages=(
+                        OptimizationStageSettings(
+                            optimizer=AdamWSettings(lr=1e-3),
+                            scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                            trigger=TriggerSettings(at_epoch=5),
+                        ),
+                        OptimizationStageSettings(
+                            optimizer=AdamSettings(lr=1e-3),
+                            scheduler=StepLRSettings(step_size=1, gamma=0.5),
+                        ),
+                    )
+                ),
+            ),
+        )
+
+        executor = VanillaExecutor()
+
+        with patch("pytorch_lightning.seed_everything"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
+                with patch.object(
+                    executor, "_find_lr_with_projected_policy", return_value=0.02
+                ) as find_lr:
+                    executor.execute(mock_components, settings)
+
+        find_lr.assert_called_once()
+        assert mock_components.model.lr == 0.02
+        mock_components.trainer.fit.assert_called_once()
+
     def test_apply_lr_tuning_noop_setter_leaves_lr_unchanged(
         self,
         mock_components: RuntimeComponents,
@@ -302,7 +295,7 @@ class TestVanillaExecutorLRTuning:
         executor = VanillaExecutor()
 
         class _NoOpLRModel:
-            """Model whose lr setter is intentionally a no-op (like the old broken design)."""
+            """Model whose lr setter is intentionally a no-op."""
 
             _lr: float = 0.001
 
@@ -312,27 +305,110 @@ class TestVanillaExecutorLRTuning:
 
             @lr.setter
             def lr(self, value: float) -> None:
-                pass  # no-op: does not store value
+                pass
 
         noop_model = _NoOpLRModel()
 
-        mock_lr_tuner = Mock()
-        mock_lr_tuner.tune.return_value = 0.05
-
-        trainer = mock_components.trainer
-        assert trainer is not None
-        with patch(
-            "dlkit.engine.training.tuning.LRTuner",
-            return_value=mock_lr_tuner,
-        ):
+        with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.05):
             executor._apply_lr_tuning(
-                trainer,
                 noop_model,  # type: ignore[arg-type]
                 mock_components.datamodule,
                 settings_with_lr_tuner,
             )
 
-        mock_lr_tuner.tune.assert_called_once()
-        # lr was NOT updated because the setter is a no-op
         assert noop_model.lr == 0.001
         assert noop_model.lr != 0.05
+
+    def test_find_lr_restores_controller_after_success(
+        self,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
+    ) -> None:
+        """Original controller and automatic_optimization are restored after LR finding."""
+        import torch.nn as nn
+
+        from dlkit.engine.training.tuning.plans import SupportedLRTuningPlan
+        from dlkit.infrastructure.config.optimizer_component import AdamWSettings
+        from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+        from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+
+        executor = VanillaExecutor()
+        original_controller = MagicMock()
+        original_controller.requires_manual_optimization = True
+
+        model = MagicMock()
+        model.model = nn.Linear(2, 2)
+        model._optimization_controller = original_controller
+        model.automatic_optimization = False
+
+        tuning_plan = SupportedLRTuningPlan(
+            projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
+        )
+
+        fake_tuning_controller = MagicMock()
+        fake_tuning_controller.requires_manual_optimization = False
+
+        with patch(
+            "dlkit.engine.training.optimization.controllers.build_optimization_controller",
+            return_value=fake_tuning_controller,
+        ):
+            with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+                mock_finder = MagicMock()
+                mock_finder.suggestion.return_value = 0.01
+                MockTuner.return_value.lr_find.return_value = mock_finder
+                with patch.object(TrainerSettings, "build", return_value=MagicMock()):
+                    result = executor._find_lr_with_projected_policy(
+                        model,
+                        None,
+                        settings_with_lr_tuner,
+                        tuning_plan,
+                        settings_with_lr_tuner.TRAINING.lr_tuner,
+                    )
+
+        assert result == 0.01
+        assert model._optimization_controller is original_controller
+        assert model.automatic_optimization is False
+
+    def test_find_lr_restores_controller_after_failure(
+        self,
+        settings_with_lr_tuner: TrainingWorkflowConfig,
+    ) -> None:
+        """Original controller is restored even when LR finding raises."""
+        import torch.nn as nn
+
+        from dlkit.engine.training.tuning.plans import SupportedLRTuningPlan
+        from dlkit.infrastructure.config.optimizer_component import AdamWSettings
+        from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+        from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+
+        executor = VanillaExecutor()
+        original_controller = MagicMock()
+        model = MagicMock()
+        model.model = nn.Linear(2, 2)
+        model._optimization_controller = original_controller
+        model.automatic_optimization = True
+
+        tuning_plan = SupportedLRTuningPlan(
+            projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
+        )
+
+        fake_tuning_controller = MagicMock()
+        fake_tuning_controller.requires_manual_optimization = True
+
+        with patch(
+            "dlkit.engine.training.optimization.controllers.build_optimization_controller",
+            return_value=fake_tuning_controller,
+        ):
+            with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+                MockTuner.return_value.lr_find.side_effect = RuntimeError("tuner exploded")
+                with patch.object(TrainerSettings, "build", return_value=MagicMock()):
+                    with pytest.raises(RuntimeError):
+                        executor._find_lr_with_projected_policy(
+                            model,
+                            None,
+                            settings_with_lr_tuner,
+                            tuning_plan,
+                            settings_with_lr_tuner.TRAINING.lr_tuner,
+                        )
+
+        assert model._optimization_controller is original_controller
+        assert model.automatic_optimization is True

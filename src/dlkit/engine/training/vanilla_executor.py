@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, cast
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
@@ -14,6 +14,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.protocols import IDataModule, ITrainableModule
 from dlkit.domain.metrics.collect import collect_metrics
 from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.training.tuning import ILRTunable, SupportedLRTuningPlan
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
@@ -24,21 +25,6 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .interfaces import ITrainingExecutor
 
 logger = get_logger(__name__)
-
-
-@runtime_checkable
-class ILRTunable(Protocol):
-    """Model that exposes a settable float learning rate for LR tuner compatibility.
-
-    Implemented by CoreLightningWrapper. Used by the training executor to detect
-    and update the learning rate after automatic LR tuning.
-    """
-
-    @property
-    def lr(self) -> float | None: ...
-
-    @lr.setter
-    def lr(self, value: float) -> None: ...
 
 
 @contextmanager
@@ -105,7 +91,7 @@ class VanillaExecutor(ITrainingExecutor):
             )
 
             # Apply automatic learning rate tuning if configured
-            self._apply_lr_tuning(trainer, model, datamodule, settings)
+            self._apply_lr_tuning(model, datamodule, settings)
 
             # Determine if we should resume from checkpoint
             ckpt_path = self._get_resume_checkpoint_path(settings)
@@ -146,69 +132,100 @@ class VanillaExecutor(ITrainingExecutor):
 
     def _apply_lr_tuning(
         self,
-        trainer: Trainer,
         model: LightningModule,
         datamodule: LightningDataModule | None,
         settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
         """Apply automatic learning rate tuning if configured.
 
-        LR tuning is enabled by the presence of TRAINING.lr_tuner settings.
-        If the section is absent (None), tuning is skipped.
-
         Args:
-            trainer: PyTorch Lightning trainer
-            model: Lightning module
-            datamodule: Optional datamodule
-            settings: Global training settings
+            model: Lightning module.
+            datamodule: Optional datamodule.
+            settings: Global training settings.
         """
         if not settings.TRAINING:
             return
-
         lr_tuner_settings = getattr(settings.TRAINING, "lr_tuner", None)
         if lr_tuner_settings is None:
             return
 
-        from dlkit.infrastructure.config.optimizer_component import optimizer_requires_closure
+        from dlkit.engine.training.tuning import UnsupportedLRTuningPlan, get_lr_tuning_plan
 
-        optimizer_spec = settings.TRAINING.optimizer.default_optimizer
-        if optimizer_requires_closure(optimizer_spec):
+        tuning_plan = get_lr_tuning_plan(settings.TRAINING.optimizer)
+        if isinstance(tuning_plan, UnsupportedLRTuningPlan):
+            logger.warning("%s Skipping LR tuner.", tuning_plan.reason)
+            return
+
+        if not isinstance(model, ILRTunable):
             logger.warning(
-                "%s uses an internal line search; LR range test is not supported. Skipping LR tuner.",
-                type(optimizer_spec).__name__.removesuffix("Settings"),
+                "Model %s does not implement ILRTunable; LR tuner result cannot be applied.",
+                type(model).__name__,
             )
             return
 
-        from dlkit.engine.training.tuning import LRTuner
-
-        lr_tuner = LRTuner()
         try:
-            suggested_lr: float = lr_tuner.tune(trainer, model, lr_tuner_settings, datamodule)
-
-            if not isinstance(model, ILRTunable):
-                logger.warning(
-                    "Could not update learning rate: model does not implement ILRTunable. "
-                    "Ensure your model extends CoreLightningWrapper."
-                )
-                return
-
-            cast(ILRTunable, model).lr = suggested_lr
-
-            actual_lr = getattr(model, "lr", None)
-            if actual_lr != suggested_lr:
-                logger.warning(
-                    "LR tuner suggested {} but model.lr reports {} after update. "
-                    "Training will proceed with the un-tuned rate.",
-                    suggested_lr,
-                    actual_lr,
-                )
-            else:
-                logger.info("Learning rate set to {}", suggested_lr)
-
+            suggested_lr = self._find_lr_with_projected_policy(
+                model, datamodule, settings, tuning_plan, lr_tuner_settings
+            )
         except Exception as e:
             logger.warning(
                 "Learning rate tuning failed: %s. Continuing with configured learning rate.", e
             )
+            return
+
+        tuning_plan.apply_suggested_lr(cast(ILRTunable, model), suggested_lr)
+
+        actual_lr = getattr(model, "lr", None)
+        if actual_lr != suggested_lr:
+            logger.warning(
+                "LR tuner suggested %.6f but model.lr=%.6f after apply; "
+                "the model lr setter may be a no-op.",
+                suggested_lr,
+                actual_lr,
+            )
+
+    def _find_lr_with_projected_policy(
+        self,
+        model: LightningModule,
+        datamodule: LightningDataModule | None,
+        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        tuning_plan: SupportedLRTuningPlan,
+        lr_tuner_settings: Any,
+    ) -> float:
+        """Run Lightning LR finder with a projected single-stage optimizer.
+
+        Temporarily swaps ``model._optimization_controller`` with one built from
+        ``tuning_plan.projected_policy`` so Lightning's LR finder sees exactly one
+        optimizer. The original controller and ``automatic_optimization`` flag are
+        always restored in the ``finally`` block.
+
+        Args:
+            model: The training model wrapper.
+            datamodule: Optional Lightning datamodule.
+            settings: Workflow settings used to build a dedicated tuning trainer.
+            tuning_plan: Carries the single-stage projected optimizer policy.
+            lr_tuner_settings: LR finder hyper-parameters.
+
+        Returns:
+            Suggested learning rate from Lightning's LR finder.
+        """
+        from dlkit.engine.training.optimization.controllers import build_optimization_controller
+        from dlkit.engine.training.tuning import LRTuner
+
+        tuning_trainer = settings.TRAINING.trainer.build(settings.SESSION)
+        tuning_controller = build_optimization_controller(
+            cast(Any, model).model, tuning_plan.projected_policy
+        )
+        original_controller = cast(Any, model)._optimization_controller
+        original_auto_opt = model.automatic_optimization
+
+        try:
+            cast(Any, model)._optimization_controller = tuning_controller
+            model.automatic_optimization = not tuning_controller.requires_manual_optimization
+            return LRTuner().tune(tuning_trainer, model, lr_tuner_settings, datamodule)
+        finally:
+            cast(Any, model)._optimization_controller = original_controller
+            model.automatic_optimization = original_auto_opt
 
     def _run_optional_steps(
         self,

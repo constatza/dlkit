@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, cast
 
+from lightning.fabric.utilities.exceptions import MisconfigurationException
 from lightning.pytorch.tuner.tuning import Tuner
 
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -58,7 +59,6 @@ class LRTuner:
             settings.num_training,
             settings.mode,
         )
-
         # Import torch.serialization for safe globals registration
         import torch.serialization
 
@@ -66,29 +66,48 @@ class LRTuner:
         safe_classes = self._get_safe_globals()
 
         tuner = Tuner(trainer)
+        original_callbacks = self._snapshot_callbacks(trainer)
 
         # Run learning rate finder with safe globals context for PyTorch 2.6+
         # This allows LR finder to save/restore checkpoints with dlkit config classes
-        with torch.serialization.safe_globals(cast(Any, safe_classes)):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message=".*weights_only.*", category=UserWarning)
-                warnings.filterwarnings(
-                    "ignore",
-                    message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
-                    category=UserWarning,
-                )
-                lr_finder = tuner.lr_find(
-                    model,
-                    datamodule=datamodule,
-                    min_lr=settings.min_lr,
-                    max_lr=settings.max_lr,
-                    num_training=settings.num_training,
-                    mode=settings.mode,
-                    early_stop_threshold=settings.early_stop_threshold,
-                )
+        try:
+            with torch.serialization.safe_globals(cast(Any, safe_classes)):
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore", message=".*weights_only.*", category=UserWarning
+                    )
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
+                        category=UserWarning,
+                    )
+                    lr_finder = tuner.lr_find(
+                        model,
+                        datamodule=datamodule,
+                        min_lr=settings.min_lr,
+                        max_lr=settings.max_lr,
+                        num_training=settings.num_training,
+                        mode=settings.mode,
+                        early_stop_threshold=settings.early_stop_threshold,
+                    )
 
-                # Get suggested learning rate
-                suggested_lr = lr_finder.suggestion() if lr_finder is not None else None
+                    # Get suggested learning rate
+                    suggested_lr = lr_finder.suggestion() if lr_finder is not None else None
+        except MisconfigurationException as error:
+            raise RuntimeError(
+                "Learning rate tuning failed because Lightning's LR finder only supports "
+                "a single optimizer. Disable [TRAINING.lr_tuner] or use a single-stage "
+                "optimizer policy."
+            ) from error
+        except IndexError as error:
+            raise RuntimeError(
+                "Learning rate tuning failed inside Lightning before training started. "
+                "This usually means the model's optimizer configuration is incompatible "
+                "with Lightning's LR finder. Configure a scheduler or disable "
+                "[TRAINING.lr_tuner]."
+            ) from error
+        finally:
+            self._restore_callbacks(trainer, original_callbacks)
 
         if suggested_lr is None:
             raise RuntimeError(
@@ -101,6 +120,25 @@ class LRTuner:
         logger.info("Learning rate tuner suggested: %s", suggested_lr)
 
         return float(suggested_lr)
+
+    def _snapshot_callbacks(self, trainer: Trainer) -> list[object] | None:
+        """Capture the trainer callback list so temporary tuner callbacks can be removed."""
+        callbacks = getattr(trainer, "callbacks", None)
+        if callbacks is None:
+            return None
+        return list(cast(list[object], callbacks))
+
+    def _restore_callbacks(
+        self,
+        trainer: Trainer,
+        original_callbacks: list[object] | None,
+    ) -> None:
+        """Restore the trainer callback list after LR finder runs or fails."""
+        if original_callbacks is None:
+            return
+        # Lightning Trainer.callbacks is always a plain mutable list attribute;
+        # cast to Any to satisfy ty (Trainer stub does not declare callbacks).
+        cast(Any, trainer).callbacks = list(original_callbacks)
 
     def _get_safe_globals(self) -> list[type[object]]:
         """Get list of dlkit classes to register as safe globals for checkpoint loading.
