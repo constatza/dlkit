@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection
 
 if TYPE_CHECKING:
@@ -80,7 +81,7 @@ class ConstantWidthFFNN(FeedForwardNN):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int,
+        hidden_size: int | None = None,
         num_layers: int,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
@@ -88,7 +89,7 @@ class ConstantWidthFFNN(FeedForwardNN):
     ) -> None:
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
-
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__(
             in_features=in_features,
             out_features=out_features,

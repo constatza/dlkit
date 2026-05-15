@@ -8,8 +8,14 @@ import torch
 
 from dlkit.common.shapes import ShapeSummary
 from dlkit.domain.nn.ffnn import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
     ScaleEquivariantConstantWidthFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantConstantWidthSimpleFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleSPDFFNN,
+    ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+    ScaleEquivariantConstantWidthSPDFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
@@ -158,3 +164,112 @@ def test_scale_equivariant_from_shape_ignores_duplicate_feature_kwargs(
 
     assert module.base_model.embedding_layer.in_features == shape.in_features
     assert module.base_model.regression_layer.out_features == shape.out_features
+
+
+class TestSEConstantWidthFFNNOptionalHiddenSize:
+    def test_omit_hidden_size_when_square(self) -> None:
+        m = ScaleEquivariantConstantWidthFFNN(in_features=4, out_features=4, num_layers=2)
+        x = torch.randn(3, 4)
+        assert m(x).shape == (3, 4)
+
+    def test_explicit_hidden_size_still_works(self) -> None:
+        m = ScaleEquivariantConstantWidthFFNN(
+            in_features=4, out_features=2, hidden_size=8, num_layers=2
+        )
+        x = torch.randn(3, 4)
+        assert m(x).shape == (3, 2)
+
+    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
+        with pytest.raises(ValueError, match="hidden_size must be provided"):
+            ScaleEquivariantConstantWidthFFNN(in_features=4, out_features=2, num_layers=2)
+
+
+class TestSEConstantWidthSimpleFFNNOptionalHiddenSize:
+    def test_omit_hidden_size_when_square(self) -> None:
+        m = ScaleEquivariantConstantWidthSimpleFFNN(in_features=4, out_features=4, num_layers=2)
+        x = torch.randn(3, 4)
+        assert m(x).shape == (3, 4)
+
+    def test_explicit_hidden_size_still_works(self) -> None:
+        m = ScaleEquivariantConstantWidthSimpleFFNN(
+            in_features=4, out_features=2, hidden_size=8, num_layers=2
+        )
+        x = torch.randn(3, 4)
+        assert m(x).shape == (3, 2)
+
+    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
+        with pytest.raises(ValueError, match="hidden_size must be provided"):
+            ScaleEquivariantConstantWidthSimpleFFNN(in_features=4, out_features=2, num_layers=2)
+
+
+@pytest.fixture
+def square_input() -> torch.Tensor:
+    return torch.randn(3, 4)
+
+
+class TestGroupBInFeaturesRename:
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            ScaleEquivariantConstantWidthSPDFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFFNN,
+            ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+        ],
+    )
+    def test_accepts_in_features(self, cls: type, square_input: torch.Tensor) -> None:
+        m = cls(in_features=4, num_layers=2)
+        assert m(square_input).shape == (3, 4)
+
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            ScaleEquivariantConstantWidthSPDFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFFNN,
+            ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+        ],
+    )
+    def test_rejects_size_kwarg(self, cls: type) -> None:
+        with pytest.raises(TypeError):
+            cls(size=4, num_layers=2)
+
+
+class TestGroupBFromShape:
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            ScaleEquivariantConstantWidthSPDFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFFNN,
+            ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+        ],
+    )
+    def test_from_shape_injects_in_features(self, cls: type, square_input: torch.Tensor) -> None:
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = cls.from_shape(shape, num_layers=2)
+        assert m(square_input).shape == (3, 4)
+
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            ScaleEquivariantConstantWidthSPDFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFFNN,
+            ScaleEquivariantConstantWidthSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
+            ScaleEquivariantConstantWidthFactorizedFFNN,
+            ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+        ],
+    )
+    def test_from_shape_ignores_explicit_in_features_override(
+        self, cls: type, square_input: torch.Tensor
+    ) -> None:
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = cls.from_shape(shape, in_features=99, num_layers=2)
+        assert m(square_input).shape == (3, 4)

@@ -116,8 +116,8 @@ def test_scale_equivariant_constant_width_constrained_variants_keep_plain_vs_res
     residual_cls: type[nn.Module],
     plain_cls: type[nn.Module],
 ) -> None:
-    residual = residual_cls(size=4, num_layers=2)
-    plain = plain_cls(size=4, num_layers=2)
+    residual = residual_cls(in_features=4, num_layers=2)
+    plain = plain_cls(in_features=4, num_layers=2)
     x = torch.randn(3, 4)
 
     assert residual(x).shape == (3, 4)

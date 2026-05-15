@@ -10,8 +10,10 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.ffnn.linear import LinearNetwork
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
+from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN
 
 
 @pytest.fixture
@@ -30,6 +32,54 @@ def constant_ffnn() -> ConstantWidthFFNN:
 def linear_net() -> LinearNetwork:
     """Simple linear network."""
     return LinearNetwork(in_features=2, out_features=2)
+
+
+class TestResolveHiddenSize:
+    def test_returns_explicit_value_when_provided(self) -> None:
+        assert _resolve_hidden_size(8, 4, 4) == 8
+
+    def test_defaults_to_in_features_when_square(self) -> None:
+        assert _resolve_hidden_size(None, 4, 4) == 4
+
+    def test_raises_when_none_and_not_square(self) -> None:
+        with pytest.raises(ValueError, match="hidden_size must be provided"):
+            _resolve_hidden_size(None, 4, 6)
+
+
+class TestConstantWidthFFNNOptionalHiddenSize:
+    def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
+        m = ConstantWidthFFNN(in_features=2, out_features=2, num_layers=2)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_hidden_size_defaults_to_in_features(self) -> None:
+        m = ConstantWidthFFNN(in_features=2, out_features=2, num_layers=2)
+        assert m.embedding_layer.out_features == 2
+
+    def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
+        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
+        with pytest.raises(ValueError, match="hidden_size must be provided"):
+            ConstantWidthFFNN(in_features=2, out_features=4, num_layers=2)
+
+
+class TestConstantWidthSimpleFFNNOptionalHiddenSize:
+    def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
+        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, num_layers=2)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_hidden_size_defaults_to_in_features(self) -> None:
+        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, num_layers=2)
+        assert m.embedding_layer.out_features == 2
+
+    def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
+        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
+        with pytest.raises(ValueError, match="hidden_size must be provided"):
+            ConstantWidthSimpleFFNN(in_features=2, out_features=4, num_layers=2)
 
 
 class TestFeedForwardNN:

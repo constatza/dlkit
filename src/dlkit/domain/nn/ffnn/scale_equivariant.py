@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import torch
 import torch.nn.functional as F
@@ -20,6 +20,7 @@ from dlkit.domain.nn.ffnn.constrained import (
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
+    _resolve_hidden_size,
 )
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
@@ -41,6 +42,19 @@ class _ScaleEquivariantBase(ScaleEquivariantWrapper):
     """Wrap a base FFNN with input/output norm scaling to enforce scale equivariance."""
 
 
+class _SquareScaleEquivariantBase(_ScaleEquivariantBase):
+    """Scale-equivariant wrapper for architecturally-square constrained networks.
+
+    Implements ``ShapeConsumer`` so the build system can inject ``in_features``
+    from dataset shape. Output dimension equals input dimension by construction.
+    """
+
+    @classmethod
+    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
+        kwargs["in_features"] = shape.in_features
+        return cls(**kwargs)
+
+
 def _default_activation(
     activation: Callable[[Tensor], Tensor] | None,
 ) -> Callable[[Tensor], Tensor]:
@@ -55,7 +69,7 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int,
+        hidden_size: int | None = None,
         num_layers: int,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -64,6 +78,7 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__(
             base_model=ConstantWidthFFNN(
                 in_features=in_features,
@@ -92,7 +107,7 @@ class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int,
+        hidden_size: int | None = None,
         num_layers: int,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -101,6 +116,7 @@ class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__(
             base_model=ConstantWidthSimpleFFNN(
                 in_features=in_features,
@@ -191,13 +207,13 @@ class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
         return cls(**shape_aware_kwargs(shape, kwargs))
 
 
-class ScaleEquivariantConstantWidthSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthSPDFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant residual constant-width SPD FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = False,
         min_diag: float = 1e-4,
@@ -209,6 +225,7 @@ class ScaleEquivariantConstantWidthSPDFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthSPDFFNN(
                 size=size,
@@ -226,13 +243,13 @@ class ScaleEquivariantConstantWidthSPDFFNN(_ScaleEquivariantBase):
         )
 
 
-class ScaleEquivariantConstantWidthSimpleSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthSimpleSPDFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant plain constant-width SPD FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = False,
         min_diag: float = 1e-4,
@@ -244,6 +261,7 @@ class ScaleEquivariantConstantWidthSimpleSPDFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthSimpleSPDFFNN(
                 size=size,
@@ -261,13 +279,13 @@ class ScaleEquivariantConstantWidthSimpleSPDFFNN(_ScaleEquivariantBase):
         )
 
 
-class ScaleEquivariantConstantWidthSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthSPDFactorizedFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant residual constant-width SPD-factorized FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = False,
         min_diag: float = 1e-4,
@@ -281,6 +299,7 @@ class ScaleEquivariantConstantWidthSPDFactorizedFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthSPDFactorizedFFNN(
                 size=size,
@@ -300,13 +319,13 @@ class ScaleEquivariantConstantWidthSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
 
-class ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant plain constant-width SPD-factorized FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = False,
         min_diag: float = 1e-4,
@@ -320,6 +339,7 @@ class ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN(_ScaleEquivariantBase
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthSimpleSPDFactorizedFFNN(
                 size=size,
@@ -339,13 +359,13 @@ class ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN(_ScaleEquivariantBase
         )
 
 
-class ScaleEquivariantConstantWidthFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthFactorizedFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant residual constant-width factorized FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = True,
         mean: float = 0.0,
@@ -358,6 +378,7 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthFactorizedFFNN(
                 size=size,
@@ -376,13 +397,13 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(_ScaleEquivariantBase):
         )
 
 
-class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(_SquareScaleEquivariantBase):
     """Scale-equivariant plain constant-width factorized FFNN."""
 
     def __init__(
         self,
         *,
-        size: int,
+        in_features: int,
         num_layers: int,
         bias: bool = True,
         mean: float = 0.0,
@@ -395,6 +416,7 @@ class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(_ScaleEquivariantBase):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        size = in_features
         super().__init__(
             base_model=ConstantWidthSimpleFactorizedFFNN(
                 size=size,

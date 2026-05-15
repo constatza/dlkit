@@ -19,6 +19,22 @@ if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
 
 
+def _resolve_hidden_size(
+    hidden_size: int | None,
+    in_features: int,
+    out_features: int,
+) -> int:
+    """Return hidden_size, defaulting to in_features when square and omitted."""
+    if hidden_size is not None:
+        return hidden_size
+    if in_features != out_features:
+        raise ValueError(
+            f"hidden_size must be provided when in_features ({in_features}) "
+            f"!= out_features ({out_features})"
+        )
+    return in_features
+
+
 class ParametricDenseBlock(nn.Module):
     """Dense block using a caller-supplied linear layer factory."""
 
