@@ -10,10 +10,25 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.common.shapes import ShapeSummary
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
-from dlkit.domain.nn.ffnn.linear import LinearNetwork
+from dlkit.domain.nn.ffnn.linear import (
+    FactorizedLinearNetwork,
+    LinearNetwork,
+    SPDFactorizedLinearNetwork,
+    SPDLinearNetwork,
+    SymmetricFactorizedLinearNetwork,
+    SymmetricLinearNetwork,
+)
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN
+from dlkit.domain.nn.primitives.parametrized_layers import (
+    FactorizedLinear,
+    SPDFactorizedLinear,
+    SPDLinear,
+    SymmetricFactorizedLinear,
+    SymmetricLinear,
+)
 
 
 @pytest.fixture
@@ -294,3 +309,244 @@ class TestLinearNetwork:
         loss.backward()
         for param in linear_net.parameters():
             assert param.grad is not None
+
+
+@pytest.fixture
+def factorized_linear_net() -> FactorizedLinearNetwork:
+    """FactorizedLinearNetwork with in=2, out=2."""
+    return FactorizedLinearNetwork(in_features=2, out_features=2)
+
+
+@pytest.fixture
+def symmetric_linear_net() -> SymmetricLinearNetwork:
+    """SymmetricLinearNetwork with features=2."""
+    return SymmetricLinearNetwork(in_features=2, out_features=2)
+
+
+@pytest.fixture
+def spd_linear_net() -> SPDLinearNetwork:
+    """SPDLinearNetwork with features=2."""
+    return SPDLinearNetwork(in_features=2, out_features=2)
+
+
+@pytest.fixture
+def symmetric_factorized_net() -> SymmetricFactorizedLinearNetwork:
+    """SymmetricFactorizedLinearNetwork with features=2."""
+    return SymmetricFactorizedLinearNetwork(in_features=2, out_features=2)
+
+
+@pytest.fixture
+def spd_factorized_net() -> SPDFactorizedLinearNetwork:
+    """SPDFactorizedLinearNetwork with features=2."""
+    return SPDFactorizedLinearNetwork(in_features=2, out_features=2)
+
+
+class TestFactorizedLinearNetwork:
+    """Tests for FactorizedLinearNetwork."""
+
+    def test_output_shape(
+        self, factorized_linear_net: FactorizedLinearNetwork, dense_input: torch.Tensor
+    ) -> None:
+        """Output should have shape (batch, out_features)."""
+        assert factorized_linear_net(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_no_bias(self, dense_input: torch.Tensor) -> None:
+        """bias=False should yield no bias parameter."""
+        m = FactorizedLinearNetwork(in_features=2, out_features=2, bias=False)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+        assert m.linear.bias is None
+
+    def test_with_bias(self) -> None:
+        """bias=True should store a bias Parameter."""
+        m = FactorizedLinearNetwork(in_features=2, out_features=2, bias=True)
+        assert isinstance(m.linear.bias, nn.Parameter)
+
+    def test_has_factorized_linear_layer(
+        self, factorized_linear_net: FactorizedLinearNetwork
+    ) -> None:
+        """self.linear should be a FactorizedLinear instance."""
+        assert isinstance(factorized_linear_net.linear, FactorizedLinear)
+
+    def test_from_shape(self, batch_size: int) -> None:
+        """from_shape should wire in_features and out_features from ShapeSummary."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        m = FactorizedLinearNetwork.from_shape(shape)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 3)
+
+    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
+        """from_shape should forward extra kwargs to __init__."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        m = FactorizedLinearNetwork.from_shape(shape, bias=False)
+        assert m.linear.bias is None
+
+    def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
+        """Gradients should reach base_weight and log_scale."""
+        m = FactorizedLinearNetwork(in_features=2, out_features=2)
+        m(dense_input).sum().backward()
+        assert m.linear.base_weight.grad is not None
+        assert m.linear.log_scale.grad is not None
+
+    def test_different_in_out_features(self, batch_size: int) -> None:
+        """Asymmetric in/out sizes should be supported."""
+        m = FactorizedLinearNetwork(in_features=8, out_features=4)
+        assert m(torch.randn(batch_size, 8)).shape == (batch_size, 4)
+
+
+class TestSymmetricLinearNetwork:
+    """Tests for SymmetricLinearNetwork."""
+
+    def test_output_shape(
+        self, symmetric_linear_net: SymmetricLinearNetwork, dense_input: torch.Tensor
+    ) -> None:
+        """Output should have shape (batch, features)."""
+        assert symmetric_linear_net(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_has_symmetric_linear_layer(self, symmetric_linear_net: SymmetricLinearNetwork) -> None:
+        """self.linear should be a SymmetricLinear instance."""
+        assert isinstance(symmetric_linear_net.linear, SymmetricLinear)
+
+    def test_raises_on_non_square(self) -> None:
+        """Non-square shapes should raise ValueError."""
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SymmetricLinearNetwork(in_features=3, out_features=2)
+
+    def test_from_shape(self, batch_size: int) -> None:
+        """from_shape should wire features from ShapeSummary."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SymmetricLinearNetwork.from_shape(shape)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+    def test_from_shape_raises_on_non_square(self) -> None:
+        """from_shape with mismatched dimensions should raise ValueError."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SymmetricLinearNetwork.from_shape(shape)
+
+    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
+        """from_shape should forward extra kwargs."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SymmetricLinearNetwork.from_shape(shape, bias=True)
+        assert m.linear.bias is not None
+
+
+class TestSPDLinearNetwork:
+    """Tests for SPDLinearNetwork."""
+
+    def test_output_shape(
+        self, spd_linear_net: SPDLinearNetwork, dense_input: torch.Tensor
+    ) -> None:
+        """Output should have shape (batch, features)."""
+        assert spd_linear_net(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_has_spd_linear_layer(self, spd_linear_net: SPDLinearNetwork) -> None:
+        """self.linear should be a SPDLinear instance."""
+        assert isinstance(spd_linear_net.linear, SPDLinear)
+
+    def test_raises_on_non_square(self) -> None:
+        """Non-square shapes should raise ValueError."""
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SPDLinearNetwork(in_features=3, out_features=2)
+
+    def test_from_shape(self, batch_size: int) -> None:
+        """from_shape should wire features from ShapeSummary."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SPDLinearNetwork.from_shape(shape)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+    def test_from_shape_raises_on_non_square(self) -> None:
+        """from_shape with mismatched dimensions should raise ValueError."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SPDLinearNetwork.from_shape(shape)
+
+    def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
+        """Gradients should flow through the SPD layer."""
+        m = SPDLinearNetwork(in_features=2, out_features=2)
+        m(dense_input).sum().backward()
+        assert any(p.grad is not None for p in m.parameters())
+
+
+class TestSymmetricFactorizedLinearNetwork:
+    """Tests for SymmetricFactorizedLinearNetwork."""
+
+    def test_output_shape(
+        self,
+        symmetric_factorized_net: SymmetricFactorizedLinearNetwork,
+        dense_input: torch.Tensor,
+    ) -> None:
+        """Output should have shape (batch, features)."""
+        assert symmetric_factorized_net(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_has_symmetric_factorized_layer(
+        self, symmetric_factorized_net: SymmetricFactorizedLinearNetwork
+    ) -> None:
+        """self.linear should be a SymmetricFactorizedLinear instance."""
+        assert isinstance(symmetric_factorized_net.linear, SymmetricFactorizedLinear)
+
+    def test_raises_on_non_square(self) -> None:
+        """Non-square shapes should raise ValueError."""
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SymmetricFactorizedLinearNetwork(in_features=3, out_features=2)
+
+    def test_from_shape(self, batch_size: int) -> None:
+        """from_shape should wire features from ShapeSummary."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SymmetricFactorizedLinearNetwork.from_shape(shape)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+    def test_from_shape_raises_on_non_square(self) -> None:
+        """from_shape with mismatched dimensions should raise ValueError."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SymmetricFactorizedLinearNetwork.from_shape(shape)
+
+    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
+        """from_shape should forward extra kwargs."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SymmetricFactorizedLinearNetwork.from_shape(shape, std=0.5)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+
+class TestSPDFactorizedLinearNetwork:
+    """Tests for SPDFactorizedLinearNetwork."""
+
+    def test_output_shape(
+        self,
+        spd_factorized_net: SPDFactorizedLinearNetwork,
+        dense_input: torch.Tensor,
+    ) -> None:
+        """Output should have shape (batch, features)."""
+        assert spd_factorized_net(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_has_spd_factorized_layer(self, spd_factorized_net: SPDFactorizedLinearNetwork) -> None:
+        """self.linear should be a SPDFactorizedLinear instance."""
+        assert isinstance(spd_factorized_net.linear, SPDFactorizedLinear)
+
+    def test_raises_on_non_square(self) -> None:
+        """Non-square shapes should raise ValueError."""
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SPDFactorizedLinearNetwork(in_features=3, out_features=2)
+
+    def test_from_shape(self, batch_size: int) -> None:
+        """from_shape should wire features from ShapeSummary."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SPDFactorizedLinearNetwork.from_shape(shape)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+    def test_from_shape_raises_on_non_square(self) -> None:
+        """from_shape with mismatched dimensions should raise ValueError."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
+        with pytest.raises(ValueError, match="in_features == out_features"):
+            SPDFactorizedLinearNetwork.from_shape(shape)
+
+    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
+        """from_shape should forward extra kwargs."""
+        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+        m = SPDFactorizedLinearNetwork.from_shape(shape, mean=0.1, std=0.2)
+        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+
+    def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
+        """Gradients should flow through the SPD factorized layer."""
+        m = SPDFactorizedLinearNetwork(in_features=2, out_features=2)
+        m(dense_input).sum().backward()
+        assert any(p.grad is not None for p in m.parameters())

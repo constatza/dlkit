@@ -11,12 +11,27 @@ The package distinguishes:
 
 | File | Purpose |
 |---|---|
-| `linear.py` | Linear baseline |
+| `linear.py` | Linear baselines: `LinearNetwork` and single-layer parametrized variants |
 | `simple.py` | Plain dense FFNNs without skip connections |
 | `residual.py` | Residual dense FFNNs with skip connections |
 | `constrained.py` | Constrained linear FFNN builders and explicit plain/residual variants |
 | `scale_equivariant.py` | Class-based scale-equivariant wrappers for dense and constrained FFNNs |
 | `gated.py` | Pluggable-gate feed-forward network (`GatedMLP`) |
+
+## Single-layer linear baselines (`linear.py`)
+
+All classes are keyword-only, expose `in_features` and `out_features`, and implement `from_shape(shape, **kwargs)`.
+
+| Class | Primitive | Constraint | Shape |
+|---|---|---|---|
+| `LinearNetwork` | `nn.Linear` | none | rectangular |
+| `FactorizedLinearNetwork` | `FactorizedLinear` | row-wise scale factorization | rectangular |
+| `SymmetricLinearNetwork` | `SymmetricLinear` | W = Wᵀ | **square only** |
+| `SPDLinearNetwork` | `SPDLinear` | W symmetric positive-definite | **square only** |
+| `SymmetricFactorizedLinearNetwork` | `SymmetricFactorizedLinear` | W = D·Sym(A)·D | **square only** |
+| `SPDFactorizedLinearNetwork` | `SPDFactorizedLinear` | W = D·SPD(A)·D | **square only** |
+
+Square-only classes raise `ValueError` at construction if `in_features != out_features`.
 
 ## Variant matrix
 

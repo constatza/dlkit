@@ -18,7 +18,14 @@ from .constrained import (
     ParametricDenseBlock,
 )
 from .gated import GatedMLP
-from .linear import LinearNetwork
+from .linear import (
+    FactorizedLinearNetwork,
+    LinearNetwork,
+    SPDFactorizedLinearNetwork,
+    SPDLinearNetwork,
+    SymmetricFactorizedLinearNetwork,
+    SymmetricLinearNetwork,
+)
 from .residual import ConstantWidthFFNN, FeedForwardNN
 from .scale_equivariant import (
     ScaleEquivariantConstantWidthFactorizedFFNN,
@@ -51,6 +58,11 @@ __all__ = [
     "ConstantWidthSimpleFFNN",
     # Linear baseline
     "LinearNetwork",
+    "FactorizedLinearNetwork",
+    "SymmetricLinearNetwork",
+    "SPDLinearNetwork",
+    "SymmetricFactorizedLinearNetwork",
+    "SPDFactorizedLinearNetwork",
     # Scale-equivariant dense variants (variable-width)
     "ScaleEquivariantFeedForwardNN",
     "ScaleEquivariantSimpleFeedForwardNN",

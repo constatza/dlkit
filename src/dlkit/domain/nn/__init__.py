@@ -19,7 +19,14 @@ from .ffnn.constrained import (
     ParametricDenseBlock,
 )
 from .ffnn.gated import GatedMLP
-from .ffnn.linear import LinearNetwork
+from .ffnn.linear import (
+    FactorizedLinearNetwork,
+    LinearNetwork,
+    SPDFactorizedLinearNetwork,
+    SPDLinearNetwork,
+    SymmetricFactorizedLinearNetwork,
+    SymmetricLinearNetwork,
+)
 from .ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from .ffnn.scale_equivariant import (
     ScaleEquivariantConstantWidthFactorizedFFNN,
@@ -84,6 +91,11 @@ from .spectral import (
 
 __all__ = [
     "LinearNetwork",
+    "FactorizedLinearNetwork",
+    "SymmetricLinearNetwork",
+    "SPDLinearNetwork",
+    "SymmetricFactorizedLinearNetwork",
+    "SPDFactorizedLinearNetwork",
     "FeedForwardNN",
     "ConstantWidthFFNN",
     "GatedMLP",
