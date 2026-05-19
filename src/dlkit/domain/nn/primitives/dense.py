@@ -16,6 +16,7 @@ class DenseBlock(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
+        bias: bool = True,
     ):
         """Initializes a DenseBlock.
 
@@ -25,6 +26,7 @@ class DenseBlock(nn.Module):
             activation (Callable[[torch.Tensor], torch.Tensor], optional): Activation function to be used in the layer. Defaults to F.gelu.
             normalize (str | None, optional): Normalization type ('layer', 'batch', or None). Defaults to None.
             dropout (float, optional): Dropout rate. Defaults to 0.0.
+            bias (bool, optional): Whether to include a bias term. Defaults to True.
         """
         super().__init__()
         self.in_features = in_features
@@ -32,7 +34,7 @@ class DenseBlock(nn.Module):
         self.norm = make_norm_layer(normalize, in_features)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
-        self.fc1 = nn.Linear(in_features, out_features)
+        self.fc1 = nn.Linear(in_features, out_features, bias=bias)
         self.activation = activation
 
     def forward(self, x):

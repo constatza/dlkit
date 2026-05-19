@@ -24,9 +24,10 @@ class SimpleFeedForwardNN(nn.Module):
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
+        bias: bool = True,
     ) -> None:
         super().__init__()
-        self.embedding_layer = nn.Linear(in_features, layers[0])
+        self.embedding_layer = nn.Linear(in_features, layers[0], bias=bias)
 
         self.layers = nn.ModuleList(
             DenseBlock(
@@ -35,11 +36,12 @@ class SimpleFeedForwardNN(nn.Module):
                 activation=activation,
                 normalize=normalize,
                 dropout=dropout,
+                bias=bias,
             )
             for i in range(len(layers) - 1)
         )
 
-        self.regression_layer = nn.Linear(layers[-1], out_features)
+        self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> SimpleFeedForwardNN:
@@ -79,6 +81,7 @@ class ConstantWidthSimpleFFNN(SimpleFeedForwardNN):
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
+        bias: bool = True,
     ) -> None:
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
@@ -90,4 +93,5 @@ class ConstantWidthSimpleFFNN(SimpleFeedForwardNN):
             activation=activation,
             normalize=normalize,
             dropout=dropout,
+            bias=bias,
         )

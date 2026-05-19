@@ -24,13 +24,14 @@ class FeedForwardNN(nn.Module):
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         self.num_layers = len(layers)
         self.activation = activation
 
         self.layers = nn.ModuleList()
-        self.embedding_layer = nn.Linear(in_features, layers[0])
+        self.embedding_layer = nn.Linear(in_features, layers[0], bias=bias)
 
         for i in range(self.num_layers - 1):
             self.layers.append(
@@ -41,12 +42,14 @@ class FeedForwardNN(nn.Module):
                         activation=activation,
                         normalize=normalize,
                         dropout=dropout,
+                        bias=bias,
                     ),
                     layer_type="linear",
+                    bias=bias,
                 )
             )
 
-        self.regression_layer = nn.Linear(layers[-1], out_features)
+        self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
 
     @classmethod
     def from_shape(cls, shape: ShapeSummary, **kwargs) -> FeedForwardNN:
@@ -86,6 +89,7 @@ class ConstantWidthFFNN(FeedForwardNN):
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
+        bias: bool = True,
     ) -> None:
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
@@ -97,4 +101,5 @@ class ConstantWidthFFNN(FeedForwardNN):
             activation=activation,
             normalize=normalize,
             dropout=dropout,
+            bias=bias,
         )
