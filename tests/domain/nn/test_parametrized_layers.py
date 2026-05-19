@@ -322,11 +322,12 @@ class TestFactorizedLinear:
         assert factorized_linear.log_scale.grad is not None
 
     def test_weight_reflects_scale_change(self) -> None:
-        """Setting log_scale to 0 must yield effective weight equal to base_weight."""
+        """weight must equal pos_fn(log_scale).unsqueeze(1) * base_weight for any scale."""
         layer = FactorizedLinear(2, 3, bias=False)
         with torch.no_grad():
             layer.log_scale.fill_(0.0)
-        assert torch.allclose(layer.weight, layer.base_weight)
+        scale = torch.nn.functional.softplus(layer.log_scale).unsqueeze(1)
+        assert torch.allclose(layer.weight, scale * layer.base_weight)
 
     def test_not_using_parametrize_machinery(
         self,
@@ -336,9 +337,10 @@ class TestFactorizedLinear:
         assert not parametrize.is_parametrized(factorized_linear, "base_weight")
 
     def test_default_mean_gives_near_unit_scale(self) -> None:
-        """Default mean=0.0 should give log_scale ≈ 0."""
+        """Default mean=0.0 should give pos_fn(log_scale) ≈ 1 at initialisation."""
         layer = FactorizedLinear(8, 16)
-        assert layer.log_scale.abs().mean().item() < 0.5
+        effective_scale = layer._pos_fn(layer.log_scale).mean().item()
+        assert abs(effective_scale - 1.0) < 0.2
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal, Self
 
-import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -370,7 +369,7 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(_SquareScaleEquivariantBase):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
@@ -408,7 +407,7 @@ class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(_SquareScaleEquivariantB
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
@@ -630,7 +629,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
@@ -675,7 +674,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,

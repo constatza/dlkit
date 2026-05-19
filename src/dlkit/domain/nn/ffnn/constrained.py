@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
-import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -425,7 +424,7 @@ class ConstantWidthFactorizedFFNN(ConstantWidthParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -456,7 +455,7 @@ class ConstantWidthSimpleFactorizedFFNN(ConstantWidthSimpleParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -621,7 +620,7 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -656,7 +655,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,

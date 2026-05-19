@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterable
 
 import torch
@@ -158,6 +159,25 @@ def register_spd_factorized(
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _unit_scale_log_mean(pos_fn: Callable[[Tensor], Tensor]) -> float:
+    """Return x such that pos_fn(x) = 1.0 for the two supported pos_fns.
+
+    - ``torch.exp``  → ``ln(1) = 0.0``           (exact)
+    - ``F.softplus`` → ``ln(e − 1) ≈ 0.5413``    (exact: softplus(ln(e−1)) = 1)
+    - anything else  → ``0.0``                    (no correction; old behaviour)
+    """
+    if pos_fn is torch.exp:
+        return 0.0
+    if pos_fn is F.softplus:
+        return math.log(math.e - 1)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
 # Parametrized linear layer classes
 # ---------------------------------------------------------------------------
 
@@ -258,7 +278,7 @@ class FactorizedLinear(nn.Module):
         *,
         mean: float = 0.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -268,10 +288,13 @@ class FactorizedLinear(nn.Module):
             in_features: Input feature size.
             out_features: Output feature size.
             bias: Whether to include a bias term.
-            mean: Mean for log-scale initialisation (``0.0`` → unit scale).
+            mean: Offset from the unit-scale point in log-scale space
+                (``0.0`` → ``pos_fn(log_scale) ≈ 1`` at initialisation,
+                regardless of which pos_fn is active). Negative values start
+                the scale below one; positive values start it above one.
             std: Standard deviation for log-scale initialisation.
             pos_fn: Element-wise function mapping log-scale to positive scale
-                factors (default: exp). Alternatives: softplus, relu+ε, etc.
+                factors (default: softplus). Alternatives: exp, relu+ε, etc.
             device: Optional device for parameter initialisation.
             dtype: Optional dtype for parameter initialisation.
         """
@@ -293,8 +316,11 @@ class FactorizedLinear(nn.Module):
 
     def reset_parameters(self) -> None:
         """Initialize parameters for the factorized linear layer."""
-        nn.init.kaiming_uniform_(self.base_weight, a=0.0)
-        nn.init.normal_(self.log_scale, mean=self._log_scale_mean, std=self._log_scale_std)
+        nn.init.kaiming_uniform_(self.base_weight, a=math.sqrt(5))
+        unit_mean = _unit_scale_log_mean(self._pos_fn)
+        nn.init.normal_(
+            self.log_scale, mean=unit_mean + self._log_scale_mean, std=self._log_scale_std
+        )
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
