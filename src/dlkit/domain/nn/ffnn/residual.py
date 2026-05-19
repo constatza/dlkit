@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal
 from torch import Tensor, nn
 
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
-from dlkit.domain.nn.primitives import DenseBlock, SkipConnection
+from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeSummary
@@ -34,20 +34,15 @@ class FeedForwardNN(nn.Module):
         self.embedding_layer = nn.Linear(in_features, layers[0], bias=bias)
 
         for i in range(self.num_layers - 1):
-            self.layers.append(
-                SkipConnection(
-                    DenseBlock(
-                        layers[i],
-                        layers[i + 1],
-                        activation=activation,
-                        normalize=normalize,
-                        dropout=dropout,
-                        bias=bias,
-                    ),
-                    layer_type="linear",
-                    bias=bias,
-                )
+            block = DenseBlock(
+                layers[i],
+                layers[i + 1],
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+                bias=bias,
             )
+            self.layers.append(SkipConnection(block, build_linear_skip_layer(block, bias=bias)))
 
         self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
 

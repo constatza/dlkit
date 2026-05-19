@@ -15,27 +15,23 @@ class _HasFeatures(Protocol):
 
 
 def agg_sum(x_in: torch.Tensor, x_out: torch.Tensor) -> torch.Tensor:
+    """Element-wise addition of skip and module outputs."""
     return x_in + x_out
 
 
 def agg_concat(x_in: torch.Tensor, x_out: torch.Tensor) -> torch.Tensor:
-    return torch.cat([x_in, x_out], dim=1)  # Concatenating along the channel dimension
-
-
-aggregation_functions = {
-    "sum": agg_sum,
-    "concat": agg_concat,
-}
+    """Channel-dimension concatenation of skip and module outputs."""
+    return torch.cat([x_in, x_out], dim=1)
 
 
 def _detect_channels(module: nn.Module) -> tuple[int | None, int | None]:
-    """Detect input and output channels from a module using guard clauses.
+    """Detect (in, out) channel counts from a module's attributes.
 
     Args:
-        module (nn.Module): The module to detect channels from.
+        module (nn.Module): Module to inspect.
 
     Returns:
-        tuple[int | None, int | None]: (in_channels, out_channels) or (None, None) if not found.
+        tuple[int | None, int | None]: Detected (in, out) or (None, None).
     """
     if hasattr(module, "in_channels") and hasattr(module, "out_channels"):
         m = cast(_HasChannels, module)
@@ -46,94 +42,169 @@ def _detect_channels(module: nn.Module) -> tuple[int | None, int | None]:
     return None, None
 
 
+def _require_channels(module: nn.Module) -> tuple[int, int]:
+    """Detect channels from module or raise ValueError.
+
+    Args:
+        module (nn.Module): Module to inspect.
+
+    Returns:
+        tuple[int, int]: (in_channels, out_channels).
+
+    Raises:
+        ValueError: If channel attributes cannot be found on the module.
+    """
+    in_ch, out_ch = _detect_channels(module)
+    if in_ch is None or out_ch is None:
+        raise ValueError(
+            f"Cannot detect in/out channels from {type(module).__name__}. "
+            "Ensure the module exposes in_channels/out_channels or in_features/out_features."
+        )
+    return in_ch, out_ch
+
+
+def build_linear_skip_layer(module: nn.Module, *, bias: bool = True) -> nn.Module:
+    """Build a linear skip adapter for a feature-based module.
+
+    Returns ``nn.Identity`` when in==out, else ``nn.Linear(in, out, bias=bias)``.
+
+    Args:
+        module (nn.Module): Module with detectable in_features/out_features.
+        bias (bool): Whether the projection layer uses a bias term.
+
+    Returns:
+        nn.Module: Identity or linear projection.
+
+    Raises:
+        ValueError: If the module has no detectable channel attributes.
+    """
+    in_f, out_f = _require_channels(module)
+    if in_f == out_f:
+        return nn.Identity()
+    return nn.Linear(in_f, out_f, bias=bias)
+
+
+def build_conv1d_skip_layer(
+    module: nn.Module,
+    *,
+    stride: int = 1,
+    bias: bool = True,
+) -> nn.Module:
+    """Build a Conv1d skip adapter for a 1D convolutional module.
+
+    Returns ``nn.Identity`` when in==out and stride==1,
+    else ``nn.Conv1d(in, out, 1, stride=stride, bias=bias)``.
+
+    Args:
+        module (nn.Module): Module with detectable in_channels/out_channels.
+        stride (int): Stride for spatial downsampling in the skip path.
+        bias (bool): Whether the projection layer uses a bias term.
+
+    Returns:
+        nn.Module: Identity or 1x1 convolutional projection.
+
+    Raises:
+        ValueError: If the module has no detectable channel attributes.
+    """
+    in_ch, out_ch = _require_channels(module)
+    if in_ch == out_ch and stride == 1:
+        return nn.Identity()
+    return nn.Conv1d(in_ch, out_ch, 1, stride=stride, bias=bias)
+
+
+def build_conv2d_skip_layer(
+    module: nn.Module,
+    *,
+    stride: int = 1,
+    bias: bool = True,
+) -> nn.Module:
+    """Build a Conv2d skip adapter for a 2D convolutional module.
+
+    Returns ``nn.Identity`` when in==out and stride==1,
+    else ``nn.Conv2d(in, out, 1, stride=stride, bias=bias)``.
+
+    Args:
+        module (nn.Module): Module with detectable in_channels/out_channels.
+        stride (int): Stride for spatial downsampling in the skip path.
+        bias (bool): Whether the projection layer uses a bias term.
+
+    Returns:
+        nn.Module: Identity or 1x1 convolutional projection.
+
+    Raises:
+        ValueError: If the module has no detectable channel attributes.
+    """
+    in_ch, out_ch = _require_channels(module)
+    if in_ch == out_ch and stride == 1:
+        return nn.Identity()
+    return nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=bias)
+
+
 class SkipConnection(nn.Module):
+    """Residual connection wrapper implementing ``y = module(x) + skip_layer(x)``.
+
+    The skip_layer guarantees at least a linear (or identity) path through the
+    network, independent of the main module's nonlinearity.
+
+    Use the factory functions :func:`build_linear_skip_layer`,
+    :func:`build_conv1d_skip_layer`, or :func:`build_conv2d_skip_layer` to
+    build the skip adapter, or inject any ``nn.Module`` directly (e.g.
+    ``torch_geometric.nn.Linear`` for graph networks).
+
+    Args:
+        module (nn.Module): The main transformation module.
+        skip_layer (nn.Module): The skip path module.
+        how (Literal["sum", "concat"]): Aggregation mode. ``"sum"`` adds the
+            paths; ``"concat"`` concatenates along dim=1, producing
+            ``2 x out_channels`` total width.
+    """
+
     def __init__(
         self,
         module: nn.Module,
+        skip_layer: nn.Module,
         how: Literal["sum", "concat"] = "sum",
-        layer_type: Literal["conv1d", "conv2d", "linear"] = "conv1d",
-        in_channels: int | None = None,
-        out_channels: int | None = None,
-        kernel_size: int = 1,
-        stride: int = 1,
-        bias: bool = True,
-    ):
-        """Initializes the SkipConnection.
-
-        Args:
-            module (nn.Module): The module to apply to the input.
-            how (Literal["sum", "concat"], optional): Aggregation method. "sum" adds skip to output;
-                "concat" concatenates along dim=1, producing 2×out_channels total width. Defaults to "sum".
-            layer_type (Literal["conv1d", "conv2d", "linear"], optional): Type of layer for adaptation. Defaults to "conv1d".
-            in_channels (int | None, optional): Input channels. Auto-detected if not provided. Defaults to None.
-            out_channels (int | None, optional): Output channels. Auto-detected if not provided. Defaults to None.
-            kernel_size (int, optional): Kernel size. Defaults to 1.
-            stride (int, optional): Stride. Defaults to 1.
-            bias (bool, optional): Whether to use bias. Defaults to True.
-        """
+    ) -> None:
         super().__init__()
+        if how not in ("sum", "concat"):
+            raise ValueError(f"Unknown aggregation {how!r}. Expected 'sum' or 'concat'.")
         detected_in, detected_out = _detect_channels(module)
-        self.in_channels = detected_in if detected_in is not None else in_channels
-        self.out_channels = detected_out if detected_out is not None else out_channels
-
-        if hasattr(module, "dilation"):
-            self.dilation = module.dilation
-        if hasattr(module, "stride"):
-            self.stride = module.stride
-
-        if self.in_channels is None or self.out_channels is None:
-            raise ValueError("in_channels and out_channels must be specified")
-
-        self.reduce_layer = select_skip_layers(
-            layer_type,
-            self.in_channels,
-            self.out_channels,
-            stride,
-            bias=bias,
-        )
-        self.kernel_size = kernel_size
-        self.layer_type = layer_type
+        self.in_channels = detected_in
+        self.out_channels = detected_out
+        self._how = how
         self.module = module
+        self.reduce_layer = skip_layer
 
-        self.aggregation_function = aggregation_functions[how]
+    @property
+    def effective_out_channels(self) -> int:
+        """Output channel count after aggregation.
+
+        Returns:
+            int: ``out_channels`` in sum mode, ``2 x out_channels`` in concat mode.
+
+        Raises:
+            ValueError: If out_channels cannot be determined from the wrapped module.
+        """
+        if self.out_channels is None:
+            raise ValueError(
+                "Cannot determine effective_out_channels: "
+                f"{type(self.module).__name__} has no detectable channel count."
+            )
+        if self._how == "concat":
+            return 2 * self.out_channels
+        return self.out_channels
 
     def forward(self, x_in: torch.Tensor) -> torch.Tensor:
+        """Apply module and aggregate with the skip path.
+
+        Args:
+            x_in (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Aggregated output.
+        """
         x_out = self.module(x_in)
         skip = self.reduce_layer(x_in)
-        agg_out = self.aggregation_function(skip, x_out)
-        return agg_out
-
-
-def select_skip_layers(
-    layer_type: Literal["conv1d", "conv2d", "linear"],
-    in_channels: int,
-    out_channels: int,
-    stride: int,
-    bias: bool = True,
-) -> nn.Module:
-    """Select and instantiate a skip adaptation layer.
-
-    Args:
-        layer_type (Literal["conv1d", "conv2d", "linear"]): Type of adaptation layer.
-        in_channels (int): Input channel count.
-        out_channels (int): Output channel count.
-        stride (int): Stride for the adaptation layer.
-        bias (bool, optional): Whether to use bias. Defaults to True.
-
-    Returns:
-        nn.Module: The selected skip adaptation layer.
-
-    Raises:
-        ValueError: If layer_type is not recognized.
-    """
-    if in_channels == out_channels:
-        return nn.Identity()
-    match layer_type:
-        case "conv1d":
-            return nn.Conv1d(in_channels, out_channels, 1, stride=stride, bias=bias)
-        case "conv2d":
-            return nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
-        case "linear":
-            return nn.Linear(in_channels, out_channels, bias=False)
-        case _:
-            raise ValueError(f"Unsupported layer type: {layer_type!r}")
+        if self._how == "concat":
+            return agg_concat(skip, x_out)
+        return agg_sum(skip, x_out)

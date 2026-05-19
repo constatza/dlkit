@@ -12,6 +12,7 @@ from dlkit.domain.nn.primitives import (
     SkipConnection,
     SPDFactorizedLinear,
     SPDLinear,
+    build_linear_skip_layer,
 )
 from dlkit.domain.nn.utils import make_norm_layer
 
@@ -93,7 +94,9 @@ class _ConstantWidthParametricBody(nn.Module):
                 normalize=normalize,
                 dropout=dropout,
             )
-            blocks.append(SkipConnection(block, layer_type="linear") if _residual else block)
+            blocks.append(
+                SkipConnection(block, build_linear_skip_layer(block)) if _residual else block
+            )
 
         self.blocks = nn.ModuleList(blocks)
 

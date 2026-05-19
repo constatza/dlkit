@@ -4,7 +4,7 @@ from torch import Tensor, nn
 from torch.nn import ModuleList
 
 from dlkit.domain.nn.primitives.convolutional import ConvolutionBlock1d
-from dlkit.domain.nn.primitives.skip import SkipConnection
+from dlkit.domain.nn.primitives.skip import SkipConnection, build_conv1d_skip_layer
 from dlkit.domain.nn.types import NormalizerName
 
 
@@ -34,23 +34,18 @@ def _build_conv_stack(
     """
     layers: ModuleList = ModuleList()
     for i in range(len(channels) - 1):
-        layers.append(
-            SkipConnection(
-                ConvolutionBlock1d(
-                    in_channels=channels[i],
-                    out_channels=channels[i + 1],
-                    in_timesteps=timesteps[i],
-                    kernel_size=kernel_size,
-                    padding="same",
-                    normalize=normalize,
-                    dilation=i + 1,
-                    activation=activation,
-                    dropout=dropout,
-                ),
-                in_channels=channels[i],
-                out_channels=channels[i + 1],
-            )
+        conv_block = ConvolutionBlock1d(
+            in_channels=channels[i],
+            out_channels=channels[i + 1],
+            in_timesteps=timesteps[i],
+            kernel_size=kernel_size,
+            padding="same",
+            normalize=normalize,
+            dilation=i + 1,
+            activation=activation,
+            dropout=dropout,
         )
+        layers.append(SkipConnection(conv_block, build_conv1d_skip_layer(conv_block)))
     return layers
 
 

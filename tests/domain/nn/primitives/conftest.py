@@ -2,7 +2,11 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.primitives.skip import SkipConnection
+from dlkit.domain.nn.primitives.skip import (
+    SkipConnection,
+    build_conv1d_skip_layer,
+    build_linear_skip_layer,
+)
 
 
 @pytest.fixture
@@ -12,14 +16,23 @@ def basic_input() -> torch.Tensor:
 
 @pytest.fixture
 def linear_skip_sum() -> SkipConnection:
-    """SkipConnection wrapping Linear(4→8), sum mode."""
-    return SkipConnection(nn.Linear(4, 8), how="sum", layer_type="linear")
+    """SkipConnection wrapping Linear(4->8), sum mode."""
+    module = nn.Linear(4, 8)
+    return SkipConnection(module, build_linear_skip_layer(module), how="sum")
 
 
 @pytest.fixture
 def linear_skip_concat() -> SkipConnection:
-    """SkipConnection wrapping Linear(4→8), concat mode (output width = 16)."""
-    return SkipConnection(nn.Linear(4, 8), how="concat", layer_type="linear")
+    """SkipConnection wrapping Linear(4->8), concat mode (output width = 16)."""
+    module = nn.Linear(4, 8)
+    return SkipConnection(module, build_linear_skip_layer(module), how="concat")
+
+
+@pytest.fixture
+def conv_skip_stride2() -> SkipConnection:
+    """Conv1d skip with stride=2, same channels — skip adapter must NOT be Identity."""
+    module = nn.Conv1d(4, 4, 3, stride=2, padding=1)
+    return SkipConnection(module, build_conv1d_skip_layer(module, stride=2))
 
 
 @pytest.fixture
