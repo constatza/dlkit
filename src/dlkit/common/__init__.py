@@ -9,6 +9,7 @@ from .errors import (
     StrategyError,
     WorkflowError,
 )
+from .geometry import FieldRole, FieldSpec, GeometryKind, GeometrySpec, TopologyKind
 from .hooks import LifecycleHooks
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import InferenceResult, OptimizationResult, TrainingResult
@@ -19,6 +20,10 @@ __all__ = [
     "ConfigurationError",
     "DLKitError",
     "ExecutionOverrides",
+    "FieldRole",
+    "FieldSpec",
+    "GeometryKind",
+    "GeometrySpec",
     "InferenceResult",
     "LifecycleHooks",
     "ModelLoadingError",
@@ -30,6 +35,7 @@ __all__ = [
     "ShapeSpecProtocol",
     "ShapeSummary",
     "StrategyError",
+    "TopologyKind",
     "TrainingResult",
     "TrainingOverrides",
     "WorkflowError",
