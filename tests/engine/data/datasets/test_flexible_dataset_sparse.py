@@ -155,37 +155,6 @@ def test_shared_sparse_pack_reads_sparse_on_demand_per_item(
     assert mocked_build_sparse.call_count == 2
 
 
-def test_flexible_dataset_sparse_feature_denormalize_applies_scale(
-    sparse_scaled_pack: dict[str, Any],
-) -> None:
-    pack_path = sparse_scaled_pack["path"]
-    n_samples = len(sparse_scaled_pack["matrices"])
-
-    base_dataset = FlexibleDataset(
-        features=[
-            Feature(name="x", value=torch.randn(n_samples, 2)),
-            SparseFeature(name="matrix", path=pack_path, model_input=False, loss_input="matrix"),
-        ],
-        targets=[Target(name="y", value=torch.randn(n_samples, 1))],
-    )
-    denorm_dataset = FlexibleDataset(
-        features=[
-            Feature(name="x", value=torch.randn(n_samples, 2)),
-            SparseFeature(
-                name="matrix",
-                path=pack_path,
-                model_input=False,
-                loss_input="matrix",
-                denormalize=True,
-            ),
-        ],
-        targets=[Target(name="y", value=torch.randn(n_samples, 1))],
-    )
-
-    base = _expect_tensor(_expect_tensordict(base_dataset[0]["features"])["matrix"]).to_dense()
-    denorm = _expect_tensor(_expect_tensordict(denorm_dataset[0]["features"])["matrix"]).to_dense()
-    assert torch.allclose(denorm, base * sparse_scaled_pack["scale"])
-
 
 def test_flexible_dataset_auto_detects_sparse_pack_from_path_feature(
     sparse_path_feature_pack: dict[str, Any],

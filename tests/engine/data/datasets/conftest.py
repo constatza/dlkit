@@ -80,25 +80,6 @@ def sparse_shared_pack(tmp_path: Path) -> dict[str, Any]:
     return {"path": pack_path, "matrix": shared}
 
 
-@pytest.fixture
-def sparse_scaled_pack(tmp_path: Path) -> dict[str, Any]:
-    """Save a 2-sample COO pack with value_scale=10.0 for denorm tests.
-
-    Args:
-        tmp_path: pytest temporary directory.
-
-    Returns:
-        Dict with ``path``, ``matrices``, and ``scale``.
-    """
-    matrices = [
-        np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.float64),
-        np.array([[3.0, 1.0], [1.0, 4.0]], dtype=np.float64),
-    ]
-    indices, values, nnz_ptr, size = _dense_matrices_to_coo(matrices)
-    pack_path = tmp_path / "scaled_pack"
-    save_sparse_pack(pack_path, indices, values, nnz_ptr, size, value_scale=10.0)
-    return {"path": pack_path, "matrices": matrices, "scale": 10.0}
-
 
 @pytest.fixture
 def sparse_path_feature_pack(tmp_path: Path) -> dict[str, Any]:

@@ -339,21 +339,21 @@ def test_sparse_broadcast_in_memmap(
         torch.testing.assert_close(actual, ref.to(actual.dtype))
 
 
-def test_sparse_broadcast_memmap_avoids_batch_sparse_build(
+def test_sparse_broadcast_memmap_avoids_stacked_sparse_build(
     sparse_shared_pack: dict[str, Any],
     small_npy_target_file: dict[str, Any],
     memmap_cache_dir: Path,
 ) -> None:
-    """Broadcast sparse packs should avoid per-chunk build_torch_sparse_batch calls."""
+    """Broadcast sparse packs should use build_torch_sparse (single) not build_torch_sparse_stacked."""
     pack_path = sparse_shared_pack["path"]
     from dlkit.infrastructure.io.sparse._coo_pack import CooPackReader
 
     original_single_build = CooPackReader.build_torch_sparse
     with (
         patch(
-            "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse_batch",
+            "dlkit.infrastructure.io.sparse._coo_pack.CooPackReader.build_torch_sparse_stacked",
             side_effect=AssertionError(
-                "build_torch_sparse_batch should not be used for broadcast packs"
+                "build_torch_sparse_stacked should not be used for broadcast packs"
             ),
         ),
         patch(
@@ -398,28 +398,3 @@ def test_sparse_memmap_cache_invalidation(
     assert new_fp != old_fp
 
 
-def test_sparse_memmap_denormalize(
-    sparse_scaled_pack: dict[str, Any],
-    memmap_cache_dir: Path,
-) -> None:
-    """value_scale is applied to stored values when denormalize=True."""
-    pack_path = sparse_scaled_pack["path"]
-    matrices = sparse_scaled_pack["matrices"]
-    scale = sparse_scaled_pack["scale"]
-
-    ds_base = FlexibleDataset(
-        features=[SparseFeature(name="adj", path=pack_path, denormalize=False)],
-        memmap_cache_dir=memmap_cache_dir,
-    )
-    ds_denorm = FlexibleDataset(
-        features=[SparseFeature(name="adj", path=pack_path, denormalize=True)],
-        memmap_cache_dir=memmap_cache_dir / "denorm",
-    )
-
-    for idx, mat in enumerate(matrices):
-        base = _expect_tensor(_expect_tensordict(ds_base[idx]["features"])["adj"])
-        denorm = _expect_tensor(_expect_tensordict(ds_denorm[idx]["features"])["adj"])
-        expected = torch.from_numpy(mat * scale).to(base.dtype)
-        torch.testing.assert_close(denorm, expected)
-        # Also verify base == unscaled
-        torch.testing.assert_close(base, torch.from_numpy(mat).to(base.dtype))

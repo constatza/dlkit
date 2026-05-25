@@ -44,7 +44,7 @@ def test_sparse_feature_raises_without_payload_files(tmp_path: Path) -> None:
 
 def test_sparse_feature_supports_custom_payload_names(tmp_path: Path) -> None:
     pack_path = tmp_path / "custom_pack"
-    files = PackFiles(indices="i.npy", values="v.npy", nnz_ptr="p.npy", values_scale="s.npy")
+    files = PackFiles(indices="i.npy", values="v.npy", nnz_ptr="p.npy", size="d.npy")
     indices = np.array([[0], [0]], dtype=np.int64)
     values = np.array([1.0], dtype=np.float64)
     nnz_ptr = np.array([0, 1], dtype=np.int64)
@@ -53,17 +53,14 @@ def test_sparse_feature_supports_custom_payload_names(tmp_path: Path) -> None:
     feature = SparseFeature(
         name="matrix",
         path=pack_path,
-        files=SparseFilesConfig(
-            indices="i.npy", values="v.npy", nnz_ptr="p.npy", values_scale="s.npy"
-        ),
-        denormalize=True,
+        files=SparseFilesConfig(indices="i.npy", values="v.npy", nnz_ptr="p.npy", size="d.npy"),
     )
     assert feature.files.indices == "i.npy"
-    assert feature.denormalize is True
+    assert feature.files.size == "d.npy"
 
 
-def test_sparse_feature_requires_values_scale(minimal_sparse_pack: Path) -> None:
-    (minimal_sparse_pack / "values_scale.npy").unlink()
+def test_sparse_feature_requires_size_file(minimal_sparse_pack: Path) -> None:
+    (minimal_sparse_pack / "size.npy").unlink()
 
-    with pytest.raises(ValueError, match="Missing payload file"):
+    with pytest.raises(ValueError, match="Expected payload files"):
         SparseFeature(name="matrix", path=minimal_sparse_pack)
