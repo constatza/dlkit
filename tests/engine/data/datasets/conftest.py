@@ -80,7 +80,6 @@ def sparse_shared_pack(tmp_path: Path) -> dict[str, Any]:
     return {"path": pack_path, "matrix": shared}
 
 
-
 @pytest.fixture
 def sparse_path_feature_pack(tmp_path: Path) -> dict[str, Any]:
     """Save a 2-sample COO pack for path-based feature auto-detection tests.

@@ -396,5 +396,3 @@ def test_sparse_memmap_cache_invalidation(
     )
     new_fp = (memmap_cache_dir / "dlkit_fingerprint.txt").read_text()
     assert new_fp != old_fp
-
-

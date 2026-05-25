@@ -168,20 +168,9 @@ cython_debug/
 .idea/
 *.xml
 
-# raw
-*data
-*data/*
-!src/dlkit/runtime/data/
-!src/dlkit/runtime/data/*.py
-!src/dlkit/runtime/data/*.md
-!src/dlkit/runtime/data/**/*.py
-!src/dlkit/runtime/data/**/*.md
-!src/dlkit/engine/data/
-!src/dlkit/engine/data/**/
-!src/dlkit/engine/data/*.py
-!src/dlkit/engine/data/*.md
-!src/dlkit/engine/data/**/*.py
-!src/dlkit/engine/data/**/*.md
+# raw data directories at repo root only
+/*data
+/*data/*
 input/
 output/
 raw/

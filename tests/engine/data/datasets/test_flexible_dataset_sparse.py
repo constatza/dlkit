@@ -155,7 +155,6 @@ def test_shared_sparse_pack_reads_sparse_on_demand_per_item(
     assert mocked_build_sparse.call_count == 2
 
 
-
 def test_flexible_dataset_auto_detects_sparse_pack_from_path_feature(
     sparse_path_feature_pack: dict[str, Any],
 ) -> None:
