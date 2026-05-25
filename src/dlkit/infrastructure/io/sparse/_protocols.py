@@ -36,7 +36,6 @@ class SparseWriter(Protocol):
         size: tuple[int, int],
         *,
         dtype: np.dtype | None = None,
-        value_scale: float = 1.0,
         manifest: PackManifest | None = None,
         files: PackFiles | None = None,
     ) -> None:
@@ -53,15 +52,15 @@ class SparseLoader(Protocol):
         path: Path,
         files: PackFiles | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Load sparse pack arrays from disk."""
+        """Load sparse pack arrays (indices, values, nnz_ptr) from disk."""
         ...
 
-    def load_value_scale(
+    def load_size(
         self,
         path: Path,
         files: PackFiles | None = None,
-    ) -> float:
-        """Load sparse pack value scale from disk (legacy default: 1.0)."""
+    ) -> tuple[int, int]:
+        """Load matrix size (rows, cols) from disk."""
         ...
 
 
@@ -72,7 +71,11 @@ class SparseCodec(SparseWriter, SparseLoader, Protocol):
 
 @runtime_checkable
 class SparsePackReader(Protocol):
-    """Format-agnostic sparse pack reader protocol."""
+    """Format-agnostic sparse pack reader protocol.
+
+    NOTE: keep in sync with AbstractSparsePackReader — both define the same interface,
+    one for structural typing, one for nominal enforcement.
+    """
 
     @property
     def n_samples(self) -> int:
@@ -84,33 +87,14 @@ class SparsePackReader(Protocol):
         """Matrix shape for each sample."""
         ...
 
-    @property
-    def value_scale(self) -> float:
-        """Value scale for stored sparse values."""
-        ...
-
     def build_torch_sparse(
         self,
         sample_index: int,
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build one sparse tensor for a sample index."""
-        ...
-
-    def build_torch_sparse_batch(
-        self,
-        sample_indices: Sequence[int],
-        *,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
-    ) -> list[Tensor]:
-        """Build sparse tensors for many sample indices."""
         ...
 
     def build_torch_sparse_stacked(
@@ -119,8 +103,6 @@ class SparsePackReader(Protocol):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build a stacked sparse tensor with shape (B, rows, cols)."""
         ...
@@ -132,11 +114,13 @@ class AbstractSparsePackReader(ABC):
     All concrete readers must inherit this class, ensuring all interface
     methods are implemented at class definition time.
 
+    NOTE: keep in sync with SparsePackReader protocol — both define the same interface.
+
     Postconditions:
-        - ``build_torch_sparse`` must return an is-sparse Tensor.
-        - ``build_torch_sparse_batch`` must return a list of is-sparse Tensors.
-        - Any ``AbstractSparsePackReader`` subclass is substitutable for any
-          other (Liskov Substitution Principle).
+        - ``build_torch_sparse`` returns an is-sparse Tensor.
+        - ``build_torch_sparse_stacked`` returns an is-sparse Tensor with shape (B, rows, cols).
+        - Stored packs are always coalesced (sorted unique coordinates enforced at write time).
+        - Any ``AbstractSparsePackReader`` subclass is substitutable for any other (LSP).
     """
 
     @property
@@ -149,11 +133,6 @@ class AbstractSparsePackReader(ABC):
     def matrix_size(self) -> tuple[int, int]:
         """Matrix shape for each sample."""
 
-    @property
-    @abstractmethod
-    def value_scale(self) -> float:
-        """Value scale for stored sparse values."""
-
     @abstractmethod
     def build_torch_sparse(
         self,
@@ -161,27 +140,10 @@ class AbstractSparsePackReader(ABC):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build one sparse tensor for a sample index.
 
-        Postcondition: returned tensor must have ``is_sparse == True``.
-        """
-
-    @abstractmethod
-    def build_torch_sparse_batch(
-        self,
-        sample_indices: Sequence[int],
-        *,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
-    ) -> list[Tensor]:
-        """Build sparse tensors for many sample indices.
-
-        Postcondition: each returned tensor must have ``is_sparse == True``.
+        Postcondition: returned tensor must have ``is_sparse == True`` and be coalesced.
         """
 
     @abstractmethod
@@ -191,10 +153,8 @@ class AbstractSparsePackReader(ABC):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build a stacked sparse tensor for many sample indices.
 
-        Postcondition: returned tensor must have ``is_sparse == True``.
+        Postcondition: returned tensor must have ``is_sparse == True`` and shape (B, rows, cols).
         """

@@ -12,8 +12,6 @@ from torch import Tensor
 from ._manifest import (
     PackFiles,
     PackManifest,
-    _manifest_from_arrays,
-    _normalize_value_scale,
 )
 from ._protocols import AbstractSparsePackReader, SparseCodec, SparseFormat, SparseLoader
 
@@ -103,27 +101,40 @@ def _coalesce_pack_payload(
     return out_indices, out_values, out_ptr
 
 
-def _value_scale_from_array(raw_scale: np.ndarray) -> float:
-    """Convert loaded numpy scale payload to a validated scalar float.
+def _infer_matrix_size(
+    indices: np.ndarray,
+    size_override: tuple[int, int] | None,
+) -> tuple[int, int]:
+    """Derive matrix size from indices at write time, with optional override.
 
     Args:
-        raw_scale: Numpy array that is either 0-D or shape (1,).
+        indices: COO indices array of shape (2, nnz).
+        size_override: Explicit size; returned as-is when provided. Use for matrices
+            where the last row or column is entirely zero (would otherwise be
+            inferred smaller than the true size).
 
     Returns:
-        Validated scale as a Python float.
+        ``(rows, cols)`` matrix dimensions.
 
     Raises:
-        ValueError: If the array has an unexpected shape or an invalid scale value.
+        ValueError: If indices are empty and no explicit size is provided, or if the
+            override is smaller than the inferred size.
     """
-    if raw_scale.ndim == 0:
-        scale = float(raw_scale)
-    elif raw_scale.ndim == 1 and raw_scale.size == 1:
-        scale = float(raw_scale[0])
-    else:
-        raise ValueError(
-            f"values_scale payload must be a scalar or shape (1,), got {raw_scale.shape}"
-        )
-    return _normalize_value_scale(scale)
+    if size_override is not None:
+        if indices.shape[1] > 0:
+            inferred_rows = int(indices[0].max()) + 1
+            inferred_cols = int(indices[1].max()) + 1
+            if size_override[0] < inferred_rows or size_override[1] < inferred_cols:
+                raise ValueError(
+                    f"size override {size_override} is smaller than the inferred size "
+                    f"({inferred_rows}, {inferred_cols}) — override must be >= inferred."
+                )
+        return size_override
+    if indices.shape[1] == 0:
+        raise ValueError("Cannot infer matrix_size from empty indices. Provide size explicitly.")
+    rows = int(indices[0].max()) + 1
+    cols = int(indices[1].max()) + 1
+    return rows, cols
 
 
 class CooPackCodec(SparseCodec):
@@ -143,7 +154,6 @@ class CooPackCodec(SparseCodec):
         size: tuple[int, int],
         *,
         dtype: np.dtype | None = None,
-        value_scale: float = 1.0,
         manifest: PackManifest | None = None,
         files: PackFiles | None = None,
     ) -> None:
@@ -160,11 +170,12 @@ class CooPackCodec(SparseCodec):
             indices: COO indices array of shape (2, total_nnz).
             values: COO values array of shape (total_nnz,).
             nnz_ptr: Row pointer array of shape (n_samples + 1,).
-            size: Explicit matrix dimensions (rows, cols).
+            size: Matrix dimensions (rows, cols). If not provided via manifest, inferred
+                from data at write time and stored immutably in ``size.npy``. Supply
+                explicitly when boundary rows/cols are entirely zero.
             dtype: Force a specific numpy dtype for stored values.
-            value_scale: Normalization scale; must be finite and > 0.
-            manifest: Authoritative contract; used instead of ``size``/``dtype``/
-                ``value_scale`` when provided.
+            manifest: Authoritative contract; used instead of ``size``/``dtype`` when
+                provided.
             files: Custom payload filenames; ignored if ``manifest`` is provided.
 
         Raises:
@@ -177,12 +188,10 @@ class CooPackCodec(SparseCodec):
         indices_arr = np.asarray(indices, dtype=np.int64)
         if manifest is not None:
             values_dtype = np.dtype(manifest.dtype)
-            resolved_scale = _normalize_value_scale(manifest.value_scale)
             expected_size = (int(manifest.matrix_size[0]), int(manifest.matrix_size[1]))
         else:
             values_dtype = np.dtype(dtype) if dtype is not None else np.asarray(values).dtype
-            resolved_scale = _normalize_value_scale(value_scale)
-            expected_size = (int(size[0]), int(size[1]))
+            expected_size = _infer_matrix_size(indices_arr, size)
         values_arr = np.asarray(values, dtype=values_dtype)
         nnz_ptr_arr = np.asarray(nnz_ptr, dtype=np.int64)
 
@@ -193,12 +202,6 @@ class CooPackCodec(SparseCodec):
             raise ValueError(f"values must be 1D, got {values_arr.shape}")
         if nnz_ptr_arr.ndim != 1:
             raise ValueError(f"nnz_ptr must be 1D, got {nnz_ptr_arr.shape}")
-        if len(size) != 2:
-            raise ValueError(f"size must be 2D, got {size}")
-        if tuple(int(v) for v in size) != expected_size:
-            raise ValueError(
-                f"size {tuple(int(v) for v in size)} does not match manifest matrix_size {expected_size}"
-            )
         if nnz_ptr_arr.size < 2:
             raise ValueError(f"nnz_ptr must include at least start/end, got {nnz_ptr_arr.size}")
         if indices_arr.shape[1] != values_arr.size:
@@ -213,9 +216,9 @@ class CooPackCodec(SparseCodec):
             )
         if np.any(np.diff(nnz_ptr_arr) < 0):
             raise ValueError("nnz_ptr must be non-decreasing")
+        rows, cols = expected_size
         row_idx = indices_arr[0]
         col_idx = indices_arr[1]
-        rows, cols = expected_size
         if np.any(row_idx < 0) or np.any(row_idx >= rows):
             raise ValueError(f"row indices must be in [0, {rows}), got out-of-bounds entries")
         if np.any(col_idx < 0) or np.any(col_idx >= cols):
@@ -253,8 +256,8 @@ class CooPackCodec(SparseCodec):
         np.save(pack_dir / payload_files.values, values_arr)
         np.save(pack_dir / payload_files.nnz_ptr, nnz_ptr_arr)
         np.save(
-            pack_dir / payload_files.values_scale,
-            np.asarray(resolved_scale, dtype=np.float64),
+            pack_dir / payload_files.size,
+            np.asarray(expected_size, dtype=np.int64),
         )
 
     def load_arrays(
@@ -278,25 +281,28 @@ class CooPackCodec(SparseCodec):
         nnz_ptr = np.load(pack_dir / payload_files.nnz_ptr, allow_pickle=False)
         return indices, values, nnz_ptr
 
-    def load_value_scale(
+    def load_size(
         self,
         path: Path,
         files: PackFiles | None = None,
-    ) -> float:
-        """Load and validate the value scale payload.
+    ) -> tuple[int, int]:
+        """Load matrix size from disk.
 
         Args:
             path: Pack directory.
             files: Custom payload filenames; defaults to ``PackFiles()``.
 
         Returns:
-            Validated scale float.
+            ``(rows, cols)`` matrix dimensions.
         """
         pack_dir = Path(path)
         payload_files = files or PackFiles()
-        scale_path = pack_dir / payload_files.values_scale
-        raw_scale = np.load(scale_path, allow_pickle=False)
-        return _value_scale_from_array(np.asarray(raw_scale))
+        size_arr = np.load(pack_dir / payload_files.size, allow_pickle=False)
+        if size_arr.ndim != 1 or size_arr.size != 2:
+            raise ValueError(
+                f"size payload must be a 1-D array of length 2, got shape {size_arr.shape}"
+            )
+        return int(size_arr[0]), int(size_arr[1])
 
 
 class CooPackReader(AbstractSparsePackReader):
@@ -304,88 +310,115 @@ class CooPackReader(AbstractSparsePackReader):
 
     Implements ``AbstractSparsePackReader`` for LSP compliance.  Accepts an
     injected ``SparseLoader`` for testability (default: ``CooPackCodec()``).
+
+    Prefer constructing via the classmethods:
+        - ``CooPackReader.from_directory(path)`` — normal path; loads all metadata from binary files.
+        - ``CooPackReader.from_manifest(path, manifest)`` — validates against an explicit contract.
     """
 
     def __init__(
         self,
+        *,
         path: Path,
+        indices: np.ndarray,
+        values: np.ndarray,
+        nnz_ptr: np.ndarray,
+        size: tuple[int, int],
         manifest: PackManifest | None = None,
+    ) -> None:
+        self._path = path
+        self._indices = indices
+        self._values = values
+        self._nnz_ptr = nnz_ptr
+        self._size = size
+        self._manifest = manifest
+        self._default_torch_dtype = _torch_dtype_from_numpy_name(np.dtype(values.dtype).name)
+
+    @classmethod
+    def from_directory(
+        cls,
+        path: Path,
         *,
         files: PackFiles | None = None,
-        matrix_size: tuple[int, int] | None = None,
-        dtype: np.dtype | str | None = None,
         loader: SparseLoader | None = None,
-    ) -> None:
-        """Initialise the reader and load all arrays from disk.
+    ) -> CooPackReader:
+        """Open a COO pack by loading all metadata from its binary files.
 
         Args:
             path: Pack directory.
-            manifest: Authoritative contract; validated against payload if provided.
-            files: Custom payload filenames; used only when ``manifest`` is None.
-            matrix_size: Explicit matrix dimensions for manifest inference.
-            dtype: Explicit dtype for manifest inference.
+            files: Custom payload filenames; defaults to ``PackFiles()``.
             loader: ``SparseLoader`` implementation; defaults to ``CooPackCodec()``.
 
-        Raises:
-            ValueError: If the manifest is not for COO format or does not match the payload.
+        Returns:
+            Fully initialised ``CooPackReader``.
         """
-        self._path = Path(path)
-        self._loader: SparseLoader = loader if loader is not None else CooPackCodec()
+        _loader: SparseLoader = loader if loader is not None else CooPackCodec()
+        resolved_files = files or PackFiles()
+        indices, values, nnz_ptr = _loader.load_arrays(path, files=resolved_files)
+        size = _loader.load_size(path, files=resolved_files)
+        return cls(
+            path=Path(path),
+            indices=indices,
+            values=values,
+            nnz_ptr=nnz_ptr,
+            size=size,
+        )
 
-        if manifest is not None:
-            if manifest.format != SparseFormat.COO:
-                raise ValueError(
-                    f"CooPackReader requires COO manifest, got '{manifest.format.value}'"
-                )
-            self._manifest = manifest
-            self._indices, self._values, self._nnz_ptr = self._loader.load_arrays(
-                self._path,
-                files=manifest.files,
-            )
-            self._value_scale = _normalize_value_scale(manifest.value_scale)
-            if int(self._nnz_ptr.size - 1) != manifest.n_samples:
-                raise ValueError(
-                    f"manifest n_samples ({manifest.n_samples}) does not match payload "
-                    f"({int(self._nnz_ptr.size - 1)})"
-                )
-            if int(self._values.size) != manifest.total_nnz:
-                raise ValueError(
-                    f"manifest total_nnz ({manifest.total_nnz}) does not match payload "
-                    f"({int(self._values.size)})"
-                )
-        else:
-            resolved_files = files or PackFiles()
-            self._indices, self._values, self._nnz_ptr = self._loader.load_arrays(
-                self._path,
-                files=resolved_files,
-            )
-            self._value_scale = self._loader.load_value_scale(self._path, files=resolved_files)
-            self._manifest = _manifest_from_arrays(
-                indices=self._indices,
-                values=self._values,
-                nnz_ptr=self._nnz_ptr,
-                files=resolved_files,
-                matrix_size=matrix_size,
-                dtype=dtype,
-                value_scale=self._value_scale,
-            )
+    @classmethod
+    def from_manifest(
+        cls,
+        path: Path,
+        manifest: PackManifest,
+        *,
+        loader: SparseLoader | None = None,
+    ) -> CooPackReader:
+        """Open a COO pack and validate its payload against an explicit manifest.
 
-        self._default_torch_dtype = _torch_dtype_from_numpy_name(self._manifest.dtype)
+        Args:
+            path: Pack directory.
+            manifest: Authoritative contract; payload is validated against it.
+            loader: ``SparseLoader`` implementation; defaults to ``CooPackCodec()``.
+
+        Returns:
+            Fully initialised ``CooPackReader``.
+
+        Raises:
+            ValueError: If the manifest is not for COO format or payload does not match.
+        """
+        if manifest.format != SparseFormat.COO:
+            raise ValueError(f"CooPackReader requires COO manifest, got '{manifest.format.value}'")
+        _loader: SparseLoader = loader if loader is not None else CooPackCodec()
+        indices, values, nnz_ptr = _loader.load_arrays(path, files=manifest.files)
+        stored_size = _loader.load_size(path, files=manifest.files)
+
+        if int(nnz_ptr.size - 1) != manifest.n_samples:
+            raise ValueError(
+                f"manifest n_samples ({manifest.n_samples}) does not match payload "
+                f"({int(nnz_ptr.size - 1)})"
+            )
+        if int(values.size) != manifest.total_nnz:
+            raise ValueError(
+                f"manifest total_nnz ({manifest.total_nnz}) does not match payload "
+                f"({int(values.size)})"
+            )
+        return cls(
+            path=Path(path),
+            indices=indices,
+            values=values,
+            nnz_ptr=nnz_ptr,
+            size=stored_size,
+            manifest=manifest,
+        )
 
     @property
     def n_samples(self) -> int:
         """Number of sparse matrices in the pack."""
-        return self._manifest.n_samples
+        return int(self._nnz_ptr.size - 1)
 
     @property
     def matrix_size(self) -> tuple[int, int]:
         """Matrix shape for each sample."""
-        return self._manifest.matrix_size
-
-    @property
-    def value_scale(self) -> float:
-        """Value scale for stored sparse values."""
-        return self._value_scale
+        return self._size
 
     def _resolve_sample_index(self, sample_index: int) -> int:
         """Resolve sample index with shared-matrix broadcast semantics.
@@ -434,8 +467,6 @@ class CooPackReader(AbstractSparsePackReader):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build one sparse COO tensor for a sample index.
 
@@ -443,8 +474,6 @@ class CooPackReader(AbstractSparsePackReader):
             sample_index: Index of the sample to build.
             device: Target device.
             dtype: Target dtype; defaults to the pack's stored dtype.
-            denormalize: If True, multiply values by ``value_scale``.
-            coalesce: If True, call ``coalesce()`` on the result.
 
         Returns:
             Sparse COO tensor with ``is_sparse == True``.
@@ -462,17 +491,14 @@ class CooPackReader(AbstractSparsePackReader):
         target_dtype = dtype or self._default_torch_dtype
         if values.dtype != target_dtype:
             values = values.to(dtype=target_dtype)
-        if denormalize:
-            values = values * self._value_scale
 
-        sparse = torch.sparse_coo_tensor(
+        return torch.sparse_coo_tensor(
             indices,
             values,
             size=self.matrix_size,
             device=device,
             is_coalesced=True,
         )
-        return sparse.coalesce() if coalesce else sparse
 
     def build_torch_sparse_batch(
         self,
@@ -480,17 +506,16 @@ class CooPackReader(AbstractSparsePackReader):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> list[Tensor]:
-        """Build sparse tensors for many sample indices.
+        """Build sparse tensors for many sample indices (convenience, non-abstract).
+
+        Prefer ``build_torch_sparse_stacked`` for batched operations — it is more
+        efficient. This method is provided for callers that specifically need a list.
 
         Args:
             sample_indices: Indices of the samples to build.
             device: Target device.
             dtype: Target dtype; defaults to the pack's stored dtype.
-            denormalize: If True, multiply values by ``value_scale``.
-            coalesce: If True, call ``coalesce()`` on each result.
 
         Returns:
             List of sparse COO tensors, each with ``is_sparse == True``.
@@ -500,8 +525,6 @@ class CooPackReader(AbstractSparsePackReader):
                 sample_index=sample_index,
                 device=device,
                 dtype=dtype,
-                denormalize=denormalize,
-                coalesce=coalesce,
             )
             for sample_index in sample_indices
         ]
@@ -512,8 +535,6 @@ class CooPackReader(AbstractSparsePackReader):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-        denormalize: bool = False,
-        coalesce: bool = False,
     ) -> Tensor:
         """Build one stacked sparse COO tensor with shape (B, rows, cols)."""
         batch_size = len(sample_indices)
@@ -521,14 +542,13 @@ class CooPackReader(AbstractSparsePackReader):
         if batch_size == 0:
             empty_indices = torch.empty((3, 0), dtype=torch.int64)
             empty_values = torch.empty((0,), dtype=dtype or self._default_torch_dtype)
-            sparse = torch.sparse_coo_tensor(
+            return torch.sparse_coo_tensor(
                 empty_indices,
                 empty_values,
                 size=(0, rows, cols),
                 device=device,
                 is_coalesced=True,
             )
-            return sparse.coalesce() if coalesce else sparse
 
         resolved_indices = self._resolve_sample_indices(sample_indices)
         starts = self._nnz_ptr[resolved_indices]
@@ -563,14 +583,11 @@ class CooPackReader(AbstractSparsePackReader):
         target_dtype = dtype or self._default_torch_dtype
         if out_values.dtype != target_dtype:
             out_values = out_values.to(dtype=target_dtype)
-        if denormalize:
-            out_values = out_values * self._value_scale
 
-        sparse = torch.sparse_coo_tensor(
+        return torch.sparse_coo_tensor(
             out_indices,
             out_values,
             size=(batch_size, rows, cols),
             device=device,
             is_coalesced=True,
         )
-        return sparse.coalesce() if coalesce else sparse

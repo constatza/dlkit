@@ -20,7 +20,6 @@ def save_sparse_pack(
     *,
     format: SparseFormat = SparseFormat.COO,
     dtype: np.dtype | None = None,
-    value_scale: float = 1.0,
     manifest: PackManifest | None = None,
     files: PackFiles | None = None,
 ) -> None:
@@ -31,11 +30,12 @@ def save_sparse_pack(
         indices: COO indices array of shape (2, total_nnz).
         values: COO values array of shape (total_nnz,).
         nnz_ptr: Row pointer array of shape (n_samples + 1,).
-        size: Matrix dimensions (rows, cols).
+        size: Matrix dimensions (rows, cols). Auto-inferred from data when not
+            provided via ``manifest``; stored immutably in ``size.npy``.
+            Supply explicitly when boundary rows/cols are entirely zero.
         format: Storage format; selects the codec via the registry.
         dtype: Force a specific numpy dtype for stored values.
-        value_scale: Normalization scale; must be finite and > 0.
-        manifest: Authoritative contract; overrides ``size``/``dtype``/``value_scale``.
+        manifest: Authoritative contract; overrides ``size``/``dtype``.
         files: Custom payload filenames; ignored if ``manifest`` is provided.
 
     Raises:
@@ -48,7 +48,6 @@ def save_sparse_pack(
         nnz_ptr,
         size,
         dtype=dtype,
-        value_scale=value_scale,
         manifest=manifest,
         files=files,
     )
@@ -60,21 +59,17 @@ def open_sparse_pack(
     format: SparseFormat = SparseFormat.COO,
     manifest: PackManifest | None = None,
     files: PackFiles | None = None,
-    matrix_size: tuple[int, int] | None = None,
-    dtype: np.dtype | str | None = None,
 ) -> AbstractSparsePackReader:
     """Open a sparse pack and return a stateful reader.
 
     Payload arrays are loaded once at construction; subsequent calls to
-    ``build_torch_sparse`` and ``build_torch_sparse_batch`` are I/O-free.
+    ``build_torch_sparse`` and ``build_torch_sparse_stacked`` are I/O-free.
 
     Args:
         path: Pack directory.
         format: Storage format; selects the reader via the registry.
         manifest: Authoritative contract; validated against the payload when given.
         files: Custom payload filenames; used only when ``manifest`` is None.
-        matrix_size: Explicit matrix dimensions for manifest inference.
-        dtype: Explicit dtype for manifest inference.
 
     Returns:
         An ``AbstractSparsePackReader`` (LSP-compliant) for the given format.
@@ -86,8 +81,6 @@ def open_sparse_pack(
         path,
         manifest,
         files=files,
-        matrix_size=matrix_size,
-        dtype=dtype,
     )
 
 
@@ -99,7 +92,7 @@ def is_sparse_pack_dir(path: Path, *, files: PackFiles | None = None) -> bool:
         files: Custom payload filenames; defaults to ``PackFiles()``.
 
     Returns:
-        True if all required payload files (indices, values, nnz_ptr) exist.
+        True if all required payload files (indices, values, nnz_ptr, size) exist.
     """
     pack_dir = Path(path)
     if not pack_dir.is_dir():
@@ -107,5 +100,10 @@ def is_sparse_pack_dir(path: Path, *, files: PackFiles | None = None) -> bool:
     payload_files = files or PackFiles()
     return all(
         (pack_dir / filename).exists()
-        for filename in (payload_files.indices, payload_files.values, payload_files.nnz_ptr)
+        for filename in (
+            payload_files.indices,
+            payload_files.values,
+            payload_files.nnz_ptr,
+            payload_files.size,
+        )
     )

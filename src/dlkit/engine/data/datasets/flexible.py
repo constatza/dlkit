@@ -90,11 +90,10 @@ class PlaceholderNotResolvedError(ValueError):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SparseSourceBinding:
-    """Sparse source binding with read-time denormalization behavior."""
+    """Sparse source binding for a sparse pack reader."""
 
     reader: SparsePackReader
     source_path: Path  # pack directory path — for cache fingerprinting
-    denormalize: bool = False
 
 
 def _normalize_entries(
@@ -166,14 +165,13 @@ def _normalize_entries(
                 indices=item.files.indices,
                 values=item.files.values,
                 nnz_ptr=item.files.nnz_ptr,
-                values_scale=item.files.values_scale,
+                size=item.files.size,
             )
             reader = open_sparse_pack(Path(item.path), files=files)
             result[item.name] = (
                 SparseSourceBinding(
                     reader=reader,
                     source_path=Path(item.path),
-                    denormalize=item.denormalize,
                 ),
                 None,
             )
@@ -192,7 +190,6 @@ def _normalize_entries(
                     SparseSourceBinding(
                         reader=open_sparse_pack(resolved_path),
                         source_path=resolved_path,
-                        denormalize=False,
                     ),
                     None,
                 )
@@ -261,15 +258,9 @@ def _load_or_convert_tensor(
 def _load_sparse_tensor(
     reader: SparsePackReader,
     sample_index: int,
-    *,
-    denormalize: bool = False,
 ) -> Tensor:
     """Load one sparse tensor from a sparse pack reader."""
-    return reader.build_torch_sparse(
-        sample_index=sample_index,
-        denormalize=denormalize,
-        coalesce=False,
-    )
+    return reader.build_torch_sparse(sample_index=sample_index)
 
 
 def _get_source_dtype() -> torch.dtype:
@@ -440,8 +431,6 @@ def _write_sparse_entry_to_memmap(
         dense_matrix = reader.build_torch_sparse(
             sample_index=0,
             dtype=dtype,
-            denormalize=binding.denormalize,
-            coalesce=False,
         ).to_dense()
         build_dense_elapsed = perf_counter() - build_dense_start
 
@@ -472,16 +461,14 @@ def _write_sparse_entry_to_memmap(
         end = min(start + chunk_size, n_total)
         pack_indices = [i % reader.n_samples for i in range(start, end)]
         sparse_start = perf_counter()
-        sparse_batch = reader.build_torch_sparse_batch(
+        stacked = reader.build_torch_sparse_stacked(
             pack_indices,
             dtype=dtype,
-            denormalize=binding.denormalize,
-            coalesce=False,
         )
         sparse_build_elapsed += perf_counter() - sparse_start
 
         dense_start = perf_counter()
-        dense_batch = torch.stack([s.to_dense() for s in sparse_batch])
+        dense_batch = stacked.to_dense()
         dense_build_elapsed += perf_counter() - dense_start
 
         write_start = perf_counter()
@@ -643,7 +630,7 @@ def _resolve_n_and_materialize_sparse(
             )
         try:
             if reader.n_samples == 1:
-                shared_sparse = _load_sparse_tensor(reader, 0, denormalize=binding.denormalize)
+                shared_sparse = _load_sparse_tensor(reader, 0)
                 feat_tensors[name] = torch.stack([shared_sparse] * n)
                 logger.debug(
                     "Sparse in-memory materialization feature='{}' mode=broadcast n_total={} "
@@ -653,12 +640,7 @@ def _resolve_n_and_materialize_sparse(
                     perf_counter() - materialize_start,
                 )
             else:
-                feat_tensors[name] = torch.stack(
-                    [
-                        _load_sparse_tensor(reader, i, denormalize=binding.denormalize)
-                        for i in range(n)
-                    ]
-                )
+                feat_tensors[name] = torch.stack([_load_sparse_tensor(reader, i) for i in range(n)])
                 logger.debug(
                     "Sparse in-memory materialization feature='{}' mode=per_sample n_total={} "
                     "elapsed_s={:.4f}",
@@ -725,11 +707,7 @@ def _inject_sparse_features(
 
     for name, binding in sparse_bindings.items():
         reader = binding.reader
-        sparse_tensor = reader.build_torch_sparse(
-            sample_index=sample_index,
-            denormalize=binding.denormalize,
-            coalesce=False,
-        )
+        sparse_tensor = reader.build_torch_sparse(sample_index=sample_index)
         sample["features", name] = sparse_tensor
     return sample
 
@@ -740,12 +718,7 @@ def _build_sparse_feature_batch(
     binding: SparseSourceBinding,
 ) -> Tensor:
     """Build a sparse feature batch for requested sample indices."""
-    reader = binding.reader
-    return reader.build_torch_sparse_stacked(
-        sample_indices=sample_indices,
-        denormalize=binding.denormalize,
-        coalesce=False,
-    )
+    return binding.reader.build_torch_sparse_stacked(sample_indices=sample_indices)
 
 
 def _inject_sparse_features_batch(

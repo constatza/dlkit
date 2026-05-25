@@ -16,7 +16,7 @@ def _validate_coo_pack(
     indices: np.ndarray,
     values: np.ndarray,
     nnz_ptr: np.ndarray,
-    value_scale_from_disk: float,
+    size: tuple[int, int],
     manifest: PackManifest,
 ) -> None:
     """Validate COO sparse pack payload against a manifest (pure, no I/O).
@@ -25,12 +25,12 @@ def _validate_coo_pack(
         indices: Loaded COO indices array of shape (2, total_nnz).
         values: Loaded COO values array of shape (total_nnz,).
         nnz_ptr: Loaded row pointer array of shape (n_samples + 1,).
-        value_scale_from_disk: Scale loaded from the pack's ``values_scale.npy``.
+        size: Matrix dimensions loaded from ``size.npy``.
         manifest: Contract to validate the payload against.
 
     Raises:
         ValueError: On any shape mismatch, pointer inconsistency, dtype conflict,
-            bounds violation, or value_scale mismatch.
+            or bounds violation.
     """
     if indices.ndim != 2 or indices.shape[0] != 2:
         raise ValueError(f"indices must have shape (2, total_nnz), got {indices.shape}")
@@ -58,12 +58,6 @@ def _validate_coo_pack(
         raise ValueError(
             f"manifest total_nnz ({manifest.total_nnz}) does not match values nnz ({values.size})"
         )
-    if not np.isfinite(manifest.value_scale) or manifest.value_scale <= 0.0:
-        raise ValueError(f"value_scale must be finite and > 0, got {manifest.value_scale}")
-    if not np.isclose(value_scale_from_disk, manifest.value_scale):
-        raise ValueError(
-            f"value_scale mismatch: payload ({value_scale_from_disk}) != contract ({manifest.value_scale})"
-        )
 
     manifest_dtype = np.dtype(manifest.dtype)
     if values.dtype != manifest_dtype:
@@ -71,7 +65,7 @@ def _validate_coo_pack(
             f"manifest dtype ({manifest_dtype.name}) does not match values dtype ({values.dtype.name})"
         )
 
-    rows, cols = manifest.matrix_size
+    rows, cols = size
     row_idx = indices[0]
     col_idx = indices[1]
     if np.any(row_idx < 0) or np.any(row_idx >= rows):
@@ -86,7 +80,6 @@ def validate_sparse_pack(
     format: SparseFormat = SparseFormat.COO,
     manifest: PackManifest | None = None,
     files: PackFiles | None = None,
-    matrix_size: tuple[int, int] | None = None,
     dtype: np.dtype | str | None = None,
 ) -> None:
     """Validate sparse pack payload arrays directly from directory files.
@@ -99,7 +92,6 @@ def validate_sparse_pack(
         format: Storage format; drives codec selection via the registry.
         manifest: Authoritative contract; validated against payload when given.
         files: Custom payload filenames; ignored if ``manifest`` is provided.
-        matrix_size: Explicit matrix dimensions for manifest inference.
         dtype: Explicit dtype for manifest inference.
 
     Raises:
@@ -110,22 +102,17 @@ def validate_sparse_pack(
 
     # Load once — no double-load
     indices, values, nnz_ptr = codec.load_arrays(path, resolved_files)
-    payload_scale = codec.load_value_scale(path, resolved_files)
+    size = codec.load_size(path, resolved_files)
 
-    # When a manifest is provided, its scale is the contract to validate against.
-    # The disk scale (payload_scale) is always used for the integrity check.
-    value_scale = float(manifest.value_scale) if manifest is not None else payload_scale
-    resolved_matrix_size = manifest.matrix_size if manifest is not None else matrix_size
     resolved_dtype = manifest.dtype if manifest is not None else dtype
 
     inferred_manifest = _manifest_from_arrays(
         indices=indices,
         values=values,
         nnz_ptr=nnz_ptr,
+        size=size,
         files=resolved_files,
-        matrix_size=resolved_matrix_size,
         dtype=resolved_dtype,
-        value_scale=value_scale,
     )
 
     if manifest is not None:
@@ -149,6 +136,6 @@ def validate_sparse_pack(
         indices=indices,
         values=values,
         nnz_ptr=nnz_ptr,
-        value_scale_from_disk=payload_scale,
+        size=size,
         manifest=inferred_manifest,
     )

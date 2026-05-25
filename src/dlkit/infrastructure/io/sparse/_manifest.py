@@ -16,56 +16,6 @@ from ._protocols import SparseFormat
 _MANIFEST_FILENAME = "manifest.json"
 
 
-def _normalize_value_scale(value_scale: float) -> float:
-    """Validate and normalize value scale.
-
-    Args:
-        value_scale: The scale value to validate.
-
-    Returns:
-        The validated scale as a Python float.
-
-    Raises:
-        ValueError: If scale is not finite or not > 0.
-    """
-    scale = float(value_scale)
-    if not np.isfinite(scale) or scale <= 0.0:
-        raise ValueError(f"Invalid value_scale: {value_scale}. Expected finite value > 0.")
-    return scale
-
-
-def _infer_matrix_size(
-    indices: np.ndarray,
-    matrix_size: tuple[int, int] | None,
-) -> tuple[int, int]:
-    """Infer matrix size from COO indices when not explicitly provided.
-
-    Args:
-        indices: COO indices array of shape (2, nnz).
-        matrix_size: Explicit size override; returned as-is if not None.
-
-    Returns:
-        Inferred or provided (rows, cols) matrix size.
-
-    Raises:
-        ValueError: If indices are empty and no explicit size is provided.
-    """
-    if matrix_size is not None:
-        return matrix_size
-    if indices.shape[1] == 0:
-        raise ValueError(
-            "Cannot infer matrix_size from empty indices. Provide matrix_size explicitly."
-        )
-    rows = int(indices[0].max()) + 1
-    cols = int(indices[1].max()) + 1
-    return rows, cols
-
-
-# Schema identifiers are explicit and versioned. Add new schema dataclasses for
-# new formats/versions and register them in _MANIFEST_ADAPTERS.
-COO_PACK_SCHEMA = "dlkit.sparse-pack.coo.v1"
-
-
 def _validate_payload_filename(name: str, field_name: str) -> None:
     """Validate one manifest-declared payload filename."""
     if not name:
@@ -76,6 +26,11 @@ def _validate_payload_filename(name: str, field_name: str) -> None:
         raise ValueError(f"{field_name} filename must end with '.npy', got '{name}'")
 
 
+# Schema identifiers are explicit and versioned. Add new schema dataclasses for
+# new formats/versions and register them in _MANIFEST_ADAPTERS.
+COO_PACK_SCHEMA = "dlkit.sparse-pack.coo.v2"
+
+
 @pydantic_dataclass(config=ConfigDict(frozen=True))
 class CooPackFiles:
     """COO payload naming contract."""
@@ -83,26 +38,25 @@ class CooPackFiles:
     indices: str = "indices.npy"
     values: str = "values.npy"
     nnz_ptr: str = "nnz_ptr.npy"
-    values_scale: str = "values_scale.npy"
+    size: str = "size.npy"
 
     def __post_init__(self) -> None:
         _validate_payload_filename(self.indices, "indices")
         _validate_payload_filename(self.values, "values")
         _validate_payload_filename(self.nnz_ptr, "nnz_ptr")
-        _validate_payload_filename(self.values_scale, "values_scale")
+        _validate_payload_filename(self.size, "size")
 
 
 @pydantic_dataclass(config=ConfigDict(frozen=True))
 class CooPackManifest:
-    """Schema contract for COO sparse packs."""
+    """Schema contract for COO sparse packs (human-readable; not correctness-critical)."""
 
-    schema: Literal["dlkit.sparse-pack.coo.v1"] = COO_PACK_SCHEMA
+    schema: Literal["dlkit.sparse-pack.coo.v2"] = COO_PACK_SCHEMA
     format: Literal[SparseFormat.COO] = SparseFormat.COO
     n_samples: PositiveInt = 1
     matrix_size: tuple[PositiveInt, PositiveInt] = (1, 1)
     dtype: str = "float32"
     total_nnz: NonNegativeInt = 0
-    value_scale: float = 1.0
     files: CooPackFiles = field(default_factory=CooPackFiles)
 
     def __post_init__(self) -> None:
@@ -111,11 +65,6 @@ class CooPackManifest:
             np.dtype(self.dtype)
         except Exception as exc:
             raise ValueError(f"Invalid dtype in sparse pack manifest: {self.dtype}") from exc
-        if not np.isfinite(self.value_scale) or self.value_scale <= 0.0:
-            raise ValueError(
-                f"Invalid value_scale in sparse pack manifest: {self.value_scale}. "
-                "Expected finite value > 0."
-            )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize manifest to JSON-compatible dictionary."""
@@ -143,41 +92,36 @@ def _manifest_from_arrays(
     indices: np.ndarray,
     values: np.ndarray,
     nnz_ptr: np.ndarray,
+    size: tuple[int, int],
     files: CooPackFiles,
-    matrix_size: tuple[int, int] | None = None,
     dtype: np.dtype | str | None = None,
-    value_scale: float = 1.0,
 ) -> CooPackManifest:
-    """Build a validated COO manifest from loaded arrays and optional overrides.
+    """Build a COO manifest from loaded arrays.
 
     Args:
         indices: COO indices array of shape (2, total_nnz).
         values: COO values array of shape (total_nnz,).
         nnz_ptr: Row pointer array of shape (n_samples + 1,).
+        size: Matrix dimensions (rows, cols) — loaded from ``size.npy``.
         files: Payload filename contract.
-        matrix_size: Explicit matrix dimensions; inferred from indices if None.
         dtype: Explicit dtype override; inferred from values if None.
-        value_scale: Normalization scale factor; must be finite and > 0.
 
     Returns:
         Validated ``CooPackManifest`` reflecting the actual array contents.
 
     Raises:
-        ValueError: If nnz_ptr is malformed or value_scale is invalid.
+        ValueError: If nnz_ptr is malformed.
     """
     if nnz_ptr.ndim != 1 or nnz_ptr.size < 2:
         raise ValueError(f"nnz_ptr must be 1D with at least 2 entries, got {nnz_ptr.shape}")
     inferred_n_samples = int(nnz_ptr.size - 1)
     resolved_dtype = np.dtype(dtype or values.dtype).name
-    resolved_size = _infer_matrix_size(indices, matrix_size)
-    resolved_scale = _normalize_value_scale(value_scale)
     return CooPackManifest(
         format=SparseFormat.COO,
         n_samples=inferred_n_samples,
-        matrix_size=(int(resolved_size[0]), int(resolved_size[1])),
+        matrix_size=(int(size[0]), int(size[1])),
         dtype=resolved_dtype,
         total_nnz=int(values.size),
-        value_scale=resolved_scale,
         files=files,
     )
 

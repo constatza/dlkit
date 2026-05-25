@@ -63,19 +63,19 @@ class SparseFilesConfig:
         indices: Filename for the column indices array.
         values: Filename for the non-zero values array.
         nnz_ptr: Filename for the row pointer array.
-        values_scale: Filename for the scale factor array.
+        size: Filename for the matrix size array.
     """
 
     indices: str = "indices.npy"
     values: str = "values.npy"
     nnz_ptr: str = "nnz_ptr.npy"
-    values_scale: str = "values_scale.npy"
+    size: str = "size.npy"
 
     def __post_init__(self) -> None:
         _validate_sparse_filename(self.indices, "indices")
         _validate_sparse_filename(self.values, "values")
         _validate_sparse_filename(self.nnz_ptr, "nnz_ptr")
-        _validate_sparse_filename(self.values_scale, "values_scale")
+        _validate_sparse_filename(self.size, "size")
 
 
 # ---------------------------------------------------------------------------
@@ -215,18 +215,12 @@ class SparseFeature(PathBasedEntry):
 
     Attributes:
         files: Named payload filenames inside the sparse-pack directory.
-        denormalize: When True, applies the stored scale factor on read:
-            ``A_original = A_stored * values_scale``.
     """
 
     entry_role: EntryRole = EntryRole.FEATURE
     files: SparseFilesConfig = Field(
         default_factory=SparseFilesConfig,
         description="Sparse payload file naming",
-    )
-    denormalize: bool = Field(
-        default=False,
-        description="Apply values_scale on read: A_original = A_stored * values_scale.",
     )
 
     @model_validator(mode="after")
@@ -237,36 +231,16 @@ class SparseFeature(PathBasedEntry):
             The validated instance.
 
         Raises:
-            ValueError: If the directory or any required payload file is missing,
-                or if ``values_scale`` is non-scalar, non-finite, or ≤ 0.
+            ValueError: If the directory or any required payload file is missing.
         """
         if self.path is None:
             return self
         if not self.path.is_dir():
             raise ValueError(f"SparseFeature path must be a directory, got: {self.path}")
-        required = (self.files.indices, self.files.values, self.files.nnz_ptr)
+        required = (self.files.indices, self.files.values, self.files.nnz_ptr, self.files.size)
         if not all((self.path / name).exists() for name in required):
             raise ValueError(
                 f"Not a sparse pack directory: {self.path}. Expected payload files: {self.files}"
-            )
-        scale_path = self.path / self.files.values_scale
-        if not scale_path.exists():
-            raise ValueError(
-                f"Not a sparse pack directory: {self.path}. Missing payload file: "
-                f"{self.files.values_scale}"
-            )
-        raw_scale = np.load(scale_path, allow_pickle=False)
-        if raw_scale.ndim == 0:
-            value_scale = float(raw_scale)
-        elif raw_scale.ndim == 1 and raw_scale.size == 1:
-            value_scale = float(raw_scale[0])
-        else:
-            raise ValueError(
-                f"SparseFeature values_scale must be scalar or shape (1,), got {raw_scale.shape}"
-            )
-        if not np.isfinite(value_scale) or value_scale <= 0.0:
-            raise ValueError(
-                f"SparseFeature values_scale must be finite and > 0, got {value_scale}"
             )
         return self
 
