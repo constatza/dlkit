@@ -1,4 +1,13 @@
-from . import attention, cae, encoder, ffnn, graph, operators, primitives, spectral
+from . import attention, cae, contracts, encoder, ffnn, graph, operators, primitives, spectral
+from .contracts import (
+    BranchTrunkSpec,
+    ContractConsumer,
+    GraphContractSpec,
+    GridOperatorSpec,
+    ModelContractSpec,
+    SequenceSpec,
+    TabulaRSpec,
+)
 from .ffnn.constrained import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthParametricFFNN,
@@ -90,6 +99,16 @@ from .spectral import (
 )
 
 __all__ = [
+    # Contracts
+    "BranchTrunkSpec",
+    "ContractConsumer",
+    "GraphContractSpec",
+    "GridOperatorSpec",
+    "ModelContractSpec",
+    "SequenceSpec",
+    "TabulaRSpec",
+    "contracts",
+    # Networks
     "LinearNetwork",
     "FactorizedLinearNetwork",
     "SymmetricLinearNetwork",
