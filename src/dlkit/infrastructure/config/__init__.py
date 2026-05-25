@@ -31,9 +31,6 @@ from .core import (
 )
 from .core.updater import update_settings
 
-# Data entries
-from .data_entries import EntryRole
-
 # Partial loading factories
 # Component settings
 # Utility settings
@@ -108,8 +105,6 @@ from .workflow_settings import (
 )
 
 __all__ = [
-    # Data entries
-    "EntryRole",
     # Main settings
     "GeneralSettings",
     "SessionSettings",

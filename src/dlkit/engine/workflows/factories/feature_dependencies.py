@@ -28,8 +28,7 @@ def _parse_feature_name_from_batch_key(key: Any) -> str | None:
 
 def _is_model_input_enabled(entry: DataEntry) -> bool:
     """Return True when the feature participates in model dispatch."""
-    model_input = getattr(entry, "model_input", True)
-    return model_input is not False and model_input is not None
+    return bool(getattr(entry, "model_input", True))
 
 
 def collect_feature_dependencies(

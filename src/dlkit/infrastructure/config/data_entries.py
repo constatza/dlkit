@@ -9,7 +9,7 @@ new code:
     entry_factories  — Feature(), Target(), ContextFeature(), type guards
 """
 
-from .entry_base import DataEntry, EntryRole
+from .entry_base import DataEntry
 from .entry_factories import (
     ContextFeature,
     Feature,
@@ -50,7 +50,6 @@ from .transform_settings import TransformSettings
 __all__ = [
     # Base
     "DataEntry",
-    "EntryRole",
     # Protocols
     "IPathBased",
     "IValueBased",

@@ -22,7 +22,7 @@ from pydantic import ConfigDict, Field, ValidationInfo, model_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic_settings import SettingsConfigDict
 
-from .entry_base import DataEntry, EntryRole
+from .entry_base import DataEntry
 from .entry_protocols import (
     IFeatureReference,
     IPathBased,
@@ -204,8 +204,6 @@ class PathFeature(PathBasedEntry):
         targets automatically.
     """
 
-    entry_role: EntryRole = EntryRole.FEATURE
-
 
 class SparseFeature(PathBasedEntry):
     """Feature loaded from a sparse-pack directory.
@@ -217,7 +215,6 @@ class SparseFeature(PathBasedEntry):
         files: Named payload filenames inside the sparse-pack directory.
     """
 
-    entry_role: EntryRole = EntryRole.FEATURE
     files: SparseFilesConfig = Field(
         default_factory=SparseFilesConfig,
         description="Sparse payload file naming",
@@ -256,7 +253,6 @@ class PathTarget(PathBasedEntry, IWritable):
         prediction names during training/validation/testing.
     """
 
-    entry_role: EntryRole = EntryRole.TARGET
     write: bool = Field(
         default=False, description="Save the prediction related to this target during inference"
     )
@@ -276,8 +272,6 @@ class ValueFeature(ValueBasedEntry):
         targets automatically.
     """
 
-    entry_role: EntryRole = EntryRole.FEATURE
-
 
 class ValueTarget(ValueBasedEntry, IWritable):
     """Target supplied as an in-memory tensor or array.
@@ -290,7 +284,6 @@ class ValueTarget(ValueBasedEntry, IWritable):
         prediction names during training/validation/testing.
     """
 
-    entry_role: EntryRole = EntryRole.TARGET
     write: bool = Field(
         default=False, description="Save the prediction related to this target during inference"
     )
@@ -311,7 +304,6 @@ class Latent(DataEntry, IRuntimeGenerated, IWritable):
         write: When True, persists this latent during inference.
     """
 
-    entry_role: EntryRole = EntryRole.LATENT
     write: bool = Field(default=False, description="Save this latent during inference")
 
     def has_value(self) -> bool:
@@ -363,7 +355,6 @@ class AutoencoderTarget(PathBasedEntry, IWritable, IFeatureReference):
             y = AutoencoderTarget(name="y", feature_ref="x")
     """
 
-    entry_role: EntryRole = EntryRole.AUTOENCODER_TARGET
     feature_ref: str = Field(
         ..., description="Name of the Feature entry to reference for transform inversion"
     )
@@ -423,7 +414,6 @@ class Prediction(DataEntry, IRuntimeGenerated, IWritable):
         write: When True, saves prediction data during inference.
     """
 
-    entry_role: EntryRole = EntryRole.PREDICTION
     target_name: str = Field(..., description="Corresponding target name")
     write: bool = Field(default=True, description="Save predictions during inference")
 

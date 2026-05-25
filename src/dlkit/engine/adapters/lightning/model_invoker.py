@@ -129,66 +129,18 @@ class TensorDictModelInvoker:
         return self._td_module(batch)
 
 
-def _classify_feature_entries(
-    feature_entries: list[Any],
-) -> tuple[list[tuple[float, str]], dict[str, str]]:
-    """Classify feature entries into positional and kwarg dispatch groups.
-
-    Resolves the ``model_input`` field on each entry:
-
-    - ``model_input=True``: kwarg using entry name as key.
-    - ``model_input=int`` / ``"0"/"1"/...``: positional at that index.
-    - ``model_input="name"`` (non-digit): kwarg with custom name.
-    - ``model_input=False`` / ``None``: excluded.
-
-    Args:
-        feature_entries: Feature DataEntry objects in config-insertion order.
-
-    Returns:
-        Tuple of ``(positional, kwarg_map)`` where:
-
-        - *positional*: ``[(sort_key, entry_name), ...]`` **unsorted** list.
-        - *kwarg_map*: ``{kwarg_name: entry_name}`` dict.
-    """
-    positional: list[tuple[float, str]] = []
-    kwarg_map: dict[str, str] = {}
-
-    for entry in feature_entries:
-        mi = getattr(entry, "model_input", True)
-        name: str | None = getattr(entry, "name", None)
-        if name is None or mi is False or mi is None:
-            continue
-        if mi is True:
-            kwarg_map[name] = name
-        elif isinstance(mi, int) and not isinstance(mi, bool):
-            positional.append((float(mi), name))
-        elif isinstance(mi, str) and mi.isdigit():
-            positional.append((float(mi), name))
-        elif isinstance(mi, str):
-            kwarg_map[mi] = name
-
-    return positional, kwarg_map
-
-
 def _build_invoker_from_entries(
     feature_entries: list[Any],
     output_spec: ModelOutputSpec | None = None,
 ) -> TensorDictModelInvoker:
     """Build a TensorDictModelInvoker from feature entry configurations.
 
-    Resolves the ``model_input`` field on each entry to determine how each
-    feature tensor is dispatched to ``model.forward()``:
+    Resolves the ``model_input`` field on each entry to determine which
+    feature tensors are forwarded to ``model.forward()``:
 
-    - ``model_input=True`` (default): passed as **kwarg** using the entry name
-      as the kwarg key — ``model(entry_name=tensor)``.
-    - ``model_input=int`` or ``model_input="0"/"1"/...``: **positional** arg at
-      the given index. Features are sorted by index before building the invoker.
-    - ``model_input="name"`` (non-digit identifier): passed as **kwarg** with
-      the given name — ``model(name=tensor)``. Decouples kwarg name from entry name.
-    - ``model_input=False`` / ``None``: **excluded** from the model call entirely.
-
-    Mixed dispatch (some positional, some kwarg) is supported — positional args
-    come before kwarg args in the ``TensorDictModule`` extraction order.
+    - ``model_input=True`` (default): include as a positional arg, preserving
+      the config-list order.
+    - ``model_input=False``: excluded from model dispatch entirely.
 
     Args:
         feature_entries: Feature DataEntry objects in config-insertion order.
@@ -201,41 +153,34 @@ def _build_invoker_from_entries(
     Raises:
         ValueError: If no features are configured as model inputs.
     """
-    positional, kwarg_map = _classify_feature_entries(feature_entries)
-    positional.sort(key=lambda x: x[0])
-    positional_in_keys: list[NestedKey] = [("features", name) for _, name in positional]
-    kwarg_in_keys: dict[str, NestedKey] = {
-        kw: ("features", entry_name) for kw, entry_name in kwarg_map.items()
-    }
+    in_keys: list[NestedKey] = [
+        ("features", entry.name)
+        for entry in feature_entries
+        if getattr(entry, "model_input", True) and getattr(entry, "name", None) is not None
+    ]
 
-    if not positional_in_keys and not kwarg_in_keys:
+    if not in_keys:
         raise ValueError(
-            "No model-input features found. Configure at least one Feature with "
-            "model_input=True (kwarg by entry name), an int/digit-string positional "
-            "index, or a kwarg name string."
+            "No model-input features found. Configure at least one Feature with model_input=True."
         )
-    return TensorDictModelInvoker(
-        in_keys=positional_in_keys,
-        output_spec=output_spec,
-        kwarg_in_keys=kwarg_in_keys or None,
-    )
+    return TensorDictModelInvoker(in_keys=in_keys, output_spec=output_spec)
 
 
 def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:
-    """Return feature entry names in invoker dispatch order.
+    """Return feature entry names in invoker dispatch order (config-list order).
 
-    Mirrors :func:`_build_invoker_from_entries` ordering: positionals first
-    (sorted by index), then kwargs in entry insertion order.  Used to store
-    ``feature_names`` in checkpoint metadata so inference can map positional
-    tensor args to the correct transform chain.
+    Used to store ``feature_names`` in checkpoint metadata so inference can
+    map positional tensor args to the correct transform chain.
 
     Args:
         feature_entries: Feature DataEntry objects in config-insertion order.
 
     Returns:
-        Tuple of entry names in the same order the invoker dispatches tensors
-        to ``model.forward()``.
+        Tuple of entry names for entries with ``model_input=True``, in the
+        same order the invoker dispatches tensors to ``model.forward()``.
     """
-    positional, kwarg_map = _classify_feature_entries(feature_entries)
-    positional.sort(key=lambda x: x[0])
-    return tuple(name for _, name in positional) + tuple(kwarg_map.keys())
+    return tuple(
+        entry.name
+        for entry in feature_entries
+        if getattr(entry, "model_input", True) and getattr(entry, "name", None) is not None
+    )

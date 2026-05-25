@@ -5,7 +5,7 @@ Covers:
 - TensorDictModelInvoker positional dispatch: model args match in_keys order
 - TensorDictModelInvoker kwarg dispatch: model receives named tensors
 - TensorDictModelInvoker multi-output (VAE): named latent keys, no "0"/"1" hack
-- _build_invoker_from_entries: model_input=True (kwarg), int, str, False/None
+- _build_invoker_from_entries: model_input=True (include), model_input=False (exclude)
 """
 
 from __future__ import annotations
@@ -266,40 +266,39 @@ class TestBuildInvokerFromEntries:
         """Feature 'z' with default model_input=True."""
         return Feature("z", value=torch.zeros(4, 5))
 
-    def test_model_input_true_dispatches_by_entry_name(
+    def test_model_input_true_includes_feature(
         self,
         bs: int,
         two_feature_batch: TensorDict,
         x_tensor: Tensor,
         z_tensor: Tensor,
     ) -> None:
-        """model_input=True (default): features passed as kwargs using entry name as key."""
+        """model_input=True (default): features included as positional args in config order."""
         feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
         feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=True)
-        received: dict[str, Tensor] = {}
+        received: list[tuple[Tensor, Tensor]] = []
 
-        class _KwModel(nn.Module):
+        class _PosModel(nn.Module):
             def forward(self, x: Tensor, z: Tensor) -> Tensor:
-                received.update({"x": x, "z": z})
+                received.append((x, z))
                 return torch.zeros(bs, 1)
 
         invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_KwModel(), two_feature_batch)
-        assert torch.equal(received["x"], x_tensor)
-        assert torch.equal(received["z"], z_tensor)
+        invoker.invoke(_PosModel(), two_feature_batch)
+        assert len(received) == 1
+        assert torch.equal(received[0][0], x_tensor)
+        assert torch.equal(received[0][1], z_tensor)
 
-    def test_explicit_int_ordering_overrides_insertion_order(
+    def test_config_order_preserved(
         self,
         bs: int,
         two_feature_batch: TensorDict,
         x_tensor: Tensor,
         z_tensor: Tensor,
     ) -> None:
-        """model_input=int: features sorted by declared index, not insertion order."""
-        # Declared x as index 1, z as index 0 → model(z, x) even though x is first
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=1)
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=0)
-
+        """Features are dispatched in config-list order when both model_input=True."""
+        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=True)
+        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
         received: list[tuple[Tensor, Tensor]] = []
 
         class _Rec(nn.Module):
@@ -307,78 +306,11 @@ class TestBuildInvokerFromEntries:
                 received.append((first, second))
                 return torch.zeros(bs, 1)
 
-        # Order in list is [x, z] but model_input says z=0, x=1
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
+        # z declared first in the list, x second
+        invoker = _build_invoker_from_entries([feat_z, feat_x])
         invoker.invoke(_Rec(), two_feature_batch)
-        assert torch.equal(received[0][0], z_tensor)  # index 0 → first
-        assert torch.equal(received[0][1], x_tensor)  # index 1 → second
-
-    def test_explicit_digit_str_ordering_overrides_insertion_order(
-        self,
-        bs: int,
-        two_feature_batch: TensorDict,
-        x_tensor: Tensor,
-        z_tensor: Tensor,
-    ) -> None:
-        """model_input='0'/'1' (digit strings): same as int positional, useful in TOML."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input="1")
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input="0")
-
-        received: list[tuple[Tensor, Tensor]] = []
-
-        class _Rec(nn.Module):
-            def forward(self, first: Tensor, second: Tensor) -> Tensor:
-                received.append((first, second))
-                return torch.zeros(bs, 1)
-
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_Rec(), two_feature_batch)
-        assert torch.equal(received[0][0], z_tensor)  # index 0 → first
-        assert torch.equal(received[0][1], x_tensor)  # index 1 → second
-
-    def test_model_input_str_kwarg_dispatch(
-        self,
-        bs: int,
-        two_feature_batch: TensorDict,
-        x_tensor: Tensor,
-        z_tensor: Tensor,
-    ) -> None:
-        """model_input='name': feature passed as kwarg with custom name."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input="x_input")
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input="z_input")
-        received: dict[str, Tensor] = {}
-
-        class _KwModel(nn.Module):
-            def forward(self, x_input: Tensor, z_input: Tensor) -> Tensor:
-                received.update({"x_input": x_input, "z_input": z_input})
-                return torch.zeros(bs, 1)
-
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_KwModel(), two_feature_batch)
-        assert torch.equal(received["x_input"], x_tensor)
-        assert torch.equal(received["z_input"], z_tensor)
-
-    def test_mixed_positional_and_kwarg(
-        self,
-        bs: int,
-        two_feature_batch: TensorDict,
-        x_tensor: Tensor,
-        z_tensor: Tensor,
-    ) -> None:
-        """model_input=0 positional + model_input='extra' kwarg — mixed dispatch."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=0)  # positional
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input="extra")  # kwarg
-        received: dict = {}
-
-        class _Mixed(nn.Module):
-            def forward(self, pos: Tensor, extra: Tensor) -> Tensor:
-                received.update({"pos": pos, "extra": extra})
-                return torch.zeros(bs, 1)
-
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_Mixed(), two_feature_batch)
-        assert torch.equal(received["pos"], x_tensor)
-        assert torch.equal(received["extra"], z_tensor)
+        assert torch.equal(received[0][0], z_tensor)  # z is first in config
+        assert torch.equal(received[0][1], x_tensor)  # x is second in config
 
     def test_model_input_false_excludes_feature(
         self,
@@ -401,27 +333,6 @@ class TestBuildInvokerFromEntries:
         invoker.invoke(_Rec(), two_feature_batch)
         assert len(received) == 1
         assert torch.equal(received[0], x_tensor)
-
-    def test_model_input_none_excludes_feature(
-        self,
-        bs: int,
-        two_feature_batch: TensorDict,
-        x_tensor: Tensor,
-    ) -> None:
-        """model_input=None excludes feature from model call."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=None)
-
-        received: list[Tensor] = []
-
-        class _Rec(nn.Module):
-            def forward(self, x: Tensor) -> Tensor:
-                received.append(x)
-                return torch.zeros(bs, 1)
-
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_Rec(), two_feature_batch)
-        assert len(received) == 1
 
     def test_no_model_input_raises_value_error(self) -> None:
         """All model_input=False raises ValueError (no inputs to pass)."""

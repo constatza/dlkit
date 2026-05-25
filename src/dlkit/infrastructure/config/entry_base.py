@@ -9,24 +9,15 @@ Concrete entry types live in ``entry_types``; factory functions in
 """
 
 from abc import ABC, abstractmethod
-from enum import StrEnum
 
 import torch
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from dlkit.common.geometry import FieldRole, GeometryKind
+
 from .core.base_settings import BasicSettings
 from .transform_settings import TransformSettings
-
-
-class EntryRole(StrEnum):
-    """Semantic role of a data entry in the pipeline."""
-
-    FEATURE = "feature"
-    TARGET = "target"
-    LATENT = "latent"
-    PREDICTION = "prediction"
-    AUTOENCODER_TARGET = "autoencoder_target"
 
 
 class DataEntry(BasicSettings, ABC):
@@ -37,10 +28,15 @@ class DataEntry(BasicSettings, ABC):
         dtype: PyTorch tensor dtype.  None resolves via the session precision
             strategy at load time.
         transforms: Transform chain applied to this entry's data.
-        model_input: Controls how (or whether) the entry is forwarded to
-            ``model.forward()``.  See field description for full semantics.
+        model_input: When True (default), the entry is forwarded to
+            ``model.forward()`` as a positional arg in config-list order.
+            When False, the entry is excluded from model dispatch.
         loss_input: When set, routes this entry as a keyword argument to the
             loss function using the given name.
+        field_role: Physics-domain role of this field (feature, coordinates,
+            etc.).  Excluded from serialization.
+        geometry_kind: Spatial structure of the field data.  Excluded from
+            serialization.
     """
 
     model_config = SettingsConfigDict(arbitrary_types_allowed=True)
@@ -53,43 +49,15 @@ class DataEntry(BasicSettings, ABC):
     transforms: list[TransformSettings] = Field(
         default_factory=list, description="Transform chain for this entry"
     )
-    model_input: int | str | bool | None = Field(
+    model_input: bool = Field(
         default=True,
+        strict=True,
         description=(
-            "Controls whether and how this feature is passed to model.forward(). "
-            "False/None: excluded. "
-            "True: kwarg using the entry name — model(entry_name=tensor). "
-            "int: explicit positional index (0 = first arg). "
-            "str digit ('0','1',...): explicit positional index. "
-            "str identifier ('name'): kwarg with this name — model(name=tensor)."
+            "Controls whether this feature is passed to model.forward(). "
+            "True (default): include as positional arg, in config-list order. "
+            "False: excluded from model dispatch entirely."
         ),
     )
-
-    @field_validator("model_input")
-    @classmethod
-    def _validate_model_input(cls, v: int | str | bool | None) -> int | str | bool | None:
-        """Reject empty or non-identifier/non-digit string values.
-
-        Args:
-            v: The model_input value to validate.
-
-        Returns:
-            The validated value unchanged.
-
-        Raises:
-            ValueError: If ``v`` is a string that is neither a digit string nor
-                a valid Python identifier.
-        """
-        if isinstance(v, str):
-            if not v:
-                raise ValueError("model_input must be non-empty. Use False/None to exclude.")
-            if not v.isdigit() and not v.isidentifier():
-                raise ValueError(
-                    f"model_input '{v}' must be a digit string ('0','1',...) "
-                    "or a valid Python identifier (kwarg name)."
-                )
-        return v
-
     loss_input: str | None = Field(
         default=None,
         description=(
@@ -98,8 +66,16 @@ class DataEntry(BasicSettings, ABC):
             "but are not passed to model.forward()."
         ),
     )
-
-    entry_role: EntryRole = Field(exclude=True, description="Semantic role of the entry.")
+    field_role: FieldRole = Field(
+        default=FieldRole.FEATURE,
+        exclude=True,
+        description="Physics-domain role of this field.",
+    )
+    geometry_kind: GeometryKind = Field(
+        default=GeometryKind.TABULAR,
+        exclude=True,
+        description="Spatial structure of the field data.",
+    )
 
     @field_validator("name")
     @classmethod

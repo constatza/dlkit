@@ -56,7 +56,7 @@ def Feature(
     *,
     value: torch.Tensor | np.ndarray,
     dtype: torch.dtype | None = None,
-    model_input: int | str | bool | None = True,
+    model_input: bool = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> ValueFeature: ...
@@ -68,7 +68,7 @@ def Feature(
     *,
     path: Path | str | None = None,
     dtype: torch.dtype | None = None,
-    model_input: int | str | bool | None = True,
+    model_input: bool = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> PathFeature: ...
@@ -80,7 +80,7 @@ def Feature(
     path: Path | str | None = None,
     value: torch.Tensor | np.ndarray | None = None,
     dtype: torch.dtype | None = None,
-    model_input: int | str | bool | None = True,
+    model_input: bool = True,
     loss_input: str | None = None,
     transforms: list[TransformSettings] | None = None,
 ) -> FeatureType:
