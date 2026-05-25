@@ -156,7 +156,7 @@ def _build_invoker_from_entries(
     in_keys: list[NestedKey] = [
         ("features", entry.name)
         for entry in feature_entries
-        if getattr(entry, "model_input", True) and getattr(entry, "name", None) is not None
+        if entry.model_input and entry.name is not None
     ]
 
     if not in_keys:
@@ -180,7 +180,5 @@ def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:
         same order the invoker dispatches tensors to ``model.forward()``.
     """
     return tuple(
-        entry.name
-        for entry in feature_entries
-        if getattr(entry, "model_input", True) and getattr(entry, "name", None) is not None
+        entry.name for entry in feature_entries if entry.model_input and entry.name is not None
     )

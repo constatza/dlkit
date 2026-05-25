@@ -158,10 +158,16 @@ class DataEntryRegistry:
             Dictionary with entry counts and names by type
         """
         with self._lock:
-            features = self.get_features()
-            targets = self.get_targets()
-            latents = self.get_latents()
-            predictions = self.get_predictions()
+            features = {
+                n: e
+                for n, e in self._entries.items()
+                if isinstance(e, (PathFeature, ValueFeature, SparseFeature))
+            }
+            targets = {
+                n: e for n, e in self._entries.items() if isinstance(e, (PathTarget, ValueTarget))
+            }
+            latents = {n: e for n, e in self._entries.items() if isinstance(e, Latent)}
+            predictions = {n: e for n, e in self._entries.items() if isinstance(e, Prediction)}
 
             return {
                 "total_entries": len(self._entries),

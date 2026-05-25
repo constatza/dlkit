@@ -69,12 +69,12 @@ class DataEntry(BasicSettings, ABC):
     field_role: FieldRole = Field(
         default=FieldRole.FEATURE,
         exclude=True,
-        description="Physics-domain role of this field.",
+        description="Physics-domain role of this field. Excluded from model_dump() output.",
     )
     geometry_kind: GeometryKind = Field(
         default=GeometryKind.TABULAR,
         exclude=True,
-        description="Spatial structure of the field data.",
+        description="Spatial structure of the field data. Excluded from model_dump() output.",
     )
 
     @field_validator("name")
