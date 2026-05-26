@@ -46,6 +46,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.domain" },
+    { path = "dlkit.engine.training.optimization" },
 ]
 
 [[modules]]

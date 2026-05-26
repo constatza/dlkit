@@ -122,7 +122,7 @@ def _maybe_resolve_contract(
         logger.debug("Checkpoint has explicit shape kwargs — skipping contract resolution")
         return None
 
-    from dlkit.engine.workflows.factories.contract_resolver import resolve_contract
+    from dlkit.domain.nn.contract_resolver import resolve_contract
 
     output_shapes = _extract_output_shapes_from_checkpoint(checkpoint)
     try:

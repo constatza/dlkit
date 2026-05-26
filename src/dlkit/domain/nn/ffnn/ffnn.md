@@ -20,7 +20,7 @@ The package distinguishes:
 
 ## Single-layer linear baselines (`linear.py`)
 
-All classes are keyword-only, expose `in_features` and `out_features`, and implement `from_shape(shape, **kwargs)`.
+All classes are keyword-only, expose `in_features` and `out_features`, and implement `from_contract(contract, **kwargs)`.
 
 | Class | Primitive | Constraint | Shape |
 |---|---|---|---|
@@ -79,22 +79,23 @@ surface is the explicit plain/residual class matrix above.
 - `ScaleEquivariant...` means the model wraps a base FFNN with norm-based
   input/output scaling.
 
-## Shape-aware construction
+## Contract-based construction
 
 The classes that naturally map dataset feature counts to `in_features` and
-`out_features` implement `from_shape(shape, **kwargs)`. This includes:
+`out_features` implement `from_contract(contract, **kwargs)` via the
+`ContractConsumer` protocol. This includes:
 - dense FFNNs
 - embedded constrained FFNNs
 - scale-equivariant variable-width dense FFNNs (`ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`)
 - scale-equivariant embedded FFNNs
 - scale-equivariant constant-width dense FFNNs
 
-When `from_shape()` is used, `shape.in_features` and `shape.out_features`
-take precedence. Duplicate `in_features` or `out_features` values passed
-through config kwargs are ignored rather than forwarded twice.
+When `from_contract()` is used with a `TabulaRSpec`, `in_shape` and `out_shape`
+are extracted; duplicate `in_features` or `out_features` values passed through
+config kwargs are stripped before forwarding.
 
 Square constant-width constrained bodies use `size`, so they are configured
-explicitly rather than through `from_shape()`.
+explicitly rather than through `from_contract()`.
 
 ## Configuration guidance
 
@@ -155,7 +156,7 @@ return Linear(h)                 # output projection
 | `normalize` | `NormalizerName \| None` | `None` | Normalisation after each gate |
 | `dropout` | `float` | `0.0` | Dropout after normalisation |
 
-Raises `ValueError` if `num_layers < 1`.  Supports `from_shape(shape, **kwargs)`.
+Raises `ValueError` if `num_layers < 1`.  Supports `from_contract(contract, **kwargs)`.
 
 **Example — context-free gating with SwiGLU:**
 

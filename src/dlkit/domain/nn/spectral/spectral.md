@@ -130,7 +130,7 @@ model = DualPathFFNN(
 
 These architectures address spectral bias at the coordinate level rather than
 through Fourier convolutions. All three
-implement `from_shape(shape, **kwargs)` for factory-compatible construction.
+implement `from_contract(contract, **kwargs)` for factory-compatible construction.
 
 ### FourierFeatureNetwork
 
@@ -157,7 +157,7 @@ where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalisation for the internal MLP |
 | `dropout` | `float` | `0.0` | Dropout for the internal MLP |
 
-`from_shape` sets `in_features` and `out_features` from the shape summary.
+`from_contract` extracts `in_features` and `out_features` from a `TabulaRSpec`.
 
 ### HashEncodingNetwork
 
@@ -192,7 +192,7 @@ meaningful.
 | `normalize` | `"batch" \| "layer" \| None` | `None` | Normalisation for the MLP head |
 | `dropout` | `float` | `0.0` | Dropout for the MLP head |
 
-`from_shape` sets `in_features` and `out_features` from the shape summary.
+`from_contract` extracts `in_features` and `out_features` from a `TabulaRSpec`.
 
 ### Siren
 
@@ -218,7 +218,7 @@ Initialisation:
 | `num_layers` | `int` | required | Number of hidden layers (>= 1) |
 | `omega0` | `float` | `30.0` | First-layer frequency multiplier |
 
-Raises `ValueError` if `num_layers < 1`.  `from_shape` is supported.
+Raises `ValueError` if `num_layers < 1`.  `from_contract` is supported.
 
 ### ModifiedMLP
 
@@ -242,7 +242,7 @@ output = W_out h_L + b_out
 | `num_layers` | `int` | required | Hidden linear layers (>= 2) |
 | `activation` | `Callable` | `torch.sigmoid` | Gating activation σ |
 
-Raises `ValueError` if `num_layers < 2`.  `from_shape` is supported.
+Raises `ValueError` if `num_layers < 2`.  `from_contract` is supported.
 
 ```python
 from dlkit.domain.nn.spectral import ModifiedMLP
@@ -290,9 +290,8 @@ n_modes = 16
 merge = "concat"
 ```
 
-`FourierEnhancedFFNN` and `DualPathFFNN` expose `from_shape(shape, **kwargs)`,
-so the shared model factory can build them explicitly from the dataset shape
-summary without constructor-name inspection.
+`FourierEnhancedFFNN` and `DualPathFFNN` expose `from_contract(contract, **kwargs)`,
+so the shared model factory can build them from a `TabulaRSpec`.
 
 ---
 

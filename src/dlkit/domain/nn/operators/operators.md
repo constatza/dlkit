@@ -88,9 +88,8 @@ n_modes = 16
 n_layers = 4
 ```
 
-`FourierNeuralOperator1d` implements `from_shape(shape, **kwargs)`, so the
-shared model factory builds it explicitly from the dataset-derived channel
-summary.
+`FourierNeuralOperator1d` implements `from_contract(contract, **kwargs)`, so the
+shared model factory builds it from a `GridOperatorSpec`.
 
 ---
 
@@ -133,8 +132,8 @@ name = "y"
 model_input = 1   # trunk input (query coordinates)
 ```
 
-`MLPDeepONet` implements `from_shape(shape, **kwargs)` and expects the shape
-summary to contain both input entries in branch/trunk order.
+`MLPDeepONet` implements `from_contract(contract, **kwargs)` and expects a
+`BranchTrunkSpec` with `branch_shape`, `query_shape`, and `out_features`.
 
 ### Example
 
