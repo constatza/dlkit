@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from dlkit.common.geometry import FieldRole, FieldSpec, GeometryKind, GeometrySpec, TopologyKind
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def _geometry_from_dict(d: dict[str, Any]) -> GeometrySpec:
@@ -88,8 +91,8 @@ def _infer_geometry_from_dataset(
             )
             if feature_entries:
                 return infer_geometry(feature_entries, dataset)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Entry-config-guided geometry inference failed, falling back: {}", exc)
 
     # Bare fallback: extract raw shapes from dataset sample directly.
     try:
@@ -121,7 +124,6 @@ def infer_geometry_from_checkpoint(
     checkpoint: dict[str, Any],
     dataset: Any | None = None,
     entry_configs: tuple[Any, ...] = (),
-    output_shapes: tuple[tuple[int, ...], ...] = (),
 ) -> GeometrySpec | None:
     """Infer a GeometrySpec using a 3-case fallback strategy.
 
@@ -133,13 +135,10 @@ def infer_geometry_from_checkpoint(
         checkpoint: Loaded checkpoint dictionary.
         dataset: Optional dataset for shape inference fallback.
         entry_configs: Optional feature DataEntry objects for dataset fallback.
-        output_shapes: Unused here; kept for call-site symmetry with
-            ``resolve_contract``.
 
     Returns:
         GeometrySpec if geometry can be determined, otherwise None.
     """
-    from loguru import logger
 
     # Case 2: external checkpoint — no dlkit_metadata at all.
     if "dlkit_metadata" not in checkpoint:

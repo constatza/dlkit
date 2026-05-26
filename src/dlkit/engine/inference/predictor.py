@@ -57,7 +57,7 @@ def _extract_output_shapes_from_checkpoint(
         target_shapes = tuple(
             tuple(int(d) for d in f["shape"])
             for f in fields
-            if f.get("role") in (FieldRole.TARGET_COORDINATES, "target", "target_coordinates")
+            if f.get("role") == FieldRole.TARGET_COORDINATES
         )
         if target_shapes:
             return target_shapes
@@ -72,21 +72,7 @@ def _extract_output_shapes_from_checkpoint(
     return ()
 
 
-_CONTRACT_SHAPE_KEYS: frozenset[str] = frozenset(
-    {
-        "in_features",
-        "out_features",
-        "in_shape",
-        "out_shape",
-        "in_channels",
-        "out_channels",
-        "spatial_shape",
-        "seq_len",
-        "edge_dim",
-        "branch_shape",
-        "query_shape",
-    }
-)
+from .model_builder import _CONTRACT_KEYS as _CONTRACT_SHAPE_KEYS
 
 
 def _checkpoint_has_explicit_shape_kwargs(checkpoint: dict) -> bool:
@@ -146,19 +132,26 @@ def _maybe_resolve_contract(
         return None
 
 
+from dlkit.common.geometry import FieldRole as _FieldRole
+
+_FEATURE_ROLES: frozenset[str] = frozenset({_FieldRole.FEATURE, _FieldRole.FEATURE_COORDINATES})
+
+
 def _feature_names_from_geometry(geometry_data: dict) -> tuple[str, ...]:
     """Derive ordered feature names from serialized GeometrySpec data.
 
-    Extracts the ``name`` of each field in the geometry, preserving insertion order.
+    Extracts the ``name`` of each FEATURE or FEATURE_COORDINATES field in the
+    geometry, preserving insertion order.  TARGET_COORDINATES and other roles
+    are excluded because they are not model inputs.
 
     Args:
         geometry_data: Dict produced by ``dataclasses.asdict(GeometrySpec)``.
 
     Returns:
-        Tuple of feature name strings (empty if no named fields).
+        Tuple of feature name strings (empty if no named feature fields).
     """
     fields = geometry_data.get("fields", [])
-    return tuple(f["name"] for f in fields if f.get("name"))
+    return tuple(f["name"] for f in fields if f.get("name") and f.get("role") in _FEATURE_ROLES)
 
 
 class PredictorError(WorkflowError):
