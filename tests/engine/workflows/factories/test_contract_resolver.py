@@ -279,15 +279,20 @@ class TestTabularDispatch:
 
         assert result.out_shape == (5,)  # type: ignore[union-attr]
 
-    def test_default_out_shape_when_no_output_shapes(self, tabular_geometry: GeometrySpec) -> None:
-        """TabulaRSpec.out_shape defaults to (1,) when output_shapes is empty.
+    def test_raises_when_no_output_shapes(self, tabular_geometry: GeometrySpec) -> None:
+        """resolve_contract raises WorkflowError for tabular geometry with no output shapes.
+
+        Legacy checkpoints that lack contract metadata cannot recover the output
+        shape from geometry alone. The user must retrain to generate a compatible
+        checkpoint.
 
         Args:
             tabular_geometry: Flat tabular feature fixture.
         """
-        result = resolve_contract(tabular_geometry)
+        from dlkit.common.errors import WorkflowError
 
-        assert result.out_shape == (1,)  # type: ignore[union-attr]
+        with pytest.raises(WorkflowError, match="Cannot resolve tabular output shape"):
+            resolve_contract(tabular_geometry)
 
 
 class TestSequenceDispatch:

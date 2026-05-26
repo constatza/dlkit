@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from torch import nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec
+
 from .metrics_routing import MetricRoute
 from .model_invoker import ModelOutputSpec
 
@@ -26,6 +28,7 @@ def build_checkpoint_metadata(
     predict_target_key: str,
     geometry: GeometrySpec | None,
     output_spec: ModelOutputSpec,
+    contract: ModelContractSpec | None = None,
 ) -> WrapperCheckpointMetadata:
     """Build checkpoint metadata from wrapper configuration.
 
@@ -39,6 +42,8 @@ def build_checkpoint_metadata(
         predict_target_key: Name of target whose inverse transform applies at predict time.
         geometry: GeometrySpec from dataset inference, or None.
         output_spec: Model output key specification.
+        contract: Optional ModelContractSpec used to build the model, persisted for
+            inference-time reconstruction.
 
     Returns:
         Configured WrapperCheckpointMetadata ready for checkpoint persistence.
@@ -50,6 +55,7 @@ def build_checkpoint_metadata(
         predict_target_key=predict_target_key,
         geometry=geometry,
         output_spec=output_spec,
+        contract=contract,
     )
 
 
@@ -67,6 +73,8 @@ class WrapperCheckpointMetadata:
         predict_target_key: Name of target whose chain is inverted at predict time.
         geometry: GeometrySpec from dataset inference, or None.
         output_spec: Model output key spec for checkpoint-driven invoker rebuild.
+        contract: ModelContractSpec used to build the model, or None when not
+            applicable. Persisted in checkpoints for inference-time reconstruction.
     """
 
     model_settings: ModelComponentSettings
@@ -75,6 +83,7 @@ class WrapperCheckpointMetadata:
     predict_target_key: str
     geometry: GeometrySpec | None = None
     output_spec: ModelOutputSpec = dataclasses.field(default_factory=ModelOutputSpec)
+    contract: ModelContractSpec | None = None
 
     @property
     def feature_names(self) -> tuple[str, ...]:

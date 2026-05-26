@@ -71,11 +71,19 @@ class DLKitCheckpointSerializer:
             dlkit_metadata["feature_names"] = list(meta.feature_names)
             dlkit_metadata["predict_target_key"] = meta.predict_target_key
             dlkit_metadata["model_family"] = self._detect_model_family()
+            contract = getattr(meta, "contract", None)
+            if contract is not None:
+                from dlkit.domain.nn.contracts import serialize_contract
+
+                dlkit_metadata["contract"] = serialize_contract(contract)
+            else:
+                dlkit_metadata["contract"] = None
         else:
             dlkit_metadata["model_settings"] = {}
             dlkit_metadata["entry_configs"] = []
             dlkit_metadata["geometry"] = {}
             dlkit_metadata["model_family"] = "external"
+            dlkit_metadata["contract"] = None
 
         checkpoint["dlkit_metadata"] = dlkit_metadata
 

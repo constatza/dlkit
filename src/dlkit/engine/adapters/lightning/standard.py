@@ -195,6 +195,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             predict_target_key=predict_target_key,
             geometry=geometry,
             output_spec=output_spec,
+            contract=contract,
         )
 
         prediction_strategy = DiscriminativePredictionStrategy(

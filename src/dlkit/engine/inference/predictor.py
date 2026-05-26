@@ -108,6 +108,10 @@ def _maybe_resolve_contract(
     and cause "multiple values" errors.  Legacy checkpoints store only
     non-shape hyperparams so a contract is required to supply the shapes.
 
+    Priority:
+    1. Contract serialized directly in ``dlkit_metadata["contract"]`` (new format).
+    2. Geometry-based resolution (legacy path).
+
     Args:
         checkpoint: Loaded checkpoint dict.
         geometry: Geometry inferred from the checkpoint or dataset, or None.
@@ -116,6 +120,17 @@ def _maybe_resolve_contract(
         ModelContractSpec if a contract is needed and geometry allows it,
         else None.
     """
+    # New format: contract serialized directly in metadata
+    metadata = checkpoint.get("dlkit_metadata", {})
+    contract_data = metadata.get("contract") or {}
+    if contract_data:
+        from dlkit.domain.nn.contracts import deserialize_contract
+
+        contract = deserialize_contract(contract_data)
+        if contract is not None:
+            logger.debug("Loaded contract from checkpoint metadata: {}", type(contract).__name__)
+            return contract
+
     if geometry is None:
         return None
     if _checkpoint_has_explicit_shape_kwargs(checkpoint):

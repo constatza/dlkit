@@ -6,6 +6,8 @@ No geometry, no config — just the minimal data required to build the model.
 
 from __future__ import annotations
 
+import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, Self, runtime_checkable
 
@@ -146,6 +148,49 @@ class ContractConsumer(Protocol):
         ...
 
 
+def serialize_contract(
+    contract: ModelContractSpec,
+) -> dict[str, int | tuple[int, ...] | None | str]:
+    """Serialize a ModelContractSpec to a JSON-safe dict with type discriminator.
+
+    Args:
+        contract: Any ModelContractSpec variant.
+
+    Returns:
+        Dict with ``"_type"`` key for deserialization plus all contract fields.
+    """
+    return {"_type": type(contract).__name__, **dataclasses.asdict(contract)}
+
+
+def deserialize_contract(
+    data: Mapping[str, object],
+) -> ModelContractSpec | None:
+    """Reconstruct a ModelContractSpec from serialized checkpoint data.
+
+    Handles list→tuple conversion for JSON round-trips.
+
+    Args:
+        data: Dict with ``"_type"`` key and contract field values.
+
+    Returns:
+        Reconstructed ModelContractSpec, or None if data is empty or unrecognized.
+    """
+    if not data:
+        return None
+    _REGISTRY: dict[str, type] = {
+        cls.__name__: cls
+        for cls in (TabulaRSpec, GridOperatorSpec, SequenceSpec, BranchTrunkSpec, GraphContractSpec)
+    }
+    cls = _REGISTRY.get(str(data.get("_type", "")))
+    if cls is None:
+        return None
+    fields = {k: tuple(v) if isinstance(v, list) else v for k, v in data.items() if k != "_type"}
+    try:
+        return cls(**fields)
+    except Exception:
+        return None
+
+
 __all__ = [
     "BranchTrunkSpec",
     "ContractConsumer",
@@ -154,4 +199,6 @@ __all__ = [
     "ModelContractSpec",
     "SequenceSpec",
     "TabulaRSpec",
+    "deserialize_contract",
+    "serialize_contract",
 ]

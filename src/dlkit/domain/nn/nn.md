@@ -68,6 +68,45 @@ Built-in model families implement `from_contract()` accepting the appropriate
 `ModelContractSpec` variant (`TabulaRSpec`, `GridOperatorSpec`, `SequenceSpec`,
 `BranchTrunkSpec`, or `GraphContractSpec`).
 
+## Contract ↔ geometry mapping
+
+`contract_resolver.resolve_contract(geometry, output_shapes)` maps a `GeometrySpec`
+to the right `ModelContractSpec` variant.  The dispatch table:
+
+| Geometry kind | Has TARGET_COORDINATES? | Contract produced |
+|---------------|------------------------|-------------------|
+| `TABULAR` | no | `TabulaRSpec(in_shape, out_shape)` |
+| `TABULAR` | yes | `BranchTrunkSpec(branch_shape, query_shape, out_features)` |
+| `SEQUENCE` | — | `SequenceSpec(in_channels, seq_len, out_channels)` |
+| `REGULAR_GRID` / `POINT_CLOUD` | no | `GridOperatorSpec(in_channels, out_channels, spatial_shape)` |
+| `REGULAR_GRID` / `POINT_CLOUD` | yes | `BranchTrunkSpec(...)` |
+| `GRAPH` | — | `GraphContractSpec(in_channels, out_channels, edge_dim)` |
+
+`output_shapes` must contain the target field shapes in config order; the first
+element supplies the output dimension(s).  For tabular models the engine infers
+`out_shape` from the dataset at training time — if none is available at inference
+the resolver raises `WorkflowError` (prefer retraining over silent fallbacks).
+
+## Contract checkpoint serialization
+
+Contracts are serialized to `dlkit_metadata["contract"]` in Lightning checkpoints.
+This makes checkpoints self-sufficient: inference reconstructs the exact
+`from_contract(contract, **kwargs)` call without re-running geometry inference.
+
+```python
+from dlkit.domain.nn.contracts import serialize_contract, deserialize_contract, TabulaRSpec
+
+spec = TabulaRSpec(in_shape=(16,), out_shape=(4,))
+data = serialize_contract(spec)
+# {"_type": "TabulaRSpec", "in_shape": (16,), "out_shape": (4,)}
+
+restored = deserialize_contract(data)
+assert restored == spec
+```
+
+`deserialize_contract` handles list→tuple coercion from JSON round-trips and
+returns `None` for unrecognized `_type` values rather than raising.
+
 ## Parameter role contracts
 
 Domain defines the semantic vocabulary used by the engine's optimization

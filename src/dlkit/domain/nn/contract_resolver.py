@@ -83,7 +83,14 @@ def _build_tabular_contract(
         TabulaRSpec with in_shape and out_shape.
     """
     primary = geometry.primary_feature()
-    out = output_shapes[0] if output_shapes else (1,)
+    if not output_shapes:
+        from dlkit.common.errors import WorkflowError
+
+        raise WorkflowError(
+            "Cannot resolve tabular output shape: checkpoint predates contract persistence. "
+            "Retrain the model to generate a compatible checkpoint."
+        )
+    out = output_shapes[0]
     return TabulaRSpec(in_shape=primary.shape, out_shape=out)
 
 
