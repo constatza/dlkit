@@ -41,7 +41,7 @@ from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
+    pass
 
 
 def _validate_extra_inputs_against_signature(
@@ -105,7 +105,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             settings=wrapper_settings,
             model_settings=model_settings,
             entry_configs=data_configs,
-            shape_summary=shape_summary,
+            geometry=geometry_spec,
         )
         ```
     """
@@ -116,7 +116,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        shape_summary: ShapeSummary | None = None,
+        geometry: Any = None,
+        contract: Any = None,
         components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
@@ -126,7 +127,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations in config-insertion order.
-            shape_summary: Shape summary from dataset inference (for shape-aware models).
+            geometry: GeometrySpec from dataset inference (for shape-aware models).
+            contract: Optional ModelContractSpec. When provided, used directly for model
+                construction.
             components: Pre-built WrapperComponents containing loss, metrics, transforms,
                 optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule (ignored otherwise).
@@ -134,7 +137,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         entry_configs = entry_configs or ()
 
         # --- Build model ---
-        model = _build_model_from_settings(model_settings, shape_summary)
+        model = _build_model_from_settings(model_settings, contract=contract)
 
         # --- Partition entries ---
         feature_entries = [e for e in entry_configs if is_feature_entry(e)]
@@ -189,9 +192,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             model_settings=model_settings,
             wrapper_settings=settings,
             entry_configs=entry_configs,
-            feature_entries=feature_entries,
             predict_target_key=predict_target_key,
-            shape_summary=shape_summary,
+            geometry=geometry,
             output_spec=output_spec,
         )
 

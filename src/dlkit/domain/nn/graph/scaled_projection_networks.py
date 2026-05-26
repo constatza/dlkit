@@ -8,8 +8,6 @@ import torch
 from torch import nn
 from torch_geometric.typing import Tensor
 
-from dlkit.common.shapes import ShapeSpecProtocol
-
 from .gat import GATv2Message, SimpleGATv2Message
 from .projection_networks import GProjection, ProjectionNetwork
 
@@ -25,20 +23,45 @@ __all__ = [
 
 
 class ScaledGProjection(ProjectionNetwork):
-    """Projection network with column-wise input scaling."""
+    """Projection network with column-wise input scaling.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+        message_module: Optional message-passing module.
+        input_projection: Optional custom input projection module.
+        output_projection: Optional custom output projection module.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int = 64,
+        edge_dim: int | None = None,
         message_module: nn.Module | None = None,
         input_projection: nn.Module | None = None,
         output_projection: nn.Module | None = None,
     ):
+        """Initialize ScaledGProjection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+            message_module: Optional message-passing module.
+            input_projection: Optional custom input projection module.
+            output_projection: Optional custom output projection module.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=message_module,
             input_projection=input_projection,
             output_projection=output_projection,
@@ -50,6 +73,16 @@ class ScaledGProjection(ProjectionNetwork):
         edge_index: Tensor,
         edge_attr: Tensor | None = None,
     ) -> Tensor:
+        """Forward pass with column-wise input normalization and optional output rescaling.
+
+        Args:
+            x: Node feature tensor.
+            edge_index: Edge connectivity tensor (2 × num_edges).
+            edge_attr: Optional edge attribute tensor.
+
+        Returns:
+            Output tensor from graph processing.
+        """
         x, scale = self._normalize_inputs(x)
         x = self._in_proj(x)
         x = self._apply_message_module(x, edge_index, edge_attr)
@@ -78,12 +111,25 @@ class ScaledGProjection(ProjectionNetwork):
 
 
 class GATv2Projection(GProjection):
-    """GProjection pre-wired with a residual GATv2Message."""
+    """GProjection pre-wired with a residual GATv2Message.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads per GATv2 layer.
+        edge_dim: Edge feature dimensionality.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function applied after each layer.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int,
         num_layers: int,
         heads: int = 1,
@@ -92,9 +138,24 @@ class GATv2Projection(GProjection):
         dropout: float = 0.0,
         activation: Callable = nn.functional.relu,
     ) -> None:
+        """Initialize GATv2Projection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            num_layers: Number of GATv2 layers.
+            heads: Number of attention heads per GATv2 layer.
+            edge_dim: Edge feature dimensionality.
+            concat: Whether to concatenate head outputs.
+            dropout: Dropout probability.
+            activation: Activation function applied after each layer.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=GATv2Message(
                 hidden_size=hidden_size,
                 num_layers=num_layers,
@@ -108,12 +169,25 @@ class GATv2Projection(GProjection):
 
 
 class SimpleGATv2Projection(GProjection):
-    """GProjection pre-wired with a plain GATv2Message."""
+    """GProjection pre-wired with a plain GATv2Message.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads per GATv2 layer.
+        edge_dim: Edge feature dimensionality.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function applied after each layer.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int,
         num_layers: int,
         heads: int = 1,
@@ -122,9 +196,24 @@ class SimpleGATv2Projection(GProjection):
         dropout: float = 0.0,
         activation: Callable = nn.functional.relu,
     ) -> None:
+        """Initialize SimpleGATv2Projection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            num_layers: Number of GATv2 layers.
+            heads: Number of attention heads per GATv2 layer.
+            edge_dim: Edge feature dimensionality.
+            concat: Whether to concatenate head outputs.
+            dropout: Dropout probability.
+            activation: Activation function applied after each layer.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=SimpleGATv2Message(
                 hidden_size=hidden_size,
                 num_layers=num_layers,
@@ -138,12 +227,25 @@ class SimpleGATv2Projection(GProjection):
 
 
 class ScaledGATv2Projection(ScaledGProjection):
-    """ScaledGProjection pre-wired with a residual GATv2Message."""
+    """ScaledGProjection pre-wired with a residual GATv2Message.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads per GATv2 layer.
+        edge_dim: Edge feature dimensionality.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function applied after each layer.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int,
         num_layers: int,
         heads: int = 1,
@@ -152,9 +254,24 @@ class ScaledGATv2Projection(ScaledGProjection):
         dropout: float = 0.0,
         activation: Callable = nn.functional.relu,
     ) -> None:
+        """Initialize ScaledGATv2Projection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            num_layers: Number of GATv2 layers.
+            heads: Number of attention heads per GATv2 layer.
+            edge_dim: Edge feature dimensionality.
+            concat: Whether to concatenate head outputs.
+            dropout: Dropout probability.
+            activation: Activation function applied after each layer.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=GATv2Message(
                 hidden_size=hidden_size,
                 num_layers=num_layers,
@@ -168,12 +285,25 @@ class ScaledGATv2Projection(ScaledGProjection):
 
 
 class ScaledSimpleGATv2Projection(ScaledGProjection):
-    """ScaledGProjection pre-wired with a plain GATv2Message."""
+    """ScaledGProjection pre-wired with a plain GATv2Message.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        num_layers: Number of GATv2 layers.
+        heads: Number of attention heads per GATv2 layer.
+        edge_dim: Edge feature dimensionality.
+        concat: Whether to concatenate head outputs.
+        dropout: Dropout probability.
+        activation: Activation function applied after each layer.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int,
         num_layers: int,
         heads: int = 1,
@@ -182,9 +312,24 @@ class ScaledSimpleGATv2Projection(ScaledGProjection):
         dropout: float = 0.0,
         activation: Callable = nn.functional.relu,
     ) -> None:
+        """Initialize ScaledSimpleGATv2Projection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            num_layers: Number of GATv2 layers.
+            heads: Number of attention heads per GATv2 layer.
+            edge_dim: Edge feature dimensionality.
+            concat: Whether to concatenate head outputs.
+            dropout: Dropout probability.
+            activation: Activation function applied after each layer.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=SimpleGATv2Message(
                 hidden_size=hidden_size,
                 num_layers=num_layers,

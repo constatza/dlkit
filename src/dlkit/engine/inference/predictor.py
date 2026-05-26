@@ -28,6 +28,21 @@ from .transforms import load_transforms_from_checkpoint
 logger = get_logger(__name__)
 
 
+def _feature_names_from_geometry(geometry_data: dict) -> tuple[str, ...]:
+    """Derive ordered feature names from serialized GeometrySpec data.
+
+    Extracts the ``name`` of each field in the geometry, preserving insertion order.
+
+    Args:
+        geometry_data: Dict produced by ``dataclasses.asdict(GeometrySpec)``.
+
+    Returns:
+        Tuple of feature name strings (empty if no named fields).
+    """
+    fields = geometry_data.get("fields", [])
+    return tuple(f["name"] for f in fields if f.get("name"))
+
+
 class PredictorError(WorkflowError):
     """Base exception for predictor-related errors."""
 
@@ -175,8 +190,12 @@ class CheckpointPredictor(IPredictor):
 
         # Extract feature_names and predict_target_key from checkpoint metadata
         meta = checkpoint.get("dlkit_metadata", {})
-        raw_fn = meta.get("feature_names", ())
-        feature_names: tuple[str, ...] = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
+        geometry_data = meta.get("geometry", {})
+        if geometry_data:
+            feature_names: tuple[str, ...] = _feature_names_from_geometry(geometry_data)
+        else:
+            raw_fn = meta.get("feature_names", ())
+            feature_names = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
         predict_target_key: str = str(meta.get("predict_target_key", ""))
 
         # Create model state

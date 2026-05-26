@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from tensordict import TensorDict
 
-from dlkit.common.shapes import ShapeSummary
 from dlkit.engine.workflows.factories.build_factory import BuildFactory, WorkflowSettings
 from dlkit.engine.workflows.factories.model_detection import ModelType
 from dlkit.infrastructure.config.core.context import BuildContext
@@ -75,10 +74,10 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
     return settings
 
 
-def test_build_factory_flexible_infers_shape_and_uses_wrapper(
+def test_build_factory_flexible_uses_contract_pipeline(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
-    # TensorDict-returning dataset so infer_shapes_from_dataset works
+    # TensorDict-returning dataset so contract inference can sample from it.
     import torch
 
     batch_sample = TensorDict(
@@ -100,17 +99,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
 
     monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
 
-    # Force detection to treat the dummy model as shape-aware so shape inference runs.
-    # Patch in flexible_build_strategy's own namespace (it imports detect_model_type directly).
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.flexible_build_strategy.detect_model_type",
-        lambda *_: ModelType.SHAPE_AWARE_DLKIT,
-    )
-
-    captured_shape_summary: dict[str, Any] = {}
+    captured_wrapper_kwargs: dict[str, Any] = {}
 
     def _capture_wrapper(*_, **kwargs):
-        captured_shape_summary["summary"] = kwargs.get("shape_summary")
+        captured_wrapper_kwargs.update(kwargs)
         return _FakeModel()
 
     # Patch WrapperFactory.create_standard_wrapper on the class object itself —
@@ -126,10 +118,10 @@ def test_build_factory_flexible_infers_shape_and_uses_wrapper(
     assert isinstance(comps.model, _FakeModel)
     assert comps.trainer is None  # inference mode
     assert comps.meta.get("dataset_type") == "flexible"
-    assert isinstance(comps.shape_spec, ShapeSummary)
-    assert comps.shape_spec.in_shapes == ((8, 3),)
-    assert comps.shape_spec.out_shapes == ((1,),)
-    assert captured_shape_summary["summary"] is comps.shape_spec
+    # shape_spec is no longer populated by FlexibleBuildStrategy — contract is the only path.
+    assert comps.shape_spec is None
+    # shape_summary must not be passed to create_standard_wrapper.
+    assert "shape_summary" not in captured_wrapper_kwargs
 
 
 def test_build_factory_selects_graph_strategy_and_passes_shape(

@@ -6,7 +6,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from dlkit.common.shapes import ShapeSummary
+from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn import (
     ScaleEquivariantConstantWidthFactorizedFFNN,
     ScaleEquivariantConstantWidthFFNN,
@@ -147,23 +147,23 @@ def test_scale_equivariant_constant_width_simple_ffnn_is_scale_equivariant_for_p
         (ScaleEquivariantEmbeddedSimpleFactorizedFFNN, {"hidden_size": 8, "num_layers": 2}),
     ],
 )
-def test_scale_equivariant_from_shape_ignores_duplicate_feature_kwargs(
+def test_from_contract_ignores_duplicate_feature_kwargs(
     model_cls: type[torch.nn.Module], kwargs: dict[str, object]
 ) -> None:
-    shape = ShapeSummary(in_shapes=((3,),), out_shapes=((2,),))
+    contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
 
     module = cast(
         Any,
-        model_cls.from_shape(
-            shape,
+        model_cls.from_contract(
+            contract,
             in_features=99,
             out_features=101,
             **kwargs,
         ),
     )
 
-    assert module.base_model.embedding_layer.in_features == shape.in_features
-    assert module.base_model.regression_layer.out_features == shape.out_features
+    assert module.base_model.embedding_layer.in_features == contract.in_shape[0]
+    assert module.base_model.regression_layer.out_features == contract.out_shape[0]
 
 
 class TestSEConstantWidthFFNNOptionalHiddenSize:
@@ -239,7 +239,7 @@ class TestGroupBInFeaturesRename:
             cls(size=4, num_layers=2)
 
 
-class TestGroupBFromShape:
+class TestGroupBFromContract:
     @pytest.mark.parametrize(
         "cls",
         [
@@ -251,10 +251,10 @@ class TestGroupBFromShape:
             ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
         ],
     )
-    def test_from_shape_injects_in_features(self, cls: type, square_input: torch.Tensor) -> None:
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = cls.from_shape(shape, num_layers=2)
-        assert m(square_input).shape == (3, 4)
+    def test_from_contract_injects_in_features(self, cls: type, square_input: torch.Tensor) -> None:
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = cls.from_contract(contract, num_layers=2)
+        assert m(square_input).shape == (square_input.shape[0], contract.in_shape[0])
 
     @pytest.mark.parametrize(
         "cls",
@@ -267,9 +267,9 @@ class TestGroupBFromShape:
             ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
         ],
     )
-    def test_from_shape_ignores_explicit_in_features_override(
+    def test_from_contract_ignores_explicit_in_features_override(
         self, cls: type, square_input: torch.Tensor
     ) -> None:
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = cls.from_shape(shape, in_features=99, num_layers=2)
-        assert m(square_input).shape == (3, 4)
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = cls.from_contract(contract, in_features=99, num_layers=2)
+        assert m(square_input).shape == (square_input.shape[0], contract.in_shape[0])

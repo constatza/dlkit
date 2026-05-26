@@ -20,6 +20,37 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _shape_spec_to_contract(shape_spec: Any) -> Any:
+    """Convert a ShapeSummary to a ModelContractSpec.
+
+    Temporary bridge until Steps 7-9 replace this with GeometrySpec → resolve_contract().
+    """
+    if shape_spec is None:
+        return None
+    from dlkit.domain.nn.contracts import BranchTrunkSpec, GridOperatorSpec, TabulaRSpec
+
+    try:
+        in_shapes = shape_spec.in_shapes
+        out_shapes = shape_spec.out_shapes
+        if len(in_shapes) >= 2:
+            return BranchTrunkSpec(
+                branch_shape=in_shapes[0],
+                query_shape=in_shapes[1],
+                out_features=out_shapes[0][0],
+            )
+        in_shape = in_shapes[0]
+        out_shape = out_shapes[0]
+        if len(in_shape) == 1:
+            return TabulaRSpec(in_shape=in_shape, out_shape=out_shape)
+        return GridOperatorSpec(
+            in_channels=in_shape[0],
+            out_channels=out_shape[0],
+            spatial_shape=in_shape[1:],
+        )
+    except AttributeError, IndexError, TypeError:
+        return None
+
+
 def build_model_from_checkpoint(
     checkpoint: dict[str, Any],
     shape_spec: ShapeSummary | None = None,
@@ -55,7 +86,8 @@ def build_model_from_checkpoint(
             ) from exc
 
     hyperparams = extract_init_kwargs(model_settings)
-    model = _build_model(cast("type[torch.nn.Module]", model_cls), shape_spec, hyperparams)
+    contract = _shape_spec_to_contract(shape_spec)
+    model = _build_model(cast("type[torch.nn.Module]", model_cls), hyperparams, contract=contract)
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
     try:

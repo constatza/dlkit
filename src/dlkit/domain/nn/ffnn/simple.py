@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal, Self
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.primitives import DenseBlock
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 
 class SimpleFeedForwardNN(nn.Module):
@@ -44,13 +42,23 @@ class SimpleFeedForwardNN(nn.Module):
         self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> SimpleFeedForwardNN:
-        """Build the network from a dataset-derived flat shape summary."""
-        return cls(
-            in_features=shape.in_features,
-            out_features=shape.out_features,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the network from a model contract spec.
+
+        Args:
+            contract: A ModelContractSpec variant; must be TabulaRSpec.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)

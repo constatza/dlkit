@@ -67,14 +67,14 @@ class DLKitCheckpointSerializer:
             meta = self._checkpoint_metadata
             dlkit_metadata["model_settings"] = self._serialize_model_settings(meta.model_settings)
             dlkit_metadata["entry_configs"] = self._serialize_entry_configs(meta.entry_configs)
-            dlkit_metadata["shape_summary"] = self._compute_shape_summary(meta.shape_summary)
+            dlkit_metadata["geometry"] = self._serialize_geometry(meta.geometry)
             dlkit_metadata["feature_names"] = list(meta.feature_names)
             dlkit_metadata["predict_target_key"] = meta.predict_target_key
             dlkit_metadata["model_family"] = self._detect_model_family()
         else:
             dlkit_metadata["model_settings"] = {}
             dlkit_metadata["entry_configs"] = []
-            dlkit_metadata["shape_summary"] = {}
+            dlkit_metadata["geometry"] = {}
             dlkit_metadata["model_family"] = "external"
 
         checkpoint["dlkit_metadata"] = dlkit_metadata
@@ -192,21 +192,20 @@ class DLKitCheckpointSerializer:
         except Exception:
             return []
 
-    def _compute_shape_summary(self, shape_summary: Any) -> dict[str, Any]:
-        """Serialize ShapeSummary for checkpoint persistence.
+    def _serialize_geometry(self, geometry: Any) -> dict[str, Any]:
+        """Serialize GeometrySpec for checkpoint persistence.
 
         Args:
-            shape_summary: ShapeSummary instance or None.
+            geometry: GeometrySpec instance or None.
 
         Returns:
-            Dict with in_shapes/out_shapes or empty dict.
+            Dict representation of the geometry spec, or empty dict.
         """
-        if shape_summary is None:
+        if geometry is None:
             return {}
         try:
-            return {
-                "in_shapes": [list(s) for s in shape_summary.in_shapes],
-                "out_shapes": [list(s) for s in shape_summary.out_shapes],
-            }
+            import dataclasses
+
+            return dataclasses.asdict(geometry)
         except Exception:
             return {}

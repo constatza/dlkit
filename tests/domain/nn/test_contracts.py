@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 from typing import Any, Self
-from unittest.mock import MagicMock
 
 import pytest
 import torch.nn as nn
@@ -239,47 +238,3 @@ class TestBuildModelContractPath:
     def test_empty_kwargs_defaults_to_empty_dict(self, tabular_spec: TabulaRSpec) -> None:
         model = build_model(_ContractConsumerModel, contract=tabular_spec)
         assert model.received_kwargs == {}
-
-
-# ---------------------------------------------------------------------------
-# build_model — legacy shape path still works
-# ---------------------------------------------------------------------------
-
-
-class _ShapeConsumerModel(_MinimalModule):
-    """nn.Module that implements the legacy from_shape interface."""
-
-    received_shape: Any = None
-
-    @classmethod
-    def from_shape(cls, shape: Any, **kwargs: Any) -> Self:
-        instance = cls()
-        instance.received_shape = shape
-        return instance
-
-
-class TestBuildModelShapePath:
-    def test_legacy_from_shape_still_called(self) -> None:
-        fake_shape = MagicMock()
-        model = build_model(_ShapeConsumerModel, shape=fake_shape)
-        assert isinstance(model, _ShapeConsumerModel)
-        assert model.received_shape is fake_shape
-
-    def test_shape_ignored_when_no_from_shape(self) -> None:
-        fake_shape = MagicMock()
-        model = build_model(_NoContractModel, shape=fake_shape, kwargs={"hidden": 8})
-        assert isinstance(model, _NoContractModel)
-        assert model.hidden == 8
-
-    def test_contract_takes_priority_over_shape(self, tabular_spec: TabulaRSpec) -> None:
-        """When both contract and shape are given, contract wins for ContractConsumer."""
-
-        class _BothConsumer(_ContractConsumerModel, _ShapeConsumerModel):
-            pass
-
-        fake_shape = MagicMock()
-        model = build_model(_BothConsumer, shape=fake_shape, contract=tabular_spec)
-        assert isinstance(model, _BothConsumer)
-        assert model.received_contract is tabular_spec
-        # from_shape should NOT have been called
-        assert model.received_shape is None

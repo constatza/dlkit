@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import torch
 from torch import Tensor, nn
 
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
+from dlkit.domain.nn.contracts import TabulaRSpec
 
 DEFAULT_SCALE_EQUIVARIANT_NORM = "l2"
 DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN = 10.0
@@ -70,15 +69,21 @@ class ScaleEquivariantWrapper(nn.Module):
         return x_scaled
 
 
-def shape_aware_kwargs(shape: ShapeSummary, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Merge explicit kwargs with shape-derived in/out feature sizes."""
-    shape_kwargs = dict(kwargs)
-    shape_kwargs.pop("in_features", None)
-    shape_kwargs.pop("out_features", None)
+def contract_aware_kwargs(contract: TabulaRSpec, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Merge explicit kwargs with contract-derived in/out feature sizes.
+
+    Args:
+        contract: A TabulaRSpec providing in_shape and out_shape.
+        kwargs: Additional keyword arguments; in_features/out_features are stripped.
+
+    Returns:
+        A dict with in_features and out_features from the contract, plus remaining kwargs.
+    """
+    filtered = {k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")}
     return {
-        "in_features": shape.in_features,
-        "out_features": shape.out_features,
-        **shape_kwargs,
+        "in_features": contract.in_shape[0],
+        "out_features": contract.out_shape[0],
+        **filtered,
     }
 
 
@@ -86,5 +91,5 @@ __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN",
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
     "ScaleEquivariantWrapper",
-    "shape_aware_kwargs",
+    "contract_aware_kwargs",
 ]

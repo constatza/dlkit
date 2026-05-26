@@ -5,8 +5,6 @@ from __future__ import annotations
 from torch import nn
 from torch_geometric.typing import Tensor
 
-from dlkit.common.shapes import ShapeSpecProtocol
-
 from .base import BaseGraphNetwork
 from .projections import SkipProjection
 
@@ -17,29 +15,45 @@ __all__ = [
 
 
 class ProjectionNetwork(BaseGraphNetwork):
-    """Common projection network foundation without normalization."""
+    """Common projection network foundation without normalization.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+        message_module: Optional message-passing module.
+        input_projection: Optional custom input projection module.
+        output_projection: Optional custom output projection module.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int,
+        edge_dim: int | None = None,
         message_module: nn.Module | None = None,
         input_projection: nn.Module | None = None,
         output_projection: nn.Module | None = None,
     ):
-        super().__init__(unified_shape=unified_shape)
+        """Initialize ProjectionNetwork.
 
-        in_dim = self.get_node_feature_dim()
-        if in_dim is None:
-            raise ValueError("Shape spec must contain 'x' (node features) dimension")
-
-        out_shape = unified_shape.get_shape("y")
-        out_dim = out_shape[-1] if out_shape else 1
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+            message_module: Optional message-passing module.
+            input_projection: Optional custom input projection module.
+            output_projection: Optional custom output projection module.
+        """
+        super().__init__(in_channels=in_channels, out_channels=out_channels, edge_dim=edge_dim)
 
         activation = nn.GELU
         self._in_proj = input_projection or SkipProjection(
-            in_features=in_dim,
+            in_features=in_channels,
             hidden_features=hidden_size,
             out_features=hidden_size,
             num_layers=2,
@@ -48,7 +62,7 @@ class ProjectionNetwork(BaseGraphNetwork):
         self._out_proj = output_projection or SkipProjection(
             in_features=hidden_size,
             hidden_features=hidden_size,
-            out_features=out_dim,
+            out_features=out_channels,
             num_layers=2,
             activation=activation,
         )
@@ -61,6 +75,16 @@ class ProjectionNetwork(BaseGraphNetwork):
         edge_index: Tensor,
         edge_attr: Tensor | None = None,
     ) -> Tensor:
+        """Forward pass through input projection, message passing, and output projection.
+
+        Args:
+            x: Node feature tensor.
+            edge_index: Edge connectivity tensor (2 × num_edges).
+            edge_attr: Optional edge attribute tensor.
+
+        Returns:
+            Output tensor from graph processing.
+        """
         x = self._in_proj(x)
         x = self._apply_message_module(x, edge_index, edge_attr)
         return self._out_proj(x)
@@ -77,20 +101,45 @@ class ProjectionNetwork(BaseGraphNetwork):
 
 
 class GProjection(ProjectionNetwork):
-    """Projection network without feature scaling."""
+    """Projection network without feature scaling.
+
+    Args:
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        hidden_size: Width of the hidden projection layers.
+        edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+        message_module: Optional message-passing module.
+        input_projection: Optional custom input projection module.
+        output_projection: Optional custom output projection module.
+    """
 
     def __init__(
         self,
         *,
-        unified_shape: ShapeSpecProtocol,
+        in_channels: int,
+        out_channels: int,
         hidden_size: int = 64,
+        edge_dim: int | None = None,
         message_module: nn.Module | None = None,
         input_projection: nn.Module | None = None,
         output_projection: nn.Module | None = None,
     ):
+        """Initialize GProjection.
+
+        Args:
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            hidden_size: Width of the hidden projection layers.
+            edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+            message_module: Optional message-passing module.
+            input_projection: Optional custom input projection module.
+            output_projection: Optional custom output projection module.
+        """
         super().__init__(
-            unified_shape=unified_shape,
+            in_channels=in_channels,
+            out_channels=out_channels,
             hidden_size=hidden_size,
+            edge_dim=edge_dim,
             message_module=message_module,
             input_projection=input_projection,
             output_projection=output_projection,

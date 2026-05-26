@@ -116,7 +116,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        model = _build_model_from_settings(model_settings, shape_summary)
+        model = _build_model_from_settings(model_settings)
         supervision_builder = FlowMatchingSupervisionBuilder(
             x1_key=x1_key,
             time_sampler=UniformTimeSampler(),
@@ -159,9 +159,8 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             model_settings=model_settings,
             wrapper_settings=wrapper_settings,
             entry_configs=entry_configs,
-            feature_names=(x1_key,),
             predict_target_key="ut",
-            shape_summary=shape_summary,
+            geometry=None,
             output_spec=output_spec,
         )
         model_wrapper = FlowMatchingWrapper(

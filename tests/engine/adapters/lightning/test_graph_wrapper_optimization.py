@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from dlkit.domain.shapes import ModelFamily, create_shape_spec
 from dlkit.engine.adapters.lightning.graph import GraphLightningWrapper
 from dlkit.engine.training.optimization.controllers import ManualOptimizationController
 from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
@@ -41,19 +40,14 @@ def sequential_graph_policy() -> OptimizerPolicySettings:
 
 
 def _make_graph_wrapper(policy: OptimizerPolicySettings) -> GraphLightningWrapper:
-    """Build a graph wrapper with explicit shape metadata."""
-    shape_spec = create_shape_spec(
-        shapes={"x": (3,), "y": (2,)},
-        default_input="x",
-        default_output="y",
-        model_family=ModelFamily.GRAPH,
-    )
+    """Build a graph wrapper with explicit channel dimensions."""
     model_settings = ModelComponentSettings.model_validate(
         {
             "name": "GProjection",
             "module_path": "dlkit.domain.nn.graph.projection_networks",
             "hidden_size": 4,
-            "unified_shape": shape_spec,
+            "in_channels": 3,
+            "out_channels": 2,
         }
     )
     wrapper_settings = WrapperComponentSettings(optimizer=policy)

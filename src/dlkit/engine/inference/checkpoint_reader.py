@@ -146,7 +146,10 @@ def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResu
             has_model_settings = True
         except WorkflowError:
             pass
-        if "dlkit_metadata" in checkpoint and "shape_summary" in checkpoint["dlkit_metadata"]:
+        if "dlkit_metadata" in checkpoint and bool(
+            checkpoint["dlkit_metadata"].get("geometry")
+            or checkpoint["dlkit_metadata"].get("shape_summary")
+        ):
             has_shape_metadata = True
     except Exception as exc:
         logger.error("Checkpoint validation failed: {}", exc)
@@ -178,7 +181,7 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
         metadata = checkpoint["dlkit_metadata"]
         model_family = metadata.get("model_family")
         wrapper_type = metadata.get("wrapper_type")
-        has_shape_spec = "shape_summary" in metadata
+        has_shape_spec = bool(metadata.get("geometry") or metadata.get("shape_summary"))
         has_model_settings = "model_settings" in metadata
 
     state_dict = extract_state_dict(checkpoint)

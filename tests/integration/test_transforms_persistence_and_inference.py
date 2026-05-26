@@ -82,26 +82,30 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
 
 
 def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
-    from dlkit.common.shapes import ShapeSummary
+    from dlkit.common.geometry import FieldRole, FieldSpec, GeometrySpec
     from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
 
+    # Include in_features and out_features explicitly so the model can be rebuilt
+    # from checkpoint kwargs alone (without shape bridge).
     model_settings = ModelComponentSettings(
         name=MODEL_NAME,
         module_path=MODEL_MODULE_PATH,
+        in_features=4,
+        out_features=4,
         hidden_size=4,
         num_layers=1,
     )
     wrapper_settings = WrapperComponentSettings()
 
-    # x/y shapes provided by FlexibleDataset are 1D (feature dimension = 4)
-    shape_summary = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
+    # Geometry stores field metadata so inference can recover feature_names.
+    geometry = GeometrySpec(fields=(FieldSpec(name="x", shape=(4,), role=FieldRole.FEATURE),))
 
     components = build_wrapper_components(wrapper_settings, entry_cfgs)
     wrapper = StandardLightningWrapper(
         settings=wrapper_settings,
         model_settings=model_settings,
         components=components,
-        shape_summary=shape_summary,
+        geometry=geometry,
         entry_configs=entry_cfgs,
     )
     assert isinstance(wrapper.model, ConstantWidthFFNN)
@@ -202,12 +206,12 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     trainer.save_checkpoint(ckpt_path)
     assert ckpt_path.exists()
 
-    from dlkit.common.shapes import ShapeSummary
-
     _settings = WrapperComponentSettings()
     _model_settings = ModelComponentSettings(
         name=MODEL_NAME,
         module_path=MODEL_MODULE_PATH,
+        in_features=4,
+        out_features=4,
         hidden_size=4,
         num_layers=1,
     )
@@ -215,7 +219,6 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
         str(ckpt_path),
         settings=_settings,
         model_settings=_model_settings,
-        shape_summary=ShapeSummary(in_shapes=((4,),), out_shapes=((4,),)),
         entry_configs=entries,
         components=build_wrapper_components(_settings, entries),
         strict=False,

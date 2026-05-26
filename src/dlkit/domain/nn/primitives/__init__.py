@@ -32,7 +32,7 @@ from .scale_equivariant import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ScaleEquivariantWrapper,
-    shape_aware_kwargs,
+    contract_aware_kwargs,
 )
 from .skip import (
     SkipConnection,
@@ -66,7 +66,7 @@ __all__ = [
     "SymmetricLinear",
     "UVGate",
     "ScaleEquivariantWrapper",
-    "shape_aware_kwargs",
+    "contract_aware_kwargs",
     "build_conv1d_skip_layer",
     "build_conv2d_skip_layer",
     "build_linear_skip_layer",

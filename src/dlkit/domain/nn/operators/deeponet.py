@@ -21,16 +21,14 @@ Two classes are provided:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import Any, Self
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import BranchTrunkSpec, ModelContractSpec
 from dlkit.domain.nn.ffnn.residual import FeedForwardNN
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 
 class DeepONet(nn.Module):
@@ -184,16 +182,12 @@ class MLPDeepONet(DeepONet):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> MLPDeepONet:
-        """Build the operator from sensor and query-coordinate shapes."""
-        if len(shape.in_shapes) < 2:
-            raise ValueError(
-                "MLPDeepONet.from_shape() requires two input shapes: "
-                "sensor values and query coordinates."
-            )
-        return cls(
-            in_features=shape.in_shapes[0][0],
-            n_coords=shape.in_shapes[1][-1],
-            out_features=shape.out_features,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the operator from a model contract spec."""
+        match contract:
+            case BranchTrunkSpec(branch_shape=b, query_shape=q, out_features=o):
+                return cls(in_features=b[0], n_coords=q[-1], out_features=o, **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires BranchTrunkSpec, got {type(contract).__name__}"
+                )

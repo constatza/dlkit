@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import Any, Self
 
 import torch
 from torch import nn
 
 from dlkit.domain.nn.cae.base import CAE
+from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
 from dlkit.domain.nn.encoder.latent import (
     TensorToVectorBlock,
     VectorToTensorBlock,
@@ -14,9 +15,6 @@ from dlkit.domain.nn.encoder.latent import (
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 
 class SkipCAE1d(CAE):
@@ -82,13 +80,15 @@ class SkipCAE1d(CAE):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> SkipCAE1d:
-        """Build the autoencoder from a 1-D convolutional shape summary."""
-        return cls(
-            in_channels=shape.in_channels,
-            in_length=shape.in_length,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the autoencoder from a model contract spec."""
+        match contract:
+            case GridOperatorSpec(in_channels=c, spatial_shape=spatial):
+                return cls(in_channels=c, in_length=spatial[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires GridOperatorSpec, got {type(contract).__name__}"
+                )
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode input to latent space.

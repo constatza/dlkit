@@ -23,7 +23,7 @@ from dlkit.infrastructure.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.infrastructure.config.data_entries import DataEntry, is_target_entry
 
 from .base import CoreLightningWrapper, _build_model_from_settings
 
@@ -56,7 +56,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        shape_summary: Any = None,
+        geometry: Any = None,
         components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
@@ -69,7 +69,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations.
-            shape_summary: Shape summary from dataset inference (optional).
+            geometry: GeometrySpec from dataset inference (optional).
             components: Pre-built WrapperComponents containing loss, metrics, transforms,
                 optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule.
@@ -77,21 +77,19 @@ class GraphLightningWrapper(CoreLightningWrapper):
         entry_configs = entry_configs or ()
 
         # Build model and value objects before calling super().__init__()
-        model = _build_model_from_settings(model_settings, shape_summary)
+        model = _build_model_from_settings(model_settings)
 
         # Use injected components
         _loss_function = components.loss_fn
         _val_metrics = MetricCollection([r.metric for r in components.val_metric_routes])
         _test_metrics = MetricCollection([r.metric for r in components.test_metric_routes])
 
-        feature_entries = [e for e in entry_configs if is_feature_entry(e)]
         checkpoint_metadata = WrapperCheckpointMetadata(
             model_settings=model_settings,
             wrapper_settings=settings,
             entry_configs=entry_configs,
-            feature_names=tuple(e.name for e in feature_entries if e.name is not None),
             predict_target_key="",
-            shape_summary=shape_summary,
+            geometry=geometry,
         )
 
         # Graph wrappers use the same optimization-controller selection rules

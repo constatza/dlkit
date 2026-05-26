@@ -11,17 +11,15 @@ states against the original features.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, Self, TypeVar
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer
 
 _GateT = TypeVar("_GateT", bound=nn.Module)
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 
 class GatedMLP(nn.Module):
@@ -104,16 +102,21 @@ class GatedMLP(nn.Module):
         return self.output(h)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        """Build a :class:`GatedMLP` from a dataset-derived shape summary.
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build a :class:`GatedMLP` from a model contract spec.
 
         Args:
-            shape: Shape summary providing ``in_features`` and
-                ``out_features``.
+            contract: A ModelContractSpec variant; must be TabulaRSpec.
             **kwargs: Additional keyword arguments forwarded to
                 :meth:`__init__`.
 
         Returns:
             Constructed :class:`GatedMLP`.
         """
-        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )

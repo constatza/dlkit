@@ -97,6 +97,8 @@ class WrapperFactory:
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents | None = None,
+        contract: Any = None,
+        geometry: Any = None,
         **kwargs: Any,
     ) -> StandardLightningWrapper:
         """Create a standard Lightning wrapper for tensor/TensorDict-based models.
@@ -106,6 +108,8 @@ class WrapperFactory:
             settings: Wrapper configuration settings.
             entry_configs: Data entry configurations.
             components: Pre-built WrapperComponents (required).
+            contract: Optional ModelContractSpec forwarded to model construction.
+            geometry: Optional GeometrySpec for checkpoint metadata.
             **kwargs: Additional arguments passed to wrapper.
 
         Returns:
@@ -124,6 +128,8 @@ class WrapperFactory:
             settings=settings,
             components=components,
             entry_configs=entry_configs or (),
+            contract=contract,
+            geometry=geometry,
             **kwargs,
         )
 

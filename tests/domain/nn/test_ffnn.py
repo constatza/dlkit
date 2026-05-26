@@ -10,7 +10,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.common.shapes import ShapeSummary
+from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.ffnn.linear import (
     FactorizedLinearNetwork,
@@ -367,16 +367,19 @@ class TestFactorizedLinearNetwork:
         """self.linear should be a FactorizedLinear instance."""
         assert isinstance(factorized_linear_net.linear, FactorizedLinear)
 
-    def test_from_shape(self, batch_size: int) -> None:
-        """from_shape should wire in_features and out_features from ShapeSummary."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        m = FactorizedLinearNetwork.from_shape(shape)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 3)
+    def test_from_contract(self, batch_size: int) -> None:
+        """from_contract should wire in_features and out_features from TabulaRSpec."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        m = FactorizedLinearNetwork.from_contract(contract)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
-    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
-        """from_shape should forward extra kwargs to __init__."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        m = FactorizedLinearNetwork.from_shape(shape, bias=False)
+    def test_from_contract_respects_kwargs(self, batch_size: int) -> None:
+        """from_contract should forward extra kwargs to __init__."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        m = FactorizedLinearNetwork.from_contract(contract, bias=False)
         assert m.linear.bias is None
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
@@ -410,22 +413,25 @@ class TestSymmetricLinearNetwork:
         with pytest.raises(ValueError, match="in_features == out_features"):
             SymmetricLinearNetwork(in_features=3, out_features=2)
 
-    def test_from_shape(self, batch_size: int) -> None:
-        """from_shape should wire features from ShapeSummary."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SymmetricLinearNetwork.from_shape(shape)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract(self, batch_size: int) -> None:
+        """from_contract should wire features from TabulaRSpec."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SymmetricLinearNetwork.from_contract(contract)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
-    def test_from_shape_raises_on_non_square(self) -> None:
-        """from_shape with mismatched dimensions should raise ValueError."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        with pytest.raises(ValueError, match="in_features == out_features"):
-            SymmetricLinearNetwork.from_shape(shape)
+    def test_from_contract_raises_on_non_square(self) -> None:
+        """from_contract with mismatched dimensions should raise ValueError."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        with pytest.raises(ValueError, match="square contract"):
+            SymmetricLinearNetwork.from_contract(contract)
 
-    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
-        """from_shape should forward extra kwargs."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SymmetricLinearNetwork.from_shape(shape, bias=True)
+    def test_from_contract_respects_kwargs(self, batch_size: int) -> None:
+        """from_contract should forward extra kwargs."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SymmetricLinearNetwork.from_contract(contract, bias=True)
         assert m.linear.bias is not None
 
 
@@ -447,17 +453,20 @@ class TestSPDLinearNetwork:
         with pytest.raises(ValueError, match="in_features == out_features"):
             SPDLinearNetwork(in_features=3, out_features=2)
 
-    def test_from_shape(self, batch_size: int) -> None:
-        """from_shape should wire features from ShapeSummary."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SPDLinearNetwork.from_shape(shape)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract(self, batch_size: int) -> None:
+        """from_contract should wire features from TabulaRSpec."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SPDLinearNetwork.from_contract(contract)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
-    def test_from_shape_raises_on_non_square(self) -> None:
-        """from_shape with mismatched dimensions should raise ValueError."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        with pytest.raises(ValueError, match="in_features == out_features"):
-            SPDLinearNetwork.from_shape(shape)
+    def test_from_contract_raises_on_non_square(self) -> None:
+        """from_contract with mismatched dimensions should raise ValueError."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        with pytest.raises(ValueError, match="square contract"):
+            SPDLinearNetwork.from_contract(contract)
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
         """Gradients should flow through the SPD layer."""
@@ -488,23 +497,29 @@ class TestSymmetricFactorizedLinearNetwork:
         with pytest.raises(ValueError, match="in_features == out_features"):
             SymmetricFactorizedLinearNetwork(in_features=3, out_features=2)
 
-    def test_from_shape(self, batch_size: int) -> None:
-        """from_shape should wire features from ShapeSummary."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SymmetricFactorizedLinearNetwork.from_shape(shape)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract(self, batch_size: int) -> None:
+        """from_contract should wire features from TabulaRSpec."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SymmetricFactorizedLinearNetwork.from_contract(contract)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
-    def test_from_shape_raises_on_non_square(self) -> None:
-        """from_shape with mismatched dimensions should raise ValueError."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        with pytest.raises(ValueError, match="in_features == out_features"):
-            SymmetricFactorizedLinearNetwork.from_shape(shape)
+    def test_from_contract_raises_on_non_square(self) -> None:
+        """from_contract with mismatched dimensions should raise ValueError."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        with pytest.raises(ValueError, match="square contract"):
+            SymmetricFactorizedLinearNetwork.from_contract(contract)
 
-    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
-        """from_shape should forward extra kwargs."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SymmetricFactorizedLinearNetwork.from_shape(shape, std=0.5)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract_respects_kwargs(self, batch_size: int) -> None:
+        """from_contract should forward extra kwargs."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SymmetricFactorizedLinearNetwork.from_contract(contract, std=0.5)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
 
 class TestSPDFactorizedLinearNetwork:
@@ -527,23 +542,29 @@ class TestSPDFactorizedLinearNetwork:
         with pytest.raises(ValueError, match="in_features == out_features"):
             SPDFactorizedLinearNetwork(in_features=3, out_features=2)
 
-    def test_from_shape(self, batch_size: int) -> None:
-        """from_shape should wire features from ShapeSummary."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SPDFactorizedLinearNetwork.from_shape(shape)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract(self, batch_size: int) -> None:
+        """from_contract should wire features from TabulaRSpec."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SPDFactorizedLinearNetwork.from_contract(contract)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
-    def test_from_shape_raises_on_non_square(self) -> None:
-        """from_shape with mismatched dimensions should raise ValueError."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((3,),))
-        with pytest.raises(ValueError, match="in_features == out_features"):
-            SPDFactorizedLinearNetwork.from_shape(shape)
+    def test_from_contract_raises_on_non_square(self) -> None:
+        """from_contract with mismatched dimensions should raise ValueError."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(3,))
+        with pytest.raises(ValueError, match="square contract"):
+            SPDFactorizedLinearNetwork.from_contract(contract)
 
-    def test_from_shape_respects_kwargs(self, batch_size: int) -> None:
-        """from_shape should forward extra kwargs."""
-        shape = ShapeSummary(in_shapes=((4,),), out_shapes=((4,),))
-        m = SPDFactorizedLinearNetwork.from_shape(shape, mean=0.1, std=0.2)
-        assert m(torch.randn(batch_size, 4)).shape == (batch_size, 4)
+    def test_from_contract_respects_kwargs(self, batch_size: int) -> None:
+        """from_contract should forward extra kwargs."""
+        contract = TabulaRSpec(in_shape=(4,), out_shape=(4,))
+        m = SPDFactorizedLinearNetwork.from_contract(contract, mean=0.1, std=0.2)
+        assert m(torch.randn(batch_size, contract.in_shape[0])).shape == (
+            batch_size,
+            contract.out_shape[0],
+        )
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
         """Gradients should flow through the SPD factorized layer."""

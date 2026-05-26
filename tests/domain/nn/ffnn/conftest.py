@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from dlkit.common.shapes import ShapeSummary
+from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.primitives.gated import GLUGate, GRNGate, SwiGLUGate, UVGate
 
 _IN = 4
@@ -44,9 +44,9 @@ def uv_factory():
 
 
 @pytest.fixture
-def shape_summary() -> ShapeSummary:
-    """ShapeSummary matching the standard GatedMLP test dimensions."""
-    return ShapeSummary(in_shapes=((_IN,),), out_shapes=((_OUT,),))
+def tabular_contract() -> TabulaRSpec:
+    """TabulaRSpec matching the standard GatedMLP test dimensions."""
+    return TabulaRSpec(in_shape=(_IN,), out_shape=(_OUT,))
 
 
 @pytest.fixture

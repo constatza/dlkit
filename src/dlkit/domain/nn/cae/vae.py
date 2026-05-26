@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import Any, Self
 
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
 
+from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
 from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 
 def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -139,13 +137,15 @@ class VAE1d(nn.Module):
         self.logvar_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> VAE1d:
-        """Build the VAE from a 1-D convolutional shape summary."""
-        return cls(
-            in_channels=shape.in_channels,
-            in_length=shape.in_length,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the VAE from a model contract spec."""
+        match contract:
+            case GridOperatorSpec(in_channels=c, spatial_shape=spatial):
+                return cls(in_channels=c, in_length=spatial[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires GridOperatorSpec, got {type(contract).__name__}"
+                )
 
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode input to latent distribution parameters.

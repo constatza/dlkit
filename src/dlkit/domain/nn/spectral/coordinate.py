@@ -24,22 +24,19 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from typing import Any, Literal, Self, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ScaleEquivariantWrapper,
-    shape_aware_kwargs,
 )
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
@@ -123,17 +120,23 @@ class FourierFeatureNetwork(nn.Module):
         return self.mlp(encoded)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        """Build from a dataset-derived shape summary.
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build from a model contract spec.
 
         Args:
-            shape: Shape summary with in_features and out_features.
+            contract: A ModelContractSpec variant; must be TabulaRSpec.
             **kwargs: Additional constructor arguments.
 
         Returns:
             Constructed FourierFeatureNetwork.
         """
-        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class MultiresolutionHashEncoding(nn.Module):
@@ -315,8 +318,14 @@ class HashEncodingNetwork(nn.Module):
         return self.mlp(self.encoding(x))
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class Siren(nn.Module):
@@ -390,17 +399,23 @@ class Siren(nn.Module):
         return self.output_layer(x)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        """Build from a dataset-derived shape summary.
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build from a model contract spec.
 
         Args:
-            shape: Shape summary with in_features and out_features.
+            contract: A ModelContractSpec variant; must be TabulaRSpec.
             **kwargs: Additional constructor arguments.
 
         Returns:
             Constructed Siren.
         """
-        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ModifiedMLP(nn.Module):
@@ -467,17 +482,23 @@ class ModifiedMLP(nn.Module):
         return self.output_layer(h)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        """Build from a dataset-derived shape summary.
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build from a model contract spec.
 
         Args:
-            shape: Shape summary with in_features and out_features.
+            contract: A ModelContractSpec variant; must be TabulaRSpec.
             **kwargs: Additional constructor arguments.
 
         Returns:
             Constructed ModifiedMLP.
         """
-        return cls(in_features=shape.in_features, out_features=shape.out_features, **kwargs)
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class _ScaleEquivariantCoordinateBase(ScaleEquivariantWrapper):
@@ -523,8 +544,17 @@ class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantSiren(_ScaleEquivariantCoordinateBase):
@@ -556,8 +586,17 @@ class ScaleEquivariantSiren(_ScaleEquivariantCoordinateBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
@@ -589,5 +628,14 @@ class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )

@@ -24,16 +24,14 @@ parameters:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal, Self
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 # ---------------------------------------------------------------------------
 # Shared spectral-feature helper (pure function, no learnable parameters)
@@ -240,13 +238,15 @@ class FourierEnhancedFFNN(FourierAugmented):
         super().__init__(backbone=backbone, n_modes=n_modes)
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> FourierEnhancedFFNN:
-        """Build the network from a dataset-derived flat shape summary."""
-        return cls(
-            in_features=shape.in_features,
-            out_features=shape.out_features,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the network from a model contract spec."""
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class DualPathFFNN(SpectralDualPath):
@@ -310,10 +310,12 @@ class DualPathFFNN(SpectralDualPath):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> DualPathFFNN:
-        """Build the network from a dataset-derived flat shape summary."""
-        return cls(
-            in_features=shape.in_features,
-            out_features=shape.out_features,
-            **kwargs,
-        )
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Build the network from a model contract spec."""
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )

@@ -15,7 +15,6 @@ import pytest
 import torch
 
 from dlkit.common import TrainingResult
-from dlkit.domain.shapes import ModelFamily, create_shape_spec
 from dlkit.infrastructure.config import (
     DataModuleSettings,
     DatasetSettings,
@@ -348,24 +347,13 @@ def graph_settings(
         ),
     )
 
-    # Create explicit shape spec for graph model
-    # Graph models need: x (node features), y (targets)
-    shape_spec = create_shape_spec(
-        shapes={
-            "x": (NODE_FEATURES,),  # Node feature dimension (batch-free)
-            "y": (TARGET_SIZE,),  # Output dimension (batch-free)
-        },
-        default_input="x",
-        default_output="y",
-        model_family=ModelFamily.GRAPH,  # Specify graph model family
-    )
-
     model = ModelComponentSettings.model_validate(
         {
             "name": "GProjection",
             "module_path": "dlkit.domain.nn.graph.projection_networks",
             "hidden_size": 4,  # Small hidden size for fast testing
-            "unified_shape": shape_spec,  # Provide explicit shape spec
+            "in_channels": NODE_FEATURES,
+            "out_channels": TARGET_SIZE,
         }
     )
 

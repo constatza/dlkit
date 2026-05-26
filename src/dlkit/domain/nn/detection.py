@@ -200,6 +200,5 @@ def requires_shape_spec(model_type: ModelType) -> bool:
     """
     return model_type in {
         ModelType.SHAPE_AWARE_DLKIT,
-        ModelType.GRAPH,
         ModelType.TIMESERIES,
     }

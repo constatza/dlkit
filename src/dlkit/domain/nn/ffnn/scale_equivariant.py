@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import Any, Literal, Self
 
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthSimpleFactorizedFFNN,
@@ -27,11 +28,7 @@ from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ScaleEquivariantWrapper,
-    shape_aware_kwargs,
 )
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
 
 _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
@@ -44,14 +41,20 @@ class _ScaleEquivariantBase(ScaleEquivariantWrapper):
 class _SquareScaleEquivariantBase(_ScaleEquivariantBase):
     """Scale-equivariant wrapper for architecturally-square constrained networks.
 
-    Implements ``ShapeConsumer`` so the build system can inject ``in_features``
-    from dataset shape. Output dimension equals input dimension by construction.
+    Implements ``ContractConsumer`` so the build system can inject ``in_features``
+    from a ``TabulaRSpec``. Output dimension equals input dimension by construction.
     """
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs: Any) -> Self:
-        kwargs["in_features"] = shape.in_features
-        return cls(**kwargs)
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins):
+                kwargs.pop("in_features", None)
+                return cls(in_features=ins[0], **kwargs)  # ty: ignore[unknown-argument]
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 def _default_activation(
@@ -94,8 +97,17 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantConstantWidthFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
@@ -132,8 +144,17 @@ class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantConstantWidthSimpleFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
@@ -167,8 +188,17 @@ class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantFeedForwardNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
@@ -202,8 +232,17 @@ class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantSimpleFeedForwardNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantConstantWidthSPDFFNN(_SquareScaleEquivariantBase):
@@ -473,8 +512,17 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSPDFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
@@ -516,8 +564,17 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSimpleSPDFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -563,8 +620,17 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedSPDFactorizedFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -610,10 +676,17 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(
-        cls, shape: ShapeSummary, **kwargs
-    ) -> ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
@@ -657,8 +730,17 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(cls, shape: ShapeSummary, **kwargs) -> ScaleEquivariantEmbeddedFactorizedFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
 
 
 class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
@@ -702,7 +784,14 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_shape(
-        cls, shape: ShapeSummary, **kwargs
-    ) -> ScaleEquivariantEmbeddedSimpleFactorizedFFNN:
-        return cls(**shape_aware_kwargs(shape, kwargs))
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                filtered = {
+                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
+                }
+                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )

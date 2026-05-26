@@ -7,7 +7,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.common.shapes import ShapeSummary
 from dlkit.domain.nn import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthSimpleFactorizedFFNN,
@@ -34,6 +33,7 @@ from dlkit.domain.nn import (
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
 )
+from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import (
     ConstantWidthParametricFFNN,
     ConstantWidthSimpleParametricFFNN,
@@ -158,11 +158,11 @@ def test_scale_equivariant_embedded_constrained_variants_keep_plain_vs_residual_
         ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ],
 )
-def test_embedded_variants_support_from_shape(model_cls: type[nn.Module]) -> None:
-    shape = ShapeSummary(in_shapes=((3,),), out_shapes=((2,),))
-    model = cast(Any, model_cls).from_shape(shape, hidden_size=4, num_layers=2)
-    x = torch.randn(4, 3)
-    assert model(x).shape == (4, 2)
+def test_embedded_variants_support_from_contract(model_cls: type[nn.Module]) -> None:
+    contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
+    model = cast(Any, model_cls).from_contract(contract, hidden_size=4, num_layers=2)
+    x = torch.randn(4, contract.in_shape[0])
+    assert model(x).shape == (4, contract.out_shape[0])
 
 
 def test_constant_width_parametric_ffnn_is_residual() -> None:

@@ -12,7 +12,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.common.shapes import ShapeSummary
+from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn.gated import GatedMLP
 
 # ---------------------------------------------------------------------------
@@ -161,15 +161,15 @@ class TestGatedMLP:
         out = model(network_input)
         assert out.shape == (network_input.shape[0], _OUT)
 
-    def test_from_shape(
+    def test_from_contract(
         self,
         glu_factory: Callable,
-        shape_summary: ShapeSummary,
+        tabular_contract: TabulaRSpec,
         network_input: torch.Tensor,
     ) -> None:
-        """from_shape classmethod constructs a working GatedMLP."""
-        model = GatedMLP.from_shape(
-            shape_summary,
+        """from_contract classmethod constructs a working GatedMLP."""
+        model = GatedMLP.from_contract(
+            tabular_contract,
             hidden_size=_HIDDEN,
             num_layers=_LAYERS,
             gate_factory=glu_factory,

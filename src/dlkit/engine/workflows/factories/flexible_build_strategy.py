@@ -6,9 +6,13 @@ from typing import Any
 
 from loguru import logger
 
-from dlkit.common.shapes import ShapeSummary
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
+from dlkit.engine.data.geometry import infer_geometry
 from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.workflows.factories.contract_resolver import (
+    ContractInferenceError,
+    resolve_contract,
+)
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
@@ -22,9 +26,7 @@ from .build_strategy import (
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
 from .feature_pipeline import FeaturePipeline
-from .model_detection import detect_model_type, requires_shape_spec
 from .module_defaults import with_runtime_module_defaults
-from .shape_inference_pipeline import ShapeInferencePipeline
 
 
 class FlexibleBuildStrategy(IBuildStrategy):
@@ -34,11 +36,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
         self,
         feature_pipeline: FeaturePipeline | None = None,
         dataset_builder: DatasetBuilder | None = None,
-        shape_inference: ShapeInferencePipeline | None = None,
     ) -> None:
         self._feature_pipeline = feature_pipeline or FeaturePipeline()
         self._dataset_builder = dataset_builder or DatasetBuilder()
-        self._shape_inference = shape_inference or ShapeInferencePipeline()
 
     def can_handle(self, settings: WorkflowSettings) -> bool:
         try:
@@ -104,15 +104,29 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        model_type = detect_model_type(model_settings)
 
-        shape_summary: ShapeSummary | None = None
-        if requires_shape_spec(model_type):
-            shape_summary = self._shape_inference.infer_flexible(
-                model_settings.name,
-                dataset,
-                selection.features,
-                selection.targets,
+        geometry: Any = None
+        contract: Any = None
+        try:
+            geometry = infer_geometry(tuple(selection.features), dataset)
+            output_shapes: tuple[tuple[int, ...], ...] = ()
+            try:
+                from tensordict import TensorDictBase
+
+                dataset_any: Any = dataset
+                sample = dataset_any[0]
+                if isinstance(sample, TensorDictBase) and "targets" in sample.keys():
+                    output_shapes = tuple(
+                        tuple(int(d) for d in v.shape) for v in sample["targets"].values()
+                    )
+            except Exception:
+                pass
+            contract = resolve_contract(geometry, output_shapes)
+        except (ValueError, ContractInferenceError) as exc:
+            logger.warning("Contract inference failed ({}), falling back to shape bridge", exc)
+        except Exception as exc:
+            logger.warning(
+                "Unexpected error during contract inference ({}), model built from kwargs", exc
             )
 
         wrapper_kwargs: dict[str, Any] = {
@@ -128,7 +142,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model = WrapperFactory.create_standard_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
-            shape_summary=shape_summary,
+            contract=contract,
+            geometry=geometry,
             entry_configs=entry_configs,
             components=components,
         )
@@ -136,6 +151,6 @@ class FlexibleBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
-            shape_spec=shape_summary,
+            shape_spec=None,
             meta={"dataset_type": "flexible"},
         )

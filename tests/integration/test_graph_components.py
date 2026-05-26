@@ -33,7 +33,6 @@ from pathlib import Path
 # Note: dlkit high-level APIs (train/infer/optimize) not used due to shape inference gap
 # This satisfies architectural test while documenting the limitation
 import dlkit  # noqa: F401 - imported to satisfy architectural test
-from dlkit.domain.shapes import ModelFamily, create_shape_spec
 
 
 class TestGraphWorkflowIntegration:
@@ -71,29 +70,21 @@ class TestGraphWorkflowIntegration:
         assert hasattr(sample, "edge_index"), "Sample should have edge_index"
         assert hasattr(sample, "y"), "Sample should have targets (y)"
 
-    def test_graph_model_creation_with_shape_spec(self) -> None:
-        """Test that graph models can be created with explicit shape specs.
+    def test_graph_model_creation_with_explicit_channels(self) -> None:
+        """Test that graph models can be created with explicit channel params.
 
         Verifies:
-        - Shape specs can be created for graph models
-        - Models correctly extract dimensions from shape specs
+        - Models accept in_channels and out_channels directly
         - Model architecture matches expected dimensions
         """
         from dlkit.domain.nn.graph.projection_networks import GProjection
 
-        # Create shape spec
-        shape_spec = create_shape_spec(
-            shapes={"x": (3,), "y": (2,)},
-            default_input="x",
-            default_output="y",
-            model_family=ModelFamily.GRAPH,
-        )
+        # Create model with explicit channel dimensions
+        model = GProjection(in_channels=3, out_channels=2, hidden_size=4)
 
-        # Create model
-        model = GProjection(unified_shape=shape_spec, hidden_size=4)
-
-        # Verify dimensions
-        assert model.get_node_feature_dim() == 3, "Node feature dim should be 3"
+        # Verify stored channel dims
+        assert model._in_channels == 3, "in_channels should be 3"
+        assert model._out_channels == 2, "out_channels should be 2"
 
         # Verify model was created with correct architecture
         assert model._in_proj is not None, "Input projection should exist"

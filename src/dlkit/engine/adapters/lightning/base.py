@@ -247,12 +247,17 @@ def _leaf_device(value: Tensor | TensorDict) -> torch.device:
     return cast(Tensor, v).device
 
 
-def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -> nn.Module:
+def _build_model_from_settings(
+    model_settings: Any,
+    *,
+    contract: Any = None,
+) -> nn.Module:
     """Build a PyTorch model from configuration settings.
 
     Args:
         model_settings: Model configuration (ModelComponentSettings).
-        shape_summary: Optional ShapeSummary for shape-aware models.
+        contract: Optional ModelContractSpec. When provided, used directly for model
+            construction.
 
     Returns:
         Instantiated and precision-cast nn.Module.
@@ -281,7 +286,7 @@ def _build_model_from_settings(model_settings: Any, shape_summary: Any = None) -
     else:
         hyperparams = {}
 
-    return build_model(model_cls, shape_summary, hyperparams)
+    return build_model(model_cls, hyperparams, contract=contract)
 
 
 class CoreLightningWrapper(LightningModule, ABC):

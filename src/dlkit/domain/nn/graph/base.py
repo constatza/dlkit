@@ -1,89 +1,63 @@
+from __future__ import annotations
+
 from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, Self
 
 from torch import Tensor, nn
 
-from dlkit.common.shapes import ShapeSpecProtocol
+if TYPE_CHECKING:
+    from dlkit.domain.nn.contracts import ModelContractSpec
 
 
 class BaseGraphNetwork(nn.Module):
     """Abstract base for graph neural networks (PyG-based).
 
     Args:
-        unified_shape: ShapeSpecProtocol containing graph-specific shape information.
-                      For graph networks, shapes typically include:
-                      - 'x': node feature dimensions (batch-free)
-                      - 'edge_index': edge connectivity shape
-                      - 'edge_attr': edge attribute dimensions (if present)
-                      - 'y': output dimensions
-        **kwargs: Additional model-specific parameters
+        in_channels: Number of input node feature channels.
+        out_channels: Number of output node feature channels.
+        edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+        **kwargs: Additional model-specific parameters.
     """
 
-    def __init__(self, *, unified_shape: ShapeSpecProtocol, **kwargs):
-        """Initialize BaseGraphNetwork with shape specification.
+    def __init__(
+        self, *, in_channels: int, out_channels: int, edge_dim: int | None = None, **kwargs
+    ):
+        """Initialize BaseGraphNetwork with explicit channel dimensions.
 
         Args:
-            unified_shape: ShapeSpecProtocol with graph shape information
-            **kwargs: Additional parameters passed to subclasses
+            in_channels: Number of input node feature channels.
+            out_channels: Number of output node feature channels.
+            edge_dim: Edge feature dimensionality; ``None`` if no edge features.
+            **kwargs: Additional parameters passed to subclasses.
         """
         super().__init__()
-        self._unified_shape = unified_shape
+        self._in_channels = in_channels
+        self._out_channels = out_channels
+        self._edge_dim = edge_dim
 
-        # Validate shape immediately
-        if not self.accepts_shape(unified_shape):
-            raise ValueError(
-                f"{self.__class__.__name__} cannot accept the provided shape specification: {unified_shape}"
-            )
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        """Construct the model from a ``GraphContractSpec``.
 
-    def get_unified_shape(self) -> ShapeSpecProtocol:
-        """Get the unified shape specification for this model.
-
-        Returns:
-            The shape specification used to configure this model
-        """
-        return self._unified_shape
-
-    def get_node_feature_dim(self) -> int | None:
-        """Get the node feature dimension from shape spec.
+        Args:
+            contract: A ``ModelContractSpec`` that must be a ``GraphContractSpec``.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
-            Node feature dimension or None if not available
+            A fully constructed instance of this model.
+
+        Raises:
+            TypeError: If ``contract`` is not a ``GraphContractSpec``.
         """
-        shape_spec = self.get_unified_shape()
+        from dlkit.domain.nn.contracts import GraphContractSpec
 
-        # For graphs, node features are typically stored as 'x'
-        node_shape = shape_spec.get_shape("x")
-        return node_shape[-1] if node_shape else None
-
-    def get_edge_feature_dim(self) -> int | None:
-        """Get the edge feature dimension from shape spec.
-
-        Returns:
-            Edge feature dimension or None if not available
-        """
-        shape_spec = self.get_unified_shape()
-
-        # Edge features are typically stored as 'edge_attr'
-        edge_shape = shape_spec.get_shape("edge_attr")
-        return edge_shape[-1] if edge_shape else None
-
-    def accepts_shape(self, shape_spec: ShapeSpecProtocol) -> bool:
-        """Check if this BaseGraphNetwork can accept the given shape specification."""
-        # Graph-specific validation: we typically need node features
-        node_shape = shape_spec.get_shape("x")
-        if node_shape is None:
-            return False
-
-        # Node features should be positive dimension
-        if len(node_shape) == 0 or node_shape[-1] <= 0:
-            return False
-
-        # Validate edge features if present
-        edge_shape = shape_spec.get_shape("edge_attr")
-        if edge_shape is not None:
-            if len(edge_shape) == 0 or edge_shape[-1] <= 0:
-                return False
-
-        return True
+        match contract:
+            case GraphContractSpec(in_channels=c_in, out_channels=c_out, edge_dim=e_dim):
+                return cls(in_channels=c_in, out_channels=c_out, edge_dim=e_dim, **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires GraphContractSpec, got {type(contract).__name__}"
+                )
 
     @abstractmethod
     def forward(

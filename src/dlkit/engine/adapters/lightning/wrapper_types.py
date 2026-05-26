@@ -12,7 +12,7 @@ from .metrics_routing import MetricRoute
 from .model_invoker import ModelOutputSpec
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
+    from dlkit.common.geometry import GeometrySpec
     from dlkit.infrastructure.config import ModelComponentSettings, WrapperComponentSettings
     from dlkit.infrastructure.config.data_entries import DataEntry
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
@@ -23,9 +23,8 @@ def build_checkpoint_metadata(
     model_settings: ModelComponentSettings,
     wrapper_settings: WrapperComponentSettings,
     entry_configs: tuple[DataEntry, ...],
-    feature_entries: list[DataEntry],
     predict_target_key: str,
-    shape_summary: ShapeSummary | None,
+    geometry: GeometrySpec | None,
     output_spec: ModelOutputSpec,
 ) -> WrapperCheckpointMetadata:
     """Build checkpoint metadata from wrapper configuration.
@@ -37,23 +36,19 @@ def build_checkpoint_metadata(
         model_settings: Model configuration.
         wrapper_settings: Wrapper configuration.
         entry_configs: Data entry configurations in config-insertion order.
-        feature_entries: Feature entries filtered from entry_configs.
         predict_target_key: Name of target whose inverse transform applies at predict time.
-        shape_summary: Shape summary from dataset inference, or None.
+        geometry: GeometrySpec from dataset inference, or None.
         output_spec: Model output key specification.
 
     Returns:
         Configured WrapperCheckpointMetadata ready for checkpoint persistence.
     """
-    from .model_invoker import _ordered_model_input_names
-
     return WrapperCheckpointMetadata(
         model_settings=model_settings,
         wrapper_settings=wrapper_settings,
         entry_configs=entry_configs,
-        feature_names=_ordered_model_input_names(feature_entries),
         predict_target_key=predict_target_key,
-        shape_summary=shape_summary,
+        geometry=geometry,
         output_spec=output_spec,
     )
 
@@ -69,19 +64,34 @@ class WrapperCheckpointMetadata:
         model_settings: Model configuration for checkpoint reconstruction.
         wrapper_settings: Wrapper configuration for checkpoint reconstruction.
         entry_configs: Data entry configurations in config order.
-        feature_names: Ordered feature names for inference restore.
         predict_target_key: Name of target whose chain is inverted at predict time.
-        shape_summary: Shape summary from dataset inference, or None.
+        geometry: GeometrySpec from dataset inference, or None.
         output_spec: Model output key spec for checkpoint-driven invoker rebuild.
     """
 
     model_settings: ModelComponentSettings
     wrapper_settings: WrapperComponentSettings
     entry_configs: tuple[DataEntry, ...]
-    feature_names: tuple[str, ...]
     predict_target_key: str
-    shape_summary: ShapeSummary | None = None
+    geometry: GeometrySpec | None = None
     output_spec: ModelOutputSpec = dataclasses.field(default_factory=ModelOutputSpec)
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        """Derive ordered feature names from geometry fields or entry_configs.
+
+        Returns:
+            Tuple of feature name strings in insertion order.
+        """
+        if self.geometry is not None:
+            return tuple(f.name for f in self.geometry.fields)
+        from dlkit.infrastructure.config.data_entries import is_feature_entry
+
+        return tuple(
+            e.name
+            for e in self.entry_configs
+            if is_feature_entry(e) and e.model_input and e.name is not None
+        )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
