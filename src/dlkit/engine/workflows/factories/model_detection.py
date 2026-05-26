@@ -10,7 +10,6 @@ from dlkit.domain.nn.detection import (  # noqa: F401
     ModelType,
     ModelTypeDetectionChain,
     detect_model_type,
-    requires_shape_spec,
 )
 
 

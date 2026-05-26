@@ -58,7 +58,6 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         from dlkit.engine.adapters.lightning.transform_pipeline import NamedBatchTransformer
         from dlkit.engine.adapters.lightning.wrapper_types import WrapperCheckpointMetadata
         from dlkit.engine.data.datasets.flexible import FlexibleDataset
-        from dlkit.engine.data.shape_inference import infer_post_transform_shapes
         from dlkit.infrastructure.io.locations import root as root_path
         from dlkit.infrastructure.io.split_provider import get_or_create_split
 
@@ -105,13 +104,6 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             dataloader=datamodule_settings.dataloader,
         )
         datamodule = FactoryProvider.create_component(datamodule_settings, dm_context)
-
-        try:
-            shape_summary = infer_post_transform_shapes(
-                dataset, configured_features, configured_targets
-            )
-        except Exception:
-            shape_summary = None
 
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
@@ -181,6 +173,5 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             model=model_wrapper,
             datamodule=datamodule,
             trainer=build_trainer(settings),
-            shape_spec=shape_summary,
             meta={"dataset_type": "flow_matching"},
         )

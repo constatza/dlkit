@@ -42,7 +42,6 @@ def mock_components() -> RuntimeComponents:
         model=mock_model,
         datamodule=mock_datamodule,
         trainer=mock_trainer,
-        shape_spec=None,
         meta={},
     )
 

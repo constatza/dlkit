@@ -60,7 +60,6 @@ def build_components():
         model=cast("Any", TestModel()),
         datamodule=Mock(),
         trainer=cast("Any", TestTrainer()),
-        shape_spec=None,
         meta={},
     )
 
@@ -234,7 +233,6 @@ def test_error_handling_integration(build_components):
         model=cast("Any", Mock()),
         datamodule=Mock(),
         trainer=cast("Any", FailingTrainer()),
-        shape_spec=None,
         meta={},
     )
 

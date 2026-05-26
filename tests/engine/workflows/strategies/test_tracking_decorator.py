@@ -216,7 +216,6 @@ def build_components():
         model=cast("Any", DummyModel()),
         datamodule=datamodule,
         trainer=trainer,
-        shape_spec=None,
         meta={},
     )
 

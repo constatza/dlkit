@@ -138,7 +138,6 @@ def _build_components(model: Any) -> RuntimeComponents:
         model=model,
         datamodule=Mock(),
         trainer=None,
-        shape_spec=None,
         meta={},
     )
 

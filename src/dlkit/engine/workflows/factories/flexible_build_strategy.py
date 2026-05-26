@@ -151,6 +151,5 @@ class FlexibleBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
-            shape_spec=None,
             meta={"dataset_type": "flexible"},
         )

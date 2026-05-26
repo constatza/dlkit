@@ -7,7 +7,6 @@ from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
-from dlkit.common.shapes import ShapeSummary
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.core.factories import FactoryProvider
@@ -21,9 +20,8 @@ from dlkit.infrastructure.config.workflow_configs import (
 
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
-from .model_detection import detect_model_type, requires_shape_spec, should_skip_wrapper
+from .model_detection import should_skip_wrapper
 from .module_defaults import with_runtime_module_defaults
-from .shape_inference_pipeline import ShapeInferencePipeline
 
 type WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -145,7 +143,6 @@ class GraphBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
-            shape_spec=None,
             meta={"dataset_type": "graph"},
         )
 
@@ -156,10 +153,8 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
     def __init__(
         self,
         dataset_builder: DatasetBuilder | None = None,
-        shape_inference: ShapeInferencePipeline | None = None,
     ) -> None:
         self._dataset_builder = dataset_builder or DatasetBuilder()
-        self._shape_inference = shape_inference or ShapeInferencePipeline()
 
     def can_handle(self, settings: WorkflowSettings) -> bool:
         from dlkit.engine.data.families import resolve_family
@@ -180,10 +175,6 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
-        model_type = detect_model_type(model_settings)
-        shape_summary: ShapeSummary | None = None
-        if requires_shape_spec(model_type):
-            shape_summary = self._shape_inference.infer_timeseries(dataset)
 
         skip_wrapper = should_skip_wrapper(model_settings, dataset)
 
@@ -206,7 +197,6 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model = WrapperFactory.create_timeseries_wrapper(
                 model_settings=model_settings,
                 settings=wrapper_settings,
-                shape_summary=shape_summary,
                 entry_configs=entry_configs,
                 components=components,
             )
@@ -215,6 +205,5 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
-            shape_spec=shape_summary,
             meta={"dataset_type": "timeseries"},
         )

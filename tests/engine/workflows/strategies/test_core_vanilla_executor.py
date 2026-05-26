@@ -49,7 +49,6 @@ def build_components(trainer_stub):
         model=cast(Any, DummyModel()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, trainer_stub),
-        shape_spec=None,
         meta={},
     )
 
@@ -104,7 +103,6 @@ def test_vanilla_executor_no_trainer_error(settings: TrainingWorkflowConfig) -> 
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=None,  # No trainer
-        shape_spec=None,
         meta={},
     )
 
@@ -128,7 +126,6 @@ def test_vanilla_executor_trainer_exception_handling(settings: TrainingWorkflowC
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, FailingTrainer()),
-        shape_spec=None,
         meta={},
     )
 
@@ -169,7 +166,6 @@ def test_vanilla_executor_post_training_exception_handling(
         model=cast(Any, object()),
         datamodule=cast(Any, object()),
         trainer=cast(Any, failing_trainer),
-        shape_spec=None,
         meta={},
     )
 

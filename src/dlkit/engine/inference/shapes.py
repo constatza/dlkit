@@ -7,13 +7,41 @@ without hexagonal architecture overhead.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from dlkit.common.errors import WorkflowError
 from dlkit.common.shapes import ShapeSummary
 
 if TYPE_CHECKING:
     pass
+
+
+def _infer_shapes_from_dataset(dataset: Any) -> ShapeSummary:
+    """Sample index 0 from a dataset and extract raw feature/target shapes.
+
+    Args:
+        dataset: Dataset whose ``__getitem__(0)`` returns a nested TensorDict
+            with ``"features"`` and ``"targets"`` keys.
+
+    Returns:
+        ShapeSummary with raw in_shapes and out_shapes from the sample.
+
+    Raises:
+        ValueError: If the sample is not a nested TensorDict.
+    """
+    from tensordict import TensorDictBase
+
+    sample = dataset[0]
+    if not isinstance(sample, TensorDictBase):
+        raise ValueError(
+            f"Expected dataset[0] to return a nested TensorDict with 'features' and 'targets', "
+            f"got {type(sample).__name__}."
+        )
+    feat_td = cast(TensorDictBase, sample["features"])
+    targ_td = cast(TensorDictBase, sample["targets"])
+    in_shapes = tuple(tuple(int(d) for d in feat_td[k].shape) for k in feat_td.keys())
+    out_shapes = tuple(tuple(int(d) for d in targ_td[k].shape) for k in targ_td.keys())
+    return ShapeSummary(in_shapes=in_shapes, out_shapes=out_shapes)
 
 
 def infer_shape_specification(
@@ -63,9 +91,7 @@ def infer_shape_specification(
     # Strategy 3: Fallback to dataset inference if provided
     if dataset is not None:
         try:
-            from dlkit.engine.data.shape_inference import infer_shapes_from_dataset
-
-            return infer_shapes_from_dataset(dataset)
+            return _infer_shapes_from_dataset(dataset)
         except Exception as e:
             logger.error(f"Dataset shape inference failed: {e}")
 

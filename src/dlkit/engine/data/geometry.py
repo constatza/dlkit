@@ -2,15 +2,93 @@
 
 from __future__ import annotations
 
+import importlib
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from dlkit.common.geometry import FieldSpec, GeometryKind, GeometrySpec, TopologyKind
-from dlkit.engine.data.shape_inference import (
-    _propagate_shape_through_chain,
-)
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from dlkit.infrastructure.config.data_entries import DataEntry
+
+
+def _resolve_transform_class(transform_settings: Any) -> type:
+    """Resolve a transform class from transform settings.
+
+    Args:
+        transform_settings: Settings object with ``name`` and ``module_path`` attrs.
+
+    Returns:
+        The resolved transform class.
+
+    Raises:
+        TypeError: If ``name`` is neither a str nor a type.
+    """
+    name = getattr(transform_settings, "name", None)
+    raw_path = getattr(transform_settings, "module_path", None)
+    module_path: str = raw_path or "dlkit.domain.transforms"
+
+    if isinstance(name, type):
+        return name
+    if not isinstance(name, str):
+        raise TypeError(f"Expected transform name to be a str or type, got {type(name).__name__}")
+
+    module = importlib.import_module(module_path)
+    return cast(type, getattr(module, name))
+
+
+def _extract_transform_kwargs(transform_settings: Any) -> dict[str, Any]:
+    """Extract non-structural keyword arguments from transform settings.
+
+    Args:
+        transform_settings: Settings object with a ``model_dump()`` method.
+
+    Returns:
+        Dict of kwargs excluding ``name`` and ``module_path``.
+    """
+    exclude = {"name", "module_path"}
+    with suppress(AttributeError):
+        return {k: v for k, v in transform_settings.model_dump().items() if k not in exclude}
+    return {}
+
+
+def _propagate_shape_through_chain(
+    shape: tuple[int, ...],
+    transform_settings_list: Sequence[Any],
+) -> tuple[int, ...]:
+    """Propagate a shape through an ordered list of transform settings analytically.
+
+    Each transform class must be registered in ``SHAPE_INFERENCE_REGISTRY``.
+
+    Args:
+        shape: Input shape to propagate.
+        transform_settings_list: Ordered transform settings (each has ``name``
+            and ``module_path`` attributes).
+
+    Returns:
+        Output shape after all transforms.
+
+    Raises:
+        ValueError: If a transform has no registered shape inference function.
+    """
+    from dlkit.domain.transforms.shape_inference import SHAPE_INFERENCE_REGISTRY
+
+    current = shape
+    for transform_settings in transform_settings_list:
+        transform_cls = _resolve_transform_class(transform_settings)
+        if transform_cls not in SHAPE_INFERENCE_REGISTRY:
+            raise ValueError(
+                f"Transform '{getattr(transform_settings, 'name', transform_cls)}' has no "
+                "registered shape inference function. Specify explicit model init_kwargs "
+                "to bypass analytical shape inference."
+            )
+        current = SHAPE_INFERENCE_REGISTRY[transform_cls](
+            current,
+            **_extract_transform_kwargs(transform_settings),
+        )
+    return current
 
 
 def infer_geometry(

@@ -7,8 +7,6 @@ from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
-from dlkit.common.shapes import ShapeSummary
-
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RuntimeComponents:
@@ -17,5 +15,4 @@ class RuntimeComponents:
     model: LightningModule
     datamodule: LightningDataModule
     trainer: Trainer | None
-    shape_spec: ShapeSummary | None
     meta: dict[str, Any]

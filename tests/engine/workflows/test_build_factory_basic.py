@@ -118,8 +118,6 @@ def test_build_factory_flexible_uses_contract_pipeline(
     assert isinstance(comps.model, _FakeModel)
     assert comps.trainer is None  # inference mode
     assert comps.meta.get("dataset_type") == "flexible"
-    # shape_spec is no longer populated by FlexibleBuildStrategy — contract is the only path.
-    assert comps.shape_spec is None
     # shape_summary must not be passed to create_standard_wrapper.
     assert "shape_summary" not in captured_wrapper_kwargs
 
@@ -177,7 +175,6 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert comps.meta.get("dataset_type") == "graph"
-    assert comps.shape_spec is None  # graph strategy returns None shape_spec
 
 
 def test_build_factory_selects_timeseries_strategy(
@@ -231,8 +228,6 @@ def test_build_factory_selects_timeseries_strategy(
 
     comps = BuildFactory().build_components(_as_workflow_settings(settings))
     assert comps.meta.get("dataset_type") == "timeseries"
-    # Timeseries dataset returns dict sample, so shape inference returns None
-    assert comps.shape_spec is None
     assert captured_spec["summary"] is None
 
 

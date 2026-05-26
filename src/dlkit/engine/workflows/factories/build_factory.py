@@ -25,7 +25,7 @@ from .build_strategy import (
 )
 from .flexible_build_strategy import FlexibleBuildStrategy
 from .generative_build_strategies import FlowMatchingBuildStrategy
-from .model_detection import ModelType, detect_model_type, requires_shape_spec
+from .model_detection import ModelType, detect_model_type
 
 
 class BuildFactory:
@@ -93,5 +93,4 @@ __all__ = [
     "WrapperFactory",
     "WorkflowSettings",
     "detect_model_type",
-    "requires_shape_spec",
 ]
