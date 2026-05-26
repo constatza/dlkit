@@ -37,7 +37,6 @@ def _apply_transform_default(settings: Any) -> Any:
 
 def build_transform_list(
     transform_seq: Any,
-    shape_spec: Any = None,
     entry_name: str | None = None,
     validate_execution: bool = False,
 ) -> tuple[ModuleList, tuple[int, ...] | None]:
@@ -45,7 +44,6 @@ def build_transform_list(
 
     Args:
         transform_seq: Sequence of TransformSettings.
-        shape_spec: Optional shape specification for pre-allocation.
         entry_name: Entry name for shape lookup.
         validate_execution: Whether to validate with dummy tensors.
 
@@ -55,8 +53,6 @@ def build_transform_list(
     import torch
 
     current_shape = None
-    if shape_spec and entry_name:
-        current_shape = shape_spec.get_shape(entry_name)
 
     module_list = ModuleList()
     dummy_input = None

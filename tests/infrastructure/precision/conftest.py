@@ -11,7 +11,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.shapes import ModelFamily, ShapeSource, create_shape_spec
 from dlkit.infrastructure.precision import PrecisionStrategy, get_precision_service
 
 
@@ -73,27 +72,15 @@ class TestModelFactory:
 
 
 class ShapeAwareTestModel(nn.Module):
-    """Test model for shape-based model construction.
+    """Test model for shape-based model construction."""
 
-    This model uses nn.Module with shape specification for model configuration,
-    following the Adapter Pattern to maintain compatibility with existing tests.
-    """
-
-    def __init__(self, shape_dict: dict[str, tuple]):
-        """Initialize test model with shape specification.
+    def __init__(self, shape_dict: dict[str, tuple[int, ...]]):
+        """Initialize test model from shape dict ``{"x": (in,), "y": (out,)}``.
 
         Args:
-            shape_dict: Shape specification in old format
+            shape_dict: Shape specification mapping entry names to shapes.
         """
         super().__init__()
-
-        # Convert old shape format to new IShapeSpec
-        shape_spec = create_shape_spec(
-            shapes=shape_dict,
-            model_family=ModelFamily.DLKIT_NN,
-            source=ShapeSource.TRAINING_DATASET,
-        )
-        self._unified_shape = shape_spec
 
         # Build simple linear model architecture
         input_dim = shape_dict["x"][0]

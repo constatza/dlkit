@@ -6,7 +6,11 @@ All loading logic integrated directly - no use case objects.
 
 from __future__ import annotations
 
-from typing import Protocol, Self, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
+
+if TYPE_CHECKING:
+    from dlkit.common.geometry import GeometrySpec
+    from dlkit.domain.nn.contracts import ModelContractSpec
 
 import torch
 from tensordict import TensorDict
@@ -21,11 +25,125 @@ from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .config import ModelState, PredictionOutput, PredictorConfig
+from .geometry import infer_geometry_from_checkpoint
 from .loading import build_model_from_checkpoint, load_checkpoint
-from .shapes import infer_shape_specification
 from .transforms import load_transforms_from_checkpoint
 
 logger = get_logger(__name__)
+
+
+def _extract_output_shapes_from_checkpoint(
+    checkpoint: dict,
+) -> tuple[tuple[int, ...], ...]:
+    """Extract output shapes from checkpoint metadata.
+
+    Tries the new geometry format (TARGET-role fields) then the legacy
+    ``shape_summary.out_shapes`` field.
+
+    Args:
+        checkpoint: Loaded checkpoint dictionary.
+
+    Returns:
+        Tuple of output shape tuples, empty if unavailable.
+    """
+    metadata = checkpoint.get("dlkit_metadata", {})
+
+    # New format: target shapes stored in geometry TARGET fields
+    geometry_data = metadata.get("geometry", {})
+    if geometry_data:
+        from dlkit.common.geometry import FieldRole
+
+        fields = geometry_data.get("fields", [])
+        target_shapes = tuple(
+            tuple(int(d) for d in f["shape"])
+            for f in fields
+            if f.get("role") in (FieldRole.TARGET_COORDINATES, "target", "target_coordinates")
+        )
+        if target_shapes:
+            return target_shapes
+
+    # Legacy format: shape_summary.out_shapes
+    shape_data = metadata.get("shape_summary", {})
+    if shape_data:
+        out_shapes = shape_data.get("out_shapes")
+        if out_shapes:
+            return tuple(tuple(int(d) for d in s) for s in out_shapes)
+
+    return ()
+
+
+_CONTRACT_SHAPE_KEYS: frozenset[str] = frozenset(
+    {
+        "in_features",
+        "out_features",
+        "in_shape",
+        "out_shape",
+        "in_channels",
+        "out_channels",
+        "spatial_shape",
+        "seq_len",
+        "edge_dim",
+        "branch_shape",
+        "query_shape",
+    }
+)
+
+
+def _checkpoint_has_explicit_shape_kwargs(checkpoint: dict) -> bool:
+    """Return True if the checkpoint already stores explicit constructor shape kwargs.
+
+    When ``resolved_init_kwargs`` contains any contract-owned key the checkpoint
+    is self-sufficient and does not need a contract to build the model.
+
+    Args:
+        checkpoint: Loaded checkpoint dict.
+
+    Returns:
+        True if the checkpoint has explicit shape kwargs in model_settings.
+    """
+    try:
+        from dlkit.engine.adapters.lightning.checkpoint_dto import normalize_checkpoint_metadata
+
+        metadata = normalize_checkpoint_metadata(checkpoint.get("dlkit_metadata", {}))
+        kwargs = metadata.get("model_settings", {}).get("resolved_init_kwargs", {})
+        return bool(_CONTRACT_SHAPE_KEYS & set(kwargs))
+    except Exception:
+        return False
+
+
+def _maybe_resolve_contract(
+    checkpoint: dict,
+    geometry: GeometrySpec | None,
+) -> ModelContractSpec | None:
+    """Resolve a ModelContractSpec only when the checkpoint lacks explicit shape kwargs.
+
+    New-format checkpoints (with ``resolved_init_kwargs``) already encode
+    ``in_features``, ``out_features``, etc. — the contract would duplicate them
+    and cause "multiple values" errors.  Legacy checkpoints store only
+    non-shape hyperparams so a contract is required to supply the shapes.
+
+    Args:
+        checkpoint: Loaded checkpoint dict.
+        geometry: Geometry inferred from the checkpoint or dataset, or None.
+
+    Returns:
+        ModelContractSpec if a contract is needed and geometry allows it,
+        else None.
+    """
+    if geometry is None:
+        return None
+    if _checkpoint_has_explicit_shape_kwargs(checkpoint):
+        logger.debug("Checkpoint has explicit shape kwargs — skipping contract resolution")
+        return None
+
+    from dlkit.engine.workflows.factories.contract_resolver import resolve_contract
+
+    output_shapes = _extract_output_shapes_from_checkpoint(checkpoint)
+    try:
+        return resolve_contract(geometry, output_shapes=output_shapes)
+    except Exception as exc:
+        logger.warning("Could not resolve contract from geometry: {}", exc)
+        return None
 
 
 def _feature_names_from_geometry(geometry_data: dict) -> tuple[str, ...]:
@@ -168,13 +286,16 @@ class CheckpointPredictor(IPredictor):
         # Load checkpoint
         checkpoint = load_checkpoint(self._config.checkpoint_path)
 
-        # Infer shape specification
-        logger.debug("Inferring shape specification")
-        shape_spec = infer_shape_specification(checkpoint, dataset=None)
+        # Infer geometry from checkpoint (for ModelState storage + feature names).
+        # Contract resolution is skipped when the checkpoint already has explicit
+        # constructor kwargs (resolved_init_kwargs path) — those are authoritative.
+        logger.debug("Inferring geometry from checkpoint")
+        geometry = infer_geometry_from_checkpoint(checkpoint)
+        contract = _maybe_resolve_contract(checkpoint, geometry)
 
         # Build and load model
         logger.debug("Building model from checkpoint")
-        model = build_model_from_checkpoint(checkpoint, shape_spec)
+        model = build_model_from_checkpoint(checkpoint, contract)
 
         # Load transforms (separated by type)
         logger.debug("Loading fitted transforms")
@@ -202,7 +323,7 @@ class CheckpointPredictor(IPredictor):
         self._model_state = ModelState(
             model=model,
             device=device,
-            shape_spec=shape_spec,
+            geometry=geometry,
             feature_transforms=feature_transforms if feature_transforms else None,
             target_transforms=target_transforms if target_transforms else None,
             metadata=meta,

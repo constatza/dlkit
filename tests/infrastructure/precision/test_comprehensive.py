@@ -15,7 +15,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.shapes import create_shape_spec
 from dlkit.infrastructure.config.data_entries import Feature, Target
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
@@ -30,30 +29,23 @@ from dlkit.infrastructure.precision import (
 class ProductionTestModel(nn.Module):
     """Realistic model for production testing."""
 
-    def __init__(self, shape, **kwargs):
+    def __init__(self, shape: dict[str, tuple[int, ...]], **kwargs):
+        """Initialize model from a shape dict ``{"x": (in_dim,), "y": (out_dim,)}``.
+
+        Args:
+            shape: Dict mapping entry names to shapes.
+        """
         super().__init__()
-
-        # Convert shape dict to unified_shape
-        if isinstance(shape, dict):
-            unified_shape = create_shape_spec(shape)
-        else:
-            # Assume it's already a shape spec
-            unified_shape = shape
-        self._unified_shape = unified_shape
-
-        # Extract shapes from unified_shape for building layers
-        input_shape = unified_shape.get_input_shape()
-        output_shape = unified_shape.get_output_shape()
-        assert input_shape is not None
-        assert output_shape is not None
+        input_dim = shape["x"][0]
+        output_dim = shape["y"][0]
 
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(input_shape[0], 128),
+            torch.nn.Linear(input_dim, 128),
             torch.nn.ReLU(),
             torch.nn.Linear(128, 64),
             torch.nn.ReLU(),
         )
-        self.decoder = torch.nn.Linear(64, output_shape[0])
+        self.decoder = torch.nn.Linear(64, output_dim)
 
         # Apply precision from context (simulating Lightning behavior)
         service = get_precision_service()

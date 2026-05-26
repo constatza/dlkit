@@ -20,13 +20,10 @@ Example:
 """
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import torch
 from torch import nn
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSpecProtocol
 
 
 @runtime_checkable
@@ -129,7 +126,7 @@ class ShapeAwareTransform(Protocol):
         >>> isinstance(scaler, ShapeAwareTransform)  # True
     """
 
-    def configure_shape(self, shape_spec: ShapeSpecProtocol, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
         """Configure transform with shape information.
 
         Args:
@@ -276,7 +273,7 @@ class Transform(nn.Module):
     #     class NonInvertible(Transform):  # Will NOT pass (no inverse_transform method)
     #         pass
 
-    def configure_shape(self, shape_spec: ShapeSpecProtocol, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
         """Configure transform with shape information (OPTIONAL).
 
         Override this method if your transform benefits from eager buffer allocation.

@@ -187,18 +187,3 @@ def detect_model_type(model_settings: Any) -> ModelType:
         Detected model type
     """
     return _detection_chain.detect_model_type(model_settings)
-
-
-def requires_shape_spec(model_type: ModelType) -> bool:
-    """Check if model type requires shape specification.
-
-    Args:
-        model_type: Model type to check
-
-    Returns:
-        True if model requires shape specification
-    """
-    return model_type in {
-        ModelType.SHAPE_AWARE_DLKIT,
-        ModelType.TIMESERIES,
-    }

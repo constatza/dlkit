@@ -13,7 +13,6 @@ from .geometry import FieldRole, FieldSpec, GeometryKind, GeometrySpec, Topology
 from .hooks import LifecycleHooks
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import InferenceResult, OptimizationResult, TrainingResult
-from .shapes import ShapeSpecProtocol, ShapeSummary
 from .state import ModelState
 
 __all__ = [
@@ -32,8 +31,6 @@ __all__ = [
     "OptimizationResult",
     "OptimizationOverrides",
     "PluginError",
-    "ShapeSpecProtocol",
-    "ShapeSummary",
     "StrategyError",
     "TopologyKind",
     "TrainingResult",

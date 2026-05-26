@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 from torch import Tensor
@@ -12,9 +12,6 @@ from .base import (
     Transform,
 )
 from .errors import TransformChainError, TransformNotFittedError
-
-if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSpecProtocol
 
 
 class TransformChain(Transform):
@@ -29,7 +26,7 @@ class TransformChain(Transform):
 
     Example:
         >>> # Create chain with analytical shape inference
-        >>> chain = TransformChain(transform_settings, shape_spec=shape_spec, entry_name="features")
+        >>> chain = TransformChain(transforms, entry_name="features")
         >>> chain.fit(x_train)
         >>> x_transformed = chain(x_train)
         >>> x_orig = chain.inverse_transform(x_transformed)
@@ -37,21 +34,18 @@ class TransformChain(Transform):
 
     transforms: ModuleList
     transformed_shape: tuple[int, ...] | None
-    _shape_spec: ShapeSpecProtocol | None
     _entry_name: str | None
 
     def __init__(
         self,
         transforms: ModuleList,
-        shape_spec: ShapeSpecProtocol | None = None,
         entry_name: str | None = None,
     ) -> None:
         """Initialize the transform chain from a pre-built ModuleList.
 
         Args:
             transforms: ModuleList of instantiated transform modules.
-            shape_spec: Optional shape specification for transforms.
-            entry_name: Optional entry name to look up shape in shape_spec.
+            entry_name: Optional entry name used for incremental-fit logging.
 
         Raises:
             ValueError: If any transform is marked as non-incrementally-fittable
@@ -66,11 +60,10 @@ class TransformChain(Transform):
             >>> from dlkit.engine.workflows.factories.component_builders import (
             ...     build_transform_list,
             ... )
-            >>> module_list, shape = build_transform_list(settings, shape_spec=spec)
-            >>> chain = TransformChain(module_list, shape_spec=spec, entry_name="features")
+            >>> module_list, shape = build_transform_list(settings)
+            >>> chain = TransformChain(module_list, entry_name="features")
         """
         super().__init__()
-        self._shape_spec = shape_spec
         self._entry_name = entry_name
         self.transforms = transforms
         self.transformed_shape = None
@@ -259,6 +252,5 @@ class TransformChain(Transform):
         """
         return TransformChain(
             transforms=ModuleList(list(reversed(self.transforms))),
-            shape_spec=self._shape_spec,
             entry_name=self._entry_name,
         )

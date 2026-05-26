@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import numpy as np
     from torch import nn
 
-    from dlkit.common.shapes import ShapeSummary
+    from dlkit.common.geometry import GeometrySpec
     from dlkit.domain.transforms.chain import TransformChain
 
 
@@ -71,7 +71,7 @@ class ModelState:
     Attributes:
         model: PyTorch model in eval mode.
         device: Device string (e.g., "cpu", "cuda").
-        shape_spec: Optional shape summary from dataset inference.
+        geometry: Optional geometry spec restored from checkpoint or dataset.
         feature_transforms: Named transform chains keyed by entry name.
         target_transforms: Named inverse transform chains keyed by entry name.
         metadata: Raw dlkit_metadata dict from checkpoint.
@@ -84,7 +84,7 @@ class ModelState:
 
     model: nn.Module  # PyTorch model in eval mode
     device: str
-    shape_spec: ShapeSummary | None = None
+    geometry: GeometrySpec | None = None
     feature_transforms: dict[str, TransformChain] | None = None
     target_transforms: dict[str, TransformChain] | None = None
     metadata: dict[str, str | int | float | bool | dict | list] = field(default_factory=dict)

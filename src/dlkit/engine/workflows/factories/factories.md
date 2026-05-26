@@ -5,7 +5,6 @@
 ## Responsibilities
 - choose the correct build strategy for the dataset/model family
 - assemble datasets, datamodules, feature pipelines, and trainers
-- run runtime shape inference when required
 - create tracking-aware training executors for the training path
 
 ## Current Layout
@@ -15,7 +14,6 @@
 - `generative_build_strategies.py`: generative/flow-matching strategy
 - `dataset_builder.py`: runtime dataset and datamodule assembly
 - `feature_pipeline.py`: feature/target transform assembly
-- `shape_inference_pipeline.py`: runtime shape inference coordination
 - `execution_strategy_factory.py`: training executor composition with tracking activation
 
 ## Notes

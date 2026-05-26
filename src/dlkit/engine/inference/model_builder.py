@@ -15,45 +15,45 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .checkpoint_reader import detect_checkpoint_dtype, extract_model_settings
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import ShapeSummary
+    from dlkit.domain.nn.contracts import ModelContractSpec
 
 logger = get_logger(__name__)
 
+# Keys that contract variants inject into from_contract(**kwargs). Stripping them
+# from hyperparams prevents "got multiple values for keyword argument" errors when
+# both the checkpoint's init_kwargs and the contract supply the same parameter.
+_CONTRACT_KEYS: frozenset[str] = frozenset(
+    {
+        "in_features",
+        "out_features",
+        "in_shape",
+        "out_shape",
+        "in_channels",
+        "out_channels",
+        "spatial_shape",
+        "seq_len",
+        "edge_dim",
+        "branch_shape",
+        "query_shape",
+    }
+)
 
-def _shape_spec_to_contract(shape_spec: Any) -> Any:
-    """Convert a ShapeSummary to a ModelContractSpec.
 
-    Temporary bridge until Steps 7-9 replace this with GeometrySpec → resolve_contract().
+def _strip_contract_keys(hyperparams: dict[str, Any]) -> dict[str, Any]:
+    """Remove shape keys that a ModelContractSpec will supply via from_contract().
+
+    Args:
+        hyperparams: Raw init kwargs extracted from checkpoint model settings.
+
+    Returns:
+        Filtered kwargs with contract-owned keys removed.
     """
-    if shape_spec is None:
-        return None
-    from dlkit.domain.nn.contracts import BranchTrunkSpec, GridOperatorSpec, TabulaRSpec
-
-    try:
-        in_shapes = shape_spec.in_shapes
-        out_shapes = shape_spec.out_shapes
-        if len(in_shapes) >= 2:
-            return BranchTrunkSpec(
-                branch_shape=in_shapes[0],
-                query_shape=in_shapes[1],
-                out_features=out_shapes[0][0],
-            )
-        in_shape = in_shapes[0]
-        out_shape = out_shapes[0]
-        if len(in_shape) == 1:
-            return TabulaRSpec(in_shape=in_shape, out_shape=out_shape)
-        return GridOperatorSpec(
-            in_channels=in_shape[0],
-            out_channels=out_shape[0],
-            spatial_shape=in_shape[1:],
-        )
-    except AttributeError, IndexError, TypeError:
-        return None
+    return {k: v for k, v in hyperparams.items() if k not in _CONTRACT_KEYS}
 
 
 def build_model_from_checkpoint(
     checkpoint: dict[str, Any],
-    shape_spec: ShapeSummary | None = None,
+    contract: ModelContractSpec | None = None,
 ) -> torch.nn.Module:
     """Instantiate and load a model from checkpoint metadata and weights."""
     model_settings = extract_model_settings(checkpoint)
@@ -86,7 +86,8 @@ def build_model_from_checkpoint(
             ) from exc
 
     hyperparams = extract_init_kwargs(model_settings)
-    contract = _shape_spec_to_contract(shape_spec)
+    if contract is not None:
+        hyperparams = _strip_contract_keys(hyperparams)
     model = _build_model(cast("type[torch.nn.Module]", model_cls), hyperparams, contract=contract)
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
