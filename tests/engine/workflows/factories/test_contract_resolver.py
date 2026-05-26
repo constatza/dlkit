@@ -183,13 +183,13 @@ def grid_with_coords_geometry() -> GeometrySpec:
         fields=(
             FieldSpec(
                 name="sensor",
-                shape=(100,),
+                shape=(1, 100),
                 role=FieldRole.FEATURE,
                 geometry_kind=GeometryKind.REGULAR_GRID,
             ),
             FieldSpec(
                 name="coords",
-                shape=(3,),
+                shape=(1, 3),
                 role=FieldRole.TARGET_COORDINATES,
                 geometry_kind=GeometryKind.REGULAR_GRID,
             ),
@@ -208,13 +208,13 @@ def point_cloud_with_coords_geometry() -> GeometrySpec:
         fields=(
             FieldSpec(
                 name="sensor",
-                shape=(64,),
+                shape=(64, 3),
                 role=FieldRole.FEATURE,
                 geometry_kind=GeometryKind.POINT_CLOUD,
             ),
             FieldSpec(
                 name="query",
-                shape=(2,),
+                shape=(32, 2),
                 role=FieldRole.TARGET_COORDINATES,
                 geometry_kind=GeometryKind.POINT_CLOUD,
             ),
@@ -520,7 +520,7 @@ class TestGridWithCoordsDispatch:
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.branch_shape == (100,)  # type: ignore[union-attr]
+        assert result.branch_shape == (1, 100)  # type: ignore[union-attr]
 
     def test_query_shape_is_target_coord_shape(
         self, grid_with_coords_geometry: GeometrySpec
@@ -532,7 +532,7 @@ class TestGridWithCoordsDispatch:
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.query_shape == (3,)  # type: ignore[union-attr]
+        assert result.query_shape == (1, 3)  # type: ignore[union-attr]
 
     def test_out_features_from_output_shapes(self, grid_with_coords_geometry: GeometrySpec) -> None:
         """BranchTrunkSpec.out_features equals output_shapes[0][0].
@@ -570,7 +570,7 @@ class TestPointCloudWithCoordsDispatch:
         """
         result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.branch_shape == (64,)  # type: ignore[union-attr]
+        assert result.branch_shape == (64, 3)  # type: ignore[union-attr]
 
     def test_query_shape_is_target_coord_shape(
         self, point_cloud_with_coords_geometry: GeometrySpec
@@ -582,7 +582,7 @@ class TestPointCloudWithCoordsDispatch:
         """
         result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.query_shape == (2,)  # type: ignore[union-attr]
+        assert result.query_shape == (32, 2)  # type: ignore[union-attr]
 
     def test_out_features_default_when_no_output_shapes(
         self, point_cloud_with_coords_geometry: GeometrySpec

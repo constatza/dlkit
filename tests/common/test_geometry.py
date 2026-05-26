@@ -25,10 +25,10 @@ def feature_spec() -> FieldSpec:
 
 @pytest.fixture
 def coord_spec() -> FieldSpec:
-    """A FEATURE_COORDINATES field with point-cloud geometry."""
+    """A FEATURE_COORDINATES field with point-cloud geometry (N_points × coord_dim)."""
     return FieldSpec(
         name="coords",
-        shape=(3,),
+        shape=(64, 3),
         role=FieldRole.FEATURE_COORDINATES,
         geometry_kind=GeometryKind.POINT_CLOUD,
     )
@@ -36,10 +36,10 @@ def coord_spec() -> FieldSpec:
 
 @pytest.fixture
 def target_coord_spec() -> FieldSpec:
-    """A TARGET_COORDINATES field."""
+    """A TARGET_COORDINATES field with point-cloud geometry (N_queries × coord_dim)."""
     return FieldSpec(
         name="query_coords",
-        shape=(3,),
+        shape=(32, 3),
         role=FieldRole.TARGET_COORDINATES,
         geometry_kind=GeometryKind.POINT_CLOUD,
     )
@@ -113,6 +113,26 @@ class TestFieldSpec:
     def test_empty_shape_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="at least one dimension"):
             FieldSpec(name="empty", shape=(), role=FieldRole.FEATURE)
+
+    def test_zero_dimension_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            FieldSpec(name="bad", shape=(0, 4), role=FieldRole.FEATURE)
+
+    def test_negative_dimension_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            FieldSpec(name="bad", shape=(8, -1), role=FieldRole.FEATURE)
+
+    @pytest.mark.parametrize(
+        "kind", [GeometryKind.SEQUENCE, GeometryKind.REGULAR_GRID, GeometryKind.POINT_CLOUD]
+    )
+    def test_1d_shape_with_multi_dim_kind_raises(self, kind: GeometryKind) -> None:
+        with pytest.raises(ValueError, match="requires at least 2 dimensions"):
+            FieldSpec(name="bad", shape=(8,), role=FieldRole.FEATURE, geometry_kind=kind)
+
+    @pytest.mark.parametrize("kind", [GeometryKind.TABULAR, GeometryKind.GRAPH])
+    def test_1d_shape_with_single_dim_kind_is_valid(self, kind: GeometryKind) -> None:
+        spec = FieldSpec(name="ok", shape=(8,), role=FieldRole.FEATURE, geometry_kind=kind)
+        assert spec.shape == (8,)
 
 
 # ---------------------------------------------------------------------------
@@ -220,3 +240,31 @@ class TestAsDict:
         assert reconstructed == spec
         assert reconstructed.topology_kind is None
         assert reconstructed.edge_feature_dim is None
+
+
+# ---------------------------------------------------------------------------
+# GeometrySpec.__post_init__ invariant tests
+# ---------------------------------------------------------------------------
+
+
+class TestGeometrySpecInvariants:
+    def test_empty_fields_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            GeometrySpec(fields=())
+
+    def test_edge_feature_dim_without_topology_raises(self, feature_spec: FieldSpec) -> None:
+        with pytest.raises(ValueError, match="topology_kind"):
+            GeometrySpec(fields=(feature_spec,), edge_feature_dim=4, topology_kind=None)
+
+    def test_edge_feature_dim_with_topology_is_valid(self, feature_spec: FieldSpec) -> None:
+        spec = GeometrySpec(
+            fields=(feature_spec,),
+            topology_kind=TopologyKind.EDGE_INDEX,
+            edge_feature_dim=4,
+        )
+        assert spec.edge_feature_dim == 4
+
+    def test_no_topology_no_edge_dim_is_valid(self, feature_spec: FieldSpec) -> None:
+        spec = GeometrySpec(fields=(feature_spec,))
+        assert spec.topology_kind is None
+        assert spec.edge_feature_dim is None

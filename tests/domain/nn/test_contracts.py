@@ -296,3 +296,110 @@ class TestFromContractVariantRejection:
         """_StrictContractConsumerModel accepts the correct TabulaRSpec."""
         model = _StrictContractConsumerModel.from_contract(tabular_spec)
         assert isinstance(model, _StrictContractConsumerModel)
+
+
+# ---------------------------------------------------------------------------
+# __post_init__ invariant tests
+# ---------------------------------------------------------------------------
+
+
+class TestTabulaRSpecInvariants:
+    def test_empty_in_shape_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            TabulaRSpec(in_shape=(), out_shape=(4,))
+
+    def test_empty_out_shape_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            TabulaRSpec(in_shape=(16,), out_shape=())
+
+
+class TestGridOperatorSpecInvariants:
+    def test_zero_in_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GridOperatorSpec(in_channels=0, out_channels=1, spatial_shape=(64, 64))
+
+    def test_zero_out_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GridOperatorSpec(in_channels=3, out_channels=0, spatial_shape=(64, 64))
+
+    def test_negative_in_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GridOperatorSpec(in_channels=-1, out_channels=1, spatial_shape=(64, 64))
+
+    def test_empty_spatial_shape_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            GridOperatorSpec(in_channels=3, out_channels=1, spatial_shape=())
+
+
+class TestSequenceSpecInvariants:
+    def test_zero_in_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceSpec(in_channels=0, seq_len=100, out_channels=4)
+
+    def test_zero_seq_len_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceSpec(in_channels=8, seq_len=0, out_channels=4)
+
+    def test_zero_out_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceSpec(in_channels=8, seq_len=100, out_channels=0)
+
+    def test_zero_out_len_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceSpec(in_channels=8, seq_len=100, out_channels=4, out_len=0)
+
+    def test_negative_out_len_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceSpec(in_channels=8, seq_len=100, out_channels=4, out_len=-1)
+
+    def test_none_out_len_is_valid(self) -> None:
+        spec = SequenceSpec(in_channels=8, seq_len=100, out_channels=4)
+        assert spec.out_len is None
+
+    def test_effective_out_len_returns_out_len_when_set(
+        self, sequence_spec_with_horizon: SequenceSpec
+    ) -> None:
+        assert sequence_spec_with_horizon.effective_out_len == sequence_spec_with_horizon.out_len
+
+    def test_effective_out_len_returns_seq_len_when_none(self, sequence_spec: SequenceSpec) -> None:
+        assert sequence_spec.effective_out_len == sequence_spec.seq_len
+
+
+class TestBranchTrunkSpecInvariants:
+    def test_empty_branch_shape_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            BranchTrunkSpec(branch_shape=(), query_shape=(2,), out_features=32)
+
+    def test_empty_query_shape_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            BranchTrunkSpec(branch_shape=(200,), query_shape=(), out_features=32)
+
+    def test_zero_out_features_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            BranchTrunkSpec(branch_shape=(200,), query_shape=(2,), out_features=0)
+
+    def test_negative_out_features_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            BranchTrunkSpec(branch_shape=(200,), query_shape=(2,), out_features=-1)
+
+
+class TestGraphContractSpecInvariants:
+    def test_zero_in_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GraphContractSpec(in_channels=0, out_channels=8, edge_dim=None)
+
+    def test_zero_out_channels_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GraphContractSpec(in_channels=16, out_channels=0, edge_dim=None)
+
+    def test_zero_edge_dim_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GraphContractSpec(in_channels=16, out_channels=8, edge_dim=0)
+
+    def test_negative_edge_dim_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            GraphContractSpec(in_channels=16, out_channels=8, edge_dim=-4)
+
+    def test_none_edge_dim_is_valid(self) -> None:
+        spec = GraphContractSpec(in_channels=16, out_channels=8, edge_dim=None)
+        assert spec.edge_dim is None

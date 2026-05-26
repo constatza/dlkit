@@ -35,6 +35,13 @@ class TopologyKind(StrEnum):
     CELL_COMPLEX = "cell_complex"
 
 
+_MIN_NDIM_PER_KIND: dict[str, int] = {
+    GeometryKind.SEQUENCE: 2,  # (channels, seq_len)
+    GeometryKind.REGULAR_GRID: 2,  # (channels, *spatial_dims)
+    GeometryKind.POINT_CLOUD: 2,  # (channels, coord_dim)
+}
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FieldSpec:
     """Specification for a single named field in a dataset entry.
@@ -52,13 +59,22 @@ class FieldSpec:
     geometry_kind: GeometryKind = GeometryKind.TABULAR
 
     def __post_init__(self) -> None:
-        """Validates that shape is non-empty.
+        """Validates shape and geometry_kind/shape dimensionality consistency.
 
         Raises:
-            ValueError: If shape is an empty tuple.
+            ValueError: If shape is empty, contains non-positive dimensions, or
+                has insufficient dimensions for the declared geometry_kind.
         """
         if not self.shape:
             raise ValueError("FieldSpec.shape must have at least one dimension")
+        if not all(d > 0 for d in self.shape):
+            raise ValueError("FieldSpec.shape dimensions must all be positive integers")
+        min_ndim = _MIN_NDIM_PER_KIND.get(self.geometry_kind, 1)
+        if len(self.shape) < min_ndim:
+            raise ValueError(
+                f"FieldSpec with geometry_kind={self.geometry_kind} requires at least "
+                f"{min_ndim} dimensions, got shape={self.shape}"
+            )
 
     @property
     def primary_size(self) -> int:
@@ -84,6 +100,17 @@ class GeometrySpec:
     fields: tuple[FieldSpec, ...]
     topology_kind: TopologyKind | None = None
     edge_feature_dim: int | None = None
+
+    def __post_init__(self) -> None:
+        """Validates field collection and topology/edge coherence.
+
+        Raises:
+            ValueError: If fields is empty, or if edge_feature_dim is set without topology_kind.
+        """
+        if not self.fields:
+            raise ValueError("GeometrySpec.fields must be non-empty")
+        if self.edge_feature_dim is not None and self.topology_kind is None:
+            raise ValueError("GeometrySpec.edge_feature_dim requires topology_kind to be set")
 
     def by_role(self, role: FieldRole) -> tuple[FieldSpec, ...]:
         """Filters fields by their :class:`FieldRole`.

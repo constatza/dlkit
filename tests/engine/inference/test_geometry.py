@@ -33,7 +33,7 @@ def multi_field_spec() -> tuple[FieldSpec, ...]:
         FieldSpec(name="sensor", shape=(100,), role=FieldRole.FEATURE),
         FieldSpec(
             name="query",
-            shape=(2,),
+            shape=(1, 2),
             role=FieldRole.TARGET_COORDINATES,
             geometry_kind=GeometryKind.REGULAR_GRID,
         ),
@@ -186,7 +186,7 @@ class TestGeometryFromDict:
     def test_all_geometry_kinds_round_trip(self, kind: GeometryKind) -> None:
         """Every GeometryKind survives a dict round-trip."""
         original = GeometrySpec(
-            fields=(FieldSpec(name="f", shape=(5,), role=FieldRole.FEATURE, geometry_kind=kind),)
+            fields=(FieldSpec(name="f", shape=(5, 3), role=FieldRole.FEATURE, geometry_kind=kind),)
         )
         d = dataclasses.asdict(original)
         restored = _geometry_from_dict(d)
