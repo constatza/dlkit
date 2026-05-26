@@ -7,13 +7,13 @@ the codebase.
 - shared workflow result types
 - shared error hierarchy
 - shared model state contracts
-- minimal shape protocols and summaries
+- geometry primitives (FieldRole, GeometryKind, FieldSpec, GeometrySpec)
 - cross-layer lifecycle hooks
 
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
 - Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`
-- Shapes: `ShapeSpecProtocol`, `ShapeSummary` (validates non-empty in_shapes and out_shapes at construction)
+- Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:

@@ -21,7 +21,7 @@ Same as the FFNN family:
 
 All built-ins are concrete classes. No public `residual: bool` on any constructor.
 
-Pass `unified_shape` (a `ShapeSpecProtocol`) to projection-level classes.
+Graph models implement `from_contract(GraphContractSpec, **kwargs)` for dataset-driven construction.
 
 ## Config example
 

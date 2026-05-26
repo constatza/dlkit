@@ -57,17 +57,16 @@ For the full matrix, see `graph/graph.md`.
 
 ## Model factory
 
-`dlkit.domain.nn.factory.build_model` constructs any `nn.Module` from a class
-and an optional `ShapeSummary`.
+`dlkit.domain.nn.factory.build_model` constructs any `nn.Module` from a class,
+optional `ModelContractSpec`, and `**kwargs`.
 
-- If the model exposes `from_shape(shape, **kwargs)`, the factory calls that
-  explicit shape-aware constructor.
-- Otherwise the factory calls the model directly with `**kwargs` and performs
-  no implicit shape injection.
+- If the model implements `ContractConsumer` (exposes `from_contract(contract, **kwargs)`),
+  the factory calls that contract-aware constructor.
+- Otherwise the factory calls the model directly with `**kwargs`.
 
-Built-in flat-input, operator, spectral, and 1-D convolutional entrypoints
-implement `from_shape()` where dataset-driven construction is part of the
-public contract.
+Built-in model families implement `from_contract()` accepting the appropriate
+`ModelContractSpec` variant (`TabulaRSpec`, `GridOperatorSpec`, `SequenceSpec`,
+`BranchTrunkSpec`, or `GraphContractSpec`).
 
 ## Parameter role contracts
 

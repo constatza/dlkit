@@ -173,6 +173,56 @@ def mesh_geometry() -> GeometrySpec:
 
 
 @pytest.fixture
+def grid_with_coords_geometry() -> GeometrySpec:
+    """GeometrySpec with REGULAR_GRID FEATURE and TARGET_COORDINATES fields.
+
+    Returns:
+        GeometrySpec for a DeepONet branch-trunk setup with grid sensor input.
+    """
+    return GeometrySpec(
+        fields=(
+            FieldSpec(
+                name="sensor",
+                shape=(100,),
+                role=FieldRole.FEATURE,
+                geometry_kind=GeometryKind.REGULAR_GRID,
+            ),
+            FieldSpec(
+                name="coords",
+                shape=(3,),
+                role=FieldRole.TARGET_COORDINATES,
+                geometry_kind=GeometryKind.REGULAR_GRID,
+            ),
+        )
+    )
+
+
+@pytest.fixture
+def point_cloud_with_coords_geometry() -> GeometrySpec:
+    """GeometrySpec with POINT_CLOUD FEATURE and TARGET_COORDINATES fields.
+
+    Returns:
+        GeometrySpec for a DeepONet branch-trunk setup with point-cloud sensor input.
+    """
+    return GeometrySpec(
+        fields=(
+            FieldSpec(
+                name="sensor",
+                shape=(64,),
+                role=FieldRole.FEATURE,
+                geometry_kind=GeometryKind.POINT_CLOUD,
+            ),
+            FieldSpec(
+                name="query",
+                shape=(2,),
+                role=FieldRole.TARGET_COORDINATES,
+                geometry_kind=GeometryKind.POINT_CLOUD,
+            ),
+        )
+    )
+
+
+@pytest.fixture
 def no_feature_geometry() -> GeometrySpec:
     """GeometrySpec with only a TARGET_COORDINATES field (no FEATURE field).
 
@@ -440,6 +490,111 @@ class TestGraphDispatch:
         result = resolve_contract(graph_geometry_with_edges)
 
         assert result.edge_dim == 8  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# Tests: REGULAR_GRID / POINT_CLOUD + TARGET_COORDINATES → BranchTrunkSpec
+# ---------------------------------------------------------------------------
+
+
+class TestGridWithCoordsDispatch:
+    """resolve_contract dispatches REGULAR_GRID + TARGET_COORDINATES → BranchTrunkSpec."""
+
+    def test_returns_branch_trunk_spec(self, grid_with_coords_geometry: GeometrySpec) -> None:
+        """REGULAR_GRID geometry with TARGET_COORDINATES produces BranchTrunkSpec.
+
+        Args:
+            grid_with_coords_geometry: Grid branch-trunk fixture.
+        """
+        result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
+
+        assert isinstance(result, BranchTrunkSpec)
+
+    def test_branch_shape_is_primary_feature_shape(
+        self, grid_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """BranchTrunkSpec.branch_shape equals the primary FEATURE shape.
+
+        Args:
+            grid_with_coords_geometry: Grid branch-trunk fixture.
+        """
+        result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
+
+        assert result.branch_shape == (100,)  # type: ignore[union-attr]
+
+    def test_query_shape_is_target_coord_shape(
+        self, grid_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """BranchTrunkSpec.query_shape equals the TARGET_COORDINATES field shape.
+
+        Args:
+            grid_with_coords_geometry: Grid branch-trunk fixture.
+        """
+        result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
+
+        assert result.query_shape == (3,)  # type: ignore[union-attr]
+
+    def test_out_features_from_output_shapes(self, grid_with_coords_geometry: GeometrySpec) -> None:
+        """BranchTrunkSpec.out_features equals output_shapes[0][0].
+
+        Args:
+            grid_with_coords_geometry: Grid branch-trunk fixture.
+        """
+        result = resolve_contract(grid_with_coords_geometry, output_shapes=((8,),))
+
+        assert result.out_features == 8  # type: ignore[union-attr]
+
+
+class TestPointCloudWithCoordsDispatch:
+    """resolve_contract dispatches POINT_CLOUD + TARGET_COORDINATES → BranchTrunkSpec."""
+
+    def test_returns_branch_trunk_spec(
+        self, point_cloud_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """POINT_CLOUD geometry with TARGET_COORDINATES produces BranchTrunkSpec.
+
+        Args:
+            point_cloud_with_coords_geometry: Point-cloud branch-trunk fixture.
+        """
+        result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
+
+        assert isinstance(result, BranchTrunkSpec)
+
+    def test_branch_shape_is_primary_feature_shape(
+        self, point_cloud_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """BranchTrunkSpec.branch_shape equals the primary FEATURE shape.
+
+        Args:
+            point_cloud_with_coords_geometry: Point-cloud branch-trunk fixture.
+        """
+        result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
+
+        assert result.branch_shape == (64,)  # type: ignore[union-attr]
+
+    def test_query_shape_is_target_coord_shape(
+        self, point_cloud_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """BranchTrunkSpec.query_shape equals the TARGET_COORDINATES field shape.
+
+        Args:
+            point_cloud_with_coords_geometry: Point-cloud branch-trunk fixture.
+        """
+        result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
+
+        assert result.query_shape == (2,)  # type: ignore[union-attr]
+
+    def test_out_features_default_when_no_output_shapes(
+        self, point_cloud_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """BranchTrunkSpec.out_features defaults to 1 when output_shapes is empty.
+
+        Args:
+            point_cloud_with_coords_geometry: Point-cloud branch-trunk fixture.
+        """
+        result = resolve_contract(point_cloud_with_coords_geometry)
+
+        assert result.out_features == 1  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

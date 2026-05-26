@@ -87,6 +87,18 @@ class _ContractConsumerModel(_MinimalModule):
         return instance
 
 
+class _StrictContractConsumerModel(_MinimalModule):
+    """nn.Module that only accepts TabulaRSpec and raises TypeError on others."""
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        if not isinstance(contract, TabulaRSpec):
+            raise TypeError(
+                f"{cls.__name__} only accepts TabulaRSpec, got {type(contract).__name__}"
+            )
+        return cls()
+
+
 class _NoContractModel(_MinimalModule):
     """nn.Module that does NOT implement ContractConsumer."""
 
@@ -238,3 +250,49 @@ class TestBuildModelContractPath:
     def test_empty_kwargs_defaults_to_empty_dict(self, tabular_spec: TabulaRSpec) -> None:
         model = build_model(_ContractConsumerModel, contract=tabular_spec)
         assert model.received_kwargs == {}
+
+    def test_callable_factory_bypasses_contract_dispatch(self, tabular_spec: TabulaRSpec) -> None:
+        """A plain callable (not a type) skips the ContractConsumer path."""
+
+        def _factory(**kwargs: Any) -> nn.Module:
+            return _NoContractModel(**kwargs)
+
+        model = build_model(_factory, kwargs={"hidden": 7}, contract=tabular_spec)
+        assert isinstance(model, _NoContractModel)
+        assert model.hidden == 7
+
+
+# ---------------------------------------------------------------------------
+# from_contract variant rejection
+# ---------------------------------------------------------------------------
+
+
+class TestFromContractVariantRejection:
+    """from_contract raises TypeError when passed the wrong contract variant."""
+
+    def test_wrong_contract_raises_type_error_tabular(self, grid_spec: GridOperatorSpec) -> None:
+        """_StrictContractConsumerModel rejects a GridOperatorSpec."""
+        with pytest.raises(TypeError, match="TabulaRSpec"):
+            _StrictContractConsumerModel.from_contract(grid_spec)
+
+    def test_wrong_contract_raises_type_error_sequence(self, sequence_spec: SequenceSpec) -> None:
+        """_StrictContractConsumerModel rejects a SequenceSpec."""
+        with pytest.raises(TypeError, match="TabulaRSpec"):
+            _StrictContractConsumerModel.from_contract(sequence_spec)
+
+    def test_wrong_contract_raises_type_error_branch_trunk(
+        self, branch_trunk_spec: BranchTrunkSpec
+    ) -> None:
+        """_StrictContractConsumerModel rejects a BranchTrunkSpec."""
+        with pytest.raises(TypeError, match="TabulaRSpec"):
+            _StrictContractConsumerModel.from_contract(branch_trunk_spec)
+
+    def test_wrong_contract_raises_type_error_graph(self, graph_spec: GraphContractSpec) -> None:
+        """_StrictContractConsumerModel rejects a GraphContractSpec."""
+        with pytest.raises(TypeError, match="TabulaRSpec"):
+            _StrictContractConsumerModel.from_contract(graph_spec)
+
+    def test_correct_contract_accepted(self, tabular_spec: TabulaRSpec) -> None:
+        """_StrictContractConsumerModel accepts the correct TabulaRSpec."""
+        model = _StrictContractConsumerModel.from_contract(tabular_spec)
+        assert isinstance(model, _StrictContractConsumerModel)
