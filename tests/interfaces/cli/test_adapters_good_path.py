@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from dlkit.common import ConfigurationError, InferenceResult, TrainingResult
-from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
+from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.interfaces.cli.adapters.config_adapter import (
     load_config,
     validate_config_path,

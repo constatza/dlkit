@@ -9,12 +9,14 @@ the codebase.
 - shared model state contracts
 - geometry primitives (FieldRole, GeometryKind, FieldSpec, GeometrySpec)
 - cross-layer lifecycle hooks
+- thin structural protocols for settings contracts (no infrastructure imports)
 
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
 - Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
+- Protocols: `BaseSettingsProtocol`, `TrainingSettingsProtocol`, `SessionSettingsProtocol`, `ModelSettingsProtocol`, `OptunaSettingsProtocol`
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`

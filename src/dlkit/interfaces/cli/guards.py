@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, TypeGuard
 
-from dlkit.infrastructure.config.protocols import TrainingSettingsProtocol
+from dlkit.common.protocols import TrainingSettingsProtocol
 
 
 def is_training_settings(obj: Any) -> TypeGuard[TrainingSettingsProtocol]:

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from dlkit.common import ConfigurationError
+from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.infrastructure.config import load_settings
-from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
 from dlkit.infrastructure.io.path_context import path_override_context
 
 

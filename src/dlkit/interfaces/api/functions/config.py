@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.engine.workflows.entrypoints import (
     TemplateKind,
 )
@@ -17,7 +18,6 @@ from dlkit.engine.workflows.entrypoints import (
     validate_template as runtime_validate_template,
 )
 from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
 
 
 def validate_config(

@@ -6,8 +6,8 @@ import importlib.util
 from typing import cast
 
 from dlkit.common.errors import WorkflowError
+from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config.protocols import BaseSettingsProtocol
 from dlkit.infrastructure.config.workflow_configs import (
     InferenceWorkflowConfig,
     OptimizationWorkflowConfig,
