@@ -218,3 +218,5 @@ GEMINI.md
 .codiumai.toml
 # Allow example dataflow under examples/minimal_e2e
 !examples/minimal_e2e/data/*.csv
+.graphify/
+graphify-out
