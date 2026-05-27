@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.domain.nn.primitives.parametrizations import DEFAULT_SPD_MIN_DIAG
 from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
     SPDFactorizedLinear,
@@ -221,7 +222,7 @@ class SPDLinearNetwork(nn.Module):
         in_features: int,
         out_features: int,
         bias: bool = False,
-        min_diag: float = 1e-4,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
     ) -> None:
         if in_features != out_features:
@@ -357,7 +358,7 @@ class SPDFactorizedLinearNetwork(nn.Module):
         in_features: int,
         out_features: int,
         bias: bool = False,
-        min_diag: float = 1e-4,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,

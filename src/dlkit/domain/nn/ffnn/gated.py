@@ -16,6 +16,7 @@ from typing import Any, Self, TypeVar
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer
 
@@ -68,7 +69,7 @@ class GatedMLP(nn.Module):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int,
+        hidden_size: int | None = None,
         num_layers: int,
         gate_factory: Callable[[], _GateT],
         normalize: NormalizerName | None = None,
@@ -76,6 +77,7 @@ class GatedMLP(nn.Module):
     ) -> None:
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}")
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__()
         self.embedding = nn.Linear(in_features, hidden_size)
         self.gates = nn.ModuleList([gate_factory() for _ in range(num_layers)])
