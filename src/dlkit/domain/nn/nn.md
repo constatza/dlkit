@@ -20,16 +20,16 @@ semantic parameter contracts. No engine orchestration belongs here.
 ## FFNN surface
 
 The FFNN family is organized symmetrically around architecture and naming:
-- `Simple...` means plain, no skip connections
-- no `Simple` prefix means residual/skip connections
-- `ConstantWidth...` means a square width-preserving body
-- `Embedded...` means input embedding plus output projection
+- `Simple...` means plain, no skip connections; no `Simple` prefix means residual/skip connections
+- `Embedded...` means the network has a dedicated initial projection layer before the body; no `Embedded` prefix means structured layers act directly from the input
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
+- Square layer types (SPD, SPDFactorized) expose only `in_features`; rectangular types (Factorized) expose `in_features`, `hidden_size`, and `out_features`
 
 Representative exports from `dlkit.domain.nn` include:
 - dense: `FeedForwardNN`, `SimpleFeedForwardNN`, `ConstantWidthFFNN`, `ConstantWidthSimpleFFNN`
-- constrained: `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
-- scale-equivariant: `ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`, `ScaleEquivariantConstantWidthFFNN`, `ScaleEquivariantConstantWidthSimpleFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN`
+- constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
+- constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
+- scale-equivariant: `ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
 - gated: `GatedMLP`
 
 For the full matrix, see `ffnn/ffnn.md`.

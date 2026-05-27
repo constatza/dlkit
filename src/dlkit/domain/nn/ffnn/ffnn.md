@@ -1,11 +1,11 @@
 # Feed-Forward Neural Networks
 
-`dlkit.domain.nn.ffnn` groups flat-input neural networks by architecture first.
+`dlkit.domain.nn.ffnn` groups flat-input neural networks by architecture.
 The package distinguishes:
 - residual vs plain
-- dense vs constrained linear bodies
+- dense vs constrained linear bodies (SPD, SPDFactorized, Factorized)
 - standard vs scale-equivariant wrappers
-- constant-width bodies vs embedded input/output projections
+- embedded vs non-embedded structured variants
 
 ## Module layout
 
@@ -42,68 +42,88 @@ Square-only classes raise `ValueError` at construction if `in_features != out_fe
 | Variable-width | `SimpleFeedForwardNN` | `FeedForwardNN` | `ScaleEquivariantSimpleFeedForwardNN` | `ScaleEquivariantFeedForwardNN` |
 | Constant-width | `ConstantWidthSimpleFFNN` | `ConstantWidthFFNN` | `ScaleEquivariantConstantWidthSimpleFFNN` | `ScaleEquivariantConstantWidthFFNN` |
 
-### Constrained constant-width
+### Constrained — square layer types (SPD, SPDFactorized)
 
-| Layer family | Plain | Residual | Scale-equivariant plain | Scale-equivariant residual |
+Square layer types (SPD, SPDFactorized) are always square. These networks expose **only `in_features`** — `hidden_size` and `out_features` are always equal to `in_features`.
+
+All layers in these networks belong to the same constrained type; no plain `nn.Linear` appears inside the model.
+
+**Embedded**: `StructuredLayer(n)` no-act → `[StructuredLayer(n) × (num_layers-2)]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 2`.
+
+**Non-embedded**: `[StructuredLayer(n) × (num_layers-1)]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 1`.
+
+| Layer family | Plain (non-embedded) | Residual (non-embedded) | Plain (embedded) | Residual (embedded) |
 |---|---|---|---|---|
-| Factorized | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | `ScaleEquivariantConstantWidthSimpleFactorizedFFNN` | `ScaleEquivariantConstantWidthFactorizedFFNN` |
-| SPD | `ConstantWidthSimpleSPDFFNN` | `ConstantWidthSPDFFNN` | `ScaleEquivariantConstantWidthSimpleSPDFFNN` | `ScaleEquivariantConstantWidthSPDFFNN` |
-| SPD-factorized | `ConstantWidthSimpleSPDFactorizedFFNN` | `ConstantWidthSPDFactorizedFFNN` | `ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN` | `ScaleEquivariantConstantWidthSPDFactorizedFFNN` |
+| SPD | `SimpleSPDFFNN` | `SPDFFNN` | `EmbeddedSimpleSPDFFNN` | `EmbeddedSPDFFNN` |
+| SPD-factorized | `SimpleSPDFactorizedFFNN` | `SPDFactorizedFFNN` | `EmbeddedSimpleSPDFactorizedFFNN` | `EmbeddedSPDFactorizedFFNN` |
 
-### Constrained embedded
+Scale-equivariant wrappers follow the same naming: `ScaleEquivariant[Embedded]SPDFFNN` etc.
 
-| Layer family | Plain | Residual | Scale-equivariant plain | Scale-equivariant residual |
+### Constrained — rectangular layer types (Factorized)
+
+Factorized layers can be rectangular. These networks expose `in_features`, `hidden_size`, and `out_features` as independent parameters.
+
+**Embedded**: `Linear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` with act → `Linear(h→out)`.
+
+**Non-embedded**: `FactorizedLinear(in→h)` (no skip) → `[FactorizedLinear(h→h) × (num_layers-1)]` with act → `Linear(h→out)`.
+
+| Variant | Plain (non-embedded) | Residual (non-embedded) | Plain (embedded) | Residual (embedded) |
 |---|---|---|---|---|
-| Factorized | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | `ScaleEquivariantEmbeddedSimpleFactorizedFFNN` | `ScaleEquivariantEmbeddedFactorizedFFNN` |
-| SPD | `EmbeddedSimpleSPDFFNN` | `EmbeddedSPDFFNN` | `ScaleEquivariantEmbeddedSimpleSPDFFNN` | `ScaleEquivariantEmbeddedSPDFFNN` |
-| SPD-factorized | `EmbeddedSimpleSPDFactorizedFFNN` | `EmbeddedSPDFactorizedFFNN` | `ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN` | `ScaleEquivariantEmbeddedSPDFactorizedFFNN` |
+| Factorized | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` |
+
+Scale-equivariant wrappers: `ScaleEquivariant[Embedded]FactorizedFFNN`, `ScaleEquivariantSimple[Embedded]FactorizedFFNN`.
 
 ## Low-level constrained builders
 
-`constrained.py` also keeps the reusable builder-oriented classes:
-- `ParametricDenseBlock`
-- `ConstantWidthParametricFFNN` — residual body (no `residual:` param)
-- `ConstantWidthSimpleParametricFFNN` — plain body (no `residual:` param)
-- `EmbeddedParametricFFNN` — residual embedded body (no `residual:` param)
-- `EmbeddedSimpleParametricFFNN` — plain embedded body (no `residual:` param)
+`constrained.py` also keeps reusable builder-oriented classes:
+- `ParametricDenseBlock` — a single norm → act → layer → dropout block; accepts `in_size` when the block's input and output dimensions differ
+- `EmbeddedParametricFFNN` — residual body with `Linear` embedding/regression projections (no `residual:` param)
+- `EmbeddedSimpleParametricFFNN` — plain body with `Linear` embedding/regression projections (no `residual:` param)
 
-These remain available for custom compositions, but the preferred public model
-surface is the explicit plain/residual class matrix above.
+These remain available for custom compositions. The preferred public model surface is the explicit plain/residual class matrix above.
 
 ## Naming rules
 
-- No `Simple` prefix means the model uses residual/skip connections.
-- `Simple...` means the model is plain and does not use skip connections.
-- `ConstantWidth...` means the network body is square and width-preserving.
-- `Embedded...` means the network has input embedding and output projection layers.
-- `ScaleEquivariant...` means the model wraps a base FFNN with norm-based
-  input/output scaling.
+| Token | Meaning |
+|---|---|
+| No `Simple` prefix | residual/skip connections active |
+| `Simple...` | plain, no skip connections |
+| `Embedded...` | has a dedicated initial projection layer before the body |
+| No `Embedded` | structured layers act directly from the input |
+| `ScaleEquivariant...` | wraps a base model with norm-based input/output scaling |
+
+For square layer types, "Embedded" means the initial projection is also a structured (SPD/Symmetric) layer without activation — not a plain `nn.Linear`.
 
 ## Contract-based construction
 
-The classes that naturally map dataset feature counts to `in_features` and
-`out_features` implement `from_contract(contract, **kwargs)` via the
-`ContractConsumer` protocol. This includes:
-- dense FFNNs
-- embedded constrained FFNNs
-- scale-equivariant variable-width dense FFNNs (`ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSimpleFeedForwardNN`)
-- scale-equivariant embedded FFNNs
-- scale-equivariant constant-width dense FFNNs
+All constrained FFNNs implement `from_contract(contract, **kwargs)` via `TabulaRSpec`.
 
-When `from_contract()` is used with a `TabulaRSpec`, `in_shape` and `out_shape`
-are extracted; duplicate `in_features` or `out_features` values passed through
-config kwargs are stripped before forwarding.
+- **Square-type classes** (`SPDFFNN`, `EmbeddedSPDFFNN`, etc.): require `in_shape == out_shape`; extract `in_features = in_shape[0]`.
+- **Rectangular-type classes** (`FactorizedFFNN`, `EmbeddedFactorizedFFNN`, etc.): extract `in_features = in_shape[0]`, `out_features = out_shape[0]`.
 
-Square constant-width constrained bodies use `size`, so they are configured
-explicitly rather than through `from_contract()`.
+`from_contract` does **not** filter kwargs — passing duplicate `in_features` or `out_features` raises a `TypeError`.
 
 ## Configuration guidance
 
-For config-driven construction, prefer the top-level package export surface:
+```toml
+[MODEL]
+name = "SPDFFNN"
+module_path = "dlkit.domain.nn"
+in_features = 8
+num_layers = 4
+```
 
 ```toml
 [MODEL]
-name = "EmbeddedSimpleFactorizedFFNN"
+name = "EmbeddedSPDFFNN"
+module_path = "dlkit.domain.nn"
+in_features = 8
+num_layers = 4
+```
+
+```toml
+[MODEL]
+name = "FactorizedFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
@@ -111,17 +131,10 @@ num_layers = 3
 
 ```toml
 [MODEL]
-name = "ConstantWidthFFNN"
+name = "EmbeddedFactorizedFFNN"
 module_path = "dlkit.domain.nn"
-hidden_size = 128
-num_layers = 4
-```
-
-```toml
-[MODEL]
-name = "ScaleEquivariantFeedForwardNN"
-module_path = "dlkit.domain.nn"
-layers = [128, 128]
+hidden_size = 64
+num_layers = 3
 ```
 
 ---
@@ -130,7 +143,7 @@ layers = [128, 128]
 
 ### GatedMLP
 
-Feed-forward network where each hidden layer is a pluggable gating unit.  The
+Feed-forward network where each hidden layer is a pluggable gating unit. The
 raw input `x` is forwarded as context into every gate, enabling
 context-sensitive gates (GRN, UV) to modulate hidden states against the
 original features.
@@ -156,7 +169,7 @@ return Linear(h)                 # output projection
 | `normalize` | `NormalizerName \| None` | `None` | Normalisation after each gate |
 | `dropout` | `float` | `0.0` | Dropout after normalisation |
 
-Raises `ValueError` if `num_layers < 1`.  Supports `from_contract(contract, **kwargs)`.
+Raises `ValueError` if `num_layers < 1`. Supports `from_contract(contract, **kwargs)`.
 
 **Example — context-free gating with SwiGLU:**
 
@@ -186,9 +199,3 @@ model = GatedMLP(
     gate_factory=lambda: UVGate(in_features=64, hidden_size=128),
 )
 ```
-
-> **Note on context-sensitive gates**: `GRNGate` and `UVGate` receive
-> `x` of shape `(batch, in_features)` from `GatedMLP.forward`.  Construct
-> them with `in_features` (for `UVGate`) or `context_size=in_features`
-> (for `GRNGate` with explicit context) matching the model's `in_features`.
-> `GLUGate` and `SwiGLUGate` ignore `x` and only require `hidden_size`.

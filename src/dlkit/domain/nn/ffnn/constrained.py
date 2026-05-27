@@ -35,21 +35,33 @@ def _resolve_hidden_size(
 
 
 class ParametricDenseBlock(nn.Module):
-    """Dense block using a caller-supplied linear layer factory."""
+    """Dense block using a caller-supplied linear layer factory.
+
+    Args:
+        size: Output dimension (passed to ``layer_factory``).
+        in_size: Input dimension for the norm layer. Defaults to ``size`` when
+            the block is square; supply when the layer maps ``in_size → size``.
+        layer_factory: Callable ``(size) → nn.Module`` that builds the linear layer.
+        activation: Element-wise activation applied before the layer.
+        normalize: Optional normalisation before activation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability after the layer.
+    """
 
     def __init__(
         self,
         *,
         size: int,
+        in_size: int | None = None,
         layer_factory: Callable[[int], nn.Module],
         activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        self.in_features = size
+        norm_size = in_size if in_size is not None else size
+        self.in_features = norm_size
         self.out_features = size
-        self.norm = make_norm_layer(normalize, size)
+        self.norm = make_norm_layer(normalize, norm_size)
         self.activation = activation
         self.layer = layer_factory(size)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
@@ -62,7 +74,10 @@ class ParametricDenseBlock(nn.Module):
 
 
 class _ConstantWidthParametricBody(nn.Module):
-    """Low-level constant-width constrained FFNN body."""
+    """Low-level constant-width constrained FFNN body.
+
+    Supports ``num_layers=0`` (empty body that acts as identity).
+    """
 
     def __init__(
         self,
@@ -77,8 +92,8 @@ class _ConstantWidthParametricBody(nn.Module):
     ) -> None:
         if size <= 0:
             raise ValueError("size must be a positive integer")
-        if num_layers <= 0:
-            raise ValueError("num_layers must be a positive integer")
+        if num_layers < 0:
+            raise ValueError("num_layers must be a non-negative integer")
 
         super().__init__()
         self.residual = _residual
@@ -102,54 +117,6 @@ class _ConstantWidthParametricBody(nn.Module):
         for block in self.blocks:
             x = block(x)
         return x
-
-
-class ConstantWidthParametricFFNN(_ConstantWidthParametricBody):
-    """Residual constant-width constrained FFNN body."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=True,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class ConstantWidthSimpleParametricFFNN(_ConstantWidthParametricBody):
-    """Plain constant-width constrained FFNN body."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=False,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
 
 
 class _EmbeddedParametricBody(nn.Module):
@@ -186,6 +153,90 @@ class _EmbeddedParametricBody(nn.Module):
         x = self.embedding_layer(x)
         x = self.body(x)
         return self.regression_layer(x)
+
+
+# ── All-SPD base classes ─────────────────────────────────────────────────────
+
+
+class _EmbeddedSPDBody(nn.Module):
+    """All-SPD FFNN: initial no-act SPD layer → activated body → final no-act SPD layer.
+
+    All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
+    Requires ``num_layers >= 2`` (at least initial + final no-act layers).
+    Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
+    """
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        _residual: bool = False,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if num_layers < 2:
+            raise ValueError(f"Embedded SPD variants require num_layers >= 2, got {num_layers}")
+        super().__init__()
+        self.initial_layer = layer_factory(in_features)
+        self.body = _ConstantWidthParametricBody(
+            size=in_features,
+            num_layers=num_layers - 2,
+            layer_factory=layer_factory,
+            _residual=_residual,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.output_layer = layer_factory(in_features)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.initial_layer(x)
+        x = self.body(x)
+        return self.output_layer(x)
+
+
+class _NonEmbeddedSPDBody(nn.Module):
+    """Non-embedded all-SPD FFNN: activated body → final no-act SPD layer.
+
+    All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
+    Requires ``num_layers >= 1``.
+    Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
+    """
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        _residual: bool = False,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if num_layers < 1:
+            raise ValueError(f"Non-embedded SPD variants require num_layers >= 1, got {num_layers}")
+        super().__init__()
+        self.body = _ConstantWidthParametricBody(
+            size=in_features,
+            num_layers=num_layers - 1,
+            layer_factory=layer_factory,
+            _residual=_residual,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.output_layer = layer_factory(in_features)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.body(x)
+        return self.output_layer(x)
+
+
+# ── Public generic builders ──────────────────────────────────────────────────
 
 
 class EmbeddedParametricFFNN(_EmbeddedParametricBody):
@@ -264,6 +315,9 @@ class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
                 )
 
 
+# ── Layer factories ──────────────────────────────────────────────────────────
+
+
 def _spd_layer_factory(
     *,
     bias: bool,
@@ -301,193 +355,30 @@ def _factorized_layer_factory(
     return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std, pos_fn=pos_fn)
 
 
-class ConstantWidthSPDFFNN(ConstantWidthParametricFFNN):
-    """Residual constant-width FFNN with SPD-constrained body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
+def _square_contract(cls_name: str, contract: ModelContractSpec) -> int:
+    """Validate a square TabulaRSpec and return ``in_features``."""
+    match contract:
+        case TabulaRSpec(in_shape=ins, out_shape=outs):
+            if ins != outs:
+                raise ValueError(
+                    f"{cls_name} requires a square contract (in_shape == out_shape), "
+                    f"got in_shape={ins}, out_shape={outs}"
+                )
+            return ins[0]
+        case _:
+            raise TypeError(f"{cls_name} requires TabulaRSpec, got {type(contract).__name__}")
 
 
-class ConstantWidthSimpleSPDFFNN(ConstantWidthSimpleParametricFFNN):
-    """Plain constant-width FFNN with SPD-constrained body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
+# ── Embedded SPD variants (all-SPD, no plain Linear) ────────────────────────
 
 
-class ConstantWidthSPDFactorizedFFNN(ConstantWidthParametricFFNN):
-    """Residual constant-width FFNN with SPD-factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class ConstantWidthSimpleSPDFactorizedFFNN(ConstantWidthSimpleParametricFFNN):
-    """Plain constant-width FFNN with SPD-factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class ConstantWidthFactorizedFFNN(ConstantWidthParametricFFNN):
-    """Residual constant-width FFNN with factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class ConstantWidthSimpleFactorizedFFNN(ConstantWidthSimpleParametricFFNN):
-    """Plain constant-width FFNN with factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            size=size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSPDFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with SPD-constrained body layers."""
+class EmbeddedSPDFFNN(_EmbeddedSPDBody):
+    """Residual all-SPD FFNN: initial no-act SPD → activated residual body → final no-act SPD."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -498,25 +389,26 @@ class EmbeddedSPDFFNN(EmbeddedParametricFFNN):
     ) -> None:
         super().__init__(
             in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            _residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
-class EmbeddedSimpleSPDFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain embedded FFNN with SPD-constrained body layers."""
+
+class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
+    """Plain all-SPD FFNN: initial no-act SPD → activated plain body → final no-act SPD."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -527,25 +419,26 @@ class EmbeddedSimpleSPDFFNN(EmbeddedSimpleParametricFFNN):
     ) -> None:
         super().__init__(
             in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            _residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
-class EmbeddedSPDFactorizedFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with SPD-factorized body layers."""
+
+class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
+    """Residual all-SPDFactorized FFNN: initial no-act → residual body → final no-act."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -558,8 +451,6 @@ class EmbeddedSPDFactorizedFFNN(EmbeddedParametricFFNN):
     ) -> None:
         super().__init__(
             in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_factorized_layer_factory(
                 bias=bias,
@@ -568,21 +459,24 @@ class EmbeddedSPDFactorizedFFNN(EmbeddedParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
+            _residual=True,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
 
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
-class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain embedded FFNN with SPD-factorized body layers."""
+
+class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
+    """Plain all-SPDFactorized FFNN: initial no-act → plain body → final no-act."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -595,8 +489,6 @@ class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedSimpleParametricFFNN):
     ) -> None:
         super().__init__(
             in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=_spd_factorized_layer_factory(
                 bias=bias,
@@ -605,10 +497,157 @@ class EmbeddedSimpleSPDFactorizedFFNN(EmbeddedSimpleParametricFFNN):
                 std=std,
                 pos_fn=pos_fn,
             ),
+            _residual=False,
             activation=activation,
             normalize=normalize,
             dropout=dropout,
         )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+# ── Non-embedded SPD variants ────────────────────────────────────────────────
+
+
+class SPDFFNN(_NonEmbeddedSPDBody):
+    """Residual non-embedded SPD FFNN: activated residual body → final no-act SPD layer."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            num_layers=num_layers,
+            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            _residual=True,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class SimpleSPDFFNN(_NonEmbeddedSPDBody):
+    """Plain non-embedded SPD FFNN: activated plain body → final no-act SPD layer."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            num_layers=num_layers,
+            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
+            _residual=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
+    """Residual non-embedded SPDFactorized FFNN: activated residual body → final no-act layer."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            num_layers=num_layers,
+            layer_factory=_spd_factorized_layer_factory(
+                bias=bias,
+                min_diag=min_diag,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+            ),
+            _residual=True,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
+    """Plain non-embedded SPDFactorized FFNN: activated plain body → final no-act layer."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            num_layers=num_layers,
+            layer_factory=_spd_factorized_layer_factory(
+                bias=bias,
+                min_diag=min_diag,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+            ),
+            _residual=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+# ── Embedded Factorized variants (plain Linear projections) ─────────────────
 
 
 class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
@@ -679,3 +718,135 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
             normalize=normalize,
             dropout=dropout,
         )
+
+
+# ── Non-embedded Factorized variants ────────────────────────────────────────
+
+
+class FactorizedFFNN(nn.Module):
+    """Residual non-embedded Factorized FFNN.
+
+    First block maps ``in_features → hidden_size`` using a structured Factorized
+    layer (no skip — dimensions may differ). Remaining body blocks are square
+    ``hidden_size → hidden_size`` with residual connections. Final plain
+    ``nn.Linear(hidden_size → out_features)`` regression layer.
+    """
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if num_layers < 1:
+            raise ValueError(f"num_layers must be >= 1, got {num_layers}")
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
+        super().__init__()
+        self.first_block = ParametricDenseBlock(
+            size=hidden_size,
+            in_size=in_features,
+            layer_factory=lambda h: FactorizedLinear(
+                in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
+            ),
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.body = _ConstantWidthParametricBody(
+            size=hidden_size,
+            num_layers=num_layers - 1,
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
+            _residual=True,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.regression_layer = nn.Linear(hidden_size, out_features)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.first_block(x)
+        x = self.body(x)
+        return self.regression_layer(x)
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
+
+
+class SimpleFactorizedFFNN(nn.Module):
+    """Plain non-embedded Factorized FFNN.
+
+    First block maps ``in_features → hidden_size`` (no skip). Remaining body
+    blocks are square ``hidden_size → hidden_size`` without residual. Final
+    plain ``nn.Linear(hidden_size → out_features)`` regression layer.
+    """
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if num_layers < 1:
+            raise ValueError(f"num_layers must be >= 1, got {num_layers}")
+        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
+        super().__init__()
+        self.first_block = ParametricDenseBlock(
+            size=hidden_size,
+            in_size=in_features,
+            layer_factory=lambda h: FactorizedLinear(
+                in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
+            ),
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.body = _ConstantWidthParametricBody(
+            size=hidden_size,
+            num_layers=num_layers - 1,
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
+            _residual=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+        self.regression_layer = nn.Linear(hidden_size, out_features)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.first_block(x)
+        x = self.body(x)
+        return self.regression_layer(x)
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )

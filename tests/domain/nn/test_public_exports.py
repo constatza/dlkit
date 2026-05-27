@@ -47,20 +47,23 @@ def test_legacy_siren_name_not_exported():
 
 def test_named_parametric_bases_exported():
     for ns in (domain_nn, public_nn):
-        assert hasattr(ns, "ConstantWidthParametricFFNN")
-        assert hasattr(ns, "ConstantWidthSimpleParametricFFNN")
         assert hasattr(ns, "EmbeddedParametricFFNN")
         assert hasattr(ns, "EmbeddedSimpleParametricFFNN")
 
 
 def test_public_namespaces_export_symmetric_constrained_pairs():
     pairs = [
-        ("ConstantWidthFactorizedFFNN", "ConstantWidthSimpleFactorizedFFNN"),
         ("EmbeddedSPDFFNN", "EmbeddedSimpleSPDFFNN"),
+        ("SPDFFNN", "SimpleSPDFFNN"),
+        ("SPDFactorizedFFNN", "SimpleSPDFactorizedFFNN"),
+        ("EmbeddedSPDFactorizedFFNN", "EmbeddedSimpleSPDFactorizedFFNN"),
+        ("FactorizedFFNN", "SimpleFactorizedFFNN"),
         (
             "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
             "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
         ),
+        ("ScaleEquivariantSPDFFNN", "ScaleEquivariantSimpleSPDFFNN"),
+        ("ScaleEquivariantFactorizedFFNN", "ScaleEquivariantSimpleFactorizedFFNN"),
     ]
     for residual_name, plain_name in pairs:
         for ns in (domain_nn, public_nn):
@@ -71,8 +74,6 @@ def test_public_namespaces_export_symmetric_constrained_pairs():
 # --- No public residual: bool on targeted constructors ---
 
 _TARGETED_CLASSES = [
-    "ConstantWidthParametricFFNN",
-    "ConstantWidthSimpleParametricFFNN",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
     "ScaleEquivariantFeedForwardNN",

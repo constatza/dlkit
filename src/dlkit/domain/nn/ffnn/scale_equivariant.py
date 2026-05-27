@@ -8,19 +8,20 @@ from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import (
-    ConstantWidthFactorizedFFNN,
-    ConstantWidthSimpleFactorizedFFNN,
-    ConstantWidthSimpleSPDFactorizedFFNN,
-    ConstantWidthSimpleSPDFFNN,
-    ConstantWidthSPDFactorizedFFNN,
-    ConstantWidthSPDFFNN,
+    SPDFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedSimpleFactorizedFFNN,
     EmbeddedSimpleSPDFactorizedFFNN,
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
+    FactorizedFFNN,
+    SimpleFactorizedFFNN,
+    SimpleSPDFactorizedFFNN,
+    SimpleSPDFFNN,
+    SPDFactorizedFFNN,
     _resolve_hidden_size,
+    _square_contract,
 )
 from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
@@ -39,29 +40,13 @@ class _ScaleEquivariantBase(ScaleEquivariantWrapper):
     """Wrap a base FFNN with input/output norm scaling to enforce scale equivariance."""
 
 
-class _SquareScaleEquivariantBase(_ScaleEquivariantBase):
-    """Scale-equivariant wrapper for architecturally-square constrained networks.
-
-    Implements ``ContractConsumer`` so the build system can inject ``in_features``
-    from a ``TabulaRSpec``. Output dimension equals input dimension by construction.
-    """
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins):
-                kwargs.pop("in_features", None)
-                return cls(in_features=ins[0], **kwargs)  # ty: ignore[unknown-argument]
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
-
-
 def _default_activation(
     activation: Callable[[Tensor], Tensor] | None,
 ) -> Callable[[Tensor], Tensor]:
     return activation if activation is not None else nn.functional.gelu
+
+
+# ── Plain dense (non-structured) ────────────────────────────────────────────
 
 
 class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
@@ -101,10 +86,7 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
@@ -148,10 +130,7 @@ class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
@@ -192,10 +171,7 @@ class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
@@ -236,253 +212,23 @@ class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
                 )
 
 
-class ScaleEquivariantConstantWidthSPDFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant residual constant-width SPD FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthSPDFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                min_diag=min_diag,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-
-class ScaleEquivariantConstantWidthSimpleSPDFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant plain constant-width SPD FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthSimpleSPDFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                min_diag=min_diag,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-
-class ScaleEquivariantConstantWidthSPDFactorizedFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant residual constant-width SPD-factorized FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthSPDFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-
-class ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant plain constant-width SPD-factorized FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthSimpleSPDFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-
-class ScaleEquivariantConstantWidthFactorizedFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant residual constant-width factorized FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-
-class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(_SquareScaleEquivariantBase):
-    """Scale-equivariant plain constant-width factorized FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        size = in_features
-        super().__init__(
-            base_model=ConstantWidthSimpleFactorizedFFNN(
-                size=size,
-                num_layers=num_layers,
-                bias=bias,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
+# ── Embedded SPD (all-SPD, square) ──────────────────────────────────────────
 
 
 class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
-    """Scale-equivariant residual embedded SPD FFNN."""
+    """Scale-equivariant residual embedded all-SPD FFNN."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -497,8 +243,6 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
         super().__init__(
             base_model=EmbeddedSPDFFNN(
                 in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
                 num_layers=num_layers,
                 bias=bias,
                 min_diag=min_diag,
@@ -514,27 +258,16 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
-    """Scale-equivariant plain embedded SPD FFNN."""
+    """Scale-equivariant plain embedded all-SPD FFNN."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -549,8 +282,6 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
         super().__init__(
             base_model=EmbeddedSimpleSPDFFNN(
                 in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
                 num_layers=num_layers,
                 bias=bias,
                 min_diag=min_diag,
@@ -566,27 +297,16 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
 
 class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
-    """Scale-equivariant residual embedded SPD-factorized FFNN."""
+    """Scale-equivariant residual embedded all-SPDFactorized FFNN."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -603,8 +323,6 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
         super().__init__(
             base_model=EmbeddedSPDFactorizedFFNN(
                 in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
                 num_layers=num_layers,
                 bias=bias,
                 min_diag=min_diag,
@@ -622,27 +340,16 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
-    """Scale-equivariant plain embedded SPD-factorized FFNN."""
+    """Scale-equivariant plain embedded all-SPDFactorized FFNN."""
 
     def __init__(
         self,
         *,
         in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
         num_layers: int,
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
@@ -659,8 +366,6 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         super().__init__(
             base_model=EmbeddedSimpleSPDFactorizedFFNN(
                 in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
                 num_layers=num_layers,
                 bias=bias,
                 min_diag=min_diag,
@@ -678,16 +383,177 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
 
     @classmethod
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+# ── Non-embedded SPD (all-SPD, square) ──────────────────────────────────────
+
+
+class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant residual non-embedded all-SPD FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=SPDFFNN(
+                in_features=in_features,
+                num_layers=num_layers,
+                bias=bias,
+                min_diag=min_diag,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant plain non-embedded all-SPD FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=SimpleSPDFFNN(
+                in_features=in_features,
+                num_layers=num_layers,
+                bias=bias,
+                min_diag=min_diag,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant residual non-embedded all-SPDFactorized FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=SPDFactorizedFFNN(
+                in_features=in_features,
+                num_layers=num_layers,
+                bias=bias,
+                min_diag=min_diag,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant plain non-embedded all-SPDFactorized FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        num_layers: int,
+        bias: bool = False,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=SimpleSPDFactorizedFFNN(
+                in_features=in_features,
+                num_layers=num_layers,
+                bias=bias,
+                min_diag=min_diag,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+
+
+# ── Embedded Factorized (plain Linear projections) ───────────────────────────
 
 
 class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
@@ -734,10 +600,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
@@ -788,10 +651,112 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
         match contract:
             case TabulaRSpec(in_shape=ins, out_shape=outs):
-                filtered = {
-                    k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")
-                }
-                return cls(in_features=ins[0], out_features=outs[0], **filtered)
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
+
+
+# ── Non-embedded Factorized ──────────────────────────────────────────────────
+
+
+class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant residual non-embedded factorized FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=FactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
+            case _:
+                raise TypeError(
+                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
+                )
+
+
+class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
+    """Scale-equivariant plain non-embedded factorized FFNN."""
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=SimpleFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                pos_fn=pos_fn,
+                activation=_default_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+    @classmethod
+    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
+        match contract:
+            case TabulaRSpec(in_shape=ins, out_shape=outs):
+                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
             case _:
                 raise TypeError(
                     f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"

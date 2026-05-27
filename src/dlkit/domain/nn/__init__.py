@@ -9,14 +9,7 @@ from .contracts import (
     TabulaRSpec,
 )
 from .ffnn.constrained import (
-    ConstantWidthFactorizedFFNN,
-    ConstantWidthParametricFFNN,
-    ConstantWidthSimpleFactorizedFFNN,
-    ConstantWidthSimpleParametricFFNN,
-    ConstantWidthSimpleSPDFactorizedFFNN,
-    ConstantWidthSimpleSPDFFNN,
-    ConstantWidthSPDFactorizedFFNN,
-    ConstantWidthSPDFFNN,
+    SPDFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
@@ -25,7 +18,12 @@ from .ffnn.constrained import (
     EmbeddedSimpleSPDFFNN,
     EmbeddedSPDFactorizedFFNN,
     EmbeddedSPDFFNN,
+    FactorizedFFNN,
     ParametricDenseBlock,
+    SimpleFactorizedFFNN,
+    SimpleSPDFactorizedFFNN,
+    SimpleSPDFFNN,
+    SPDFactorizedFFNN,
 )
 from .ffnn.gated import GatedMLP
 from .ffnn.linear import (
@@ -38,22 +36,22 @@ from .ffnn.linear import (
 )
 from .ffnn.residual import ConstantWidthFFNN, FeedForwardNN
 from .ffnn.scale_equivariant import (
-    ScaleEquivariantConstantWidthFactorizedFFNN,
     ScaleEquivariantConstantWidthFFNN,
-    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantConstantWidthSimpleFFNN,
-    ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN,
-    ScaleEquivariantConstantWidthSimpleSPDFFNN,
-    ScaleEquivariantConstantWidthSPDFactorizedFFNN,
-    ScaleEquivariantConstantWidthSPDFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleSPDFFNN,
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
+    ScaleEquivariantFactorizedFFNN,
     ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantSimpleFactorizedFFNN,
     ScaleEquivariantSimpleFeedForwardNN,
+    ScaleEquivariantSimpleSPDFactorizedFFNN,
+    ScaleEquivariantSimpleSPDFFNN,
+    ScaleEquivariantSPDFactorizedFFNN,
+    ScaleEquivariantSPDFFNN,
 )
 from .ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 from .graph import (
@@ -131,37 +129,39 @@ __all__ = [
     "ConstantWidthSimpleFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
-    "ConstantWidthParametricFFNN",
-    "ConstantWidthSimpleParametricFFNN",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
-    # Constant-width constrained variants
-    "ConstantWidthSPDFFNN",
-    "ConstantWidthSimpleSPDFFNN",
-    "ConstantWidthSPDFactorizedFFNN",
-    "ConstantWidthSimpleSPDFactorizedFFNN",
-    "ConstantWidthFactorizedFFNN",
-    "ConstantWidthSimpleFactorizedFFNN",
-    # Embedded constrained variants
+    # Embedded SPD variants (all-SPD, square)
     "EmbeddedSPDFFNN",
     "EmbeddedSimpleSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
     "EmbeddedSimpleSPDFactorizedFFNN",
+    # Non-embedded SPD variants (all-SPD, square)
+    "SPDFFNN",
+    "SimpleSPDFFNN",
+    "SPDFactorizedFFNN",
+    "SimpleSPDFactorizedFFNN",
+    # Embedded Factorized variants
     "EmbeddedFactorizedFFNN",
     "EmbeddedSimpleFactorizedFFNN",
-    # ScaleEquivariant constrained variants
-    "ScaleEquivariantConstantWidthSPDFFNN",
-    "ScaleEquivariantConstantWidthSimpleSPDFFNN",
-    "ScaleEquivariantConstantWidthSPDFactorizedFFNN",
-    "ScaleEquivariantConstantWidthSimpleSPDFactorizedFFNN",
-    "ScaleEquivariantConstantWidthFactorizedFFNN",
-    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
+    # Non-embedded Factorized variants
+    "FactorizedFFNN",
+    "SimpleFactorizedFFNN",
+    # Scale-equivariant embedded SPD variants
     "ScaleEquivariantEmbeddedSPDFFNN",
     "ScaleEquivariantEmbeddedSimpleSPDFFNN",
     "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
     "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
+    # Scale-equivariant non-embedded SPD variants
+    "ScaleEquivariantSPDFFNN",
+    "ScaleEquivariantSimpleSPDFFNN",
+    "ScaleEquivariantSPDFactorizedFFNN",
+    "ScaleEquivariantSimpleSPDFactorizedFFNN",
+    # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
+    "ScaleEquivariantFactorizedFFNN",
+    "ScaleEquivariantSimpleFactorizedFFNN",
     # Graph neural networks
     "GATv2Message",
     "SimpleGATv2Message",
