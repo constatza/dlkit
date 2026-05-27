@@ -9,6 +9,7 @@ from torch import Tensor, nn
 from torch.nn.utils import parametrize
 
 from dlkit.domain.nn.primitives.parametrizations import (
+    DEFAULT_SPD_MIN_DIAG,
     SPD,
     PositiveSandwichScale,
     Symmetric,
@@ -64,7 +65,7 @@ def register_spd(
     module: nn.Module,
     tensor_name: str = "weight",
     *,
-    min_diag: float = 1e-4,
+    min_diag: float = DEFAULT_SPD_MIN_DIAG,
     pos_fn: Callable[[Tensor], Tensor] = F.softplus,
 ) -> nn.Module:
     """Register hard SPD structure on a module tensor.
@@ -124,7 +125,7 @@ def register_spd_factorized(
     size: int,
     tensor_name: str = "weight",
     *,
-    min_diag: float = 1e-4,
+    min_diag: float = DEFAULT_SPD_MIN_DIAG,
     mean: float = 0.0,
     std: float = 0.1,
     pos_fn: Callable[[Tensor], Tensor] = F.softplus,
@@ -227,7 +228,7 @@ class SPDLinear(nn.Linear):
         features: int,
         bias: bool = False,
         *,
-        min_diag: float = 1e-4,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -390,7 +391,7 @@ class SPDFactorizedLinear(nn.Linear):
         features: int,
         bias: bool = False,
         *,
-        min_diag: float = 1e-4,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,

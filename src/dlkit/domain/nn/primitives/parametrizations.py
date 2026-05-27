@@ -10,6 +10,11 @@ from torch.nn import functional as F
 # Chosen small enough to not interfere with valid near-zero inputs.
 _SOFTPLUS_INV_CLAMP: float = 1e-14
 
+# Default minimum diagonal for SPD-constrained layers. Small enough not to
+# clip eigenvalues that the model needs to represent, but large enough to
+# prevent exact singularity.
+DEFAULT_SPD_MIN_DIAG: float = 1e-6
+
 
 def _validate_square_matrix(x: torch.Tensor, name: str) -> None:
     """Validate that a tensor is a square 2-D matrix.
@@ -123,7 +128,7 @@ class SPD(nn.Module):
 
     def __init__(
         self,
-        min_diag: float = 1e-4,
+        min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
     ) -> None:
         """Initialize the SPD parametrization.

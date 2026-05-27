@@ -10,6 +10,7 @@ from .gated import (
     UVGate,
 )
 from .parametrizations import (
+    DEFAULT_SPD_MIN_DIAG,
     SPD,
     PositiveColumnScale,
     PositiveRowScale,
@@ -44,6 +45,7 @@ from .skip import (
 __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN",
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
+    "DEFAULT_SPD_MIN_DIAG",
     "SPD",
     "ConvolutionBlock1d",
     "DenseBlock",
