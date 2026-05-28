@@ -15,10 +15,10 @@ And two convenience constructors that build the sub-networks from scalar
 parameters:
 
 ``FourierEnhancedFFNN`` — inherits ``FourierAugmented``; builds a
-    ``ConstantWidthFFNN`` backbone internally.
+    ``FFNN`` backbone internally.
 
 ``DualPathFFNN`` — inherits ``SpectralDualPath``; builds two
-    ``ConstantWidthFFNN`` branches and a ``Linear`` projection internally.
+    ``FFNN`` branches and a ``Linear`` projection internally.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
-from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
+from dlkit.domain.nn.ffnn.residual import FFNN
 
 # ---------------------------------------------------------------------------
 # Shared spectral-feature helper (pure function, no learnable parameters)
@@ -197,7 +197,7 @@ class SpectralDualPath(nn.Module):
 class FourierEnhancedFFNN(FourierAugmented):
     """FFNN augmented with truncated Fourier features.
 
-    Inherits ``FourierAugmented`` and builds a ``ConstantWidthFFNN`` backbone
+    Inherits ``FourierAugmented`` and builds a ``FFNN`` backbone
     whose input size is ``in_features + n_modes * 2``.
 
     The factory "ffnn" strategy injects ``in_features`` and ``out_features``
@@ -226,7 +226,7 @@ class FourierEnhancedFFNN(FourierAugmented):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        backbone = ConstantWidthFFNN(
+        backbone = FFNN(
             in_features=in_features + n_modes * 2,
             out_features=out_features,
             hidden_size=hidden_size,
@@ -250,10 +250,10 @@ class FourierEnhancedFFNN(FourierAugmented):
 
 
 class DualPathFFNN(SpectralDualPath):
-    """FFNN with parallel spatial and spectral ``ConstantWidthFFNN`` branches.
+    """FFNN with parallel spatial and spectral ``FFNN`` branches.
 
     Inherits ``SpectralDualPath`` and builds both branches as
-    ``ConstantWidthFFNN`` instances.
+    ``FFNN`` instances.
 
     Args:
         in_features: Number of spatial input features.
@@ -281,7 +281,7 @@ class DualPathFFNN(SpectralDualPath):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        spatial_branch = ConstantWidthFFNN(
+        spatial_branch = FFNN(
             in_features=in_features,
             out_features=hidden_size,
             hidden_size=hidden_size,
@@ -290,7 +290,7 @@ class DualPathFFNN(SpectralDualPath):
             normalize=normalize,
             dropout=dropout,
         )
-        spectral_branch = ConstantWidthFFNN(
+        spectral_branch = FFNN(
             in_features=n_modes * 2,
             out_features=hidden_size,
             hidden_size=hidden_size,

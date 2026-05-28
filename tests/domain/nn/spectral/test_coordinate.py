@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from dlkit.domain.nn.contracts import TabulaRSpec
-from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantConstantWidthFFNN
+from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 from dlkit.domain.nn.spectral.coordinate import (
     FourierFeatureNetwork,
     HashEncodingNetwork,
@@ -299,7 +299,7 @@ class TestContractAwareScaleEquivariantCoordinateNetworks:
 class TestScaleEquivariantDenseRegression:
     def test_existing_dense_model_remains_positive_scale_equivariant(self) -> None:
         torch.manual_seed(0)
-        net = ScaleEquivariantConstantWidthFFNN(
+        net = ScaleEquivariantFFNN(
             in_features=3,
             out_features=2,
             hidden_size=16,

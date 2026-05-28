@@ -13,7 +13,7 @@ Two classes are provided:
     CNN, custom FFNN) as the branch or trunk.
 
 ``MLPDeepONet``
-    Convenience subclass that builds ``FeedForwardNN`` branch and trunk
+    Convenience subclass that builds ``VarWidthFFNN`` branch and trunk
     networks from scalar hyperparameters.  Shape injection by the factory
     "ffnn" strategy works automatically (``in_features`` is accepted).
 """
@@ -28,7 +28,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import BranchTrunkSpec, ModelContractSpec
-from dlkit.domain.nn.ffnn.residual import FeedForwardNN
+from dlkit.domain.nn.ffnn.residual import VarWidthFFNN
 
 
 class DeepONet(nn.Module):
@@ -60,7 +60,7 @@ class DeepONet(nn.Module):
     Example — inject a transformer as the branch::
 
         branch = TransformerEncoder(...)  # (B, n_sensors) → (B, p)
-        trunk = FeedForwardNN(...)  # (B, n_coords)  → (B, p)
+        trunk = VarWidthFFNN(...)  # (B, n_coords)  → (B, p)
         model = DeepONet(
             branch_net=branch,
             trunk_net=trunk,
@@ -130,10 +130,10 @@ class DeepONet(nn.Module):
 
 
 class MLPDeepONet(DeepONet):
-    """DeepONet with ``FeedForwardNN`` branch and trunk networks.
+    """DeepONet with ``VarWidthFFNN`` branch and trunk networks.
 
     Convenience subclass that constructs branch and trunk as
-    ``FeedForwardNN`` instances from scalar hyperparameters.  The factory
+    ``VarWidthFFNN`` instances from scalar hyperparameters.  The factory
     "ffnn" strategy injects ``in_features`` automatically from the dataset
     shape summary.
 
@@ -162,13 +162,13 @@ class MLPDeepONet(DeepONet):
         activation: Callable[[Tensor], Tensor] = F.gelu,
     ) -> None:
         latent_dim = trunk_width * out_features
-        branch_net = FeedForwardNN(
+        branch_net = VarWidthFFNN(
             in_features=in_features,
             out_features=latent_dim,
             layers=[hidden_size] * branch_depth,
             activation=activation,
         )
-        trunk_net = FeedForwardNN(
+        trunk_net = VarWidthFFNN(
             in_features=n_coords,
             out_features=latent_dim,
             layers=[hidden_size] * trunk_depth,

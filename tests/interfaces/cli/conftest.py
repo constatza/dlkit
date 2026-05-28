@@ -73,7 +73,7 @@ path = "{target_path}"
 filepath = "{split_path}"
 
 [MODEL]
-name = "ConstantWidthFFNN"
+name = "FFNN"
 module_path = "dlkit.domain.nn.ffnn.residual"
 checkpoint = "{checkpoint_path}"
 
@@ -320,7 +320,7 @@ def sample_settings() -> Mock:
     mock_settings.model_dump.return_value = {
         "SESSION": {"name": "test_session", "workflow": "train", "seed": 42},
         "DATASET": {"name": "FlexibleDataset", "root_dir": "."},
-        "MODEL": {"name": "ConstantWidthFFNN", "module_path": "dlkit.domain.nn.ffnn.residual"},
+        "MODEL": {"name": "FFNN", "module_path": "dlkit.domain.nn.ffnn.residual"},
         "MLFLOW": {"experiment_name": "test_experiment"},
     }
     return mock_settings

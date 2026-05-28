@@ -171,9 +171,9 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
     checkpoint_path = tmp_path / "model.ckpt"
 
     # Build the model to get the correct state dict keys
-    from dlkit.domain.nn.ffnn import ConstantWidthFFNN
+    from dlkit.domain.nn.ffnn import FFNN
 
-    _model = ConstantWidthFFNN(
+    _model = FFNN(
         in_features=FEATURE_SIZE,
         out_features=TARGET_SIZE,
         hidden_size=FEATURE_SIZE,
@@ -189,7 +189,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                 "out_shapes": [[TARGET_SIZE]],
             },
             "model_settings": {
-                "name": "ConstantWidthFFNN",
+                "name": "FFNN",
                 "module_path": "dlkit.domain.nn",
                 "params": {
                     "hidden_size": FEATURE_SIZE,
@@ -243,7 +243,7 @@ def _make_training_settings(
     )
 
     model = ModelComponentSettings(
-        name="ConstantWidthFFNN",
+        name="FFNN",
         module_path="dlkit.domain.nn",
         hidden_size=4,
         num_layers=1,
@@ -524,7 +524,7 @@ pin_memory = false
 persistent_workers = false
 
 [MODEL]
-name = "ConstantWidthFFNN"
+name = "FFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 4
 num_layers = 1

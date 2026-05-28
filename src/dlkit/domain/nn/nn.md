@@ -20,26 +20,28 @@ semantic parameter contracts. No engine orchestration belongs here.
 ## FFNN surface
 
 The FFNN family is organized symmetrically around architecture and naming:
-- `Simple...` means plain, no skip connections; no `Simple` prefix means residual/skip connections
+- `VarWidth...` means explicit per-layer width list required; no prefix means constant-width (`hidden_size` + `num_layers`)
+- `Simple...` means plain, no skip connections; no `Simple` prefix means residual/skip connections active
+- `FFNN` and `VarWidthFFNN` both accept `skip: bool = True` — use `skip=False` instead of a separate `Simple*` class
 - `Embedded...` means the network has a dedicated initial projection layer before the body; no `Embedded` prefix means structured layers act directly from the input
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
 - Square layer types (SPD, SPDFactorized) expose only `in_features`; rectangular types (Factorized) expose `in_features`, `hidden_size`, and `out_features`
 
 Representative exports from `dlkit.domain.nn` include:
-- dense: `FeedForwardNN`, `SimpleFeedForwardNN`, `ConstantWidthFFNN`, `ConstantWidthSimpleFFNN`
+- dense: `VarWidthFFNN`, `FFNN` (both accept `skip: bool = True`)
 - constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
 - constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
-- scale-equivariant: `ScaleEquivariantFeedForwardNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
+- scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
 - gated: `GatedMLP`
 
 For the full matrix, see `ffnn/ffnn.md`.
 
 ## Residual/plain family matrix
 
-| Family | Residual | Plain |
+| Family | Residual (default) | Plain (`skip=False`) |
 |---|---|---|
-| Dense (variable-width) | `FeedForwardNN` | `SimpleFeedForwardNN` |
-| Dense (constant-width) | `ConstantWidthFFNN` | `ConstantWidthSimpleFFNN` |
+| Dense (variable-width) | `VarWidthFFNN` | `VarWidthFFNN(skip=False)` |
+| Dense (constant-width) | `FFNN` | `FFNN(skip=False)` |
 | Graph (GAT) | `GATv2Projection`, `ScaledGATv2Projection` | `SimpleGATv2Projection`, `ScaledSimpleGATv2Projection` |
 
 ## Graph NN surface

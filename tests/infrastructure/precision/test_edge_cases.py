@@ -7,7 +7,7 @@ import time
 import pytest
 import torch
 
-from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
+from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.infrastructure.config.data_entries import Feature
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.io.arrays import load_array
@@ -23,8 +23,8 @@ SMALL_FILE_SHAPE = (8, 4)
 SMALL_FILE_COUNT = 2
 
 
-def _build_model_in_precision_context() -> ConstantWidthFFNN:
-    model = ConstantWidthFFNN(in_features=4, out_features=4, hidden_size=4, num_layers=1)
+def _build_model_in_precision_context() -> FFNN:
+    model = FFNN(in_features=4, out_features=4, hidden_size=4, num_layers=1)
     service = get_precision_service()
     return model.to(dtype=service.resolve_precision().to_torch_dtype())
 
@@ -65,17 +65,17 @@ class TestPrecisionEdgeCases:
 
     def test_precision_with_broken_models(self, monkeypatch: pytest.MonkeyPatch):
         """Precision casting failures should propagate for real DLKit models."""
-        original_to = ConstantWidthFFNN.to
+        original_to = FFNN.to
 
         def _raise_to(self, *args, **kwargs):
             raise RuntimeError("Model precision application failed")
 
-        monkeypatch.setattr(ConstantWidthFFNN, "to", _raise_to)
+        monkeypatch.setattr(FFNN, "to", _raise_to)
         with pytest.raises(RuntimeError, match="Model precision application failed"):
             with precision_override(PrecisionStrategy.MIXED_16):
                 _build_model_in_precision_context()
 
-        monkeypatch.setattr(ConstantWidthFFNN, "to", original_to)
+        monkeypatch.setattr(FFNN, "to", original_to)
         with precision_override(PrecisionStrategy.MIXED_16):
             normal_model = _build_model_in_precision_context()
         assert next(normal_model.parameters()).dtype == torch.float16

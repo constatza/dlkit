@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any, Literal, Self
 
 import torch.nn.functional as F
@@ -23,8 +23,7 @@ from dlkit.domain.nn.ffnn.constrained import (
     _resolve_hidden_size,
     _square_contract,
 )
-from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
-from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
+from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
@@ -49,7 +48,7 @@ def _default_activation(
 # ── Plain dense (non-structured) ────────────────────────────────────────────
 
 
-class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantFFNN(_ScaleEquivariantBase):
     """Scale-equivariant residual constant-width FFNN."""
 
     def __init__(
@@ -68,137 +67,11 @@ class ScaleEquivariantConstantWidthFFNN(_ScaleEquivariantBase):
     ) -> None:
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__(
-            base_model=ConstantWidthFFNN(
+            base_model=FFNN(
                 in_features=in_features,
                 out_features=out_features,
                 hidden_size=hidden_size,
                 num_layers=num_layers,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
-
-
-class ScaleEquivariantConstantWidthSimpleFFNN(_ScaleEquivariantBase):
-    """Scale-equivariant plain constant-width FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
-        super().__init__(
-            base_model=ConstantWidthSimpleFFNN(
-                in_features=in_features,
-                out_features=out_features,
-                hidden_size=hidden_size,
-                num_layers=num_layers,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
-
-
-class ScaleEquivariantFeedForwardNN(_ScaleEquivariantBase):
-    """Scale-equivariant residual variable-width FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        layers: Sequence[int],
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=FeedForwardNN(
-                in_features=in_features,
-                out_features=out_features,
-                layers=layers,
-                activation=_default_activation(activation),
-                normalize=normalize,
-                dropout=dropout,
-            ),
-            norm=norm,
-            eps_gain=eps_gain,
-            keep_stats=keep_stats,
-        )
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
-
-
-class ScaleEquivariantSimpleFeedForwardNN(_ScaleEquivariantBase):
-    """Scale-equivariant plain variable-width FFNN."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        layers: Sequence[int],
-        norm: str = _DEFAULT_NORM,
-        eps_gain: float = _DEFAULT_EPS_GAIN,
-        keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            base_model=SimpleFeedForwardNN(
-                in_features=in_features,
-                out_features=out_features,
-                layers=layers,
                 activation=_default_activation(activation),
                 normalize=normalize,
                 dropout=dropout,

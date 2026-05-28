@@ -1,6 +1,6 @@
 """Tests for feed-forward neural networks.
 
-Tests FeedForwardNN, ConstantWidthFFNN, and LinearNetwork for shape
+Tests VarWidthFFNN, FFNN, and LinearNetwork for shape
 transformations, inheritance, and normalization/regularization.
 """
 
@@ -20,8 +20,7 @@ from dlkit.domain.nn.ffnn.linear import (
     SymmetricFactorizedLinearNetwork,
     SymmetricLinearNetwork,
 )
-from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN, FeedForwardNN
-from dlkit.domain.nn.ffnn.simple import ConstantWidthSimpleFFNN
+from dlkit.domain.nn.ffnn.residual import FFNN, VarWidthFFNN
 from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
     SPDFactorizedLinear,
@@ -32,15 +31,15 @@ from dlkit.domain.nn.primitives.parametrized_layers import (
 
 
 @pytest.fixture
-def ffnn() -> FeedForwardNN:
+def ffnn() -> VarWidthFFNN:
     """Basic FFNN with 2 hidden layers."""
-    return FeedForwardNN(in_features=2, out_features=2, layers=[4, 4])
+    return VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4])
 
 
 @pytest.fixture
-def constant_ffnn() -> ConstantWidthFFNN:
+def constant_ffnn() -> FFNN:
     """FFNN with constant width hidden layers."""
-    return ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=3)
+    return FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=3)
 
 
 @pytest.fixture
@@ -61,125 +60,125 @@ class TestResolveHiddenSize:
             _resolve_hidden_size(None, 4, 6)
 
 
-class TestConstantWidthFFNNOptionalHiddenSize:
+class TestFFNNOptionalHiddenSize:
     def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
-        m = ConstantWidthFFNN(in_features=2, out_features=2, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, num_layers=2)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_hidden_size_defaults_to_in_features(self) -> None:
-        m = ConstantWidthFFNN(in_features=2, out_features=2, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, num_layers=2)
         assert m.embedding_layer.out_features == 2
 
     def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
-        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_raises_when_not_square_and_no_hidden_size(self) -> None:
         with pytest.raises(ValueError, match="hidden_size must be provided"):
-            ConstantWidthFFNN(in_features=2, out_features=4, num_layers=2)
+            FFNN(in_features=2, out_features=4, num_layers=2)
 
 
-class TestConstantWidthSimpleFFNNOptionalHiddenSize:
+class TestFFNNSkipFalse:
     def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
-        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, num_layers=2, skip=False)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_hidden_size_defaults_to_in_features(self) -> None:
-        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, num_layers=2, skip=False)
         assert m.embedding_layer.out_features == 2
 
     def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
-        m = ConstantWidthSimpleFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
+        m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2, skip=False)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_raises_when_not_square_and_no_hidden_size(self) -> None:
         with pytest.raises(ValueError, match="hidden_size must be provided"):
-            ConstantWidthSimpleFFNN(in_features=2, out_features=4, num_layers=2)
+            FFNN(in_features=2, out_features=4, num_layers=2, skip=False)
 
 
-class TestFeedForwardNN:
-    """Tests for FeedForwardNN."""
+class TestVarWidthFFNN:
+    """Tests for VarWidthFFNN."""
 
-    def test_output_shape(self, ffnn: FeedForwardNN, dense_input: torch.Tensor) -> None:
+    def test_output_shape(self, ffnn: VarWidthFFNN, dense_input: torch.Tensor) -> None:
         """Output should have shape (batch, out_features)."""
         assert ffnn(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_is_dlkit_model(self, ffnn: FeedForwardNN) -> None:
-        """FeedForwardNN should be instance of nn.Module."""
+    def test_is_dlkit_model(self, ffnn: VarWidthFFNN) -> None:
+        """VarWidthFFNN should be instance of nn.Module."""
         assert isinstance(ffnn, nn.Module)
 
-    def test_is_nn_module(self, ffnn: FeedForwardNN) -> None:
-        """FeedForwardNN should be instance of nn.Module."""
+    def test_is_nn_module(self, ffnn: VarWidthFFNN) -> None:
+        """VarWidthFFNN should be instance of nn.Module."""
         assert isinstance(ffnn, nn.Module)
 
     def test_single_hidden_layer(self, dense_input: torch.Tensor) -> None:
         """FFNN with single hidden layer should work."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[4])
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[4])
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_many_hidden_layers(self, dense_input: torch.Tensor) -> None:
         """FFNN with many layers should work."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[4, 8, 4, 2])
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[4, 8, 4, 2])
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_with_batch_norm(self, dense_input: torch.Tensor) -> None:
         """FFNN with batch normalization should work."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[4, 4], normalize="batch")
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4], normalize="batch")
         m.eval()
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_with_layer_norm(self, dense_input: torch.Tensor) -> None:
         """FFNN with layer normalization should work."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[4, 4], normalize="layer")
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4], normalize="layer")
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_with_dropout(self, dense_input: torch.Tensor) -> None:
         """FFNN with dropout should work."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[4, 4], dropout=0.2)
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4], dropout=0.2)
         m.eval()
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_has_parameters(self, ffnn: FeedForwardNN) -> None:
+    def test_has_parameters(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should have trainable parameters."""
         assert len(list(ffnn.parameters())) > 0
 
-    def test_has_embedding_layer(self, ffnn: FeedForwardNN) -> None:
+    def test_has_embedding_layer(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should have an embedding_layer."""
         assert hasattr(ffnn, "embedding_layer")
         assert isinstance(ffnn.embedding_layer, nn.Linear)
         assert ffnn.embedding_layer.in_features == 2
         assert ffnn.embedding_layer.out_features == 4
 
-    def test_has_regression_layer(self, ffnn: FeedForwardNN) -> None:
+    def test_has_regression_layer(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should have a regression_layer."""
         assert hasattr(ffnn, "regression_layer")
         assert isinstance(ffnn.regression_layer, nn.Linear)
         assert ffnn.regression_layer.in_features == 4
         assert ffnn.regression_layer.out_features == 2
 
-    def test_has_hidden_layers(self, ffnn: FeedForwardNN) -> None:
+    def test_has_hidden_layers(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should have layers ModuleList."""
         assert hasattr(ffnn, "layers")
         assert isinstance(ffnn.layers, nn.ModuleList)
         assert len(ffnn.layers) == 1  # [4 → 4]
 
-    def test_num_layers_stored(self, ffnn: FeedForwardNN) -> None:
+    def test_num_layers_stored(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should store num_layers."""
         assert ffnn.num_layers == 2  # len([4, 4])
 
-    def test_activation_stored(self, ffnn: FeedForwardNN) -> None:
+    def test_activation_stored(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should store activation function."""
         assert hasattr(ffnn, "activation")
         assert callable(ffnn.activation)
 
     def test_different_widths(self, dense_input: torch.Tensor) -> None:
         """FFNN should support varying layer widths."""
-        m = FeedForwardNN(in_features=2, out_features=2, layers=[8, 4, 6])
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[8, 4, 6])
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
         """Gradients should flow through all layers."""
-        ffnn = FeedForwardNN(in_features=2, out_features=2, layers=[4, 4])
+        ffnn = VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4])
         out = ffnn(dense_input)
         loss = out.sum()
         loss.backward()
@@ -188,30 +187,28 @@ class TestFeedForwardNN:
             assert param.grad is not None
 
 
-class TestConstantWidthFFNN:
-    """Tests for ConstantWidthFFNN."""
+class TestFFNN:
+    """Tests for FFNN."""
 
-    def test_output_shape(
-        self, constant_ffnn: ConstantWidthFFNN, dense_input: torch.Tensor
-    ) -> None:
+    def test_output_shape(self, constant_ffnn: FFNN, dense_input: torch.Tensor) -> None:
         """Output should have shape (batch, out_features)."""
         assert constant_ffnn(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_is_ffnn(self, constant_ffnn: ConstantWidthFFNN) -> None:
-        """ConstantWidthFFNN should be instance of FeedForwardNN."""
-        assert isinstance(constant_ffnn, FeedForwardNN)
+    def test_is_ffnn(self, constant_ffnn: FFNN) -> None:
+        """FFNN should be instance of VarWidthFFNN."""
+        assert isinstance(constant_ffnn, VarWidthFFNN)
 
-    def test_is_dlkit_model(self, constant_ffnn: ConstantWidthFFNN) -> None:
-        """ConstantWidthFFNN should be instance of nn.Module."""
+    def test_is_dlkit_model(self, constant_ffnn: FFNN) -> None:
+        """FFNN should be instance of nn.Module."""
         assert isinstance(constant_ffnn, nn.Module)
 
-    def test_is_nn_module(self, constant_ffnn: ConstantWidthFFNN) -> None:
-        """ConstantWidthFFNN should be instance of nn.Module."""
+    def test_is_nn_module(self, constant_ffnn: FFNN) -> None:
+        """FFNN should be instance of nn.Module."""
         assert isinstance(constant_ffnn, nn.Module)
 
     def test_all_hidden_layers_same_width(self) -> None:
         """All hidden layers should have width = hidden_size."""
-        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=8, num_layers=4)
+        m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=4)
         # Check that layers were created with constant width
         # First layer: 2 → 8, then 8 → 8 × (num_layers-1)
         assert m.embedding_layer.out_features == 8
@@ -220,20 +217,20 @@ class TestConstantWidthFFNN:
     def test_zero_layers_raises(self) -> None:
         """Zero hidden layers should raise ValueError."""
         with pytest.raises(ValueError):
-            ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=0)
+            FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=0)
 
     def test_single_hidden_layer(self, dense_input: torch.Tensor) -> None:
-        """ConstantWidthFFNN with single layer should work."""
-        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=1)
+        """FFNN with single layer should work."""
+        m = FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=1)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
     def test_many_hidden_layers(self, dense_input: torch.Tensor) -> None:
-        """ConstantWidthFFNN with many layers should work."""
-        m = ConstantWidthFFNN(in_features=2, out_features=2, hidden_size=4, num_layers=5)
+        """FFNN with many layers should work."""
+        m = FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=5)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_has_parameters(self, constant_ffnn: ConstantWidthFFNN) -> None:
-        """ConstantWidthFFNN should have trainable parameters."""
+    def test_has_parameters(self, constant_ffnn: FFNN) -> None:
+        """FFNN should have trainable parameters."""
         assert len(list(constant_ffnn.parameters())) > 0
 
 

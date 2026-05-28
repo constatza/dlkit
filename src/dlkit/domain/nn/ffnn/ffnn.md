@@ -37,10 +37,10 @@ Square-only classes raise `ValueError` at construction if `in_features != out_fe
 
 ### Dense
 
-| Architecture | Plain | Residual | Scale-equivariant plain | Scale-equivariant residual |
-|---|---|---|---|---|
-| Variable-width | `SimpleFeedForwardNN` | `FeedForwardNN` | `ScaleEquivariantSimpleFeedForwardNN` | `ScaleEquivariantFeedForwardNN` |
-| Constant-width | `ConstantWidthSimpleFFNN` | `ConstantWidthFFNN` | `ScaleEquivariantConstantWidthSimpleFFNN` | `ScaleEquivariantConstantWidthFFNN` |
+| Architecture | Plain (`skip=False`) | Residual (`skip=True`, default) | Scale-equivariant |
+|---|---|---|---|
+| Variable-width | `VarWidthFFNN(skip=False)` | `VarWidthFFNN` | — |
+| Constant-width | `FFNN(skip=False)` | `FFNN` | `ScaleEquivariantFFNN` |
 
 ### Constrained — square layer types (SPD, SPDFactorized)
 
@@ -73,6 +73,8 @@ Factorized layers can be rectangular. These networks expose `in_features`, `hidd
 
 Scale-equivariant wrappers: `ScaleEquivariant[Embedded]FactorizedFFNN`, `ScaleEquivariantSimple[Embedded]FactorizedFFNN`.
 
+> Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
+
 ## Low-level constrained builders
 
 `constrained.py` also keeps reusable builder-oriented classes:
@@ -86,10 +88,12 @@ These remain available for custom compositions. The preferred public model surfa
 
 | Token | Meaning |
 |---|---|
-| No `Simple` prefix | residual/skip connections active |
-| `Simple...` | plain, no skip connections |
-| `Embedded...` | has a dedicated initial projection layer before the body |
-| No `Embedded` | structured layers act directly from the input |
+| `VarWidth...` | explicit per-layer width list required (`layers: Sequence[int]`) |
+| no width prefix | constant-width implied — specify `hidden_size` + `num_layers` |
+| `Simple...` | plain, no skip connections (or use `skip=False` on `FFNN`/`VarWidthFFNN`) |
+| no `Simple` prefix | residual/skip connections active (`skip=True` default) |
+| `Embedded...` | has a dedicated initial linear projection layer before the body |
+| no `Embedded` prefix | structured layers act directly from the input |
 | `ScaleEquivariant...` | wraps a base model with norm-based input/output scaling |
 
 For square layer types, "Embedded" means the initial projection is also a structured (SPD/Symmetric) layer without activation — not a plain `nn.Linear`.

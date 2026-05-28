@@ -10,7 +10,7 @@ from lightning.pytorch import Trainer
 from torch import Tensor
 
 import dlkit
-from dlkit.domain.nn import ConstantWidthFFNN
+from dlkit.domain.nn import FFNN
 from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
 from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
@@ -25,7 +25,7 @@ from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.types.split import IndexSplit
 
 MODEL_MODULE_PATH = "dlkit.domain.nn"
-MODEL_NAME = "ConstantWidthFFNN"
+MODEL_NAME = "FFNN"
 
 
 def _make_data(
@@ -108,12 +108,12 @@ def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> Standard
         geometry=geometry,
         entry_configs=entry_cfgs,
     )
-    assert isinstance(wrapper.model, ConstantWidthFFNN)
+    assert isinstance(wrapper.model, FFNN)
     _configure_identity_ffnn(wrapper.model)
     return wrapper
 
 
-def _configure_identity_ffnn(model: ConstantWidthFFNN) -> None:
+def _configure_identity_ffnn(model: FFNN) -> None:
     with torch.no_grad():
         model.embedding_layer.weight.copy_(torch.eye(4))
         model.embedding_layer.bias.zero_()

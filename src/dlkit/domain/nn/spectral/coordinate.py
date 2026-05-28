@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
-from dlkit.domain.nn.ffnn.residual import ConstantWidthFFNN
+from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
@@ -96,7 +96,7 @@ class FourierFeatureNetwork(nn.Module):
         else:
             self.register_buffer("B", B)
 
-        self.mlp = ConstantWidthFFNN(
+        self.mlp = FFNN(
             in_features=2 * n_frequencies,
             out_features=out_features,
             hidden_size=hidden_size,
@@ -304,7 +304,7 @@ class HashEncodingNetwork(nn.Module):
             bounds=bounds,
             include_input=include_input,
         )
-        self.mlp = ConstantWidthFFNN(
+        self.mlp = FFNN(
             in_features=self.encoding.output_dim,
             out_features=out_features,
             hidden_size=hidden_size,

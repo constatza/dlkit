@@ -34,10 +34,8 @@ from .ffnn.linear import (
     SymmetricFactorizedLinearNetwork,
     SymmetricLinearNetwork,
 )
-from .ffnn.residual import ConstantWidthFFNN, FeedForwardNN
+from .ffnn.residual import FFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
-    ScaleEquivariantConstantWidthFFNN,
-    ScaleEquivariantConstantWidthSimpleFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
@@ -45,15 +43,13 @@ from .ffnn.scale_equivariant import (
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFactorizedFFNN,
-    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantFFNN,
     ScaleEquivariantSimpleFactorizedFFNN,
-    ScaleEquivariantSimpleFeedForwardNN,
     ScaleEquivariantSimpleSPDFactorizedFFNN,
     ScaleEquivariantSimpleSPDFFNN,
     ScaleEquivariantSPDFactorizedFFNN,
     ScaleEquivariantSPDFFNN,
 )
-from .ffnn.simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 from .graph import (
     GATv2Message,
     GATv2Projection,
@@ -106,27 +102,23 @@ __all__ = [
     "SequenceSpec",
     "TabulaRSpec",
     "contracts",
-    # Networks
+    # VarWidth (explicit per-layer widths)
+    "VarWidthFFNN",
+    # Constant-width
+    "FFNN",
+    # Gated
+    "GatedMLP",
+    # Linear baseline
     "LinearNetwork",
     "FactorizedLinearNetwork",
     "SymmetricLinearNetwork",
     "SPDLinearNetwork",
     "SymmetricFactorizedLinearNetwork",
     "SPDFactorizedLinearNetwork",
-    "FeedForwardNN",
-    "ConstantWidthFFNN",
-    "GatedMLP",
     # Parameter roles
     "ParameterRole",
-    # ScaleEquivariant dense variants (variable-width)
-    "ScaleEquivariantFeedForwardNN",
-    "ScaleEquivariantSimpleFeedForwardNN",
-    # ScaleEquivariant dense variants (constant-width)
-    "ScaleEquivariantConstantWidthFFNN",
-    "ScaleEquivariantConstantWidthSimpleFFNN",
-    # Plain dense variants
-    "SimpleFeedForwardNN",
-    "ConstantWidthSimpleFFNN",
+    # Scale-equivariant constant-width
+    "ScaleEquivariantFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",

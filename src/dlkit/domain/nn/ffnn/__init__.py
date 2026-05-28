@@ -24,10 +24,8 @@ from .linear import (
     SymmetricFactorizedLinearNetwork,
     SymmetricLinearNetwork,
 )
-from .residual import ConstantWidthFFNN, FeedForwardNN
+from .residual import FFNN, VarWidthFFNN
 from .scale_equivariant import (
-    ScaleEquivariantConstantWidthFFNN,
-    ScaleEquivariantConstantWidthSimpleFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
@@ -35,25 +33,21 @@ from .scale_equivariant import (
     ScaleEquivariantEmbeddedSPDFactorizedFFNN,
     ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFactorizedFFNN,
-    ScaleEquivariantFeedForwardNN,
+    ScaleEquivariantFFNN,
     ScaleEquivariantSimpleFactorizedFFNN,
-    ScaleEquivariantSimpleFeedForwardNN,
     ScaleEquivariantSimpleSPDFactorizedFFNN,
     ScaleEquivariantSimpleSPDFFNN,
     ScaleEquivariantSPDFactorizedFFNN,
     ScaleEquivariantSPDFFNN,
 )
-from .simple import ConstantWidthSimpleFFNN, SimpleFeedForwardNN
 
 __all__ = [
-    # Residual dense networks
-    "FeedForwardNN",
-    "ConstantWidthFFNN",
-    # Gated networks
+    # VarWidth (explicit per-layer widths)
+    "VarWidthFFNN",
+    # Constant-width
+    "FFNN",
+    # Gated
     "GatedMLP",
-    # Plain dense networks
-    "SimpleFeedForwardNN",
-    "ConstantWidthSimpleFFNN",
     # Linear baseline
     "LinearNetwork",
     "FactorizedLinearNetwork",
@@ -61,22 +55,18 @@ __all__ = [
     "SPDLinearNetwork",
     "SymmetricFactorizedLinearNetwork",
     "SPDFactorizedLinearNetwork",
-    # Scale-equivariant dense variants (variable-width)
-    "ScaleEquivariantFeedForwardNN",
-    "ScaleEquivariantSimpleFeedForwardNN",
-    # Scale-equivariant dense variants (constant-width)
-    "ScaleEquivariantConstantWidthFFNN",
-    "ScaleEquivariantConstantWidthSimpleFFNN",
+    # Scale-equivariant constant-width
+    "ScaleEquivariantFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
-    # Embedded SPD variants (all-SPD, square)
+    # Embedded SPD variants
     "EmbeddedSPDFFNN",
     "EmbeddedSimpleSPDFFNN",
     "EmbeddedSPDFactorizedFFNN",
     "EmbeddedSimpleSPDFactorizedFFNN",
-    # Non-embedded SPD variants (all-SPD, square)
+    # Non-embedded SPD variants
     "SPDFFNN",
     "SimpleSPDFFNN",
     "SPDFactorizedFFNN",

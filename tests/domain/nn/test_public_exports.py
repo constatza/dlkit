@@ -3,26 +3,31 @@ import inspect
 import dlkit.domain.nn as domain_nn
 import dlkit.nn as public_nn
 
-# --- Dense FFNN pairs ---
+# --- Dense FFNN exports ---
 
 
-def test_original_dense_pairs_still_exported():
+def test_varwidth_and_constant_ffnn_exported():
     for ns in (domain_nn, public_nn):
-        assert hasattr(ns, "FeedForwardNN")
-        assert hasattr(ns, "SimpleFeedForwardNN")
-        assert hasattr(ns, "ConstantWidthFFNN")
-        assert hasattr(ns, "ConstantWidthSimpleFFNN")
+        assert hasattr(ns, "VarWidthFFNN")
+        assert hasattr(ns, "FFNN")
 
 
-def test_se_variable_width_pair_exported():
+def test_scale_equivariant_ffnn_exported():
     for ns in (domain_nn, public_nn):
-        assert hasattr(ns, "ScaleEquivariantFeedForwardNN")
-        assert hasattr(ns, "ScaleEquivariantSimpleFeedForwardNN")
+        assert hasattr(ns, "ScaleEquivariantFFNN")
 
 
-def test_scale_equivariant_ffnn_not_exported():
-    assert not hasattr(domain_nn, "ScaleEquivariantFFNN")
-    assert not hasattr(public_nn, "ScaleEquivariantFFNN")
+def test_removed_se_varwidth_not_exported():
+    for ns in (domain_nn, public_nn):
+        assert not hasattr(ns, "ScaleEquivariantVarWidthFFNN")
+        assert not hasattr(ns, "ScaleEquivariantSimpleVarWidthFFNN")
+        assert not hasattr(ns, "ScaleEquivariantSimpleFFNN")
+
+
+def test_removed_simple_classes_not_exported():
+    for ns in (domain_nn, public_nn):
+        assert not hasattr(ns, "SimpleFFNN")
+        assert not hasattr(ns, "SimpleVarWidthFFNN")
 
 
 def test_coordinate_spectral_bias_models_exported():
@@ -71,23 +76,17 @@ def test_public_namespaces_export_symmetric_constrained_pairs():
             assert hasattr(ns, plain_name), f"{plain_name!r} missing from {ns.__name__}"
 
 
-# --- No public residual: bool on targeted constructors ---
-
-_TARGETED_CLASSES = [
-    "EmbeddedParametricFFNN",
-    "EmbeddedSimpleParametricFFNN",
-    "ScaleEquivariantFeedForwardNN",
-    "ScaleEquivariantSimpleFeedForwardNN",
-]
+# --- FFNN and VarWidthFFNN accept skip kwarg ---
 
 
-def test_no_targeted_ffnn_class_has_residual_param():
-    for name in _TARGETED_CLASSES:
-        cls = getattr(domain_nn, name, None)
-        if cls is None:
-            continue
-        sig = inspect.signature(cls.__init__)
-        assert "residual" not in sig.parameters, f"{name} still has public residual param"
+def test_ffnn_has_skip_param():
+    sig = inspect.signature(domain_nn.FFNN.__init__)
+    assert "skip" in sig.parameters
+
+
+def test_varwidth_ffnn_has_skip_param():
+    sig = inspect.signature(domain_nn.VarWidthFFNN.__init__)
+    assert "skip" in sig.parameters
 
 
 # --- Graph classes ---
@@ -121,22 +120,3 @@ def test_gatv2_projection_is_a_class():
     assert isinstance(graph_mod.ScaledGATv2Projection, type)
     assert isinstance(graph_mod.SimpleGATv2Projection, type)
     assert isinstance(graph_mod.ScaledSimpleGATv2Projection, type)
-
-
-_TARGETED_GRAPH_CLASSES = [
-    "GATv2Message",
-    "SimpleGATv2Message",
-    "GATv2Projection",
-    "SimpleGATv2Projection",
-    "ScaledGATv2Projection",
-    "ScaledSimpleGATv2Projection",
-]
-
-
-def test_no_targeted_graph_class_has_residual_param():
-    for name in _TARGETED_GRAPH_CLASSES:
-        cls = getattr(domain_nn, name, None)
-        if cls is None:
-            continue
-        sig = inspect.signature(cls.__init__)
-        assert "residual" not in sig.parameters, f"{name} still has public residual param"

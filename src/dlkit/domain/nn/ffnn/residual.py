@@ -10,8 +10,20 @@ from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 
 
-class FeedForwardNN(nn.Module):
-    """Feed-forward neural network with residual skip connections."""
+class VarWidthFFNN(nn.Module):
+    """Feed-forward network with explicit per-layer widths.
+
+    Args:
+        in_features: Input dimension.
+        out_features: Output dimension.
+        layers: Hidden-layer widths as an explicit list; each entry is one hidden layer.
+        activation: Element-wise activation between layers.
+        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability between layers.
+        bias: Whether linear layers include a bias term.
+        skip: If ``True`` (default) each hidden transition is wrapped in a
+            ``SkipConnection``; set to ``False`` for a plain dense network.
+    """
 
     def __init__(
         self,
@@ -23,6 +35,7 @@ class FeedForwardNN(nn.Module):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
+        skip: bool = True,
     ) -> None:
         super().__init__()
         self.num_layers = len(layers)
@@ -40,7 +53,10 @@ class FeedForwardNN(nn.Module):
                 dropout=dropout,
                 bias=bias,
             )
-            self.layers.append(SkipConnection(block, build_linear_skip_layer(block, bias=bias)))
+            layer = (
+                SkipConnection(block, build_linear_skip_layer(block, bias=bias)) if skip else block
+            )
+            self.layers.append(layer)
 
         self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
 
@@ -70,13 +86,25 @@ class FeedForwardNN(nn.Module):
         return self.regression_layer(x)
 
 
-class ConstantWidthFFNN(FeedForwardNN):
-    """Residual feed-forward network with constant-width hidden layers.
+class FFNN(VarWidthFFNN):
+    """Feed-forward network with constant-width hidden layers.
+
+    Args:
+        in_features: Input dimension.
+        out_features: Output dimension.
+        hidden_size: Width of all hidden layers; defaults to
+            ``max(in_features, out_features)`` when omitted.
+        num_layers: Number of hidden layers.
+        activation: Element-wise activation between layers.
+        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability between layers.
+        bias: Whether linear layers include a bias term.
+        skip: If ``True`` (default) each hidden transition is wrapped in a
+            ``SkipConnection``; set to ``False`` for a plain dense network.
 
     Note:
-        ``num_layers`` is the number of hidden width entries passed to
-        :class:`FeedForwardNN`.  The number of nonlinear ``DenseBlock`` layers
-        created is ``num_layers - 1`` (transitions between adjacent entries).
+        The number of nonlinear ``DenseBlock`` layers created is
+        ``num_layers - 1`` (transitions between adjacent entries).
         With ``num_layers=1`` the network is an embedding linear followed
         immediately by the regression linear — no nonlinearity.  Use
         ``num_layers >= 2`` for a genuinely nonlinear network.
@@ -93,6 +121,7 @@ class ConstantWidthFFNN(FeedForwardNN):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
+        skip: bool = True,
     ) -> None:
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
@@ -105,4 +134,5 @@ class ConstantWidthFFNN(FeedForwardNN):
             normalize=normalize,
             dropout=dropout,
             bias=bias,
+            skip=skip,
         )
