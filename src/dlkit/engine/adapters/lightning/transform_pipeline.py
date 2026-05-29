@@ -230,8 +230,7 @@ class NamedBatchTransformer(nn.Module):
                     continue
 
                 raise TypeError(
-                    f"Incremental fitting for '{chain.__class__.__name__}' is not implemented. "
-                    "Remove this transform from online fit path. TODO: incremental PCA."
+                    f"Transform '{chain.__class__.__name__}' is not fittable in this path."
                 )
 
     def is_fitted(self) -> bool:

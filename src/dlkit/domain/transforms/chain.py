@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
+import torch
 from loguru import logger
 from torch import Tensor
 from torch.nn import ModuleList
@@ -104,12 +105,12 @@ class TransformChain(Transform):
         dataloader: Any,
         tensor_selector: Callable[[Any], Tensor],
     ) -> None:
-        """Fit the chain from a re-iterable dataloader without full-data buffering.
+        """Fit the chain from a re-iterable dataloader.
 
         Each fittable transform is handled in order:
         - Incremental-capable transforms are fitted by streaming batches.
-        - Non-incremental fittable transforms must already be fitted, otherwise
-          fitting fails fast.
+        - Non-incremental fittable transforms materialise the full dataset (applying
+          prior transforms first), then call fit() once.
 
         Args:
             dataloader: Re-iterable training dataloader.
@@ -117,7 +118,6 @@ class TransformChain(Transform):
 
         Raises:
             ValueError: If dataloader is empty.
-            TypeError: If an unfitted non-incremental transform is encountered.
             TransformChainError: If any fit/apply step fails.
         """
         sample: Tensor | None = None
@@ -134,10 +134,16 @@ class TransformChain(Transform):
 
             if not isinstance(transform, IncrementalFittableTransform):
                 if not transform.fitted:
-                    raise TypeError(
-                        f"Incremental fitting for '{transform.__class__.__name__}' is not "
-                        "implemented. Remove this transform from online fit path."
-                    )
+                    # Collect all batches through prior transforms, then fit once.
+                    # Memory-intensive but necessary for batch-only algorithms (PCA, ICA, etc.).
+                    prior = list(self.transforms)[:i]
+                    chunks = []
+                    for batch in dataloader:
+                        x = tensor_selector(batch)
+                        for prev in prior:
+                            x = prev(x)
+                        chunks.append(x.detach().cpu())
+                    transform.fit(torch.cat(chunks, dim=0))
                 continue
 
             try:

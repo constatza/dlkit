@@ -52,14 +52,6 @@ def test_transform_chain_streaming_fit_multi_transform() -> None:
     assert y.shape == dataloader[0].shape
 
 
-def test_transform_chain_streaming_fit_fails_for_unfitted_non_incremental() -> None:
-    chain = TransformChain(ModuleList([PCA(n_components=1)]), entry_name="x")
-    dataloader = [torch.randn(4, 3), torch.randn(4, 3)]
-
-    with pytest.raises(TypeError, match="Incremental fitting"):
-        chain.fit_from_dataloader(dataloader, tensor_selector=lambda batch: batch)
-
-
 def test_transform_chain_streaming_fit_allows_prefitted_pca() -> None:
     pca = PCA(n_components=1)
     full = torch.randn(8, 3)
@@ -73,3 +65,45 @@ def test_transform_chain_streaming_fit_allows_prefitted_pca() -> None:
     assert chain.fitted
     y = chain.forward(dataloader[0])
     assert y.shape[-1] == 1
+
+
+@pytest.fixture
+def unfitted_pca_chain() -> TransformChain:
+    pca = PCA(n_components=2)
+    return TransformChain(ModuleList([pca]))
+
+
+def test_fit_from_dataloader_materialises_for_non_incremental_transform(
+    unfitted_pca_chain: TransformChain,
+) -> None:
+    data = torch.randn(60, 6)
+    batches = [data[i : i + 20] for i in range(0, 60, 20)]
+    dataloader = [{"features": b} for b in batches]
+
+    unfitted_pca_chain.fit_from_dataloader(
+        dataloader, tensor_selector=lambda batch: batch["features"]
+    )
+
+    assert unfitted_pca_chain.fitted
+    out = unfitted_pca_chain(data)
+    assert out.shape == (60, 2)
+
+
+def test_fit_from_dataloader_applies_prior_transforms_before_fitting_pca() -> None:
+    # Chain: [StandardScaler (incremental), PCA (non-incremental)].
+    # PCA must be fitted on scaled data, not raw — verifies prior-transform application.
+    scaler = StandardScaler(dim=0)
+    pca = PCA(n_components=2)
+    chain = TransformChain(ModuleList([scaler, pca]), entry_name="x")
+
+    torch.manual_seed(0)
+    data = torch.randn(60, 6) * 100  # large scale to make scaler effect visible
+    batches = [data[i : i + 20] for i in range(0, 60, 20)]
+
+    chain.fit_from_dataloader(batches, tensor_selector=lambda b: b)
+
+    assert chain.fitted
+    assert scaler.fitted
+    assert pca.fitted
+    out = chain(data)
+    assert out.shape == (60, 2)
