@@ -1,28 +1,10 @@
-from functools import wraps
 from typing import ClassVar, cast
 
 import torch
 from loguru import logger
 
-from .base import Transform
+from .base import Transform, reshaper2d
 from .errors import InvalidTransformConfigurationError, TransformNotFittedError
-
-
-def reshaper2d(func):
-    """Decorator to handle multi-dimensional inputs by flattening to 2D."""
-
-    @wraps(func)
-    def wrapper(*args):
-        data_position = len(args) - 1
-        data = args[data_position]
-        shape = data.shape
-        if len(shape) < 2:
-            return func(*args)
-        data = data.reshape(-1, data.shape[-1])
-        processed = func(*args[:-1], data)
-        return processed.reshape((-1,) + shape[1:-1] + processed.shape[1:])
-
-    return wrapper
 
 
 class PCA(Transform):

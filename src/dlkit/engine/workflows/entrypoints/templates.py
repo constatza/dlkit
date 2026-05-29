@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, cast, get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
@@ -234,7 +234,7 @@ def _render_toml(template: dict[str, Any], *, kind: TemplateKind) -> str:
             parent, child = section_key.split(".", 1)
             if parent not in doc:
                 doc.add(parent, table())
-            parent_table = cast(Any, doc[parent])
+            parent_table = doc[parent]
             child_table = table()
 
             if isinstance(content, dict):
@@ -265,6 +265,6 @@ def _render_toml(template: dict[str, Any], *, kind: TemplateKind) -> str:
                         if dotted_key in comments:
                             subtable.add(comment(comments[dotted_key]))
                         subtable.add(subkey, subvalue)
-                    cast(Any, doc[section_key]).add(key, subtable)
+                    doc[section_key].add(key, subtable)
 
     return dumps(doc)

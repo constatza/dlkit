@@ -20,10 +20,43 @@ Example:
 """
 
 from abc import abstractmethod
+from functools import wraps
 from typing import Any, Protocol, runtime_checkable
 
 import torch
 from torch import nn
+
+
+def reshaper2d(func):
+    """Decorator that handles ND inputs for transforms operating on the last dimension.
+
+    Reshapes (..., D) → (N, D), applies func, then reshapes output back.
+
+    Args:
+        func (Callable[..., torch.Tensor]): Transform method operating on 2D tensors (N, D).
+
+    Returns:
+        Callable[..., torch.Tensor]: Wrapped function that transparently handles
+            arbitrary leading dimensions.
+
+    Example:
+        >>> class MyTransform(Transform):
+        ...     @reshaper2d
+        ...     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        ...         return x @ self.weight.T
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        data = args[-1]
+        shape = data.shape
+        if len(shape) < 2:
+            return func(*args, **kwargs)
+        data = data.reshape(-1, shape[-1])
+        processed = func(*args[:-1], data, **kwargs)
+        return processed.reshape((-1,) + shape[1:-1] + processed.shape[1:])
+
+    return wrapper
 
 
 @runtime_checkable
@@ -43,6 +76,11 @@ class FittableTransform(Protocol):
         >>> scaler = StandardScaler()
         >>> isinstance(scaler, FittableTransform)  # True
     """
+
+    @property
+    def fitted(self) -> bool:
+        """Whether the transform has been fitted to data."""
+        ...
 
     def fit(self, data: torch.Tensor) -> None:
         """Fit transform parameters to training data.
