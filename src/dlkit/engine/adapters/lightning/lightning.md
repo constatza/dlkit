@@ -298,14 +298,16 @@ _batch_transformer._feature_chains.x.transforms.1._fitted   # PCA
 ```
 
 Fittable transforms are fitted automatically through
-`StandardLightningWrapper.configure_callbacks()` using a streaming multi-pass
-dataloader flow (no full `torch.cat` buffering):
+`StandardLightningWrapper.configure_callbacks()`. `NamedBatchTransformer.fit()`
+handles three cases:
 
-- Incremental-capable transforms (currently `StandardScaler`, `MinMaxScaler`) are
-  fitted batch-by-batch.
-- Non-incremental fittable transforms must already be fitted; otherwise fitting
-  fails fast with a clear error.
-- Current policy: online fitting for unfitted `PCA` is rejected (`TODO: incremental PCA`).
+- Transforms implementing `IncrementalFittableTransform` (e.g. `IncrementalPCA`,
+  `StandardScaler`, `MinMaxScaler`) are fitted batch-by-batch via
+  `reset_fit_state → update_fit → finalize_fit`.
+- Transforms implementing `_FittableFromDataloader` (i.e. `TransformChain`) use
+  `fit_from_dataloader`, which materialises the full dataset for non-incremental
+  algorithms like `PCA`, `ICA`, and `TruncatedSVD` in a single `fit(full_data)` call.
+- Transforms that are already fitted are skipped.
 
 ---
 

@@ -64,6 +64,10 @@ geometry = GeometrySpec(
 `GeometrySpec` is normally inferred automatically by the engine from `entry_configs`
 and dataset samples. Construct it manually only for advanced use cases or tests.
 
+`GeometrySpec.get_shape(name)` looks up a field by name and returns its shape tuple,
+or `None` if not found. This is the interface consumed by `ShapeAwareTransform.configure_shape`
+for eager buffer pre-allocation.
+
 ## Design Rule
 `common` does not import higher layers. Runtime orchestration, config loading,
 and model construction stay out of this package.
