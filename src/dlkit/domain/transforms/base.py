@@ -21,10 +21,12 @@ Example:
 
 from abc import abstractmethod
 from functools import wraps
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
-from torch import nn
+from torch import Tensor, nn
+
+from dlkit.common.geometry import GeometrySpec
 
 
 def reshaper2d(func):
@@ -164,7 +166,7 @@ class ShapeAwareTransform(Protocol):
         >>> isinstance(scaler, ShapeAwareTransform)  # True
     """
 
-    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: GeometrySpec, entry_name: str) -> None:
         """Configure transform with shape information.
 
         Args:
@@ -311,7 +313,7 @@ class Transform(nn.Module):
     #     class NonInvertible(Transform):  # Will NOT pass (no inverse_transform method)
     #         pass
 
-    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: GeometrySpec, entry_name: str) -> None:
         """Configure transform with shape information (OPTIONAL).
 
         Override this method if your transform benefits from eager buffer allocation.
@@ -370,13 +372,13 @@ class Transform(nn.Module):
 
     def _load_from_state_dict(
         self,
-        state_dict: dict,
+        state_dict: dict[str, Tensor | bool],
         prefix: str,
-        local_metadata: dict,
+        local_metadata: dict[str, int],
         strict: bool,
-        missing_keys: list,
-        unexpected_keys: list,
-        error_msgs: list,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
     ) -> None:
         """Override _load_from_state_dict to restore _fitted bool from checkpoint.
 

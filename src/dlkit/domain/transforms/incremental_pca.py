@@ -1,4 +1,10 @@
-from typing import Any, cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    import numpy as np
+    from sklearn.decomposition import IncrementalPCA as _SKLearnIPCA
 
 import torch
 from loguru import logger
@@ -42,7 +48,7 @@ class IncrementalPCA(Transform):
         super().__init__()
         self.n_components = n_components
         self.batch_size = batch_size
-        self._estimator: Any = None
+        self._estimator: _SKLearnIPCA | None = None
         self.register_buffer("mean", torch.tensor([]))
         self.register_buffer("components", torch.tensor([]))
         self.register_buffer("explained_variance_ratio", torch.tensor([]))
@@ -64,20 +70,35 @@ class IncrementalPCA(Transform):
 
         Args:
             batch: Tensor of shape (..., n_features).
+
+        Raises:
+            RuntimeError: If reset_fit_state() has not been called before update_fit().
         """
+        if self._estimator is None:
+            raise RuntimeError("Call reset_fit_state() before update_fit().")
         np_batch = batch.detach().cpu().numpy()
         if np_batch.ndim > 2:
             np_batch = np_batch.reshape(-1, np_batch.shape[-1])
         self._estimator.partial_fit(np_batch)
 
     def finalize_fit(self) -> None:
-        """Extract fitted parameters into torch buffers and discard the estimator."""
-        self.register_buffer("mean", torch.from_numpy(self._estimator.mean_.copy()).float())
+        """Extract fitted parameters into torch buffers and discard the estimator.
+
+        Raises:
+            RuntimeError: If reset_fit_state() has not been called before finalize_fit().
+        """
+        if self._estimator is None:
+            raise RuntimeError("Call reset_fit_state() before finalize_fit().")
+        estimator = self._estimator
         self.register_buffer(
-            "components", torch.from_numpy(self._estimator.components_.copy()).float()
+            "mean", torch.from_numpy(cast("np.ndarray", estimator.mean_).copy()).float()
+        )
+        self.register_buffer(
+            "components",
+            torch.from_numpy(cast("np.ndarray", estimator.components_).copy()).float(),
         )
         explained_variance_ratio = torch.from_numpy(
-            self._estimator.explained_variance_ratio_.copy()
+            cast("np.ndarray", estimator.explained_variance_ratio_).copy()
         ).float()
         self.register_buffer("explained_variance_ratio", explained_variance_ratio)
         self._estimator = None
@@ -104,13 +125,13 @@ class IncrementalPCA(Transform):
 
     def _load_from_state_dict(
         self,
-        state_dict: dict,
+        state_dict: dict[str, torch.Tensor | bool],
         prefix: str,
-        local_metadata: dict,
+        local_metadata: dict[str, int],
         strict: bool,
-        missing_keys: list,
-        unexpected_keys: list,
-        error_msgs: list,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
     ) -> None:
         """Pre-allocate buffers with correct shape from checkpoint before loading.
 
@@ -124,9 +145,9 @@ class IncrementalPCA(Transform):
             error_msgs: List to accumulate error messages.
         """
         for name in ("mean", "components", "explained_variance_ratio"):
-            key = f"{prefix}{name}"
-            if key in state_dict:
-                self.register_buffer(name, torch.empty_like(state_dict[key]))
+            val = state_dict.get(f"{prefix}{name}")
+            if isinstance(val, torch.Tensor):
+                self.register_buffer(name, torch.empty_like(val))
         super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )

@@ -137,3 +137,17 @@ class GeometrySpec:
         if not features:
             raise ValueError("GeometrySpec has no FEATURE field")
         return features[0]
+
+    def get_shape(self, name: str) -> tuple[int, ...] | None:
+        """Return the shape of the named field, or None if not found.
+
+        Args:
+            name: Field identifier to look up.
+
+        Returns:
+            Shape tuple for the field, or None if not present.
+        """
+        for field in self.fields:
+            if field.name == name:
+                return field.shape
+        return None

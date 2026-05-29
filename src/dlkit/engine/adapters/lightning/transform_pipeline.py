@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Protocol, cast, runtime_checkable
+from collections.abc import Callable, Iterable
+from typing import Protocol, cast, runtime_checkable
 
 import torch
 from loguru import logger
@@ -26,8 +26,8 @@ class _FittableFromDataloader(Protocol):
 
     def fit_from_dataloader(
         self,
-        dataloader: Any,
-        extractor: Callable[..., Any],
+        dataloader: Iterable[TensorDictBase],
+        extractor: Callable[[TensorDictBase], Tensor],
     ) -> None: ...
 
 
@@ -90,7 +90,7 @@ class NamedBatchTransformer(nn.Module):
         self._target_chains = nn.ModuleDict(target_chains)
         self._ns: IBatchNamespaceSpec = namespace_spec or StandardBatchNamespace()
 
-    def transform(self, batch: Any) -> Any:
+    def transform(self, batch: TensorDictBase) -> TensorDictBase:
         """Apply transforms to all feature and target entries in the batch.
 
         Iterates registered chains (authoritative), not batch keys.
@@ -107,8 +107,10 @@ class NamedBatchTransformer(nn.Module):
         """
         fn = self._ns.feature_namespace
         tn = self._ns.target_namespace
-        batch_feature_keys = set(batch[fn].keys())
-        new_features: dict[str, Tensor] = {}
+        features_td = cast(TensorDictBase, batch[fn])
+        targets_td = cast(TensorDictBase, batch[tn])
+        batch_feature_keys = set(features_td.keys())
+        new_features: dict[str, Tensor | TensorDictBase] = {}
 
         for k in self._feature_chains:
             if k not in batch_feature_keys:
@@ -123,10 +125,10 @@ class NamedBatchTransformer(nn.Module):
                 # Intentional zero-copy alias: untransformed features are passed through by
                 # reference. Standard loss functions and torchmetrics do not mutate their
                 # inputs; cloning here would add O(batch×features) overhead every training step.
-                new_features[k] = batch[fn, k]
+                new_features[k] = cast(Tensor, batch[fn, k])
 
-        batch_target_keys = set(batch[tn].keys())
-        new_targets: dict[str, Tensor] = {}
+        batch_target_keys = set(targets_td.keys())
+        new_targets: dict[str, Tensor | TensorDictBase] = {}
 
         for k in self._target_chains:
             if k not in batch_target_keys:
@@ -139,12 +141,12 @@ class NamedBatchTransformer(nn.Module):
         for k in batch_target_keys:
             if k not in new_targets:
                 # Same zero-copy passthrough rationale as features above.
-                new_targets[k] = batch[tn, k]
+                new_targets[k] = cast(Tensor, batch[tn, k])
 
         return TensorDict(
             {
-                fn: TensorDict(cast(Any, new_features), batch_size=batch.batch_size),
-                tn: TensorDict(cast(Any, new_targets), batch_size=batch.batch_size),
+                fn: TensorDict(new_features, batch_size=batch.batch_size),  # type: ignore
+                tn: TensorDict(new_targets, batch_size=batch.batch_size),  # type: ignore
             },
             batch_size=batch.batch_size,
         )
@@ -185,9 +187,9 @@ class NamedBatchTransformer(nn.Module):
                             )
                         case _:
                             result[k] = cast(Tensor | TensorDictBase, v)
-                return TensorDict(cast(Any, result), batch_size=predictions.batch_size)
+                return TensorDict(result, batch_size=predictions.batch_size)  # type: ignore
 
-    def fit(self, dataloader: Any) -> None:
+    def fit(self, dataloader: Iterable[TensorDictBase]) -> None:
         """Fit all fittable transforms using training data.
 
         Args:
@@ -211,7 +213,7 @@ class NamedBatchTransformer(nn.Module):
                 if isinstance(chain, _FittableFromDataloader):
                     cast(_FittableFromDataloader, chain).fit_from_dataloader(
                         dataloader,
-                        lambda batch, ns=namespace, key=entry_name: batch[ns, key],
+                        lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]),
                     )
                     continue
 

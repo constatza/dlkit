@@ -64,13 +64,13 @@ class TruncatedSVD(Transform):
 
     def _load_from_state_dict(
         self,
-        state_dict: dict,
+        state_dict: dict[str, torch.Tensor | bool],
         prefix: str,
-        local_metadata: dict,
+        local_metadata: dict[str, int],
         strict: bool,
-        missing_keys: list,
-        unexpected_keys: list,
-        error_msgs: list,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
     ) -> None:
         """Pre-allocate buffers with correct shape from checkpoint before loading.
 
@@ -84,9 +84,9 @@ class TruncatedSVD(Transform):
             error_msgs: List to accumulate error messages.
         """
         for name in ("components", "singular_values", "explained_energy_ratio"):
-            key = f"{prefix}{name}"
-            if key in state_dict:
-                self.register_buffer(name, torch.empty_like(state_dict[key]))
+            val = state_dict.get(f"{prefix}{name}")
+            if isinstance(val, torch.Tensor):
+                self.register_buffer(name, torch.empty_like(val))
         super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
