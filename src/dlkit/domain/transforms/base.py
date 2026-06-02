@@ -227,7 +227,6 @@ class Transform(nn.Module):
         ...         return x + self.mean
     """
 
-    apply_inverse: bool
     _fitted: bool
 
     def __init__(self) -> None:
@@ -239,7 +238,6 @@ class Transform(nn.Module):
             or allocate buffers lazily during fit() from data.shape.
         """
         super().__init__()
-        self.apply_inverse = True
         self._fitted = False
 
     @abstractmethod

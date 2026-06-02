@@ -1,4 +1,4 @@
-from typing import ClassVar, cast
+from typing import cast
 
 import torch
 from loguru import logger
@@ -21,8 +21,6 @@ class PCA(Transform):
     The number of components can be validated against input shape via configure_shape(),
     or determined dynamically during fit().
     """
-
-    _NOT_INCREMENTALLY_FITTABLE: ClassVar[bool] = True
 
     def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
@@ -165,8 +163,9 @@ class PCA(Transform):
         if not self.fitted:
             raise TransformNotFittedError("PCA")
 
-        mean = cast(torch.Tensor, self.mean)
-        components = cast(torch.Tensor, self.components)
+        device = x.device
+        mean = cast(torch.Tensor, self.mean).to(device)
+        components = cast(torch.Tensor, self.components).to(device)
         # Center the data using the stored mean
         data_centered = x - mean
         # Project onto principal components

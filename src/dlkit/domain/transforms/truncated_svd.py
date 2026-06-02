@@ -124,7 +124,8 @@ class TruncatedSVD(Transform):
         """
         if not self.fitted:
             raise TransformNotFittedError("TruncatedSVD")
-        components = cast(torch.Tensor, self.components)
+        device = x.device
+        components = cast(torch.Tensor, self.components).to(device)
         return torch.matmul(x, components)
 
     def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:

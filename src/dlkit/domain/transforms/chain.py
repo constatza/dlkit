@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Iterable
 
 import torch
 from loguru import logger
@@ -15,7 +14,7 @@ from .base import (
 from .errors import TransformChainError, TransformNotFittedError
 
 
-class TransformChain(Transform):
+class TransformChain[BatchT](Transform):
     """Pipeline for chaining multiple transformations for one tensor stream.
 
     This class manages a sequence of transforms (e.g., scalers, normalizers, PCA),
@@ -47,10 +46,6 @@ class TransformChain(Transform):
         Args:
             transforms: ModuleList of instantiated transform modules.
             entry_name: Optional entry name used for incremental-fit logging.
-
-        Raises:
-            ValueError: If any transform is marked as non-incrementally-fittable
-                (cannot be used in online fit paths).
 
         Note:
             TransformChain no longer builds transforms from settings. Use
@@ -102,8 +97,8 @@ class TransformChain(Transform):
 
     def fit_from_dataloader(
         self,
-        dataloader: Any,
-        tensor_selector: Callable[[Any], Tensor],
+        dataloader: Iterable[BatchT],
+        tensor_selector: Callable[[BatchT], Tensor],
     ) -> None:
         """Fit the chain from a re-iterable dataloader.
 
@@ -169,7 +164,6 @@ class TransformChain(Transform):
 
         # Infer transformed shape from one sample after fitting.
         transform_index = 0
-        transform = self.transforms[0] if self.transforms else None
         try:
             sample_out = sample
             for transform in self.transforms:

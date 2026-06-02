@@ -167,8 +167,9 @@ class IncrementalPCA(Transform):
         """
         if not self.fitted:
             raise TransformNotFittedError("IncrementalPCA")
-        mean = cast(torch.Tensor, self.mean)
-        components = cast(torch.Tensor, self.components)
+        device = x.device
+        mean = cast(torch.Tensor, self.mean).to(device)
+        components = cast(torch.Tensor, self.components).to(device)
         return torch.matmul(x - mean, components.T)
 
     @reshaper2d
