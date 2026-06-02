@@ -106,7 +106,8 @@ class TruncatedSVD(Transform):
         """
         if not self.fitted:
             raise TransformNotFittedError("TruncatedSVD")
-        components = cast(torch.Tensor, self.components)
+        device = x.device
+        components = cast(torch.Tensor, self.components).to(device)
         return torch.matmul(x, components.T)
 
     @reshaper2d
