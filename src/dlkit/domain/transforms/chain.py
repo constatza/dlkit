@@ -21,8 +21,7 @@ class TransformChain[BatchT](Transform):
     providing methods to fit them in order, apply them (``forward``), and apply their
     inverse transformations (``inverse_transform``).
 
-    The chain uses analytical shape inference (pure functions) for efficiency, with
-    optional dummy tensor validation for compatibility checking.
+    Supports sequential fitting, application, and optionally inverse transformation.
 
     Example:
         >>> # Create chain with analytical shape inference
@@ -163,6 +162,7 @@ class TransformChain[BatchT](Transform):
                 ) from e
 
         # Infer transformed shape from one sample after fitting.
+        transform = None
         transform_index = 0
         try:
             sample_out = sample

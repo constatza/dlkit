@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
@@ -74,7 +75,9 @@ def _propagate_shape_through_chain(
     current = shape
     for ts in transform_settings_list:
         transform_cls = _resolve_transform_class(ts)
-        kwargs = _extract_transform_kwargs(ts)
+        all_kwargs = _extract_transform_kwargs(ts)
+        valid_params = set(inspect.signature(transform_cls.__init__).parameters) - {"self"}
+        kwargs = {k: v for k, v in all_kwargs.items() if k in valid_params}
         instance = transform_cls(**kwargs)
         if not hasattr(instance, "infer_output_shape"):
             raise ValueError(

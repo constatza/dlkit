@@ -115,16 +115,20 @@ Subclass `Transform` and implement `forward()`. If the transform participates in
 geometry/shape inference, also implement `infer_output_shape(self, in_shape)`:
 
 ```python
+import torch
 from dlkit.domain.transforms import Transform
-from dlkit.domain.shapes import ShapeSpec  # or the relevant shape type
 
 
 class MyTransform(Transform):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        ...
+    def __init__(self, *, n_components: int) -> None:
+        super().__init__()
+        self.n_components = n_components
 
-    def infer_output_shape(self, in_shape: ShapeSpec) -> ShapeSpec:
-        ...
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x[..., : self.n_components]
+
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        return in_shape[:-1] + (self.n_components,)
 ```
 
 Optionally implement any subset of the protocol methods (`fit`, `inverse_transform`,
