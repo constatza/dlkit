@@ -60,8 +60,6 @@ def _propagate_shape_through_chain(
 ) -> tuple[int, ...]:
     """Propagate a shape through an ordered list of transform settings analytically.
 
-    Each transform class must be registered in ``SHAPE_INFERENCE_REGISTRY``.
-
     Args:
         shape: Input shape to propagate.
         transform_settings_list: Ordered transform settings (each has ``name``
@@ -71,23 +69,19 @@ def _propagate_shape_through_chain(
         Output shape after all transforms.
 
     Raises:
-        ValueError: If a transform has no registered shape inference function.
+        ValueError: If a transform has no ``infer_output_shape()`` instance method.
     """
-    from dlkit.domain.transforms.shape_inference import SHAPE_INFERENCE_REGISTRY
-
     current = shape
-    for transform_settings in transform_settings_list:
-        transform_cls = _resolve_transform_class(transform_settings)
-        if transform_cls not in SHAPE_INFERENCE_REGISTRY:
+    for ts in transform_settings_list:
+        transform_cls = _resolve_transform_class(ts)
+        kwargs = _extract_transform_kwargs(ts)
+        instance = transform_cls(**kwargs)
+        if not hasattr(instance, "infer_output_shape"):
             raise ValueError(
-                f"Transform '{getattr(transform_settings, 'name', transform_cls)}' has no "
-                "registered shape inference function. Specify explicit model init_kwargs "
-                "to bypass analytical shape inference."
+                f"Transform '{getattr(ts, 'name', transform_cls)}' has no "
+                "infer_output_shape() method. Cannot infer geometry analytically."
             )
-        current = SHAPE_INFERENCE_REGISTRY[transform_cls](
-            current,
-            **_extract_transform_kwargs(transform_settings),
-        )
+        current = instance.infer_output_shape(current)
     return current
 
 
@@ -111,7 +105,7 @@ def infer_geometry(
 
     Raises:
         ValueError: If dataset[0] is not a nested TensorDict, or if a transform
-                    has no registered shape inference function.
+                    has no infer_output_shape() method.
     """
     try:
         from tensordict import TensorDictBase

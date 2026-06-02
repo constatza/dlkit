@@ -258,18 +258,12 @@ class TestTopologyKindInference:
 class TestTransformPropagation:
     """Tests that transform chains are propagated through shape inference."""
 
-    def test_shape_preserving_transform_leaves_shape_unchanged(self, monkeypatch) -> None:
+    def test_shape_preserving_transform_leaves_shape_unchanged(self) -> None:
         """An identity (shape-preserving) transform does not change the shape."""
-        from dlkit.domain.transforms.shape_inference import (
-            SHAPE_INFERENCE_REGISTRY,
-            infer_shape_preserving,
-        )
 
-        # Create a dummy transform class and register it as shape-preserving
         class _DummyPreserving:
-            pass
-
-        monkeypatch.setitem(SHAPE_INFERENCE_REGISTRY, _DummyPreserving, infer_shape_preserving)
+            def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+                return in_shape
 
         transform_settings = MagicMock()
         transform_settings.name = _DummyPreserving
@@ -285,14 +279,14 @@ class TestTransformPropagation:
 
         assert result.fields[0].shape == (12,)
 
-    def test_unregistered_transform_raises_value_error(self) -> None:
-        """A transform without a registered shape inference function raises ValueError."""
+    def test_transform_without_infer_output_shape_raises_value_error(self) -> None:
+        """A transform without ``infer_output_shape()`` raises ValueError."""
 
-        class _UnregisteredTransform:
+        class _NoShapeInference:
             pass
 
         transform_settings = MagicMock()
-        transform_settings.name = _UnregisteredTransform
+        transform_settings.name = _NoShapeInference
         transform_settings.module_path = None
         transform_settings.model_dump.return_value = {}
 
@@ -301,7 +295,7 @@ class TestTransformPropagation:
         )
         dataset = _make_dataset({"z": torch.zeros(12)})
 
-        with pytest.raises(ValueError, match="no registered shape inference"):
+        with pytest.raises(ValueError, match="infer_output_shape"):
             infer_geometry((entry,), dataset)
 
 

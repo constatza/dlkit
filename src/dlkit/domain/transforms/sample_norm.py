@@ -9,7 +9,6 @@ from pydantic import ConfigDict, validate_call
 
 from dlkit.common.geometry import GeometrySpec
 from dlkit.domain.transforms.base import Transform
-from dlkit.domain.transforms.shape_inference import register_shape_inference
 
 
 class SampleNormL2(Transform):
@@ -187,9 +186,13 @@ class SampleNormL2(Transform):
         # Denormalize: x_original = y * ||x||_2
         return y * self._last_norms
 
+    def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Return input shape unchanged (SampleNormL2 is shape-preserving).
 
-# Register shape inference function (SampleNormL2 preserves shape)
-@register_shape_inference(SampleNormL2)
-def _infer_sample_norm_output_shape(input_shape: tuple[int, ...], **kwargs) -> tuple[int, ...]:
-    """SampleNormL2 preserves input shape."""
-    return input_shape
+        Args:
+            in_shape: Input tensor shape.
+
+        Returns:
+            Same as in_shape.
+        """
+        return in_shape
