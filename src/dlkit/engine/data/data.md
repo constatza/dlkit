@@ -9,4 +9,4 @@ Current responsibilities:
 - dataset-family resolution
 - dataset implementations in `datasets/`
 - dataset split views in `splits.py`
-- shape inference helpers shared by runtime services
+- shared sample-driven shape inference helpers for runtime services

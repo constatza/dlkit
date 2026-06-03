@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
-from dlkit.engine.data.geometry import infer_geometry
+from dlkit.engine.data.geometry import infer_geometry_from_sample, infer_target_shapes_from_sample
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.contract_resolver import (
     ContractInferenceError,
@@ -108,19 +108,9 @@ class FlexibleBuildStrategy(IBuildStrategy):
         geometry: Any = None
         contract: Any = None
         try:
-            geometry = infer_geometry(tuple(selection.features), dataset)
-            output_shapes: tuple[tuple[int, ...], ...] = ()
-            try:
-                from tensordict import TensorDictBase
-
-                dataset_any: Any = dataset
-                sample = dataset_any[0]
-                if isinstance(sample, TensorDictBase) and "targets" in sample.keys():
-                    output_shapes = tuple(
-                        tuple(int(d) for d in v.shape) for v in sample["targets"].values()
-                    )
-            except Exception:
-                pass
+            sample = cast(Any, dataset)[0]
+            geometry = infer_geometry_from_sample(tuple(selection.features), sample)
+            output_shapes = infer_target_shapes_from_sample(selection.targets, sample)
             contract = resolve_contract(geometry, output_shapes)
         except (ValueError, ContractInferenceError) as exc:
             logger.warning("Contract inference failed ({}), falling back to shape bridge", exc)
