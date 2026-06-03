@@ -338,6 +338,11 @@ checkpoint["dlkit_metadata"] = {
 the metadata block itself and normalize older `model_settings` payloads into the
 flat DTO shape above before reconstruction.
 
+Serialized transform specs inside `entry_configs[*].transforms` are treated as
+checkpoint metadata, not as already-instantiated settings objects. Transform
+construction normalizes those mappings into typed `TransformSettings` before
+applying runtime module defaults and creating transform modules.
+
 `feature_names` is used by `CheckpointPredictor` to map positional args in
 `predictor.predict(tensor0, tensor1)` to the correct feature transform chain and
 to reconstruct the correct `model.forward()` dispatch order. The list only includes

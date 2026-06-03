@@ -8,14 +8,15 @@ from dlkit.domain.transforms.chain import TransformChain
 from dlkit.domain.transforms.minmax import MinMaxScaler
 from dlkit.domain.transforms.pca import PCA
 from dlkit.domain.transforms.standard import StandardScaler
+from dlkit.engine.adapters.lightning.transform_builder import build_transform_list
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 
 def test_transform_chain_build_fit_forward_inverse() -> None:
     # Single MinMax scaler in chain
-    from dlkit.engine.workflows.factories.component_builders import build_transform_list
-
-    ts = TransformSettings(name="MinMaxScaler", module_path="dlkit.domain.transforms.minmax", dim=0)
+    ts = TransformSettings.model_validate(
+        {"name": "MinMaxScaler", "module_path": "dlkit.domain.transforms.minmax", "dim": 0}
+    )
     # No shape_spec needed - transforms will infer from data
     module_list, _ = build_transform_list([ts])
     chain = TransformChain(module_list)
@@ -33,6 +34,34 @@ def test_transform_chain_build_fit_forward_inverse() -> None:
 
     inv = chain.inverse()
     assert isinstance(inv, TransformChain)
+
+
+def test_build_transform_list_accepts_serialized_transform_dicts() -> None:
+    module_list, _ = build_transform_list(
+        [{"name": "PCA", "dim": 0, "n_components": 2}],
+        entry_name="x",
+    )
+
+    assert len(module_list) == 1
+    transform = module_list[0]
+    assert isinstance(transform, PCA)
+    assert transform.n_components == 2
+
+
+def test_build_transform_list_preserves_typed_transform_settings() -> None:
+    module_list, _ = build_transform_list(
+        [TransformSettings.model_validate({"name": "PCA", "n_components": 2})]
+    )
+
+    assert len(module_list) == 1
+    transform = module_list[0]
+    assert isinstance(transform, PCA)
+    assert transform.n_components == 2
+
+
+def test_build_transform_list_rejects_unsupported_spec_types() -> None:
+    with pytest.raises(TypeError, match="Transform specifications must be"):
+        build_transform_list([object()])
 
 
 def test_transform_chain_streaming_fit_multi_transform() -> None:

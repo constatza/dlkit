@@ -149,14 +149,14 @@ def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str,
 
 
 def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> list[Any]:
-    """Extract transform settings from entry config.
+    """Extract raw transform specifications from one entry config.
 
     Args:
         entry_name: Name of the data entry
         entry_configs: Entry configurations
 
     Returns:
-        List of transform settings, empty if none found
+        List of serialized-or-typed transform specs, empty if none found
     """
     entry_config = entry_configs.get(entry_name)
     if not entry_config:

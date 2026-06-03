@@ -52,3 +52,5 @@ with load_model("model.ckpt", device="auto") as predictor:
   metadata properties.
 - The runtime predictor owns checkpoint validation, metadata extraction, and
   model lifecycle management.
+- Checkpoint transform reconstruction accepts the serialized `entry_configs[*].transforms`
+  metadata written by DLKit and normalizes those specs before module construction.
