@@ -14,7 +14,7 @@ The primary dataset for array-based data with flexible feature/target configurat
 - `.npz` - NumPy multi-array archive files
 - `.pt` / `.pth` - PyTorch tensor files
 - `.txt` / `.csv` - Text-based array files
-- sparse pack directories - COO payload packs (default files: `indices.npy`, `values.npy`, `nnz_ptr.npy`, `values_scale.npy`; customizable via `SparseFeature.files`)
+- zarr pack directories - dense matrix packs read via `MatrixFeature` with a path to the zarr directory
 
 **Key Features:**
 - Default mode loads arrays into memory upfront for simple workflows
@@ -114,69 +114,38 @@ targets = [Target(name="y", path="labels.pt")]  # Load from PyTorch file
 dataset = FlexibleDataset(features=features, targets=targets)
 ```
 
-### Sparse Matrix Context Features
+### Matrix Context Features
 
-Use sparse pack directories for per-sample matrices consumed by custom losses.
+Use zarr pack directories for per-sample matrices consumed by custom losses.
 
-#### Programmatic API (explicit `SparseFeature`)
+#### Programmatic API
 
 ```python
-from dlkit.infrastructure.config.data_entries import Feature, SparseFeature, Target
+from pathlib import Path
+
+from dlkit.infrastructure.config import MatrixFeature
+from dlkit.infrastructure.config.data_entries import Feature, Target
 
 features = [
     Feature(name="x", path="features.npy"),
-    SparseFeature(name="matrix", path="matrix_pack", model_input=False, loss_input="matrix"),
+    MatrixFeature(name="K", path=Path("/data/stiffness_matrices"), model_input=False, loss_input="K"),
 ]
 targets = [Target(name="y", path="labels.npy")]
 dataset = FlexibleDataset(features=features, targets=targets)
 ```
 
-#### Programmatic API (custom sparse payload names)
-
-```python
-from dlkit.infrastructure.config.data_entries import Feature, SparseFeature, SparseFilesConfig, Target
-
-features = [
-    Feature(name="x", path="features.npy"),
-    SparseFeature(
-        name="matrix",
-        path="matrix_pack",
-        model_input=False,
-        loss_input="matrix",
-        denormalize=True,  # apply values_scale during read
-        files=SparseFilesConfig(
-            indices="row_index.npy",
-            values="entries.npy",
-            nnz_ptr="offsets.npy",
-            values_scale="scale.npy",
-        ),
-    ),
-]
-targets = [Target(name="y", path="labels.npy")]
-dataset = FlexibleDataset(features=features, targets=targets)
-```
-
-#### TOML / generic `Feature` path auto-detection
-
-If `path` points to a directory containing sparse payload files, `FlexibleDataset`
-auto-detects it as a sparse pack and loads sparse tensors.
+#### TOML Configuration
 
 ```toml
 [[DATASET.features]]
-name = "matrix"
-path = "matrix_pack"    # directory with sparse payload files
+name = "K"
+path = "/data/stiffness_matrices"   # zarr pack directory
 model_input = false
-loss_input = "matrix"
-
-# Optional: override sparse payload filenames
-files = { indices = "row_index.npy", values = "entries.npy", nnz_ptr = "offsets.npy", values_scale = "scale.npy" }
-
-# Optional: apply values_scale when materializing sparse tensors
-denormalize = true
+loss_input = "K"
 ```
 
-Sparse tensors are stored in the dataset feature TensorDict and collated via
-`torch.stack` on same-shape COO tensors.
+Dense matrices are read from the zarr pack on each sample access and stored in
+the dataset feature TensorDict.
 
 ### In-Memory Data (Testing/Programmatic)
 

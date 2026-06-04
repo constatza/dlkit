@@ -17,7 +17,7 @@
 - `path_context.py` / `path_context_state.py`: request-scoped path overrides
 - `explicit_path_context.py`: explicit (non-thread-local) path context structures
 - `paths.py`, `locations.py`: path resolution and directory provisioning
-- `arrays.py`, `tables.py`, `index.py`, `tensor_entries.py`, `sparse/`: data-loading helpers
+- `arrays.py`, `tables.py`, `index.py`, `tensor_entries.py`, `packs/`: data-loading helpers
 - `system.py`: module/class loading from modules or filesystem paths
 
 ## Path Resolution Architecture
