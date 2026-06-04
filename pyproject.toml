@@ -40,7 +40,7 @@ dev = [
     "prek",
     "pytest<9.0.0,>=8.2.2",
     "pytest-cov>=7.0.0",
-    "pytest-memray>=1.7",
+    "pytest-memray>=1.7; sys_platform != 'win32'",
     "pytest-mock>=3.14.0",
     "pytest-testmon>=2.2.0",
     "pytest-timeout>=2.4.0",
