@@ -15,17 +15,14 @@ from .config import (
     write_config,
 )
 from .index import load_split_indices
-from .path_resolver import PathResolver
-from .sparse import (
-    PackFiles,
-    PackManifest,
-    SparseFormat,
-    is_sparse_pack_dir,
-    open_sparse_pack,
-    register_manifest_schema,
-    save_sparse_pack,
-    validate_sparse_pack,
+from .packs import (
+    ArrayPackFormat,
+    open_array_pack,
+    register_format,
+    save_array_pack,
+    write_array_pack,
 )
+from .path_resolver import PathResolver
 from .tables import read_table
 from .tensor_entries import (
     TensorDataEntry,
@@ -57,15 +54,12 @@ __all__ = [
     # Path resolution
     "PathResolver",
     "locations",
-    # Sparse pack I/O
-    "open_sparse_pack",
-    "is_sparse_pack_dir",
-    "save_sparse_pack",
-    "validate_sparse_pack",
-    "PackFiles",
-    "PackManifest",
-    "register_manifest_schema",
-    "SparseFormat",
+    # Array pack I/O (new packs API)
+    "open_array_pack",
+    "write_array_pack",
+    "save_array_pack",
+    "ArrayPackFormat",
+    "register_format",
     # Writers
     "IWriter",
     "TomlWriter",

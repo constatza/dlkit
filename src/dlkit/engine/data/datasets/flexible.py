@@ -10,9 +10,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
 import numpy as np
@@ -23,18 +21,13 @@ from torch import Tensor
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
     FeatureType,
+    MatrixFeature,
     PathBasedEntry,
-    SparseFeature,
     TargetType,
     ValueBasedEntry,
 )
 from dlkit.infrastructure.io import load_array
-from dlkit.infrastructure.io.sparse import (
-    PackFiles,
-    SparsePackReader,
-    is_sparse_pack_dir,
-    open_sparse_pack,
-)
+from dlkit.infrastructure.io.packs import IArrayPackReader, open_array_pack
 from dlkit.infrastructure.io.tensor_entries import TensorDataEntry, to_tensor_entry
 
 from .base import BaseDataset, register_dataset
@@ -45,6 +38,7 @@ if TYPE_CHECKING:
 
 
 type _TensorMap = dict[str, Tensor]
+type _EntrySource = Path | Tensor | np.ndarray | IArrayPackReader
 
 
 def _build_nested_tensordict(
@@ -88,21 +82,14 @@ class PlaceholderNotResolvedError(ValueError):
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SparseSourceBinding:
-    """Sparse source binding for a sparse pack reader."""
-
-    reader: SparsePackReader
-    source_path: Path  # pack directory path — for cache fingerprinting
-
-
 def _normalize_entries(
     entries: Any,
-) -> dict[str, tuple[Path | Tensor | np.ndarray | SparseSourceBinding, str | None]]:
+) -> dict[str, tuple[_EntrySource, str | None]]:
     """Extract path or value from DataEntry objects or pre-resolved tensor entries.
 
-    Expects DataEntry objects (PathFeature, ValueFeature, PathTarget, ValueTarget)
-    created by Feature() or Target() factories. These factories handle validation.
+    Expects DataEntry objects (PathFeature, ValueFeature, PathTarget, ValueTarget,
+    MatrixFeature) created by Feature()/Matrix()/Target() factories.
+    These factories handle validation.
 
     Single Responsibility: Extract data sources from validated entries.
     No validation - trust that factories already validated.
@@ -113,12 +100,13 @@ def _normalize_entries(
     Returns:
         Dictionary mapping entry name to tuple of (data source, entry name).
         The entry name is used as array_key when loading .npz files.
+        ``IArrayPackReader`` values represent zarr dense matrix pack entries.
 
     Raises:
         TypeError: If receives dict (should use Feature()/Target() instead)
         PlaceholderNotResolvedError: If entry is placeholder without data
     """
-    result: dict[str, tuple[Path | Tensor | np.ndarray | SparseSourceBinding, str | None]] = {}
+    result: dict[str, tuple[_EntrySource, str | None]] = {}
     if entries is None:
         return result
 
@@ -151,30 +139,18 @@ def _normalize_entries(
                 raise PlaceholderNotResolvedError(str(item.name or "unknown"))
             assert item.name is not None, "Non-placeholder entry must have name"
             result[item.name] = (
-                cast("Path | Tensor | np.ndarray | SparseSourceBinding", item.value),
+                cast("_EntrySource", item.value),
                 item.name,
             )
 
-        # SparseFeature: open sparse pack reader
-        elif isinstance(item, SparseFeature):
+        # MatrixFeature (and its SparseFeature alias): open zarr dense array pack reader
+        elif isinstance(item, MatrixFeature):
             if item.is_placeholder():
                 raise PlaceholderNotResolvedError(str(item.name or "unknown"))
             assert item.name is not None, "Non-placeholder entry must have name"
-            assert item.path is not None, "SparseFeature path must be set for non-placeholder entry"
-            files = PackFiles(
-                indices=item.files.indices,
-                values=item.files.values,
-                nnz_ptr=item.files.nnz_ptr,
-                size=item.files.size,
-            )
-            reader = open_sparse_pack(Path(item.path), files=files)
-            result[item.name] = (
-                SparseSourceBinding(
-                    reader=reader,
-                    source_path=Path(item.path),
-                ),
-                None,
-            )
+            assert item.path is not None, "MatrixFeature path must be set for non-placeholder entry"
+            reader = open_array_pack(Path(item.path))
+            result[item.name] = (reader, None)
 
         # PathBasedEntry: extract file path
         elif isinstance(item, PathBasedEntry):
@@ -184,17 +160,7 @@ def _normalize_entries(
             assert item.path is not None, (
                 "PathBasedEntry must have a path for non-placeholder entry"
             )
-            resolved_path = Path(item.path)
-            if is_sparse_pack_dir(resolved_path):
-                result[item.name] = (
-                    SparseSourceBinding(
-                        reader=open_sparse_pack(resolved_path),
-                        source_path=resolved_path,
-                    ),
-                    None,
-                )
-            else:
-                result[item.name] = (resolved_path, item.name)
+            result[item.name] = (Path(item.path), item.name)
 
         # Generic DataEntry: check capabilities
         elif isinstance(item, DataEntry):
@@ -255,14 +221,6 @@ def _load_or_convert_tensor(
     return load_array(source, dtype=dtype)
 
 
-def _load_sparse_tensor(
-    reader: SparsePackReader,
-    sample_index: int,
-) -> Tensor:
-    """Load one sparse tensor from a sparse pack reader."""
-    return reader.build_torch_sparse(sample_index=sample_index)
-
-
 def _get_source_dtype() -> torch.dtype:
     """Get the active precision dtype from PrecisionService.
 
@@ -274,54 +232,25 @@ def _get_source_dtype() -> torch.dtype:
     return get_precision_service().get_torch_dtype()
 
 
-def _source_to_fingerprint_path(name: str, source: Path | SparseSourceBinding) -> Path:
-    """Pure function: extract the path used for mtime fingerprinting from a source.
-
-    Args:
-        name: Entry name (used in error message only).
-        source: File path or sparse source binding.
-
-    Returns:
-        Path used for mtime-based cache invalidation.
-
-    Raises:
-        ValueError: If source is not a file-backed type.
-    """
-    match source:
-        case Path():
-            return source
-        case SparseSourceBinding():
-            return source.source_path
-        case _:
-            raise ValueError(
-                f"Entry '{name}' is not file-backed. "
-                "memmap_cache_dir requires PathBasedEntry or sparse pack entries."
-            )
-
-
 def _compute_source_fingerprint(
-    all_maps: dict[str, tuple[Path | SparseSourceBinding, str | None]],
+    all_maps: dict[str, tuple[Path, str | None]],
     dtype: torch.dtype,
 ) -> str:
     """Compute SHA-256 fingerprint over source files and dtype.
 
     Args:
-        all_maps: Mapping from entry name to (source, array_key).
+        all_maps: Mapping from entry name to (source_path, array_key).
         dtype: Target tensor dtype included in the fingerprint.
 
     Returns:
         str: Full hex-digest fingerprint string.
-
-    Raises:
-        ValueError: If any source is not file-backed.
     """
     h = hashlib.sha256()
     for name in sorted(all_maps):
         source, _ = all_maps[name]
-        fp_path = _source_to_fingerprint_path(name, source)
         h.update(name.encode())
-        h.update(fp_path.as_posix().encode())
-        h.update(str(fp_path.stat().st_mtime_ns).encode())
+        h.update(source.as_posix().encode())
+        h.update(str(source.stat().st_mtime_ns).encode())
     h.update(str(dtype).encode())
     return h.hexdigest()
 
@@ -392,122 +321,26 @@ def _write_entry_to_memmap(
     return mmt
 
 
-def _write_sparse_entry_to_memmap(
-    name: str,
-    binding: SparseSourceBinding,
-    n_total: int,
-    group_dir: Path,
-    dtype: torch.dtype,
-    chunk_size: int = 1_000,
-) -> Any:
-    """Densify a sparse pack into an (n_total, D, D) MemoryMappedTensor, chunk by chunk.
-
-    Peak RAM is bounded to ``chunk_size × D × D × sizeof(dtype)`` regardless of
-    ``n_total``.  The ``i % reader.n_samples`` indexing unifies broadcast packs
-    (n_samples == 1) and normal packs without a branch.
-
-    Args:
-        name: Entry name (used for output filename).
-        binding: Sparse source binding with reader and denormalization settings.
-        n_total: Total rows to write.  May differ from ``reader.n_samples`` when
-            the pack is a broadcast (n_samples == 1) expanded to a larger dataset.
-        group_dir: Directory to write the ``.memmap`` file into.
-        dtype: Target tensor dtype.
-        chunk_size: Rows written per loop iteration.
-
-    Returns:
-        MemoryMappedTensor: Disk-backed tensor of shape ``(n_total, D, D)``.
-    """
-    from tensordict.memmap import MemoryMappedTensor
-
-    reader = binding.reader
-    d_rows, d_cols = reader.matrix_size
-    filename = str(group_dir / f"{name}.memmap")
-    mmt = MemoryMappedTensor.empty([n_total, d_rows, d_cols], dtype=dtype, filename=filename)
-
-    total_start = perf_counter()
-    if reader.n_samples == 1:
-        build_dense_start = perf_counter()
-        dense_matrix = reader.build_torch_sparse(
-            sample_index=0,
-            dtype=dtype,
-        ).to_dense()
-        build_dense_elapsed = perf_counter() - build_dense_start
-
-        write_elapsed = 0.0
-        dense_template = dense_matrix.unsqueeze(0)
-        for start in range(0, n_total, chunk_size):
-            end = min(start + chunk_size, n_total)
-            write_start = perf_counter()
-            mmt[start:end] = dense_template.expand(end - start, -1, -1)
-            write_elapsed += perf_counter() - write_start
-
-        logger.debug(
-            "Sparse memmap write feature='{}' mode=broadcast n_total={} chunk_size={} "
-            "dense_build_s={:.4f} write_s={:.4f} total_s={:.4f}",
-            name,
-            n_total,
-            chunk_size,
-            build_dense_elapsed,
-            write_elapsed,
-            perf_counter() - total_start,
-        )
-        return mmt
-
-    sparse_build_elapsed = 0.0
-    dense_build_elapsed = 0.0
-    write_elapsed = 0.0
-    for start in range(0, n_total, chunk_size):
-        end = min(start + chunk_size, n_total)
-        pack_indices = [i % reader.n_samples for i in range(start, end)]
-        sparse_start = perf_counter()
-        stacked = reader.build_torch_sparse_stacked(
-            pack_indices,
-            dtype=dtype,
-        )
-        sparse_build_elapsed += perf_counter() - sparse_start
-
-        dense_start = perf_counter()
-        dense_batch = stacked.to_dense()
-        dense_build_elapsed += perf_counter() - dense_start
-
-        write_start = perf_counter()
-        mmt[start:end] = dense_batch
-        write_elapsed += perf_counter() - write_start
-
-    logger.debug(
-        "Sparse memmap write feature='{}' mode=per_sample n_total={} chunk_size={} "
-        "sparse_build_s={:.4f} dense_build_s={:.4f} write_s={:.4f} total_s={:.4f}",
-        name,
-        n_total,
-        chunk_size,
-        sparse_build_elapsed,
-        dense_build_elapsed,
-        write_elapsed,
-        perf_counter() - total_start,
-    )
-
-    return mmt
-
-
 def _determine_n_total(
     dense_tensors: dict[str, Any],
-    sparse_bindings: dict[str, SparseSourceBinding],
+    pack_bindings: dict[str, IArrayPackReader] | None = None,
 ) -> int:
     """Pure function: resolve the canonical sample count N from available tensors.
 
-    Precedence: dense tensors (features + targets) → sparse reader n_samples > 1.
+    Precedence: dense tensors (features + targets) → zarr pack readers (n_samples > 1).
 
     Args:
         dense_tensors: Already-written tensors keyed by entry name.
-        sparse_bindings: Sparse feature bindings not yet materialised.
+        pack_bindings: Zarr dense array pack readers.  Readers with
+            ``n_samples > 1`` contribute to N resolution when no dense entries
+            are present.
 
     Returns:
         int: Canonical dataset size N.
 
     Raises:
-        BatchComplianceError: If dense sizes disagree, or sparse n_samples disagree.
-        ValueError: If N cannot be inferred (no dense, all-broadcast sparse).
+        BatchComplianceError: If dense sizes disagree or pack sample counts disagree.
+        ValueError: If N cannot be inferred (no dense entries, all-broadcast packs).
     """
     dense_n_set = {int(t.shape[0]) for t in dense_tensors.values()}
     if dense_n_set:
@@ -518,155 +351,79 @@ def _determine_n_total(
             )
         return next(iter(dense_n_set))
 
-    if sparse_bindings:
-        sparse_ns = {b.reader.n_samples for b in sparse_bindings.values() if b.reader.n_samples > 1}
-        if not sparse_ns:
-            raise ValueError(
-                "Cannot infer dataset size: all sparse entries are broadcast packs "
-                "(n_samples=1). Provide at least one non-broadcast entry or a dense target."
-            )
-        if len(sparse_ns) > 1:
+    resolved_pack_bindings = pack_bindings or {}
+    pack_ns = {r.n_samples for r in resolved_pack_bindings.values() if r.n_samples > 1}
+    if pack_ns:
+        if len(pack_ns) > 1:
             raise BatchComplianceError(
-                f"Sparse entries have differing sample counts: {sorted(sparse_ns)}."
+                f"Matrix pack entries have differing sample counts: {sorted(pack_ns)}."
             )
-        return next(iter(sparse_ns))
+        return next(iter(pack_ns))
 
     raise ValueError("No entries provided to determine dataset size.")
 
 
 def _validate_memmap_entries(
-    all_maps: dict[str, tuple[Path | Tensor | np.ndarray | SparseSourceBinding, str | None]],
+    all_maps: dict[str, tuple[_EntrySource, str | None]],
 ) -> None:
-    """Raise ValueError if any entry is not file-backed.
+    """Raise ValueError if any entry is not a file path.
+
+    Callers must strip ``IArrayPackReader`` entries before calling this function;
+    pack readers bypass the memmap cache entirely.
 
     Args:
         all_maps: Mapping from entry name to (source, array_key).
+            Must not contain ``IArrayPackReader`` entries (strip them before calling).
 
     Raises:
-        ValueError: If any source is not a Path or SparseSourceBinding.
+        ValueError: If any source is not a Path.
     """
     for name, (source, _) in all_maps.items():
-        if not isinstance(source, (Path, SparseSourceBinding)):
+        if not isinstance(source, Path):
             raise ValueError(
                 f"Entry '{name}' is not file-backed. "
-                "memmap_cache_dir requires PathBasedEntry or sparse pack entries."
+                "memmap_cache_dir requires PathBasedEntry entries."
             )
 
 
 def _load_dense_entries(
-    feat_map: dict[str, tuple[Path | Tensor | np.ndarray | SparseSourceBinding, str | None]],
-    targ_map: dict[str, tuple[Path | Tensor | np.ndarray | SparseSourceBinding, str | None]],
-) -> tuple[dict[str, Tensor], dict[str, SparseSourceBinding], dict[str, Tensor]]:
-    """Load dense tensors from entry maps; collect sparse feature bindings.
+    feat_map: dict[str, tuple[_EntrySource, str | None]],
+    targ_map: dict[str, tuple[_EntrySource, str | None]],
+) -> tuple[
+    dict[str, Tensor],
+    dict[str, IArrayPackReader],
+    dict[str, Tensor],
+]:
+    """Load dense tensors from entry maps; collect zarr pack bindings.
 
-    Splits feat_map into dense tensors and deferred sparse bindings.
-    Loads all target tensors, rejecting sparse targets.
+    Splits feat_map into dense tensors and zarr dense pack readers.
+    Loads all target tensors, rejecting pack targets.
 
     Args:
         feat_map: Feature entry map: name → (source, array_key).
         targ_map: Target entry map: name → (source, array_key).
 
     Returns:
-        Tuple of (dense feature tensors, sparse bindings, target tensors).
+        Tuple of (dense feature tensors, pack readers, target tensors).
 
     Raises:
-        ValueError: If a target entry uses a sparse pack.
+        ValueError: If a target entry uses a matrix pack.
     """
     dense_feat_tensors: dict[str, Tensor] = {}
-    sparse_bindings: dict[str, SparseSourceBinding] = {}
+    pack_bindings: dict[str, IArrayPackReader] = {}
     for name, (source, array_key) in feat_map.items():
-        if isinstance(source, SparseSourceBinding):
-            sparse_bindings[name] = source
+        if isinstance(source, IArrayPackReader):
+            pack_bindings[name] = source
         else:
             dense_feat_tensors[name] = _load_or_convert_tensor(source, array_key=array_key)
 
     targ_tensors: dict[str, Tensor] = {}
     for name, (source, array_key) in targ_map.items():
-        if isinstance(source, SparseSourceBinding):
-            raise ValueError(f"Target entry '{name}' cannot use sparse packs.")
+        if isinstance(source, IArrayPackReader):
+            raise ValueError(f"Target entry '{name}' cannot use matrix packs.")
         targ_tensors[name] = _load_or_convert_tensor(source, array_key=array_key)
 
-    return dense_feat_tensors, sparse_bindings, targ_tensors
-
-
-def _resolve_n_and_materialize_sparse(
-    dense_feat_tensors: dict[str, Tensor],
-    targ_tensors: dict[str, Tensor],
-    sparse_bindings: dict[str, SparseSourceBinding],
-) -> tuple[dict[str, Tensor], int]:
-    """Infer canonical N and materialize sparse features to dense tensors.
-
-    Uses _determine_n_total for N resolution, then stacks each sparse pack
-    into a (N, D, D) dense tensor.
-
-    Args:
-        dense_feat_tensors: Already-loaded dense feature tensors.
-        targ_tensors: Target tensors.
-        sparse_bindings: Sparse feature bindings not yet materialized.
-
-    Returns:
-        Tuple of (feature tensor map with sparse entries materialized, canonical N).
-
-    Raises:
-        BatchComplianceError: If sparse sample counts disagree with N, or stacking fails.
-        ValueError: If N cannot be inferred from available entries.
-    """
-    if not sparse_bindings:
-        return dict(dense_feat_tensors), 0
-
-    # Filter out scalar tensors before N inference — scalar compliance is checked
-    # by _assemble_dataset_tensordict; 0-D tensors have no shape[0].
-    non_scalar_dense = {
-        k: v for k, v in {**dense_feat_tensors, **targ_tensors}.items() if v.dim() > 0
-    }
-    n = _determine_n_total(non_scalar_dense, sparse_bindings)
-    feat_tensors = dict(dense_feat_tensors)
-    for name, binding in sparse_bindings.items():
-        materialize_start = perf_counter()
-        reader = binding.reader
-        if reader.n_samples not in (1, n):
-            raise BatchComplianceError(
-                f"Sparse feature '{name}' has {reader.n_samples} samples but expected 1 or {n}."
-            )
-        try:
-            if reader.n_samples == 1:
-                shared_sparse = _load_sparse_tensor(reader, 0)
-                feat_tensors[name] = torch.stack([shared_sparse] * n)
-                logger.debug(
-                    "Sparse in-memory materialization feature='{}' mode=broadcast n_total={} "
-                    "elapsed_s={:.4f}",
-                    name,
-                    n,
-                    perf_counter() - materialize_start,
-                )
-            else:
-                feat_tensors[name] = torch.stack([_load_sparse_tensor(reader, i) for i in range(n)])
-                logger.debug(
-                    "Sparse in-memory materialization feature='{}' mode=per_sample n_total={} "
-                    "elapsed_s={:.4f}",
-                    name,
-                    n,
-                    perf_counter() - materialize_start,
-                )
-        except RuntimeError as exc:
-            raise BatchComplianceError(
-                f"Failed to stack sparse feature '{name}'. Ensure sparse tensor collation support "
-                "is available in current torch/tensordict versions."
-            ) from exc
-    return feat_tensors, n
-
-
-def _validate_sparse_bindings_for_n(
-    sparse_bindings: dict[str, SparseSourceBinding],
-    n: int,
-) -> None:
-    """Validate that each sparse binding can align with resolved dataset size N."""
-    for name, binding in sparse_bindings.items():
-        n_sparse = binding.reader.n_samples
-        if n_sparse not in (1, n):
-            raise BatchComplianceError(
-                f"Sparse feature '{name}' has {n_sparse} samples but expected 1 or {n}."
-            )
+    return dense_feat_tensors, pack_bindings, targ_tensors
 
 
 def _make_empty_dataset_tensordict(n: int) -> TensorDict:
@@ -695,47 +452,55 @@ def _normalize_indices(indices: list[int], n: int) -> list[int]:
     return [_normalize_index(int(idx), n) for idx in indices]
 
 
-def _inject_sparse_features(
+def _inject_pack_features(
     sample: TensorDict,
     *,
     sample_index: int,
-    sparse_bindings: dict[str, SparseSourceBinding],
+    pack_bindings: dict[str, IArrayPackReader],
 ) -> TensorDict:
-    """Return a sample TensorDict with sparse features injected on demand."""
-    if not sparse_bindings:
+    """Return a sample TensorDict with zarr dense matrix pack features injected.
+
+    Each reader returns a dense ``Tensor[rows, cols]`` for a scalar index.
+
+    Args:
+        sample: Sample TensorDict to enrich (mutated in place).
+        sample_index: Absolute index of the sample within the dataset.
+        pack_bindings: Zarr dense pack readers keyed by feature name.
+
+    Returns:
+        The enriched sample TensorDict.
+    """
+    if not pack_bindings:
         return sample
 
-    for name, binding in sparse_bindings.items():
-        reader = binding.reader
-        sparse_tensor = reader.build_torch_sparse(sample_index=sample_index)
-        sample["features", name] = sparse_tensor
+    for name, reader in pack_bindings.items():
+        sample["features", name] = reader[sample_index]
     return sample
 
 
-def _build_sparse_feature_batch(
-    *,
-    sample_indices: list[int],
-    binding: SparseSourceBinding,
-) -> Tensor:
-    """Build a sparse feature batch for requested sample indices."""
-    return binding.reader.build_torch_sparse_stacked(sample_indices=sample_indices)
-
-
-def _inject_sparse_features_batch(
+def _inject_pack_features_batch(
     batch: TensorDict,
     *,
     sample_indices: list[int],
-    sparse_bindings: dict[str, SparseSourceBinding],
+    pack_bindings: dict[str, IArrayPackReader],
 ) -> TensorDict:
-    """Inject sparse features into a batched TensorDict."""
-    if not sparse_bindings:
+    """Inject zarr dense matrix pack features into a batched TensorDict.
+
+    Each reader returns a dense ``Tensor[B, rows, cols]`` for a list index.
+
+    Args:
+        batch: Batched TensorDict to enrich (mutated in place).
+        sample_indices: Absolute indices of the samples within the dataset.
+        pack_bindings: Zarr dense pack readers keyed by feature name.
+
+    Returns:
+        The enriched batched TensorDict.
+    """
+    if not pack_bindings:
         return batch
 
-    for name, binding in sparse_bindings.items():
-        batch["features", name] = _build_sparse_feature_batch(
-            sample_indices=sample_indices,
-            binding=binding,
-        )
+    for name, reader in pack_bindings.items():
+        batch["features", name] = reader[sample_indices]
     return batch
 
 
@@ -813,7 +578,7 @@ def _load_entry_from_memmap(filename: Path, info: dict[str, Any]) -> Tensor:
 
 
 def _build_memmap_cache(
-    feat_map: dict[str, tuple[Path | SparseSourceBinding, str | None]],
+    feat_map: dict[str, tuple[Path, str | None]],
     targ_map: dict[str, tuple[Path, str | None]],
     cache_dir: Path,
     dtype: torch.dtype,
@@ -821,13 +586,8 @@ def _build_memmap_cache(
 ) -> TensorDict:
     """Build an OOM-safe memmap cache for a dataset.
 
-    Dense and target entries are written first so N can be resolved before
-    sparse entries are densified.  Sparse entries are written in a second pass
-    with ``n_total=N``, bounding peak RAM to ``chunk_size × D × D`` rows.
-
     Args:
-        feat_map: Feature entry map: name → (source, array_key).  Source may be
-            a ``Path`` (dense) or a ``SparseSourceBinding`` (sparse-to-dense).
+        feat_map: Feature entry map: name → (source_path, array_key).
         targ_map: Target entry map: name → (source_path, array_key).
         cache_dir: Root directory for the cache.
         dtype: Target tensor dtype for all entries.
@@ -848,34 +608,18 @@ def _build_memmap_cache(
     meta: dict[str, dict[str, Any]] = {"features": {}, "targets": {}}
     feat_tensors: _TensorMap = {}
     targ_tensors: _TensorMap = {}
-    sparse_feat_bindings: dict[str, SparseSourceBinding] = {}
 
-    # First pass: write dense feature entries; collect sparse bindings for later.
     for name, (source, array_key) in feat_map.items():
-        match source:
-            case Path():
-                mmt = _write_entry_to_memmap(
-                    name, source, array_key, features_dir, dtype, chunk_size
-                )
-                feat_tensors[name] = mmt
-                meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
-            case SparseSourceBinding():
-                sparse_feat_bindings[name] = source
+        mmt = _write_entry_to_memmap(name, source, array_key, features_dir, dtype, chunk_size)
+        feat_tensors[name] = mmt
+        meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
 
-    # Targets are always dense.
     for name, (source, array_key) in targ_map.items():
         mmt = _write_entry_to_memmap(name, source, array_key, targets_dir, dtype, chunk_size)
         targ_tensors[name] = mmt
         meta["targets"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
 
-    # Resolve N (pure): dense entries take precedence; fall back to sparse readers.
-    n = _determine_n_total({**feat_tensors, **targ_tensors}, sparse_feat_bindings)
-
-    # Second pass: densify sparse features now that N is known.
-    for name, binding in sparse_feat_bindings.items():
-        mmt = _write_sparse_entry_to_memmap(name, binding, n, features_dir, dtype, chunk_size)
-        feat_tensors[name] = mmt
-        meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
+    n = _determine_n_total({**feat_tensors, **targ_tensors})
 
     with open(cache_dir / "meta.json", "w") as f:
         json.dump(meta, f)
@@ -909,7 +653,7 @@ def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
 
 
 def _load_or_build_memmap(
-    feat_map: dict[str, tuple[Path | SparseSourceBinding, str | None]],
+    feat_map: dict[str, tuple[Path, str | None]],
     targ_map: dict[str, tuple[Path, str | None]],
     cache_dir: Path,
     dtype: torch.dtype,
@@ -921,7 +665,7 @@ def _load_or_build_memmap(
     or dtype triggers a full wipe-and-rebuild (no stale sub-directories).
 
     Args:
-        feat_map: Feature entry map: name → (source, array_key).
+        feat_map: Feature entry map: name → (source_path, array_key).
         targ_map: Target entry map: name → (source_path, array_key).
         cache_dir: Directory for memmap cache files.
         dtype: Target tensor dtype (included in fingerprint).
@@ -930,7 +674,7 @@ def _load_or_build_memmap(
     Returns:
         TensorDict: Dataset TensorDict backed by memory-mapped files.
     """
-    all_maps: dict[str, tuple[Path | SparseSourceBinding, str | None]] = {**feat_map, **targ_map}
+    all_maps: dict[str, tuple[Path, str | None]] = {**feat_map, **targ_map}
     fingerprint = _compute_source_fingerprint(all_maps, dtype)
     stored_fp = _read_cache_fingerprint(cache_dir)
 
@@ -1015,11 +759,12 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         """Initialize FlexibleDataset with feature and target entries.
 
         Args:
-            features: Feature entries (PathFeature, ValueFeature, or SparseFeature).
+            features: Feature entries (PathFeature, ValueFeature, or MatrixFeature).
             targets: Target entries (PathTarget or ValueTarget from Target() factory).
             memmap_cache_dir: If set, load dataset via OS memory-mapped files stored in
-                this directory.  Entries must be file-backed (PathBasedEntry or sparse
-                pack entries).  The cache is invalidated when source files or dtype change.
+                this directory.  Entries must be file-backed (PathBasedEntry).
+                MatrixFeature entries bypass the memmap cache — zarr handles OOM natively.
+                The cache is invalidated when source files or dtype change.
             memmap_chunk_size: Rows written per iteration when building the memmap cache.
                 Bounds peak RAM to ``chunk_size × feature_width × sizeof(dtype)``.
                 Ignored when ``memmap_cache_dir`` is ``None``.
@@ -1039,12 +784,21 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
 
         self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
         self._target_names: tuple[str, ...] = tuple(targ_map.keys())
-        self._sparse_bindings: dict[str, SparseSourceBinding] = {}
+        self._pack_bindings: dict[str, IArrayPackReader] = {}
 
         if memmap_cache_dir is not None:
-            _validate_memmap_entries({**feat_map, **targ_map})
+            # MatrixFeature entries bypass the memmap cache — zarr handles OOM natively.
+            # Separate pack readers from file-backed entries before validation.
+            pack_only: dict[str, IArrayPackReader] = {
+                name: source
+                for name, (source, _) in feat_map.items()
+                if isinstance(source, IArrayPackReader)
+            }
+            self._pack_bindings = pack_only
+            non_pack_feat = {k: v for k, v in feat_map.items() if k not in pack_only}
+            _validate_memmap_entries({**non_pack_feat, **targ_map})
             dtype = _get_source_dtype()
-            _feat = cast("dict[str, tuple[Path | SparseSourceBinding, str | None]]", feat_map)
+            _feat = cast("dict[str, tuple[Path, str | None]]", non_pack_feat)
             _targ = cast("dict[str, tuple[Path, str | None]]", targ_map)
             self._dataset_td = _load_or_build_memmap(
                 _feat,
@@ -1054,13 +808,12 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
                 memmap_chunk_size,
             )
         else:
-            dense_feats, sparse_bindings, targs = _load_dense_entries(feat_map, targ_map)
-            self._sparse_bindings = sparse_bindings
+            dense_feats, pack_bindings, targs = _load_dense_entries(feat_map, targ_map)
+            self._pack_bindings = pack_bindings
 
-            # Resolve canonical N using dense entries first, sparse bindings as fallback.
+            # Resolve canonical N: dense entries → pack readers.
             non_scalar_dense = {k: v for k, v in {**dense_feats, **targs}.items() if v.dim() > 0}
-            n = _determine_n_total(non_scalar_dense, sparse_bindings)
-            _validate_sparse_bindings_for_n(sparse_bindings, n)
+            n = _determine_n_total(non_scalar_dense, pack_bindings)
 
             if dense_feats or targs:
                 self._dataset_td, _ = _assemble_dataset_tensordict(
@@ -1070,7 +823,7 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
                     self._target_names,
                 )
             else:
-                # Sparse-only dataset path: keep an empty dense base and inject sparse per sample.
+                # Pack-only dataset: keep an empty dense base, inject per sample.
                 self._dataset_td = _make_empty_dataset_tensordict(n)
 
         self._length = int(self._dataset_td.batch_size[0])
@@ -1094,27 +847,27 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         """
         sample_index = _normalize_index(int(idx), self._length)
         sample = cast("TensorDict", self._dataset_td[sample_index])
-        return _inject_sparse_features(
+        return _inject_pack_features(
             sample,
             sample_index=sample_index,
-            sparse_bindings=self._sparse_bindings,
+            pack_bindings=self._pack_bindings,
         )
 
     def __getitems__(self, indices: list[int]) -> TensorDict:
         """Get a batched TensorDict for a list of indices.
 
         This path is used by PyTorch DataLoader for map-style datasets when
-        auto-collation is enabled, allowing sparse feature injection once per batch.
+        auto-collation is enabled, allowing pack feature injection once per batch.
         """
         if not indices:
             raise ValueError("indices must be non-empty")
 
         sample_indices = _normalize_indices(indices, self._length)
         batch = cast("TensorDict", self._dataset_td[sample_indices])
-        return _inject_sparse_features_batch(
+        return _inject_pack_features_batch(
             batch,
             sample_indices=sample_indices,
-            sparse_bindings=self._sparse_bindings,
+            pack_bindings=self._pack_bindings,
         )
 
 
