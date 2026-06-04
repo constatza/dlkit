@@ -6,6 +6,7 @@ path resolution, and class instantiation across the test suite.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ import numpy as np
 import pytest
 
 from dlkit.infrastructure.config.environment import env as global_environment
-from dlkit.infrastructure.io.sparse import save_sparse_pack
+from dlkit.infrastructure.io.packs import write_array_pack
 
 
 @pytest.fixture(autouse=True)
@@ -33,82 +34,79 @@ def _restore_global_environment_root() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Sparse pack fixtures
+# Zarr dense pack fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def dense_matrices() -> list[np.ndarray]:
-    """Three 3×3 dense float64 matrices for COO pack tests.
+def dense_matrices_4x4() -> list[np.ndarray]:
+    """Three 4×4 float32 dense matrices for zarr pack tests.
 
     Returns:
-        List of three sparse-ish 3×3 numpy arrays.
+        List of three distinct 4×4 float32 numpy arrays.
     """
-    return [
-        np.array(
-            [[2.0, 0.0, 1.0], [0.0, 3.0, 0.0], [1.0, 0.0, 4.0]],
-            dtype=np.float64,
-        ),
-        np.array(
-            [[5.0, 1.0, 0.0], [1.0, 6.0, 2.0], [0.0, 2.0, 7.0]],
-            dtype=np.float64,
-        ),
-        np.array(
-            [[8.0, 0.0, 0.0], [0.0, 9.0, 3.0], [0.0, 3.0, 10.0]],
-            dtype=np.float64,
-        ),
-    ]
+    rng = np.random.default_rng(0)
+    return [rng.random((4, 4)).astype(np.float32) for _ in range(3)]
 
 
 @pytest.fixture
-def coo_pack_arrays(
-    dense_matrices: list[np.ndarray],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]]:
-    """Convert dense matrices to COO pack format arrays.
-
-    Args:
-        dense_matrices: Dense matrices to convert.
-
-    Returns:
-        Tuple of ``(indices, values, nnz_ptr, size)``.
-    """
-    row_parts: list[np.ndarray] = []
-    col_parts: list[np.ndarray] = []
-    value_parts: list[np.ndarray] = []
-    nnz_ptr = [0]
-
-    for matrix in dense_matrices:
-        rows, cols = np.nonzero(matrix)
-        vals = matrix[rows, cols]
-        row_parts.append(rows.astype(np.int64))
-        col_parts.append(cols.astype(np.int64))
-        value_parts.append(vals)
-        nnz_ptr.append(nnz_ptr[-1] + int(vals.size))
-
-    indices = np.vstack([np.concatenate(row_parts), np.concatenate(col_parts)])
-    values = np.concatenate(value_parts)
-    ptr = np.asarray(nnz_ptr, dtype=np.int64)
-    return indices, values, ptr, dense_matrices[0].shape
-
-
-@pytest.fixture
-def saved_sparse_pack(
-    tmp_path: Path,
-    coo_pack_arrays: tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]],
-) -> Path:
-    """Save a COO sparse pack with default parameters and return its directory path.
+def zarr_dense_pack(tmp_path: Path, dense_matrices_4x4: list[np.ndarray]) -> Path:
+    """Save a zarr dense pack to ``tmp_path/zarr_pack`` and return the path.
 
     Args:
         tmp_path: pytest temporary directory.
-        coo_pack_arrays: Arrays to save.
+        dense_matrices_4x4: Matrices to store.
 
     Returns:
-        Path to the saved sparse pack directory.
+        Path to the written zarr dense pack directory.
     """
-    indices, values, nnz_ptr, size = coo_pack_arrays
-    pack_path = tmp_path / "matrix_pack"
-    save_sparse_pack(pack_path, indices, values, nnz_ptr, size)
+    pack_path = tmp_path / "zarr_pack"
+    with write_array_pack(pack_path, size=(4, 4)) as w:
+        for matrix in dense_matrices_4x4:
+            w.write_sample(matrix)
     return pack_path
+
+
+# ---------------------------------------------------------------------------
+# OOM / memory-bounded fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def matrix_stream():
+    """Fixture returning a generator of 1_000 random (128, 128) float32 arrays.
+
+    Each array is produced lazily — only one is alive at a time so the full
+    65 MB dataset is never held in memory simultaneously.
+
+    Returns:
+        Generator yielding 1_000 float32 arrays of shape ``(128, 128)``.
+    """
+
+    def _gen():
+        rng = np.random.default_rng(42)
+        for _ in range(1_000):
+            yield rng.random((128, 128)).astype(np.float32)
+
+    return _gen()
+
+
+@pytest.fixture(scope="session")
+def pack_1k(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Session-scoped 1_000-sample 128×128 float32 zarr dense pack.
+
+    Args:
+        tmp_path_factory: pytest session-scoped temp path factory.
+
+    Returns:
+        Path to the written zarr dense pack directory.
+    """
+    path = tmp_path_factory.mktemp("packs") / "pack_1k"
+    rng = np.random.default_rng(42)
+    with write_array_pack(path, size=(128, 128)) as w:
+        for _ in range(1_000):
+            w.write_sample(rng.random((128, 128)).astype(np.float32))
+    return path
 
 
 # Test module constants
@@ -459,6 +457,3 @@ def npz_empty(tmp_path: Path) -> Path:
     path = tmp_path / "empty.npz"
     np.savez(path)
     return path
-
-
-from collections.abc import Callable

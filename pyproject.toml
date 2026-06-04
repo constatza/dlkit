@@ -31,6 +31,7 @@ dependencies = [
     "optuna-integration>=4.5.0",
     "yarl>=1.9.0",
     "platformdirs>=2.0",
+    "zarr>=3.0,<4.0",
 ]
 
 [dependency-groups]
@@ -39,6 +40,7 @@ dev = [
     "prek",
     "pytest<9.0.0,>=8.2.2",
     "pytest-cov>=7.0.0",
+    "pytest-memray>=1.7",
     "pytest-mock>=3.14.0",
     "pytest-testmon>=2.2.0",
     "pytest-timeout>=2.4.0",
@@ -109,6 +111,7 @@ pythonpath = [
 markers = [
     "slow: kept for reference; no default deselection",
     "regression: critical regression tests that must never be removed or modified",
+    "limit_memory: pytest-memray memory ceiling for OOM regression tests",
 ]
 filterwarnings = [
     # Suppress Pydantic serialization warnings for lazy-loaded settings
