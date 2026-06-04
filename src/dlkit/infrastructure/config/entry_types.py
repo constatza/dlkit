@@ -162,9 +162,6 @@ class PathFeature(PathBasedEntry):
     def _validate_dir_is_array_pack(self) -> PathFeature:
         """Verify that any directory ``path`` is a recognised zarr array pack.
 
-        Args:
-            None.
-
         Returns:
             The validated instance.
 
