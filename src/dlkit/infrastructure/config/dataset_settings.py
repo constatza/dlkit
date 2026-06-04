@@ -23,8 +23,7 @@ from .core.base_settings import (
 )
 from .data_entries import (
     FeatureType,
-    PathFeature,
-    PathTarget,
+    PathBasedEntry,
     TargetType,
 )
 from .enums import DatasetFamily
@@ -158,7 +157,7 @@ class DatasetSettings(StringNamedComponentSettings):
         # Validate features
         for feature in self.features:
             if (
-                isinstance(feature, PathFeature)
+                isinstance(feature, PathBasedEntry)
                 and feature.path is not None
                 and not feature.path.exists()
             ):
@@ -167,7 +166,7 @@ class DatasetSettings(StringNamedComponentSettings):
         # Validate targets
         for target in self.targets:
             if (
-                isinstance(target, PathTarget)
+                isinstance(target, PathBasedEntry)
                 and target.path is not None
                 and not target.path.exists()
             ):
@@ -218,10 +217,10 @@ class DatasetSettings(StringNamedComponentSettings):
         """
         files: dict[str, Path | None] = {}
         for f in self.features:
-            if isinstance(f, PathFeature) and f.name is not None and f.path is not None:
+            if isinstance(f, PathBasedEntry) and f.name is not None and f.path is not None:
                 files[f.name] = Path(f.path)
         for t in self.targets:
-            if isinstance(t, PathTarget) and t.name is not None and t.path is not None:
+            if isinstance(t, PathBasedEntry) and t.name is not None and t.path is not None:
                 files[t.name] = Path(t.path)
         return files
 

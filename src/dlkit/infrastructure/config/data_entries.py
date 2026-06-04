@@ -14,8 +14,6 @@ from .entry_factories import (
     ContextFeature,
     Feature,
     FeatureType,
-    Matrix,
-    Sparse,
     Target,
     TargetType,
     has_feature_reference,
@@ -71,8 +69,6 @@ __all__ = [
     # Factories
     "Feature",
     "FeatureType",
-    "Matrix",
-    "Sparse",  # deprecated alias for Matrix
     "Target",
     "TargetType",
     "ContextFeature",

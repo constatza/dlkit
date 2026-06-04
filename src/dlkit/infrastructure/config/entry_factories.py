@@ -2,7 +2,6 @@
 
 Public API:
     Feature() - create PathFeature or ValueFeature
-    Matrix()  - create PathFeature pointing to a zarr pack directory
     Target()  - create PathTarget or ValueTarget
     ContextFeature() - create a feature excluded from model.forward()
 
@@ -135,52 +134,6 @@ def Feature(
         loss_input=loss_input,
         transforms=transform_list,
     )
-
-
-# ---------------------------------------------------------------------------
-# Matrix factory
-# ---------------------------------------------------------------------------
-
-
-def Matrix(
-    name: str | None = None,
-    *,
-    path: Path | str | None = None,
-    dtype: torch.dtype | None = None,
-    model_input: bool = True,
-    loss_input: str | None = None,
-    transforms: list[TransformSettings] | None = None,
-) -> PathFeature:
-    """Create a ``PathFeature`` pointing to a zarr dense array pack directory.
-
-    Args:
-        name: Entry name; defaults to the dict key when stored in a mapping.
-        path: Path to the zarr pack directory (None for placeholder mode).
-        dtype: PyTorch dtype override.
-        model_input: Forwarding semantics for ``model.forward()``.
-        loss_input: Route this entry as a loss kwarg with this name.
-        transforms: Transform chain for this entry.
-
-    Returns:
-        A ``PathFeature`` configured with the given arguments.
-
-    Examples:
-        >>> f = Matrix(name="K", path="data/stiffness.zarr")
-        >>> isinstance(f, PathFeature)
-        True
-    """
-    resolved_path = Path(path) if path is not None else None
-    return PathFeature(
-        name=name,
-        path=resolved_path,
-        dtype=dtype,
-        model_input=model_input,
-        loss_input=loss_input,
-        transforms=transforms or [],
-    )
-
-
-Sparse = Matrix
 
 
 # ---------------------------------------------------------------------------
@@ -424,8 +377,6 @@ def has_feature_reference(entry: DataEntry) -> bool:
 __all__ = [
     "Feature",
     "FeatureType",
-    "Matrix",
-    "Sparse",
     "Target",
     "TargetType",
     "ContextFeature",
