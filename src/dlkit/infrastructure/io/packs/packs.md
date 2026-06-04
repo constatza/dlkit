@@ -69,5 +69,5 @@ register_format(ArrayPackFormat.MY_FORMAT, lambda path: MyPackReader(path))
 - `CooPackReader`, `CooPackWriter`, `ZarrPackReader`, `ZarrPackWriter` — removed.
 - `SparseFormat`, `PackManifest`, `PackFiles` — removed.
 - `open_sparse_pack`, `save_sparse_pack`, `write_coo_pack`, `write_zarr_pack` — removed.
-- `SparseFeature` is now a type alias for `MatrixFeature`; the `files` field is gone.
+- Use `Feature()` or `PathFeature` pointing at a zarr directory — no special entry type required.
 - `FlexibleDataset` no longer has a `_sparse_bindings` attribute.

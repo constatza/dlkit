@@ -65,14 +65,14 @@ def test_dataloader_epoch_bounded(pack_1k: Path, tmp_path: Path) -> None:
     from dlkit.engine.data.datasets import FlexibleDataset
     from dlkit.engine.data.datasets.flexible import collate_tensordict
     from dlkit.infrastructure.config.entry_factories import Target
-    from dlkit.infrastructure.config.entry_types import MatrixFeature
+    from dlkit.infrastructure.config.entry_types import PathFeature
 
     n = 1_000
     target_path = tmp_path / "targets.npy"
     np.save(target_path, np.zeros((n, 1), dtype=np.float32))
 
     dataset = FlexibleDataset(
-        features=[MatrixFeature(name="mat", path=pack_1k)],
+        features=[PathFeature(name="mat", path=pack_1k)],
         targets=[Target(name="y", path=target_path)],
     )
     loader = DataLoader(

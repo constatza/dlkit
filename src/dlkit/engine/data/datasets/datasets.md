@@ -14,7 +14,7 @@ The primary dataset for array-based data with flexible feature/target configurat
 - `.npz` - NumPy multi-array archive files
 - `.pt` / `.pth` - PyTorch tensor files
 - `.txt` / `.csv` - Text-based array files
-- zarr pack directories - dense matrix packs read via `MatrixFeature` with a path to the zarr directory
+- zarr pack directories - dense matrix packs read via `Feature()` / `PathFeature` by pointing at the zarr directory
 
 **Key Features:**
 - Default mode loads arrays into memory upfront for simple workflows
@@ -123,12 +123,11 @@ Use zarr pack directories for per-sample matrices consumed by custom losses.
 ```python
 from pathlib import Path
 
-from dlkit.infrastructure.config import MatrixFeature
 from dlkit.infrastructure.config.data_entries import Feature, Target
 
 features = [
     Feature(name="x", path="features.npy"),
-    MatrixFeature(name="K", path=Path("/data/stiffness_matrices"), model_input=False, loss_input="K"),
+    Feature(name="K", path=Path("/data/stiffness_matrices"), model_input=False, loss_input="K"),
 ]
 targets = [Target(name="y", path="labels.npy")]
 dataset = FlexibleDataset(features=features, targets=targets)
