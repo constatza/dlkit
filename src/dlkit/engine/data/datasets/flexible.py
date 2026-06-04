@@ -775,7 +775,7 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
                     dense_feats,
                     dense_targs,
                     tuple(dense_feats.keys()),
-                    self._target_names,
+                    tuple(dense_targs.keys()),
                 )
             else:
                 # Pack-only dataset: keep an empty dense base, inject per sample.
