@@ -119,20 +119,17 @@ def test_path_feature_accepts_none_path() -> None:
     assert feature.is_placeholder()
 
 
-def test_path_feature_accepts_non_directory_file(tmp_path: Path) -> None:
+def test_path_feature_accepts_non_directory_file(npy_file: Path) -> None:
     """PathFeature accepts any existing file path regardless of extension.
 
     The zarr-pack validator only fires when the path is a directory;
     a plain file is treated as a regular array file.
 
     Args:
-        tmp_path: pytest temporary directory.
+        npy_file: Path to an existing .npy file.
     """
-    file_path = tmp_path / "data.npy"
-    np.save(file_path, np.ones((5, 3), dtype=np.float32))
-
-    feature = PathFeature(name="K", path=file_path)
-    assert feature.path == file_path
+    feature = PathFeature(name="K", path=npy_file)
+    assert feature.path == npy_file
 
 
 def test_path_feature_raises_when_path_does_not_exist(tmp_path: Path) -> None:

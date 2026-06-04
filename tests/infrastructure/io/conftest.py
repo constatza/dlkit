@@ -6,7 +6,7 @@ path resolution, and class instantiation across the test suite.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ def zarr_dense_pack(tmp_path: Path, dense_matrices_4x4: list[np.ndarray]) -> Pat
 
 
 @pytest.fixture
-def matrix_stream():
+def matrix_stream() -> Generator[np.ndarray]:
     """Fixture returning a generator of 1_000 random (128, 128) float32 arrays.
 
     Each array is produced lazily — only one is alive at a time so the full
@@ -83,7 +83,7 @@ def matrix_stream():
         Generator yielding 1_000 float32 arrays of shape ``(128, 128)``.
     """
 
-    def _gen():
+    def _gen() -> Generator[np.ndarray]:
         rng = np.random.default_rng(42)
         for _ in range(1_000):
             yield rng.random((128, 128)).astype(np.float32)

@@ -147,6 +147,21 @@ def npz_empty(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def npy_target_3x1(tmp_path: Path) -> Path:
+    """Numpy target file with 3 samples of shape (1,).
+
+    Args:
+        tmp_path: pytest temporary directory fixture.
+
+    Returns:
+        Path to the saved .npy file.
+    """
+    path = tmp_path / "target_3x1.npy"
+    np.save(path, np.zeros((3, 1), dtype=np.float32))
+    return path
+
+
+@pytest.fixture
 def zarr_matrix_pack(tmp_path: Path) -> dict[str, Any]:
     """3-sample 4x4 float32 zarr dense matrix pack.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -78,7 +79,8 @@ def test_broadcast_pack_replicates(zarr_broadcast_pack: dict[str, Any]) -> None:
 
 def test_memmap_cache_dir_bypassed_for_zarr_feature(
     zarr_matrix_pack: dict[str, Any],
-    tmp_path: Any,
+    npy_target_3x1: Path,
+    tmp_path: Path,
 ) -> None:
     """With memmap_cache_dir set, zarr pack reader must NOT be replaced by a MemoryMappedTensor."""
     pack_path = zarr_matrix_pack["path"]
@@ -86,12 +88,9 @@ def test_memmap_cache_dir_bypassed_for_zarr_feature(
 
     # A file-backed target is required so the memmap path can write the cache.
     # The pack entry bypasses the memmap and is kept as-is.
-    target_path = tmp_path / "y.npy"
-    np.save(str(target_path), np.zeros((3, 1), dtype=np.float32))
-
     dataset = FlexibleDataset(
         features=[Feature(name="mat", path=pack_path)],
-        targets=[Target(name="y", path=target_path)],
+        targets=[Target(name="y", path=npy_target_3x1)],
         memmap_cache_dir=cache_dir,
     )
 
