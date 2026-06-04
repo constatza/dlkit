@@ -13,7 +13,6 @@ from typing import Any
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
     Latent,
-    MatrixFeature,
     PathFeature,
     PathTarget,
     Prediction,
@@ -21,7 +20,7 @@ from dlkit.infrastructure.config.data_entries import (
     ValueTarget,
 )
 
-FeatureEntry = PathFeature | ValueFeature | MatrixFeature
+FeatureEntry = PathFeature | ValueFeature
 TargetEntry = PathTarget | ValueTarget
 
 
@@ -97,9 +96,7 @@ class DataEntryRegistry:
         """
         with self._lock:
             return {
-                n: e
-                for n, e in self._entries.items()
-                if isinstance(e, (PathFeature, ValueFeature, MatrixFeature))
+                n: e for n, e in self._entries.items() if isinstance(e, (PathFeature, ValueFeature))
             }
 
     def get_targets(self) -> dict[str, TargetEntry]:
@@ -159,9 +156,7 @@ class DataEntryRegistry:
         """
         with self._lock:
             features = {
-                n: e
-                for n, e in self._entries.items()
-                if isinstance(e, (PathFeature, ValueFeature, MatrixFeature))
+                n: e for n, e in self._entries.items() if isinstance(e, (PathFeature, ValueFeature))
             }
             targets = {
                 n: e for n, e in self._entries.items() if isinstance(e, (PathTarget, ValueTarget))

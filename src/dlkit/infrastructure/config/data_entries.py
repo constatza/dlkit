@@ -36,12 +36,10 @@ from .entry_protocols import (
 from .entry_types import (
     AutoencoderTarget,
     Latent,
-    MatrixFeature,
     PathBasedEntry,
     PathFeature,
     PathTarget,
     Prediction,
-    SparseFeature,
     ValueBasedEntry,
     ValueFeature,
     ValueTarget,
@@ -62,8 +60,6 @@ __all__ = [
     "ValueBasedEntry",
     # Path-based types
     "PathFeature",
-    "MatrixFeature",
-    "SparseFeature",
     "PathTarget",
     # Value-based types
     "ValueFeature",

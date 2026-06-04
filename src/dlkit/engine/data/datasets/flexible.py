@@ -21,7 +21,6 @@ from torch import Tensor
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
     FeatureType,
-    MatrixFeature,
     PathBasedEntry,
     TargetType,
     ValueBasedEntry,
@@ -87,8 +86,8 @@ def _normalize_entries(
 ) -> dict[str, tuple[_EntrySource, str | None]]:
     """Extract path or value from DataEntry objects or pre-resolved tensor entries.
 
-    Expects DataEntry objects (PathFeature, ValueFeature, PathTarget, ValueTarget,
-    MatrixFeature) created by Feature()/Matrix()/Target() factories.
+    Expects DataEntry objects (PathFeature, ValueFeature, PathTarget, ValueTarget)
+    created by Feature()/Target() factories.
     These factories handle validation.
 
     Single Responsibility: Extract data sources from validated entries.
@@ -100,7 +99,7 @@ def _normalize_entries(
     Returns:
         Dictionary mapping entry name to tuple of (data source, entry name).
         The entry name is used as array_key when loading .npz files.
-        ``IArrayPackReader`` values represent zarr dense matrix pack entries.
+        ``IArrayPackReader`` values represent zarr array pack entries.
 
     Raises:
         TypeError: If receives dict (should use Feature()/Target() instead)
@@ -143,16 +142,7 @@ def _normalize_entries(
                 item.name,
             )
 
-        # MatrixFeature (and its SparseFeature alias): open zarr dense array pack reader
-        elif isinstance(item, MatrixFeature):
-            if item.is_placeholder():
-                raise PlaceholderNotResolvedError(str(item.name or "unknown"))
-            assert item.name is not None, "Non-placeholder entry must have name"
-            assert item.path is not None, "MatrixFeature path must be set for non-placeholder entry"
-            reader = open_array_pack(Path(item.path))
-            result[item.name] = (reader, None)
-
-        # PathBasedEntry: extract file path
+        # PathBasedEntry: zarr pack dir → IArrayPackReader; file → Path
         elif isinstance(item, PathBasedEntry):
             if item.is_placeholder():
                 raise PlaceholderNotResolvedError(str(item.name or "unknown"))
@@ -160,7 +150,12 @@ def _normalize_entries(
             assert item.path is not None, (
                 "PathBasedEntry must have a path for non-placeholder entry"
             )
-            result[item.name] = (Path(item.path), item.name)
+            resolved = Path(item.path)
+            if resolved.is_dir():
+                reader = open_array_pack(resolved)
+                result[item.name] = (reader, None)
+            else:
+                result[item.name] = (resolved, item.name)
 
         # Generic DataEntry: check capabilities
         elif isinstance(item, DataEntry):
@@ -759,11 +754,11 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         """Initialize FlexibleDataset with feature and target entries.
 
         Args:
-            features: Feature entries (PathFeature, ValueFeature, or MatrixFeature).
+            features: Feature entries (PathFeature or ValueFeature).
             targets: Target entries (PathTarget or ValueTarget from Target() factory).
             memmap_cache_dir: If set, load dataset via OS memory-mapped files stored in
                 this directory.  Entries must be file-backed (PathBasedEntry).
-                MatrixFeature entries bypass the memmap cache — zarr handles OOM natively.
+                Zarr pack entries bypass the memmap cache — zarr handles OOM natively.
                 The cache is invalidated when source files or dtype change.
             memmap_chunk_size: Rows written per iteration when building the memmap cache.
                 Bounds peak RAM to ``chunk_size × feature_width × sizeof(dtype)``.
@@ -787,7 +782,7 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         self._pack_bindings: dict[str, IArrayPackReader] = {}
 
         if memmap_cache_dir is not None:
-            # MatrixFeature entries bypass the memmap cache — zarr handles OOM natively.
+            # Zarr pack entries bypass the memmap cache — zarr handles OOM natively.
             # Separate pack readers from file-backed entries before validation.
             pack_only: dict[str, IArrayPackReader] = {
                 name: source

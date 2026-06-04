@@ -54,7 +54,6 @@ from dlkit.infrastructure.config.data_entries import (
     Feature,
     FeatureType,
     Latent,
-    SparseFeature,
     Target,
     TargetType,
 )
@@ -64,7 +63,6 @@ __all__ = [
     "Feature",
     "Target",
     "ContextFeature",
-    "SparseFeature",
     "AutoencoderTarget",
     "Latent",
     "DataEntry",

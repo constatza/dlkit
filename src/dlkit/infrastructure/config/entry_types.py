@@ -3,7 +3,6 @@
 Hierarchy:
     PathBasedEntry  (DataEntry + IPathBased)
         ├── PathFeature
-        ├── MatrixFeature
         └── PathTarget
     ValueBasedEntry (DataEntry + IValueBased)
         ├── ValueFeature
@@ -150,43 +149,34 @@ class ValueBasedEntry(DataEntry, IValueBased, ABC):
 class PathFeature(PathBasedEntry):
     """Feature loaded from a file path.
 
+    When ``path`` points to a directory, it must be a valid zarr array pack
+    (as identified by ``dlkit.infrastructure.io.packs.detect_format``).
+
     Notes:
         When the wrapper is configured with ``is_autoencoder=True`` and no
         explicit targets are provided, the pipeline treats feature entries as
         targets automatically.
     """
 
-
-class MatrixFeature(PathBasedEntry):
-    """Feature loaded from a zarr dense matrix pack directory.
-
-    The ``path`` must point to a directory that is a valid zarr array store.
-    No manifest file is required at load time.
-    """
-
     @model_validator(mode="after")
-    def validate_is_matrix_pack(self) -> MatrixFeature:
-        """Verify that ``path`` points to an existing directory.
+    def _validate_dir_is_array_pack(self) -> PathFeature:
+        """Verify that any directory ``path`` is a recognised zarr array pack.
+
+        Args:
+            None.
 
         Returns:
             The validated instance.
 
         Raises:
-            ValueError: If the path is set but is not a directory.
+            ValueError: If ``path`` is a directory that is not a known pack format.
         """
-        if self.path is None:
+        if self.path is None or not self.path.is_dir():
             return self
-        if not self.path.is_dir():
-            raise ValueError(f"MatrixFeature path must be a directory, got: {self.path}")
+        from dlkit.infrastructure.io.packs import detect_format
+
+        detect_format(self.path)  # raises ValueError if not a known pack format
         return self
-
-
-SparseFeature = MatrixFeature
-"""Backward-compatible alias for ``MatrixFeature``.
-
-Existing code using ``SparseFeature`` continues to work unchanged.
-New code should use ``MatrixFeature`` directly.
-"""
 
 
 class PathTarget(PathBasedEntry, IWritable):
