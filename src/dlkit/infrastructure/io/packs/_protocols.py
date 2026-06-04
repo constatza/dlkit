@@ -124,6 +124,15 @@ class AbstractArrayPackReader(ABC):
     def matrix_size(self) -> tuple[int, int]:
         """Shared ``(rows, cols)`` shape for every sample."""
 
+    @property
+    def sample_shape(self) -> tuple[int, ...]:
+        """Alias for ``matrix_size`` generalizing ND arrays.
+
+        Returns:
+            The shape of each sample, as a tuple of ints.
+        """
+        return tuple(self.matrix_size)
+
     @abstractmethod
     def __getitem__(self, idx: int | list[int] | slice) -> Tensor:
         """Return one or more dense matrices.
