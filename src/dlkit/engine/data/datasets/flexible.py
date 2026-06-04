@@ -381,44 +381,26 @@ def _validate_memmap_entries(
             )
 
 
-def _load_dense_entries(
-    feat_map: dict[str, tuple[_EntrySource, str | None]],
-    targ_map: dict[str, tuple[_EntrySource, str | None]],
-) -> tuple[
-    dict[str, Tensor],
-    dict[str, IArrayPackReader],
-    dict[str, Tensor],
-]:
-    """Load dense tensors from entry maps; collect zarr pack bindings.
-
-    Splits feat_map into dense tensors and zarr dense pack readers.
-    Loads all target tensors, rejecting pack targets.
+def _partition_entry_map(
+    entry_map: dict[str, tuple[_EntrySource, str | None]],
+) -> tuple[dict[str, Tensor], dict[str, IArrayPackReader]]:
+    """Split a normalised entry map into eager tensors and lazy pack readers.
 
     Args:
-        feat_map: Feature entry map: name → (source, array_key).
-        targ_map: Target entry map: name → (source, array_key).
+        entry_map: Mapping from entry name to (source, array_key) pairs.
 
     Returns:
-        Tuple of (dense feature tensors, pack readers, target tensors).
-
-    Raises:
-        ValueError: If a target entry uses a matrix pack.
+        Tuple of (dense_tensors, lazy_readers) where dense_tensors contains
+        pre-loaded tensors and lazy_readers contains IArrayPackReader instances.
     """
-    dense_feat_tensors: dict[str, Tensor] = {}
-    pack_bindings: dict[str, IArrayPackReader] = {}
-    for name, (source, array_key) in feat_map.items():
+    dense: dict[str, Tensor] = {}
+    packs: dict[str, IArrayPackReader] = {}
+    for name, (source, array_key) in entry_map.items():
         if isinstance(source, IArrayPackReader):
-            pack_bindings[name] = source
+            packs[name] = source
         else:
-            dense_feat_tensors[name] = _load_or_convert_tensor(source, array_key=array_key)
-
-    targ_tensors: dict[str, Tensor] = {}
-    for name, (source, array_key) in targ_map.items():
-        if isinstance(source, IArrayPackReader):
-            raise ValueError(f"Target entry '{name}' cannot use matrix packs.")
-        targ_tensors[name] = _load_or_convert_tensor(source, array_key=array_key)
-
-    return dense_feat_tensors, pack_bindings, targ_tensors
+            dense[name] = _load_or_convert_tensor(source, array_key=array_key)
+    return dense, packs
 
 
 def _make_empty_dataset_tensordict(n: int) -> TensorDict:
@@ -447,56 +429,30 @@ def _normalize_indices(indices: list[int], n: int) -> list[int]:
     return [_normalize_index(int(idx), n) for idx in indices]
 
 
-def _inject_pack_features(
-    sample: TensorDict,
+def _inject_lazy_readers(
+    td: TensorDict,
     *,
-    sample_index: int,
-    pack_bindings: dict[str, IArrayPackReader],
+    idx: int | list[int],
+    readers: dict[str, IArrayPackReader],
+    namespace: str,
 ) -> TensorDict:
-    """Return a sample TensorDict with zarr dense matrix pack features injected.
-
-    Each reader returns a dense ``Tensor[rows, cols]`` for a scalar index.
+    """Inject lazy-reader tensors into a TensorDict at the given nested namespace.
 
     Args:
-        sample: Sample TensorDict to enrich (mutated in place).
-        sample_index: Absolute index of the sample within the dataset.
-        pack_bindings: Zarr dense pack readers keyed by feature name.
+        td: TensorDict to enrich (mutated in place).
+        idx: Single sample index (int) or batch of indices (list[int]).
+        readers: Lazy pack readers keyed by entry name.
+        namespace: Nested key prefix (e.g. ``"features"`` or ``"targets"``).
 
     Returns:
-        The enriched sample TensorDict.
+        The enriched TensorDict.
     """
-    if not pack_bindings:
-        return sample
+    if not readers:
+        return td
 
-    for name, reader in pack_bindings.items():
-        sample["features", name] = reader[sample_index]
-    return sample
-
-
-def _inject_pack_features_batch(
-    batch: TensorDict,
-    *,
-    sample_indices: list[int],
-    pack_bindings: dict[str, IArrayPackReader],
-) -> TensorDict:
-    """Inject zarr dense matrix pack features into a batched TensorDict.
-
-    Each reader returns a dense ``Tensor[B, rows, cols]`` for a list index.
-
-    Args:
-        batch: Batched TensorDict to enrich (mutated in place).
-        sample_indices: Absolute indices of the samples within the dataset.
-        pack_bindings: Zarr dense pack readers keyed by feature name.
-
-    Returns:
-        The enriched batched TensorDict.
-    """
-    if not pack_bindings:
-        return batch
-
-    for name, reader in pack_bindings.items():
-        batch["features", name] = reader[sample_indices]
-    return batch
+    for name, reader in readers.items():
+        td[namespace, name] = reader[idx]
+    return td
 
 
 def _assemble_dataset_tensordict(
@@ -779,22 +735,22 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
 
         self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
         self._target_names: tuple[str, ...] = tuple(targ_map.keys())
-        self._pack_bindings: dict[str, IArrayPackReader] = {}
+        self._feature_pack_bindings: dict[str, IArrayPackReader] = {}
+        self._target_pack_bindings: dict[str, IArrayPackReader] = {}
 
         if memmap_cache_dir is not None:
             # Zarr pack entries bypass the memmap cache — zarr handles OOM natively.
-            # Separate pack readers from file-backed entries before validation.
-            pack_only: dict[str, IArrayPackReader] = {
-                name: source
-                for name, (source, _) in feat_map.items()
-                if isinstance(source, IArrayPackReader)
-            }
-            self._pack_bindings = pack_only
-            non_pack_feat = {k: v for k, v in feat_map.items() if k not in pack_only}
-            _validate_memmap_entries({**non_pack_feat, **targ_map})
+            # Strip pack readers from both maps before passing to memmap validation.
+            feat_packs = {n: s for n, (s, _) in feat_map.items() if isinstance(s, IArrayPackReader)}
+            targ_packs = {n: s for n, (s, _) in targ_map.items() if isinstance(s, IArrayPackReader)}
+            self._feature_pack_bindings = feat_packs
+            self._target_pack_bindings = targ_packs
+            non_pack_feat = {k: v for k, v in feat_map.items() if k not in feat_packs}
+            non_pack_targ = {k: v for k, v in targ_map.items() if k not in targ_packs}
+            _validate_memmap_entries({**non_pack_feat, **non_pack_targ})
             dtype = _get_source_dtype()
             _feat = cast("dict[str, tuple[Path, str | None]]", non_pack_feat)
-            _targ = cast("dict[str, tuple[Path, str | None]]", targ_map)
+            _targ = cast("dict[str, tuple[Path, str | None]]", non_pack_targ)
             self._dataset_td = _load_or_build_memmap(
                 _feat,
                 _targ,
@@ -803,17 +759,21 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
                 memmap_chunk_size,
             )
         else:
-            dense_feats, pack_bindings, targs = _load_dense_entries(feat_map, targ_map)
-            self._pack_bindings = pack_bindings
+            dense_feats, feat_packs = _partition_entry_map(feat_map)
+            dense_targs, targ_packs = _partition_entry_map(targ_map)
+            self._feature_pack_bindings = feat_packs
+            self._target_pack_bindings = targ_packs
 
             # Resolve canonical N: dense entries → pack readers.
-            non_scalar_dense = {k: v for k, v in {**dense_feats, **targs}.items() if v.dim() > 0}
-            n = _determine_n_total(non_scalar_dense, pack_bindings)
+            non_scalar_dense = {
+                k: v for k, v in {**dense_feats, **dense_targs}.items() if v.dim() > 0
+            }
+            n = _determine_n_total(non_scalar_dense, {**feat_packs, **targ_packs})
 
-            if dense_feats or targs:
+            if dense_feats or dense_targs:
                 self._dataset_td, _ = _assemble_dataset_tensordict(
                     dense_feats,
-                    targs,
+                    dense_targs,
                     tuple(dense_feats.keys()),
                     self._target_names,
                 )
@@ -842,11 +802,13 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         """
         sample_index = _normalize_index(int(idx), self._length)
         sample = cast("TensorDict", self._dataset_td[sample_index])
-        return _inject_pack_features(
-            sample,
-            sample_index=sample_index,
-            pack_bindings=self._pack_bindings,
+        _inject_lazy_readers(
+            sample, idx=sample_index, readers=self._feature_pack_bindings, namespace="features"
         )
+        _inject_lazy_readers(
+            sample, idx=sample_index, readers=self._target_pack_bindings, namespace="targets"
+        )
+        return sample
 
     def __getitems__(self, indices: list[int]) -> TensorDict:
         """Get a batched TensorDict for a list of indices.
@@ -859,11 +821,13 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
 
         sample_indices = _normalize_indices(indices, self._length)
         batch = cast("TensorDict", self._dataset_td[sample_indices])
-        return _inject_pack_features_batch(
-            batch,
-            sample_indices=sample_indices,
-            pack_bindings=self._pack_bindings,
+        _inject_lazy_readers(
+            batch, idx=sample_indices, readers=self._feature_pack_bindings, namespace="features"
         )
+        _inject_lazy_readers(
+            batch, idx=sample_indices, readers=self._target_pack_bindings, namespace="targets"
+        )
+        return batch
 
 
 def collate_tensordict(batch: list[TensorDictBase] | TensorDictBase) -> TensorDict:
