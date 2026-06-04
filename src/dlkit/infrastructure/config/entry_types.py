@@ -162,17 +162,23 @@ class PathFeature(PathBasedEntry):
     def _validate_dir_is_array_pack(self) -> PathFeature:
         """Verify that any directory ``path`` is a recognised zarr array pack.
 
+        Checks for the zarr v3 group sentinel ``pack.zarr/zarr.json`` without
+        importing from ``infrastructure.io`` to avoid a config↔io import cycle.
+
         Returns:
             The validated instance.
 
         Raises:
-            ValueError: If ``path`` is a directory that is not a known pack format.
+            ValueError: If ``path`` is a directory without the zarr pack sentinel.
         """
         if self.path is None or not self.path.is_dir():
             return self
-        from dlkit.infrastructure.io.packs import detect_format
-
-        detect_format(self.path)  # raises ValueError if not a known pack format
+        sentinel = self.path / "pack.zarr" / "zarr.json"
+        if not sentinel.exists():
+            raise ValueError(
+                f"Directory is not a recognised array pack: {self.path}. "
+                f"Expected '{sentinel}' to exist."
+            )
         return self
 
 
