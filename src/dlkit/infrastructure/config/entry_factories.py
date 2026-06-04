@@ -2,11 +2,12 @@
 
 Public API:
     Feature() - create PathFeature or ValueFeature
+    Matrix()  - create MatrixFeature (zarr dense matrix pack)
     Target()  - create PathTarget or ValueTarget
     ContextFeature() - create a feature excluded from model.forward()
 
 Type aliases:
-    FeatureType = PathFeature | ValueFeature | SparseFeature
+    FeatureType = PathFeature | ValueFeature | MatrixFeature  (SparseFeature = MatrixFeature alias)
     TargetType  = PathTarget  | ValueTarget
 
 Type guards (all accept DataEntry, return bool):
@@ -30,9 +31,9 @@ from .entry_protocols import (
 )
 from .entry_types import (
     AutoencoderTarget,
+    MatrixFeature,
     PathFeature,
     PathTarget,
-    SparseFeature,
     ValueFeature,
     ValueTarget,
 )
@@ -42,7 +43,9 @@ from .transform_settings import TransformSettings
 # Type aliases
 # ---------------------------------------------------------------------------
 
-FeatureType = PathFeature | ValueFeature | SparseFeature
+# SparseFeature is an alias for MatrixFeature; keep both in the union so that
+# existing ``isinstance(x, SparseFeature)`` calls and annotations continue to work.
+FeatureType = PathFeature | ValueFeature | MatrixFeature
 TargetType = PathTarget | ValueTarget
 
 # ---------------------------------------------------------------------------
@@ -135,6 +138,53 @@ def Feature(
         loss_input=loss_input,
         transforms=transform_list,
     )
+
+
+# ---------------------------------------------------------------------------
+# Matrix factory
+# ---------------------------------------------------------------------------
+
+
+def Matrix(
+    name: str | None = None,
+    *,
+    path: Path | str | None = None,
+    dtype: torch.dtype | None = None,
+    model_input: bool = True,
+    loss_input: str | None = None,
+    transforms: list[TransformSettings] | None = None,
+) -> MatrixFeature:
+    """Create a ``MatrixFeature`` pointing to a zarr dense matrix pack directory.
+
+    Args:
+        name: Entry name; defaults to the dict key when stored in a mapping.
+        path: Path to the zarr pack directory (None for placeholder mode).
+        dtype: PyTorch dtype override.
+        model_input: Forwarding semantics for ``model.forward()``.
+        loss_input: Route this entry as a loss kwarg with this name.
+        transforms: Transform chain for this entry.
+
+    Returns:
+        A ``MatrixFeature`` configured with the given arguments.
+
+    Examples:
+        >>> f = Matrix(name="K", path="data/stiffness.zarr")
+        >>> isinstance(f, MatrixFeature)
+        True
+    """
+    resolved_path = Path(path) if path is not None else None
+    return MatrixFeature(
+        name=name,
+        path=resolved_path,
+        dtype=dtype,
+        model_input=model_input,
+        loss_input=loss_input,
+        transforms=transforms or [],
+    )
+
+
+# Deprecated alias — use Matrix() instead.
+Sparse = Matrix
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +348,10 @@ def is_feature_entry(entry: DataEntry) -> bool:
         entry: The entry to inspect.
 
     Returns:
-        True for ``PathFeature``, ``ValueFeature``, or ``SparseFeature``.
+        True for ``PathFeature``, ``ValueFeature``, or ``MatrixFeature`` (includes
+        ``SparseFeature``, which is an alias for ``MatrixFeature``).
     """
-    return isinstance(entry, (PathFeature, ValueFeature, SparseFeature))
+    return isinstance(entry, (PathFeature, ValueFeature, MatrixFeature))
 
 
 def is_target_entry(entry: DataEntry) -> bool:
@@ -378,6 +429,8 @@ def has_feature_reference(entry: DataEntry) -> bool:
 __all__ = [
     "Feature",
     "FeatureType",
+    "Matrix",
+    "Sparse",
     "Target",
     "TargetType",
     "ContextFeature",

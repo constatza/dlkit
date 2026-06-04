@@ -14,6 +14,8 @@ from .entry_factories import (
     ContextFeature,
     Feature,
     FeatureType,
+    Matrix,
+    Sparse,
     Target,
     TargetType,
     has_feature_reference,
@@ -34,16 +36,15 @@ from .entry_protocols import (
 from .entry_types import (
     AutoencoderTarget,
     Latent,
+    MatrixFeature,
     PathBasedEntry,
     PathFeature,
     PathTarget,
     Prediction,
     SparseFeature,
-    SparseFilesConfig,
     ValueBasedEntry,
     ValueFeature,
     ValueTarget,
-    _validate_sparse_filename,
 )
 from .transform_settings import TransformSettings
 
@@ -61,8 +62,8 @@ __all__ = [
     "ValueBasedEntry",
     # Path-based types
     "PathFeature",
+    "MatrixFeature",
     "SparseFeature",
-    "SparseFilesConfig",
     "PathTarget",
     # Value-based types
     "ValueFeature",
@@ -74,6 +75,8 @@ __all__ = [
     # Factories
     "Feature",
     "FeatureType",
+    "Matrix",
+    "Sparse",  # deprecated alias for Matrix
     "Target",
     "TargetType",
     "ContextFeature",
@@ -87,6 +90,4 @@ __all__ = [
     "has_feature_reference",
     # Re-exported for backward compat (was in the original module namespace)
     "TransformSettings",
-    # Private helper (kept for any existing importers)
-    "_validate_sparse_filename",
 ]

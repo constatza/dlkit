@@ -3,7 +3,7 @@
 Hierarchy:
     PathBasedEntry  (DataEntry + IPathBased)
         ├── PathFeature
-        ├── SparseFeature
+        ├── MatrixFeature
         └── PathTarget
     ValueBasedEntry (DataEntry + IValueBased)
         ├── ValueFeature
@@ -18,8 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from pydantic import ConfigDict, Field, ValidationInfo, model_validator
-from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic import Field, ValidationInfo, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from .entry_base import DataEntry
@@ -30,53 +29,6 @@ from .entry_protocols import (
     IValueBased,
     IWritable,
 )
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _validate_sparse_filename(name: str, field_name: str) -> None:
-    """Assert that a sparse payload filename is a well-formed .npy basename.
-
-    Args:
-        name: Filename string to validate.
-        field_name: Human-readable field label for error messages.
-
-    Raises:
-        ValueError: If the filename is empty, contains path separators, or
-            does not end with ``.npy``.
-    """
-    if not name:
-        raise ValueError(f"{field_name} filename must be non-empty")
-    if "/" in name or "\\" in name:
-        raise ValueError(f"{field_name} filename must be a local basename, got '{name}'")
-    if not name.endswith(".npy"):
-        raise ValueError(f"{field_name} filename must end with '.npy', got '{name}'")
-
-
-@pydantic_dataclass(config=ConfigDict(frozen=True))
-class SparseFilesConfig:
-    """Named payload filenames for a sparse-pack directory.
-
-    Attributes:
-        indices: Filename for the column indices array.
-        values: Filename for the non-zero values array.
-        nnz_ptr: Filename for the row pointer array.
-        size: Filename for the matrix size array.
-    """
-
-    indices: str = "indices.npy"
-    values: str = "values.npy"
-    nnz_ptr: str = "nnz_ptr.npy"
-    size: str = "size.npy"
-
-    def __post_init__(self) -> None:
-        _validate_sparse_filename(self.indices, "indices")
-        _validate_sparse_filename(self.values, "values")
-        _validate_sparse_filename(self.nnz_ptr, "nnz_ptr")
-        _validate_sparse_filename(self.size, "size")
-
 
 # ---------------------------------------------------------------------------
 # Abstract path-based and value-based bases
@@ -205,41 +157,36 @@ class PathFeature(PathBasedEntry):
     """
 
 
-class SparseFeature(PathBasedEntry):
-    """Feature loaded from a sparse-pack directory.
+class MatrixFeature(PathBasedEntry):
+    """Feature loaded from a zarr dense matrix pack directory.
 
-    The ``path`` must point to a directory containing the payload arrays
-    defined in ``files``.  No manifest file is required at load time.
-
-    Attributes:
-        files: Named payload filenames inside the sparse-pack directory.
+    The ``path`` must point to a directory that is a valid zarr array store.
+    No manifest file is required at load time.
     """
 
-    files: SparseFilesConfig = Field(
-        default_factory=SparseFilesConfig,
-        description="Sparse payload file naming",
-    )
-
     @model_validator(mode="after")
-    def validate_is_sparse_pack(self) -> SparseFeature:
-        """Verify that ``path`` is a valid sparse-pack directory.
+    def validate_is_matrix_pack(self) -> MatrixFeature:
+        """Verify that ``path`` points to an existing directory.
 
         Returns:
             The validated instance.
 
         Raises:
-            ValueError: If the directory or any required payload file is missing.
+            ValueError: If the path is set but is not a directory.
         """
         if self.path is None:
             return self
         if not self.path.is_dir():
-            raise ValueError(f"SparseFeature path must be a directory, got: {self.path}")
-        required = (self.files.indices, self.files.values, self.files.nnz_ptr, self.files.size)
-        if not all((self.path / name).exists() for name in required):
-            raise ValueError(
-                f"Not a sparse pack directory: {self.path}. Expected payload files: {self.files}"
-            )
+            raise ValueError(f"MatrixFeature path must be a directory, got: {self.path}")
         return self
+
+
+SparseFeature = MatrixFeature
+"""Backward-compatible alias for ``MatrixFeature``.
+
+Existing code using ``SparseFeature`` continues to work unchanged.
+New code should use ``MatrixFeature`` directly.
+"""
 
 
 class PathTarget(PathBasedEntry, IWritable):
