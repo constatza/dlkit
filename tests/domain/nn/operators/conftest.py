@@ -37,8 +37,8 @@ def n_queries() -> int:
 
 
 @pytest.fixture
-def n_coords() -> int:
-    """Spatial coordinate dimension for query points."""
+def query_dim() -> int:
+    """Coordinate width for DeepONet query points."""
     return 1
 
 
@@ -61,9 +61,9 @@ def deeponet_branch(batch_size: int, n_sensors: int) -> torch.Tensor:
 
 
 @pytest.fixture
-def deeponet_trunk(batch_size: int, n_queries: int, n_coords: int) -> torch.Tensor:
-    """Trunk query points for DeepONet: (batch, n_queries, n_coords).
+def deeponet_trunk(batch_size: int, n_queries: int, query_dim: int) -> torch.Tensor:
+    """Query points for DeepONet: (batch, n_queries, query_dim).
 
     Shape: (4, 10, 1)
     """
-    return torch.randn(batch_size, n_queries, n_coords)
+    return torch.randn(batch_size, n_queries, query_dim)

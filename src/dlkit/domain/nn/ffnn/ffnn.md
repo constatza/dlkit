@@ -41,6 +41,7 @@ Square-only classes raise `ValueError` at construction if `in_features != out_fe
 |---|---|---|---|
 | Variable-width | `VarWidthFFNN(skip=False)` | `VarWidthFFNN` | — |
 | Constant-width | `FFNN(skip=False)` | `FFNN` | `ScaleEquivariantFFNN` |
+| Embedded constant-width | — | `EmbeddedFFNN` | — |
 
 ### Constrained — square layer types (SPD, SPDFactorized)
 
@@ -75,6 +76,28 @@ Scale-equivariant wrappers: `ScaleEquivariant[Embedded]FactorizedFFNN`, `ScaleEq
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
 
+Dense shape intuition:
+
+```text
+VarWidthFFNN
+  (B, in_features)
+  -> embed to layers[0]
+  -> layers[1], ..., layers[-1]
+  -> (B, out_features)
+
+FFNN
+  (B, in_features)
+  -> embed to hidden_size
+  -> constant-width body repeated by num_layers
+  -> (B, out_features)
+
+EmbeddedFFNN
+  (B, in_features)
+  -> input embedding to hidden_size
+  -> fixed-width residual body repeated by num_layers
+  -> output projection to (B, out_features)
+```
+
 ## Low-level constrained builders
 
 `constrained.py` also keeps reusable builder-oriented classes:
@@ -83,6 +106,26 @@ Scale-equivariant wrappers: `ScaleEquivariant[Embedded]FactorizedFFNN`, `ScaleEq
 - `EmbeddedSimpleParametricFFNN` — plain body with `Linear` embedding/regression projections (no `residual:` param)
 
 These remain available for custom compositions. The preferred public model surface is the explicit plain/residual class matrix above.
+
+## Embedded dense convenience model
+
+`EmbeddedFFNN` is the standard embedded dense residual variant used by the
+DeepONet operator family.
+
+Architecture:
+
+```text
+Linear(in_features -> hidden_size)
+-> residual constant-width body
+-> Linear(hidden_size -> out_features)
+```
+
+It exposes the same dense-network knobs as `FFNN`:
+- `in_features`
+- `out_features`
+- `hidden_size`
+- `num_layers`
+- optional `activation`, `normalize`, `dropout`, `bias`
 
 ## Naming rules
 

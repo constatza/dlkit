@@ -1,8 +1,4 @@
-"""Fourier Neural Operator for 1-D spatial domains.
-
-Reference: Li et al., "Fourier Neural Operator for Parametric Partial
-Differential Equations", ICLR 2021. https://arxiv.org/abs/2010.08895
-"""
+"""Fourier Neural Operator for 1-D spatial domains."""
 
 from __future__ import annotations
 
@@ -20,29 +16,17 @@ from dlkit.domain.nn.spectral.layers import FourierLayer
 class FourierNeuralOperator1d(GridOperatorBase):
     """Fourier Neural Operator for 1-D spatial functions.
 
-    Learns a mapping ``G : U → V`` between function spaces discretised on
-    a regular 1-D grid.  The operator is discretisation-invariant: a model
-    trained on a coarse grid can be evaluated at a finer resolution.
+    Input/output dimensions:
+        input: ``(batch, in_channels, length)``
+        output: ``(batch, out_channels, length)``
 
-    Inherits the lifting → body → projection scaffold from
-    ``GridOperatorBase``.  The body is an ``nn.Sequential`` of
-    ``FourierLayer`` blocks.
+    Architecture dimensions:
+        lifting: ``(batch, in_channels, length) -> (batch, width, length)``
+        body: ``(batch, width, length) -> (batch, width, length)``
+        projection: ``(batch, width, length) -> (batch, out_channels, length)``
 
-    To build an operator with a custom body (e.g. wavelet layers), subclass
-    ``GridOperatorBase`` directly and supply your own body::
-
-        body = nn.Sequential(*[WaveletLayer(channels=64) for _ in range(4)])
-        op = GridOperatorBase(body=body, in_channels=2, out_channels=1, width=64)
-
-    Args:
-        in_channels: Number of input function channels (including any
-            appended spatial grid coordinates).
-        out_channels: Number of output function channels.
-        width: Latent channel width used throughout the FNO body.
-        n_modes: Number of Fourier modes retained per layer.
-        n_layers: Number of ``FourierLayer`` blocks in the body.
-        activation: Pointwise activation used inside each Fourier layer.
-            Defaults to ``F.gelu``.
+    Constructor dimensions:
+        ``in_channels``, ``out_channels``, ``width``, ``n_modes``, ``n_layers``
     """
 
     def __init__(

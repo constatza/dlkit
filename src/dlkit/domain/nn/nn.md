@@ -23,12 +23,12 @@ The FFNN family is organized symmetrically around architecture and naming:
 - `VarWidth...` means explicit per-layer width list required; no prefix means constant-width (`hidden_size` + `num_layers`)
 - `Simple...` means plain, no skip connections; no `Simple` prefix means residual/skip connections active
 - `FFNN` and `VarWidthFFNN` both accept `skip: bool = True` — use `skip=False` instead of a separate `Simple*` class
-- `Embedded...` means the network has a dedicated initial projection layer before the body; no `Embedded` prefix means structured layers act directly from the input
+- `Embedded...` means the network has a dedicated initial projection layer before the body; `EmbeddedFFNN` is the dense constant-width version
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
 - Square layer types (SPD, SPDFactorized) expose only `in_features`; rectangular types (Factorized) expose `in_features`, `hidden_size`, and `out_features`
 
 Representative exports from `dlkit.domain.nn` include:
-- dense: `VarWidthFFNN`, `FFNN` (both accept `skip: bool = True`)
+- dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`
 - constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
 - constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
 - scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
@@ -88,6 +88,11 @@ to the right `ModelContractSpec` variant.  The dispatch table:
 element supplies the output dimension(s).  For tabular models the engine infers
 `out_shape` from the dataset at training time — if none is available at inference
 the resolver raises `WorkflowError` (prefer retraining over silent fallbacks).
+
+For `BranchTrunkSpec`, the output-shape rules follow DeepONet semantics:
+- canonical query-mode scalar targets: `(n_queries,)` -> `out_features = 1`
+- canonical query-mode vector targets: `(n_queries, out_features)` -> `out_features = out_features`
+- paired single-query targets: `(out_features,)` -> `out_features = out_features`
 
 ## Contract checkpoint serialization
 

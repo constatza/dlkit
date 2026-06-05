@@ -124,18 +124,15 @@ ContextFeature(name="A", path="data/stiffness.npy")  # model_input=False
 Target(name="y", path="data/targets.npy")
 ```
 
-`model_input` controls how (and whether) a feature is dispatched to `model.forward()`:
+`model_input` controls whether a feature is dispatched to `model.forward()`:
 
 | `model_input` value | Dispatch style | Example |
 |---|---|---|
-| `True` (default) | kwarg, key = entry name | `model(x=tensor)` |
-| `0`, `1`, … (int) | positional, sorted by index | `model(tensor0, tensor1)` |
-| `"name"` (non-digit str) | kwarg, key = `"name"` | `model(name=tensor)` |
-| `False` / `None` | excluded from model call | context feature for loss only |
+| `True` (default) | positional, config-list order | `model(x_tensor, z_tensor)` |
+| `False` | excluded from model call | context feature for loss only |
 
-`_classify_feature_entries()` in `components.py` encodes these rules and is shared by
-the training invoker (`TensorDictModelInvoker`) and the inference `feature_names`
-metadata so both paths use identical dispatch ordering.
+`TensorDictModelInvoker` uses the config-list order of model-input features for
+both training and inference metadata reconstruction.
 
 For NPZ inputs, the entry `name` is used as the array key.
 
@@ -184,16 +181,17 @@ targets = [{ name = "y", path = "data/targets.npy" }]
 loss_function = { name = "mse" }
 ```
 
-Default (`model_input=True`) dispatches as kwargs: `model(x=batch["features","x"], z=batch["features","z"])`.
+With both entries marked `model_input=true`, invocation is positional in
+config-list order: `model(batch["features","x"], batch["features","z"])`.
 
-For explicit positional ordering, set `model_input` to an integer:
+For DeepONet-style branch/trunk inputs:
 ```toml
 features = [
-  { name = "x", path = "...", model_input = 0 },
-  { name = "z", path = "...", model_input = 1 },
+  { name = "u", path = "...", field_role = "feature", model_input = true },
+  { name = "query_coords", path = "...", field_role = "target_coordinates", model_input = true },
 ]
 ```
-Invocation: `model(batch["features","x"], batch["features","z"])` — positionals sorted by index.
+Invocation: `model(batch["features","u"], batch["features","query_coords"])`.
 
 ---
 

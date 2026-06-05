@@ -159,11 +159,29 @@ def _build_branch_trunk_contract(
         )
     query = query_fields[0]
     out = output_shapes[0] if output_shapes else (1,)
+    out_features = _resolve_branch_trunk_out_features(query.shape, out)
     return BranchTrunkSpec(
         branch_shape=branch.shape,
         query_shape=query.shape,
-        out_features=out[0],
+        out_features=out_features,
     )
+
+
+def _resolve_branch_trunk_out_features(
+    query_shape: tuple[int, ...],
+    target_shape: tuple[int, ...],
+) -> int:
+    """Infer DeepONet output width from target and query shapes.
+
+    Canonical query-mode samples use ``query_shape=(Q, d)`` and target shapes
+    ``(Q,)`` or ``(Q, out_features)``. Paired single-query samples use
+    ``query_shape=(d,)`` and target shape ``(out_features,)``.
+    """
+    if not target_shape:
+        return 1
+    if len(target_shape) == 1:
+        return target_shape[0] if len(query_shape) == 1 else 1
+    return target_shape[-1]
 
 
 def _build_graph_contract(geometry: GeometrySpec) -> GraphContractSpec:

@@ -72,6 +72,36 @@ class TestPredictCommand:
         mock_predictor.unload.assert_called_once()
         mock_present_result.assert_called_once()
 
+    @patch("dlkit.interfaces.cli.commands.predict.load_config")
+    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
+    @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
+    @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
+    def test_predict_passes_branch_and_trunk_inputs_in_feature_order(
+        self,
+        mock_present_result: Mock,
+        mock_build_datamodule: Mock,
+        mock_load_model_from_settings: Mock,
+        mock_load_config: Mock,
+        cli_runner: CliRunner,
+        sample_config_path: Path,
+        sample_checkpoint_path: Path,
+        sample_settings: Mock,
+    ) -> None:
+        sample_settings.has_dataset_config = True
+        mock_load_config.return_value = sample_settings
+
+        mock_predictor = _make_mock_predictor(["u", "query_coords"])
+        mock_load_model_from_settings.return_value = mock_predictor
+        mock_build_datamodule.return_value = _make_mock_datamodule(["u", "query_coords"])
+
+        result = cli_runner.invoke(
+            predict_app, [str(sample_config_path), str(sample_checkpoint_path)]
+        )
+
+        assert result.exit_code == 0
+        _, kwargs = mock_predictor.predict.call_args
+        assert tuple(kwargs) == ("u", "query_coords")
+
     def test_infer_with_missing_checkpoint_fails(
         self,
         cli_runner: CliRunner,

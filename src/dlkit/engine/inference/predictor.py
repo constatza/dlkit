@@ -37,8 +37,8 @@ def _extract_output_shapes_from_checkpoint(
 ) -> tuple[tuple[int, ...], ...]:
     """Extract output shapes from checkpoint metadata.
 
-    Tries the new geometry format (TARGET-role fields) then the legacy
-    ``shape_summary.out_shapes`` field.
+    New-format checkpoints should carry a serialized contract directly.
+    Legacy checkpoints may still provide ``shape_summary.out_shapes``.
 
     Args:
         checkpoint: Loaded checkpoint dictionary.
@@ -47,20 +47,6 @@ def _extract_output_shapes_from_checkpoint(
         Tuple of output shape tuples, empty if unavailable.
     """
     metadata = checkpoint.get("dlkit_metadata", {})
-
-    # New format: target shapes stored in geometry TARGET fields
-    geometry_data = metadata.get("geometry", {})
-    if geometry_data:
-        from dlkit.common.geometry import FieldRole
-
-        fields = geometry_data.get("fields", [])
-        target_shapes = tuple(
-            tuple(int(d) for d in f["shape"])
-            for f in fields
-            if f.get("role") == FieldRole.TARGET_COORDINATES
-        )
-        if target_shapes:
-            return target_shapes
 
     # Legacy format: shape_summary.out_shapes
     shape_data = metadata.get("shape_summary", {})
@@ -149,15 +135,21 @@ def _maybe_resolve_contract(
 
 from dlkit.common.geometry import FieldRole as _FieldRole
 
-_FEATURE_ROLES: frozenset[str] = frozenset({_FieldRole.FEATURE, _FieldRole.FEATURE_COORDINATES})
+_FEATURE_ROLES: frozenset[str] = frozenset(
+    {
+        _FieldRole.FEATURE,
+        _FieldRole.FEATURE_COORDINATES,
+        _FieldRole.TARGET_COORDINATES,
+    }
+)
 
 
 def _feature_names_from_geometry(geometry_data: dict) -> tuple[str, ...]:
     """Derive ordered feature names from serialized GeometrySpec data.
 
-    Extracts the ``name`` of each FEATURE or FEATURE_COORDINATES field in the
-    geometry, preserving insertion order.  TARGET_COORDINATES and other roles
-    are excluded because they are not model inputs.
+    Extracts the ``name`` of each model-input field in the geometry,
+    preserving insertion order. DeepONet-style trunk coordinates are stored as
+    ``TARGET_COORDINATES`` and must remain part of the ordered input list.
 
     Args:
         geometry_data: Dict produced by ``dataclasses.asdict(GeometrySpec)``.

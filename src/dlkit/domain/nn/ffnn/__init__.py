@@ -24,7 +24,7 @@ from .linear import (
     SymmetricFactorizedLinearNetwork,
     SymmetricLinearNetwork,
 )
-from .residual import FFNN, VarWidthFFNN
+from .residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from .scale_equivariant import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
@@ -46,6 +46,7 @@ __all__ = [
     "VarWidthFFNN",
     # Constant-width
     "FFNN",
+    "EmbeddedFFNN",
     # Gated
     "GatedMLP",
     # Linear baseline

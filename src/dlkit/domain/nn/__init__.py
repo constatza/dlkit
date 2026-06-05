@@ -34,7 +34,7 @@ from .ffnn.linear import (
     SymmetricFactorizedLinearNetwork,
     SymmetricLinearNetwork,
 )
-from .ffnn.residual import FFNN, VarWidthFFNN
+from .ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
@@ -60,12 +60,14 @@ from .graph import (
 )
 from .operators import (
     DeepONet,
+    EmbeddedDeepONet,
+    FFNNDeepONet,
     FourierNeuralOperator1d,
     GridOperatorBase,
     IGridOperator,
     IOperatorNetwork,
     IQueryOperator,
-    MLPDeepONet,
+    VarWidthDeepONet,
 )
 from .parameter_roles import ParameterRole
 from .primitives import (
@@ -106,6 +108,7 @@ __all__ = [
     "VarWidthFFNN",
     # Constant-width
     "FFNN",
+    "EmbeddedFFNN",
     # Gated
     "GatedMLP",
     # Linear baseline
@@ -182,7 +185,9 @@ __all__ = [
     "GridOperatorBase",
     "FourierNeuralOperator1d",
     "DeepONet",
-    "MLPDeepONet",
+    "VarWidthDeepONet",
+    "FFNNDeepONet",
+    "EmbeddedDeepONet",
     # Gating mechanisms and gated building blocks
     "IGatingMechanism",
     "GLUGate",

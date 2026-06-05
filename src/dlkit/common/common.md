@@ -33,7 +33,7 @@ vocabulary used by the engine's shape-inference and contract-resolution pipeline
 |------|---------|--------|
 | `FEATURE` | Primary model input (sensor data, node features, etc.) | `in_shape` / `in_channels` in contracts |
 | `FEATURE_COORDINATES` | Spatial coordinates that accompany the feature (e.g. query grid) | `in_channels` or `spatial_shape` depending on geometry kind |
-| `TARGET_COORDINATES` | Coordinate query for the output (DeepONet trunk input) | `query_shape` in `BranchTrunkSpec` |
+| `TARGET_COORDINATES` | Query coordinates for the output evaluation | `query_shape` in `BranchTrunkSpec` |
 
 ### GeometryKind — spatial structure
 
@@ -55,7 +55,7 @@ from dlkit.common.geometry import FieldRole, GeometryKind, FieldSpec, GeometrySp
 geometry = GeometrySpec(
     fields=(
         FieldSpec(name="x", shape=(16,), role=FieldRole.FEATURE),
-        # add TARGET_COORDINATES for DeepONet / branch-trunk networks:
+        # add TARGET_COORDINATES for DeepONet / branch-query networks:
         # FieldSpec(name="query", shape=(3,), role=FieldRole.TARGET_COORDINATES),
     )
 )

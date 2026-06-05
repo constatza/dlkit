@@ -433,7 +433,7 @@ class TestBranchTrunkDispatch:
     def test_out_features_from_output_shapes(
         self, tabular_with_coords_geometry: GeometrySpec
     ) -> None:
-        """BranchTrunkSpec.out_features equals output_shapes[0][0].
+        """Single-query tabular targets use their sole feature width.
 
         Args:
             tabular_with_coords_geometry: Branch-trunk fixture.
@@ -540,14 +540,22 @@ class TestGridWithCoordsDispatch:
         assert result.query_shape == (1, 3)  # type: ignore[union-attr]
 
     def test_out_features_from_output_shapes(self, grid_with_coords_geometry: GeometrySpec) -> None:
-        """BranchTrunkSpec.out_features equals output_shapes[0][0].
+        """Query-shaped scalar targets resolve to one output feature.
 
         Args:
             grid_with_coords_geometry: Grid branch-trunk fixture.
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((8,),))
 
-        assert result.out_features == 8  # type: ignore[union-attr]
+        assert result.out_features == 1  # type: ignore[union-attr]
+
+    def test_vector_outputs_use_last_target_dimension(
+        self, grid_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """Query-shaped vector targets resolve to their feature dimension."""
+        result = resolve_contract(grid_with_coords_geometry, output_shapes=((8, 3),))
+
+        assert result.out_features == 3  # type: ignore[union-attr]
 
 
 class TestPointCloudWithCoordsDispatch:
@@ -600,6 +608,14 @@ class TestPointCloudWithCoordsDispatch:
         result = resolve_contract(point_cloud_with_coords_geometry)
 
         assert result.out_features == 1  # type: ignore[union-attr]
+
+    def test_point_cloud_vector_outputs_use_last_target_dimension(
+        self, point_cloud_with_coords_geometry: GeometrySpec
+    ) -> None:
+        """Point-cloud query targets use the last target dimension as output width."""
+        result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((32, 4),))
+
+        assert result.out_features == 4  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

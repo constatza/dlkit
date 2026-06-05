@@ -50,6 +50,9 @@ with load_model("model.ckpt", device="auto") as predictor:
   `InferenceWorkflowConfig` unless an explicit `checkpoint_path=` override is provided.
 - `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public
   metadata properties.
+- For DeepONet-style checkpoints, `feature_names` preserves both the branch
+  feature entry and the query-coordinate `target_coordinates` entry in
+  training-time order.
 - The runtime predictor owns checkpoint validation, metadata extraction, and
   model lifecycle management.
 - Checkpoint transform reconstruction accepts the serialized `entry_configs[*].transforms`
