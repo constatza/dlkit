@@ -377,6 +377,11 @@ class TestSessionPrecisionAliases:
         assert isinstance(settings.precision, PrecisionStrategy)
         assert str(settings.precision) == expected
 
+    @pytest.mark.parametrize("value", ["float32", "single", "double", "float16", "amp"])
+    def test_semantic_precision_aliases_are_rejected(self, value: str) -> None:
+        with pytest.raises(ValueError, match="Lightning-compatible precision names only"):
+            SessionSettings.model_validate({"precision": value})
+
 
 # ============================================================================
 # Completeness Validation Tests

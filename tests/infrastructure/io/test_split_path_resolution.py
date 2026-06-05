@@ -41,7 +41,7 @@ name = "integration-test-session"
 root_dir = "{custom_root.as_posix()}"
 workflow = "train"
 seed = 42
-precision = "single"
+precision = "32"
 
 [DATASET]
 type = "flexible"

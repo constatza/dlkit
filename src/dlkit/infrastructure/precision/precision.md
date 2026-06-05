@@ -38,10 +38,17 @@ Set precision in TOML under `[SESSION]`:
 
 ```toml
 [SESSION]
-precision = "float32"      # or "float16", "bfloat16", "double", "16-mixed", etc.
+precision = "32"           # or "64", "16", "bf16", "16-mixed", "bf16-mixed"
 ```
 
-Accepted aliases (case-insensitive): `float32 / f32 / single`, `float16 / f16 / half`, `bfloat16 / bf16`, `float64 / f64 / double`, `16-mixed / amp`, `bf16-mixed`. Integer strings are rejected — use semantic names.
+DLKit accepts semantic aliases too, but user-facing examples should prefer Lightning-compatible precision names:
+
+- `"64"`
+- `"32"`
+- `"16"`
+- `"bf16"`
+- `"16-mixed"`
+- `"bf16-mixed"`
 
 ## Lightning Integration
 

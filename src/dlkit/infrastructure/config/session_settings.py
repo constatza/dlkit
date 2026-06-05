@@ -68,24 +68,25 @@ class SessionSettings(BasicSettings):
     @field_validator("precision", mode="before")
     @classmethod
     def validate_precision(cls, v: Any) -> PrecisionStrategy:
-        """Validate and normalize precision input using alias support.
+        """Validate and normalize precision input using Lightning-style names only.
 
-        This validator accepts precision values in various formats (enum values,
-        semantic string aliases, and Lightning-style integer/string values) and
-        normalizes them to PrecisionStrategy.
+        This validator accepts precision values in Lightning-compatible formats
+        (enum values, integers, and Lightning-style strings) and normalizes them
+        to PrecisionStrategy.
 
         Args:
-            v: Precision value from config (string or PrecisionStrategy)
+            v: Precision value from config (string, int, or PrecisionStrategy)
 
         Returns:
             Normalized PrecisionStrategy enum value
 
         Raises:
-            ValueError: If precision value is invalid (e.g., "wtf", "unsupported")
+            ValueError: If precision value is not one of the supported
+                Lightning-style precision names.
 
         Examples:
-            Valid inputs: 32, "32", "double", "float64", "16-mixed", etc.
-            Invalid inputs: "wtf", "foo", "unsupported", etc.
+            Valid inputs: 32, "32", 16, "16", "16-mixed", "bf16", "bf16-mixed"
+            Invalid inputs: "float32", "single", "double", "wtf"
         """
         # Already a PrecisionStrategy - pass through
         if isinstance(v, PrecisionStrategy):
@@ -99,12 +100,11 @@ class SessionSettings(BasicSettings):
             if normalized in _LIGHTNING_PRECISION_ALIASES:
                 return _LIGHTNING_PRECISION_ALIASES[normalized]
 
-        # Use from_string to parse and validate (handles str only)
-        try:
-            return PrecisionStrategy.from_string(v)
-        except ValueError as e:
-            # Re-raise with context about where the error occurred
-            raise ValueError(f"Invalid precision value in [SESSION] configuration: {e}") from e
+        raise ValueError(
+            "Invalid precision value in [SESSION] configuration. "
+            "Use Lightning-compatible precision names only: "
+            "64, 32, 16, bf16, 16-mixed, bf16-mixed."
+        )
 
     @property
     def is_training_mode(self) -> bool:

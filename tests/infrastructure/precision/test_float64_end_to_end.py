@@ -1,7 +1,7 @@
-"""Comprehensive end-to-end tests for float64 (double) precision.
+"""Comprehensive end-to-end tests for float64 precision.
 
 This module tests the complete float64 precision pipeline to ensure:
-1. Config loading accepts "64", "double", "float64" aliases
+1. Config loading accepts Lightning-compatible float64 precision names
 2. Model weights are initialized as float64
 3. Input tensors are cast to float64
 4. Forward pass maintains float64 precision
@@ -24,7 +24,6 @@ from dlkit.infrastructure.precision import (
     get_precision_service,
     precision_override,
 )
-from dlkit.infrastructure.precision.strategy import _PRECISION_ALIAS_MAP
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "darwin",
@@ -101,36 +100,19 @@ class TestFloat64EndToEnd:
         session = _build_session(precision="64")
         assert session.precision == PrecisionStrategy.FULL_64
 
-    def test_precision_string_double(self):
-        """Test float64 precision with alias 'double'."""
-        session = _build_session(precision="double")
-        assert session.precision == PrecisionStrategy.FULL_64
-
-    def test_precision_string_float64(self):
-        """Test float64 precision with alias 'float64'."""
-        session = _build_session(precision="float64")
-        assert session.precision == PrecisionStrategy.FULL_64
-
-    def test_precision_string_f64(self):
-        """Test float64 precision with alias 'f64'."""
-        session = _build_session(precision="f64")
-        assert session.precision == PrecisionStrategy.FULL_64
-
-    def test_precision_string_fp64(self):
-        """Test float64 precision with alias 'fp64'."""
-        session = _build_session(precision="fp64")
-        assert session.precision == PrecisionStrategy.FULL_64
-
     def test_precision_integer_alias(self):
         """Test that integer 64 maps to FULL_64 via Lightning alias."""
         session = _build_session(precision=64)
         assert session.precision == PrecisionStrategy.FULL_64
 
-    def test_precision_case_insensitive(self):
-        """Test that precision strings are case-insensitive."""
-        for value in ["DOUBLE", "Double", "FLOAT64", "Float64", "F64"]:
+    def test_precision_string_case_insensitive(self):
+        """Test that Lightning-compatible precision strings are case-insensitive."""
+        for value in ["64", "BF16", "Bf16", "16-MIXED", "Bf16-Mixed"]:
             session = _build_session(precision=value)
-            assert session.precision == PrecisionStrategy.FULL_64
+            assert (
+                session.precision
+                == SessionSettings.model_validate({"precision": value.lower()}).precision
+            )
 
     def test_invalid_precision_string_raises_error(self):
         """Test that invalid precision string raises clear error."""
@@ -155,7 +137,7 @@ class TestFloat64EndToEnd:
 
     def test_model_weights_float64_with_session(self, model_shape):
         """Test that model uses session precision for float64."""
-        session = _build_session(precision="double")
+        session = _build_session(precision="64")
 
         with precision_override(session.get_precision_strategy()):
             model = Float64TestModel(**model_shape)
@@ -196,7 +178,7 @@ class TestFloat64EndToEnd:
 
     def test_data_loading_float64(self, sample_data):
         """Test that data is loaded with float64 precision."""
-        session = _build_session(precision="float64")
+        session = _build_session(precision="64")
         feature = NpyEntry(name="input", path=sample_data["input"], data_role=DataRole.FEATURE)
 
         # Load with session precision using context
@@ -211,7 +193,7 @@ class TestFloat64EndToEnd:
         """Test complete training pipeline with float64 precision."""
 
         # 1. Setup session with float64
-        session = _build_session(precision="double", seed=42)
+        session = _build_session(precision="64", seed=42)
         assert session.precision == PrecisionStrategy.FULL_64
 
         # 2. Load data with float64 precision using context
@@ -256,7 +238,7 @@ class TestFloat64EndToEnd:
     def test_precision_service_float64(self):
         """Test precision service with float64."""
         service = get_precision_service()
-        session = _build_session(precision="f64")
+        session = _build_session(precision="64")
 
         # Resolve precision
         resolved = service.resolve_precision(session)
@@ -277,7 +259,7 @@ class TestFloat64EndToEnd:
     def test_precision_service_tensor_casting_float64(self):
         """Test precision service tensor casting to float64."""
         service = get_precision_service()
-        session = _build_session(precision="double")
+        session = _build_session(precision="64")
 
         # Create float32 tensor
         tensor = torch.randn(10, 20, dtype=torch.float32)
@@ -290,7 +272,7 @@ class TestFloat64EndToEnd:
     def test_precision_service_model_application_float64(self, model_shape):
         """Test precision service apply_precision_to_model with float64."""
         service = get_precision_service()
-        session = _build_session(precision="fp64")
+        session = _build_session(precision="64")
 
         # Create model with default precision (float32)
         with precision_override(PrecisionStrategy.FULL_32):
@@ -326,18 +308,20 @@ class TestFloat64EndToEnd:
         assert next(model.parameters()).dtype == torch.float64
 
     def test_mixed_precision_data_types(self):
-        """Test different precision aliases for comparison.
+        """Test accepted Lightning-compatible precision names across strategies."""
+        expected_strategies = {
+            "64": PrecisionStrategy.FULL_64,
+            "32": PrecisionStrategy.FULL_32,
+            "16": PrecisionStrategy.TRUE_16,
+            "bf16": PrecisionStrategy.TRUE_BF16,
+            "16-mixed": PrecisionStrategy.MIXED_16,
+            "bf16-mixed": PrecisionStrategy.MIXED_BF16,
+        }
 
-        Uses semantic aliases from the authoritative alias map for validation.
-        """
-        # Test a representative subset of SEMANTIC aliases (no numeric strings)
-        test_aliases = ["double", "float64", "single", "float32", "half", "float16"]
-
-        for alias in test_aliases:
-            expected_strategy = _PRECISION_ALIAS_MAP[alias]
-            session = _build_session(precision=alias)
+        for value, expected_strategy in expected_strategies.items():
+            session = _build_session(precision=value)
             assert session.precision == expected_strategy, (
-                f"Alias '{alias}' should resolve to {expected_strategy}"
+                f"Precision name '{value}' should resolve to {expected_strategy}"
             )
 
     def test_float64_memory_factor(self):
@@ -360,7 +344,7 @@ class TestFloat64EndToEnd:
     def test_precision_info_float64(self):
         """Test comprehensive precision info for float64."""
         service = get_precision_service()
-        session = _build_session(precision="double")
+        session = _build_session(precision="64")
 
         info = service.get_precision_info(session)
 
