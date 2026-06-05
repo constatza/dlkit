@@ -185,6 +185,8 @@ print(result.checkpoint_path)
 
 Optimization is a separate workflow selected with `SESSION.workflow = "optimize"` and an `[OPTUNA]` section.
 
+`[OPTUNA.model]` must define the hyperparameter search space and should mirror tunable fields from `[MODEL]`.
+
 ```toml
 [SESSION]
 name = "search_run"
@@ -201,6 +203,10 @@ enabled = true
 n_trials = 50
 study_name = "baseline_search"
 storage = "sqlite:///optuna.db"
+
+[OPTUNA.model]
+hidden_size = [64, 128, 256]
+num_layers = [2, 4, 6]
 
 [TRAINING.trainer]
 max_epochs = 25

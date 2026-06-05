@@ -156,6 +156,10 @@ def build_optuna_template_dict() -> dict:
             "n_trials": 100,
             "study_name": "my_study",
             "storage": _get_default_optuna_storage(),
+            "model": {
+                "hidden_size": [64, 128, 256],
+                "num_layers": [2, 4, 6],
+            },
         },
         "TRAINING": {
             "trainer": {
@@ -203,6 +207,13 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
         base.update(
             {
                 "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
+            }
+        )
+    if kind == "optuna":
+        base.update(
+            {
+                "OPTUNA.model.hidden_size": "Example search space for MODEL.hidden_size",
+                "OPTUNA.model.num_layers": "Example search space for MODEL.num_layers",
             }
         )
     return base
