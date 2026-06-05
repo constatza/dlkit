@@ -68,6 +68,13 @@ class TensorDictModelInvoker:
     After ``invoke()``, callers read ``batch["predictions"]`` (and any latent keys
     from ``output_spec.latent_keys``).
 
+    Important:
+        This class supports positional and keyword dispatch, but DLKit's default
+        feature-to-model mapping is positional. The standard build path uses
+        ``_build_invoker_from_entries()``, which only supplies ``in_keys`` and
+        therefore calls ``model(*feature_tensors)`` in ``DATASET.features``
+        config-list order for entries with ``model_input=True``.
+
     Args:
         in_keys: Ordered positional key paths, e.g.
             ``[("features", "x"), ("features", "z")]``.
@@ -97,6 +104,9 @@ class TensorDictModelInvoker:
         def _dispatch(*args: Any) -> Any:
             model = cell[0]
             assert model is not None, "model_cell must be set before dispatch"
+            # TODO: If DLKit ever exposes model-dispatch policy in user config,
+            # keep this seam as the source of truth and document the supported
+            # positional/keyword modes there rather than only in wrapper docs.
             return model(*args[:n_pos], **dict(zip(kwarg_names, args[n_pos:], strict=True)))
 
         self._td_module = TensorDictModule(_dispatch, in_keys=all_in_keys, out_keys=self._out_keys)
@@ -136,7 +146,14 @@ def _build_invoker_from_entries(
     """Build a TensorDictModelInvoker from feature entry configurations.
 
     Resolves the ``model_input`` field on each entry to determine which
-    feature tensors are forwarded to ``model.forward()``:
+    feature tensors are forwarded to ``model.forward()``.
+
+    Default DLKit dispatch is positional, not keyword-based. This helper only
+    builds positional ``in_keys`` and preserves ``feature_entries`` insertion
+    order, so the wrapper invokes models as:
+
+    - single input: ``model(x)``
+    - multiple inputs: ``model(x, z, ...)``
 
     - ``model_input=True`` (default): include as a positional arg, preserving
       the config-list order.

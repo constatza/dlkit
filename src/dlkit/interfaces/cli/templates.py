@@ -6,10 +6,10 @@ This is the single source of truth used by the CLI and sync tools.
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
-from tomlkit import comment, document, dumps, table
-from tomlkit.items import Table
+from tomlkit import aot, comment, document, dumps, table
+from tomlkit.items import AoT, Table
 from tomlkit.toml_document import TOMLDocument
 
 
@@ -39,6 +39,31 @@ def _get_environment_aware_output_dir() -> str:
 TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
 
 
+def _dataset_template(*, include_targets: bool) -> dict[str, Any]:
+    dataset: dict[str, Any] = {
+        "name": "FlexibleDataset",
+        "root_dir": "./data",
+        "features": [
+            {
+                "name": "x",
+                "path": "features.npy",
+                "data_role": "feature",
+                "field_role": "feature",
+            }
+        ],
+    }
+    if include_targets:
+        dataset["targets"] = [
+            {
+                "name": "y",
+                "path": "targets.npy",
+                "data_role": "target",
+                "field_role": "target",
+            }
+        ]
+    return dataset
+
+
 def build_training_template_dict() -> dict:
     return {
         "SESSION": {
@@ -60,9 +85,7 @@ def build_training_template_dict() -> dict:
         "DATAMODULE": {
             "name": "your.datamodule.class",
         },
-        "DATASET": {
-            "name": "your.dataset.class",
-        },
+        "DATASET": _dataset_template(include_targets=True),
     }
 
 
@@ -79,6 +102,7 @@ def build_inference_template_dict() -> dict:
             "name": "your.model.class",
             "checkpoint": "./model.ckpt",
         },
+        "DATASET": _dataset_template(include_targets=False),
     }
 
 
@@ -108,9 +132,7 @@ def build_mlflow_template_dict() -> dict:
         "DATAMODULE": {
             "name": "your.datamodule.class",
         },
-        "DATASET": {
-            "name": "your.dataset.class",
-        },
+        "DATASET": _dataset_template(include_targets=True),
     }
 
 
@@ -144,9 +166,7 @@ def build_optuna_template_dict() -> dict:
         "DATAMODULE": {
             "name": "your.datamodule.class",
         },
-        "DATASET": {
-            "name": "your.dataset.class",
-        },
+        "DATASET": _dataset_template(include_targets=True),
     }
 
 
@@ -175,6 +195,9 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
         "TRAINING.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
         "DATAMODULE.name": "DataModule class path or alias (dataflow loading)",
         "DATASET.name": "Dataset class path or alias",
+        "DATASET.root_dir": "Root directory used to resolve relative dataset entry paths",
+        "DATASET.features": "Feature entries loaded into the batch TensorDict",
+        "DATASET.targets": "Target entries loaded into the batch TensorDict",
     }
     if kind == "inference":
         base.update(
@@ -183,6 +206,55 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
             }
         )
     return base
+
+
+def _build_table(
+    content: dict[str, Any],
+    *,
+    comments: dict[str, str],
+    prefix: str,
+) -> tuple[Table, list[tuple[str, dict[str, Any] | list[dict[str, Any]]]]]:
+    tbl = table()
+    nested_items: list[tuple[str, dict[str, Any] | list[dict[str, Any]]]] = []
+    for key, value in content.items():
+        dotted = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict) or _is_array_of_tables(value):
+            nested_items.append((key, value))
+            continue
+        if dotted in comments:
+            tbl.add(comment(comments[dotted]))
+        tbl.add(key, value)
+    return tbl, nested_items
+
+
+def _is_array_of_tables(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, dict) for item in value)
+
+
+def _build_aot(
+    entries: list[dict[str, Any]],
+    *,
+    comments: dict[str, str],
+    prefix: str,
+) -> AoT:
+    array = aot()
+    for entry in entries:
+        entry_tbl, nested_items = _build_table(entry, comments=comments, prefix=prefix)
+        for key, value in nested_items:
+            dotted = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                child_tbl, grand_nested = _build_table(value, comments=comments, prefix=dotted)
+                if grand_nested:
+                    raise ValueError(
+                        f"Nested arrays of tables are not supported in templates: {dotted}"
+                    )
+                entry_tbl.add(key, child_tbl)
+            elif _is_array_of_tables(value):
+                raise ValueError(
+                    f"Nested arrays of tables are not supported in templates: {dotted}"
+                )
+        array.append(entry_tbl)
+    return array
 
 
 def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
@@ -207,46 +279,41 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
         if content is None:
             continue
         comments = _comments_for(kind)
-        # Dotted section like SESSION.inference: add as nested table
+        # Dotted section like SESSION.workflow: add as nested table
         if "." in key:
             parent, child = key.split(".", 1)
             if parent not in doc:
                 doc.add(parent, table())
             parent_tbl = cast(Table, doc[parent])
-            child_tbl = table()
-            for k, v in content.items():
-                dotted = f"{key}.{k}"
-                if dotted in comments:
-                    parent_tbl.add(comment(comments[dotted]))
-                child_tbl.add(k, v)
+            child_tbl, nested_items = _build_table(content, comments=comments, prefix=key)
+            if nested_items:
+                raise ValueError(f"Nested content is not supported under dotted section {key}")
             parent_tbl.add(child, child_tbl)
             continue
 
-        # For regular sections: if any nested dicts exist, add an explicit parent section
-        has_nested = any(isinstance(v, dict) for v in content.values())
-        parent_tbl = table()
-        # Scalars on the section
-        for k, v in content.items():
-            if not isinstance(v, dict):
-                dotted = f"{key}.{k}"
-                if dotted in comments:
-                    parent_tbl.add(comment(comments[dotted]))
-                parent_tbl.add(k, v)
+        parent_tbl, nested_items = _build_table(content, comments=comments, prefix=key)
         doc.add(key, parent_tbl)
-        # Now add nested subtables
-        if has_nested:
-            if all(isinstance(v, dict) for v in content.values()) and len(content) > 0:
+        if nested_items:
+            if len(nested_items) == len(content):
                 need_parent_headers.add(key)
-            for k, v in content.items():
-                if isinstance(v, dict):
-                    child_tbl = table()
-                    for ck, cv in v.items():
-                        dotted = f"{key}.{k}.{ck}"
-                        if dotted in comments:
-                            child_tbl.add(comment(comments[dotted]))
-                        child_tbl.add(ck, cv)
-                    section_tbl = cast(Table, doc[key])
-                    section_tbl.add(k, child_tbl)
+            section_tbl = cast(Table, doc[key])
+            for child_key, child_value in nested_items:
+                dotted = f"{key}.{child_key}"
+                if isinstance(child_value, dict):
+                    child_tbl, grand_nested = _build_table(
+                        child_value, comments=comments, prefix=dotted
+                    )
+                    if grand_nested:
+                        raise ValueError(
+                            f"Nested arrays of tables are not supported in templates: {dotted}"
+                        )
+                    section_tbl.add(child_key, child_tbl)
+                    continue
+                if dotted in comments:
+                    section_tbl.add(comment(comments[dotted]))
+                section_tbl.add(
+                    child_key, _build_aot(child_value, comments=comments, prefix=dotted)
+                )
     rendered = dumps(doc)
     # Ensure explicit parent headers for purely nested sections (e.g., [TRAINING])
     for sec in need_parent_headers:

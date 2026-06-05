@@ -303,6 +303,7 @@ dlkit config sync-templates --write
 - Multiple output formats with Rich syntax highlighting
 - Hierarchical table display for nested configurations
 - Template generation via `generate_template()` API
+- Generated templates use the current entry-based dataset shape with `[[DATASET.features]]` and `[[DATASET.targets]]`
 - Template sync for maintaining consistency across examples
 - Drift detection with `--check` flag
 
@@ -468,4 +469,3 @@ except Exception as e:
 - `dlkit.interfaces.cli.middleware`: Error handling middleware
 - `dlkit.interfaces.servers`: Server management services
 - `dlkit.infrastructure.config`: Configuration models and validation
-

@@ -81,8 +81,13 @@ class IModelInvoker(Protocol):
 
     The model invoker reads feature tensors from *batch*, calls the model,
     and writes the output back into the batch under a ``"predictions"`` key
-    (and optionally latent keys).  Callers read ``batch["predictions"]``
+    (and optionally latent keys). Callers read ``batch["predictions"]``
     after calling ``invoke()``.
+
+    In DLKit's default wrapper path, model-input features are passed
+    positionally in ``DATASET.features`` config-list order. Keyword dispatch is
+    supported by alternate invoker implementations, but it is not the default
+    behavior used by ``_build_invoker_from_entries()``.
     """
 
     def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:

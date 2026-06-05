@@ -5,6 +5,7 @@ Covers:
 - TensorDictModelInvoker positional dispatch: model args match in_keys order
 - TensorDictModelInvoker kwarg dispatch: model receives named tensors
 - TensorDictModelInvoker multi-output (VAE): named latent keys, no "0"/"1" hack
+- _build_invoker_from_entries: default dispatch is positional, not kwargs
 - _build_invoker_from_entries: model_input=True (include), model_input=False (exclude)
 """
 
@@ -321,6 +322,27 @@ class TestBuildInvokerFromEntries:
         invoker.invoke(_Rec(), two_feature_batch)
         assert torch.equal(received[0][0], z_tensor)  # z is first in config
         assert torch.equal(received[0][1], x_tensor)  # x is second in config
+
+    def test_default_builder_does_not_map_features_as_kwargs(
+        self,
+        bs: int,
+        two_feature_batch: TensorDict,
+    ) -> None:
+        """Default entry-based dispatch is positional, so kw-only forwards fail."""
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
+        )
+        feat_z = ValueEntry(
+            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
+        )
+
+        class _KwOnlyModel(nn.Module):
+            def forward(self, *, x: Tensor, z: Tensor) -> Tensor:
+                return torch.zeros(bs, 1)
+
+        invoker = _build_invoker_from_entries([feat_x, feat_z])
+        with pytest.raises(TypeError, match="positional"):
+            invoker.invoke(_KwOnlyModel(), two_feature_batch)
 
     def test_model_input_false_excludes_feature(
         self,

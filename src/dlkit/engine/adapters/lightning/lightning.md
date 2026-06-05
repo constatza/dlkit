@@ -16,7 +16,7 @@ StandardLightningWrapper.__init__
   │
   ├─► _build_model_from_settings()    →  nn.Module
   │
-  ├─► IModelInvoker ── TensorDictModelInvoker  (kwarg/positional dispatch via TensorDictModule)
+  ├─► IModelInvoker ── TensorDictModelInvoker  (default positional dispatch via TensorDictModule)
   ├─► ILossComputer ── RoutedLossComputer      (named key → loss fn kwargs)
   ├─► IMetricsUpdater─ RoutedMetricsUpdater    (per-metric routing, no MetricCollection.update)
   └─► IBatchTransformer NamedBatchTransformer  (named ModuleDict chains)
@@ -113,7 +113,7 @@ from dlkit.infrastructure.config.data_entries import Feature, Target, ContextFea
 # Feature — fed to the model (model_input=True by default)
 Feature(name="x", path="data/features.npy")
 
-# Multiple features — default dispatch is kwargs: model(x=x_tensor, z=z_tensor)
+# Multiple features — default dispatch is positional: model(x_tensor, z_tensor)
 Feature(name="x", path="data/features_x.npy")
 Feature(name="z", path="data/features_z.npy")
 
@@ -145,21 +145,20 @@ Minimal configuration for `model(x) → y`:
 **TOML**:
 ```toml
 [DATASET]
-features = [{ name = "x", path = "data/features.npy" }]
-targets = [{ name = "y", path = "data/targets.npy" }]
+name = "FlexibleDataset"
 
-[MODEL]
-name = "LinearNet"
-in_features = 32
-out_features = 8
+[[DATASET.features]]
+name = "x"
+path = "data/features.npy"
 
-[WRAPPER]
-loss_function = { name = "mse" }
+[[DATASET.targets]]
+name = "y"
+path = "data/targets.npy"
 ```
 
 The wrapper automatically:
 - Builds `NamedBatchTransformer(feature_chains={"x": Identity()}, target_chains={"y": Identity()})`
-- Builds `TensorDictModelInvoker(kwarg_in_keys={"x": ("features","x")})` → calls `model(x=batch["features","x"])`
+- Builds `TensorDictModelInvoker(in_keys=[("features","x")])` → calls `model(batch["features","x"])`
 - Builds `RoutedLossComputer(loss_fn, target_key=None, default_target_key="y")` → `loss(preds, batch["targets","y"])`
 
 ---
@@ -171,14 +170,19 @@ For `model(x, z) → y` (two feature arrays):
 **TOML**:
 ```toml
 [DATASET]
-features = [
-  { name = "x", path = "data/features_x.npy" },
-  { name = "z", path = "data/features_z.npy" },
-]
-targets = [{ name = "y", path = "data/targets.npy" }]
+name = "FlexibleDataset"
 
-[WRAPPER]
-loss_function = { name = "mse" }
+[[DATASET.features]]
+name = "x"
+path = "data/features_x.npy"
+
+[[DATASET.features]]
+name = "z"
+path = "data/features_z.npy"
+
+[[DATASET.targets]]
+name = "y"
+path = "data/targets.npy"
 ```
 
 With both entries marked `model_input=true`, invocation is positional in
@@ -186,10 +190,17 @@ config-list order: `model(batch["features","x"], batch["features","z"])`.
 
 For DeepONet-style branch/trunk inputs:
 ```toml
-features = [
-  { name = "u", path = "...", field_role = "feature", model_input = true },
-  { name = "query_coords", path = "...", field_role = "target_coordinates", model_input = true },
-]
+[[DATASET.features]]
+name = "u"
+path = "..."
+field_role = "feature"
+model_input = true
+
+[[DATASET.features]]
+name = "query_coords"
+path = "..."
+field_role = "target_coordinates"
+model_input = true
 ```
 Invocation: `model(batch["features","u"], batch["features","query_coords"])`.
 
@@ -203,11 +214,20 @@ keyword arguments via `extra_inputs` / `target_key`:
 **TOML**:
 ```toml
 [DATASET]
-features = [
-  { name = "x", path = "data/features.npy" },
-  { name = "A", path = "data/stiffness.npy", model_input = false },
-]
-targets = [{ name = "y", path = "data/targets.npy" }]
+name = "FlexibleDataset"
+
+[[DATASET.features]]
+name = "x"
+path = "data/features.npy"
+
+[[DATASET.features]]
+name = "A"
+path = "data/stiffness.npy"
+model_input = false
+
+[[DATASET.targets]]
+name = "y"
+path = "data/targets.npy"
 
 [WRAPPER]
 loss_function = { name = "EnergyNormLoss", target_key = "targets.y", extra_inputs = [

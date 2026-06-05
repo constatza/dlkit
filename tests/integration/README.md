@@ -57,20 +57,26 @@ All tests use TOML configurations that follow this pattern:
 ```toml
 [SESSION]
 name = "test_name"
-inference = false  # or true for inference tests
+workflow = "train"  # use "inference" for inference workflows
 seed = 42
+precision = "32"
+root_dir = "<tmp_path>"
 
 [DATASET]
-name = "FlexibleDataset" 
+name = "FlexibleDataset"
 root_dir = "<tmp_path>/test_data"
 
 [[DATASET.features]]
 name = "X"
 path = "<tmp_path>/test_data/features.npy"
+data_role = "feature"
+field_role = "feature"
 
 [[DATASET.targets]]
 name = "y"
 path = "<tmp_path>/test_data/targets.npy"
+data_role = "target"
+field_role = "target"
 
 [DATASET.split]
 filepath = "<tmp_path>/test_data/split.txt"
