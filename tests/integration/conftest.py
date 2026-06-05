@@ -21,9 +21,10 @@ from dlkit.infrastructure.config import (
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.dataset_settings import IndexSplitSettings
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.model_components import (
     MetricComponentSettings,
     ModelComponentSettings,
@@ -225,8 +226,8 @@ def _make_training_settings(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
         root=data_dir,
-        features=(Feature(name="x", path=data_dir / "features.npy"),),
-        targets=(Target(name="y", path=data_dir / "targets.npy"),),
+        features=(NpyEntry(name="x", path=data_dir / "features.npy", data_role=DataRole.FEATURE),),
+        targets=(NpyEntry(name="y", path=data_dir / "targets.npy", data_role=DataRole.TARGET),),
         split=IndexSplitSettings(),
     )
 
@@ -503,10 +504,12 @@ root_dir = "{data_dir.as_posix()}"
 
 [[DATASET.features]]
 name = "x"
+format = "npy"
 path = "features.npy"
 
 [[DATASET.targets]]
 name = "y"
+format = "npy"
 path = "targets.npy"
 
 [DATASET.split]

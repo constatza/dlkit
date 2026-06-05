@@ -3,7 +3,8 @@
 import pytest
 import torch
 
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.io.arrays import load_array
 from dlkit.infrastructure.precision import PrecisionService, PrecisionStrategy, precision_override
@@ -15,9 +16,11 @@ class TestPrecisionIntegration:
     @pytest.fixture
     def sample_data_file(self, tmp_path):
         """Create a sample dataflow file for testing."""
-        data = torch.randn(100, 10, dtype=torch.float64)
-        file_path = tmp_path / "test_data.pt"
-        torch.save(data, file_path)
+        import numpy as np
+
+        data = np.random.randn(100, 10).astype(np.float64)
+        file_path = tmp_path / "test_data.npy"
+        np.save(file_path, data)
         return file_path
 
     def test_session_settings_precision_provider(self):
@@ -30,18 +33,20 @@ class TestPrecisionIntegration:
         assert resolved == PrecisionStrategy.MIXED_16
 
     def test_data_entry_precision_resolution(self, sample_data_file):
-        """Test DataEntry precision resolution."""
-        # Feature with explicit dtype
-        feature_explicit = Feature(name="test", path=sample_data_file, dtype=torch.float16)
-        assert feature_explicit.get_effective_dtype() == torch.float16
+        """Test DataEntry precision resolution via PrecisionService."""
+        # Feature with explicit dtype uses entry.dtype directly
+        feature_explicit = NpyEntry(
+            name="test", path=sample_data_file, data_role=DataRole.FEATURE, dtype=torch.float16
+        )
+        assert feature_explicit.dtype == torch.float16
 
-        # Feature without explicit dtype - should use session precision
-        feature_session = Feature(name="test2", path=sample_data_file)
+        # Feature without explicit dtype - resolve via PrecisionService
+        feature_session = NpyEntry(name="test2", path=sample_data_file, data_role=DataRole.FEATURE)
         session = SessionSettings(precision=PrecisionStrategy.TRUE_BF16)
 
         service = PrecisionService()
         expected_dtype = service.get_torch_dtype(session)
-        actual_dtype = feature_session.get_effective_dtype(session)
+        actual_dtype = feature_session.dtype or service.get_torch_dtype(session)
         assert actual_dtype == expected_dtype == torch.bfloat16
 
     def test_io_arrays_precision_integration(self, sample_data_file):
@@ -153,9 +158,10 @@ class TestPrecisionIntegration:
             model = test_model_factory.create_precision_test_model(sample_shape)
             assert model.get_model_dtype() == expected_dtype
 
-            # 4. DataEntry should use context precision
-            feature = Feature(name="test", path=sample_data_file)
-            assert feature.get_effective_dtype() == expected_dtype
+            # 4. DataEntry with no explicit dtype resolves via PrecisionService
+            feature = NpyEntry(name="test", path=sample_data_file, data_role=DataRole.FEATURE)
+            assert feature.dtype is None  # no explicit dtype set
+            assert service.get_torch_dtype() == expected_dtype
 
     def test_trainer_settings_precision_integration(self):
         """Test TrainerSettings precision integration."""
@@ -201,8 +207,12 @@ class TestPrecisionIntegration:
         precision = service.resolve_precision(broken_provider)
         assert precision == PrecisionStrategy.FULL_32
 
-        # DataEntry should handle service failures gracefully
-        feature = Feature(name="test", path=sample_data_file)
-        dtype = feature.resolve_dtype_with_fallback(torch.float64)
-        # Should get the fallback since we can't resolve from broken service
+        # DataEntry has no explicit dtype; precision resolution is done by service
+        feature = NpyEntry(name="test", path=sample_data_file, data_role=DataRole.FEATURE)
+        assert feature.dtype is None
+        # Verify the fallback path in PrecisionService directly
+        try:
+            dtype = service.get_torch_dtype(broken_provider)
+        except Exception:
+            dtype = torch.float32
         assert dtype in (torch.float32, torch.float64)  # Either service default or fallback

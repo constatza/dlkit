@@ -16,7 +16,8 @@ from dlkit.infrastructure.config import (
     OptimizerPolicySettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,7 +52,11 @@ def wrapper_settings() -> WrapperComponentSettings:
 @pytest.fixture
 def entry_configs():
     """Single feature entry for the integration test."""
-    return (Feature("x", value=torch.zeros(_BATCH_SIZE, _IN_SHAPE[0])),)
+    return (
+        ValueEntry(
+            name="x", value=torch.zeros(_BATCH_SIZE, _IN_SHAPE[0]), data_role=DataRole.FEATURE
+        ),
+    )
 
 
 @pytest.fixture

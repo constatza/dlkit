@@ -9,8 +9,9 @@ import numpy as np
 import torch
 
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
-from dlkit.infrastructure.config.data_entries import Feature, Target
-from dlkit.infrastructure.io.packs import IArrayPackReader
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry, ZarrEntry
+from dlkit.infrastructure.io.zarr import ZarrLazyReader
 
 
 def _expect_float32_tensor(value: object) -> torch.Tensor:
@@ -23,8 +24,10 @@ def test_getitem_returns_dense_tensor(zarr_matrix_pack: dict[str, Any]) -> None:
     """dataset[0]['features']['mat'] must be a (4, 4) float32 dense tensor."""
     pack_path = zarr_matrix_pack["path"]
     dataset = FlexibleDataset(
-        features=[Feature(name="mat", path=pack_path)],
-        targets=[Target(name="y", value=torch.zeros(3, 1))],
+        entries=[
+            ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE),
+            ValueEntry(name="y", value=torch.zeros(3, 1), data_role=DataRole.TARGET),
+        ],
     )
 
     sample = dataset[0]
@@ -38,8 +41,10 @@ def test_getitems_returns_batched_dense_tensor(zarr_matrix_pack: dict[str, Any])
     """dataset.__getitems__([0, 1, 2])['features']['mat'] must be (3, 4, 4), no .to_dense()."""
     pack_path = zarr_matrix_pack["path"]
     dataset = FlexibleDataset(
-        features=[Feature(name="mat", path=pack_path)],
-        targets=[Target(name="y", value=torch.zeros(3, 1))],
+        entries=[
+            ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE),
+            ValueEntry(name="y", value=torch.zeros(3, 1), data_role=DataRole.TARGET),
+        ],
     )
 
     batch = dataset.__getitems__([0, 1, 2])
@@ -50,10 +55,10 @@ def test_getitems_returns_batched_dense_tensor(zarr_matrix_pack: dict[str, Any])
 
 
 def test_n_resolution_from_pack_reader(zarr_matrix_pack: dict[str, Any]) -> None:
-    """Dataset with only a zarr PathFeature (no dense entries) must report len == 3."""
+    """Dataset with only a zarr ZarrEntry (no dense entries) must report len == 3."""
     pack_path = zarr_matrix_pack["path"]
     dataset = FlexibleDataset(
-        features=[Feature(name="mat", path=pack_path)],
+        entries=[ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE)],
     )
 
     assert len(dataset) == 3
@@ -65,8 +70,10 @@ def test_broadcast_pack_replicates(zarr_broadcast_pack: dict[str, Any]) -> None:
     expected_matrix = zarr_broadcast_pack["matrix"]
 
     dataset = FlexibleDataset(
-        features=[Feature(name="mat", path=pack_path)],
-        targets=[Target(name="y", value=torch.zeros(3, 1))],
+        entries=[
+            ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE),
+            ValueEntry(name="y", value=torch.zeros(3, 1), data_role=DataRole.TARGET),
+        ],
     )
 
     batch = dataset.__getitems__([0, 1, 2])
@@ -89,14 +96,16 @@ def test_memmap_cache_dir_bypassed_for_zarr_feature(
     # A file-backed target is required so the memmap path can write the cache.
     # The pack entry bypasses the memmap and is kept as-is.
     dataset = FlexibleDataset(
-        features=[Feature(name="mat", path=pack_path)],
-        targets=[Target(name="y", path=npy_target_3x1)],
+        entries=[
+            ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=npy_target_3x1, data_role=DataRole.TARGET),
+        ],
         memmap_cache_dir=cache_dir,
     )
 
-    # The pack binding must still be an IArrayPackReader, not a MemoryMappedTensor.
-    assert "mat" in dataset._feature_pack_bindings
-    assert isinstance(dataset._feature_pack_bindings["mat"], IArrayPackReader)
+    # The lazy reader must still be a ZarrLazyReader, not a MemoryMappedTensor.
+    assert "mat" in dataset._feature_lazy_readers
+    assert isinstance(dataset._feature_lazy_readers["mat"], ZarrLazyReader)
 
     # Functional sanity: index still works when memmap path is active.
     mat = _expect_float32_tensor(dataset[0]["features"]["mat"])
@@ -113,8 +122,10 @@ def test_zarr_target_lazy_injection(zarr_matrix_pack: dict[str, Any]) -> None:
     """
     pack_path = zarr_matrix_pack["path"]
     dataset = FlexibleDataset(
-        features=[Feature(name="x", path=pack_path)],
-        targets=[Target(name="y", path=pack_path)],
+        entries=[
+            ZarrEntry(name="x", path=pack_path, data_role=DataRole.FEATURE),
+            ZarrEntry(name="y", path=pack_path, data_role=DataRole.TARGET),
+        ],
     )
 
     sample = dataset[0]
@@ -123,7 +134,7 @@ def test_zarr_target_lazy_injection(zarr_matrix_pack: dict[str, Any]) -> None:
 
 
 def test_feature_factory_with_zarr_dir(zarr_matrix_pack: dict[str, Any]) -> None:
-    """Feature() with a zarr directory builds FlexibleDataset correctly end-to-end.
+    """PathFeature with a zarr directory builds FlexibleDataset correctly end-to-end.
 
     Validates that PathFeature auto-detection works from the factory through dataset
     indexing.
@@ -133,7 +144,7 @@ def test_feature_factory_with_zarr_dir(zarr_matrix_pack: dict[str, Any]) -> None
     """
     pack_path = zarr_matrix_pack["path"]
     dataset = FlexibleDataset(
-        features=[Feature(name="K", path=pack_path)],
+        entries=[ZarrEntry(name="K", path=pack_path, data_role=DataRole.FEATURE)],
     )
 
     assert len(dataset) == 3

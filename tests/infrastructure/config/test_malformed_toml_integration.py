@@ -72,6 +72,7 @@ class TestMissingNameInTOML:
 name = "FlexibleDataset"
 
 [[DATASET.features]]
+format = "npy"
 path = "{data_path.as_posix()}"
 """)
 
@@ -87,6 +88,7 @@ path = "{data_path.as_posix()}"
 name = "FlexibleDataset"
 
 [[DATASET.targets]]
+format = "npy"
 path = "{data_path.as_posix()}"
 """)
 
@@ -99,6 +101,7 @@ path = "{data_path.as_posix()}"
         data_path = tmp_path / "test.npy"
         config.write_text(f"""
 [[DATASET.features]]
+format = "npy"
 path = "{data_path.as_posix()}"
 """)
 
@@ -117,14 +120,17 @@ path = "{data_path.as_posix()}"
         config.write_text(f"""
 [[DATASET.features]]
 name = "x"
+format = "npy"
 path = "{x_path.as_posix()}"
 
 [[DATASET.features]]
 # Missing name here!
+format = "npy"
 path = "{y_path.as_posix()}"
 
 [[DATASET.targets]]
 name = "z"
+format = "npy"
 path = "{z_path.as_posix()}"
 """)
 
@@ -151,10 +157,12 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x"
+format = "npy"
 path = "{sample_data_file.as_posix()}"
 
 [[DATASET.targets]]
 name = "y"
+format = "npy"
 path = "{sample_target_file.as_posix()}"
 """)
 
@@ -183,18 +191,22 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x1"
+format = "npy"
 path = "{x1_path.as_posix()}"
 
 [[DATASET.features]]
 name = "x2"
+format = "npy"
 path = "{x2_path.as_posix()}"
 
 [[DATASET.features]]
 name = "x3"
+format = "npy"
 path = "{x3_path.as_posix()}"
 
 [[DATASET.targets]]
 name = "y"
+format = "npy"
 path = "{y_path.as_posix()}"
 """)
 

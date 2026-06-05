@@ -22,7 +22,8 @@ from dlkit.engine.data.datasets.flexible import (
     _build_memmap_cache,
     collate_tensordict,
 )
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,8 +47,10 @@ def _make_dataset(
 ) -> FlexibleDataset:
     """Build a FlexibleDataset with memmap_cache_dir from npy fixtures."""
     return FlexibleDataset(
-        features=[Feature(name="x", path=npy_feature_file["path"])],
-        targets=[Target(name="y", path=npy_target_file["path"])],
+        entries=[
+            NpyEntry(name="x", path=npy_feature_file["path"], data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=npy_target_file["path"], data_role=DataRole.TARGET),
+        ],
         memmap_cache_dir=memmap_cache_dir,
     )
 
@@ -201,14 +204,18 @@ def test_memmap_multi_worker_dataloader(
 
 def test_memmap_with_npz_source(tmp_path: Path, memmap_cache_dir: Path) -> None:
     """NPZ source files work correctly with memmap_cache_dir."""
+    from dlkit.infrastructure.config.entry_types import NpzEntry
+
     features = np.random.randn(50, 4).astype(np.float32)
     targets = np.random.randn(50, 1).astype(np.float32)
     npz_path = tmp_path / "data.npz"
     np.savez(npz_path, x=features, y=targets)
 
     ds = FlexibleDataset(
-        features=[Feature(name="x", path=npz_path)],
-        targets=[Target(name="y", path=npz_path)],
+        entries=[
+            NpzEntry(name="x", path=npz_path, data_role=DataRole.FEATURE),
+            NpzEntry(name="y", path=npz_path, data_role=DataRole.TARGET),
+        ],
         memmap_cache_dir=memmap_cache_dir,
     )
     assert len(ds) == 50
@@ -226,12 +233,10 @@ def test_memmap_with_npz_source(tmp_path: Path, memmap_cache_dir: Path) -> None:
 
 def test_memmap_raises_for_value_based_entry(tmp_path: Path, memmap_cache_dir: Path) -> None:
     """ValueError raised when a ValueBasedEntry is used with memmap_cache_dir."""
-    from dlkit.infrastructure.config.data_entries import Feature as ValueFeature
-
     tensor_data = torch.randn(10, 3)
     with pytest.raises(ValueError, match="not file-backed"):
         FlexibleDataset(
-            features=[ValueFeature(name="x", value=tensor_data)],
+            entries=[ValueEntry(name="x", value=tensor_data, data_role=DataRole.FEATURE)],
             memmap_cache_dir=memmap_cache_dir,
         )
 
@@ -247,8 +252,10 @@ def test_inmemory_path_unchanged_when_no_cache_dir(
 ) -> None:
     """Without memmap_cache_dir the existing in-memory path works identically."""
     ds = FlexibleDataset(
-        features=[Feature(name="x", path=npy_feature_file["path"])],
-        targets=[Target(name="y", path=npy_target_file["path"])],
+        entries=[
+            NpyEntry(name="x", path=npy_feature_file["path"], data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=npy_target_file["path"], data_role=DataRole.TARGET),
+        ],
     )
     assert len(ds) == npy_feature_file["shape"][0]
     sample = ds[0]

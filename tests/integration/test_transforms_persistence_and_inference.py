@@ -16,7 +16,8 @@ from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
 from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
-from dlkit.infrastructure.config.data_entries import Feature, FeatureType, Target, TargetType
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -44,7 +45,10 @@ def _make_data(
 
 def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule:
     dataset = FlexibleDataset(
-        features=[Feature(name="x", path=fx)], targets=[Target(name="y", path=fy)]
+        entries=[
+            NpyEntry(name="x", path=fx, data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=fy, data_role=DataRole.TARGET),
+        ]
     )
     n = len(dataset)
     # Edge case: zero validation/test to ensure transforms fit on the full dataset
@@ -73,15 +77,15 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
     return dm
 
 
-def _entry_configs(fx: Path, fy: Path) -> tuple[FeatureType | TargetType, ...]:
+def _entry_configs(fx: Path, fy: Path) -> tuple[NpyEntry, ...]:
     # Apply MinMaxScaler to both x and y; direct for features, inverse for targets at predict
     ts = TransformSettings(name="MinMaxScaler", module_path="dlkit.domain.transforms.minmax", dim=0)
-    x = Feature(name="x", path=fx, transforms=[ts])
-    y = Target(name="y", path=fy, transforms=[ts])
+    x = NpyEntry(name="x", path=fx, data_role=DataRole.FEATURE, transforms=[ts])
+    y = NpyEntry(name="y", path=fy, data_role=DataRole.TARGET, transforms=[ts])
     return (x, y)
 
 
-def _build_wrapper(entry_cfgs: tuple[FeatureType | TargetType, ...]) -> StandardLightningWrapper:
+def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper:
     from dlkit.common.geometry import FieldRole, FieldSpec, GeometrySpec
     from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
 

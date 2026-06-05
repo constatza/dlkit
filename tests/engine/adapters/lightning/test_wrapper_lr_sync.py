@@ -8,7 +8,8 @@ from torch.nn import ModuleList
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config import OptimizerPolicySettings
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -38,7 +39,7 @@ def _build_wrapper():
         model_settings=model_settings,
         settings=wrapper_settings,
         components=components,
-        entry_configs=(Feature("x", value=torch.zeros(4, 1)),),
+        entry_configs=(ValueEntry(name="x", value=torch.zeros(4, 1), data_role=DataRole.FEATURE),),
     )
 
 

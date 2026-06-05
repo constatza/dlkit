@@ -8,7 +8,9 @@ from dlkit.engine.workflows.factories.feature_dependencies import (
     select_required_features,
     validate_feature_selection,
 )
-from dlkit.infrastructure.config.data_entries import AutoencoderTarget, Feature, Target
+from dlkit.infrastructure.config.data_entries import AutoencoderTarget
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
@@ -26,11 +28,17 @@ def test_collect_feature_dependencies_captures_all_dependency_sources(tmp_path) 
     np.save(y_path, np.zeros((3, 1), dtype=np.float32))
 
     features = (
-        Feature(name="x", path=x_path),
-        Feature(name="matrix", path=matrix_path, model_input=False, loss_input="matrix"),
+        NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+        NpyEntry(
+            name="matrix",
+            path=matrix_path,
+            data_role=DataRole.FEATURE,
+            model_input=False,
+            loss_input="matrix",
+        ),
     )
     targets = (
-        Target(name="y", path=y_path),
+        NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),
         AutoencoderTarget(name="recon", feature_ref="matrix", path=y_path),
     )
     loss_spec = LossComponentSettings(extra_inputs=(LossInputRef(arg="m", key="features.matrix"),))
@@ -55,11 +63,15 @@ def test_validate_feature_selection_raises_for_missing_dependency(tmp_path) -> N
     np.save(matrix_path, np.zeros((2, 2, 2), dtype=np.float32))
     np.save(y_path, np.zeros((2, 1), dtype=np.float32))
 
-    features = (Feature(name="matrix", path=matrix_path, model_input=False),)
+    features = (
+        NpyEntry(name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False),
+    )
     loss_spec = LossComponentSettings(
         extra_inputs=(LossInputRef(arg="missing", key="features.not_in_config"),)
     )
-    deps = collect_feature_dependencies(features, (Target(name="y", path=y_path),), loss_spec, ())
+    deps = collect_feature_dependencies(
+        features, (NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),), loss_spec, ()
+    )
     selected = select_required_features(features, deps)
 
     with pytest.raises(ValueError, match="not_in_config"):

@@ -15,9 +15,11 @@ from dlkit.engine.workflows.factories.build_factory import BuildFactory, Workflo
 from dlkit.engine.workflows.factories.model_detection import ModelType
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import DataEntry, Feature, Target
+from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.entry_types import AutoencoderTarget, NpyEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.model_components import (
@@ -239,11 +241,13 @@ def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
 ) -> None:
     """When no policy is configured, build_wrapper_components falls back to AdamWSettings."""
     from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
-    from dlkit.infrastructure.config.data_entries import Feature, Target
     from dlkit.infrastructure.config.model_components import WrapperComponentSettings
     from dlkit.infrastructure.config.optimizer_component import AdamWSettings
 
-    entry_configs = (Feature(name="x"), Target(name="y"))
+    entry_configs = (
+        NpyEntry(name="x", data_role=DataRole.FEATURE),
+        NpyEntry(name="y", data_role=DataRole.TARGET),
+    )
     wrapper_settings = WrapperComponentSettings()
 
     # No policy set → fallback must be AdamWSettings, not a ValidationError.
@@ -267,8 +271,8 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     ds = DatasetSettings(
         name="SupervisedArrayDataset",
         module_path="dlkit.engine.data.datasets",
-        features=(Feature(name="x", path=x_path),),
-        targets=(Target(name="y", path=y_path),),
+        features=(NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
         memmap_cache=True,
     )
     dm = DataModuleSettings(
@@ -288,9 +292,9 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     captured: dict[str, Any] = {}
 
     class _CapturedFlexibleDataset:
-        def __init__(self, *, features, targets=None, memmap_cache_dir=None):
-            captured["features"] = list(features)
-            captured["targets"] = list(targets or ())
+        def __init__(self, *, entries, memmap_cache_dir=None):
+            captured["features"] = [e for e in entries if e.data_role == DataRole.FEATURE]
+            captured["targets"] = [e for e in entries if e.data_role == DataRole.TARGET]
             captured["memmap_cache_dir"] = memmap_cache_dir
             self._n = 8
 
@@ -353,8 +357,8 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
-        features=(Feature(name="x", path=x_path),),
-        targets=(Target(name="y", path=y_path),),
+        features=(NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     dm = DataModuleSettings(
         name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
@@ -374,8 +378,9 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            captured["features"] = list(ctx.overrides["features"])
-            captured["targets"] = list(ctx.overrides["targets"])
+            all_entries = list(ctx.overrides.get("entries", ()))
+            captured["features"] = [e for e in all_entries if e.data_role == DataRole.FEATURE]
+            captured["targets"] = [e for e in all_entries if e.data_role == DataRole.TARGET]
             return _FakeDataset({"x": np.zeros((2,))})
         if s is settings.DATAMODULE:
             return _FakeDataModule()
@@ -421,11 +426,13 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
         features=(
-            Feature(name="x", path=x_path),
-            Feature(name="matrix", path=matrix_path, model_input=False),
-            Feature(name="aux", path=aux_path, model_input=False),
+            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+            NpyEntry(
+                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
+            ),
+            NpyEntry(name="aux", path=aux_path, data_role=DataRole.FEATURE, model_input=False),
         ),
-        targets=(Target(name="y", path=y_path),),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(workflow="inference"),
@@ -443,8 +450,13 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
-            captured["dataset_target_names"] = [entry.name for entry in ctx.overrides["targets"]]
+            all_entries = list(ctx.overrides.get("entries", ()))
+            captured["dataset_feature_names"] = [
+                e.name for e in all_entries if e.data_role == DataRole.FEATURE
+            ]
+            captured["dataset_target_names"] = [
+                e.name for e in all_entries if e.data_role == DataRole.TARGET
+            ]
             return _FakeDataset({"x": np.zeros((2,))})
         if s is settings.DATAMODULE:
             return _FakeDataModule()
@@ -487,10 +499,12 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
         features=(
-            Feature(name="x", path=x_path),
-            Feature(name="matrix", path=matrix_path, model_input=False),
+            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+            NpyEntry(
+                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
+            ),
         ),
-        targets=(Target(name="y", path=y_path),),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     training = TrainingSettings(
         loss_function=LossComponentSettings(
@@ -513,7 +527,10 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            all_entries = list(ctx.overrides.get("entries", ()))
+            captured["dataset_feature_names"] = [
+                e.name for e in all_entries if e.data_role == DataRole.FEATURE
+            ]
             return _FakeDataset({"x": np.zeros((2,))})
         if s is settings.DATAMODULE:
             return _FakeDataModule()
@@ -610,10 +627,12 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
         features=(
-            Feature(name="x", path=x_path),
-            Feature(name="matrix", path=matrix_path, model_input=False),
+            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+            NpyEntry(
+                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
+            ),
         ),
-        targets=(Target(name="y", path=y_path),),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     training = TrainingSettings(
         metrics=(
@@ -638,7 +657,10 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            all_entries = list(ctx.overrides.get("entries", ()))
+            captured["dataset_feature_names"] = [
+                e.name for e in all_entries if e.data_role == DataRole.FEATURE
+            ]
             return _FakeDataset({"x": np.zeros((2,))})
         if s is settings.DATAMODULE:
             return _FakeDataModule()
@@ -672,8 +694,12 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
     ds = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
-        features=(Feature(name="matrix", path=matrix_path, model_input=False),),
-        targets=(Target(name="y", path=y_path),),
+        features=(
+            NpyEntry(
+                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
+            ),
+        ),
+        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     settings = GeneralSettings(
         SESSION=SessionSettings(workflow="inference"),
@@ -686,15 +712,19 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
         ),
         TRAINING=TrainingSettings(),
     )
+    # Bypass Pydantic validation to inject AutoencoderTarget (not in AnyEntry union)
     settings.DATASET.__dict__["targets"] = [
-        types.SimpleNamespace(name="recon", feature_ref="matrix")
+        AutoencoderTarget(name="recon", feature_ref="matrix", data_role=DataRole.TARGET)
     ]
 
     captured: dict[str, Any] = {}
 
     def _fake_create_component(s, ctx: BuildContext):
         if s is settings.DATASET:
-            captured["dataset_feature_names"] = [entry.name for entry in ctx.overrides["features"]]
+            all_entries = list(ctx.overrides.get("entries", ()))
+            captured["dataset_feature_names"] = [
+                e.name for e in all_entries if getattr(e, "data_role", None) == DataRole.FEATURE
+            ]
             return _FakeDataset({"x": np.zeros((2,))})
         if s is settings.DATAMODULE:
             return _FakeDataModule()

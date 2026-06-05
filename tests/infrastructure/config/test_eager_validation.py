@@ -16,10 +16,11 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     MetricComponentSettings,
@@ -79,10 +80,10 @@ class TestEagerValidationSuccessCases:
             },
             "DATASET": {
                 "features": [
-                    {"name": "x", "path": str(features_path)},
+                    {"name": "x", "format": "npy", "path": str(features_path)},
                 ],
                 "targets": [
-                    {"name": "y", "path": str(targets_path)},
+                    {"name": "y", "format": "npy", "path": str(targets_path)},
                 ],
             },
             "MODEL": {
@@ -210,8 +211,8 @@ class TestEagerValidationSuccessCases:
 
         # Inject DATASET section programmatically (with eager validation)
         dataset = DatasetSettings(
-            features=(Feature(name="x", path=features_path),),
-            targets=(Target(name="y", path=targets_path),),
+            features=(NpyEntry(name="x", path=features_path, data_role=DataRole.FEATURE),),
+            targets=(NpyEntry(name="y", path=targets_path, data_role=DataRole.TARGET),),
         )
 
         config = config.model_copy(update={"DATASET": dataset})
@@ -241,7 +242,7 @@ class TestEagerValidationFailureCases:
             },
             "DATASET": {
                 "features": [
-                    {"name": "x", "path": "/this/path/does/not/exist.npy"},
+                    {"name": "x", "format": "npy", "path": "/this/path/does/not/exist.npy"},
                 ],
             },
         }
@@ -406,8 +407,8 @@ class TestCompletenessValidation:
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
-                "features": [{"name": "x", "path": str(features_path)}],
-                "targets": [{"name": "y", "path": str(targets_path)}],
+                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
             },
             "MODEL": {
                 "name": "LinearNetwork",
@@ -497,8 +498,8 @@ class TestCompletenessValidation:
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
-                "features": [{"name": "x", "path": str(features_path)}],
-                "targets": [{"name": "y", "path": str(targets_path)}],
+                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
             },
         }
 
@@ -611,8 +612,8 @@ class TestCompletenessValidation:
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
-                "features": [{"name": "x", "path": str(features_path)}],
-                "targets": [{"name": "y", "path": str(targets_path)}],
+                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
             },
             "MODEL": {
                 "name": "LinearNetwork",
@@ -684,8 +685,8 @@ class TestProgrammaticOverrideWorkflow:
         np.save(targets_path, np.random.rand(100, 1))
 
         dataset = DatasetSettings(
-            features=(Feature(name="x", path=features_path),),
-            targets=(Target(name="y", path=targets_path),),
+            features=(NpyEntry(name="x", path=features_path, data_role=DataRole.FEATURE),),
+            targets=(NpyEntry(name="y", path=targets_path, data_role=DataRole.TARGET),),
         )
 
         datamodule = DataModuleSettings(
@@ -737,8 +738,10 @@ class TestProgrammaticOverrideWorkflow:
         # This should fail eagerly during model_copy due to Pydantic validation
         with pytest.raises(ValidationError):
             dataset = DatasetSettings(
-                features=(Feature(name="x", path="/nonexistent/bad.npy"),),
-                targets=(Target(name="y", path="/another/bad.npy"),),
+                features=(
+                    NpyEntry(name="x", path="/nonexistent/bad.npy", data_role=DataRole.FEATURE),
+                ),
+                targets=(NpyEntry(name="y", path="/another/bad.npy", data_role=DataRole.TARGET),),
             )
 
             config.model_copy(update={"DATASET": dataset})
@@ -830,8 +833,8 @@ class TestEdgeCasesAndErrorMessages:
                 "dataloader": {"batch_size": 16},
             },
             "DATASET": {
-                "features": [{"name": "x", "path": str(features_path)}],
-                "targets": [{"name": "y", "path": str(targets_path)}],
+                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
             },
             "MODEL": {
                 "name": "LinearNetwork",

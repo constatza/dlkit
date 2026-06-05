@@ -15,7 +15,8 @@ import torch
 from tensordict import TensorDict
 
 from dlkit.engine.data.datasets.flexible import BatchComplianceError, FlexibleDataset
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry, NpzEntry
 from dlkit.infrastructure.precision import PrecisionStrategy, precision_override
 
 
@@ -24,8 +25,11 @@ class TestFlexibleDatasetWithNpz:
 
     def test_load_single_feature_from_single_array_npz(self, npz_single_array: dict) -> None:
         """Test loading a feature from single-array NPZ (auto-detection)."""
-        features = [Feature(name="data", path=npz_single_array["path"])]
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="data", path=npz_single_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         assert len(dataset) == 10
         assert len(dataset._feature_names) == 1
@@ -33,10 +37,12 @@ class TestFlexibleDatasetWithNpz:
 
     def test_load_multiple_arrays_from_multi_npz(self, npz_multi_array: dict) -> None:
         """Test loading features and targets from same multi-array NPZ."""
-        features = [Feature(name="features", path=npz_multi_array["path"])]
-        targets = [Target(name="targets", path=npz_multi_array["path"])]
-
-        dataset = FlexibleDataset(features=features, targets=targets)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpzEntry(name="targets", path=npz_multi_array["path"], data_role=DataRole.TARGET),
+            ]
+        )
 
         assert len(dataset) == 10
         assert len(dataset._feature_names) == 1
@@ -46,12 +52,12 @@ class TestFlexibleDatasetWithNpz:
 
     def test_load_multiple_features_from_same_npz(self, npz_multi_array: dict) -> None:
         """Test loading multiple features from same NPZ using different names."""
-        features = [
-            Feature(name="features", path=npz_multi_array["path"]),
-            Feature(name="latent", path=npz_multi_array["path"]),
-        ]
-
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpzEntry(name="latent", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+            ]
+        )
 
         assert len(dataset) == 10
         assert len(dataset._feature_names) == 2
@@ -65,12 +71,12 @@ class TestFlexibleDatasetWithNpz:
         npy_path = tmp_path / "extra.npy"
         np.save(npy_path, npy_data)
 
-        features = [
-            Feature(name="features", path=npz_multi_array["path"]),  # From NPZ
-            Feature(name="extra", path=npy_path),  # From NPY
-        ]
-
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpyEntry(name="extra", path=npy_path, data_role=DataRole.FEATURE),
+            ]
+        )
 
         assert len(dataset) == 10
         assert len(dataset._feature_names) == 2
@@ -79,10 +85,12 @@ class TestFlexibleDatasetWithNpz:
 
     def test_getitem_returns_correct_data(self, npz_multi_array: dict) -> None:
         """Test that __getitem__ returns correct slices from NPZ data."""
-        features = [Feature(name="features", path=npz_multi_array["path"])]
-        targets = [Target(name="targets", path=npz_multi_array["path"])]
-
-        dataset = FlexibleDataset(features=features, targets=targets)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpzEntry(name="targets", path=npz_multi_array["path"], data_role=DataRole.TARGET),
+            ]
+        )
 
         # Get first sample
         sample = dataset[0]
@@ -106,22 +114,25 @@ class TestFlexibleDatasetWithNpz:
 
     def test_npz_with_precision_context(self, npz_single_array: dict) -> None:
         """Test that NPZ loading respects precision context in dataset."""
-        features = [Feature(name="data", path=npz_single_array["path"])]
+        entry = NpzEntry(name="data", path=npz_single_array["path"], data_role=DataRole.FEATURE)
 
         # Load with float64 precision
         with precision_override(PrecisionStrategy.FULL_64):
-            dataset = FlexibleDataset(features=features)
+            dataset = FlexibleDataset(entries=[entry])
             assert dataset._dataset_td["features", "data"].dtype == torch.float64
 
         # Load with float32 precision
         with precision_override(PrecisionStrategy.FULL_32):
-            dataset = FlexibleDataset(features=features)
+            dataset = FlexibleDataset(entries=[entry])
             assert dataset._dataset_td["features", "data"].dtype == torch.float32
 
     def test_npz_data_integrity(self, npz_multi_array: dict) -> None:
         """Test that data is preserved correctly through dataset loading."""
-        features = [Feature(name="features", path=npz_multi_array["path"])]
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         # Compare with original data
         loaded_data = np.asarray(dataset._dataset_td["features", "features"].numpy())
@@ -132,8 +143,11 @@ class TestFlexibleDatasetWithNpz:
     def test_entry_name_used_as_array_key(self, npz_multi_array: dict) -> None:
         """Test that entry name is correctly used as array_key for NPZ files."""
         # Use "features" as entry name - should load "features" array from NPZ
-        features = [Feature(name="features", path=npz_multi_array["path"])]
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         assert dataset._dataset_td["features", "features"].shape == (10, 5)
         np.testing.assert_allclose(
@@ -144,8 +158,11 @@ class TestFlexibleDatasetWithNpz:
         )
 
         # Use "latent" as entry name - should load "latent" array from NPZ
-        features2 = [Feature(name="latent", path=npz_multi_array["path"])]
-        dataset2 = FlexibleDataset(features=features2)
+        dataset2 = FlexibleDataset(
+            entries=[
+                NpzEntry(name="latent", path=npz_multi_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         assert dataset2._dataset_td["features", "latent"].shape == (10, 3)
         np.testing.assert_allclose(
@@ -161,17 +178,23 @@ class TestFlexibleDatasetNpzErrors:
 
     def test_wrong_entry_name_raises(self, npz_multi_array: dict) -> None:
         """Test that using wrong entry name raises clear error."""
-        # Entry name "missing" doesn't exist in NPZ
-        features = [Feature(name="missing", path=npz_multi_array["path"])]
-
         with pytest.raises(ValueError, match="Array key 'missing' not found"):
-            FlexibleDataset(features=features)
+            FlexibleDataset(
+                entries=[
+                    NpzEntry(
+                        name="missing", path=npz_multi_array["path"], data_role=DataRole.FEATURE
+                    )
+                ]
+            )
 
     def test_single_array_npz_with_matching_name(self, npz_single_array: dict) -> None:
         """Test that single-array NPZ requires matching entry name."""
         # Entry name must match the array key in NPZ
-        features = [Feature(name="data", path=npz_single_array["path"])]
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="data", path=npz_single_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         # Should work when name matches
         assert len(dataset) == 10
@@ -179,11 +202,14 @@ class TestFlexibleDatasetNpzErrors:
 
     def test_single_array_npz_with_wrong_name_raises(self, npz_single_array: dict) -> None:
         """Test that single-array NPZ with wrong name raises error."""
-        # Entry name "wrong_name" doesn't match "data" in NPZ
-        features = [Feature(name="wrong_name", path=npz_single_array["path"])]
-
         with pytest.raises(ValueError, match="Array key 'wrong_name' not found"):
-            FlexibleDataset(features=features)
+            FlexibleDataset(
+                entries=[
+                    NpzEntry(
+                        name="wrong_name", path=npz_single_array["path"], data_role=DataRole.FEATURE
+                    )
+                ]
+            )
 
     def test_inconsistent_array_lengths_raises(self, tmp_path) -> None:
         """Test that NPZ arrays with inconsistent lengths raise error."""
@@ -194,11 +220,13 @@ class TestFlexibleDatasetNpzErrors:
         path = tmp_path / "inconsistent.npz"
         np.savez(path, features=arr1, targets=arr2)
 
-        features = [Feature(name="features", path=path)]
-        targets = [Target(name="targets", path=path)]
-
         with pytest.raises(BatchComplianceError, match="same first dimension N"):
-            FlexibleDataset(features=features, targets=targets)
+            FlexibleDataset(
+                entries=[
+                    NpzEntry(name="features", path=path, data_role=DataRole.FEATURE),
+                    NpzEntry(name="targets", path=path, data_role=DataRole.TARGET),
+                ]
+            )
 
 
 class TestFlexibleDatasetNpzPerformance:
@@ -208,13 +236,13 @@ class TestFlexibleDatasetNpzPerformance:
         """Test that loading multiple arrays from same NPZ works efficiently."""
         # This tests that we can load from the same NPZ file multiple times
         # Each load should work independently
-        features = [
-            Feature(name="features", path=npz_multi_array["path"]),
-            Feature(name="latent", path=npz_multi_array["path"]),
-        ]
-        targets = [Target(name="targets", path=npz_multi_array["path"])]
-
-        dataset = FlexibleDataset(features=features, targets=targets)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpzEntry(name="latent", path=npz_multi_array["path"], data_role=DataRole.FEATURE),
+                NpzEntry(name="targets", path=npz_multi_array["path"], data_role=DataRole.TARGET),
+            ]
+        )
 
         assert len(dataset._feature_names) == 2
         assert len(dataset._target_names) == 1
@@ -225,8 +253,11 @@ class TestFlexibleDatasetNpzPerformance:
     def test_lazy_loading_behavior(self, npz_multi_array: dict) -> None:
         """Test that only requested arrays are loaded from NPZ."""
         # Create dataset with only features (not targets)
-        features = [Feature(name="features", path=npz_multi_array["path"])]
-        dataset = FlexibleDataset(features=features)
+        dataset = FlexibleDataset(
+            entries=[
+                NpzEntry(name="features", path=npz_multi_array["path"], data_role=DataRole.FEATURE)
+            ]
+        )
 
         # Only features should be loaded, not other arrays in the NPZ
         assert len(dataset._feature_names) == 1

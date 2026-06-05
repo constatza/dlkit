@@ -40,10 +40,12 @@ name = "SupervisedArrayDataset"
 
     [[DATASET.features]]
     name = "x"
+    format = "npy"
     path = "{data_path}"
 
     [[DATASET.targets]]
     name = "y"
+    format = "npy"
     path = "{data_path}"
 
     [DATASET.split]

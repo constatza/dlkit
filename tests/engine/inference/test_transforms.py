@@ -8,17 +8,19 @@ import torch
 from dlkit.domain.transforms.chain import TransformChain
 from dlkit.domain.transforms.pca import PCA
 from dlkit.engine.inference.transforms import load_transforms_from_checkpoint
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 
 def _make_serialized_feature_entry(tmp_path: Path) -> dict[str, object]:
     feature_path = tmp_path / "features.npy"
     np.save(feature_path, np.zeros((4, 5), dtype=np.float32))
-    entry = Feature(
+    entry = NpyEntry(
         name="x",
         path=feature_path,
         transforms=[TransformSettings.model_validate({"name": "PCA", "n_components": 2})],
+        data_role=DataRole.FEATURE,
     )
     return entry.model_dump()
 

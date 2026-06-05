@@ -12,9 +12,9 @@ from typing import Any
 
 import numpy as np
 import pytest
+import zarr
 
 from dlkit.infrastructure.config.environment import env as global_environment
-from dlkit.infrastructure.io.packs import write_array_pack
 
 
 @pytest.fixture(autouse=True)
@@ -51,19 +51,21 @@ def dense_matrices_4x4() -> list[np.ndarray]:
 
 @pytest.fixture
 def zarr_dense_pack(tmp_path: Path, dense_matrices_4x4: list[np.ndarray]) -> Path:
-    """Save a zarr dense pack to ``tmp_path/zarr_pack`` and return the path.
+    """Save a native zarr array store to ``tmp_path/zarr_pack`` and return the path.
 
     Args:
         tmp_path: pytest temporary directory.
         dense_matrices_4x4: Matrices to store.
 
     Returns:
-        Path to the written zarr dense pack directory.
+        Path to the native zarr store directory.
     """
     pack_path = tmp_path / "zarr_pack"
-    with write_array_pack(pack_path, size=(4, 4)) as w:
-        for matrix in dense_matrices_4x4:
-            w.write_sample(matrix)
+    data = np.stack(dense_matrices_4x4, axis=0)
+    arr = zarr.open_array(
+        str(pack_path), mode="w", shape=data.shape, chunks=(1, 4, 4), dtype=data.dtype
+    )
+    arr[:] = data
     return pack_path
 
 
@@ -93,19 +95,21 @@ def matrix_stream() -> Generator[np.ndarray]:
 
 @pytest.fixture(scope="session")
 def pack_1k(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Session-scoped 1_000-sample 128×128 float32 zarr dense pack.
+    """Session-scoped 1_000-sample 128×128 float32 native zarr array store.
 
     Args:
         tmp_path_factory: pytest session-scoped temp path factory.
 
     Returns:
-        Path to the written zarr dense pack directory.
+        Path to the native zarr store directory.
     """
     path = tmp_path_factory.mktemp("packs") / "pack_1k"
     rng = np.random.default_rng(42)
-    with write_array_pack(path, size=(128, 128)) as w:
-        for _ in range(1_000):
-            w.write_sample(rng.random((128, 128)).astype(np.float32))
+    data = np.stack([rng.random((128, 128)).astype(np.float32) for _ in range(1_000)], axis=0)
+    arr = zarr.open_array(
+        str(path), mode="w", shape=data.shape, chunks=(1, 128, 128), dtype=data.dtype
+    )
+    arr[:] = data
     return path
 
 

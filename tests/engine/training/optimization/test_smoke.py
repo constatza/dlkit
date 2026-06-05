@@ -34,7 +34,8 @@ from dlkit.engine.training.optimization.state_repository import OptimizationStat
 from dlkit.engine.training.optimization.stepping import StepAllOptimizers
 from dlkit.engine.training.optimization.triggers import NoTransitionTrigger
 from dlkit.infrastructure.config import OptimizerPolicySettings
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -126,7 +127,10 @@ def _make_wrapper(
         model_settings=ModelComponentSettings(name=model_cls_name, module_path=_MODULE),
         settings=WrapperComponentSettings(),
         components=components,
-        entry_configs=(Feature(name="x"), Target(name="y")),
+        entry_configs=(
+            ValueEntry(name="x", data_role=DataRole.FEATURE),
+            ValueEntry(name="y", data_role=DataRole.TARGET),
+        ),
     )
 
 

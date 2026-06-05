@@ -15,7 +15,8 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.io.arrays import load_array
 from dlkit.infrastructure.precision import (
@@ -70,15 +71,17 @@ class TestFloat64EndToEnd:
     @pytest.fixture
     def sample_data(self, tmp_path):
         """Create sample data files for testing."""
+        import numpy as np
+
         # Create float32 data that will be cast to float64
-        input_data = torch.randn(100, 20, dtype=torch.float32)
-        target_data = torch.randn(100, 10, dtype=torch.float32)
+        input_data = np.random.randn(100, 20).astype(np.float32)
+        target_data = np.random.randn(100, 10).astype(np.float32)
 
-        input_path = tmp_path / "input_data.pt"
-        target_path = tmp_path / "target_data.pt"
+        input_path = tmp_path / "input_data.npy"
+        target_path = tmp_path / "target_data.npy"
 
-        torch.save(input_data, input_path)
-        torch.save(target_data, target_path)
+        np.save(input_path, input_data)
+        np.save(target_path, target_data)
 
         return {"input": input_path, "target": target_path}
 
@@ -194,7 +197,7 @@ class TestFloat64EndToEnd:
     def test_data_loading_float64(self, sample_data):
         """Test that data is loaded with float64 precision."""
         session = _build_session(precision="float64")
-        feature = Feature(name="input", path=sample_data["input"])
+        feature = NpyEntry(name="input", path=sample_data["input"], data_role=DataRole.FEATURE)
 
         # Load with session precision using context
         with precision_override(session.get_precision_strategy()):
@@ -212,8 +215,8 @@ class TestFloat64EndToEnd:
         assert session.precision == PrecisionStrategy.FULL_64
 
         # 2. Load data with float64 precision using context
-        feature = Feature(name="input", path=sample_data["input"])
-        target = Target(name="target", path=sample_data["target"])
+        feature = NpyEntry(name="input", path=sample_data["input"], data_role=DataRole.FEATURE)
+        target = NpyEntry(name="target", path=sample_data["target"], data_role=DataRole.TARGET)
 
         with precision_override(session.get_precision_strategy()):
             assert feature.path is not None

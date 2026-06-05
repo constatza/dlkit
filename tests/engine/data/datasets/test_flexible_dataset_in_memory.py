@@ -19,15 +19,10 @@ from dlkit.engine.data.datasets.flexible import (
     PlaceholderNotResolvedError,
     _load_or_convert_tensor,
     _normalize_entries,
+    _NormalizedEntry,
 )
-from dlkit.infrastructure.config.data_entries import (
-    Feature,
-    PathFeature,
-    PathTarget,
-    Target,
-    ValueFeature,
-    ValueTarget,
-)
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry, PathBasedEntry, ValueEntry
 
 
 def _expect_tensor(value: object) -> torch.Tensor:
@@ -58,39 +53,42 @@ def sample_torch_tensor() -> torch.Tensor:
 
 
 @pytest.fixture
-def value_feature(sample_numpy_array: np.ndarray) -> ValueFeature:
-    """ValueFeature with in-memory value."""
-    return ValueFeature(name="feat1", value=sample_numpy_array)
+def value_feature(sample_numpy_array: np.ndarray) -> ValueEntry:
+    """ValueEntry with in-memory value (feature role)."""
+    return ValueEntry(name="feat1", value=sample_numpy_array, data_role=DataRole.FEATURE)
 
 
 @pytest.fixture
-def value_target(sample_torch_tensor: torch.Tensor) -> ValueTarget:
-    """ValueTarget with in-memory value."""
-    return ValueTarget(name="target1", value=sample_torch_tensor)
+def value_target(sample_torch_tensor: torch.Tensor) -> ValueEntry:
+    """ValueEntry with in-memory value (target role)."""
+    return ValueEntry(name="target1", value=sample_torch_tensor, data_role=DataRole.TARGET)
 
 
 @pytest.fixture
-def path_feature(tmp_path: Path) -> PathFeature:
-    """PathFeature with file path."""
+def path_feature(tmp_path: Path) -> NpyEntry:
+    """NpyEntry with file path (feature role)."""
     X = np.arange(10, dtype=np.float32).reshape(5, 2)
     path = tmp_path / "feature.npy"
     np.save(path, X)
-    return PathFeature(name="feat_file", path=path)
+    return NpyEntry(name="feat_file", path=path, data_role=DataRole.FEATURE)
 
 
 @pytest.fixture
-def path_target(tmp_path: Path) -> PathTarget:
-    """PathTarget with file path."""
+def path_target(tmp_path: Path) -> NpyEntry:
+    """NpyEntry with file path (target role)."""
     Y = np.ones((5, 1), dtype=np.float32)
     path = tmp_path / "target.npy"
     np.save(path, Y)
-    return PathTarget(name="target_file", path=path)
+    return NpyEntry(name="target_file", path=path, data_role=DataRole.TARGET)
 
 
 @pytest.fixture
-def placeholder_feature() -> PathFeature:
-    """PathFeature placeholder (no path)."""
-    return PathFeature(name="placeholder_feat")
+def placeholder_feature() -> PathBasedEntry:
+    """PathBasedEntry placeholder (no path)."""
+    from dlkit.infrastructure.config.entry_types import NpyEntry as _NpyEntry
+
+    # NpyEntry without path = placeholder
+    return _NpyEntry(name="placeholder_feat", data_role=DataRole.FEATURE)
 
 
 # ============================================================================
@@ -101,62 +99,66 @@ def placeholder_feature() -> PathFeature:
 class TestNormalizeEntriesNewHierarchy:
     """Tests for _normalize_entries() with new PathBasedEntry/ValueBasedEntry hierarchy."""
 
-    def test_normalize_value_feature(self, value_feature: ValueFeature):
-        """Test _normalize_entries() extracts value from ValueFeature."""
+    def test_normalize_value_feature(self, value_feature: ValueEntry):
+        """Test _normalize_entries() extracts value from ValueEntry (feature)."""
         result = _normalize_entries([value_feature])
 
         assert "feat1" in result
-        source, name = result["feat1"]
-        assert isinstance(source, np.ndarray)
-        assert source.shape == (5, 2)
-        assert name == "feat1"
+        ne = result["feat1"]
+        assert isinstance(ne, _NormalizedEntry)
+        assert isinstance(ne.source, np.ndarray)
+        assert ne.source.shape == (5, 2)
+        assert ne.array_key == "feat1"
 
-    def test_normalize_path_feature(self, path_feature: PathFeature):
-        """Test _normalize_entries() extracts path from PathFeature."""
+    def test_normalize_path_feature(self, path_feature: NpyEntry):
+        """Test _normalize_entries() extracts path from NpyEntry (feature)."""
         result = _normalize_entries([path_feature])
 
         assert "feat_file" in result
-        source, name = result["feat_file"]
-        assert isinstance(source, Path)
-        assert name == "feat_file"
+        ne = result["feat_file"]
+        assert isinstance(ne, _NormalizedEntry)
+        assert isinstance(ne.source, Path)
+        assert ne.array_key == "feat_file"
 
-    def test_normalize_value_target(self, value_target: ValueTarget):
-        """Test _normalize_entries() extracts value from ValueTarget."""
+    def test_normalize_value_target(self, value_target: ValueEntry):
+        """Test _normalize_entries() extracts value from ValueEntry (target)."""
         result = _normalize_entries([value_target])
 
         assert "target1" in result
-        source, name = result["target1"]
-        assert isinstance(source, torch.Tensor)
-        assert source.shape == (5, 3)
-        assert name == "target1"
+        ne = result["target1"]
+        assert isinstance(ne, _NormalizedEntry)
+        assert isinstance(ne.source, torch.Tensor)
+        assert ne.source.shape == (5, 3)
+        assert ne.array_key == "target1"
 
-    def test_normalize_path_target(self, path_target: PathTarget):
-        """Test _normalize_entries() extracts path from PathTarget."""
+    def test_normalize_path_target(self, path_target: NpyEntry):
+        """Test _normalize_entries() extracts path from NpyEntry (target)."""
         result = _normalize_entries([path_target])
 
         assert "target_file" in result
-        source, name = result["target_file"]
-        assert isinstance(source, Path)
-        assert name == "target_file"
+        ne = result["target_file"]
+        assert isinstance(ne, _NormalizedEntry)
+        assert isinstance(ne.source, Path)
+        assert ne.array_key == "target_file"
 
-    def test_normalize_placeholder_raises_error(self, placeholder_feature: PathFeature):
+    def test_normalize_placeholder_raises_error(self, placeholder_feature: PathBasedEntry):
         """Test _normalize_entries() raises error for placeholder entries."""
         with pytest.raises(PlaceholderNotResolvedError, match="placeholder without path or value"):
             _normalize_entries([placeholder_feature])
 
-    def test_normalize_mixed_value_and_path(
-        self, value_feature: ValueFeature, path_target: PathTarget
-    ):
+    def test_normalize_mixed_value_and_path(self, value_feature: ValueEntry, path_target: NpyEntry):
         """Test _normalize_entries() handles mixed value and path entries."""
         result = _normalize_entries([value_feature, path_target])
 
         assert len(result) == 2
-        source1, name1 = result["feat1"]
-        assert isinstance(source1, np.ndarray)
-        assert name1 == "feat1"
-        source2, name2 = result["target_file"]
-        assert isinstance(source2, Path)
-        assert name2 == "target_file"
+        ne1 = result["feat1"]
+        assert isinstance(ne1, _NormalizedEntry)
+        assert isinstance(ne1.source, np.ndarray)
+        assert ne1.array_key == "feat1"
+        ne2 = result["target_file"]
+        assert isinstance(ne2, _NormalizedEntry)
+        assert isinstance(ne2.source, Path)
+        assert ne2.array_key == "target_file"
 
 
 class TestNormalizeEntriesFactoryValidation:
@@ -178,23 +180,25 @@ class TestNormalizeEntriesFactoryValidation:
         assert result == {}
 
     def test_normalize_factory_created_entries(self, tmp_path: Path):
-        """Test _normalize_entries() handles Feature()/Target() factory output."""
-        # Create actual file for PathFeature
+        """Test _normalize_entries() handles NpyEntry/ValueEntry factory output."""
+        # Create actual file for NpyEntry
         x_path = tmp_path / "x.npy"
         np.save(x_path, np.ones((5, 2), dtype=np.float32))
 
-        feat = Feature(name="x", path=x_path)
-        targ = Target(name="y", value=np.ones((5, 1)))
+        feat = NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="y", value=np.ones((5, 1)), data_role=DataRole.TARGET)
 
         result = _normalize_entries([feat, targ])
 
         assert len(result) == 2
-        source_x, name_x = result["x"]
-        assert isinstance(source_x, Path)
-        assert name_x == "x"
-        source_y, name_y = result["y"]
-        assert isinstance(source_y, np.ndarray)
-        assert name_y == "y"
+        ne_x = result["x"]
+        assert isinstance(ne_x, _NormalizedEntry)
+        assert isinstance(ne_x.source, Path)
+        assert ne_x.array_key == "x"
+        ne_y = result["y"]
+        assert isinstance(ne_y, _NormalizedEntry)
+        assert isinstance(ne_y.source, np.ndarray)
+        assert ne_y.array_key == "y"
 
 
 # ============================================================================
@@ -259,10 +263,10 @@ class TestFlexibleDatasetNewHierarchy:
     """Tests for FlexibleDataset with new PathBasedEntry/ValueBasedEntry hierarchy."""
 
     def test_dataset_with_value_entries_only(
-        self, value_feature: ValueFeature, value_target: ValueTarget
+        self, value_feature: ValueEntry, value_target: ValueEntry
     ):
         """Test FlexibleDataset with only value-based entries."""
-        ds = FlexibleDataset(features=[value_feature], targets=[value_target])
+        ds = FlexibleDataset(entries=[value_feature, value_target])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -277,11 +281,9 @@ class TestFlexibleDatasetNewHierarchy:
         assert sample["features", "feat1"].shape == (2,)
         assert sample["targets", "target1"].shape == (3,)
 
-    def test_dataset_with_path_entries_only(
-        self, path_feature: PathFeature, path_target: PathTarget
-    ):
+    def test_dataset_with_path_entries_only(self, path_feature: NpyEntry, path_target: NpyEntry):
         """Test FlexibleDataset with only path-based entries."""
-        ds = FlexibleDataset(features=[path_feature], targets=[path_target])
+        ds = FlexibleDataset(entries=[path_feature, path_target])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -292,9 +294,9 @@ class TestFlexibleDatasetNewHierarchy:
         assert len(features.keys()) >= 1
         assert len(targets.keys()) >= 1
 
-    def test_dataset_with_mixed_entries(self, value_feature: ValueFeature, path_target: PathTarget):
+    def test_dataset_with_mixed_entries(self, value_feature: ValueEntry, path_target: NpyEntry):
         """Test FlexibleDataset with mixed value and path entries."""
-        ds = FlexibleDataset(features=[value_feature], targets=[path_target])
+        ds = FlexibleDataset(entries=[value_feature, path_target])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -307,26 +309,26 @@ class TestFlexibleDatasetNewHierarchy:
         assert isinstance(sample["features", "feat1"], torch.Tensor)
         assert isinstance(sample["targets", "target_file"], torch.Tensor)
 
-    def test_dataset_with_placeholder_raises(self, placeholder_feature: PathFeature):
+    def test_dataset_with_placeholder_raises(self, placeholder_feature: PathBasedEntry):
         """Test FlexibleDataset raises error for placeholder entries."""
         with pytest.raises(PlaceholderNotResolvedError):
-            FlexibleDataset(features=[placeholder_feature], targets=None)
+            FlexibleDataset(entries=[placeholder_feature])
 
 
 class TestFlexibleDatasetFactoryEntries:
-    """Tests for FlexibleDataset with Feature()/Target() factory entries."""
+    """Tests for FlexibleDataset with NpyEntry/ValueEntry entries."""
 
     def test_dataset_with_factory_path_entries(self, tmp_path: Path):
-        """Test FlexibleDataset with Feature/Target factory path entries."""
+        """Test FlexibleDataset with NpyEntry path entries."""
         X_path = tmp_path / "X.npy"
         Y_path = tmp_path / "Y.npy"
         np.save(X_path, np.ones((5, 2), dtype=np.float32))
         np.save(Y_path, np.ones((5, 1), dtype=np.float32))
 
-        feat = Feature(name="X", path=X_path)
-        targ = Target(name="Y", path=Y_path)
+        feat = NpyEntry(name="X", path=X_path, data_role=DataRole.FEATURE)
+        targ = NpyEntry(name="Y", path=Y_path, data_role=DataRole.TARGET)
 
-        ds = FlexibleDataset(features=[feat], targets=[targ])
+        ds = FlexibleDataset(entries=[feat, targ])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -335,14 +337,14 @@ class TestFlexibleDatasetFactoryEntries:
         assert len(_expect_tensordict(sample["targets"]).keys()) == 1
 
     def test_dataset_with_factory_value_entries(self):
-        """Test FlexibleDataset with Feature/Target factory value entries."""
+        """Test FlexibleDataset with ValueEntry entries."""
         X = np.arange(20, dtype=np.float32).reshape(10, 2)
         Y = np.ones((10, 1), dtype=np.float32)
 
-        feat = Feature(name="X", value=X)
-        targ = Target(name="Y", value=Y)
+        feat = ValueEntry(name="X", value=X, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="Y", value=Y, data_role=DataRole.TARGET)
 
-        ds = FlexibleDataset(features=[feat], targets=[targ])
+        ds = FlexibleDataset(entries=[feat, targ])
 
         assert len(ds) == 10
         sample = ds[5]
@@ -357,10 +359,10 @@ class TestFlexibleDatasetFactoryEntries:
 
     def test_dataset_with_factory_placeholder_raises(self):
         """Test FlexibleDataset raises error for factory placeholder entries."""
-        feat = Feature(name="X")  # Placeholder
+        feat = NpyEntry(name="X", data_role=DataRole.FEATURE)  # Placeholder
 
         with pytest.raises(PlaceholderNotResolvedError):
-            FlexibleDataset(features=[feat], targets=None)
+            FlexibleDataset(entries=[feat])
 
 
 class TestFlexibleDatasetValidation:
@@ -371,23 +373,23 @@ class TestFlexibleDatasetValidation:
         X = np.ones((5, 2), dtype=np.float32)
         Y = np.ones((3, 1), dtype=np.float32)  # Different length!
 
-        feat = ValueFeature(name="X", value=X)
-        targ = ValueTarget(name="Y", value=Y)
+        feat = ValueEntry(name="X", value=X, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="Y", value=Y, data_role=DataRole.TARGET)
 
         with pytest.raises(BatchComplianceError, match="same first dimension N"):
-            FlexibleDataset(features=[feat], targets=[targ])
+            FlexibleDataset(entries=[feat, targ])
 
     def test_requires_at_least_one_entry(self):
         """Test FlexibleDataset requires at least one entry."""
         with pytest.raises(ValueError, match="At least one feature or target"):
-            FlexibleDataset(features=[], targets=None)
+            FlexibleDataset(entries=[])
 
     def test_only_features_valid(self):
         """Test FlexibleDataset with only features."""
         X = np.arange(10, dtype=np.float32).reshape(5, 2)
-        feat = ValueFeature(name="X", value=X)
+        feat = ValueEntry(name="X", value=X, data_role=DataRole.FEATURE)
 
-        ds = FlexibleDataset(features=[feat], targets=None)
+        ds = FlexibleDataset(entries=[feat])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -397,9 +399,9 @@ class TestFlexibleDatasetValidation:
     def test_only_targets_valid(self):
         """Test FlexibleDataset with only targets."""
         Y = np.ones((5, 1), dtype=np.float32)
-        targ = ValueTarget(name="Y", value=Y)
+        targ = ValueEntry(name="Y", value=Y, data_role=DataRole.TARGET)
 
-        ds = FlexibleDataset(features=[], targets=[targ])
+        ds = FlexibleDataset(entries=[targ])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -416,22 +418,22 @@ class TestIntegration:
     """Integration tests for FlexibleDataset with various entry types."""
 
     def test_all_entry_types_together(self, tmp_path: Path):
-        """Test FlexibleDataset with PathFeature and ValueFeature using factories."""
-        # PathFeature via factory
+        """Test FlexibleDataset with NpyEntry and ValueEntry feature entries."""
+        # NpyEntry path-based
         X1_path = tmp_path / "X1.npy"
         np.save(X1_path, np.ones((5, 2), dtype=np.float32))
-        feat1 = Feature(name="feat1", path=X1_path)
+        feat1 = NpyEntry(name="feat1", path=X1_path, data_role=DataRole.FEATURE)
 
-        # PathFeature direct
+        # NpyEntry direct
         X2_path = tmp_path / "X2.npy"
         np.save(X2_path, np.ones((5, 3), dtype=np.float32) * 2)
-        feat2 = PathFeature(name="feat2", path=X2_path)
+        feat2 = NpyEntry(name="feat2", path=X2_path, data_role=DataRole.FEATURE)
 
-        # ValueFeature
+        # ValueEntry
         X3 = np.ones((5, 4), dtype=np.float32) * 3
-        feat3 = ValueFeature(name="feat3", value=X3)
+        feat3 = ValueEntry(name="feat3", value=X3, data_role=DataRole.FEATURE)
 
-        ds = FlexibleDataset(features=[feat1, feat2, feat3], targets=None)
+        ds = FlexibleDataset(entries=[feat1, feat2, feat3])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -448,10 +450,10 @@ class TestIntegration:
         X = torch.arange(20, dtype=torch.float32).reshape(10, 2)
         Y = torch.zeros((10, 1), dtype=torch.float32)
 
-        feat = ValueFeature(name="X", value=X)
-        targ = ValueTarget(name="Y", value=Y)
+        feat = ValueEntry(name="X", value=X, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="Y", value=Y, data_role=DataRole.TARGET)
 
-        ds = FlexibleDataset(features=[feat], targets=[targ])
+        ds = FlexibleDataset(entries=[feat, targ])
 
         assert len(ds) == 10
         sample = ds[0]
@@ -465,11 +467,15 @@ class TestIntegration:
         )
 
     def test_flexible_dataset_with_value_factory_entries(self):
-        """Test FlexibleDataset with Feature/Target factory value entries."""
-        feat = Feature(name="x", value=np.ones((10, 5), dtype=np.float32))
-        targ = Target(name="y", value=np.zeros((10, 1), dtype=np.float32))
+        """Test FlexibleDataset with ValueEntry entries."""
+        feat = ValueEntry(
+            name="x", value=np.ones((10, 5), dtype=np.float32), data_role=DataRole.FEATURE
+        )
+        targ = ValueEntry(
+            name="y", value=np.zeros((10, 1), dtype=np.float32), data_role=DataRole.TARGET
+        )
 
-        dataset = FlexibleDataset(features=[feat], targets=[targ])
+        dataset = FlexibleDataset(entries=[feat, targ])
 
         assert len(dataset) == 10
 
@@ -489,7 +495,7 @@ class TestIntegration:
         )
 
     def test_flexible_dataset_mixed_factory_types(self, tmp_path: Path):
-        """Test FlexibleDataset with mixed factory entries (path and value)."""
+        """Test FlexibleDataset with mixed path and value entries."""
         # Create path-based feature
         x_path = tmp_path / "x.npy"
         np.save(x_path, np.full((10, 3), 2.0, dtype=np.float32))
@@ -497,10 +503,10 @@ class TestIntegration:
         # Create value-based target
         y_arr = np.full((10, 1), 5.0, dtype=np.float32)
 
-        feat = Feature(name="x", path=x_path)
-        targ = Target(name="y", value=y_arr)
+        feat = NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="y", value=y_arr, data_role=DataRole.TARGET)
 
-        dataset = FlexibleDataset(features=[feat], targets=[targ])
+        dataset = FlexibleDataset(entries=[feat, targ])
 
         assert len(dataset) == 10
 
@@ -514,25 +520,27 @@ class TestIntegration:
         )
 
     def test_flexible_dataset_all_entry_formats_factory_based(self, tmp_path: Path):
-        """Test FlexibleDataset with all supported entry formats using factories."""
-        # PathFeature direct
+        """Test FlexibleDataset with all supported entry formats using new API."""
+        # NpyEntry path-based feature
         x1_path = tmp_path / "x1.npy"
         np.save(x1_path, np.ones((8, 2), dtype=np.float32))
-        feat1 = PathFeature(name="x1", path=x1_path)
+        feat1 = NpyEntry(name="x1", path=x1_path, data_role=DataRole.FEATURE)
 
-        # ValueFeature
-        feat2 = ValueFeature(name="x2", value=np.ones((8, 3), dtype=np.float32) * 2)
+        # ValueEntry feature
+        feat2 = ValueEntry(
+            name="x2", value=np.ones((8, 3), dtype=np.float32) * 2, data_role=DataRole.FEATURE
+        )
 
-        # Feature factory with path
+        # NpyEntry feature (second path-based)
         x3_path = tmp_path / "x3.npy"
         np.save(x3_path, np.ones((8, 4), dtype=np.float32) * 3)
-        feat3 = Feature(name="x3", path=x3_path)
+        feat3 = NpyEntry(name="x3", path=x3_path, data_role=DataRole.FEATURE)
 
-        # Target factory with value
+        # ValueEntry target
         y_arr = np.ones((8, 1), dtype=np.float32) * 10
-        targ = Target(name="y", value=y_arr)
+        targ = ValueEntry(name="y", value=y_arr, data_role=DataRole.TARGET)
 
-        dataset = FlexibleDataset(features=[feat1, feat2, feat3], targets=[targ])
+        dataset = FlexibleDataset(entries=[feat1, feat2, feat3, targ])
 
         assert len(dataset) == 8
         sample = dataset[0]
@@ -556,49 +564,63 @@ class TestIntegration:
 
 
 @pytest.fixture
-def feature_5x2() -> ValueFeature:
-    """ValueFeature with shape (5, 2)."""
-    return ValueFeature(name="x", value=np.ones((5, 2), dtype=np.float32))
+def feature_5x2() -> ValueEntry:
+    """ValueEntry with shape (5, 2) and feature role."""
+    return ValueEntry(name="x", value=np.ones((5, 2), dtype=np.float32), data_role=DataRole.FEATURE)
 
 
 @pytest.fixture
-def target_5x1() -> ValueTarget:
-    """ValueTarget with shape (5, 1)."""
-    return ValueTarget(name="y", value=np.zeros((5, 1), dtype=np.float32))
+def target_5x1() -> ValueEntry:
+    """ValueEntry with shape (5, 1) and target role."""
+    return ValueEntry(name="y", value=np.zeros((5, 1), dtype=np.float32), data_role=DataRole.TARGET)
 
 
 class TestBatchCompliance:
     """Tests enforcing strict batch-shape invariants on FlexibleDataset."""
 
-    def test_scalar_feature_raises_batch_compliance_error(self, target_5x1: ValueTarget):
+    def test_scalar_feature_raises_batch_compliance_error(self, target_5x1: ValueEntry):
         """Scalar (0-D) feature tensor raises BatchComplianceError."""
-        scalar_feat = ValueFeature(name="s", value=np.array(1.0, dtype=np.float32))
+        scalar_feat = ValueEntry(
+            name="s", value=np.array(1.0, dtype=np.float32), data_role=DataRole.FEATURE
+        )
 
         with pytest.raises(BatchComplianceError, match="Scalar"):
-            FlexibleDataset(features=[scalar_feat], targets=[target_5x1])
+            FlexibleDataset(entries=[scalar_feat, target_5x1])
 
-    def test_scalar_target_raises_batch_compliance_error(self, feature_5x2: ValueFeature):
+    def test_scalar_target_raises_batch_compliance_error(self, feature_5x2: ValueEntry):
         """Scalar (0-D) target tensor raises BatchComplianceError."""
-        scalar_targ = ValueTarget(name="s", value=np.array(0.0, dtype=np.float32))
+        scalar_targ = ValueEntry(
+            name="s", value=np.array(0.0, dtype=np.float32), data_role=DataRole.TARGET
+        )
 
         with pytest.raises(BatchComplianceError, match="Scalar"):
-            FlexibleDataset(features=[feature_5x2], targets=[scalar_targ])
+            FlexibleDataset(entries=[feature_5x2, scalar_targ])
 
     def test_mismatched_n_raises_batch_compliance_error(self):
         """Entries with different first dimensions raise BatchComplianceError."""
-        feat = ValueFeature(name="x", value=np.ones((5, 2), dtype=np.float32))
-        targ = ValueTarget(name="y", value=np.zeros((7, 1), dtype=np.float32))
+        feat = ValueEntry(
+            name="x", value=np.ones((5, 2), dtype=np.float32), data_role=DataRole.FEATURE
+        )
+        targ = ValueEntry(
+            name="y", value=np.zeros((7, 1), dtype=np.float32), data_role=DataRole.TARGET
+        )
 
         with pytest.raises(BatchComplianceError, match="same first dimension N"):
-            FlexibleDataset(features=[feat], targets=[targ])
+            FlexibleDataset(entries=[feat, targ])
 
-    def test_mixed_ranks_with_shared_n_pass(self, feature_5x2: ValueFeature):
+    def test_mixed_ranks_with_shared_n_pass(self, feature_5x2: ValueEntry):
         """Entries with different ranks but the same first dimension N are valid."""
-        feat_3d = ValueFeature(name="x3", value=np.ones((5, 4, 4), dtype=np.float32))
-        feat_4d = ValueFeature(name="x4", value=np.ones((5, 2, 3, 2), dtype=np.float32))
-        targ = ValueTarget(name="y", value=np.zeros((5, 1), dtype=np.float32))
+        feat_3d = ValueEntry(
+            name="x3", value=np.ones((5, 4, 4), dtype=np.float32), data_role=DataRole.FEATURE
+        )
+        feat_4d = ValueEntry(
+            name="x4", value=np.ones((5, 2, 3, 2), dtype=np.float32), data_role=DataRole.FEATURE
+        )
+        targ = ValueEntry(
+            name="y", value=np.zeros((5, 1), dtype=np.float32), data_role=DataRole.TARGET
+        )
 
-        ds = FlexibleDataset(features=[feature_5x2, feat_3d, feat_4d], targets=[targ])
+        ds = FlexibleDataset(entries=[feature_5x2, feat_3d, feat_4d, targ])
 
         assert len(ds) == 5
         sample = ds[0]
@@ -607,20 +629,20 @@ class TestBatchCompliance:
         assert sample["features", "x4"].shape == (2, 3, 2)
 
     def test_dataset_td_has_correct_batch_size(
-        self, feature_5x2: ValueFeature, target_5x1: ValueTarget
+        self, feature_5x2: ValueEntry, target_5x1: ValueEntry
     ):
         """Internal _dataset_td is built with batch_size=[N]."""
-        ds = FlexibleDataset(features=[feature_5x2], targets=[target_5x1])
+        ds = FlexibleDataset(entries=[feature_5x2, target_5x1])
 
         assert ds._dataset_td.batch_size == torch.Size([5])
         assert _expect_tensordict(ds._dataset_td["features"]).batch_size == torch.Size([5])
         assert _expect_tensordict(ds._dataset_td["targets"]).batch_size == torch.Size([5])
 
     def test_getitem_returns_unbatched_tensordict(
-        self, feature_5x2: ValueFeature, target_5x1: ValueTarget
+        self, feature_5x2: ValueEntry, target_5x1: ValueEntry
     ):
         """__getitem__ returns a TensorDict with batch_size=[] (single sample)."""
-        ds = FlexibleDataset(features=[feature_5x2], targets=[target_5x1])
+        ds = FlexibleDataset(entries=[feature_5x2, target_5x1])
 
         sample = ds[0]
 

@@ -13,12 +13,8 @@ from torch.nn import ModuleList
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config import OptimizerPolicySettings
-from dlkit.infrastructure.config.data_entries import (
-    Feature,
-    Target,
-    is_feature_entry,
-    is_target_entry,
-)
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
@@ -84,7 +80,10 @@ def test_standard_wrapper_basic_steps():
         name="_Id", module_path="tests.engine.adapters.lightning.test_standard_wrapper_steps"
     )
     wset = WrapperComponentSettings()
-    entry_configs = (Feature(name="x"), Target(name="y"))
+    entry_configs = (
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="y", data_role=DataRole.TARGET),
+    )
     components = _make_components(loss_fn=nn.MSELoss(), feature_names=("x",), target_names=("y",))
     wrapper = StandardLightningWrapper(
         model_settings=mdl, settings=wset, components=components, entry_configs=entry_configs
@@ -126,8 +125,10 @@ def _make_wrapper_with_loss(
         captured.update(kwargs)
         return torch.nn.functional.mse_loss(preds, target)
 
-    feature_names = tuple(e.name for e in entry_configs if is_feature_entry(e) and e.name)
-    target_names = tuple(e.name for e in entry_configs if is_target_entry(e) and e.name)
+    feature_names = tuple(
+        e.name for e in entry_configs if e.data_role == DataRole.FEATURE and e.name
+    )
+    target_names = tuple(e.name for e in entry_configs if e.data_role == DataRole.TARGET and e.name)
     components = _make_components(
         loss_fn=_kwarg_loss, feature_names=feature_names, target_names=target_names
     )
@@ -145,9 +146,9 @@ def test_loss_input_str_routes_entry_as_named_kwarg() -> None:
     """loss_input='K' on a feature routes the tensor as kwarg K= to the loss function."""
     captured: dict = {}
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="stiffness", model_input=False, loss_input="K"),
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="stiffness", model_input=False, loss_input="K", data_role=DataRole.FEATURE),
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     wrapper = _make_wrapper_with_loss(captured, entry_configs)
     K_val = torch.eye(3).unsqueeze(0).expand(2, 3, 3)
@@ -174,9 +175,9 @@ def test_loss_input_context_feature_excluded_from_model() -> None:
         return torch.nn.functional.mse_loss(preds, target)
 
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="K", model_input=False, loss_input="K"),
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="K", model_input=False, loss_input="K", data_role=DataRole.FEATURE),
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     components = _make_components(loss_fn=_loss, feature_names=("x",), target_names=("y",))
     wrapper = StandardLightningWrapper(
@@ -211,10 +212,12 @@ def test_loss_input_context_feature_excluded_from_model() -> None:
 def test_duplicate_loss_input_across_entries_raises() -> None:
     """Two entries with the same loss_input value raise ValueError at construction."""
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="K1", model_input=False, loss_input="K"),
-        Feature(name="K2", model_input=False, loss_input="K"),  # duplicate
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="K1", model_input=False, loss_input="K", data_role=DataRole.FEATURE),
+        ValueEntry(
+            name="K2", model_input=False, loss_input="K", data_role=DataRole.FEATURE
+        ),  # duplicate
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     components = _make_components(feature_names=("x",), target_names=("y",))
 
@@ -230,9 +233,9 @@ def test_duplicate_loss_input_across_entries_raises() -> None:
 def test_loss_input_and_extra_inputs_overlap_raises() -> None:
     """Same kwarg in both DataEntry.loss_input and extra_inputs raises ValueError."""
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="stiffness", model_input=False, loss_input="K"),
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="stiffness", model_input=False, loss_input="K", data_role=DataRole.FEATURE),
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     wset = WrapperComponentSettings(
         loss_function=LossComponentSettings(
@@ -259,10 +262,12 @@ def test_loss_input_and_extra_inputs_non_overlap_merge() -> None:
         return torch.nn.functional.mse_loss(preds, target)
 
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="K1", model_input=False, loss_input="kwarg1"),
-        Feature(name="K2", model_input=False),  # routed only via explicit extra_inputs
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="K1", model_input=False, loss_input="kwarg1", data_role=DataRole.FEATURE),
+        ValueEntry(
+            name="K2", model_input=False, data_role=DataRole.FEATURE
+        ),  # routed only via explicit extra_inputs
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     wset = WrapperComponentSettings(
         loss_function=LossComponentSettings(
@@ -305,9 +310,9 @@ def test_signature_validation_catches_missing_kwarg() -> None:
         return torch.nn.functional.mse_loss(preds, target)
 
     entry_configs = (
-        Feature(name="x"),
-        Feature(name="K", model_input=False, loss_input="K"),
-        Target(name="y"),
+        ValueEntry(name="x", data_role=DataRole.FEATURE),
+        ValueEntry(name="K", model_input=False, loss_input="K", data_role=DataRole.FEATURE),
+        ValueEntry(name="y", data_role=DataRole.TARGET),
     )
     components = _make_components(loss_fn=_strict_loss, feature_names=("x",), target_names=("y",))
 

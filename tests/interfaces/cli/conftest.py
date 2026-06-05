@@ -63,10 +63,12 @@ root_dir = "{root_dir}"
 
 [[DATASET.features]]
 name = "X"
+format = "npy"
 path = "{feature_path}"
 
 [[DATASET.targets]]
 name = "Y"
+format = "npy"
 path = "{target_path}"
 
 [DATASET.split]

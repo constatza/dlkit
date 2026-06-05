@@ -15,7 +15,8 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 from dlkit.infrastructure.io.arrays import load_array
@@ -86,8 +87,12 @@ class TestComprehensivePrecision:
         session = SessionSettings(precision=PrecisionStrategy.MIXED_16)
 
         # Create features and targets with session precision
-        feature = Feature(name="input", path=sample_datasets["float32"])
-        target = Target(name="output", path=sample_datasets["float32"])
+        feature = NpyEntry.model_construct(
+            name="input", path=sample_datasets["float32"], data_role=DataRole.FEATURE
+        )
+        target = NpyEntry.model_construct(
+            name="output", path=sample_datasets["float32"], data_role=DataRole.TARGET
+        )
         assert feature.path is not None
         assert target.path is not None
 
@@ -236,16 +241,12 @@ class TestComprehensivePrecision:
     def test_error_recovery_and_fallbacks(self, sample_datasets):
         """Test error recovery and fallback mechanisms."""
 
-        # Test DataEntry fallback when precision service fails
-        feature = Feature(name="test", path=sample_datasets["float32"])
-
-        # Mock service failure
-        with patch("dlkit.infrastructure.precision.service.get_precision_service") as mock_service:
-            mock_service.side_effect = RuntimeError("Service unavailable")
-
-            # Should fall back to provided default
-            dtype = feature.resolve_dtype_with_fallback(torch.float64)
-            assert dtype == torch.float64
+        # DataEntry no longer exposes dtype resolution methods;
+        # verify entry has no explicit dtype and load_array handles fallbacks.
+        feature = NpyEntry.model_construct(
+            name="test", path=sample_datasets["float32"], data_role=DataRole.FEATURE
+        )
+        assert feature.dtype is None
 
         # Test load_array with service failure
         with patch("dlkit.infrastructure.io.arrays.get_precision_service") as mock_service:
@@ -340,7 +341,9 @@ class TestComprehensivePrecision:
         features = []
         with precision_override(session.get_precision_strategy()):
             for i, (_name, path) in enumerate(sample_datasets.items()):
-                feature = Feature(name=f"feature_{i}", path=path)
+                feature = NpyEntry.model_construct(
+                    name=f"feature_{i}", path=path, data_role=DataRole.FEATURE
+                )
                 assert feature.path is not None
                 data = load_array(feature.path)
                 features.append(data)

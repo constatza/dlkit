@@ -14,7 +14,8 @@ from dlkit.infrastructure.config import (
     OptimizerPolicySettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 
 
 class _DummyModel(nn.Module):
@@ -55,7 +56,7 @@ def dummy_wrapper_settings() -> WrapperComponentSettings:
 @pytest.fixture
 def dummy_entry_configs():
     """Minimal entry configurations with one model-input feature."""
-    return (Feature("x", value=torch.zeros(4, 1)),)
+    return (ValueEntry(name="x", value=torch.zeros(4, 1), data_role=DataRole.FEATURE),)
 
 
 def test_checkpoint_save_includes_metadata(

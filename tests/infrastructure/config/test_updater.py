@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 from dlkit.infrastructure.config import load_settings, update_settings
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.extras_settings import ExtrasSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
@@ -307,6 +308,7 @@ batch_size = 32
 
 [[DATASET.features]]
 name = "old_feature"
+format = "npy"
 path = "{features_path.as_posix()}"
 
 [MODEL]
@@ -333,8 +335,12 @@ module_path = "torch.nn"
             {
                 "DATASET": {
                     "features": (
-                        Feature(name="new_feature1", path=features_path),
-                        Feature(name="new_feature2", path=features_path),
+                        NpyEntry(
+                            name="new_feature1", path=features_path, data_role=DataRole.FEATURE
+                        ),
+                        NpyEntry(
+                            name="new_feature2", path=features_path, data_role=DataRole.FEATURE
+                        ),
                     )
                 }
             },
@@ -728,7 +734,17 @@ module_path = "torch.nn"
         with pytest.raises(ValidationError):
             update_settings(
                 settings,
-                {"DATASET": {"features": (Feature(name="x", path="/nonexistent/bad/path.npy"),)}},
+                {
+                    "DATASET": {
+                        "features": (
+                            NpyEntry(
+                                name="x",
+                                path="/nonexistent/bad/path.npy",
+                                data_role=DataRole.FEATURE,
+                            ),
+                        )
+                    }
+                },
             )
 
     def test_validation_with_default_catches_errors(self, tmp_path):

@@ -12,8 +12,9 @@ import pandas as pd
 
 from dlkit.engine.tracking.interfaces import IRunContext
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.general_settings import GeneralSettings
 
@@ -97,8 +98,8 @@ def _make_settings(tmp_path: Path) -> GeneralSettings:
 
     dataset = DatasetSettings(
         name="CustomDataset",
-        features=(Feature(name="x", path=feature_path),),
-        targets=(Target(name="y", path=target_path),),
+        features=(NpyEntry(name="x", path=feature_path, data_role=DataRole.FEATURE),),
+        targets=(NpyEntry(name="y", path=target_path, data_role=DataRole.TARGET),),
     )
     return GeneralSettings(DATASET=dataset)
 

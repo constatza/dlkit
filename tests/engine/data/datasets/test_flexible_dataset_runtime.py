@@ -8,7 +8,8 @@ import torch
 from tensordict import TensorDict
 
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
-from dlkit.infrastructure.config.data_entries import Feature, Target
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 
 
 def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
@@ -26,8 +27,11 @@ def test_flexible_dataset_runtime_loads_and_indexes(tmp_path: Path):
     np.save(y_path, Y)
 
     ds = FlexibleDataset(
-        features=[Feature(name="x1", path=x1_path), Feature(name="x2", path=x2_path)],
-        targets=[Target(name="y", path=y_path)],
+        entries=[
+            NpyEntry(name="x1", path=x1_path, data_role=DataRole.FEATURE),
+            NpyEntry(name="x2", path=x2_path, data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),
+        ],
     )
 
     assert len(ds) == 5

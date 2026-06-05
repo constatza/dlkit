@@ -7,7 +7,8 @@ from torch.nn import ModuleList
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config import OptimizerPolicySettings
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
     WrapperComponentSettings,
@@ -52,7 +53,7 @@ def test_wrapper_factory_create_standard_wrapper():
         name="_Std", module_path="tests.engine.adapters.lightning.test_wrapper_factory"
     )
     wset = WrapperComponentSettings()
-    entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
+    entry_configs = (ValueEntry(name="x", value=torch.zeros(4, 1), data_role=DataRole.FEATURE),)
     components = _make_components(feature_names=("x",))
     wrapper = WrapperFactory.create_standard_wrapper(
         model_settings=mdl,
@@ -68,7 +69,7 @@ def test_wrapper_factory_auto_creates_standard():
         name="_Std", module_path="tests.engine.adapters.lightning.test_wrapper_factory"
     )
     wset = WrapperComponentSettings()
-    entry_configs = (Feature("x", value=torch.zeros(4, 1)),)
+    entry_configs = (ValueEntry(name="x", value=torch.zeros(4, 1), data_role=DataRole.FEATURE),)
     components = _make_components(feature_names=("x",))
     w = WrapperFactory.create_wrapper(
         model_settings=mdl,

@@ -1,10 +1,11 @@
 """Tests for DataEntry validation logic.
 
-Tests the new hierarchical DataEntry architecture:
+Tests the new format-specific DataEntry architecture:
 - PathBasedEntry/ValueBasedEntry base classes
-- PathFeature/ValueFeature/PathTarget/ValueTarget concrete classes
-- Feature()/Target() factory functions
-- Placeholder mode support
+- NpyEntry/NpzEntry/ZarrEntry/ValueEntry concrete classes
+- data_role field (DataRole.FEATURE / DataRole.TARGET)
+- Placeholder mode support (path=None)
+- is_feature / is_target helpers
 """
 
 from __future__ import annotations
@@ -17,20 +18,16 @@ import pytest
 import torch
 
 from dlkit.infrastructure.config.data_entries import (
-    Feature,
     PathBasedEntry,
-    PathFeature,
-    PathTarget,
-    Target,
     ValueBasedEntry,
-    ValueFeature,
-    ValueTarget,
-    is_feature_entry,
+    is_feature,
     is_path_based,
-    is_target_entry,
+    is_target,
     is_value_based,
 )
+from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry
 
 # ============================================================================
 # Fixtures
@@ -50,241 +47,145 @@ def sample_torch_tensor() -> torch.Tensor:
 
 
 # ============================================================================
-# Factory Function Tests
+# NpyEntry Construction Tests
 # ============================================================================
 
 
-class TestFeatureFactory:
-    """Tests for Feature() factory function."""
+class TestNpyEntryFeature:
+    """Tests for NpyEntry with feature role."""
 
-    def test_feature_with_path_returns_path_feature(self, tmp_path: Path):
-        """Test Feature with path returns PathFeature instance.
-
-        Note: Uses model_construct to bypass path existence validation,
-        since we're testing type detection logic, not path validation.
-        """
-        test_path = tmp_path / "test.npy"
-        feat = PathFeature.model_construct(name="test", path=test_path)
-
-        assert isinstance(feat, PathFeature)
-        assert isinstance(feat, PathBasedEntry)
-        assert feat.has_path()
-        assert not feat.has_value()
-        assert not feat.is_placeholder()
-
-    def test_feature_with_value_returns_value_feature(self, sample_numpy_array: np.ndarray):
-        """Test Feature with value returns ValueFeature instance."""
-        feat = Feature(name="test", value=sample_numpy_array)
-
-        assert isinstance(feat, ValueFeature)
-        assert isinstance(feat, ValueBasedEntry)
-        assert feat.has_value()
-        assert not feat.has_path()
-        assert not feat.is_placeholder()
-
-    def test_feature_without_path_or_value_returns_placeholder(self):
-        """Test Feature without path or value returns placeholder PathFeature."""
-        feat = Feature(name="test")
-
-        assert isinstance(feat, PathFeature)
-        assert feat.is_placeholder()
-        assert not feat.has_path()
-        assert not feat.has_value()
-
-    def test_feature_with_path_none_explicit_returns_placeholder(self):
-        """Test Feature with explicit path=None returns placeholder."""
-        feat = Feature(name="test", path=None)
-
-        assert isinstance(feat, PathFeature)
-        assert feat.is_placeholder()
-
-    def test_feature_with_both_path_and_value_raises(
-        self, tmp_path: Path, sample_numpy_array: np.ndarray
-    ):
-        """Test Feature with both path and value raises ValueError."""
-        with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
-            Feature(  # ty: ignore[no-matching-overload]
-                name="test", path=tmp_path / "test.npy", value=sample_numpy_array
-            )
-
-    def test_feature_string_path_converted_to_path_object(self, tmp_path: Path):
-        """Test Feature converts string path to Path object."""
-        feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
-
-        assert isinstance(feat.path, (Path, str))  # Can be either depending on construction
-        assert str(feat.path).endswith("test.npy")
-
-
-class TestTargetFactory:
-    """Tests for Target() factory function."""
-
-    def test_target_with_path_returns_path_target(self, tmp_path: Path):
-        """Test Target with path returns PathTarget instance."""
-        targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
-
-        assert isinstance(targ, PathTarget)
-        assert isinstance(targ, PathBasedEntry)
-        assert targ.has_path()
-        assert not targ.has_value()
-        assert not targ.is_placeholder()
-
-    def test_target_with_value_returns_value_target(self, sample_numpy_array: np.ndarray):
-        """Test Target with value returns ValueTarget instance."""
-        targ = Target(name="test", value=sample_numpy_array)
-
-        assert isinstance(targ, ValueTarget)
-        assert isinstance(targ, ValueBasedEntry)
-        assert targ.has_value()
-        assert not targ.has_path()
-        assert not targ.is_placeholder()
-
-    def test_target_without_path_or_value_returns_placeholder(self):
-        """Test Target without path or value returns placeholder PathTarget."""
-        targ = Target(name="test")
-
-        assert isinstance(targ, PathTarget)
-        assert targ.is_placeholder()
-
-    def test_target_with_both_path_and_value_raises(
-        self, tmp_path: Path, sample_numpy_array: np.ndarray
-    ):
-        """Test Target with both path and value raises ValueError."""
-        with pytest.raises(ValueError, match="cannot have both 'path' and 'value'"):
-            Target(  # ty: ignore[no-matching-overload]
-                name="test", path=tmp_path / "test.npy", value=sample_numpy_array
-            )
-
-    def test_target_has_write_attribute(self, tmp_path: Path, sample_numpy_array: np.ndarray):
-        """Test Target preserves write attribute."""
-        targ_path = PathTarget.model_construct(name="test", path=tmp_path / "test.npy", write=True)
-        targ_value = ValueTarget(name="test", value=sample_numpy_array, write=True)
-
-        assert targ_path.write is True
-        assert targ_value.write is True
-
-
-# ============================================================================
-# PathFeature/PathTarget Direct Construction Tests
-# ============================================================================
-
-
-class TestPathFeature:
-    """Tests for PathFeature direct construction."""
-
-    def test_path_feature_with_valid_path(self, tmp_path: Path):
-        """Test PathFeature with valid path."""
-        feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_npy_entry_feature_with_valid_path(self, tmp_path: Path):
+        """Test NpyEntry (feature) with valid path."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 2)))
+        feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
 
         assert feat.has_path()
         assert not feat.has_value()
         assert not feat.is_placeholder()
+        assert feat.data_role == DataRole.FEATURE
 
-    def test_path_feature_placeholder_mode(self):
-        """Test PathFeature in placeholder mode (no path)."""
-        feat = PathFeature(name="test")
+    def test_npy_entry_placeholder_mode(self):
+        """Test NpyEntry in placeholder mode (no path)."""
+        feat = NpyEntry(name="test", data_role=DataRole.FEATURE)
 
         assert feat.is_placeholder()
         assert not feat.has_path()
         assert not feat.has_value()
 
-    def test_path_feature_loss_input_default(self, tmp_path: Path):
-        """Test PathFeature defaults loss_input to None."""
-        feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_npy_entry_loss_input_default(self, tmp_path: Path):
+        """Test NpyEntry defaults loss_input to None."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 2)))
+        feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
 
         assert feat.loss_input is None
 
 
-class TestPathTarget:
-    """Tests for PathTarget direct construction."""
+class TestNpyEntryTarget:
+    """Tests for NpyEntry with target role."""
 
-    def test_path_target_with_valid_path(self, tmp_path: Path):
-        """Test PathTarget with valid path."""
-        targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_npy_entry_target_with_valid_path(self, tmp_path: Path):
+        """Test NpyEntry (target) with valid path."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 1)))
+        targ = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.TARGET)
 
         assert targ.has_path()
         assert not targ.has_value()
         assert not targ.is_placeholder()
+        assert targ.data_role == DataRole.TARGET
 
-    def test_path_target_placeholder_mode(self):
-        """Test PathTarget in placeholder mode (no path)."""
-        targ = PathTarget(name="test")
+    def test_npy_entry_target_placeholder_mode(self):
+        """Test NpyEntry (target) in placeholder mode (no path)."""
+        targ = NpyEntry(name="test", data_role=DataRole.TARGET)
 
         assert targ.is_placeholder()
         assert not targ.has_path()
         assert not targ.has_value()
 
-    def test_path_target_loss_input_default(self, tmp_path: Path):
-        """Test PathTarget defaults loss_input to None."""
-        targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_npy_entry_target_loss_input_default(self, tmp_path: Path):
+        """Test NpyEntry (target) defaults loss_input to None."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 1)))
+        targ = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.TARGET)
 
         assert targ.loss_input is None
 
-    def test_path_target_write_attribute(self, tmp_path: Path):
-        """Test PathTarget has write attribute."""
-        targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy", write=True)
+    def test_npy_entry_target_write_attribute(self, tmp_path: Path):
+        """Test NpyEntry (target) has write attribute."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 1)))
+        targ = NpyEntry.model_construct(
+            name="test", path=path, data_role=DataRole.TARGET, write=True
+        )
 
         assert targ.write is True
 
 
 # ============================================================================
-# ValueFeature/ValueTarget Direct Construction Tests
+# ValueEntry Construction Tests
 # ============================================================================
 
 
-class TestValueFeature:
-    """Tests for ValueFeature direct construction."""
+class TestValueEntryFeature:
+    """Tests for ValueEntry with feature role."""
 
-    def test_value_feature_with_numpy_array(self, sample_numpy_array: np.ndarray):
-        """Test ValueFeature with numpy array."""
-        feat = ValueFeature(name="test", value=sample_numpy_array)
+    def test_value_entry_feature_with_numpy_array(self, sample_numpy_array: np.ndarray):
+        """Test ValueEntry (feature) with numpy array."""
+        feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
 
         assert feat.has_value()
         assert not feat.has_path()
         assert not feat.is_placeholder()
         assert isinstance(feat.value, np.ndarray)
+        assert feat.data_role == DataRole.FEATURE
 
-    def test_value_feature_with_torch_tensor(self, sample_torch_tensor: torch.Tensor):
-        """Test ValueFeature with torch tensor."""
-        feat = ValueFeature(name="test", value=sample_torch_tensor)
+    def test_value_entry_feature_with_torch_tensor(self, sample_torch_tensor: torch.Tensor):
+        """Test ValueEntry (feature) with torch tensor."""
+        feat = ValueEntry(name="test", value=sample_torch_tensor, data_role=DataRole.FEATURE)
 
         assert feat.has_value()
         assert isinstance(feat.value, torch.Tensor)
 
-    def test_value_feature_loss_input_default(self, sample_numpy_array: np.ndarray):
-        """Test ValueFeature defaults loss_input to None."""
-        feat = ValueFeature(name="test", value=sample_numpy_array)
+    def test_value_entry_feature_loss_input_default(self, sample_numpy_array: np.ndarray):
+        """Test ValueEntry (feature) defaults loss_input to None."""
+        feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
 
         assert feat.loss_input is None
 
 
-class TestValueTarget:
-    """Tests for ValueTarget direct construction."""
+class TestValueEntryTarget:
+    """Tests for ValueEntry with target role."""
 
-    def test_value_target_with_numpy_array(self, sample_numpy_array: np.ndarray):
-        """Test ValueTarget with numpy array."""
-        targ = ValueTarget(name="test", value=sample_numpy_array)
+    def test_value_entry_target_with_numpy_array(self, sample_numpy_array: np.ndarray):
+        """Test ValueEntry (target) with numpy array."""
+        targ = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.TARGET)
 
         assert targ.has_value()
         assert not targ.has_path()
         assert not targ.is_placeholder()
         assert isinstance(targ.value, np.ndarray)
+        assert targ.data_role == DataRole.TARGET
 
-    def test_value_target_with_torch_tensor(self, sample_torch_tensor: torch.Tensor):
-        """Test ValueTarget with torch tensor."""
-        targ = ValueTarget(name="test", value=sample_torch_tensor)
+    def test_value_entry_target_with_torch_tensor(self, sample_torch_tensor: torch.Tensor):
+        """Test ValueEntry (target) with torch tensor."""
+        targ = ValueEntry(name="test", value=sample_torch_tensor, data_role=DataRole.TARGET)
 
         assert targ.has_value()
         assert isinstance(targ.value, torch.Tensor)
 
-    def test_value_target_loss_input_default(self, sample_numpy_array: np.ndarray):
-        """Test ValueTarget defaults loss_input to None."""
-        targ = ValueTarget(name="test", value=sample_numpy_array)
+    def test_value_entry_target_loss_input_default(self, sample_numpy_array: np.ndarray):
+        """Test ValueEntry (target) defaults loss_input to None."""
+        targ = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.TARGET)
 
         assert targ.loss_input is None
 
-    def test_value_target_write_attribute(self, sample_numpy_array: np.ndarray):
-        """Test ValueTarget has write attribute."""
-        targ = ValueTarget(name="test", value=sample_numpy_array, write=True)
+    def test_value_entry_target_write_attribute(self, sample_numpy_array: np.ndarray):
+        """Test ValueEntry (target) has write attribute."""
+        targ = ValueEntry(
+            name="test", value=sample_numpy_array, data_role=DataRole.TARGET, write=True
+        )
 
         assert targ.write is True
 
@@ -295,33 +196,51 @@ class TestValueTarget:
 
 
 class TestTypeGuards:
-    """Tests for type guard functions."""
+    """Tests for type guard functions with new API."""
 
-    def test_is_feature_entry(self, tmp_path: Path, sample_numpy_array: np.ndarray):
-        """Test is_feature_entry identifies feature types."""
-        path_feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
-        value_feat = ValueFeature(name="test", value=sample_numpy_array)
-        path_targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_is_feature_npy(self, tmp_path: Path):
+        """Test is_feature identifies NpyEntry with FEATURE role."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 2)))
+        feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
+        targ = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.TARGET)
 
-        assert is_feature_entry(path_feat) is True
-        assert is_feature_entry(value_feat) is True
-        assert is_feature_entry(path_targ) is False
+        assert is_feature(feat) is True
+        assert is_feature(targ) is False
 
-    def test_is_target_entry(self, tmp_path: Path, sample_numpy_array: np.ndarray):
-        """Test is_target_entry identifies target types."""
-        path_targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
-        value_targ = ValueTarget(name="test", value=sample_numpy_array)
-        path_feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
+    def test_is_feature_value(self, sample_numpy_array: np.ndarray):
+        """Test is_feature identifies ValueEntry with FEATURE role."""
+        feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.TARGET)
 
-        assert is_target_entry(path_targ) is True
-        assert is_target_entry(value_targ) is True
-        assert is_target_entry(path_feat) is False
+        assert is_feature(feat) is True
+        assert is_feature(targ) is False
+
+    def test_is_target_npy(self, tmp_path: Path):
+        """Test is_target identifies NpyEntry with TARGET role."""
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 1)))
+        targ = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.TARGET)
+        feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
+
+        assert is_target(targ) is True
+        assert is_target(feat) is False
+
+    def test_is_target_value(self, sample_numpy_array: np.ndarray):
+        """Test is_target identifies ValueEntry with TARGET role."""
+        targ = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.TARGET)
+        feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
+
+        assert is_target(targ) is True
+        assert is_target(feat) is False
 
     def test_is_path_based(self, tmp_path: Path, sample_numpy_array: np.ndarray):
         """Test is_path_based identifies path-based types."""
-        path_feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
-        path_targ = PathTarget.model_construct(name="test", path=tmp_path / "test.npy")
-        value_feat = ValueFeature(name="test", value=sample_numpy_array)
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 2)))
+        path_feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
+        path_targ = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.TARGET)
+        value_feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
 
         assert is_path_based(path_feat) is True
         assert is_path_based(path_targ) is True
@@ -329,9 +248,11 @@ class TestTypeGuards:
 
     def test_is_value_based(self, tmp_path: Path, sample_numpy_array: np.ndarray):
         """Test is_value_based identifies value-based types."""
-        value_feat = ValueFeature(name="test", value=sample_numpy_array)
-        value_targ = ValueTarget(name="test", value=sample_numpy_array)
-        path_feat = PathFeature.model_construct(name="test", path=tmp_path / "test.npy")
+        value_feat = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        value_targ = ValueEntry(name="test", value=sample_numpy_array, data_role=DataRole.TARGET)
+        path = tmp_path / "test.npy"
+        np.save(path, np.ones((5, 2)))
+        path_feat = NpyEntry.model_construct(name="test", path=path, data_role=DataRole.FEATURE)
 
         assert is_value_based(value_feat) is True
         assert is_value_based(value_targ) is True
@@ -344,186 +265,71 @@ class TestTypeGuards:
 
 
 class TestStrictValidation:
-    """Tests for strict validation mode."""
+    """Tests for strict validation mode on NpyEntry."""
 
-    def test_path_feature_strict_mode_valid_path(self, tmp_path: Path):
-        """Test PathFeature passes strict validation with existing path."""
+    def test_npy_entry_strict_mode_valid_path(self, tmp_path: Path):
+        """Test NpyEntry passes strict validation with existing path."""
         test_file = tmp_path / "test.npy"
         np.save(test_file, np.ones((10, 5)))
 
-        feat = PathFeature.model_validate(
-            {"name": "test", "path": str(test_file)}, context={"strict": True}
+        feat = NpyEntry.model_validate(
+            {"name": "test", "path": str(test_file), "data_role": "feature"},
+            context={"strict": True},
         )
 
         assert feat.has_path()
 
-    def test_path_feature_strict_mode_invalid_path(self):
-        """Test PathFeature fails strict validation with non-existing path."""
-        with pytest.raises(ValueError, match="Path does not exist"):
-            PathFeature.model_validate(
-                {"name": "test", "path": "/nonexistent/path.npy"}, context={"strict": True}
+    def test_npy_entry_strict_mode_invalid_path(self):
+        """Test NpyEntry fails strict validation with non-existing path."""
+        with pytest.raises(ValueError, match="does not exist"):
+            NpyEntry.model_validate(
+                {"name": "test", "path": "/nonexistent/path.npy", "data_role": "feature"},
+                context={"strict": True},
             )
 
-    def test_path_feature_non_strict_mode_invalid_path(self):
-        """Test PathFeature constructed with non-strict mode allows non-existing path."""
+    def test_npy_entry_non_strict_mode_invalid_path(self):
+        """Test NpyEntry constructed with non-strict mode allows non-existing path."""
         # Use model_construct to create without validation
-        feat = PathFeature.model_construct(name="test", path="/nonexistent/path.npy")
+        feat = NpyEntry.model_construct(
+            name="test", path="/nonexistent/path.npy", data_role=DataRole.FEATURE
+        )
 
         assert feat.has_path()
 
-    def test_placeholder_strict_mode_ok(self):
+    def test_npy_entry_placeholder_strict_mode_ok(self):
         """Test placeholder passes strict validation (no path to check)."""
-        feat = PathFeature.model_validate({"name": "test"}, context={"strict": True})
+        feat = NpyEntry.model_validate(
+            {"name": "test", "data_role": "feature"}, context={"strict": True}
+        )
 
         assert feat.is_placeholder()
 
 
 # ============================================================================
-# Error Message Tests
-# ============================================================================
-
-
-class TestErrorMessages:
-    """Tests for error message quality."""
-
-    def test_factory_error_includes_entry_name(
-        self, tmp_path: Path, sample_numpy_array: np.ndarray
-    ):
-        """Test factory error messages include entry name."""
-        with pytest.raises(ValueError, match="Feature 'my_feature'"):
-            Feature(  # ty: ignore[no-matching-overload]
-                name="my_feature", path=tmp_path / "test.npy", value=sample_numpy_array
-            )
-
-        with pytest.raises(ValueError, match="Target 'my_target'"):
-            Target(  # ty: ignore[no-matching-overload]
-                name="my_target", path=tmp_path / "test.npy", value=sample_numpy_array
-            )
-
-
-# ============================================================================
-# Name Validation Tests (Production Bug Fix)
-# ============================================================================
-
-
-class TestNameValidation:
-    """Tests for name validation when data source is present.
-
-    These tests verify the fix for the production bug where TOML configs
-    with missing 'name' fields passed validation but failed at runtime.
-    """
-
-    def test_path_feature_missing_name_fails(self, tmp_path: Path):
-        """PathFeature with path but no name should fail validation."""
-        with pytest.raises(ValueError, match="requires 'name'"):
-            PathFeature.model_validate({"path": str(tmp_path / "test.npy")})
-
-    def test_path_feature_missing_name_error_message_includes_details(self, tmp_path: Path):
-        """Error message should include helpful details about the problem."""
-        with pytest.raises(ValueError) as exc_info:
-            PathFeature.model_validate({"path": str(tmp_path / "test.npy")})
-
-        error_msg = str(exc_info.value)
-        assert "PathFeature" in error_msg
-        assert "requires 'name'" in error_msg
-        assert "test.npy" in error_msg
-        assert "DATASET.features" in error_msg
-        assert "Fix:" in error_msg
-
-    def test_path_target_missing_name_fails(self, tmp_path: Path):
-        """PathTarget with path but no name should fail validation."""
-        with pytest.raises(ValueError, match="requires 'name'"):
-            PathTarget.model_validate({"path": str(tmp_path / "test.npy")})
-
-    def test_value_feature_missing_name_fails(self, sample_numpy_array: np.ndarray):
-        """ValueFeature with value but no name should fail validation."""
-        with pytest.raises(ValueError, match="requires 'name'"):
-            ValueFeature.model_validate({"value": sample_numpy_array})
-
-    def test_value_target_missing_name_fails(self, sample_numpy_array: np.ndarray):
-        """ValueTarget with value but no name should fail validation."""
-        with pytest.raises(ValueError, match="requires 'name'"):
-            ValueTarget.model_validate({"value": sample_numpy_array})
-
-    def test_placeholder_without_name_succeeds(self):
-        """Placeholder (no path, no value, no name) should succeed."""
-        # PathFeature placeholder
-        feat = PathFeature.model_validate({})
-        assert feat.is_placeholder()
-        assert feat.name is None
-
-        # PathTarget placeholder
-        targ = PathTarget.model_validate({})
-        assert targ.is_placeholder()
-        assert targ.name is None
-
-    def test_placeholder_with_name_no_data_succeeds(self):
-        """Placeholder with name but no data should succeed (for later injection)."""
-        feat = PathFeature.model_validate({"name": "x"})
-        assert feat.is_placeholder()
-        assert feat.name == "x"
-        assert feat.path is None
-
-    def test_valid_path_feature_with_name_succeeds(self, tmp_path: Path):
-        """PathFeature with both name and path should succeed (with model_construct)."""
-        feat = PathFeature.model_construct(name="x", path=tmp_path / "test.npy")
-        assert feat.name == "x"
-        assert str(feat.path).endswith("test.npy")
-        assert not feat.is_placeholder()
-
-    def test_valid_value_feature_with_name_succeeds(self, sample_numpy_array: np.ndarray):
-        """ValueFeature with both name and value should succeed."""
-        feat = ValueFeature.model_validate({"name": "x", "value": sample_numpy_array})
-        assert feat.name == "x"
-        assert feat.has_value()
-        assert not feat.is_placeholder()
-
-    def test_factory_function_respects_validation(self, tmp_path: Path):
-        """Factory functions should also trigger validation."""
-        # This should fail (path without name)
-        with pytest.raises(ValueError, match="requires 'name'"):
-            PathFeature(path=tmp_path / "test.npy")
-
-        # This should succeed (placeholder without name)
-        feat = PathFeature()
-        assert feat.is_placeholder()
-
-    def test_model_construct_bypasses_validation(self, tmp_path: Path):
-        """model_construct should bypass validation (for internal use)."""
-        # This would normally fail validation, but model_construct skips it
-        feat = PathFeature.model_construct(path=tmp_path / "test.npy", name=None)
-        assert str(feat.path).endswith("test.npy")
-        assert feat.name is None
-        # Note: This is intentional for internal/testing use
-
-
-# ============================================================================
-# DatasetSettings Integration Tests (Regression for nested_model issue)
+# DatasetSettings Integration Tests
 # ============================================================================
 
 
 class TestDatasetSettingsValuePreservation:
-    """Regression tests for ValueFeature/ValueTarget preservation in DatasetSettings.
+    """Regression tests for ValueEntry preservation in DatasetSettings.
 
     These tests guard against the bug where nested_model_default_partial_update=True
-    caused ValueFeature/ValueTarget objects to be converted to PathFeature/PathTarget
-    during DatasetSettings validation (losing the in-memory value field).
+    caused ValueEntry objects to be converted to NpyEntry objects during
+    DatasetSettings validation (losing the in-memory value field).
     """
 
-    def test_value_feature_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
-        """ValueFeature should remain ValueFeature when stored in DatasetSettings.features."""
-
-        feat = Feature(name="x", value=sample_numpy_array)
-        assert isinstance(feat, ValueFeature)
+    def test_value_entry_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
+        """ValueEntry should remain ValueEntry when stored in DatasetSettings.features."""
+        feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        assert isinstance(feat, ValueEntry)
         assert feat.has_value()
         feat_id = id(feat)
 
-        # Create DatasetSettings with ValueFeature
+        # Create DatasetSettings with ValueEntry
         ds_settings = DatasetSettings(features=(feat,))
 
         # Verify type preservation
-        assert isinstance(ds_settings.features[0], ValueFeature)
-        assert not isinstance(ds_settings.features[0], PathFeature)
+        assert isinstance(ds_settings.features[0], ValueEntry)
 
         # Verify value preservation
         assert ds_settings.features[0].has_value()
@@ -534,20 +340,18 @@ class TestDatasetSettingsValuePreservation:
         assert id(ds_settings.features[0]) == feat_id
         assert ds_settings.features[0] is feat
 
-    def test_value_target_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
-        """ValueTarget should remain ValueTarget when stored in DatasetSettings.targets."""
-
-        targ = Target(name="y", value=sample_numpy_array)
-        assert isinstance(targ, ValueTarget)
+    def test_value_entry_target_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
+        """ValueEntry (target) should remain ValueEntry when stored in DatasetSettings.targets."""
+        targ = ValueEntry(name="y", value=sample_numpy_array, data_role=DataRole.TARGET)
+        assert isinstance(targ, ValueEntry)
         assert targ.has_value()
         targ_id = id(targ)
 
-        # Create DatasetSettings with ValueTarget
+        # Create DatasetSettings with ValueEntry target
         ds_settings = DatasetSettings(features=(), targets=(targ,))
 
         # Verify type preservation
-        assert isinstance(ds_settings.targets[0], ValueTarget)
-        assert not isinstance(ds_settings.targets[0], PathTarget)
+        assert isinstance(ds_settings.targets[0], ValueEntry)
 
         # Verify value preservation
         assert ds_settings.targets[0].has_value()
@@ -561,26 +365,29 @@ class TestDatasetSettingsValuePreservation:
     def test_mixed_value_and_path_entries_in_dataset_settings(
         self, tmp_path: Path, sample_numpy_array: np.ndarray
     ):
-        """DatasetSettings should handle mixed ValueFeature and PathFeature correctly."""
-
+        """DatasetSettings should handle mixed ValueEntry and NpyEntry correctly."""
         # Create path-based feature
         x_path = tmp_path / "x.npy"
         np.save(x_path, sample_numpy_array)
-        path_feat = Feature(name="x_path", path=x_path)
+        path_feat = NpyEntry(name="x_path", path=x_path, data_role=DataRole.FEATURE)
 
         # Create value-based feature
-        value_feat = Feature(name="x_value", value=sample_numpy_array)
+        value_feat = ValueEntry(
+            name="x_value", value=sample_numpy_array, data_role=DataRole.FEATURE
+        )
 
         # Create DatasetSettings with mixed entries
         ds_settings = DatasetSettings(features=(path_feat, value_feat))
 
-        # Verify path feature is PathFeature
-        assert isinstance(ds_settings.features[0], PathFeature)
+        # Verify path feature is NpyEntry (PathBasedEntry)
+        assert isinstance(ds_settings.features[0], NpyEntry)
+        assert isinstance(ds_settings.features[0], PathBasedEntry)
         assert ds_settings.features[0].has_path()
         assert not ds_settings.features[0].has_value()
 
-        # Verify value feature is ValueFeature
-        assert isinstance(ds_settings.features[1], ValueFeature)
+        # Verify value feature is ValueEntry (ValueBasedEntry)
+        assert isinstance(ds_settings.features[1], ValueEntry)
+        assert isinstance(ds_settings.features[1], ValueBasedEntry)
         assert ds_settings.features[1].has_value()
         assert not ds_settings.features[1].has_path()
 
@@ -589,19 +396,18 @@ class TestDatasetSettingsValuePreservation:
         assert ds_settings.features[1] is value_feat
 
     def test_value_entries_work_with_flexible_dataset(self, sample_numpy_array: np.ndarray):
-        """ValueFeature/ValueTarget should work with FlexibleDataset when passed through DatasetSettings."""
+        """ValueEntry should work with FlexibleDataset when passed through DatasetSettings."""
         from dlkit.engine.data.datasets.flexible import FlexibleDataset
 
         # Create value-based entries
-        feat = Feature(name="x", value=sample_numpy_array)
-        targ = Target(name="y", value=sample_numpy_array[:, :1])  # First column as target
+        feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        targ = ValueEntry(name="y", value=sample_numpy_array[:, :1], data_role=DataRole.TARGET)
 
         # Create DatasetSettings
         ds_settings = DatasetSettings(features=(feat,), targets=(targ,))
 
         # Create FlexibleDataset using features/targets from DatasetSettings
-        # This is the actual usage pattern in BuildFactory
-        dataset = FlexibleDataset(features=ds_settings.features, targets=ds_settings.targets)
+        dataset = FlexibleDataset(entries=list(ds_settings.features) + list(ds_settings.targets))
 
         # Verify dataset works
         assert len(dataset) == 10

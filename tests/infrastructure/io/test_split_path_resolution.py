@@ -49,10 +49,12 @@ name = "SupervisedArrayDataset"
 
     [[DATASET.features]]
     name = "x"
+    format = "npy"
     path = "{data_file.as_posix()}"
 
     [[DATASET.targets]]
     name = "y"
+    format = "npy"
     path = "{data_file.as_posix()}"
 
     [DATASET.split]

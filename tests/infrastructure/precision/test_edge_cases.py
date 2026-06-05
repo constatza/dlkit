@@ -8,7 +8,8 @@ import pytest
 import torch
 
 from dlkit.domain.nn.ffnn.residual import FFNN
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.io.arrays import load_array
 from dlkit.infrastructure.precision import (
@@ -192,9 +193,14 @@ class TestPrecisionEdgeCases:
                 assert data.dtype == torch.float16
                 assert data.numel() == 0
 
-            # Test feature with None dtype
-            feature = Feature(name="test", path=empty_file, dtype=None)
-            resolved_dtype = feature.get_effective_dtype()
+            # Test feature with None dtype — resolution is done via PrecisionService
+            feature = NpyEntry.model_construct(
+                name="test", path=empty_file, data_role=DataRole.FEATURE, dtype=None
+            )
+            assert feature.dtype is None
+            from dlkit.infrastructure.precision.service import get_precision_service
+
+            resolved_dtype = get_precision_service().get_torch_dtype()
             assert isinstance(resolved_dtype, torch.dtype)
 
         finally:

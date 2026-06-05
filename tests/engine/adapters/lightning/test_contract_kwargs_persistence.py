@@ -22,7 +22,8 @@ from dlkit.infrastructure.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.data_entries import Feature
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_types import ValueEntry
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -61,7 +62,7 @@ def entry_configs():
     """Minimal entry configurations with one feature."""
     import torch
 
-    return (Feature("x", value=torch.zeros(4, 1)),)
+    return (ValueEntry(name="x", value=torch.zeros(4, 1), data_role=DataRole.FEATURE),)
 
 
 @pytest.fixture

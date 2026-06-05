@@ -454,11 +454,12 @@ class TestExcludedFieldRoundTrip:
         np.testing.assert_array_equal(result.secret, original_arr)
 
     def test_value_feature_excluded_field_survives(self) -> None:
-        """End-to-end test using actual ValueFeature from dlkit."""
-        from dlkit.infrastructure.config.data_entries import ValueFeature
+        """End-to-end test using actual ValueEntry from dlkit."""
+        from dlkit.infrastructure.config.data_roles import DataRole
+        from dlkit.infrastructure.config.entry_types import ValueEntry
 
         arr = np.ones((10, 5), dtype=np.float32)
-        feature = ValueFeature(name="x", value=arr)
+        feature = ValueEntry(name="x", value=arr, data_role=DataRole.FEATURE)
 
         # Patch an unrelated attribute (name).
         # The value field (exclude=True) must survive.

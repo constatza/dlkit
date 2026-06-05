@@ -7,8 +7,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-
-from dlkit.infrastructure.io.packs import save_array_pack
+import zarr
 
 
 @pytest.fixture
@@ -163,35 +162,41 @@ def npy_target_3x1(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def zarr_matrix_pack(tmp_path: Path) -> dict[str, Any]:
-    """3-sample 4x4 float32 zarr dense matrix pack.
+    """3-sample 4x4 float32 native zarr array store.
 
     Args:
         tmp_path: pytest temporary directory fixture.
 
     Returns:
-        Dict with ``path`` (pack dir) and ``matrices`` (list of dense float32 arrays).
+        Dict with ``path`` (zarr store dir) and ``matrices`` (list of dense float32 arrays).
     """
     rng = np.random.default_rng(42)
     matrices = [rng.random((4, 4)).astype(np.float32) for _ in range(3)]
     data = np.stack(matrices, axis=0)
     pack_path = tmp_path / "zarr_matrix_pack"
-    save_array_pack(pack_path, data)
+    arr = zarr.open_array(
+        str(pack_path), mode="w", shape=data.shape, chunks=(1, 4, 4), dtype=data.dtype
+    )
+    arr[:] = data
     return {"path": pack_path, "matrices": matrices}
 
 
 @pytest.fixture
 def zarr_broadcast_pack(tmp_path: Path) -> dict[str, Any]:
-    """1-sample (broadcast) 4x4 float32 zarr dense matrix pack.
+    """1-sample (broadcast) 4x4 float32 native zarr array store.
 
     Args:
         tmp_path: pytest temporary directory fixture.
 
     Returns:
-        Dict with ``path`` (pack dir) and ``matrix`` (the single shared float32 array).
+        Dict with ``path`` (zarr store dir) and ``matrix`` (the single shared float32 array).
     """
     rng = np.random.default_rng(7)
     matrix = rng.random((4, 4)).astype(np.float32)
     data = matrix[np.newaxis]
     pack_path = tmp_path / "zarr_broadcast_pack"
-    save_array_pack(pack_path, data)
+    arr = zarr.open_array(
+        str(pack_path), mode="w", shape=data.shape, chunks=(1, 4, 4), dtype=data.dtype
+    )
+    arr[:] = data
     return {"path": pack_path, "matrix": matrix}

@@ -22,7 +22,9 @@ from dlkit.engine.adapters.lightning.model_invoker import (
     TensorDictModelInvoker,
     _build_invoker_from_entries,
 )
-from dlkit.infrastructure.config.data_entries import Feature, FeatureType
+from dlkit.infrastructure.config.data_roles import DataRole
+from dlkit.infrastructure.config.entry_base import DataEntry
+from dlkit.infrastructure.config.entry_types import ValueEntry
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -257,14 +259,14 @@ class TestTensorDictModelInvokerMultiOutput:
 
 class TestBuildInvokerFromEntries:
     @pytest.fixture
-    def feat_x(self) -> FeatureType:
+    def feat_x(self) -> DataEntry:
         """Feature 'x' with default model_input=True."""
-        return Feature("x", value=torch.zeros(4, 3))
+        return ValueEntry("x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE)
 
     @pytest.fixture
-    def feat_z(self) -> FeatureType:
+    def feat_z(self) -> DataEntry:
         """Feature 'z' with default model_input=True."""
-        return Feature("z", value=torch.zeros(4, 5))
+        return ValueEntry("z", value=torch.zeros(4, 5), data_role=DataRole.FEATURE)
 
     def test_model_input_true_includes_feature(
         self,
@@ -274,8 +276,12 @@ class TestBuildInvokerFromEntries:
         z_tensor: Tensor,
     ) -> None:
         """model_input=True (default): features included as positional args in config order."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=True)
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
+        )
+        feat_z = ValueEntry(
+            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
+        )
         received: list[tuple[Tensor, Tensor]] = []
 
         class _PosModel(nn.Module):
@@ -297,8 +303,12 @@ class TestBuildInvokerFromEntries:
         z_tensor: Tensor,
     ) -> None:
         """Features are dispatched in config-list order when both model_input=True."""
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=True)
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
+        feat_z = ValueEntry(
+            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
+        )
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
+        )
         received: list[tuple[Tensor, Tensor]] = []
 
         class _Rec(nn.Module):
@@ -319,8 +329,12 @@ class TestBuildInvokerFromEntries:
         x_tensor: Tensor,
     ) -> None:
         """model_input=False excludes feature from model call."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
-        feat_z = Feature("z", value=torch.zeros(bs, 5), model_input=False)
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
+        )
+        feat_z = ValueEntry(
+            name="z", value=torch.zeros(bs, 5), model_input=False, data_role=DataRole.FEATURE
+        )
 
         received: list[Tensor] = []
 
@@ -336,13 +350,17 @@ class TestBuildInvokerFromEntries:
 
     def test_no_model_input_raises_value_error(self) -> None:
         """All model_input=False raises ValueError (no inputs to pass)."""
-        feat_x = Feature("x", value=torch.zeros(4, 3), model_input=False)
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(4, 3), model_input=False, data_role=DataRole.FEATURE
+        )
         with pytest.raises(ValueError, match="No model-input features"):
             _build_invoker_from_entries([feat_x])
 
     def test_output_spec_threaded_through(self, bs: int, simple_batch: TensorDict) -> None:
         """output_spec is used to set out_keys on the invoker."""
-        feat_x = Feature("x", value=torch.zeros(bs, 3), model_input=True)
+        feat_x = ValueEntry(
+            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
+        )
         spec = ModelOutputSpec(latent_keys=(("latents", "z"),))
 
         class _Rec(nn.Module):
