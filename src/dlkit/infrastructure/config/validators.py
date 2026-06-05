@@ -19,6 +19,7 @@ Architecture Principles:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,8 +30,25 @@ if TYPE_CHECKING:
         TrainingWorkflowConfig,
     )
 
-from .data_entries import PathBasedEntry, PathFeature, PathTarget, ValueBasedEntry
+from .data_entries import PathBasedEntry, ValueBasedEntry
+from .entry_base import DataEntry
 from .enums import DatasetFamily
+
+
+def _validate_entry_paths(entries: Iterable[DataEntry], role_label: str) -> None:
+    """Raise ValueError if any path-based entry has a path that does not exist.
+
+    Args:
+        entries: Entries to validate.
+        role_label: Human-readable label for error messages (e.g. "Feature", "Target").
+
+    Raises:
+        ValueError: If a path-based entry's path does not exist on disk.
+    """
+    for entry in entries:
+        if isinstance(entry, PathBasedEntry) and entry.path is not None and not entry.path.exists():
+            raise ValueError(f"{role_label} path does not exist: {entry.path}")
+
 
 _NON_FLEXIBLE_DATASET_NAMES: frozenset[str] = frozenset({"GraphDataset", "TimeSeriesDataset"})
 
@@ -68,12 +86,8 @@ def _assert_path_exists(path: Path, label: str) -> None:
 
 
 def _validate_path_entry(entry: object, index: int, role: str) -> None:
-    """Validate a single PathFeature/PathTarget entry has a valid existing path."""
-    if isinstance(entry, PathFeature) and entry.path is not None:
-        path = _coerce_path(entry.path)
-        if path is not None:
-            _assert_path_exists(path, f"{role} #{index + 1}")
-    elif isinstance(entry, PathTarget) and entry.path is not None:
+    """Validate a single PathBasedEntry has a valid existing path."""
+    if isinstance(entry, PathBasedEntry) and entry.path is not None:
         path = _coerce_path(entry.path)
         if path is not None:
             _assert_path_exists(path, f"{role} #{index + 1}")

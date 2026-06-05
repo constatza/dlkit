@@ -2,16 +2,15 @@
 
 Thin re-exports from ``dlkit.infrastructure.io`` so users can write::
 
-    from dlkit.io import open_array_pack, save_array_pack, locations
+    from dlkit.io import load_array, locations
 
 instead of::
 
-    from dlkit.infrastructure.io import open_array_pack, save_array_pack
+    from dlkit.infrastructure.io import load_array
     from dlkit.infrastructure.io import locations
 """
 
 from dlkit.infrastructure.io import (
-    ArrayPackFormat,
     ConfigSectionError,
     ConfigValidationError,
     IWriter,
@@ -19,6 +18,7 @@ from dlkit.infrastructure.io import (
     TomlWriter,
     WriterFactory,
     YamlWriter,
+    ZarrLazyReader,
     check_section_exists,
     get_available_sections,
     load_array,
@@ -28,24 +28,16 @@ from dlkit.infrastructure.io import (
     load_sections_config,
     load_split_indices,
     locations,
-    open_array_pack,
     read_table,
-    register_format,
     register_section_mapping,
     reset_section_mappings,
-    save_array_pack,
     serialize_config_to_string,
-    write_array_pack,
     write_config,
 )
 
 __all__ = [
-    # Array pack I/O (packs API)
-    "open_array_pack",
-    "write_array_pack",
-    "save_array_pack",
-    "ArrayPackFormat",
-    "register_format",
+    # Zarr I/O
+    "ZarrLazyReader",
     # Path locations
     "locations",
     # Array / table loading

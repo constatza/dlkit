@@ -14,7 +14,7 @@ from dlkit.engine.adapters.lightning.transform_builder import build_transform_li
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.infrastructure.config.data_entries import DataEntry, is_feature, is_target
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     WrapperComponentSettings,
@@ -93,8 +93,8 @@ def build_wrapper_components(
     Returns:
         WrapperComponents value object with all pre-built components.
     """
-    feature_entries = [e for e in entry_configs if is_feature_entry(e)]
-    target_entries = [e for e in entry_configs if is_target_entry(e)]
+    feature_entries = [e for e in entry_configs if is_feature(e)]
+    target_entries = [e for e in entry_configs if is_target(e)]
     all_target_keys = tuple(e.name for e in target_entries if e.name is not None)
     default_target_key = all_target_keys[0] if all_target_keys else ""
 

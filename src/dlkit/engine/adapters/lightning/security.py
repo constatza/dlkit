@@ -55,11 +55,7 @@ def register_dlkit_safe_globals() -> None:
         from dlkit.infrastructure.config.data_entries import (
             AutoencoderTarget,
             Latent,
-            PathFeature,
-            PathTarget,
             Prediction,
-            ValueFeature,
-            ValueTarget,
         )
         from dlkit.infrastructure.config.model_components import (
             LossComponentSettings,
@@ -86,10 +82,6 @@ def register_dlkit_safe_globals() -> None:
             OptimizerSettings,
             SchedulerSettings,
             # Data entry classes
-            PathFeature,
-            PathTarget,
-            ValueFeature,
-            ValueTarget,
             Latent,
             AutoencoderTarget,
             Prediction,

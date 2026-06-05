@@ -11,11 +11,7 @@ from lightning.pytorch import LightningDataModule
 from dlkit.engine.workflows.selectors.family_selector import DatasetFamilySelector
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import (
-    DataEntry,
-    FeatureType,
-    TargetType,
-)
+from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.io.split_provider import get_or_create_split
 from dlkit.infrastructure.io.tensor_entries import convert_totensor_entries
@@ -57,14 +53,12 @@ class DatasetBuilder:
             from dlkit.engine.data.datasets.flexible import FlexibleDataset
 
             return FlexibleDataset(
-                features=cast(tuple[FeatureType, ...], selected_features),
-                targets=cast(tuple[TargetType, ...], selected_targets),
+                entries=(*selected_features, *selected_targets),  # ty: ignore[invalid-argument-type]
                 memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
             )
 
         ds_overrides = {
-            "features": selected_features,
-            "targets": selected_targets,
+            "entries": (*selected_features, *selected_targets),
         }
         return FactoryProvider.create_component(ds_settings, context.with_overrides(**ds_overrides))
 

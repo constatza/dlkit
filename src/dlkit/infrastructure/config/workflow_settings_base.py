@@ -5,12 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
-from pydantic import Field, ValidationInfo, model_validator
+from pydantic import Field, model_validator
 
 from .core.base_settings import BasicSettings
 from .core.patching import patch_model
 from .core.sources import DLKitTomlSource, _read_env_patches
-from .data_entries import PathFeature, PathTarget
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
 from .environment import sync_session_root_to_environment
@@ -46,23 +45,13 @@ class BaseWorkflowSettings(BasicSettings):
     _workflow_type: ClassVar[str] = "base"
 
     @model_validator(mode="after")
-    def validate_nested_paths(self, info: ValidationInfo) -> BaseWorkflowSettings:
+    def validate_nested_paths(self) -> BaseWorkflowSettings:
         """Validate nested DATASET feature/target paths eagerly."""
         if self.DATASET is not None:
-            for feature in self.DATASET.features:
-                if (
-                    isinstance(feature, PathFeature)
-                    and feature.path is not None
-                    and not feature.path.exists()
-                ):
-                    raise ValueError(f"Feature path does not exist: {feature.path}")
-            for target in self.DATASET.targets:
-                if (
-                    isinstance(target, PathTarget)
-                    and target.path is not None
-                    and not target.path.exists()
-                ):
-                    raise ValueError(f"Target path does not exist: {target.path}")
+            from dlkit.infrastructure.config.validators import _validate_entry_paths
+
+            _validate_entry_paths(self.DATASET.features, "Feature")
+            _validate_entry_paths(self.DATASET.targets, "Target")
         return self
 
     @classmethod

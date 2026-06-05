@@ -94,12 +94,12 @@ class WrapperCheckpointMetadata:
         """
         if self.geometry is not None:
             return tuple(f.name for f in self.geometry.fields)
-        from dlkit.infrastructure.config.data_entries import is_feature_entry
+        from dlkit.infrastructure.config.data_entries import is_feature
 
         return tuple(
             e.name
             for e in self.entry_configs
-            if is_feature_entry(e) and e.model_input and e.name is not None
+            if is_feature(e) and e.model_input and e.name is not None
         )
 
 

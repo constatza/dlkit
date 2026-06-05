@@ -52,8 +52,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
     selected_targets = tuple(getattr(ds_settings, "targets", ()) or ())
 
     dataset = FlexibleDataset(
-        features=selected_features,
-        targets=selected_targets,
+        entries=(*selected_features, *selected_targets),
         memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
     )
 

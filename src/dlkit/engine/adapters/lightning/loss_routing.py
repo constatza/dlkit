@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from tensordict import TensorDict
 from torch import Tensor
 
-from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry
+from dlkit.infrastructure.config.data_entries import DataEntry, is_feature
 from dlkit.infrastructure.config.model_components import LossInputRef
 
 from .batch_namespace import _parse_key
@@ -118,7 +118,7 @@ def build_auto_extra_inputs(
                 f"Duplicate loss_input kwarg '{kwarg}' declared on multiple entries. "
                 "Each kwarg name must appear on exactly one entry."
             )
-        namespace = "features" if is_feature_entry(e) else "targets"
+        namespace = "features" if is_feature(e) else "targets"
         result[kwarg] = LossInputRef(arg=kwarg, key=f"{namespace}.{e.name}")
     return result
 

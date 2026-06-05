@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import DataEntry, FeatureType, TargetType
+from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 from dlkit.infrastructure.types.split import IndexSplit
 
@@ -81,8 +80,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         )
         configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
         dataset = FlexibleDataset(
-            features=cast(tuple[FeatureType, ...], configured_features),
-            targets=cast(tuple[TargetType, ...], configured_targets),
+            entries=(*configured_features, *configured_targets),  # ty: ignore[invalid-argument-type]
             memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
         )
         if settings.DATASET is None:

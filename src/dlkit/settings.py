@@ -49,25 +49,15 @@ from dlkit.infrastructure.config import (
 )
 from dlkit.infrastructure.config.data_entries import (
     AutoencoderTarget,
-    ContextFeature,
     DataEntry,
-    Feature,
-    FeatureType,
     Latent,
-    Target,
-    TargetType,
 )
 
 __all__ = [
-    # Data entry factories (for programmatic config)
-    "Feature",
-    "Target",
-    "ContextFeature",
+    # Data entry types
     "AutoencoderTarget",
     "Latent",
     "DataEntry",
-    "FeatureType",
-    "TargetType",
     # Top-level unified config
     "GeneralSettings",
     "SessionSettings",

@@ -497,9 +497,9 @@ class CoreLightningWrapper(LightningModule, ABC):
         Returns:
             Tuple of Feature configurations.
         """
-        from dlkit.infrastructure.config.data_entries import is_feature_entry
+        from dlkit.infrastructure.config.data_entries import is_feature
 
-        return tuple(e for e in self._entry_configs if is_feature_entry(e))
+        return tuple(e for e in self._entry_configs if is_feature(e))
 
     def get_target_configs(self) -> tuple[Any, ...]:
         """Get target entry configurations.
@@ -507,9 +507,9 @@ class CoreLightningWrapper(LightningModule, ABC):
         Returns:
             Tuple of Target configurations.
         """
-        from dlkit.infrastructure.config.data_entries import is_target_entry
+        from dlkit.infrastructure.config.data_entries import is_target
 
-        return tuple(e for e in self._entry_configs if is_target_entry(e))
+        return tuple(e for e in self._entry_configs if is_target(e))
 
     # =========================================================================
     # Abstract Methods

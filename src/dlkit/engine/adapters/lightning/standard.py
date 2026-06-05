@@ -34,7 +34,7 @@ from dlkit.infrastructure.config import (
     ModelComponentSettings,
     WrapperComponentSettings,
 )
-from dlkit.infrastructure.config.data_entries import DataEntry, is_feature_entry, is_target_entry
+from dlkit.infrastructure.config.data_entries import DataEntry, is_feature, is_target
 from dlkit.infrastructure.config.model_components import LossInputRef
 
 from .base import ProcessingLightningWrapper, _build_model_from_settings
@@ -140,8 +140,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         model = _build_model_from_settings(model_settings, contract=contract)
 
         # --- Partition entries ---
-        feature_entries = [e for e in entry_configs if is_feature_entry(e)]
-        target_entries = [e for e in entry_configs if is_target_entry(e)]
+        feature_entries = [e for e in entry_configs if is_feature(e)]
+        target_entries = [e for e in entry_configs if is_target(e)]
 
         all_target_keys: tuple[str, ...] = tuple(
             e.name for e in target_entries if e.name is not None
@@ -335,6 +335,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             meta = self._checkpoint_metadata
             if meta is not None:
                 target_names = [
-                    e.name for e in meta.entry_configs if is_target_entry(e) and e.name is not None
+                    e.name for e in meta.entry_configs if is_target(e) and e.name is not None
                 ]
                 checkpoint["dlkit_metadata"]["target_names"] = target_names

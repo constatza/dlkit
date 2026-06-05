@@ -3,83 +3,79 @@
 Import from here for backward compatibility; prefer the specific modules for
 new code:
 
-    entry_protocols  — capability interfaces (IPathBased, IWritable, …)
+    entry_protocols  — capability interfaces (IPathBased, IRuntimeGenerated, …)
     entry_base       — DataEntry ABC
-    entry_types      — concrete types (PathFeature, ValueTarget, Latent, …)
-    entry_factories  — Feature(), Target(), ContextFeature(), type guards
+    entry_types      — concrete types (Latent, ZarrEntry, ValueEntry, …)
+    entry_factories  — type aliases and type guards
+    data_roles       — DataRole enum
 """
 
+from .data_roles import DataRole
 from .entry_base import DataEntry
 from .entry_factories import (
-    ContextFeature,
-    Feature,
-    FeatureType,
-    Target,
-    TargetType,
-    has_feature_reference,
-    is_feature_entry,
+    AnyEntry,
+    AnyPathEntry,
+    is_feature,
     is_path_based,
-    is_runtime_generated,
-    is_target_entry,
+    is_target,
     is_value_based,
-    is_writable,
 )
 from .entry_protocols import (
     IFeatureReference,
     IPathBased,
     IRuntimeGenerated,
     IValueBased,
-    IWritable,
 )
 from .entry_types import (
     AutoencoderTarget,
+    CsvEntry,
+    Hdf5Entry,
     Latent,
+    NpyEntry,
+    NpzEntry,
+    ParquetEntry,
     PathBasedEntry,
-    PathFeature,
-    PathTarget,
     Prediction,
     ValueBasedEntry,
-    ValueFeature,
-    ValueTarget,
+    ValueEntry,
+    ZarrEntry,
 )
 from .transform_settings import TransformSettings
 
 __all__ = [
     # Base
     "DataEntry",
+    # Role enum
+    "DataRole",
     # Protocols
     "IPathBased",
     "IValueBased",
-    "IWritable",
     "IRuntimeGenerated",
     "IFeatureReference",
     # Abstract bases
     "PathBasedEntry",
     "ValueBasedEntry",
-    # Path-based types
-    "PathFeature",
-    "PathTarget",
-    # Value-based types
-    "ValueFeature",
-    "ValueTarget",
+    # Format-specific path-based types
+    "ZarrEntry",
+    "NpyEntry",
+    "NpzEntry",
+    "CsvEntry",
+    "ParquetEntry",
+    "Hdf5Entry",
+    # Unified value-based type
+    "ValueEntry",
     # Special types
     "Latent",
     "AutoencoderTarget",
     "Prediction",
-    # Factories
-    "Feature",
-    "FeatureType",
-    "Target",
-    "TargetType",
-    "ContextFeature",
+    # Type aliases
+    "AnyPathEntry",
+    "AnyEntry",
     # Type guards
-    "is_feature_entry",
-    "is_target_entry",
     "is_path_based",
     "is_value_based",
-    "is_writable",
-    "is_runtime_generated",
-    "has_feature_reference",
+    "is_feature",
+    "is_target",
     # Re-exported for backward compat (was in the original module namespace)
     "TransformSettings",
 ]

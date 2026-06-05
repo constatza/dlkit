@@ -17,6 +17,8 @@ from pydantic_settings import SettingsConfigDict
 from dlkit.common.geometry import FieldRole, GeometryKind
 
 from .core.base_settings import BasicSettings
+from .data_roles import DataRole
+from .normalized_entry import NormalizedEntry
 from .transform_settings import TransformSettings
 
 
@@ -65,6 +67,14 @@ class DataEntry(BasicSettings, ABC):
             "Combine with model_input=False to create context tensors that feed the loss "
             "but are not passed to model.forward()."
         ),
+    )
+    data_role: DataRole = Field(
+        default=DataRole.FEATURE,
+        description="ML pipeline role: where this entry lives in the batch TensorDict.",
+    )
+    write: bool = Field(
+        default=False,
+        description="When True, save predictions/latents for this entry during inference.",
     )
     field_role: FieldRole = Field(
         default=FieldRole.FEATURE,
@@ -144,63 +154,34 @@ class DataEntry(BasicSettings, ABC):
 
         return self
 
-    @abstractmethod
     def has_value(self) -> bool:
         """Return True if this entry holds an in-memory value.
 
         Returns:
-            True if value is present, False otherwise.
+            False by default; overridden by ValueBasedEntry.
         """
+        return False
 
-    @abstractmethod
     def has_path(self) -> bool:
         """Return True if this entry has a file path.
 
         Returns:
-            True if path is set, False otherwise.
+            False by default; overridden by PathBasedEntry.
         """
+        return False
 
-    @abstractmethod
     def is_placeholder(self) -> bool:
         """Return True if this entry is awaiting value injection.
 
         Returns:
-            True if the entry needs a value before it can be used.
+            False by default; overridden by PathBasedEntry and ValueBasedEntry.
         """
+        return False
 
-    def get_effective_dtype(self, precision_provider=None) -> torch.dtype:
-        """Resolve the effective dtype for this entry.
-
-        Args:
-            precision_provider: Optional precision provider for strategy resolution.
+    @abstractmethod
+    def normalize(self) -> NormalizedEntry:
+        """Return a resolved data source for this entry.
 
         Returns:
-            The resolved ``torch.dtype``.
+            NormalizedEntry with the appropriate source, array_key, and load_kwargs.
         """
-        if self.dtype is not None:
-            return self.dtype
-
-        from dlkit.infrastructure.precision.service import get_precision_service
-
-        return get_precision_service().get_torch_dtype(precision_provider)
-
-    def resolve_dtype_with_fallback(
-        self, fallback_dtype: torch.dtype = torch.float32
-    ) -> torch.dtype:
-        """Resolve dtype with an explicit fallback when precision service is unavailable.
-
-        Args:
-            fallback_dtype: Dtype to use if resolution fails.
-
-        Returns:
-            The resolved ``torch.dtype``.
-        """
-        if self.dtype is not None:
-            return self.dtype
-
-        try:
-            from dlkit.infrastructure.precision.service import get_precision_service
-
-            return get_precision_service().get_torch_dtype()
-        except Exception:
-            return fallback_dtype

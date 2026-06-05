@@ -11,7 +11,6 @@ from pydantic import (
     Field,
     FilePath,
     NonNegativeFloat,
-    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -21,11 +20,8 @@ from .core.base_settings import (
     StringNamedComponentSettings,
     validate_module_path_import,
 )
-from .data_entries import (
-    FeatureType,
-    PathBasedEntry,
-    TargetType,
-)
+from .data_entries import AnyEntry, PathBasedEntry
+from .data_roles import DataRole
 from .enums import DatasetFamily
 
 
@@ -119,9 +115,9 @@ class DatasetSettings(StringNamedComponentSettings):
     root: DirectoryPath | None = Field(
         default=None, exclude=True, description="Root directory of the dataset", alias="root_dir"
     )
-    # Flexible entries only: tuples of Feature/Target settings (immutable for consistency)
-    features: tuple[FeatureType, ...] = Field(default=(), description="Flexible feature entries")
-    targets: tuple[TargetType, ...] = Field(default=(), description="Flexible target entries")
+    # Flexible entries only: tuples of DataEntry settings (immutable for consistency)
+    features: tuple[AnyEntry, ...] = Field(default=(), description="Flexible feature entries")
+    targets: tuple[AnyEntry, ...] = Field(default=(), description="Flexible target entries")
 
     split: IndexSplitSettings = Field(
         default_factory=IndexSplitSettings,
@@ -138,40 +134,12 @@ class DatasetSettings(StringNamedComponentSettings):
     )
 
     @model_validator(mode="after")
-    def validate_nested_paths(self, info: ValidationInfo) -> DatasetSettings:
-        """Validate nested Feature/Target paths with eager validation.
+    def validate_nested_paths(self) -> DatasetSettings:
+        """Validate nested Feature/Target paths with eager validation."""
+        from dlkit.infrastructure.config.validators import _validate_entry_paths
 
-        Pydantic does not automatically propagate validation context to nested models.
-        This validator explicitly validates features and targets paths, ensuring
-        path existence checks are performed for fail-fast error detection.
-
-        Args:
-            info: Pydantic validation info (unused, kept for compatibility).
-
-        Returns:
-            The validated DatasetSettings instance.
-
-        Raises:
-            ValueError: If any feature/target path is specified but does not exist.
-        """
-        # Validate features
-        for feature in self.features:
-            if (
-                isinstance(feature, PathBasedEntry)
-                and feature.path is not None
-                and not feature.path.exists()
-            ):
-                raise ValueError(f"Feature path does not exist: {feature.path}")
-
-        # Validate targets
-        for target in self.targets:
-            if (
-                isinstance(target, PathBasedEntry)
-                and target.path is not None
-                and not target.path.exists()
-            ):
-                raise ValueError(f"Target path does not exist: {target.path}")
-
+        _validate_entry_paths(self.features, "Feature")
+        _validate_entry_paths(self.targets, "Target")
         return self
 
     @field_validator("module_path", mode="after")
@@ -195,10 +163,7 @@ class DatasetSettings(StringNamedComponentSettings):
     @property
     def has_targets(self) -> bool:
         """Check if any target entries are configured."""
-        try:
-            return len(self.targets) > 0
-        except Exception:
-            return False
+        return len(self.targets) > 0
 
     @property
     def has_root(self) -> bool:
@@ -235,12 +200,24 @@ class DatasetSettings(StringNamedComponentSettings):
     def get_init_kwargs(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Return initialization kwargs preserving nested DataEntry objects."""
         base = super().get_init_kwargs(exclude=exclude)
-        # Inject DataEntry instances as objects (not serialized dicts) when non-empty.
-        # Empty tuples are omitted — graph datasets don't accept features/targets kwargs.
-        if self.features:
-            base["features"] = list(self.features)
-        if self.targets:
-            base["targets"] = list(self.targets)
+        # Remove legacy features/targets keys — FlexibleDataset uses entries= only.
+        base.pop("features", None)
+        base.pop("targets", None)
+        # Combine features and targets into a single entries list.
+        # Graph/timeseries datasets don't accept entries= so we omit when empty.
+        entries = [
+            e
+            if e.data_role == DataRole.FEATURE
+            else e.model_copy(update={"data_role": DataRole.FEATURE})
+            for e in self.features
+        ] + [
+            e
+            if e.data_role == DataRole.TARGET
+            else e.model_copy(update={"data_role": DataRole.TARGET})
+            for e in self.targets
+        ]
+        if entries:
+            base["entries"] = entries
         resolved = self.resolved_memmap_cache_dir
         if resolved is not None:
             base["memmap_cache_dir"] = resolved

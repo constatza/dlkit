@@ -57,3 +57,18 @@ class StageTransitionError(DLKitError):
 
 class UnsupportedOptimizerPolicyError(DLKitError):
     """Raised when an optimization program configuration is not supported."""
+
+
+class PlaceholderNotResolvedError(ValueError):
+    """Raised when a placeholder entry is used without value injection."""
+
+    def __init__(self, entry_name: str) -> None:
+        """Initialize with entry name.
+
+        Args:
+            entry_name: Name of the unresolved placeholder entry
+        """
+        super().__init__(
+            f"Entry '{entry_name}' is a placeholder without path or value. "
+            f"Either specify 'path' in config or inject 'value' programmatically."
+        )

@@ -10,18 +10,13 @@ from __future__ import annotations
 from threading import Lock
 from typing import Any
 
-from dlkit.infrastructure.config.data_entries import (
-    DataEntry,
-    Latent,
-    PathFeature,
-    PathTarget,
-    Prediction,
-    ValueFeature,
-    ValueTarget,
+from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.infrastructure.config.entry_factories import (
+    is_feature,
+    is_latent,
+    is_prediction,
+    is_target,
 )
-
-FeatureEntry = PathFeature | ValueFeature
-TargetEntry = PathTarget | ValueTarget
 
 
 class DataEntryRegistry:
@@ -88,45 +83,41 @@ class DataEntryRegistry:
         with self._lock:
             return self._entries.copy()
 
-    def get_features(self) -> dict[str, FeatureEntry]:
+    def get_features(self) -> dict[str, DataEntry]:
         """Get all feature entries.
 
         Returns:
             Dictionary mapping feature names to feature objects
         """
         with self._lock:
-            return {
-                n: e for n, e in self._entries.items() if isinstance(e, (PathFeature, ValueFeature))
-            }
+            return {n: e for n, e in self._entries.items() if is_feature(e)}
 
-    def get_targets(self) -> dict[str, TargetEntry]:
+    def get_targets(self) -> dict[str, DataEntry]:
         """Get all target entries.
 
         Returns:
             Dictionary mapping target names to target objects
         """
         with self._lock:
-            return {
-                n: e for n, e in self._entries.items() if isinstance(e, (PathTarget, ValueTarget))
-            }
+            return {n: e for n, e in self._entries.items() if is_target(e)}
 
-    def get_latents(self) -> dict[str, Latent]:
+    def get_latents(self) -> dict[str, DataEntry]:
         """Get all latent entries.
 
         Returns:
-            Dictionary mapping latent names to Latent objects
+            Dictionary mapping latent names to latent DataEntry objects
         """
         with self._lock:
-            return {n: e for n, e in self._entries.items() if isinstance(e, Latent)}
+            return {n: e for n, e in self._entries.items() if is_latent(e)}
 
-    def get_predictions(self) -> dict[str, Prediction]:
+    def get_predictions(self) -> dict[str, DataEntry]:
         """Get all prediction entries.
 
         Returns:
-            Dictionary mapping prediction names to Prediction objects
+            Dictionary mapping prediction names to prediction DataEntry objects
         """
         with self._lock:
-            return {n: e for n, e in self._entries.items() if isinstance(e, Prediction)}
+            return {n: e for n, e in self._entries.items() if is_prediction(e)}
 
     def get_entry(self, name: str) -> DataEntry | None:
         """Get a specific entry by name.
@@ -154,24 +145,20 @@ class DataEntryRegistry:
         Returns:
             Dictionary with entry counts and names by type
         """
-        with self._lock:
-            features = {
-                n: e for n, e in self._entries.items() if isinstance(e, (PathFeature, ValueFeature))
-            }
-            targets = {
-                n: e for n, e in self._entries.items() if isinstance(e, (PathTarget, ValueTarget))
-            }
-            latents = {n: e for n, e in self._entries.items() if isinstance(e, Latent)}
-            predictions = {n: e for n, e in self._entries.items() if isinstance(e, Prediction)}
+        features = self.get_features()
+        targets = self.get_targets()
+        latents = self.get_latents()
+        predictions = self.get_predictions()
+        entries = self.get_entries()
 
-            return {
-                "total_entries": len(self._entries),
-                "feature_count": len(features),
-                "target_count": len(targets),
-                "latent_count": len(latents),
-                "prediction_count": len(predictions),
-                "feature_names": list(features.keys()),
-                "target_names": list(targets.keys()),
-                "latent_names": list(latents.keys()),
-                "prediction_names": list(predictions.keys()),
-            }
+        return {
+            "total_entries": len(entries),
+            "feature_count": len(features),
+            "target_count": len(targets),
+            "latent_count": len(latents),
+            "prediction_count": len(predictions),
+            "feature_names": list(features.keys()),
+            "target_names": list(targets.keys()),
+            "latent_names": list(latents.keys()),
+            "prediction_names": list(predictions.keys()),
+        }

@@ -1,3 +1,5 @@
+from dlkit.infrastructure.zarr import ILazyReader, ZarrLazyReader
+
 from . import locations  # centralized path policy
 from .arrays import load_array
 from .config import (
@@ -15,13 +17,6 @@ from .config import (
     write_config,
 )
 from .index import load_split_indices
-from .packs import (
-    ArrayPackFormat,
-    open_array_pack,
-    register_format,
-    save_array_pack,
-    write_array_pack,
-)
 from .path_resolver import PathResolver
 from .tables import read_table
 from .tensor_entries import (
@@ -54,12 +49,9 @@ __all__ = [
     # Path resolution
     "PathResolver",
     "locations",
-    # Array pack I/O (new packs API)
-    "open_array_pack",
-    "write_array_pack",
-    "save_array_pack",
-    "ArrayPackFormat",
-    "register_format",
+    # Zarr I/O
+    "ILazyReader",
+    "ZarrLazyReader",
     # Writers
     "IWriter",
     "TomlWriter",

@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from collections.abc import Iterable
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
@@ -18,16 +18,11 @@ import torch
 from loguru import logger
 from torch import Tensor
 
-from dlkit.infrastructure.config.data_entries import (
-    DataEntry,
-    FeatureType,
-    PathBasedEntry,
-    TargetType,
-    ValueBasedEntry,
-)
+from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-exported for callers)
+from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
+from dlkit.infrastructure.config.normalized_entry import NormalizedEntry as _NormalizedEntry
 from dlkit.infrastructure.io import load_array
-from dlkit.infrastructure.io.packs import IArrayPackReader, open_array_pack
-from dlkit.infrastructure.io.tensor_entries import TensorDataEntry, to_tensor_entry
+from dlkit.infrastructure.zarr import ILazyReader
 
 from .base import BaseDataset, register_dataset
 
@@ -37,7 +32,6 @@ if TYPE_CHECKING:
 
 
 type _TensorMap = dict[str, Tensor]
-type _EntrySource = Path | Tensor | np.ndarray | IArrayPackReader
 
 
 def _build_nested_tensordict(
@@ -66,110 +60,46 @@ class BatchComplianceError(ValueError):
     """
 
 
-class PlaceholderNotResolvedError(ValueError):
-    """Raised when a placeholder entry is used without value injection."""
-
-    def __init__(self, entry_name: str) -> None:
-        """Initialize with entry name.
-
-        Args:
-            entry_name: Name of the unresolved placeholder entry
-        """
-        super().__init__(
-            f"Entry '{entry_name}' is a placeholder without path or value. "
-            f"Either specify 'path' in config or inject 'value' programmatically."
-        )
-
-
 def _normalize_entries(
     entries: Any,
-) -> dict[str, tuple[_EntrySource, str | None]]:
-    """Extract path or value from DataEntry objects or pre-resolved tensor entries.
+) -> dict[str, _NormalizedEntry]:
+    """Extract normalized data sources from DataEntry objects.
 
-    Expects DataEntry objects (PathFeature, ValueFeature, PathTarget, ValueTarget)
-    created by Feature()/Target() factories.
-    These factories handle validation.
-
-    Single Responsibility: Extract data sources from validated entries.
-    No validation - trust that factories already validated.
+    Each entry's normalize() method produces a _NormalizedEntry containing
+    the appropriate source (ILazyReader, Path, Tensor, or ndarray).
 
     Args:
         entries: Collection of DataEntry objects
 
     Returns:
-        Dictionary mapping entry name to tuple of (data source, entry name).
-        The entry name is used as array_key when loading .npz files.
-        ``IArrayPackReader`` values represent zarr array pack entries.
+        Dictionary mapping entry name to _NormalizedEntry.
 
     Raises:
-        TypeError: If receives dict (should use Feature()/Target() instead)
-        PlaceholderNotResolvedError: If entry is placeholder without data
+        TypeError: If entries is a raw dict
+        PlaceholderNotResolvedError: If any entry is a placeholder
     """
-    result: dict[str, tuple[_EntrySource, str | None]] = {}
+    result: dict[str, _NormalizedEntry] = {}
     if entries is None:
         return result
 
-    # Reject dicts - force users to use factories
     if isinstance(entries, dict):
         raise TypeError(
             "FlexibleDataset no longer accepts raw dicts. "
-            "Use Feature() or Target() factories instead:\n"
-            "  from dlkit.infrastructure.config.data_entries import Feature, Target\n"
-            "  features = [Feature(name='x', path='data.npy')]"
+            "Use NpyEntry, ZarrEntry, or ValueEntry instead."
         )
 
-    # list[DataEntry] entries
     for item in entries:
-        # Already-resolved tensor entries
-        if isinstance(item, TensorDataEntry):
-            result[item.name] = (item.tensor, item.name)
-            continue
-
-        # Reject dicts in list
         if isinstance(item, dict):
             raise TypeError(
                 "FlexibleDataset no longer accepts raw dicts. "
-                "Use Feature(**dict) or Target(**dict) factories instead."
+                "Use NpyEntry, ZarrEntry, or ValueEntry instead."
             )
-
-        # ValueBasedEntry: extract in-memory value
-        if isinstance(item, ValueBasedEntry):
-            if item.is_placeholder():
-                raise PlaceholderNotResolvedError(str(item.name or "unknown"))
-            assert item.name is not None, "Non-placeholder entry must have name"
-            result[item.name] = (
-                cast("_EntrySource", item.value),
-                item.name,
-            )
-
-        # PathBasedEntry: zarr pack dir → IArrayPackReader; file → Path
-        elif isinstance(item, PathBasedEntry):
-            if item.is_placeholder():
-                raise PlaceholderNotResolvedError(str(item.name or "unknown"))
-            assert item.name is not None, "Non-placeholder entry must have name"
-            assert item.path is not None, (
-                "PathBasedEntry must have a path for non-placeholder entry"
-            )
-            resolved = Path(item.path)
-            if resolved.is_dir():
-                reader = open_array_pack(resolved)
-                result[item.name] = (reader, None)
-            else:
-                result[item.name] = (resolved, item.name)
-
-        # Generic DataEntry: check capabilities
-        elif isinstance(item, DataEntry):
-            if item.is_placeholder():
-                raise PlaceholderNotResolvedError(str(item.name or "unknown"))
-            assert item.name is not None, "Non-placeholder entry must have name"
-            tensor_entry = to_tensor_entry(item)
-            result[item.name] = (tensor_entry.tensor, item.name)
-
-        else:
+        if not hasattr(item, "name") or item.name is None:
             raise TypeError(
-                f"Unsupported entry type: {type(item).__name__}. "
-                f"Expected DataEntry objects from Feature()/Target() factories."
+                f"Entry {type(item).__name__} has no name. "
+                "All entries must have a name set before normalization."
             )
+        result[item.name] = item.normalize()
 
     return result
 
@@ -178,6 +108,7 @@ def _load_or_convert_tensor(
     source: Path | Tensor | np.ndarray,
     dtype: torch.dtype | None = None,
     array_key: str | None = None,
+    **load_kwargs: Any,
 ) -> Tensor:
     """Pure function: convert source to torch.Tensor with dtype handling.
 
@@ -188,6 +119,7 @@ def _load_or_convert_tensor(
         source: File path OR in-memory tensor/array
         dtype: Target dtype (uses PrecisionService if None)
         array_key: For .npz files, the array name to extract
+        **load_kwargs: Extra kwargs forwarded to load_array() (e.g. mmap_mode)
 
     Returns:
         torch.Tensor with appropriate dtype
@@ -212,8 +144,8 @@ def _load_or_convert_tensor(
     # load_array() already handles PrecisionService integration
     # For .npz files, pass array_key to select specific array
     if isinstance(source, Path) and source.suffix.lower() == ".npz":
-        return load_array(source, dtype=dtype, array_key=array_key)
-    return load_array(source, dtype=dtype)
+        return load_array(source, dtype=dtype, array_key=array_key, **load_kwargs)
+    return load_array(source, dtype=dtype, **load_kwargs)
 
 
 def _get_source_dtype() -> torch.dtype:
@@ -228,13 +160,13 @@ def _get_source_dtype() -> torch.dtype:
 
 
 def _compute_source_fingerprint(
-    all_maps: dict[str, tuple[Path, str | None]],
+    all_maps: dict[str, _NormalizedEntry],
     dtype: torch.dtype,
 ) -> str:
     """Compute SHA-256 fingerprint over source files and dtype.
 
     Args:
-        all_maps: Mapping from entry name to (source_path, array_key).
+        all_maps: Mapping from entry name to _NormalizedEntry (Path sources only).
         dtype: Target tensor dtype included in the fingerprint.
 
     Returns:
@@ -242,10 +174,11 @@ def _compute_source_fingerprint(
     """
     h = hashlib.sha256()
     for name in sorted(all_maps):
-        source, _ = all_maps[name]
+        ne = all_maps[name]
+        assert isinstance(ne.source, Path)
         h.update(name.encode())
-        h.update(source.as_posix().encode())
-        h.update(str(source.stat().st_mtime_ns).encode())
+        h.update(ne.source.as_posix().encode())
+        h.update(str(ne.source.stat().st_mtime_ns).encode())
     h.update(str(dtype).encode())
     return h.hexdigest()
 
@@ -318,15 +251,15 @@ def _write_entry_to_memmap(
 
 def _determine_n_total(
     dense_tensors: dict[str, Any],
-    pack_bindings: dict[str, IArrayPackReader] | None = None,
+    pack_bindings: dict[str, ILazyReader] | None = None,
 ) -> int:
     """Pure function: resolve the canonical sample count N from available tensors.
 
-    Precedence: dense tensors (features + targets) → zarr pack readers (n_samples > 1).
+    Precedence: dense tensors (features + targets) → zarr lazy readers (n_samples > 1).
 
     Args:
         dense_tensors: Already-written tensors keyed by entry name.
-        pack_bindings: Zarr dense array pack readers.  Readers with
+        pack_bindings: ILazyReader instances.  Readers with
             ``n_samples > 1`` contribute to N resolution when no dense entries
             are present.
 
@@ -359,22 +292,22 @@ def _determine_n_total(
 
 
 def _validate_memmap_entries(
-    all_maps: dict[str, tuple[_EntrySource, str | None]],
+    all_maps: dict[str, _NormalizedEntry],
 ) -> None:
     """Raise ValueError if any entry is not a file path.
 
-    Callers must strip ``IArrayPackReader`` entries before calling this function;
-    pack readers bypass the memmap cache entirely.
+    Callers must strip ``ZarrLazyReader`` entries before calling this function;
+    zarr readers bypass the memmap cache entirely.
 
     Args:
-        all_maps: Mapping from entry name to (source, array_key).
-            Must not contain ``IArrayPackReader`` entries (strip them before calling).
+        all_maps: Mapping from entry name to _NormalizedEntry.
+            Must not contain ``ZarrLazyReader`` entries (strip them before calling).
 
     Raises:
         ValueError: If any source is not a Path.
     """
-    for name, (source, _) in all_maps.items():
-        if not isinstance(source, Path):
+    for name, ne in all_maps.items():
+        if not isinstance(ne.source, Path):
             raise ValueError(
                 f"Entry '{name}' is not file-backed. "
                 "memmap_cache_dir requires PathBasedEntry entries."
@@ -382,25 +315,27 @@ def _validate_memmap_entries(
 
 
 def _partition_entry_map(
-    entry_map: dict[str, tuple[_EntrySource, str | None]],
-) -> tuple[dict[str, Tensor], dict[str, IArrayPackReader]]:
-    """Split a normalised entry map into eager tensors and lazy pack readers.
+    entry_map: dict[str, _NormalizedEntry],
+) -> tuple[dict[str, Tensor], dict[str, ILazyReader]]:
+    """Split a normalised entry map into eager tensors and lazy zarr readers.
 
     Args:
-        entry_map: Mapping from entry name to (source, array_key) pairs.
+        entry_map: Mapping from entry name to _NormalizedEntry.
 
     Returns:
         Tuple of (dense_tensors, lazy_readers) where dense_tensors contains
-        pre-loaded tensors and lazy_readers contains IArrayPackReader instances.
+        pre-loaded tensors and lazy_readers contains ILazyReader instances.
     """
     dense: dict[str, Tensor] = {}
-    packs: dict[str, IArrayPackReader] = {}
-    for name, (source, array_key) in entry_map.items():
-        if isinstance(source, IArrayPackReader):
-            packs[name] = source
+    lazy: dict[str, ILazyReader] = {}
+    for name, ne in entry_map.items():
+        if isinstance(ne.source, ILazyReader):
+            lazy[name] = ne.source
         else:
-            dense[name] = _load_or_convert_tensor(source, array_key=array_key)
-    return dense, packs
+            dense[name] = _load_or_convert_tensor(
+                ne.source, array_key=ne.array_key, **ne.load_kwargs
+            )
+    return dense, lazy
 
 
 def _make_empty_dataset_tensordict(n: int) -> TensorDict:
@@ -433,7 +368,7 @@ def _inject_lazy_readers(
     td: TensorDict,
     *,
     idx: int | list[int],
-    readers: dict[str, IArrayPackReader],
+    readers: dict[str, ILazyReader],
     namespace: str,
 ) -> TensorDict:
     """Inject lazy-reader tensors into a TensorDict at the given nested namespace.
@@ -441,7 +376,7 @@ def _inject_lazy_readers(
     Args:
         td: TensorDict to enrich (mutated in place).
         idx: Single sample index (int) or batch of indices (list[int]).
-        readers: Lazy pack readers keyed by entry name.
+        readers: Lazy zarr readers keyed by entry name.
         namespace: Nested key prefix (e.g. ``"features"`` or ``"targets"``).
 
     Returns:
@@ -529,8 +464,8 @@ def _load_entry_from_memmap(filename: Path, info: dict[str, Any]) -> Tensor:
 
 
 def _build_memmap_cache(
-    feat_map: dict[str, tuple[Path, str | None]],
-    targ_map: dict[str, tuple[Path, str | None]],
+    feat_map: dict[str, _NormalizedEntry],
+    targ_map: dict[str, _NormalizedEntry],
     cache_dir: Path,
     dtype: torch.dtype,
     chunk_size: int = 5_000,
@@ -538,8 +473,8 @@ def _build_memmap_cache(
     """Build an OOM-safe memmap cache for a dataset.
 
     Args:
-        feat_map: Feature entry map: name → (source_path, array_key).
-        targ_map: Target entry map: name → (source_path, array_key).
+        feat_map: Feature entry map: name → _NormalizedEntry (Path sources only).
+        targ_map: Target entry map: name → _NormalizedEntry (Path sources only).
         cache_dir: Root directory for the cache.
         dtype: Target tensor dtype for all entries.
         chunk_size: Rows per write iteration.
@@ -560,13 +495,15 @@ def _build_memmap_cache(
     feat_tensors: _TensorMap = {}
     targ_tensors: _TensorMap = {}
 
-    for name, (source, array_key) in feat_map.items():
-        mmt = _write_entry_to_memmap(name, source, array_key, features_dir, dtype, chunk_size)
+    for name, ne in feat_map.items():
+        assert isinstance(ne.source, Path)
+        mmt = _write_entry_to_memmap(name, ne.source, ne.array_key, features_dir, dtype, chunk_size)
         feat_tensors[name] = mmt
         meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
 
-    for name, (source, array_key) in targ_map.items():
-        mmt = _write_entry_to_memmap(name, source, array_key, targets_dir, dtype, chunk_size)
+    for name, ne in targ_map.items():
+        assert isinstance(ne.source, Path)
+        mmt = _write_entry_to_memmap(name, ne.source, ne.array_key, targets_dir, dtype, chunk_size)
         targ_tensors[name] = mmt
         meta["targets"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
 
@@ -604,8 +541,8 @@ def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
 
 
 def _load_or_build_memmap(
-    feat_map: dict[str, tuple[Path, str | None]],
-    targ_map: dict[str, tuple[Path, str | None]],
+    feat_map: dict[str, _NormalizedEntry],
+    targ_map: dict[str, _NormalizedEntry],
     cache_dir: Path,
     dtype: torch.dtype,
     chunk_size: int = 5_000,
@@ -616,8 +553,8 @@ def _load_or_build_memmap(
     or dtype triggers a full wipe-and-rebuild (no stale sub-directories).
 
     Args:
-        feat_map: Feature entry map: name → (source_path, array_key).
-        targ_map: Target entry map: name → (source_path, array_key).
+        feat_map: Feature entry map: name → _NormalizedEntry (Path sources only).
+        targ_map: Target entry map: name → _NormalizedEntry (Path sources only).
         cache_dir: Directory for memmap cache files.
         dtype: Target tensor dtype (included in fingerprint).
         chunk_size: Rows written per iteration when building the cache.
@@ -625,7 +562,7 @@ def _load_or_build_memmap(
     Returns:
         TensorDict: Dataset TensorDict backed by memory-mapped files.
     """
-    all_maps: dict[str, tuple[Path, str | None]] = {**feat_map, **targ_map}
+    all_maps: dict[str, _NormalizedEntry] = {**feat_map, **targ_map}
     fingerprint = _compute_source_fingerprint(all_maps, dtype)
     stored_fp = _read_cache_fingerprint(cache_dir)
 
@@ -646,11 +583,14 @@ def _load_or_build_memmap(
 
 @register_dataset
 class FlexibleDataset(BaseDataset["TensorDict"]):
-    """Dataset that loads an arbitrary set of feature and target files.
+    """Dataset that loads an arbitrary set of feature and target entries.
 
-    Entries are provided as DataEntry objects created via Feature() or Target()
-    factories. The key used in __getitem__ output is the entry name, and the
-    value is the tensor slice at the requested index.
+    Entries are provided as DataEntry objects with ``data_role`` set to
+    ``DataRole.FEATURE`` or ``DataRole.TARGET`` (NpyEntry, ZarrEntry,
+    ValueEntry, etc.).
+
+    The key used in __getitem__ output is the entry name, and the value is the
+    tensor slice at the requested index.
 
     Precision handling is automatic via the global precision service. Use
     precision_override() context to control the dtype of loaded tensors.
@@ -659,62 +599,42 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
     - NumPy arrays: .npy (single array), .npz (multi-array)
     - PyTorch tensors: .pt, .pth
     - Text files: .txt, .csv
+    - Zarr arrays: native zarr v3 stores (lazy, indexed)
 
     For .npz files with multiple arrays, the entry name is used as the array key
     to select which array to load from the file.
 
     Supports:
-    - Path-based entries: Data loaded from files (PathFeature, PathTarget)
-    - Value-based entries: In-memory data (ValueFeature, ValueTarget)
+    - Path-based entries: Data loaded from files
+    - Value-based entries: In-memory data
     - Placeholder entries: Must be resolved before use (raises PlaceholderNotResolvedError)
 
     Single Responsibility: Load and manage dataset lifecycle (NO validation).
-    Validation is handled by Feature()/Target() factories.
+    Validation is handled by entry constructors.
 
     Examples:
-        Basic usage with .npy files:
-            >>> from dlkit.infrastructure.config.data_entries import Feature, Target
-            >>> features = [Feature(name="x", path="data.npy")]
-            >>> targets = [Target(name="y", path="labels.npy")]
-            >>> dataset = FlexibleDataset(features=features, targets=targets)
-
-        Using .npz files (entry name used as array key):
-            >>> features = [Feature(name="features", path="data.npz")]
-            >>> targets = [Target(name="targets", path="data.npz")]
-            >>> dataset = FlexibleDataset(features=features, targets=targets)
-            # Loads array "features" and "targets" from data.npz
-
-        Multiple features from same .npz file:
-            >>> features = [
-            ...     Feature(name="features", path="data.npz"),
-            ...     Feature(name="latent", path="data.npz"),
-            ... ]
-            >>> dataset = FlexibleDataset(features=features)
-
-        Mixed file formats:
-            >>> features = [
-            ...     Feature(name="x", path="features.npy"),
-            ...     Feature(name="y", path="extra.npz"),  # Uses "y" as array key
-            ... ]
-            >>> dataset = FlexibleDataset(features=features)
+        >>> from dlkit.infrastructure.config.entry_types import ValueEntry
+        >>> from dlkit.infrastructure.config.data_roles import DataRole
+        >>> feat = ValueEntry(name="x", value=x_tensor, data_role=DataRole.FEATURE)
+        >>> targ = ValueEntry(name="y", value=y_tensor, data_role=DataRole.TARGET)
+        >>> dataset = FlexibleDataset(entries=[feat, targ])
     """
 
     def __init__(
         self,
+        entries: Sequence[AnyEntry],
         *,
-        features: Iterable[FeatureType],
-        targets: Iterable[TargetType] | None = None,
         memmap_cache_dir: Path | None = None,
         memmap_chunk_size: int = 5_000,
     ) -> None:
-        """Initialize FlexibleDataset with feature and target entries.
+        """Initialize FlexibleDataset with a list of entries.
 
         Args:
-            features: Feature entries (PathFeature or ValueFeature).
-            targets: Target entries (PathTarget or ValueTarget from Target() factory).
+            entries: Unified list of DataEntry objects with ``data_role`` set.
+                Role filtering is performed via ``is_feature()`` / ``is_target()``.
             memmap_cache_dir: If set, load dataset via OS memory-mapped files stored in
                 this directory.  Entries must be file-backed (PathBasedEntry).
-                Zarr pack entries bypass the memmap cache — zarr handles OOM natively.
+                Zarr entries bypass the memmap cache — zarr handles OOM natively.
                 The cache is invalidated when source files or dtype change.
             memmap_chunk_size: Rows written per iteration when building the memmap cache.
                 Bounds peak RAM to ``chunk_size × feature_width × sizeof(dtype)``.
@@ -725,50 +645,55 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
             ValueError: If no features or targets are provided, or a non-file-backed
                 entry is used with memmap_cache_dir.
             PlaceholderNotResolvedError: If placeholder entry without value.
-            TypeError: If raw dicts are passed (use Feature()/Target() instead).
+            TypeError: If raw dicts are passed (use entry constructors instead).
         """
-        feat_map = _normalize_entries(features)
-        targ_map = _normalize_entries(targets)
+        feature_entries: list[Any] = [e for e in entries if is_feature(e)]
+        target_entries: list[Any] = [e for e in entries if is_target(e)]
+
+        feat_map = _normalize_entries(feature_entries)
+        targ_map = _normalize_entries(target_entries)
 
         if not feat_map and not targ_map:
             raise ValueError("At least one feature or target entry is required")
 
         self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
         self._target_names: tuple[str, ...] = tuple(targ_map.keys())
-        self._feature_pack_bindings: dict[str, IArrayPackReader] = {}
-        self._target_pack_bindings: dict[str, IArrayPackReader] = {}
+        self._feature_lazy_readers: dict[str, ILazyReader] = {}
+        self._target_lazy_readers: dict[str, ILazyReader] = {}
 
         if memmap_cache_dir is not None:
-            # Zarr pack entries bypass the memmap cache — zarr handles OOM natively.
-            # Strip pack readers from both maps before passing to memmap validation.
-            feat_packs = {n: s for n, (s, _) in feat_map.items() if isinstance(s, IArrayPackReader)}
-            targ_packs = {n: s for n, (s, _) in targ_map.items() if isinstance(s, IArrayPackReader)}
-            self._feature_pack_bindings = feat_packs
-            self._target_pack_bindings = targ_packs
-            non_pack_feat = {k: v for k, v in feat_map.items() if k not in feat_packs}
-            non_pack_targ = {k: v for k, v in targ_map.items() if k not in targ_packs}
-            _validate_memmap_entries({**non_pack_feat, **non_pack_targ})
-            dtype = _get_source_dtype()
-            _feat = cast("dict[str, tuple[Path, str | None]]", non_pack_feat)
-            _targ = cast("dict[str, tuple[Path, str | None]]", non_pack_targ)
+            # ILazyReader entries bypass the memmap cache — zarr handles OOM natively.
+            # Strip zarr readers from both maps before passing to memmap validation.
+            feat_zarr = {
+                n: ne.source for n, ne in feat_map.items() if isinstance(ne.source, ILazyReader)
+            }
+            targ_zarr = {
+                n: ne.source for n, ne in targ_map.items() if isinstance(ne.source, ILazyReader)
+            }
+            self._feature_lazy_readers = feat_zarr
+            self._target_lazy_readers = targ_zarr
+            non_zarr_feat = {k: v for k, v in feat_map.items() if k not in feat_zarr}
+            non_zarr_targ = {k: v for k, v in targ_map.items() if k not in targ_zarr}
+            _validate_memmap_entries({**non_zarr_feat, **non_zarr_targ})
+            active_dtype = _get_source_dtype()
             self._dataset_td = _load_or_build_memmap(
-                _feat,
-                _targ,
+                non_zarr_feat,
+                non_zarr_targ,
                 Path(memmap_cache_dir),
-                dtype,
+                active_dtype,
                 memmap_chunk_size,
             )
         else:
-            dense_feats, feat_packs = _partition_entry_map(feat_map)
-            dense_targs, targ_packs = _partition_entry_map(targ_map)
-            self._feature_pack_bindings = feat_packs
-            self._target_pack_bindings = targ_packs
+            dense_feats, feat_lazy = _partition_entry_map(feat_map)
+            dense_targs, targ_lazy = _partition_entry_map(targ_map)
+            self._feature_lazy_readers = feat_lazy
+            self._target_lazy_readers = targ_lazy
 
-            # Resolve canonical N: dense entries → pack readers.
+            # Resolve canonical N: dense entries → zarr readers.
             non_scalar_dense = {
                 k: v for k, v in {**dense_feats, **dense_targs}.items() if v.dim() > 0
             }
-            n = _determine_n_total(non_scalar_dense, {**feat_packs, **targ_packs})
+            n = _determine_n_total(non_scalar_dense, {**feat_lazy, **targ_lazy})
 
             if dense_feats or dense_targs:
                 self._dataset_td, _ = _assemble_dataset_tensordict(
@@ -803,10 +728,10 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         sample_index = _normalize_index(int(idx), self._length)
         sample = cast("TensorDict", self._dataset_td[sample_index])
         _inject_lazy_readers(
-            sample, idx=sample_index, readers=self._feature_pack_bindings, namespace="features"
+            sample, idx=sample_index, readers=self._feature_lazy_readers, namespace="features"
         )
         _inject_lazy_readers(
-            sample, idx=sample_index, readers=self._target_pack_bindings, namespace="targets"
+            sample, idx=sample_index, readers=self._target_lazy_readers, namespace="targets"
         )
         return sample
 
@@ -822,10 +747,10 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         sample_indices = _normalize_indices(indices, self._length)
         batch = cast("TensorDict", self._dataset_td[sample_indices])
         _inject_lazy_readers(
-            batch, idx=sample_indices, readers=self._feature_pack_bindings, namespace="features"
+            batch, idx=sample_indices, readers=self._feature_lazy_readers, namespace="features"
         )
         _inject_lazy_readers(
-            batch, idx=sample_indices, readers=self._target_pack_bindings, namespace="targets"
+            batch, idx=sample_indices, readers=self._target_lazy_readers, namespace="targets"
         )
         return batch
 

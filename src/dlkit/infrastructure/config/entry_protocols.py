@@ -7,7 +7,6 @@ independent of any concrete hierarchy.  Downstream code uses
 Interfaces:
     IPathBased - entry loads data from a file path
     IValueBased - entry holds an in-memory tensor/array
-    IWritable - entry can be saved during inference
     IRuntimeGenerated - entry is produced by the model at run-time
     IFeatureReference - entry references another feature (e.g. AutoencoderTarget)
 """
@@ -23,7 +22,7 @@ class IPathBased(ABC):
     """Marks entries that load data from file paths.
 
     Example:
-        >>> entry = PathFeature(name="x", path="data.npy")
+        >>> entry = NpyEntry(name="x", path="data.npy", data_role=DataRole.FEATURE)
         >>> isinstance(entry, IPathBased)
         True
     """
@@ -41,7 +40,7 @@ class IValueBased(ABC):
     """Marks entries that contain in-memory tensor/array values.
 
     Example:
-        >>> entry = ValueFeature(name="x", value=np.ones((10, 5)))
+        >>> entry = ValueEntry(name="x", value=np.ones((10, 5)), data_role=DataRole.FEATURE)
         >>> isinstance(entry, IValueBased)
         True
     """
@@ -53,18 +52,6 @@ class IValueBased(ABC):
         Returns:
             Tensor or array if set, else None.
         """
-
-
-class IWritable:
-    """Marks entries whose data can be persisted during inference.
-
-    Implementations must expose a ``write: bool`` attribute.
-
-    Example:
-        >>> target = PathTarget(name="y", path="targets.npy", write=True)
-        >>> isinstance(target, IWritable)
-        True
-    """
 
 
 class IRuntimeGenerated:
