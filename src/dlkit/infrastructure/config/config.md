@@ -219,6 +219,11 @@ new_settings = update_settings(
 
 - `DATASET.family` is the explicit dataset-family override. Runtime heuristics
   only apply when it is unset.
+- `DATASET.features[*]` and `DATASET.targets[*]` may omit `format` for
+  loadable path-based entries when the path suffix is informative. The config
+  layer infers `.npy`, `.npz`, `.csv`, `.txt`, `.parquet`, `.h5`, `.hdf5`,
+  and `.zarr` before discriminated-union validation. Ambiguous paths should
+  use an explicit `format = "..."`.
 - Component `module_path` values remain optional; when provided they are
   validated at config load time, and runtime builders still apply default module
   namespaces when omitted.

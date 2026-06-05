@@ -24,6 +24,73 @@ from .data_entries import AnyEntry, PathBasedEntry
 from .data_roles import DataRole
 from .enums import DatasetFamily
 
+_FORMAT_BY_SUFFIX: dict[str, str] = {
+    ".npy": "npy",
+    ".npz": "npz",
+    ".csv": "csv",
+    ".txt": "csv",
+    ".parquet": "parquet",
+    ".h5": "hdf5",
+    ".hdf5": "hdf5",
+    ".zarr": "zarr",
+}
+
+type RawEntryAtom = str | int | float | bool | Path | None
+type RawEntrySequence = list[RawEntryAtom] | tuple[RawEntryAtom, ...]
+type RawEntryValue = RawEntryAtom | RawEntrySequence
+type RawEntryPayload = dict[str, RawEntryValue]
+type RawEntryItem = RawEntryPayload | AnyEntry
+type RawEntryCollection = list[RawEntryItem] | tuple[RawEntryItem, ...]
+type RawEntryFallback = RawEntryAtom | RawEntryPayload
+
+
+def _as_raw_entry_payload(entry: RawEntryItem) -> RawEntryPayload | None:
+    """Return raw TOML payloads while leaving validated entries untouched."""
+    if isinstance(entry, dict):
+        return entry
+    return None
+
+
+def _infer_entry_format(entry: RawEntryItem) -> RawEntryItem:
+    """Fill in missing path-entry format from the raw path payload.
+
+    This runs before Pydantic resolves the ``AnyEntry`` discriminated union so
+    path-based entries can omit ``format`` in TOML and still parse into the
+    correct concrete entry class.
+    """
+    payload = _as_raw_entry_payload(entry)
+    if payload is None:
+        return entry
+    if "format" in payload:
+        return entry
+    if "feature_ref" in payload or "value" in payload:
+        return entry
+
+    raw_path = payload.get("path")
+    if raw_path is None:
+        return entry
+    if not isinstance(raw_path, str | Path):
+        return entry
+
+    path = Path(raw_path)
+    suffix = path.suffix.lower()
+    inferred = _FORMAT_BY_SUFFIX.get(suffix)
+    if inferred is not None:
+        return {**payload, "format": inferred}
+
+    if path.exists() and path.is_dir():
+        raise ValueError(
+            f"Could not infer DATASET entry format from directory path '{path}'. "
+            "Directory-backed entries must use a '.zarr' suffix for automatic inference, "
+            "or specify an explicit format such as format = 'zarr'."
+        )
+
+    raise ValueError(
+        f"Could not infer DATASET entry format from path '{path}'. "
+        "Supported inferred extensions are: .npy, .npz, .csv, .txt, .parquet, .h5, .hdf5, .zarr. "
+        "Add an explicit format = '...' if the path uses a different convention."
+    )
+
 
 class IndexSplitSettings(BasicSettings):
     """Index split configuration for train/val/test dataflow splitting.
@@ -132,6 +199,18 @@ class DatasetSettings(StringNamedComponentSettings):
             "Resolved to memmap_cache_dir at build time."
         ),
     )
+
+    @field_validator("features", "targets", mode="before")
+    @classmethod
+    def _inject_missing_entry_formats(
+        cls, value: RawEntryCollection | RawEntryFallback
+    ) -> RawEntryCollection | RawEntryFallback:
+        """Infer missing ``format`` discriminators for raw dataset entry payloads."""
+        if isinstance(value, list):
+            return [_infer_entry_format(entry) for entry in value]
+        if isinstance(value, tuple):
+            return tuple(_infer_entry_format(entry) for entry in value)
+        return value
 
     @model_validator(mode="after")
     def validate_nested_paths(self) -> DatasetSettings:

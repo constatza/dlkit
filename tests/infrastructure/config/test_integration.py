@@ -20,6 +20,7 @@ from dlkit.infrastructure.config import (
 )
 from dlkit.infrastructure.config.core.base_settings import ComponentSettings
 from dlkit.infrastructure.config.core.factories import DefaultComponentFactory
+from dlkit.infrastructure.config.data_entries import NpyEntry
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -390,6 +391,46 @@ class TestGeneralSettingsEndToEndIntegration:
 
         with pytest.raises(ValueError, match="Checkpoint path must be provided"):
             GeneralSettings.model_validate(invalid_config)
+
+    def test_load_settings_infers_dataset_entry_format_from_path(self, tmp_path: Path) -> None:
+        """TOML loading should infer path-entry format before union resolution."""
+        from dlkit.infrastructure.config import load_settings
+
+        feature_path = tmp_path / "features.npy"
+        target_path = tmp_path / "targets.npy"
+        feature_path.write_bytes(b"placeholder")
+        target_path.write_bytes(b"placeholder")
+
+        config_file = tmp_path / "format_inference.toml"
+        config_file.write_text(
+            f"""
+[SESSION]
+name = "format_inference"
+workflow = "train"
+seed = 42
+
+[TRAINING]
+epochs = 1
+
+[DATASET]
+name = "FlexibleDataset"
+
+[[DATASET.features]]
+name = "x"
+path = "{feature_path.as_posix()}"
+
+[[DATASET.targets]]
+name = "y"
+path = "{target_path.as_posix()}"
+"""
+        )
+
+        settings = load_settings(config_file)
+        workflow = _expect_tracking_workflow(settings)
+        dataset = _expect_not_none(workflow.DATASET)
+
+        assert isinstance(dataset.features[0], NpyEntry)
+        assert isinstance(dataset.targets[0], NpyEntry)
 
 
 class TestFactoryProviderSingletonIntegration:
