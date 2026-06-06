@@ -31,7 +31,7 @@ def test_getitem_returns_dense_tensor(zarr_matrix_pack: dict[str, Any]) -> None:
     )
 
     sample = dataset[0]
-    mat = _expect_float32_tensor(sample["features"]["mat"])
+    mat = _expect_float32_tensor(sample["features", "mat"])
 
     assert mat.shape == (4, 4)
     assert not mat.is_sparse
@@ -48,7 +48,7 @@ def test_getitems_returns_batched_dense_tensor(zarr_matrix_pack: dict[str, Any])
     )
 
     batch = dataset.__getitems__([0, 1, 2])
-    mat = _expect_float32_tensor(batch["features"]["mat"])
+    mat = _expect_float32_tensor(batch["features", "mat"])
 
     assert mat.shape == (3, 4, 4)
     assert not mat.is_sparse
@@ -77,7 +77,7 @@ def test_broadcast_pack_replicates(zarr_broadcast_pack: dict[str, Any]) -> None:
     )
 
     batch = dataset.__getitems__([0, 1, 2])
-    mat = _expect_float32_tensor(batch["features"]["mat"])
+    mat = _expect_float32_tensor(batch["features", "mat"])
 
     assert mat.shape == (3, 4, 4)
     expected = torch.from_numpy(np.stack([expected_matrix] * 3))
@@ -108,7 +108,7 @@ def test_memmap_cache_dir_bypassed_for_zarr_feature(
     assert isinstance(dataset._feature_lazy_readers["mat"], ZarrLazyReader)
 
     # Functional sanity: index still works when memmap path is active.
-    mat = _expect_float32_tensor(dataset[0]["features"]["mat"])
+    mat = _expect_float32_tensor(dataset[0]["features", "mat"])
     assert mat.shape == (4, 4)
 
 
@@ -129,7 +129,7 @@ def test_zarr_target_lazy_injection(zarr_matrix_pack: dict[str, Any]) -> None:
     )
 
     sample = dataset[0]
-    tensor = _expect_float32_tensor(sample["targets"]["y"])
+    tensor = _expect_float32_tensor(sample["targets", "y"])
     assert tensor.shape == (4, 4)
 
 
@@ -149,5 +149,5 @@ def test_feature_factory_with_zarr_dir(zarr_matrix_pack: dict[str, Any]) -> None
 
     assert len(dataset) == 3
     sample = dataset[0]
-    tensor = _expect_float32_tensor(sample["features"]["K"])
+    tensor = _expect_float32_tensor(sample["features", "K"])
     assert tensor.shape == (4, 4)

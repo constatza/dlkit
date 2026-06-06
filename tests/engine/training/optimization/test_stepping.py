@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any, cast
 
 import pytest
 import torch
@@ -336,7 +337,7 @@ class TestConcurrentOptimizerClosureRouting:
             loss.backward()
             return loss
 
-        loss = optimizer.step(closure)
+        loss = cast("Any", optimizer).step(closure)
 
         assert isinstance(loss, Tensor)
         assert call_count == 1
@@ -362,7 +363,7 @@ class TestConcurrentOptimizerClosureRouting:
             loss.backward()
             return loss
 
-        loss = optimizer.step(closure)
+        loss = cast("Any", optimizer).step(closure)
 
         assert isinstance(loss, Tensor)
         assert call_count > 0
@@ -385,4 +386,4 @@ class TestConcurrentOptimizerClosureRouting:
             return loss
 
         with pytest.raises(RuntimeError, match="at most one LBFGS"):
-            optimizer.step(closure)
+            cast("Any", optimizer).step(closure)

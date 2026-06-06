@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import pytest
 import torch
@@ -87,9 +88,12 @@ class TestSiren:
 
     def test_hidden_layer_init(self) -> None:
         net = Siren(in_features=2, out_features=1, hidden_size=8, num_layers=3)
-        bound = math.sqrt(6.0 / net.hidden_layers[0].in_features) / net._omega0
+        first_hidden = cast("torch.nn.Linear", net.hidden_layers[0])
+        omega0 = net._omega0
+        bound = math.sqrt(6.0 / first_hidden.in_features) / omega0
         for layer in net.hidden_layers:
-            assert layer.weight.data.abs().max() <= bound + 1e-5
+            linear = cast("torch.nn.Linear", layer)
+            assert linear.weight.data.abs().max() <= bound + 1e-5
 
     def test_from_contract(self) -> None:
         contract = TabulaRSpec(in_shape=(2,), out_shape=(1,))

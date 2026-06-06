@@ -1,5 +1,6 @@
 """Tests for settings updater with deep merge functionality."""
 
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -739,7 +740,7 @@ module_path = "torch.nn"
                         "features": (
                             NpyEntry(
                                 name="x",
-                                path="/nonexistent/bad/path.npy",
+                                path=cast("Path | None", "/nonexistent/bad/path.npy"),
                                 data_role=DataRole.FEATURE,
                             ),
                         )

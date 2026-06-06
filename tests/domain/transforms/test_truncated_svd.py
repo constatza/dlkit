@@ -1,5 +1,6 @@
 import pytest
 import torch
+from typing import cast
 
 from dlkit.domain.transforms.errors import TransformNotFittedError
 from dlkit.domain.transforms.truncated_svd import TruncatedSVD
@@ -63,12 +64,12 @@ class TestTruncatedSVD:
 
     def test_fit_stores_singular_values(self, fitted_tsvd: TruncatedSVD) -> None:
         assert hasattr(fitted_tsvd, "singular_values")
-        sv = fitted_tsvd.singular_values
+        sv = cast("torch.Tensor", fitted_tsvd.singular_values)
         assert sv.shape == (4,)
         assert (sv >= 0).all()
 
     def test_fit_stores_explained_energy_ratio(self, fitted_tsvd: TruncatedSVD) -> None:
-        ratio = fitted_tsvd.explained_energy_ratio
+        ratio = cast("torch.Tensor", fitted_tsvd.explained_energy_ratio)
         assert ratio.ndim == 0
         assert 0.0 < ratio.item() <= 1.0
 
@@ -77,4 +78,7 @@ class TestTruncatedSVD:
     ) -> None:
         t2 = TruncatedSVD(n_components=4)
         t2.load_state_dict(fitted_tsvd.state_dict())
-        torch.testing.assert_close(t2.explained_energy_ratio, fitted_tsvd.explained_energy_ratio)
+        torch.testing.assert_close(
+            cast("torch.Tensor", t2.explained_energy_ratio),
+            cast("torch.Tensor", fitted_tsvd.explained_energy_ratio),
+        )

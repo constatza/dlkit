@@ -7,6 +7,7 @@ enabling testing without file I/O and supporting programmatic API usage.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -312,7 +313,7 @@ class TestFlexibleDatasetNewHierarchy:
     def test_dataset_with_placeholder_raises(self, placeholder_feature: PathBasedEntry):
         """Test FlexibleDataset raises error for placeholder entries."""
         with pytest.raises(PlaceholderNotResolvedError):
-            FlexibleDataset(entries=[placeholder_feature])
+            FlexibleDataset(entries=cast("Any", [placeholder_feature]))
 
 
 class TestFlexibleDatasetFactoryEntries:

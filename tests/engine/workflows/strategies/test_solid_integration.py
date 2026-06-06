@@ -161,10 +161,10 @@ def test_interface_segregation_principle_integration():
     training_methods = [method for method in dir(ITrainingExecutor) if not method.startswith("_")]
     assert training_methods == ["execute"]
 
-    # IExperimentTracker should only have tracking methods
+    # IExperimentTracker should only have tracking methods (no config-serialization concerns)
     tracker_methods = [method for method in dir(IExperimentTracker) if not method.startswith("_")]
     assert "create_run" in tracker_methods
-    assert "log_settings" in tracker_methods
+    assert "log_settings" not in tracker_methods
 
     # IOptimizationStrategy should only expose optimization execution
     optimizer_methods = [

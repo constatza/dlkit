@@ -23,6 +23,7 @@ from dlkit.domain.metrics.functional import (
     _relative_energy_norm_update,
 )
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================
@@ -208,7 +209,7 @@ class TestCorrectness:
 
         direct = relative_energy_norm_loss(preds, target, matrix, eps=1e-8)
         per_sample = _relative_energy_norm_update(preds, target, matrix, eps=1e-8)
-        split = _relative_energy_norm_compute(per_sample.sum(), per_sample.numel())
+        split = _relative_energy_norm_compute(per_sample.sum(), torch.tensor(per_sample.numel()))
 
         assert torch.allclose(direct, split)
 

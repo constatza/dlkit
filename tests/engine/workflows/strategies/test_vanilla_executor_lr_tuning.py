@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -91,7 +92,8 @@ class TestVanillaExecutorLRTuning:
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 executor.execute(mock_components, settings_without_lr_tuner)
 
-        mock_components.trainer.fit.assert_called_once()
+        trainer = cast("Any", mock_components.trainer)
+        trainer.fit.assert_called_once()
         assert mock_components.model.lr == 0.001
 
     def test_execute_with_lr_tuner_enabled(
@@ -111,7 +113,7 @@ class TestVanillaExecutorLRTuning:
 
         find_lr.assert_called_once()
         assert mock_components.model.lr == 0.005
-        mock_components.trainer.fit.assert_called_once()
+        cast("Any", mock_components.trainer).fit.assert_called_once()
 
     def test_execute_with_lr_tuner_empty_config(
         self,
@@ -152,7 +154,7 @@ class TestVanillaExecutorLRTuning:
                 ):
                     executor.execute(mock_components, settings_with_lr_tuner)
 
-        mock_components.trainer.fit.assert_called_once()
+        cast("Any", mock_components.trainer).fit.assert_called_once()
         assert mock_components.model.lr == 0.001
 
     def test_apply_lr_tuning_sets_model_lr(
@@ -242,7 +244,7 @@ class TestVanillaExecutorLRTuning:
                     executor.execute(mock_components, settings)
 
         mock_lr_tuner.tune.assert_not_called()
-        mock_components.trainer.fit.assert_called_once()
+        cast("Any", mock_components.trainer).fit.assert_called_once()
 
     def test_apply_lr_tuning_projects_multi_stage_policy_to_temporary_wrapper(
         self,
@@ -283,7 +285,7 @@ class TestVanillaExecutorLRTuning:
 
         find_lr.assert_called_once()
         assert mock_components.model.lr == 0.02
-        mock_components.trainer.fit.assert_called_once()
+        cast("Any", mock_components.trainer).fit.assert_called_once()
 
     def test_apply_lr_tuning_noop_setter_leaves_lr_unchanged(
         self,
@@ -293,7 +295,9 @@ class TestVanillaExecutorLRTuning:
         """When model.lr setter is a no-op, model.lr stays at original value after tuning."""
         executor = VanillaExecutor()
 
-        class _NoOpLRModel:
+        from lightning.pytorch import LightningModule
+
+        class _NoOpLRModel(LightningModule):
             """Model whose lr setter is intentionally a no-op."""
 
             _lr: float = 0.001
@@ -310,7 +314,7 @@ class TestVanillaExecutorLRTuning:
 
         with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.05):
             executor._apply_lr_tuning(
-                noop_model,  # type: ignore[arg-type]
+                cast("Any", noop_model),
                 mock_components.datamodule,
                 settings_with_lr_tuner,
             )

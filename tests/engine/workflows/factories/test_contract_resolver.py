@@ -9,6 +9,7 @@ from dlkit.domain.nn.contracts import (
     BranchTrunkSpec,
     GraphContractSpec,
     GridOperatorSpec,
+    ModelContractSpec,
     SequenceSpec,
     TabulaRSpec,
 )
@@ -16,6 +17,31 @@ from dlkit.engine.workflows.factories.contract_resolver import (
     ContractInferenceError,
     resolve_contract,
 )
+
+
+def _as_tabular(contract: ModelContractSpec) -> TabulaRSpec:
+    assert isinstance(contract, TabulaRSpec)
+    return contract
+
+
+def _as_sequence(contract: ModelContractSpec) -> SequenceSpec:
+    assert isinstance(contract, SequenceSpec)
+    return contract
+
+
+def _as_grid(contract: ModelContractSpec) -> GridOperatorSpec:
+    assert isinstance(contract, GridOperatorSpec)
+    return contract
+
+
+def _as_branch_trunk(contract: ModelContractSpec) -> BranchTrunkSpec:
+    assert isinstance(contract, BranchTrunkSpec)
+    return contract
+
+
+def _as_graph(contract: ModelContractSpec) -> GraphContractSpec:
+    assert isinstance(contract, GraphContractSpec)
+    return contract
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -267,7 +293,7 @@ class TestTabularDispatch:
         """
         result = resolve_contract(tabular_geometry, output_shapes=((3,),))
 
-        assert result.in_shape == (8,)  # type: ignore[union-attr]
+        assert _as_tabular(result).in_shape == (8,)
 
     def test_out_shape_from_output_shapes(self, tabular_geometry: GeometrySpec) -> None:
         """TabulaRSpec.out_shape equals output_shapes[0].
@@ -277,7 +303,7 @@ class TestTabularDispatch:
         """
         result = resolve_contract(tabular_geometry, output_shapes=((5,),))
 
-        assert result.out_shape == (5,)  # type: ignore[union-attr]
+        assert _as_tabular(result).out_shape == (5,)
 
     def test_raises_when_no_output_shapes(self, tabular_geometry: GeometrySpec) -> None:
         """resolve_contract raises WorkflowError for tabular geometry with no output shapes.
@@ -316,7 +342,7 @@ class TestSequenceDispatch:
         """
         result = resolve_contract(sequence_geometry, output_shapes=((4, 32),))
 
-        assert result.in_channels == 16  # type: ignore[union-attr]
+        assert _as_sequence(result).in_channels == 16
 
     def test_seq_len_from_shape(self, sequence_geometry: GeometrySpec) -> None:
         """SequenceSpec.seq_len equals shape[1] of the primary feature.
@@ -326,7 +352,7 @@ class TestSequenceDispatch:
         """
         result = resolve_contract(sequence_geometry, output_shapes=((4, 32),))
 
-        assert result.seq_len == 32  # type: ignore[union-attr]
+        assert _as_sequence(result).seq_len == 32
 
     def test_out_channels_from_output_shapes(self, sequence_geometry: GeometrySpec) -> None:
         """SequenceSpec.out_channels equals output_shapes[0][0].
@@ -336,7 +362,7 @@ class TestSequenceDispatch:
         """
         result = resolve_contract(sequence_geometry, output_shapes=((7, 32),))
 
-        assert result.out_channels == 7  # type: ignore[union-attr]
+        assert _as_sequence(result).out_channels == 7
 
 
 class TestGridDispatch:
@@ -360,7 +386,7 @@ class TestGridDispatch:
         """
         result = resolve_contract(grid_geometry, output_shapes=((2,),))
 
-        assert result.in_channels == 4  # type: ignore[union-attr]
+        assert _as_grid(result).in_channels == 4
 
     def test_out_channels_from_output_shapes(self, grid_geometry: GeometrySpec) -> None:
         """GridOperatorSpec.out_channels equals output_shapes[0][0].
@@ -370,7 +396,7 @@ class TestGridDispatch:
         """
         result = resolve_contract(grid_geometry, output_shapes=((6,),))
 
-        assert result.out_channels == 6  # type: ignore[union-attr]
+        assert _as_grid(result).out_channels == 6
 
     def test_spatial_shape_drops_channel_dim(self, grid_geometry: GeometrySpec) -> None:
         """GridOperatorSpec.spatial_shape equals shape[1:] of the primary feature.
@@ -380,7 +406,7 @@ class TestGridDispatch:
         """
         result = resolve_contract(grid_geometry, output_shapes=((2,),))
 
-        assert result.spatial_shape == (64, 64)  # type: ignore[union-attr]
+        assert _as_grid(result).spatial_shape == (64, 64)
 
     def test_point_cloud_returns_grid_operator_spec(
         self, point_cloud_geometry: GeometrySpec
@@ -418,7 +444,7 @@ class TestBranchTrunkDispatch:
         """
         result = resolve_contract(tabular_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.branch_shape == (100,)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).branch_shape == (100,)
 
     def test_query_shape_is_coords_shape(self, tabular_with_coords_geometry: GeometrySpec) -> None:
         """BranchTrunkSpec.query_shape equals the TARGET_COORDINATES field shape.
@@ -428,7 +454,7 @@ class TestBranchTrunkDispatch:
         """
         result = resolve_contract(tabular_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.query_shape == (2,)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).query_shape == (2,)
 
     def test_out_features_from_output_shapes(
         self, tabular_with_coords_geometry: GeometrySpec
@@ -440,7 +466,7 @@ class TestBranchTrunkDispatch:
         """
         result = resolve_contract(tabular_with_coords_geometry, output_shapes=((5,),))
 
-        assert result.out_features == 5  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).out_features == 5
 
 
 class TestGraphDispatch:
@@ -464,7 +490,7 @@ class TestGraphDispatch:
         """
         result = resolve_contract(graph_geometry)
 
-        assert result.in_channels == 32  # type: ignore[union-attr]
+        assert _as_graph(result).in_channels == 32
 
     def test_out_channels_same_as_in_channels(self, graph_geometry: GeometrySpec) -> None:
         """GraphContractSpec.out_channels defaults to primary_size (same as in_channels).
@@ -474,7 +500,8 @@ class TestGraphDispatch:
         """
         result = resolve_contract(graph_geometry)
 
-        assert result.out_channels == result.in_channels  # type: ignore[union-attr]
+        graph_contract = _as_graph(result)
+        assert graph_contract.out_channels == graph_contract.in_channels
 
     def test_edge_dim_none_when_no_edges(self, graph_geometry: GeometrySpec) -> None:
         """GraphContractSpec.edge_dim is None when geometry.edge_feature_dim is None.
@@ -484,7 +511,7 @@ class TestGraphDispatch:
         """
         result = resolve_contract(graph_geometry)
 
-        assert result.edge_dim is None  # type: ignore[union-attr]
+        assert _as_graph(result).edge_dim is None
 
     def test_edge_dim_propagated(self, graph_geometry_with_edges: GeometrySpec) -> None:
         """GraphContractSpec.edge_dim equals geometry.edge_feature_dim.
@@ -494,7 +521,7 @@ class TestGraphDispatch:
         """
         result = resolve_contract(graph_geometry_with_edges)
 
-        assert result.edge_dim == 8  # type: ignore[union-attr]
+        assert _as_graph(result).edge_dim == 8
 
 
 # ---------------------------------------------------------------------------
@@ -525,7 +552,7 @@ class TestGridWithCoordsDispatch:
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.branch_shape == (1, 100)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).branch_shape == (1, 100)
 
     def test_query_shape_is_target_coord_shape(
         self, grid_with_coords_geometry: GeometrySpec
@@ -537,7 +564,7 @@ class TestGridWithCoordsDispatch:
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.query_shape == (1, 3)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).query_shape == (1, 3)
 
     def test_out_features_from_output_shapes(self, grid_with_coords_geometry: GeometrySpec) -> None:
         """Query-shaped scalar targets resolve to one output feature.
@@ -547,7 +574,7 @@ class TestGridWithCoordsDispatch:
         """
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((8,),))
 
-        assert result.out_features == 1  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).out_features == 1
 
     def test_vector_outputs_use_last_target_dimension(
         self, grid_with_coords_geometry: GeometrySpec
@@ -555,7 +582,7 @@ class TestGridWithCoordsDispatch:
         """Query-shaped vector targets resolve to their feature dimension."""
         result = resolve_contract(grid_with_coords_geometry, output_shapes=((8, 3),))
 
-        assert result.out_features == 3  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).out_features == 3
 
 
 class TestPointCloudWithCoordsDispatch:
@@ -583,7 +610,7 @@ class TestPointCloudWithCoordsDispatch:
         """
         result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.branch_shape == (64, 3)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).branch_shape == (64, 3)
 
     def test_query_shape_is_target_coord_shape(
         self, point_cloud_with_coords_geometry: GeometrySpec
@@ -595,7 +622,7 @@ class TestPointCloudWithCoordsDispatch:
         """
         result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((1,),))
 
-        assert result.query_shape == (32, 2)  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).query_shape == (32, 2)
 
     def test_out_features_default_when_no_output_shapes(
         self, point_cloud_with_coords_geometry: GeometrySpec
@@ -607,7 +634,7 @@ class TestPointCloudWithCoordsDispatch:
         """
         result = resolve_contract(point_cloud_with_coords_geometry)
 
-        assert result.out_features == 1  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).out_features == 1
 
     def test_point_cloud_vector_outputs_use_last_target_dimension(
         self, point_cloud_with_coords_geometry: GeometrySpec
@@ -615,7 +642,7 @@ class TestPointCloudWithCoordsDispatch:
         """Point-cloud query targets use the last target dimension as output width."""
         result = resolve_contract(point_cloud_with_coords_geometry, output_shapes=((32, 4),))
 
-        assert result.out_features == 4  # type: ignore[union-attr]
+        assert _as_branch_trunk(result).out_features == 4
 
 
 # ---------------------------------------------------------------------------

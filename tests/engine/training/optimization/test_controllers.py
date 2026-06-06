@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from contextlib import contextmanager
 
 import pytest
@@ -420,7 +422,7 @@ class TestManualOptimizationController:
         scheduler_stage_0 = SchedulerSpy()
         scheduler_stage_1 = SchedulerSpy()
         trigger = NoTransitionTrigger()
-        trigger.update = lambda epoch, metrics: True  # type: ignore[method-assign]
+        trigger.update = cast("Any", lambda epoch, metrics: True)
 
         program = RunningOptimizerPolicy(
             stages=(

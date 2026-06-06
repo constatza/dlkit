@@ -106,7 +106,7 @@ class TestComprehensivePrecision:
         assert target_data.dtype == torch.float16
 
         # Create model with session precision (using precision override context)
-        shape = {"x": (20,), "y": (20,)}
+        shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (20,)}
         with precision_override(PrecisionStrategy.MIXED_16):
             model = ProductionTestModel(shape)
 
@@ -135,7 +135,7 @@ class TestComprehensivePrecision:
             assert data_memory_save.dtype == torch.float16
 
             # Model creation in override context
-            shape = {"x": (20,), "y": (20,)}
+            shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (20,)}
             model_memory = ProductionTestModel(shape)
             model_dtype = next(model_memory.parameters()).dtype
             assert model_dtype == torch.float16
@@ -162,7 +162,7 @@ class TestComprehensivePrecision:
                     data = load_array(datasets["float32"])
 
                     # Create model in thread-specific precision
-                    shape = {"x": (20,), "y": (5,)}
+                    shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (5,)}
                     model = ProductionTestModel(shape)
 
                     # Verify precision isolation
@@ -259,7 +259,7 @@ class TestComprehensivePrecision:
     def test_memory_optimization_scenarios(self, sample_datasets):
         """Test memory optimization scenarios with different precision strategies."""
 
-        shape = {"x": (20,), "y": (10,)}
+        shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (10,)}
 
         # Test memory factors are correctly calculated
         _service = get_precision_service()
@@ -350,7 +350,7 @@ class TestComprehensivePrecision:
                 assert data.dtype == torch.float16
 
         # Model creation phase
-        shape = {"x": (20,), "y": (5,)}
+        shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (5,)}
         model = ProductionTestModel(shape)
 
         # Apply precision to model using precision service
@@ -400,7 +400,7 @@ class TestComprehensivePrecision:
                     data = load_array(datasets["float32"])
 
                     # Create model
-                    shape = {"x": (20,), "y": (5,)}
+                    shape: dict[str, tuple[int, ...]] = {"x": (20,), "y": (5,)}
                     model = ProductionTestModel(shape)
 
                     # Forward pass

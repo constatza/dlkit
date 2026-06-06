@@ -91,13 +91,15 @@ def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper
 
     # Include in_features and out_features explicitly so the model can be rebuilt
     # from checkpoint kwargs alone (without shape bridge).
-    model_settings = ModelComponentSettings(
-        name=MODEL_NAME,
-        module_path=MODEL_MODULE_PATH,
-        in_features=4,
-        out_features=4,
-        hidden_size=4,
-        num_layers=1,
+    model_settings = ModelComponentSettings.model_validate(
+        {
+            "name": MODEL_NAME,
+            "module_path": MODEL_MODULE_PATH,
+            "in_features": 4,
+            "out_features": 4,
+            "hidden_size": 4,
+            "num_layers": 1,
+        }
     )
     wrapper_settings = WrapperComponentSettings()
 
@@ -211,13 +213,15 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     assert ckpt_path.exists()
 
     _settings = WrapperComponentSettings()
-    _model_settings = ModelComponentSettings(
-        name=MODEL_NAME,
-        module_path=MODEL_MODULE_PATH,
-        in_features=4,
-        out_features=4,
-        hidden_size=4,
-        num_layers=1,
+    _model_settings = ModelComponentSettings.model_validate(
+        {
+            "name": MODEL_NAME,
+            "module_path": MODEL_MODULE_PATH,
+            "in_features": 4,
+            "out_features": 4,
+            "hidden_size": 4,
+            "num_layers": 1,
+        }
     )
     loaded = StandardLightningWrapper.load_from_checkpoint(
         str(ckpt_path),
@@ -374,7 +378,7 @@ def test_manual_inverse_matches_default_path(predictor_transform_setup: dict[str
     manual_predictions = _extract_prediction_tensor(manual_result)
     manual_predictions_raw = apply_inverse_chain(
         manual_predictions,
-        wrapper._batch_transformer._target_chains["y"],
+        cast("Any", wrapper._batch_transformer)._target_chains["y"],
     )
 
     assert torch.allclose(manual_predictions_raw, default_predictions, atol=1e-6)

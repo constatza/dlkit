@@ -41,6 +41,7 @@ from dlkit.domain.metrics.functional import (
     temporal_derivative_error,
 )
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================
@@ -430,7 +431,7 @@ class TestUpdateComputeSplit:
         """Test compute function calculates mean."""
         sum_errors = torch.tensor(10.0)
         total = 5
-        mean_error = _normalized_vector_norm_compute(sum_errors, total)
+        mean_error = _normalized_vector_norm_compute(sum_errors, torch.tensor(total))
 
         assert torch.allclose(mean_error, torch.tensor(2.0))
 
@@ -445,7 +446,7 @@ class TestUpdateComputeSplit:
         errors = _normalized_vector_norm_update(preds, target, ord=2, dim=-1, eps=1e-8)
         sum_errors = errors.sum()
         total = errors.numel()
-        split_result = _normalized_vector_norm_compute(sum_errors, total)
+        split_result = _normalized_vector_norm_compute(sum_errors, torch.tensor(total))
 
         assert torch.allclose(direct_result, split_result)
 
@@ -462,7 +463,7 @@ class TestUpdateComputeSplit:
         """Test temporal compute calculates mean."""
         sum_squared = torch.tensor(20.0)
         total = 10
-        mean_error = _temporal_derivative_compute(sum_squared, total)
+        mean_error = _temporal_derivative_compute(sum_squared, torch.tensor(total))
 
         assert torch.allclose(mean_error, torch.tensor(2.0))
 
@@ -477,7 +478,7 @@ class TestUpdateComputeSplit:
         squared_errors = _temporal_derivative_update(preds, target, n=1, derivative_dim=1)
         sum_squared = squared_errors.sum()
         total = squared_errors.numel()
-        split_result = _temporal_derivative_compute(sum_squared, total)
+        split_result = _temporal_derivative_compute(sum_squared, torch.tensor(total))
 
         assert torch.allclose(direct_result, split_result)
 
@@ -497,7 +498,7 @@ class TestUpdateComputeSplit:
         )
 
         per_sample = _relative_energy_norm_update(preds, target, matrix, eps=1e-8)
-        split = _relative_energy_norm_compute(per_sample.sum(), per_sample.numel())
+        split = _relative_energy_norm_compute(per_sample.sum(), torch.tensor(per_sample.numel()))
 
         assert torch.allclose(direct, split)
 
@@ -574,7 +575,7 @@ class TestUpdateComputeSplit:
     ):
         """All compute helpers should preserve raw `sum / total` behavior."""
         expected = sum_value / total
-        result = compute_fn(sum_value, total)
+        result = compute_fn(sum_value, torch.tensor(total))
         assert torch.allclose(result, expected, equal_nan=True)
 
 

@@ -262,12 +262,12 @@ class TestBuildInvokerFromEntries:
     @pytest.fixture
     def feat_x(self) -> DataEntry:
         """Feature 'x' with default model_input=True."""
-        return ValueEntry("x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE)
+        return ValueEntry(name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE)
 
     @pytest.fixture
     def feat_z(self) -> DataEntry:
         """Feature 'z' with default model_input=True."""
-        return ValueEntry("z", value=torch.zeros(4, 5), data_role=DataRole.FEATURE)
+        return ValueEntry(name="z", value=torch.zeros(4, 5), data_role=DataRole.FEATURE)
 
     def test_model_input_true_includes_feature(
         self,

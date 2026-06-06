@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -51,7 +52,7 @@ def _make_dataset(feature_dict: dict[str, torch.Tensor]) -> MagicMock:
     Returns:
         MagicMock with __getitem__ returning the expected TensorDict structure.
     """
-    features_td = TensorDict(feature_dict, batch_size=[])
+    features_td = TensorDict(cast("Any", feature_dict), batch_size=[])
     sample = TensorDict({"features": features_td}, batch_size=[])
     dataset = MagicMock()
     dataset.__getitem__ = MagicMock(return_value=sample)
@@ -125,6 +126,10 @@ def multi_entry_tabular() -> tuple[tuple[DataEntry, ...], MagicMock]:
 
 class TestInferGeometryBasic:
     """Basic shape and field spec correctness."""
+
+    @staticmethod
+    def _mutate_attr(obj: object, name: str, value: object) -> None:
+        setattr(obj, name, value)
 
     def test_single_tabular_field_shape(
         self, tabular_entry: DataEntry, tabular_dataset: MagicMock
@@ -209,7 +214,7 @@ class TestInferGeometryBasic:
 
         assert isinstance(result, GeometrySpec)
         with pytest.raises((TypeError, AttributeError)):
-            result.fields = ()  # type: ignore[misc]
+            self._mutate_attr(result, "fields", ())
 
 
 class TestTopologyKindInference:

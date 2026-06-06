@@ -225,7 +225,7 @@ def _make_training_settings(
     dataset = DatasetSettings(
         name="FlexibleDataset",
         module_path="dlkit.engine.data.datasets",
-        root=data_dir,
+        root_dir=data_dir,
         features=(NpyEntry(name="x", path=data_dir / "features.npy", data_role=DataRole.FEATURE),),
         targets=(NpyEntry(name="y", path=data_dir / "targets.npy", data_role=DataRole.TARGET),),
         split=IndexSplitSettings(),

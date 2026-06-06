@@ -132,11 +132,11 @@ def test_step_with_closure(batched_muon: BatchedMuon, muon_params: list[torch.Te
     """step(closure) calls the closure and returns the loss."""
     called = [False]
 
-    def closure() -> torch.Tensor:
+    def closure() -> float:
         called[0] = True
         for p in muon_params:
             p.grad = torch.randn_like(p)
-        return torch.tensor(1.23)
+        return 1.23
 
     loss = batched_muon.step(closure=closure)
     assert called[0], "closure was not invoked"

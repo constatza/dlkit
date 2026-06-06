@@ -113,13 +113,17 @@ class _NoContractModel(_MinimalModule):
 
 
 class TestTabulaRSpec:
+    @staticmethod
+    def _mutate_attr(obj: object, name: str, value: object) -> None:
+        setattr(obj, name, value)
+
     def test_fields_are_accessible(self, tabular_spec: TabulaRSpec) -> None:
         assert tabular_spec.in_shape == (16,)
         assert tabular_spec.out_shape == (4,)
 
     def test_is_frozen(self, tabular_spec: TabulaRSpec) -> None:
         with pytest.raises(FrozenInstanceError):
-            tabular_spec.in_shape = (32,)  # type: ignore[misc]
+            self._mutate_attr(tabular_spec, "in_shape", (32,))
 
 
 class TestGridOperatorSpec:
@@ -130,7 +134,7 @@ class TestGridOperatorSpec:
 
     def test_is_frozen(self, grid_spec: GridOperatorSpec) -> None:
         with pytest.raises(FrozenInstanceError):
-            grid_spec.in_channels = 99  # type: ignore[misc]
+            TestTabulaRSpec._mutate_attr(grid_spec, "in_channels", 99)
 
 
 class TestSequenceSpec:
@@ -147,7 +151,7 @@ class TestSequenceSpec:
 
     def test_is_frozen(self, sequence_spec: SequenceSpec) -> None:
         with pytest.raises(FrozenInstanceError):
-            sequence_spec.seq_len = 200  # type: ignore[misc]
+            TestTabulaRSpec._mutate_attr(sequence_spec, "seq_len", 200)
 
 
 class TestBranchTrunkSpec:
@@ -158,7 +162,7 @@ class TestBranchTrunkSpec:
 
     def test_is_frozen(self, branch_trunk_spec: BranchTrunkSpec) -> None:
         with pytest.raises(FrozenInstanceError):
-            branch_trunk_spec.out_features = 0  # type: ignore[misc]
+            TestTabulaRSpec._mutate_attr(branch_trunk_spec, "out_features", 0)
 
 
 class TestGraphContractSpec:
@@ -170,7 +174,7 @@ class TestGraphContractSpec:
 
     def test_is_frozen(self, graph_spec: GraphContractSpec) -> None:
         with pytest.raises(FrozenInstanceError):
-            graph_spec.in_channels = 0  # type: ignore[misc]
+            TestTabulaRSpec._mutate_attr(graph_spec, "in_channels", 0)
 
 
 # ---------------------------------------------------------------------------

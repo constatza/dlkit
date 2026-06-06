@@ -8,6 +8,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 import torch
 from pydantic import ValidationError
@@ -15,7 +17,6 @@ from pydantic import ValidationError
 from dlkit.common.geometry import FieldRole, GeometryKind
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry
-
 
 class TestModelInputField:
     """Tests for the model_input bool field on DataEntry subclasses."""
@@ -43,32 +44,51 @@ class TestModelInputField:
         """String model_input raises ValidationError (hard-cut to bool)."""
         with pytest.raises(ValidationError):
             ValueEntry(
-                name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, model_input="hidden"
-            )  # type: ignore[arg-type]
+                name="x",
+                value=torch.zeros(4, 3),
+                data_role=DataRole.FEATURE,
+                model_input=cast("bool", "hidden"),
+            )
 
     def test_model_input_int_raises(self) -> None:
         """Integer model_input raises ValidationError (hard-cut to bool)."""
         with pytest.raises(ValidationError):
-            ValueEntry(name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, model_input=0)  # type: ignore[arg-type]
+            ValueEntry(
+                name="x",
+                value=torch.zeros(4, 3),
+                data_role=DataRole.FEATURE,
+                model_input=cast("bool", 0),
+            )
 
     def test_model_input_none_raises(self) -> None:
         """None model_input raises ValidationError (hard-cut to bool)."""
         with pytest.raises(ValidationError):
             ValueEntry(
-                name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, model_input=None
-            )  # type: ignore[arg-type]
+                name="x",
+                value=torch.zeros(4, 3),
+                data_role=DataRole.FEATURE,
+                model_input=cast("bool", None),
+            )
 
     def test_model_input_int_one_raises(self) -> None:
         """Integer 1 raises ValidationError (strict bool — no coercion from int)."""
         with pytest.raises(ValidationError):
-            ValueEntry(name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, model_input=1)  # type: ignore[arg-type]
+            ValueEntry(
+                name="x",
+                value=torch.zeros(4, 3),
+                data_role=DataRole.FEATURE,
+                model_input=cast("bool", 1),
+            )
 
     def test_model_input_kwarg_str_raises(self) -> None:
         """String 'kwarg' raises ValidationError (strict bool — no strings accepted)."""
         with pytest.raises(ValidationError):
             ValueEntry(
-                name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, model_input="kwarg"
-            )  # type: ignore[arg-type]
+                name="x",
+                value=torch.zeros(4, 3),
+                data_role=DataRole.FEATURE,
+                model_input=cast("bool", "kwarg"),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +139,11 @@ class TestFieldRoleField:
     def test_field_role_parses_from_string(self, role_str: str, expected: FieldRole) -> None:
         """field_role accepts the string value defined by FieldRole (StrEnum)."""
         feat = ValueEntry(
-            name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, field_role=role_str
-        )  # type: ignore[arg-type]
+            name="x",
+            value=torch.zeros(4, 3),
+            data_role=DataRole.FEATURE,
+            field_role=cast("FieldRole", role_str),
+        )
         assert feat.field_role == expected
 
     def test_field_role_excluded_from_model_dump(self, value_entry_default: ValueEntry) -> None:
@@ -163,8 +186,11 @@ class TestGeometryKindField:
     def test_geometry_kind_parses_from_string(self, kind_str: str, expected: GeometryKind) -> None:
         """geometry_kind accepts the string value defined by GeometryKind (StrEnum)."""
         feat = ValueEntry(
-            name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE, geometry_kind=kind_str
-        )  # type: ignore[arg-type]
+            name="x",
+            value=torch.zeros(4, 3),
+            data_role=DataRole.FEATURE,
+            geometry_kind=cast("GeometryKind", kind_str),
+        )
         assert feat.geometry_kind == expected
 
     def test_geometry_kind_excluded_from_model_dump(self, value_entry_default: ValueEntry) -> None:

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
@@ -53,7 +54,7 @@ class TestIncrementalPCA:
         out1 = fitted_ipca(data)
         t2 = IncrementalPCA(n_components=5)
         t2.load_state_dict(fitted_ipca.state_dict())
-        torch.testing.assert_close(t2(data), out1)
+        torch.testing.assert_close(cast("torch.Tensor", t2(data)), out1)
 
     def test_chain_fits_via_dataloader(self, data: torch.Tensor) -> None:
         t = IncrementalPCA(n_components=5, batch_size=30)
@@ -70,7 +71,7 @@ class TestIncrementalPCA:
     def test_finalize_fit_stores_explained_variance_ratio(
         self, fitted_ipca: IncrementalPCA
     ) -> None:
-        ratio = fitted_ipca.explained_variance_ratio
+        ratio = cast("torch.Tensor", fitted_ipca.explained_variance_ratio)
         assert ratio.shape == (5,)
         assert 0.0 < ratio.sum().item() <= 1.0
 
@@ -80,7 +81,8 @@ class TestIncrementalPCA:
         t2 = IncrementalPCA(n_components=5)
         t2.load_state_dict(fitted_ipca.state_dict())
         torch.testing.assert_close(
-            t2.explained_variance_ratio, fitted_ipca.explained_variance_ratio
+            cast("torch.Tensor", t2.explained_variance_ratio),
+            cast("torch.Tensor", fitted_ipca.explained_variance_ratio),
         )
 
     def test_file_checkpoint_round_trip(
@@ -98,6 +100,7 @@ class TestIncrementalPCA:
         torch.testing.assert_close(ipca2.mean, fitted_ipca.mean)
         torch.testing.assert_close(ipca2.components, fitted_ipca.components)
         torch.testing.assert_close(
-            ipca2.explained_variance_ratio, fitted_ipca.explained_variance_ratio
+            cast("torch.Tensor", ipca2.explained_variance_ratio),
+            cast("torch.Tensor", fitted_ipca.explained_variance_ratio),
         )
         torch.testing.assert_close(ipca2(data), fitted_ipca(data))

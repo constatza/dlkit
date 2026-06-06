@@ -94,6 +94,10 @@ def multiple_features_spec() -> GeometrySpec:
 
 
 class TestFieldSpec:
+    @staticmethod
+    def _mutate_attr(obj: object, name: str, value: object) -> None:
+        setattr(obj, name, value)
+
     def test_primary_size_returns_shape_first_dim(self, feature_spec: FieldSpec) -> None:
         assert feature_spec.primary_size == feature_spec.shape[0]
 
@@ -108,7 +112,7 @@ class TestFieldSpec:
 
     def test_is_frozen(self, feature_spec: FieldSpec) -> None:
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
-            feature_spec.name = "mutated"  # type: ignore[misc]
+            self._mutate_attr(feature_spec, "name", "mutated")
 
     def test_empty_shape_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="at least one dimension"):

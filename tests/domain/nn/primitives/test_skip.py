@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import Any, cast
 
 import pytest
 import torch
@@ -52,7 +53,7 @@ def test_invalid_how_raises() -> None:
     """Unknown aggregation string raises ValueError."""
     module = nn.Linear(4, 4)
     with pytest.raises(ValueError, match="Unknown aggregation"):
-        SkipConnection(module, build_linear_skip_layer(module), how="multiply")  # type: ignore[arg-type]
+        SkipConnection(module, build_linear_skip_layer(module), how=cast("Any", "multiply"))
 
 
 def test_bias_linear_skip_respected_true() -> None:
