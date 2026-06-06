@@ -24,18 +24,6 @@ def _get_default_optuna_storage() -> str:
     return locations.optuna_storage_uri()
 
 
-def _get_environment_aware_output_dir() -> str:
-    """Get environment-aware default output directory for templates.
-
-    Returns:
-        Default output directory path respecting environment configuration
-    """
-    from dlkit.infrastructure.config.environment import EnvironmentSettings
-
-    env = EnvironmentSettings()
-    return str(env.get_root_path() / "output")
-
-
 TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
 
 
@@ -71,7 +59,6 @@ def build_training_template_dict() -> dict:
             "workflow": "train",
             "seed": 42,
             "precision": "32",
-            "root_dir": "./",
         },
         "MODEL": {
             "name": "your.model.class",
@@ -80,6 +67,7 @@ def build_training_template_dict() -> dict:
             "trainer": {
                 "max_epochs": 100,
                 "accelerator": "auto",
+                "default_root_dir": "./lightning",
             },
         },
         "DATAMODULE": {
@@ -96,7 +84,6 @@ def build_inference_template_dict() -> dict:
             "workflow": "inference",
             "seed": 42,
             "precision": "32",
-            "root_dir": "./",
         },
         "MODEL": {
             "name": "your.model.class",
@@ -113,7 +100,6 @@ def build_mlflow_template_dict() -> dict:
             "workflow": "train",
             "seed": 42,
             "precision": "32",
-            "root_dir": "./",
         },
         "MODEL": {
             "name": "your.model.class",
@@ -143,7 +129,6 @@ def build_optuna_template_dict() -> dict:
             "workflow": "optimize",
             "seed": 42,
             "precision": "32",
-            "root_dir": "./",
         },
         "MODEL": {
             "name": "your.model.class",
@@ -165,6 +150,7 @@ def build_optuna_template_dict() -> dict:
             "trainer": {
                 "max_epochs": 100,
                 "accelerator": "auto",
+                "default_root_dir": "./lightning",
             },
         },
         "DATAMODULE": {
@@ -194,9 +180,9 @@ def _comments_for(kind: TemplateKind) -> dict[str, str]:
         "SESSION.seed": "Random seed for reproducibility",
         "SESSION.precision": "Computation precision preset (e.g., '32', '16-mixed')",
         "MODEL.name": "Model class path or registry alias",
-        "SESSION.root_dir": "Optional root directory for path resolution",
         "TRAINING.trainer.max_epochs": "Maximum number of epochs (Lightning Trainer)",
         "TRAINING.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
+        "TRAINING.trainer.default_root_dir": "Local Lightning work directory when MLflow is disabled",
         "DATAMODULE.name": "DataModule class path or alias (dataflow loading)",
         "DATASET.name": "Dataset class path or alias",
         "DATASET.root_dir": "Root directory used to resolve relative dataset entry paths",

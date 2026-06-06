@@ -24,24 +24,6 @@ if TYPE_CHECKING:
     )
 
 
-def _sync_session_root_to_environment(settings: Any) -> None:
-    """Synchronize SESSION.root_dir to global EnvironmentSettings.
-
-    This wraps the public sync function from environment.py. It provides a
-    defensive fallback when PathOverrideContext is not active.
-
-    With PathResolver in place, this mutation is not strictly required, but
-    we keep it for backward compatibility and to ensure SESSION.root_dir
-    is available as a fallback when PathResolver is used directly.
-
-    Args:
-        settings: Loaded settings object (GeneralSettings or similar)
-    """
-    from dlkit.infrastructure.config.environment import sync_session_root_to_environment
-
-    sync_session_root_to_environment(settings)
-
-
 def _resolve_default_settings_class() -> type[BaseModel] | None:
     """Lazily import GeneralSettings without top-level coupling."""
     module_name = "dlkit.infrastructure.config.general_settings"
@@ -103,11 +85,6 @@ def load_config[T: BaseModel](
             config_data,
         ) from e
 
-    # Sync SESSION.root_dir to global environment for defensive fallback
-    # This ensures SESSION.root_dir is respected even when PathOverrideContext is not active
-    _sync_session_root_to_environment(validated)
-
-    # No post-PathsResolver step; path resolution is environment/config-based
     return cast(T, validated)
 
 
@@ -192,17 +169,6 @@ def load_sections_config(
                 model_class.__name__,
                 section_data,
             ) from e
-
-    # If we loaded a full settings object (GeneralSettings), sync SESSION.root_dir
-    # This handles partial loading where a complete GeneralSettings is returned
-    if len(constructed_sections) > 1 and "SESSION" in constructed_sections:
-        # Create a mock settings object with SESSION attribute for synchronization
-        class _MockSettings:
-            def __init__(self, session: Any) -> None:
-                self.SESSION = session
-
-        mock_settings = _MockSettings(constructed_sections["SESSION"])
-        _sync_session_root_to_environment(mock_settings)
 
     return constructed_sections
 
@@ -361,9 +327,6 @@ def load_training_config_eager(config_path: Path | str) -> TrainingWorkflowConfi
     # Eager validation - fails fast on typos/types
     config = TrainingWorkflowConfig.model_validate(toml_data)
 
-    # Sync root_dir to environment
-    _sync_session_root_to_environment(config)
-
     return config
 
 
@@ -389,8 +352,6 @@ def load_inference_config_eager(config_path: Path | str) -> InferenceWorkflowCon
     toml_data = load_config(config_path, raw=True)
     config = InferenceWorkflowConfig.model_validate(toml_data)
 
-    _sync_session_root_to_environment(config)
-
     return config
 
 
@@ -415,7 +376,5 @@ def load_optimization_config_eager(config_path: Path | str) -> OptimizationWorkf
 
     toml_data = load_config(config_path, raw=True)
     config = OptimizationWorkflowConfig.model_validate(toml_data)
-
-    _sync_session_root_to_environment(config)
 
     return config

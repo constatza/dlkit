@@ -9,7 +9,6 @@ from typing import Any, TypeVar
 
 from dlkit.common.errors import WorkflowError
 from dlkit.infrastructure.config.workflow_types import WorkflowConfig
-from dlkit.infrastructure.io.path_context import get_current_path_context, path_override_context
 
 from ._override_types import RuntimeOverrideModel
 from ._overrides import apply_runtime_overrides, build_runtime_overrides, validate_runtime_overrides
@@ -24,7 +23,6 @@ class EntrypointContext:
 
     settings: WorkflowConfig
     start_time: float = field(default_factory=time.time)
-    path_overrides: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def _normalize_overrides(
@@ -57,25 +55,12 @@ class EntrypointContext:
         if normalized_overrides:
             effective = apply_runtime_overrides(effective, **normalized_overrides)
 
-        path_overrides: dict[str, Any] = {}
-        current_context = get_current_path_context()
-        already_has_root = current_context and getattr(current_context, "root_dir", None)
-        if not already_has_root:
-            # Prefer an explicit root_dir override; fall back to SESSION.root_dir
-            override_root = normalized_overrides.get("root_dir")
-            root_from_cfg = getattr(getattr(effective, "SESSION", None), "root_dir", None)
-            resolved_root = override_root or root_from_cfg
-            if resolved_root:
-                path_overrides["root_dir"] = resolved_root
-        return cls(settings=effective, path_overrides=path_overrides)
+        return cls(settings=effective)
 
     def elapsed(self) -> float:
         """Return elapsed time since preparation."""
         return time.time() - self.start_time
 
     def run_with_path_context(self, fn: Callable[[], T]) -> T:
-        """Execute a callback within the derived path override context."""
-        if self.path_overrides:
-            with path_override_context(self.path_overrides):
-                return fn()
+        """Execute a callback within the derived runtime context."""
         return fn()

@@ -11,7 +11,6 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
-from dlkit.infrastructure.config.security.uri_types import SecurePath
 from dlkit.infrastructure.precision import PrecisionStrategy
 
 from .core.base_settings import BasicSettings
@@ -55,14 +54,6 @@ class SessionSettings(BasicSettings):
     precision: PrecisionStrategy = Field(
         default=PrecisionStrategy.FULL_32,
         description="Precision strategy for computation (default: full 32-bit)",
-    )
-    # Formal root directory field for path resolution (optional)
-    root_dir: SecurePath | None = Field(
-        default=None,
-        description=(
-            "Optional root directory for resolving relative paths. When provided via CLI or config,"
-            " it drives all standard locations under <root>/output."
-        ),
     )
 
     @field_validator("precision", mode="before")

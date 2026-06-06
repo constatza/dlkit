@@ -18,8 +18,6 @@ from ..middleware.error_handler import handle_cli_errors
 from ..params import (
     CONFIG_PATH_ARG,
     MLFLOW_FLAG,
-    OUTPUT_DIR_PARAM,
-    ROOT_DIR_PARAM,
 )
 
 # Create optimization command group
@@ -42,8 +40,6 @@ def _run_optimization_impl(
         str | None, typer.Option("--study-name", "-s", help="Name for the Optuna study")
     ] = None,
     mlflow: MLFLOW_FLAG = False,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
 ) -> None:
     """Run hyperparameter optimization using Optuna.
 
@@ -54,7 +50,7 @@ def _run_optimization_impl(
     """
     # Load configuration
     console.print(f"📖 Loading configuration from: {config_path}")
-    _settings = load_config(config_path, root_dir=root_dir)
+    _settings = load_config(config_path)
     settings = _settings if is_training_settings(_settings) else None
 
     # Validate Optuna is configured (flattened)
@@ -70,8 +66,6 @@ def _run_optimization_impl(
     console.print(f"  Trials: {trials}")
     if study_name:
         console.print(f"  Study name: {study_name}")
-    if root_dir:
-        console.print(f"  Root dir: {root_dir}")
 
     # Execute optimization
     with Progress(
@@ -86,8 +80,6 @@ def _run_optimization_impl(
             overrides={
                 "trials": trials,
                 "study_name": study_name,
-                "root_dir": root_dir,
-                "output_dir": output_dir,
             },
             mlflow=mlflow,
         )
@@ -110,8 +102,6 @@ def main(
         str | None, typer.Option("--study-name", "-s", help="Name for the Optuna study")
     ] = None,
     mlflow: MLFLOW_FLAG = False,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
 ) -> None:
     """Run hyperparameter optimization using Optuna with configuration and parameter overrides."""
     if ctx.invoked_subcommand is not None:
@@ -121,8 +111,6 @@ def main(
         trials=trials,
         study_name=study_name,
         mlflow=mlflow,
-        root_dir=root_dir,
-        output_dir=output_dir,
     )
 
 

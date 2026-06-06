@@ -43,9 +43,6 @@ def execute(
                     if key
                     in {
                         "checkpoint_path",
-                        "root_dir",
-                        "output_dir",
-                        "data_dir",
                         "trials",
                         "study_name",
                         "experiment_name",
@@ -72,9 +69,6 @@ def execute(
                     if key
                     in {
                         "checkpoint_path",
-                        "root_dir",
-                        "output_dir",
-                        "data_dir",
                         "epochs",
                         "batch_size",
                         "learning_rate",

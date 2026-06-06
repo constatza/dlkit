@@ -15,7 +15,6 @@ from .generative_settings import GenerativeSettings
 from .mlflow_settings import MLflowSettings
 from .model_components import ModelComponentSettings
 from .optuna_settings import OptunaSettings
-from .paths_settings import PathsSettings
 from .session_settings import SessionSettings
 from .training_settings import TrainingSettings as TrainingConfig
 
@@ -35,7 +34,6 @@ class GeneralSettings(BasicSettings):
     - DATAMODULE: Data loading configuration
     - DATASET: Dataset configuration
     - TRAINING: Core training settings
-    - PATHS: Standardized paths with automatic resolution (optional)
     - EXTRAS: Free-form user-defined helper settings (ignored by core)
     - GENERATIVE: Generative algorithm configuration (optional)
 
@@ -50,7 +48,6 @@ class GeneralSettings(BasicSettings):
         DATAMODULE: Data loading and processing configuration
         DATASET: Dataset-specific configuration
         TRAINING: Core training configuration with nested library settings
-        PATHS: Optional standardized paths with automatic resolution
         EXTRAS: Arbitrary user-defined values for custom scripts/tools
         GENERATIVE: Optional generative algorithm configuration
     """
@@ -85,11 +82,6 @@ class GeneralSettings(BasicSettings):
     TRAINING: TrainingConfig | None = Field(
         default_factory=TrainingConfig,
         description="Core training configuration with nested library settings",
-    )
-    # Optional standardized paths with automatic resolution
-    PATHS: PathsSettings | None = Field(
-        default=None,
-        description="Optional standardized paths with automatic resolution relative to root_dir",
     )
     # Optional, free-form user extras (ignored by core libraries)
     EXTRAS: ExtrasSettings | None = Field(
@@ -134,13 +126,11 @@ class GeneralSettings(BasicSettings):
         """
         from dlkit.infrastructure.config.core.patching import patch_model
         from dlkit.infrastructure.config.core.sources import DLKitTomlSource, _read_env_patches
-        from dlkit.infrastructure.config.environment import sync_session_root_to_environment
 
         try:
             settings = cls.model_validate(DLKitTomlSource(Path(filepath))())
             if env := _read_env_patches("DLKIT_", "__"):
                 settings = patch_model(settings, env)
-            sync_session_root_to_environment(settings)
             return settings
 
         except Exception as e:

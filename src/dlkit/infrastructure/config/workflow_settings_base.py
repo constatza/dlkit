@@ -12,10 +12,8 @@ from .core.patching import patch_model
 from .core.sources import DLKitTomlSource, _read_env_patches
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
-from .environment import sync_session_root_to_environment
 from .extras_settings import ExtrasSettings
 from .model_components import ModelComponentSettings
-from .paths_settings import PathsSettings
 from .session_settings import SessionSettings
 
 
@@ -32,10 +30,6 @@ class BaseWorkflowSettings(BasicSettings):
     )
     DATASET: DatasetSettings | None = Field(
         default=None, description="Dataset-specific configuration"
-    )
-    PATHS: PathsSettings | None = Field(
-        default=None,
-        description="Optional standardized paths with automatic resolution relative to root_dir",
     )
     EXTRAS: ExtrasSettings | None = Field(
         default=None,
@@ -69,7 +63,6 @@ class BaseWorkflowSettings(BasicSettings):
             settings = patch_model(settings, env)
         if overrides:
             settings = patch_model(settings, overrides)
-        sync_session_root_to_environment(settings)
         return settings
 
     @property

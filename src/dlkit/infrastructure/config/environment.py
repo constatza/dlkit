@@ -1,20 +1,12 @@
-"""Environment-aware settings using pydantic-settings for DLKit configuration.
-
-This module provides centralized environment variable management following Single
-Responsibility Principle. It manages only environment-level concerns like root_dir
-and DLKit internal artifacts, while components maintain ownership of their specific paths.
-"""
+"""Environment-aware settings using pydantic-settings for DLKit configuration."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from dlkit.infrastructure.config.security.uri_types import SecurePath
 
 
 def _setenv_if_missing(key: str, value: int) -> None:
@@ -57,9 +49,6 @@ class EnvironmentSettings(BaseSettings):
 
     This class manages only environment-level configuration that affects the entire
     DLKit system. Individual components maintain ownership of their specific paths.
-
-    All settings can be overridden by environment variables prefixed with DLKIT_.
-    For example, DLKIT_ROOT_DIR="/custom/root" will override the root_dir setting.
     """
 
     model_config = SettingsConfigDict(
@@ -68,12 +57,6 @@ class EnvironmentSettings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-    )
-
-    # Environment-level configuration (affects all path resolution)
-    root_dir: SecurePath | None = Field(
-        default=None,
-        description="Root directory for relative path resolution across all components",
     )
 
     # DLKit internal artifacts only (not user dataflow)
@@ -100,11 +83,8 @@ class EnvironmentSettings(BaseSettings):
         """Get the effective root directory for path resolution.
 
         Returns:
-            Path: Resolved root directory (uses current working directory if root_dir is None)
+            Path: Current working directory
         """
-        if self.root_dir is not None:
-            # SecurePath already handles tilde expansion and security checks
-            return Path(self.root_dir).resolve()
         return Path.cwd()
 
     def get_internal_dir_path(self) -> Path:
@@ -129,44 +109,4 @@ class EnvironmentSettings(BaseSettings):
 # Global instance for easy access throughout the system
 env = EnvironmentSettings()
 
-# Configure MLflow retry behavior early, before MLflow is imported.
-# ensure_mlflow_defaults() is idempotent so this is safe to call at module level.
 ensure_mlflow_defaults()
-
-
-def sync_session_root_to_environment(settings: Any) -> None:
-    """Synchronize SESSION.root_dir to the global environment fallback.
-
-    This is intentionally config-local so `tools.config` does not depend on
-    `tools.io` for root propagation.
-    """
-
-    try:
-        from loguru import logger
-
-        if os.environ.get("DLKIT_ROOT_DIR"):
-            return
-
-        session = getattr(settings, "SESSION", None)
-        if session is None:
-            return
-
-        session_root_dir = getattr(session, "root_dir", None)
-        if session_root_dir is None:
-            return
-
-        root_path = Path(session_root_dir).expanduser()
-        if not root_path.is_absolute():
-            root_path = (Path.cwd() / root_path).resolve()
-        else:
-            root_path = root_path.resolve()
-
-        env.root_dir = str(root_path)
-        logger.debug(
-            "Synchronized SESSION.root_dir to EnvironmentSettings for fallback path resolution",
-            session_root_dir=str(root_path),
-        )
-    except Exception as e:
-        from loguru import logger
-
-        logger.warning(f"Failed to sync SESSION.root_dir to environment (non-fatal): {e}")

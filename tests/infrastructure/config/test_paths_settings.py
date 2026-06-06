@@ -7,7 +7,6 @@ import tomllib
 import pytest
 from pydantic import ValidationError
 
-from dlkit.infrastructure.config.general_settings import GeneralSettings
 from dlkit.infrastructure.config.paths_settings import PathsSettings
 from dlkit.infrastructure.io.config import serialize_config_to_string
 
@@ -25,20 +24,6 @@ class TestPathsSettings:
 
         assert paths.output_dir == "C:/tmp/out"
         assert paths.get_path("processed_dir") == "C:/tmp/proc"
-
-    def test_dotted_patch_revalidates_and_normalizes_paths_extras(self) -> None:
-        settings = GeneralSettings(PATHS=PathsSettings(output_dir="outputs"))
-
-        updated = settings.patch(
-            {
-                "PATHS.output_dir": r"C:\tmp\out",
-                "PATHS.processed_dir": r"C:\tmp\proc",
-            }
-        )
-
-        assert updated.PATHS is not None
-        assert updated.PATHS.output_dir == "C:/tmp/out"
-        assert updated.PATHS.get_path("processed_dir") == "C:/tmp/proc"
 
     def test_extra_non_path_values_fail_clearly(self) -> None:
         with pytest.raises(

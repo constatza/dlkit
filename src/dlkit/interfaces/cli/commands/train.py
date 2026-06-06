@@ -17,13 +17,10 @@ from ..params import (
     BATCH_SIZE_PARAM,
     CHECKPOINT_PARAM,
     CONFIG_PATH_ARG,
-    DATA_DIR_PARAM,
     EPOCHS_PARAM,
     EXPERIMENT_NAME_PARAM,
     LEARNING_RATE_PARAM,
     MLFLOW_FLAG,
-    OUTPUT_DIR_PARAM,
-    ROOT_DIR_PARAM,
     RUN_NAME_PARAM,
     VALIDATE_ONLY_FLAG,
 )
@@ -43,9 +40,6 @@ def _run_training_impl(
     mlflow: MLFLOW_FLAG = False,
     checkpoint: CHECKPOINT_PARAM = None,
     validate_only: VALIDATE_ONLY_FLAG = False,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
-    data_dir: DATA_DIR_PARAM = None,
     epochs: EPOCHS_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     learning_rate: LEARNING_RATE_PARAM = None,
@@ -57,13 +51,12 @@ def _run_training_impl(
     Examples:
         dlkit train config.toml
         dlkit train config.toml --mlflow --epochs 100
-        dlkit train config.toml --checkpoint model.ckpt --output-dir ./custom
+        dlkit train config.toml --checkpoint model.ckpt
         dlkit train config.toml --mlflow --experiment-name test
         dlkit train config.toml --validate-only
     """
-    # Load configuration (don't apply output_dir here, let API handle all overrides)
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = load_config(config_path, root_dir=root_dir)
+    settings = load_config(config_path)
 
     training_settings = settings if is_training_settings(settings) else None
 
@@ -99,10 +92,6 @@ def _run_training_impl(
     override_messages = []
     if checkpoint:
         override_messages.append(f"Checkpoint: {checkpoint}")
-    if output_dir:
-        override_messages.append(f"Output dir: {output_dir}")
-    if data_dir:
-        override_messages.append(f"Data dir: {data_dir}")
     if epochs:
         override_messages.append(f"Epochs: {epochs}")
     if batch_size:
@@ -113,9 +102,6 @@ def _run_training_impl(
         override_messages.append(f"Experiment: {experiment_name}")
     if run_name:
         override_messages.append(f"Run name: {run_name}")
-
-    if root_dir:
-        override_messages.append(f"Root dir: {root_dir}")
     if override_messages:
         console.print("🔧 Parameter overrides:")
         for msg in override_messages:
@@ -131,9 +117,6 @@ def _run_training_impl(
             settings,
             overrides={
                 "checkpoint_path": checkpoint,
-                "root_dir": root_dir,
-                "output_dir": output_dir,
-                "data_dir": data_dir,
                 "epochs": epochs,
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
@@ -161,9 +144,6 @@ def entry(
     mlflow: MLFLOW_FLAG = False,
     checkpoint: CHECKPOINT_PARAM = None,
     validate_only: VALIDATE_ONLY_FLAG = False,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
-    data_dir: DATA_DIR_PARAM = None,
     epochs: EPOCHS_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     learning_rate: LEARNING_RATE_PARAM = None,
@@ -180,9 +160,6 @@ def entry(
         mlflow=mlflow,
         checkpoint=checkpoint,
         validate_only=validate_only,
-        root_dir=root_dir,
-        output_dir=output_dir,
-        data_dir=data_dir,
         epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,

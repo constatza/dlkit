@@ -11,20 +11,18 @@ Design rationale:
 - Type safety: Full type hints maintained via Annotated types
 
 Usage example:
-    from dlkit.interfaces.cli.params import ROOT_DIR_PARAM, OUTPUT_DIR_PARAM
+    from dlkit.interfaces.cli.params import CONFIG_PATH_ARG, CHECKPOINT_PARAM
 
     @app.command()
     def my_command(
-        root_dir: ROOT_DIR_PARAM = None,
-        output_dir: OUTPUT_DIR_PARAM = None,
+        config_path: CONFIG_PATH_ARG,
+        checkpoint: CHECKPOINT_PARAM = None,
     ) -> None:
-        # Command implementation
         pass
 
 Note:
 - All path parameters use `Path | None` (not `Optional[Path]`)
 - Parameter names in function signatures must match the annotated name
-- CLI shortcuts (like `-o` for `--output-dir`) are preserved in annotations
 """
 
 from __future__ import annotations
@@ -37,38 +35,6 @@ import typer
 # ============================================================================
 # Path Override Parameters
 # ============================================================================
-
-ROOT_DIR_PARAM = Annotated[
-    Path | None,
-    typer.Option("--root-dir", help="Root directory for path resolution (overrides config)"),
-]
-"""Root directory override for session-level path resolution.
-
-Overrides the root directory specified in config's SESSION.root_dir or
-the DLKIT_ROOT_DIR environment variable. All relative paths in the
-configuration are resolved relative to this root.
-"""
-
-OUTPUT_DIR_PARAM = Annotated[
-    Path | None,
-    typer.Option("--output-dir", "-o", help="Override output directory from config"),
-]
-"""Output directory override for predictions and results.
-
-Overrides the output directory where predictions, metrics, and other
-training artifacts are saved. Defaults to `output/` under the root.
-"""
-
-DATA_DIR_PARAM = Annotated[
-    Path | None,
-    typer.Option("--dataflow-dir", "-d", help="Override dataflow directory from config"),
-]
-"""Data directory override for input datasets.
-
-Overrides the directory where input data files are located. This is
-typically used to point to a different data location without modifying
-the configuration file.
-"""
 
 CHECKPOINT_PARAM = Annotated[
     Path | None,

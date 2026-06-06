@@ -17,9 +17,6 @@ class TrainingOverrides(_StrictOverrideModel):
     """Supported overrides for training workflows."""
 
     checkpoint_path: Path | str | None = None
-    root_dir: Path | str | None = None
-    output_dir: Path | str | None = None
-    data_dir: Path | str | None = None
     epochs: int | None = None
     batch_size: int | None = None
     learning_rate: float | None = None
@@ -35,9 +32,6 @@ class OptimizationOverrides(_StrictOverrideModel):
     """Supported overrides for optimization workflows."""
 
     checkpoint_path: Path | str | None = None
-    root_dir: Path | str | None = None
-    output_dir: Path | str | None = None
-    data_dir: Path | str | None = None
     trials: int | None = None
     study_name: str | None = None
     experiment_name: str | None = None

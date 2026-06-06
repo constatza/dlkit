@@ -21,17 +21,14 @@ from _pytest.tmpdir import TempPathFactory
 
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.environment import env as global_environment
 from dlkit.infrastructure.io import load_config
 from dlkit.infrastructure.registry.public import (
     _reset_for_tests as _reset_component_registry_for_tests,
 )
 
 _ORIGINAL_HOME_ENV = os.environ.get("HOME")
-_ORIGINAL_DLKIT_ROOT_DIR = os.environ.get("DLKIT_ROOT_DIR")
 _ORIGINAL_MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI")
 _ORIGINAL_PATH_HOME = pathlib.Path.home
-_ORIGINAL_ENV_ROOT = global_environment.root_dir
 _TEST_SESSION_ROOT: Path | None = None
 _TEST_HOME_DIR: Path | None = None
 _TEST_ARTIFACTS_DIR: Path | None = None
@@ -175,15 +172,12 @@ def pytest_configure(config):
     session_root = Path(str(tmp_factory.getbasetemp())) / "dlkit"
     home_dir = session_root / "home"
     artifacts_dir = session_root / "tests" / "artifacts"
-    root_dir = session_root / "root"
 
-    for directory in (home_dir, artifacts_dir, root_dir):
+    for directory in (home_dir, artifacts_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     os.environ["HOME"] = str(home_dir)
     os.environ["DLKIT_TEST_ARTIFACT_ROOT"] = str(artifacts_dir)
-    os.environ.setdefault("DLKIT_ROOT_DIR", str(root_dir))
-
     # Pin MLflow tracking URI to an isolated session-level SQLite DB so that
     # collection-phase and import-time MLflow calls never write to the project root.
     mlruns_session_dir = session_root / "mlruns"
@@ -191,8 +185,6 @@ def pytest_configure(config):
     os.environ["MLFLOW_TRACKING_URI"] = f"sqlite:///{(mlruns_session_dir / 'mlflow.db').as_posix()}"
 
     setattr(pathlib.Path, "home", classmethod(lambda cls, _home=home_dir: _home))  # noqa: B010
-    global_environment.root_dir = str(root_dir)
-
     _TEST_SESSION_ROOT = session_root
     _TEST_HOME_DIR = home_dir
     _TEST_ARTIFACTS_DIR = artifacts_dir
@@ -213,10 +205,6 @@ def pytest_unconfigure(config):
     else:
         os.environ["HOME"] = _ORIGINAL_HOME_ENV
 
-    os.environ.pop("DLKIT_ROOT_DIR", None)
-    if _ORIGINAL_DLKIT_ROOT_DIR is not None:
-        os.environ["DLKIT_ROOT_DIR"] = _ORIGINAL_DLKIT_ROOT_DIR
-
     os.environ.pop("MLFLOW_TRACKING_URI", None)
     if _ORIGINAL_MLFLOW_TRACKING_URI is not None:
         os.environ["MLFLOW_TRACKING_URI"] = _ORIGINAL_MLFLOW_TRACKING_URI
@@ -227,7 +215,6 @@ def pytest_unconfigure(config):
     _TEST_SESSION_ROOT = None
     _TEST_HOME_DIR = None
     _TEST_ARTIFACTS_DIR = None
-    global_environment.root_dir = _ORIGINAL_ENV_ROOT
 
 
 def pytest_collection_modifyitems(config, items):

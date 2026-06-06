@@ -69,9 +69,6 @@ Key architectural decisions:
 - `mlflow: bool = False` - Enable MLflow tracking
 - `checkpoint: Path | None = None` - Resume training from checkpoint
 - `validate_only: bool = False` - Validate config without training
-- `root_dir: Path | None = None` - Root directory override
-- `output_dir: Path | None = None` - Output directory override
-- `data_dir: Path | None = None` - Data directory override
 - `epochs: int | None = None` - Training epochs override
 - `batch_size: int | None = None` - Batch size override
 - `learning_rate: float | None = None` - Learning rate override
@@ -120,9 +117,6 @@ dlkit train config.toml --validate-only
 **Parameters**:
 - `config_path: Path` - Path to TOML configuration file
 - `checkpoint: Path` - Path to model checkpoint (.ckpt)
-- `root_dir: Path | None = None` - Root directory override
-- `output_dir: Path | None = None` - Output directory override
-- `data_dir: Path | None = None` - Data directory override
 - `batch_size: int | None = None` - Batch size override
 - `save_predictions: bool = True` - Save predictions to file
 
@@ -138,7 +132,7 @@ dlkit train config.toml --validate-only
 dlkit predict config.toml model.ckpt
 
 # With overrides
-dlkit predict config.toml model.ckpt --output-dir ./results --batch-size 128
+dlkit predict config.toml model.ckpt --batch-size 128
 
 # Without saving predictions
 dlkit predict config.toml model.ckpt --no-save
@@ -165,8 +159,6 @@ dlkit predict config.toml model.ckpt --no-save
 - `trials: int = 100` - Number of optimization trials
 - `study_name: str | None = None` - Optuna study name
 - `mlflow: bool = False` - Enable MLflow tracking
-- `root_dir: Path | None = None` - Root directory override
-- `output_dir: Path | None = None` - Output directory override
 
 **Subcommands**:
 - `dlkit optimize status STUDY_NAME STORAGE` - Show study status

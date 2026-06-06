@@ -132,48 +132,6 @@ class TestPredictCommand:
         assert result.exit_code == 1
         mock_load_config.assert_called_once()
 
-    @patch("dlkit.interfaces.cli.commands.predict.load_config")
-    @patch("dlkit.interfaces.cli.commands.predict.load_model_from_settings")
-    @patch("dlkit.interfaces.cli.commands.predict.build_inference_datamodule")
-    @patch("dlkit.interfaces.cli.commands.predict.present_inference_result")
-    def test_infer_with_parameter_overrides(
-        self,
-        mock_present_result: Mock,
-        mock_build_datamodule: Mock,
-        mock_load_model_from_settings: Mock,
-        mock_load_config: Mock,
-        cli_runner: CliRunner,
-        sample_config_path: Path,
-        sample_checkpoint_path: Path,
-        sample_settings: Mock,
-        tmp_path: Path,
-    ) -> None:
-        sample_settings.has_dataset_config = True
-        mock_load_config.return_value = sample_settings
-
-        mock_predictor = _make_mock_predictor()
-        mock_load_model_from_settings.return_value = mock_predictor
-        mock_build_datamodule.return_value = _make_mock_datamodule()
-
-        output_dir = tmp_path / "custom_output"
-        data_dir = tmp_path / "custom_data"
-
-        result = cli_runner.invoke(
-            predict_app,
-            [
-                str(sample_config_path),
-                str(sample_checkpoint_path),
-                "--output-dir",
-                str(output_dir),
-                "--dataflow-dir",
-                str(data_dir),
-                "--batch-size",
-                "32",
-            ],
-        )
-
-        assert result.exit_code == 0
-
 
 class TestPredictMainCallback:
     def test_infer_without_args_shows_missing_argument_error(
@@ -213,37 +171,6 @@ class TestPredictMainCallback:
         args, kwargs = mock_run_inference.call_args
         assert kwargs["config_path"] == sample_config_path
         assert kwargs["checkpoint"] == sample_checkpoint_path
-
-    @patch("dlkit.interfaces.cli.commands.predict._run_inference_impl")
-    def test_infer_direct_invocation_with_options(
-        self,
-        mock_run_inference: Mock,
-        cli_runner: CliRunner,
-        sample_config_path: Path,
-        sample_checkpoint_path: Path,
-        tmp_path: Path,
-    ) -> None:
-        output_dir = tmp_path / "outputs"
-
-        result = cli_runner.invoke(
-            predict_app,
-            [
-                str(sample_config_path),
-                str(sample_checkpoint_path),
-                "--output-dir",
-                str(output_dir),
-                "--batch-size",
-                "64",
-            ],
-        )
-
-        assert result.exit_code == 0
-
-        mock_run_inference.assert_called_once()
-        args, kwargs = mock_run_inference.call_args
-        assert kwargs["output_dir"] == output_dir
-        assert kwargs["batch_size"] == 64
-        assert kwargs["save_predictions"] is True
 
 
 class TestPredictHelperFunctions:

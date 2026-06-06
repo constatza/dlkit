@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
-from dlkit.infrastructure.io import locations
 from dlkit.infrastructure.io.paths import normalize_user_path
 
-_PATH_FIELDS = frozenset({"checkpoint_path", "root_dir", "output_dir", "data_dir"})
+_PATH_FIELDS = frozenset({"checkpoint_path"})
 
 
 def normalize_override_path(
@@ -47,7 +46,7 @@ def build_runtime_overrides(**kwargs: Any) -> dict[str, Any]:
         if key in _PATH_FIELDS:
             normalized[key] = normalize_override_path(
                 value,
-                require_absolute=(key == "root_dir"),
+                require_absolute=False,
             )
         else:
             normalized[key] = value
@@ -126,7 +125,6 @@ def _build_patch(settings: Any, overrides: dict[str, Any]) -> dict[str, Any]:
                 "enabled": True,
                 "n_trials": optuna_fields.get("n_trials", 3),
                 "study_name": optuna_fields.get("study_name", "default_study"),
-                "storage": locations.optuna_storage_uri(),
             }
 
     return patch

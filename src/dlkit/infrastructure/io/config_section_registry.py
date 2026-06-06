@@ -134,7 +134,6 @@ def _initialize_default_mappings() -> None:
         from dlkit.infrastructure.config.extras_settings import ExtrasSettings
         from dlkit.infrastructure.config.model_components import ModelComponentSettings
         from dlkit.infrastructure.config.optuna_settings import OptunaSettings
-        from dlkit.infrastructure.config.paths_settings import PathsSettings
         from dlkit.infrastructure.config.session_settings import SessionSettings
         from dlkit.infrastructure.config.training_settings import TrainingSettings
 
@@ -145,7 +144,6 @@ def _initialize_default_mappings() -> None:
             ("DATASET", DatasetSettings),
             ("TRAINING", TrainingSettings),
             ("OPTUNA", OptunaSettings),
-            ("PATHS", PathsSettings),
             ("EXTRAS", ExtrasSettings),
         )
 

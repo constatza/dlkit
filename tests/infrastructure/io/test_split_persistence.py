@@ -1,11 +1,10 @@
-"""Tests for split index persistence and caching."""
+"""Tests for split resolution without implicit local persistence."""
 
 from pathlib import Path
 
 import pytest
 
-from dlkit.infrastructure.io.locations import splits_dir
-from dlkit.infrastructure.io.split_provider import get_or_create_split
+from dlkit.infrastructure.io.split_provider import SplitResolution, get_or_create_split
 from dlkit.infrastructure.types.split import IndexSplit
 
 
@@ -32,50 +31,28 @@ def explicit_split_file(tmp_path: Path, sample_split_data: dict) -> Path:
 
 
 def test_get_or_create_split_generates_new_split(tmp_path: Path):
-    """Test that get_or_create_split generates a new split when none exists."""
-    split = get_or_create_split(
+    """Generated splits stay in memory and expose deterministic artifact names."""
+    resolution = get_or_create_split(
         num_samples=100,
         test_ratio=0.2,
         val_ratio=0.2,
         session_name="test_session",
     )
 
+    assert isinstance(resolution, SplitResolution)
+    split = resolution.index_split
     assert isinstance(split, IndexSplit)
     assert len(split.train) + len(split.validation) + len(split.test) == 100
-    # Should have saved the split
-    split_file = splits_dir() / "test_session_100_split.json"
-    assert split_file.exists()
-
-
-def test_get_or_create_split_loads_cached_split(tmp_path: Path):
-    """Test that get_or_create_split loads an existing cached split."""
-    # First call: create and cache
-    split1 = get_or_create_split(
-        num_samples=100,
-        test_ratio=0.2,
-        val_ratio=0.2,
-        session_name="cache_test",
-    )
-
-    # Second call: should load from cache (same indices)
-    split2 = get_or_create_split(
-        num_samples=100,
-        test_ratio=0.2,
-        val_ratio=0.2,
-        session_name="cache_test",
-    )
-
-    # Verify same split was loaded
-    assert split1.train == split2.train
-    assert split1.validation == split2.validation
-    assert split1.test == split2.test
+    assert resolution.source_path is None
+    assert resolution.artifact_filename == "test_session_100_split.json"
+    assert not (tmp_path / resolution.artifact_filename).exists()
 
 
 def test_get_or_create_split_uses_explicit_filepath(
     explicit_split_file: Path, sample_split_data: dict
 ):
     """Test that explicit filepath takes precedence."""
-    split = get_or_create_split(
+    resolution = get_or_create_split(
         num_samples=100,
         test_ratio=0.2,
         val_ratio=0.2,
@@ -83,53 +60,51 @@ def test_get_or_create_split_uses_explicit_filepath(
         explicit_filepath=explicit_split_file,
     )
 
+    split = resolution.index_split
     # Should match the explicit file data
     assert list(split.train) == sample_split_data["train"]
     assert list(split.validation) == sample_split_data["validation"]
     assert list(split.test) == sample_split_data["test"]
     assert split.predict is not None
     assert list(split.predict) == sample_split_data["predict"]
+    assert resolution.source_path == explicit_split_file
+    assert resolution.artifact_filename == explicit_split_file.name
 
 
 def test_get_or_create_split_different_sessions_create_different_splits():
-    """Test that different session names create different cached splits."""
+    """Session name affects artifact naming, not split generation semantics."""
     split1 = get_or_create_split(
         num_samples=50,
         test_ratio=0.2,
         val_ratio=0.2,
         session_name="session_a",
-    )
+    ).index_split
 
     split2 = get_or_create_split(
         num_samples=50,
         test_ratio=0.2,
         val_ratio=0.2,
         session_name="session_b",
-    )
+    ).index_split
 
     # Different sessions should have different random splits
     # (very unlikely to be identical)
     assert split1.train != split2.train
 
 
-def test_get_or_create_split_handles_corrupt_cache(tmp_path: Path):
-    """Test that corrupt cache files are regenerated."""
-    # Create a corrupt cache file
-    split_file = splits_dir() / "corrupt_test_50_split.json"
-    split_file.parent.mkdir(parents=True, exist_ok=True)
-    with split_file.open("w") as f:
-        f.write("not valid json{{{")
+def test_get_or_create_split_rejects_corrupt_explicit_file(tmp_path: Path):
+    """Corrupt explicit split files fail fast instead of silently regenerating."""
+    split_file = tmp_path / "corrupt_split.json"
+    split_file.write_text("not valid json{{{")
 
-    # Should handle corruption and generate new split
-    split = get_or_create_split(
-        num_samples=50,
-        test_ratio=0.2,
-        val_ratio=0.2,
-        session_name="corrupt_test",
-    )
-
-    assert isinstance(split, IndexSplit)
-    assert len(split.train) + len(split.validation) + len(split.test) == 50
+    with pytest.raises(Exception):
+        get_or_create_split(
+            num_samples=50,
+            test_ratio=0.2,
+            val_ratio=0.2,
+            session_name="corrupt_test",
+            explicit_filepath=split_file,
+        )
 
 
 def test_split_ratios_are_respected():
@@ -143,7 +118,7 @@ def test_split_ratios_are_respected():
         test_ratio=test_ratio,
         val_ratio=val_ratio,
         session_name="ratio_test",
-    )
+    ).index_split
 
     # Check ratios are approximately correct (within 1%)
     actual_test_ratio = len(split.test) / num_samples
@@ -163,7 +138,7 @@ def test_split_indices_are_unique_and_complete():
         test_ratio=0.2,
         val_ratio=0.2,
         session_name="unique_test",
-    )
+    ).index_split
 
     # Combine all indices
     all_indices = set(split.train) | set(split.validation) | set(split.test)

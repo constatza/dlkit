@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -66,7 +67,6 @@ class TestEagerValidationSuccessCases:
             "SESSION": {
                 "name": "test_training",
                 "seed": 42,
-                "root_dir": str(tmp_path),
             },
             "TRAINING": {
                 "epochs": 10,
@@ -669,7 +669,7 @@ class TestProgrammaticOverrideWorkflow:
         """Test full workflow: load partial → inject DATASET → validate → ready for build."""
         # Step 1: Load partial config (only required sections)
         config_dict = {
-            "SESSION": {"name": "test_workflow", "seed": 42, "root_dir": str(tmp_path)},
+            "SESSION": {"name": "test_workflow", "seed": 42},
             "TRAINING": {
                 "epochs": 10,
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
@@ -744,9 +744,19 @@ class TestProgrammaticOverrideWorkflow:
         with pytest.raises(ValidationError):
             dataset = DatasetSettings(
                 features=(
-                    NpyEntry(name="x", path="/nonexistent/bad.npy", data_role=DataRole.FEATURE),
+                    NpyEntry(
+                        name="x",
+                        path=cast("Path | None", "/nonexistent/bad.npy"),
+                        data_role=DataRole.FEATURE,
+                    ),
                 ),
-                targets=(NpyEntry(name="y", path="/another/bad.npy", data_role=DataRole.TARGET),),
+                targets=(
+                    NpyEntry(
+                        name="y",
+                        path=cast("Path | None", "/another/bad.npy"),
+                        data_role=DataRole.TARGET,
+                    ),
+                ),
             )
 
             config.model_copy(update={"DATASET": dataset})

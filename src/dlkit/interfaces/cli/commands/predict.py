@@ -32,9 +32,6 @@ from ..params import (
     BATCH_SIZE_PARAM,
     CHECKPOINT_ARG,
     CONFIG_PATH_ARG,
-    DATA_DIR_PARAM,
-    OUTPUT_DIR_PARAM,
-    ROOT_DIR_PARAM,
     SAVE_PREDICTIONS_FLAG,
 )
 
@@ -54,9 +51,6 @@ console = Console()
 def _run_inference_impl(
     config_path: CONFIG_PATH_ARG,
     checkpoint: CHECKPOINT_ARG,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
-    data_dir: DATA_DIR_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     save_predictions: SAVE_PREDICTIONS_FLAG = True,
 ) -> None:
@@ -68,23 +62,15 @@ def _run_inference_impl(
       `[MODEL].checkpoint`, that value is used by the API when this argument
       is not provided (future behavior). When both are present, this argument
       takes precedence.
-    - Overrides: `--output-dir`, `--dataflow-dir`, `--batch-size`.
+    - Override: `--batch-size`.
     """
-    # Load configuration first so checkpoint resolution stays in the inference API.
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = cast(InferenceWorkflowConfig, load_config(config_path, root_dir=root_dir))
+    settings = cast(InferenceWorkflowConfig, load_config(config_path))
 
     # Show applied overrides
     override_messages = []
-    if output_dir:
-        override_messages.append(f"Output dir: {output_dir}")
-    if data_dir:
-        override_messages.append(f"Data dir: {data_dir}")
     if batch_size:
         override_messages.append(f"Batch size: {batch_size}")
-
-    if root_dir:
-        override_messages.append(f"Root dir: {root_dir}")
     if override_messages:
         console.print("🔧 Parameter overrides:")
         for msg in override_messages:
@@ -172,9 +158,6 @@ def _run_inference_impl(
 def entry(
     config_path: CONFIG_PATH_ARG,
     checkpoint: CHECKPOINT_ARG,
-    root_dir: ROOT_DIR_PARAM = None,
-    output_dir: OUTPUT_DIR_PARAM = None,
-    data_dir: DATA_DIR_PARAM = None,
     batch_size: BATCH_SIZE_PARAM = None,
     save_predictions: SAVE_PREDICTIONS_FLAG = True,
 ) -> None:
@@ -182,7 +165,7 @@ def entry(
 
     Usage examples:
     - `dlkit infer CONFIG.toml CHECKPOINT.ckpt`
-    - `dlkit infer CONFIG.toml --output-dir ./out --batch-size 64` (uses [MODEL].checkpoint)
+    - `dlkit infer CONFIG.toml MODEL.ckpt --batch-size 64`
 
     Note: Supplying `CHECKPOINT` via CLI is explicit and recommended. If
     `[MODEL].checkpoint` is present in the configuration, it may be used by
@@ -191,9 +174,6 @@ def entry(
     _run_inference_impl(
         config_path=config_path,
         checkpoint=checkpoint,
-        root_dir=root_dir,
-        output_dir=output_dir,
-        data_dir=data_dir,
         batch_size=batch_size,
         save_predictions=save_predictions,
     )

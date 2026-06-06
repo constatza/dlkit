@@ -76,11 +76,6 @@ class WorkflowSettingsLoader:
         if env := _read_env_patches("DLKIT_", "__"):
             config = patch_model(config, env)
 
-        # Propagate SESSION.root_dir to the global environment if set
-        from dlkit.infrastructure.config.environment import sync_session_root_to_environment
-
-        sync_session_root_to_environment(config)
-
         return config
 
 
@@ -108,15 +103,15 @@ def load_settings(config_path: Path | str) -> WorkflowConfig:
 
     Training:
         - Required: SESSION, TRAINING
-        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, PATHS, EXTRAS
+        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, OPTUNA, EXTRAS
 
     Optimization:
         - Required: SESSION, TRAINING, OPTUNA
-        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, PATHS, EXTRAS
+        - Optional: DATAMODULE, DATASET, MODEL, MLFLOW, EXTRAS
 
     Inference:
         - Required: SESSION, MODEL
-        - Optional: DATAMODULE, DATASET, PATHS, EXTRAS
+        - Optional: DATAMODULE, DATASET, EXTRAS
 
     Args:
         config_path: Path to TOML configuration file.

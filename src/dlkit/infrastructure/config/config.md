@@ -201,19 +201,16 @@ new_settings = update_settings(
 - `infrastructure.config` validates those payloads into typed settings models
   and applies runtime overrides.
 
-## `PATHS` Contract
+## Path Ownership
 
-`PATHS` is a path-only settings section.
-
-- Declared fields such as `output_dir` and `data_dir` use the `SecurePath`
-  contract.
-- Extra keys are allowed for user-defined path names, but they are normalized
-  with the same `SecurePath` rules as declared fields.
-- Canonical runtime representation is a normalized POSIX-style string.
-- Non-path arbitrary values do not belong in `PATHS`; put them in `EXTRAS`.
-- `SESSION.root_dir` remains the only root-setting authority. `PATHS` values are
-  resolved relative to the existing path-resolution precedence, but `PATHS`
-  does not define an alternate project root.
+- Relative config paths resolve from the config file location during TOML
+  preprocessing.
+- `DATASET.root_dir` is the only root-like path anchor kept in core config; it
+  rebases dataset entry paths and explicit split file paths for that dataset.
+- Output ownership stays with the producing subsystem:
+  `TRAINING.trainer.default_root_dir` for Lightning-local work when MLflow is
+  disabled, and MLflow artifact/storage URIs when tracking is enabled.
+- `PATHS` and `SESSION.root_dir` are not part of the workflow config contract.
 
 ## Notes
 

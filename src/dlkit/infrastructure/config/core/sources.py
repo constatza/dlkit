@@ -14,7 +14,7 @@ class DLKitTomlSource:
     """Callable that reads a TOML file and applies DLKit path preprocessing.
 
     Reads a TOML file, applies unified path resolution (resolving relative paths
-    against the config file location and SESSION.root_dir), and optionally
+    against the config file location and dataset-local roots), and optionally
     filters to a subset of top-level sections.
 
     Args:
@@ -45,15 +45,13 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
     """Unified path resolver for DLKit TOML configs.
 
     Always processes the full dict before any section filter so that DATASET path
-    resolution can reference SESSION.root_dir even when only DATASET is requested.
+    resolution can reference sibling config sections when needed.
 
     Handles:
-        - ``SESSION.root_dir``
         - ``TRAINING.trainer.default_root_dir``
         - ``MODEL.checkpoint``
         - ``DATASET.split.filepath``
         - ``DATASET.features[*].path`` and ``DATASET.targets[*].path``
-        - ``PATHS.*`` (all string values)
 
     Args:
         data: Full TOML dict loaded from disk.
@@ -87,26 +85,8 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
             path_obj = (base / path_obj).resolve()
         return str(path_obj)
 
-    def _resolve_root_dir(session_data: dict[str, Any] | None) -> Path:
-        if isinstance(session_data, dict):
-            candidate = session_data.get("root_dir")
-            if isinstance(candidate, str) and candidate:
-                base = _process_path_field(candidate, config_dir)
-                return Path(base).resolve()
-
-        return config_dir if config_dir.exists() else Path.cwd().resolve()
-
     processed = dict(data)
-
-    # Resolve SESSION.root_dir in-place (makes it absolute for downstream)
-    session_data = processed.get("SESSION")
-    if isinstance(session_data, dict) and "root_dir" in session_data:
-        session_copy = dict(session_data)
-        session_copy["root_dir"] = _process_path_field(session_copy["root_dir"], config_dir)
-        processed["SESSION"] = session_copy
-        session_data = session_copy
-
-    root_dir = _resolve_root_dir(session_data)
+    root_dir = config_dir if config_dir.exists() else Path.cwd().resolve()
 
     # TRAINING.trainer.default_root_dir
     training = processed.get("TRAINING")
@@ -183,15 +163,6 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
 
         processed["DATASET"] = dataset_copy
 
-    # PATHS.* (all string values)
-    paths_sec = processed.get("PATHS")
-    if isinstance(paths_sec, dict):
-        paths_copy = dict(paths_sec)
-        for key, value in list(paths_copy.items()):
-            if isinstance(value, str) and value:
-                paths_copy[key] = _process_path_field(value, root_dir)
-        processed["PATHS"] = paths_copy
-
     return processed
 
 
@@ -227,8 +198,8 @@ def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
         rest = key[len(prefix) :]
         if not rest:
             continue
-        # Skip flat vars (e.g. DLKIT_ROOT_DIR) unless the prefix already
-        # consumed the section component (i.e. ends with the delimiter).
+        # Skip flat vars unless the prefix already consumed the section
+        # component (i.e. ends with the delimiter).
         if not prefix.endswith(delimiter) and delimiter not in rest:
             continue
         parts = [p for p in rest.split(delimiter) if p]

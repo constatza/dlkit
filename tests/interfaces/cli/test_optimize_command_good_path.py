@@ -86,52 +86,6 @@ class TestOptimizeCommand:
         assert "--study-name" not in result.stdout  # No "unknown option" error
         assert result.exit_code != 2  # Not a CLI parsing error
 
-    def test_optimize_command_accepts_output_dir_parameter(
-        self,
-        cli_runner: CliRunner,
-        tmp_path: Path,
-    ) -> None:
-        """Test that optimize command accepts --output-dir parameter."""
-        config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
-        output_dir = tmp_path / "outputs"
-
-        # This will fail at runtime but should parse the CLI arguments correctly
-        result = cli_runner.invoke(
-            optimize_app, ["--output-dir", str(output_dir), str(config_file)]
-        )
-
-        # Should parse arguments correctly (even if execution fails)
-        assert "--output-dir" not in result.stdout  # No "unknown option" error
-        assert result.exit_code != 2  # Not a CLI parsing error
-
-    def test_optimize_command_accepts_multiple_parameters(
-        self,
-        cli_runner: CliRunner,
-        tmp_path: Path,
-    ) -> None:
-        """Test that optimize command accepts multiple parameters together."""
-        config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
-
-        result = cli_runner.invoke(
-            optimize_app,
-            [
-                "--trials",
-                "25",
-                "--study-name",
-                "multi_test",
-                "--output-dir",
-                str(tmp_path / "out"),
-                str(config_file),
-            ],
-        )
-
-        # Should parse all arguments correctly
-        assert result.exit_code != 2  # Not a CLI parsing error
-        # Should attempt to run (even if it fails due to config/setup issues)
-        assert "usage:" not in result.stdout.lower()
-
 
 class TestOptimizeCommandStructure:
     """Test optimize command internal structure and imports."""

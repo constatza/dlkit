@@ -195,12 +195,9 @@ class OptimizationServiceFactory:
                 "Creating MLflow tracking adapter for optimization experiment '{}'",
                 experiment_name,
             )
-            session = getattr(settings, "SESSION", None)
-            root_dir = getattr(session, "root_dir", None) if session is not None else None
             return MLflowTrackingAdapter(
                 mlflow_settings=mlflow_config,
                 session_name=experiment_name,
-                root_dir=root_dir,
             )
 
         # Use null tracker by default when MLflow is not enabled

@@ -7,13 +7,10 @@ from pathlib import Path
 from dlkit.common import ConfigurationError
 from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.infrastructure.config import load_settings
-from dlkit.infrastructure.io.path_context import path_override_context
 
 
 def load_config(
     config_path: Path,
-    *,
-    root_dir: Path | None = None,
 ) -> BaseSettingsProtocol:
     """Load configuration from file with CLI-specific error handling.
 
@@ -21,8 +18,6 @@ def load_config(
 
     Args:
         config_path: Path to configuration file
-        root_dir: Optional root directory override
-
     Returns:
         BaseSettingsProtocol: Loaded settings object appropriate for the workflow type
 
@@ -39,14 +34,7 @@ def load_config(
         # Load settings - all workflows use the same loading function
         load_fn = load_settings
 
-        # Load settings from file. If CLI provides root_dir, apply as a temporary context.
-        if root_dir is not None:
-            with path_override_context({"root_dir": root_dir}):
-                settings = load_fn(config_path)
-        else:
-            settings = load_fn(config_path)
-
-        # Note: Path overrides are applied via a path context and not mutated into settings.
+        settings = load_fn(config_path)
 
         return settings
 

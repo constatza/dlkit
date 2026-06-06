@@ -35,9 +35,6 @@ class TrainingOverrides(RuntimeOverrideModel):
     """Supported runtime overrides for training entrypoints."""
 
     checkpoint_path: Path | None = None
-    root_dir: Path | None = None
-    output_dir: Path | None = None
-    data_dir: Path | None = None
     epochs: int | None = None
     batch_size: int | None = None
     learning_rate: float | None = None
@@ -53,9 +50,6 @@ class OptimizationOverrides(RuntimeOverrideModel):
     """Supported runtime overrides for optimization entrypoints."""
 
     checkpoint_path: Path | None = None
-    root_dir: Path | None = None
-    output_dir: Path | None = None
-    data_dir: Path | None = None
     trials: int | None = None
     study_name: str | None = None
     experiment_name: str | None = None

@@ -44,9 +44,6 @@ accelerator = "cpu"
 [OPTUNA]
 enabled = false
 
-[PATHS]
-output_dir = "./output"
-
 [EXTRAS]
 custom_param = "test"
 """
@@ -78,7 +75,6 @@ class TestPartialConfigLoading:
         assert hasattr(settings, "TRAINING")
         assert hasattr(settings, "MLFLOW")
         assert hasattr(settings, "OPTUNA")
-        assert hasattr(settings, "PATHS")
         assert hasattr(settings, "EXTRAS")
 
         # Verify sections are not None

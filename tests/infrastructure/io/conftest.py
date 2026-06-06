@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -19,18 +19,15 @@ from dlkit.infrastructure.config.environment import env as global_environment
 
 @pytest.fixture(autouse=True)
 def _restore_global_environment_root() -> Any:
-    """Save and restore global_environment.root_dir around each test.
+    """Preserve any legacy ``root_dir`` test state when present."""
+    env_obj = cast("Any", global_environment)
+    if not hasattr(env_obj, "root_dir"):
+        yield
+        return
 
-    Tests in this package may temporarily set global_environment.root_dir = None
-    to simulate a clean state. Without restoration the session-level root_dir
-    set by conftest.pytest_configure leaks out and breaks later tests.
-
-    Yields:
-        None
-    """
-    saved = global_environment.root_dir
+    saved = env_obj.root_dir
     yield
-    global_environment.root_dir = saved
+    env_obj.root_dir = saved
 
 
 # ---------------------------------------------------------------------------

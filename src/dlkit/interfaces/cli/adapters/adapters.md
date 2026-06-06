@@ -8,14 +8,12 @@ The CLI adapters module provides abstraction layers between the command-line int
 - **Dependency Inversion Principle**: Depends on protocol abstractions (`BaseSettingsProtocol`)
 - **Separation of Concerns**: Configuration loading separate from result presentation
 - **Error Translation**: Converts low-level errors to user-friendly `ConfigurationError`
-- **Context Manager Pattern**: Uses `path_override_context` for temporary path overrides
 - **Presentation Layer**: Rich library for terminal output formatting
 
 Key architectural decisions:
 - Adapters are pure functions (no state)
 - Configuration loading validates early and fails fast
 - Result presentation is read-only (no side effects on results)
-- Path overrides via context managers (no settings mutation)
 - Protocol-based design enables testing with mocks
 
 ## Module Structure
@@ -57,12 +55,10 @@ Key architectural decisions:
 
 ### Component 1: `load_config`
 
-**Purpose**: Load configuration from TOML file with CLI-specific error handling, partial loading optimization, and path override support.
+**Purpose**: Load configuration from TOML file with CLI-specific error handling and partial loading optimization.
 
 **Parameters**:
 - `config_path: Path` - Path to configuration file (must exist)
-- `root_dir: Path | None = None` - Optional root directory override
-- `output_dir: Path | None = None` - Optional output directory override (deprecated)
 - `workflow_type: str | None = None` - Workflow type for partial loading ('training', 'inference', or None)
 
 **Returns**: `BaseSettingsProtocol` - Loaded settings object appropriate for workflow type
@@ -81,17 +77,13 @@ settings = load_config(Path("config.toml"))
 # With workflow-specific partial loading
 training_settings = load_config(Path("config.toml"), workflow_type="training")
 
-# With root directory override
-settings = load_config(Path("config.toml"), root_dir=Path("/custom/root"), workflow_type="training")
 ```
 
 **Implementation Notes**:
 - Validates file existence before attempting load
 - Uses partial loading for performance (only loads required sections)
-- Applies root_dir via `path_override_context` (temporary, no mutation)
 - Translates all exceptions to `ConfigurationError` with context
 - Supports training/inference workflow types or defaults to training
-- Thread-safe path override via context manager
 
 ---
 

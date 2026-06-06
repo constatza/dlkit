@@ -30,7 +30,6 @@ from .dataset_settings import DatasetSettings
 from .mlflow_settings import MLflowSettings
 from .model_components import ModelComponentSettings
 from .optuna_settings import OptunaSettings
-from .paths_settings import PathsSettings
 from .session_settings import SessionSettings
 from .training_settings import TrainingSettings as TrainingConfig
 
@@ -39,7 +38,7 @@ class TrainingWorkflowConfig(BasicSettings):
     """Configuration for training workflows with eager validation.
 
     Required Sections (at load time):
-        - SESSION: Session control (name, seed, root_dir, precision)
+        - SESSION: Session control (name, seed, precision)
         - TRAINING: Training config (epochs, optimizer, loss, metrics)
 
     Optional Sections (can be injected programmatically):
@@ -48,7 +47,6 @@ class TrainingWorkflowConfig(BasicSettings):
         - MODEL: Model config (can be provided via API)
         - MLFLOW: Experiment tracking (defaults to disabled)
         - OPTUNA: Hyperparameter optimization (defaults to disabled)
-        - PATHS: Custom path overrides (falls back to SESSION.root_dir)
         - EXTRAS: Free-form user settings (ignored by core)
 
     Validation Strategy:
@@ -102,11 +100,6 @@ class TrainingWorkflowConfig(BasicSettings):
         description="Optuna hyperparameter optimization (defaults to disabled)",
     )
 
-    # Optional user sections
-    PATHS: PathsSettings | None = Field(
-        default=None,
-        description="Custom path overrides (falls back to SESSION.root_dir)",
-    )
     EXTRAS: dict[str, Any] = Field(
         default_factory=dict,
         description="Free-form user settings (ignored by core)",
@@ -185,7 +178,6 @@ class InferenceWorkflowConfig(BasicSettings):
     Optional Sections (for batch inference):
         - DATAMODULE: Data loading config (for batch inference)
         - DATASET: Dataset config (for batch inference)
-        - PATHS: Custom path overrides
         - EXTRAS: Free-form user settings
 
     For batch prediction, provide both DATASET and DATAMODULE. For
@@ -231,10 +223,6 @@ class InferenceWorkflowConfig(BasicSettings):
     )
 
     # Optional user sections
-    PATHS: PathsSettings | None = Field(
-        default=None,
-        description="Custom path overrides",
-    )
     EXTRAS: dict[str, Any] = Field(
         default_factory=dict,
         description="Free-form user settings (ignored by core)",
@@ -300,7 +288,6 @@ class OptimizationWorkflowConfig(BasicSettings):
         - DATASET: Dataset config
         - MODEL: Model config
         - MLFLOW: Experiment tracking (can track optimization studies)
-        - PATHS: Custom path overrides
         - EXTRAS: Free-form user settings
 
     Example Usage:
@@ -345,10 +332,6 @@ class OptimizationWorkflowConfig(BasicSettings):
     )
 
     # Optional user sections
-    PATHS: PathsSettings | None = Field(
-        default=None,
-        description="Custom path overrides",
-    )
     EXTRAS: dict[str, Any] = Field(
         default_factory=dict,
         description="Free-form user settings (ignored by core)",

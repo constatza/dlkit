@@ -11,7 +11,6 @@ from .dataset_settings import DatasetSettings
 from .mlflow_settings import MLflowSettings
 from .model_components import ModelComponentSettings
 from .optuna_settings import OptunaSettings
-from .paths_settings import PathsSettings
 from .session_settings import SessionSettings
 from .training_settings import TrainingSettings as TrainingConfig
 
@@ -51,12 +50,6 @@ class BaseSettingsProtocol(Protocol):
     @abstractmethod
     def DATASET(self) -> DatasetSettings | None:
         """Dataset settings."""
-        ...
-
-    @property
-    @abstractmethod
-    def PATHS(self) -> PathsSettings | None:
-        """Path override settings."""
         ...
 
     @property

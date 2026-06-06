@@ -59,9 +59,6 @@ class BaseSettingsProtocol(Protocol):
     def DATASET(self) -> object: ...
 
     @property
-    def PATHS(self) -> object: ...
-
-    @property
     def EXTRAS(self) -> object: ...
 
     @property

@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, Field
 
-from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.paths_settings import PathsSettings
 from dlkit.infrastructure.io.config import (
     ConfigSectionError,
@@ -134,13 +133,6 @@ class TestLoadSectionConfig:
         assert isinstance(paths_config, PathsTestSettings)
         assert Path(paths_config.dataroot).name == "test_data"
 
-    def test_load_known_section_without_model(self, config_file):
-        """Load a known section using the predefined mapping only."""
-        paths_config = load_section_config(config_file, section_name="PATHS")
-
-        assert isinstance(paths_config, PathsSettings)
-        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
-
     def test_file_not_found(self):
         """Test handling of missing config file."""
         with pytest.raises(FileNotFoundError):
@@ -177,31 +169,6 @@ class TestLoadSectionsConfig:
         assert isinstance(model_config, ModelTestSettings)
         assert model_config.name == "TestModel"
         assert model_config.latent_size == 128
-
-    def test_load_known_sections_without_models(self, config_file):
-        """Test loading sections via predefined registry mappings."""
-        configs = load_sections_config(config_file, ["PATHS", "MODEL"])
-
-        assert isinstance(configs["PATHS"], PathsSettings)
-        assert isinstance(configs["MODEL"], ModelComponentSettings)
-        assert configs["MODEL"].name == "TestModel"
-        paths_config = configs["PATHS"]
-        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
-
-    def test_load_mixed_section_specs(self, config_file):
-        """Mix registry-driven and explicit model mappings."""
-        configs = load_sections_config(
-            config_file,
-            {
-                "PATHS": None,
-                "MODEL": ModelComponentSettings,
-            },
-        )
-
-        assert isinstance(configs["PATHS"], PathsSettings)
-        assert isinstance(configs["MODEL"], ModelComponentSettings)
-        paths_config = configs["PATHS"]
-        assert Path(_get_extra_path(paths_config, "dataroot")).name == "test_data"
 
     def test_load_with_missing_section(self, config_file):
         """Test loading when one section is missing."""
