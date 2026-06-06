@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
 from torch import Tensor
 
+from dlkit.common.hooks import ParamValue
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
 from dlkit.engine.tracking.artifact_logger import (
     TAG_LOGGED_MODEL_ARTIFACT_PATH,
@@ -51,7 +53,7 @@ def wrapped_model() -> _ConcreteWrapper:
     isinstance relationship and the .model attribute.
     """
     wrapper: _ConcreteWrapper = object.__new__(_ConcreteWrapper)
-    wrapper.model = _InnerNet()
+    wrapper.model = cast("Any", _InnerNet())
     return wrapper
 
 
@@ -69,10 +71,18 @@ class _RecordingRunContext(IRunContext):
     def run_id(self) -> str:
         return self._run_id
 
+    @property
+    def experiment_id(self) -> str | None:
+        return "artifact-experiment"
+
+    @property
+    def tracking_uri(self) -> str | None:
+        return "sqlite:///tmp/mlflow.db"
+
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         pass
 
-    def log_params(self, params: dict[str, Any]) -> None:
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
         pass
 
     def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None:

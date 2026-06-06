@@ -2,26 +2,14 @@
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
-from pathlib import Path
-from typing import Any
+from types import TracebackType
 
 from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
-from dlkit.infrastructure.io.path_context import (
-    get_current_path_context,
-    path_override_context,
-)
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .backend import LocalSqliteBackend, TrackingBackend, select_backend
-from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
 from .mlflow_resource_manager import MLflowResourceManager
-
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
 
@@ -72,10 +60,9 @@ class MLflowTracker(IExperimentTracker):
         self.disable_autostart = disable_autostart
         self._probe = probe
         self._resource_manager: MLflowResourceManager | None = None
-        self._mlflow_config: Any = None
+        self._mlflow_config: MLflowSettings | None = None
         self._exit_stack: ExitStack | None = None
         self._backend: TrackingBackend | None = None
-        self._root_dir: Path | None = None
 
     def __enter__(self) -> MLflowTracker:
         """Context manager entry - initializes MLflow resources using ExitStack.
@@ -96,15 +83,6 @@ class MLflowTracker(IExperimentTracker):
             try:
                 self._exit_stack = ExitStack()
                 self._exit_stack.__enter__()
-
-                # Ensure MLflow resources resolve paths relative to root_dir overrides
-                if self._root_dir is not None:
-                    ctx = get_current_path_context()
-                    has_root_override = bool(ctx and getattr(ctx, "root_dir", None))
-                    if not has_root_override:
-                        self._exit_stack.enter_context(
-                            path_override_context({"root_dir": self._root_dir})
-                        )
 
                 logger.debug("Selecting tracking backend")
                 self._backend = select_backend(probe=self._probe)
@@ -134,7 +112,7 @@ class MLflowTracker(IExperimentTracker):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Context manager exit with cleanup via ExitStack."""
         logger.debug("MLflowTracker.__exit__ called - exc_type: {}, exc_val: {}", exc_type, exc_val)
@@ -201,194 +179,13 @@ class MLflowTracker(IExperimentTracker):
         """
         return isinstance(self._backend, LocalSqliteBackend)
 
-    def configure(
-        self,
-        mlflow_config: Any,
-        *,
-        root_dir: Path | str | None = None,
-    ) -> None:
-        """Store MLflow config — no side effects. Resolution deferred to __enter__.
+    def has_active_parent_run(self) -> bool:
+        """Report whether an active parent run already exists for nesting."""
+        if self._resource_manager is None:
+            return False
+        return self._resource_manager.has_active_parent_run()
 
-        Args:
-            mlflow_config: MLflow configuration settings.
-            root_dir: Optional root directory override for path resolution.
-        """
-        self._mlflow_config = mlflow_config
-        self._root_dir = self._determine_root_dir(root_dir)
+    def configure(self, config: MLflowSettings) -> None:
+        """Store MLflow config with no side effects."""
+        self._mlflow_config = config
         logger.debug("MLflow config stored - will initialize in context entry")
-
-    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
-        """Save complete configuration settings as MLflow TOML artifact.
-
-        Args:
-            settings: Complete settings object to serialize and log.
-            run_context: Active run context to log artifact to.
-
-        Raises:
-            RuntimeError: If serialization or artifact logging fails.
-        """
-        try:
-            from dlkit.infrastructure.io import serialize_config_to_string
-
-            toml_content = serialize_config_to_string(
-                settings,
-                exclude_unset=True,
-                exclude_value_entries=True,
-            )
-            run_context.log_artifact_content(toml_content, "GeneralSettings.toml")
-        except Exception as e:
-            raise RuntimeError("Couldn't log settings") from e
-
-    def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
-    ) -> None:
-        """Log model hyperparameters extracted from settings.MODEL.
-
-        Args:
-            model: Model instance (currently ignored).
-            run_context: Active run context to log parameters to.
-            settings: Settings object containing MODEL configuration.
-
-        Raises:
-            RuntimeError: If parameter extraction or logging fails.
-        """
-        try:
-            if settings.MODEL is None:
-                return
-
-            params = settings.MODEL.model_dump(exclude_none=True)
-
-            component_fields = {"name", "module_path", "checkpoint", "shape"}
-            hparams = {k: v for k, v in params.items() if k not in component_fields}
-
-            if hparams:
-                run_context.log_params(hparams)
-
-        except Exception as e:
-            raise RuntimeError("Couldn't log settings") from e
-
-    def log_dataset_to_run(
-        self, datamodule: Any, run_context: IRunContext, settings: _WorkflowSettings
-    ) -> None:
-        """Log dataset lineage to MLflow with structured and artifact fallbacks."""
-        dataset = getattr(datamodule, "dataset", None)
-        tags = self._build_dataset_tags(settings, dataset)
-        sources = self._collect_dataset_sources(settings, dataset)
-
-        structured_logged = self._log_structured_dataset(
-            dataset, run_context, settings, tags, sources
-        )
-        self._log_dataset_manifest_artifact(
-            run_context=run_context,
-            settings=settings,
-            dataset=dataset,
-            sources=sources,
-            tags=tags,
-            structured_logged=structured_logged,
-        )
-
-    def _log_structured_dataset(
-        self,
-        dataset: Any,
-        run_context: IRunContext,
-        settings: _WorkflowSettings,
-        tags: dict[str, str],
-        sources: list[str],
-    ) -> bool:
-        if dataset is None:
-            logger.debug(
-                "No dataset found in datamodule, continuing with settings-driven lineage logging"
-            )
-
-        dataset_name = self._resolve_dataset_name(settings)
-        structured_logger = StructuredDatasetLogger()
-        if structured_logger.log(
-            dataset=dataset,
-            run_context=run_context,
-            settings=settings,
-            dataset_name=dataset_name,
-            sources=sources,
-            tags=tags,
-        ):
-            return True
-
-        logger.warning(
-            "Structured MLflow dataset logging unavailable for dataset class '{}' "
-            "and current config payload; manifest artifact fallback will be used.",
-            type(dataset).__name__ if dataset is not None else "None",
-        )
-        return False
-
-    def _resolve_dataset_name(self, settings: _WorkflowSettings) -> str:
-        configured_name = getattr(settings.DATASET, "name", None) if settings.DATASET else None
-        if configured_name:
-            return str(configured_name)
-        return "training_data"
-
-    def _build_dataset_tags(self, settings: _WorkflowSettings, dataset: Any) -> dict[str, str]:
-        tags: dict[str, str] = {}
-        if settings.DATASET:
-            try:
-                split_cfg = settings.DATASET.split
-                tags["split_test_ratio"] = str(split_cfg.test_ratio)
-                tags["split_val_ratio"] = str(split_cfg.val_ratio)
-            except Exception:
-                pass
-
-            dataset_type = getattr(settings.DATASET, "type", None)
-            if dataset_type:
-                tags["dataset_type"] = str(dataset_type)
-
-        tags["dataset_class"] = type(dataset).__name__ if dataset is not None else "None"
-        return tags
-
-    def _collect_dataset_sources(self, settings: _WorkflowSettings, dataset: Any) -> list[str]:
-        del dataset
-        return DatasetSourceCollector().collect(settings)
-
-    def _log_dataset_manifest_artifact(
-        self,
-        run_context: IRunContext,
-        settings: _WorkflowSettings,
-        dataset: Any,
-        sources: list[str],
-        tags: dict[str, str],
-        structured_logged: bool,
-    ) -> None:
-        try:
-            import hashlib
-            import json
-
-            fingerprint_payload = json.dumps(sorted(sources), separators=(",", ":"))
-            fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
-
-            manifest = {
-                "dataset_name": self._resolve_dataset_name(settings),
-                "dataset_class": type(dataset).__name__ if dataset is not None else None,
-                "sources": sources,
-                "source_count": len(sources),
-                "fingerprint": fingerprint,
-                "tags": tags,
-                "structured_mlflow_dataset_logged": structured_logged,
-            }
-
-            run_context.log_artifact_content(
-                json.dumps(manifest, indent=2, sort_keys=True),
-                "lineage/dataset_manifest.json",
-            )
-            run_context.set_tag("dataset_manifest_artifact", "lineage")
-            run_context.set_tag("dataset_source_count", str(len(sources)))
-            run_context.set_tag("dataset_fingerprint", fingerprint)
-        except Exception as e:
-            logger.warning("Failed to log dataset manifest artifact: {}", e)
-
-    def _determine_root_dir(self, candidate: Path | str | None) -> Path | None:
-        if candidate is not None:
-            return Path(candidate).resolve()
-
-        ctx = get_current_path_context()
-        root_dir_val = getattr(ctx, "root_dir", None) if ctx else None
-        if root_dir_val is not None:
-            return Path(str(root_dir_val)).resolve()
-
-        return None

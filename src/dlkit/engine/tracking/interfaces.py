@@ -3,20 +3,32 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from types import TracebackType
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.common.hooks import ParamValue
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+from dlkit.engine.artifacts import IMetricSink as IMetricSink  # noqa: PLC0414
+
+if TYPE_CHECKING:
+    from mlflow.data.dataset import Dataset as MlflowDataset
+    from mlflow.entities import Dataset as MlflowDatasetEntity
+    from mlflow.models import ModelSignature
+    from sklearn.base import BaseEstimator
+    from torch import nn
+
+# Extensible tracking payload sum types.
+# These are sum types, not aliases: they enumerate currently supported
+# MLflow-facing payload shapes and are intended to grow for other backends.
+type LoggedDataset = MlflowDataset | MlflowDatasetEntity
+type LoggedModel = nn.Module | BaseEstimator
 
 
-class IRunContext(ABC):
+class IRunContext(IMetricSink, ABC):
     """Context for an active tracking run.
 
     Provides methods for logging metrics, parameters, artifacts, and tags to an
@@ -58,6 +70,18 @@ class IRunContext(ABC):
         """
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def experiment_id(self) -> str | None:
+        """Get the experiment identifier for this tracking run."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def tracking_uri(self) -> str | None:
+        """Get the resolved tracking URI for this tracking run."""
+        raise NotImplementedError
+
     @abstractmethod
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """Log metrics to the active run.
@@ -78,7 +102,7 @@ class IRunContext(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_params(self, params: dict[str, Any]) -> None:
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
         """Log parameters (hyperparameters) to the active run.
 
         Parameters are typically configuration values that don't change during training.
@@ -166,7 +190,10 @@ class IRunContext(ABC):
 
     @abstractmethod
     def log_dataset(
-        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+        self,
+        dataset: LoggedDataset,
+        context: str | None = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         """Log a dataset to the active run.
 
@@ -199,12 +226,13 @@ class IRunContext(ABC):
     @abstractmethod
     def log_model(
         self,
-        model: Any,
+        model: LoggedModel,
         artifact_path: str,
         *,
         registered_model_name: str | None = None,
-        signature: Any | None = None,
-        input_example: Any | None = None,
+        signature: ModelSignature | None = None,
+        # Intentionally opaque foreign backend payload forwarded to MLflow.
+        input_example: object | None = None,
     ) -> str | None:
         """Log a model artifact to the active run.
 
@@ -262,6 +290,14 @@ class IRunContext(ABC):
         """Set a tag on a registered model version."""
         raise NotImplementedError
 
+    def is_active(self) -> bool:
+        """Return True when this is a real (non-null) tracking run.
+
+        Returns:
+            True for live tracking runs; False for null/stub contexts.
+        """
+        return True
+
 
 class IExperimentTracker(ABC):
     """Abstract experiment tracker following Dependency Inversion Principle.
@@ -300,7 +336,7 @@ class IExperimentTracker(ABC):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: TracebackType | None,
     ) -> bool | None:
         """Exit the tracker context manager, releasing resources."""
         raise NotImplementedError
@@ -342,59 +378,6 @@ class IExperimentTracker(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
-        """Log complete configuration settings to the run.
-
-        Typically saves settings as an artifact (e.g., TOML file) for reproducibility.
-
-        Args:
-            settings: Complete settings object to log.
-            run_context: Active run context to log to.
-
-        Raises:
-            RuntimeError: If logging fails.
-
-        Example:
-            ```python
-            with tracker.create_run("experiment") as run:
-                # Log full config for reproducibility
-                tracker.log_settings(settings, run)
-            ```
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
-    ) -> None:
-        """Log model hyperparameters extracted from settings.
-
-        Extracts hyperparameters from settings.MODEL and logs them as run parameters.
-        Excludes structural fields (name, module_path, checkpoint, shape).
-
-        Args:
-            model: Model instance (currently ignored, may be used in future).
-            run_context: Active run context to log to.
-            settings: Settings containing MODEL configuration with hyperparameters.
-
-        Raises:
-            RuntimeError: If parameter extraction or logging fails.
-
-        Example:
-            ```python
-            # Settings contains model hyperparameters
-            settings.MODEL = ModelComponent(
-                name="my_model", hidden_dim=256, num_layers=3, dropout=0.1
-            )
-
-            with tracker.create_run("training") as run:
-                # Logs: {"hidden_dim": 256, "num_layers": 3, "dropout": 0.1}
-                tracker.log_model_parameters(model, run, settings)
-            ```
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def get_tracking_uri(self) -> str | None:
         """Return the resolved tracking URI, or None if not initialized.
 
@@ -411,6 +394,15 @@ class IExperimentTracker(ABC):
             True if the backend is local (e.g., SQLite / local directory).
         """
         raise NotImplementedError
+
+    def configure(self, config: MLflowSettings) -> None:
+        """Configure the tracker with backend-specific settings (no-op by default).
+
+        Concrete backends override this to apply configuration before any runs are created.
+
+        Args:
+            config: Backend-specific configuration object.
+        """
 
 
 class NullRunContext(IRunContext):
@@ -435,12 +427,18 @@ class NullRunContext(IRunContext):
 
     @property
     def run_id(self) -> str:
-        """Return a placeholder run ID.
+        """Return empty string — null context has no real run ID."""
+        return ""
 
-        Returns:
-            str: Always returns "null-run-id" as a placeholder.
-        """
-        return "null-run-id"
+    @property
+    def experiment_id(self) -> str | None:
+        """Return None (null tracker has no experiment)."""
+        return None
+
+    @property
+    def tracking_uri(self) -> str | None:
+        """Return None (null tracker has no backend)."""
+        return None
 
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """No-op metrics logging.
@@ -450,7 +448,7 @@ class NullRunContext(IRunContext):
             step: Ignored.
         """
 
-    def log_params(self, params: dict[str, Any]) -> None:
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
         """No-op parameter logging.
 
         Args:
@@ -482,7 +480,10 @@ class NullRunContext(IRunContext):
         """
 
     def log_dataset(
-        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+        self,
+        dataset: LoggedDataset,
+        context: str | None = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         """No-op dataset logging.
 
@@ -494,12 +495,13 @@ class NullRunContext(IRunContext):
 
     def log_model(
         self,
-        model: Any,
+        model: LoggedModel,
         artifact_path: str,
         *,
         registered_model_name: str | None = None,
-        signature: Any | None = None,
-        input_example: Any | None = None,
+        signature: ModelSignature | None = None,
+        # Intentionally opaque foreign backend payload forwarded to MLflow.
+        input_example: object | None = None,
     ) -> str | None:
         """No-op model logging."""
         return None
@@ -526,12 +528,8 @@ class NullRunContext(IRunContext):
     ) -> None:
         """No-op model version tag update."""
 
-    def get_tracking_uri(self) -> str | None:
-        """Return None (null tracker has no backend)."""
-        return None
-
-    def is_local(self) -> bool:
-        """Return False (null tracker has no backend)."""
+    def is_active(self) -> bool:
+        """Return False — null context is not a real tracking run."""
         return False
 
 
@@ -573,7 +571,7 @@ class NullTracker(IExperimentTracker):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Context manager exit for null tracker.
 
@@ -616,25 +614,6 @@ class NullTracker(IExperimentTracker):
 
         return _null_context()
 
-    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
-        """No-op settings logging.
-
-        Args:
-            settings: Ignored.
-            run_context: Ignored.
-        """
-
-    def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
-    ) -> None:
-        """No-op model parameter logging.
-
-        Args:
-            model: Ignored.
-            run_context: Ignored.
-            settings: Ignored.
-        """
-
     def get_tracking_uri(self) -> str | None:
         """Return None — null tracker has no backend."""
         return None
@@ -642,19 +621,3 @@ class NullTracker(IExperimentTracker):
     def is_local(self) -> bool:
         """Return False — null tracker has no backend."""
         return False
-
-
-@runtime_checkable
-class ITrackingSetup(Protocol):
-    """Optional protocol for trackers that support external configuration setup."""
-
-    def configure(self, mlflow_config: Any, *, root_dir: Any = None) -> None: ...
-
-
-@runtime_checkable
-class IDatasetLogger(Protocol):
-    """Optional protocol for trackers that support dataset lineage logging."""
-
-    def log_dataset_to_run(
-        self, datamodule: Any, run_context: IRunContext, settings: Any
-    ) -> None: ...

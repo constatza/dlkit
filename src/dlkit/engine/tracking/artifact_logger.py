@@ -6,12 +6,23 @@ Single Responsibility: Log checkpoints, models, and user-defined artifacts to ML
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 from dlkit.common import TrainingResult
+from lightning.pytorch import Trainer
+from torch import nn
+
+from dlkit.common.hooks import ParamValue
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.engine.artifacts import (
+    ArtifactPublisher,
+    ContentArtifactPayload,
+    FileArtifactPayload,
+    ProducedArtifact,
+)
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
@@ -34,29 +45,34 @@ TAG_MODEL_CLASS = "mlflow_model_class"
 TAG_MODEL_REGISTRATION_ENABLED = "mlflow_model_registration_enabled"
 
 
-def _resolve_artifact_store_base() -> Path | None:
-    """Return the local artifact store base for the active MLflow run, or None.
+class CheckpointCallbackLike(Protocol):
+    best_model_path: str | Path | None
+    last_model_path: str | Path | None
 
-    Returns:
-        Absolute path to the run's artifact root when the artifact URI uses
-        a local ``file://`` scheme, otherwise ``None``.
-    """
-    try:
-        import mlflow
 
-        if mlflow.active_run() is None:
-            return None
-        artifact_uri = mlflow.get_artifact_uri()
-        if not artifact_uri or not artifact_uri.startswith("file://"):
-            return None
+@dataclass(frozen=True, slots=True)
+class RunContextArtifactPublisher(ArtifactPublisher):
+    """Publish typed produced artifacts through the active run context."""
 
-        from dlkit.infrastructure.io.url_utils import get_url_path
+    run_context: IRunContext
 
-        raw_path = get_url_path(artifact_uri).lstrip("/")
-        candidate = Path("/" + raw_path) if not Path(raw_path).is_absolute() else Path(raw_path)
-        return candidate.resolve()
-    except Exception:
-        return None
+    def publish(self, artifact: ProducedArtifact) -> None:
+        artifact_dir, artifact_name = _split_artifact_path(artifact.artifact_path)
+        match artifact.payload:
+            case FileArtifactPayload(file_path=file_path):
+                self.run_context.log_artifact(file_path, artifact_dir=artifact_dir)
+            case ContentArtifactPayload(content=content):
+                target = artifact_name if not artifact_dir else f"{artifact_dir}/{artifact_name}"
+                self.run_context.log_artifact_content(content, target)
+            case _:
+                raise TypeError(f"Unsupported artifact payload: {type(artifact.payload).__name__}")
+
+
+def _split_artifact_path(artifact_path: str) -> tuple[str, str]:
+    path = Path(artifact_path)
+    artifact_dir = path.parent.as_posix()
+    artifact_name = path.name
+    return ("" if artifact_dir == "." else artifact_dir, artifact_name)
 
 
 def _is_inside(path: Path, base: Path) -> bool:
@@ -77,7 +93,7 @@ def _is_inside(path: Path, base: Path) -> bool:
 
 
 def _log_or_skip_checkpoint(
-    run_context: Any,
+    run_context: IRunContext,
     ckpt_path: Path,
     artifact_base: Path | None,
     artifact_dir: str,
@@ -115,11 +131,11 @@ def _log_or_skip_checkpoint(
             logger.warning("Could not remove local checkpoint {}: {}", ckpt_path, exc)
 
 
-def _resolve_model_class_name(model: Any) -> str:
+def _resolve_model_class_name(model: object) -> str:
     """Return the effective class name for MLflow, unwrapping DLKit Lightning wrappers.
 
     Args:
-        model: Any model object, possibly a ProcessingLightningWrapper.
+        model: Model object, possibly a ProcessingLightningWrapper.
 
     Returns:
         Class name of the underlying nn.Module when model is a wrapper,
@@ -174,8 +190,23 @@ class ArtifactLogger:
         Returns:
             Pending model registration payload for post-run finalization, if any.
         """
+        self.log_split_artifact(components, run_context)
         self.log_checkpoints(components, run_context)
         return self.maybe_register_model(settings, components, run_context)
+
+    def log_split_artifact(
+        self,
+        components: RuntimeComponents,
+        run_context: IRunContext,
+    ) -> None:
+        """Log the split used by the run without creating new local cache files."""
+        try:
+            split_artifact = components.artifacts.split_artifact
+            if split_artifact is None:
+                return
+            RunContextArtifactPublisher(run_context).publish(split_artifact)
+        except Exception as e:
+            logger.warning("Failed to log split artifact: {}", e)
 
     def log_checkpoints(
         self,
@@ -205,8 +236,12 @@ class ArtifactLogger:
             # Log best and last checkpoints
             best = getattr(ckpt_cb, "best_model_path", None)
             last = getattr(ckpt_cb, "last_model_path", None)
+            if best is not None and not isinstance(best, str | Path):
+                best = None
+            if last is not None and not isinstance(last, str | Path):
+                last = None
 
-            artifact_base = _resolve_artifact_store_base()
+            artifact_base = components.artifacts.policy.artifact_store_dir
 
             if best:
                 _log_or_skip_checkpoint(run_context, Path(best), artifact_base, "checkpoints")
@@ -291,7 +326,7 @@ class ArtifactLogger:
         self,
         *,
         run_context: IRunContext,
-        model: Any,
+        model: nn.Module,
         model_name: str,
         registration_enabled: bool,
     ) -> str | None:
@@ -312,7 +347,7 @@ class ArtifactLogger:
         self,
         *,
         run_context: IRunContext,
-        model: Any,
+        model: nn.Module,
         model_uri: str,
         registration_enabled: bool,
     ) -> None:
@@ -379,7 +414,7 @@ class ArtifactLogger:
         except Exception as e:
             logger.warning("Failed to log user-defined artifacts or params: {}", e)
 
-    def _find_checkpoint_callback(self, trainer: Any) -> Any | None:
+    def _find_checkpoint_callback(self, trainer: Trainer) -> CheckpointCallbackLike | None:
         """Find ModelCheckpoint callback in trainer.
 
         Args:
@@ -394,19 +429,22 @@ class ArtifactLogger:
             return ckpt_cb
 
         # Search in callbacks list
-        if hasattr(trainer, "callbacks"):
-            try:
-                from pytorch_lightning.callbacks import ModelCheckpoint
+        callbacks = getattr(trainer, "callbacks", None)
+        if not isinstance(callbacks, Sequence):
+            return None
 
-                candidates = [c for c in trainer.callbacks if isinstance(c, ModelCheckpoint)]
-                return candidates[0] if candidates else None
-            except ImportError as e:
-                logger.warning("Failed to import ModelCheckpoint: {}", e)
-                return None
+        try:
+            from pytorch_lightning.callbacks import ModelCheckpoint
+        except ImportError as e:
+            logger.warning("Failed to import ModelCheckpoint: {}", e)
+            return None
 
-        return None
+        candidates: list[CheckpointCallbackLike] = [
+            c for c in callbacks if isinstance(c, ModelCheckpoint)
+        ]
+        return candidates[0] if candidates else None
 
-    def _derive_registered_model_name(self, model: Any) -> str:
+    def _derive_registered_model_name(self, model: object) -> str:
         """Build registered model name from model class name."""
         raw_name = _resolve_model_class_name(model) or "Model"
         normalized = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
@@ -493,7 +531,7 @@ class ArtifactLogger:
             return
 
         # Filter out non-serializable values
-        safe_params = {}
+        safe_params: dict[str, ParamValue] = {}
         for key, value in params_dict.items():
             try:
                 safe_params[key] = str(value) if value is not None else ""

@@ -10,33 +10,22 @@ import math
 from dlkit.common import TrainingResult
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .interfaces import IExperimentTracker, IRunContext
+from dlkit.engine.artifacts import IMetricSink
 
 logger = get_logger(__name__)
 
 
 class MetricLogger:
-    """Handles metric logging to MLflow.
+    """Logs training/validation/test metrics to a run context.
 
-    Single Responsibility: Log training/validation/test metrics to experiment tracker.
     Separates numeric metrics from non-numeric fallbacks.
-
-    Args:
-        tracker: Experiment tracker implementation
+    Stateless — all context is passed per-call via ``run_context``.
     """
-
-    def __init__(self, tracker: IExperimentTracker):
-        """Initialize with experiment tracker.
-
-        Args:
-            tracker: Experiment tracker implementation
-        """
-        self._tracker = tracker
 
     def log_summary_metrics(
         self,
         result: TrainingResult,
-        run_context: IRunContext,
+        run_context: IMetricSink,
     ) -> None:
         """Log summary metrics excluding stage-specific metrics already logged by callbacks.
 
@@ -83,7 +72,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 
@@ -96,7 +85,7 @@ class MetricLogger:
     def log_all_metrics(
         self,
         result: TrainingResult,
-        run_context: IRunContext,
+        run_context: IMetricSink,
     ) -> None:
         """Log all scalar metrics from the training result to the tracker.
 
@@ -120,7 +109,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 

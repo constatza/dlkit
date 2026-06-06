@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 from mlflow import MlflowClient
 
+from dlkit.common.hooks import ParamValue
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .interfaces import IRunContext
+from .interfaces import IRunContext, LoggedDataset, LoggedModel
+
+if TYPE_CHECKING:
+    from mlflow.entities import Dataset as MlflowDatasetEntity
+    from mlflow.models import ModelSignature
 
 logger = get_logger(__name__)
+
+
+def _resolve_dataset_entity(dataset: LoggedDataset) -> MlflowDatasetEntity:
+    conversion = getattr(dataset, "_to_mlflow_entity", None)
+    if not callable(conversion):
+        return cast("MlflowDatasetEntity", dataset)
+    return conversion()
 
 
 class ClientBasedRunContext(IRunContext):
@@ -21,7 +34,14 @@ class ClientBasedRunContext(IRunContext):
     by using explicit client instances for all operations.
     """
 
-    def __init__(self, client: MlflowClient, run_id: str, *, tracking_uri: str):
+    def __init__(
+        self,
+        client: MlflowClient,
+        run_id: str,
+        *,
+        tracking_uri: str,
+        experiment_id: str | None = None,
+    ):
         """Initialize run context with client, run ID, and tracking URI.
 
         Args:
@@ -32,6 +52,19 @@ class ClientBasedRunContext(IRunContext):
         self._client = client
         self._run_id = run_id
         self._tracking_uri = tracking_uri
+        self._experiment_id = experiment_id
+
+    @property
+    def run_id(self) -> str:
+        return self._run_id
+
+    @property
+    def experiment_id(self) -> str | None:
+        return self._experiment_id
+
+    @property
+    def tracking_uri(self) -> str | None:
+        return self._tracking_uri
 
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """Log metrics using MLflow client.
@@ -46,7 +79,7 @@ class ClientBasedRunContext(IRunContext):
         except Exception as e:
             logger.warning("Failed to log metrics: %s", e)
 
-    def log_params(self, params: dict[str, Any]) -> None:
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
         """Log parameters using MLflow client."""
         try:
             for key, value in params.items():
@@ -86,7 +119,10 @@ class ClientBasedRunContext(IRunContext):
             logger.warning("Failed to set tag %s: %s", key, e)
 
     def log_dataset(
-        self, dataset: Any, context: str | None = None, tags: dict[str, str] | None = None
+        self,
+        dataset: LoggedDataset,
+        context: str | None = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         """Log dataset using MLflow client.
 
@@ -99,9 +135,7 @@ class ClientBasedRunContext(IRunContext):
             from mlflow.entities import DatasetInput, InputTag
 
             # Client API expects mlflow.entities.Dataset (not mlflow.data.Dataset wrapper).
-            dataset_entity = (
-                dataset._to_mlflow_entity() if hasattr(dataset, "_to_mlflow_entity") else dataset
-            )
+            dataset_entity = _resolve_dataset_entity(dataset)
 
             input_tags = [InputTag(key=k, value=v) for k, v in (tags or {}).items()]
             if context:
@@ -119,12 +153,13 @@ class ClientBasedRunContext(IRunContext):
 
     def log_model(
         self,
-        model: Any,
+        model: LoggedModel,
         artifact_path: str,
         *,
         registered_model_name: str | None = None,
-        signature: Any | None = None,
-        input_example: Any | None = None,
+        signature: ModelSignature | None = None,
+        # Intentionally opaque foreign backend payload forwarded to MLflow.
+        input_example: object | None = None,
     ) -> str | None:
         """Log model artifact with automatic MLflow flavor dispatch."""
         try:
@@ -272,17 +307,12 @@ class ClientBasedRunContext(IRunContext):
             logger.warning("Failed to log batch: %s", e)
 
     @property
-    def run_id(self) -> str:
-        """Get current run ID."""
-        return self._run_id
-
-    @property
     def client(self) -> MlflowClient:
         """Get MLflow client instance."""
         return self._client
 
 
-def _is_sklearn_estimator(model: Any) -> bool:
+def _is_sklearn_estimator(model: object) -> bool:
     """Check sklearn estimator support without hard dependency at import time."""
     try:
         from sklearn.base import BaseEstimator
@@ -292,22 +322,21 @@ def _is_sklearn_estimator(model: Any) -> bool:
         return False
 
 
-def _resolve_model_flavor(model: Any) -> str:
+def _resolve_model_flavor(model: object) -> str:
     if _is_sklearn_estimator(model):
         return "sklearn"
 
     try:
         import torch
-
-        if isinstance(model, torch.nn.Module):
-            return "pytorch"
     except Exception:
         return "unknown"
 
+    if isinstance(model, torch.nn.Module):
+        return "pytorch"
     return "unknown"
 
 
-def _resolve_logged_model_uri(logged_model: Any, fallback_uri: str) -> str:
+def _resolve_logged_model_uri(logged_model: object, fallback_uri: str) -> str:
     """Resolve best available MLflow model URI from flavor logging result."""
     model_uri = getattr(logged_model, "model_uri", None)
     if isinstance(model_uri, str) and model_uri:
@@ -321,7 +350,8 @@ def _resolve_logged_model_uri(logged_model: Any, fallback_uri: str) -> str:
 
 def _is_matching_version(
     *,
-    version: Any,
+    # Intentionally opaque MLflow client record; we only probe stable attributes.
+    version: object,
     run_id: str | None,
     artifact_path: str | None,
 ) -> bool:

@@ -10,7 +10,6 @@ nested MLflow run structure for Optuna optimization:
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-from pathlib import Path
 from typing import Any
 
 import mlflow
@@ -46,7 +45,6 @@ class MLflowTrackingAdapter(IExperimentTracker):
         mlflow_tracker: Any = None,
         mlflow_settings: Any = None,
         session_name: str | None = None,
-        root_dir: Path | str | None = None,
     ):
         """Initialize MLflow tracking adapter.
 
@@ -59,7 +57,6 @@ class MLflowTrackingAdapter(IExperimentTracker):
         self._mlflow_settings = mlflow_settings
         self._session_name = session_name
         self._exit_stack: ExitStack | None = None
-        self._root_dir = Path(root_dir).resolve() if root_dir is not None else None
         self._explicit_run_name: str | None = None
 
         if self._mlflow_settings:
@@ -82,7 +79,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
 
         # Configure tracker if settings provided
         if self._mlflow_settings and self._tracker:
-            self._tracker.configure(self._mlflow_settings, root_dir=self._root_dir)
+            self._tracker.configure(self._mlflow_settings)
 
     def __enter__(self):
         """Enter context and initialize MLflow tracker using ExitStack."""
@@ -338,33 +335,15 @@ class MLflowStudyRunContext(IStudyRunContext):
             settings: GeneralSettings object for the best trial
         """
         try:
-            import os
-            import tempfile
-            from pathlib import Path
+            from dlkit.infrastructure.io import serialize_config_to_string
 
-            from dlkit.infrastructure.io.config import write_config
-
-            # Create temporary TOML file with unset values excluded
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".toml", delete=False, prefix="best_trial_config_"
-            ) as temp_file:
-                write_config(
-                    settings,
-                    temp_file.name,
-                    exclude_unset=True,
-                    exclude_value_entries=True,
-                )
-                temp_path = Path(temp_file.name)
-
-            try:
-                # Log TOML file as artifact with clear naming
-                self._run_context.log_artifact(temp_path, artifact_dir="")
-                logger.debug("Best trial settings logged as TOML artifact")
-            finally:
-                # Clean up temp file
-                if temp_path.exists():
-                    os.unlink(temp_path)
-
+            toml_content = serialize_config_to_string(
+                settings,
+                exclude_unset=True,
+                exclude_value_entries=True,
+            )
+            self._run_context.log_artifact_content(toml_content, "best_trial_config.toml")
+            logger.debug("Best trial settings logged as TOML artifact")
         except Exception as e:
             logger.warning("Failed to log best trial settings: {}", e)
 
@@ -416,34 +395,18 @@ class MLflowTrialRunContext(ITrialRunContext):
             settings: GeneralSettings object for this trial
         """
         try:
-            import os
-            import tempfile
-            from pathlib import Path
+            from dlkit.infrastructure.io import serialize_config_to_string
 
-            from dlkit.infrastructure.io.config import write_config
-
-            # Create temporary TOML file with unset values excluded
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as temp_file:
-                write_config(
-                    settings,
-                    temp_file.name,
-                    exclude_unset=True,
-                    exclude_value_entries=True,
-                )
-                temp_path = Path(temp_file.name)
-
-            try:
-                # Log TOML file as artifact
-                self._run_context.log_artifact(temp_path, artifact_dir="")
-                logger.debug(
-                    "Trial {} settings logged as TOML artifact",
-                    self._trial.trial_number,
-                )
-            finally:
-                # Clean up temp file
-                if temp_path.exists():
-                    os.unlink(temp_path)
-
+            toml_content = serialize_config_to_string(
+                settings,
+                exclude_unset=True,
+                exclude_value_entries=True,
+            )
+            self._run_context.log_artifact_content(toml_content, "trial_config.toml")
+            logger.debug(
+                "Trial {} settings logged as TOML artifact",
+                self._trial.trial_number,
+            )
         except Exception as e:
             logger.warning("Failed to log trial settings: {}", e)
 
@@ -486,7 +449,7 @@ class MLflowTrialRunContext(ITrialRunContext):
             for key, value in metrics.items():
                 try:
                     numeric_metrics[key] = float(value)
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     # Log non-numeric as parameters
                     self._run_context.log_params({f"metric_{key}": str(value)})
 
@@ -510,17 +473,12 @@ class MLflowTrialRunContext(ITrialRunContext):
     def log_trial_artifacts(self, artifacts: dict[str, Any]) -> None:
         """Log trial artifacts."""
         try:
-            from pathlib import Path as PathLib
-
             for key, artifact_path in artifacts.items():
                 if hasattr(artifact_path, "exists") and artifact_path.exists():
                     # Log file artifacts using run context
-                    self._run_context.log_artifact(PathLib(str(artifact_path)), artifact_dir=key)
+                    self._run_context.log_artifact(artifact_path, artifact_dir=key)
                 else:
-                    # Log as text artifact - write to temp file first
-                    temp_path = PathLib("/tmp") / f"{key}.txt"
-                    temp_path.write_text(str(artifact_path))
-                    self._run_context.log_artifact(temp_path, artifact_dir="")
+                    self._run_context.log_artifact_content(str(artifact_path), f"{key}.txt")
 
             logger.debug("Trial {} artifacts logged to MLflow", self._trial.trial_number)
 

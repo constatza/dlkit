@@ -5,8 +5,6 @@ Single Responsibility: Add MLflow metadata to training results.
 
 from __future__ import annotations
 
-from typing import Any
-
 from dlkit.common import TrainingResult
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.workflow_configs import (
@@ -15,7 +13,7 @@ from dlkit.infrastructure.config.workflow_configs import (
 )
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .interfaces import IExperimentTracker, IRunContext
+from .interfaces import IRunContext
 
 type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -27,18 +25,7 @@ class ResultEnricher:
 
     Single Responsibility: Add MLflow metadata to training results.
     Does not modify the tracker or settings, only enriches result objects.
-
-    Args:
-        tracker: Experiment tracker implementation
     """
-
-    def __init__(self, tracker: IExperimentTracker):
-        """Initialize with experiment tracker.
-
-        Args:
-            tracker: Experiment tracker implementation
-        """
-        self._tracker = tracker
 
     def enrich_result(
         self,
@@ -66,7 +53,8 @@ class ResultEnricher:
             enriched = dict(getattr(result, "metrics", {}) or {})
 
             run_id = self._resolve_run_id(run_context)
-            resolved_uri = self._resolve_tracking_uri(tracking_uri)
+            resolved_uri = self._resolve_tracking_uri(tracking_uri, run_context)
+            experiment_id = self._resolve_experiment_id(run_context)
 
             if run_id:
                 enriched["mlflow_run_id"] = run_id
@@ -74,7 +62,8 @@ class ResultEnricher:
             else:
                 logger.debug("No active MLflow run for enrichment")
 
-            self._add_experiment_id(enriched)
+            if experiment_id:
+                enriched["mlflow_experiment_id"] = experiment_id
 
             if resolved_uri:
                 enriched["mlflow_tracking_uri"] = resolved_uri
@@ -102,38 +91,23 @@ class ResultEnricher:
         Returns:
             Run ID string or None
         """
-        if run_context is not None:
-            run_id = getattr(run_context, "run_id", None)
-            if run_id and run_id != "null-run-id":
+        if run_context is not None and run_context.is_active():
+            run_id = run_context.run_id
+            if run_id:
                 return run_id
-
-        try:
-            import mlflow
-
-            run = mlflow.active_run()
-            if run:
-                return run.info.run_id
-        except Exception as e:
-            logger.warning("Failed to get MLflow run_id from global state: %s", e)
 
         return None
 
-    def _add_experiment_id(self, enriched: dict[str, Any]) -> None:
-        """Add MLflow experiment ID to enriched metrics from global state.
+    def _resolve_experiment_id(self, run_context: IRunContext | None) -> str | None:
+        if run_context is None:
+            return None
+        return getattr(run_context, "experiment_id", None)
 
-        Args:
-            enriched: Dictionary to add experiment ID to
-        """
-        try:
-            import mlflow
-
-            run = mlflow.active_run()
-            if run:
-                enriched["mlflow_experiment_id"] = run.info.experiment_id
-        except Exception as e:
-            logger.warning("Failed to add MLflow experiment_id: %s", e)
-
-    def _resolve_tracking_uri(self, tracking_uri: str | None) -> str | None:
+    def _resolve_tracking_uri(
+        self,
+        tracking_uri: str | None,
+        run_context: IRunContext | None,
+    ) -> str | None:
         """Resolve tracking URI preferring explicit value over global state.
 
         Args:
@@ -144,11 +118,6 @@ class ResultEnricher:
         """
         if tracking_uri:
             return tracking_uri
-        try:
-            import mlflow
-
-            current_uri = mlflow.get_tracking_uri()
-            return current_uri or None
-        except Exception as e:
-            logger.warning("Failed to get MLflow tracking URI: %s", e)
+        if run_context is None:
             return None
+        return getattr(run_context, "tracking_uri", None)

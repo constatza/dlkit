@@ -5,7 +5,6 @@ Single Responsibility: Provide typed access to nested configuration values with 
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from dlkit.infrastructure.config import GeneralSettings
@@ -42,14 +41,6 @@ class ConfigAccessor:
             Model name from settings or default "Model"
         """
         return self._get_nested("MODEL", "name", default="Model")
-
-    def get_session_root_dir(self) -> Path | None:
-        """Get session root directory.
-
-        Returns:
-            Root directory path or None if not configured
-        """
-        return self._get_nested("SESSION", "root_dir", default=None)
 
     def get_mlflow_config(self) -> Any:
         """Get MLflow configuration section.
@@ -90,9 +81,10 @@ class ConfigAccessor:
         """Get optional registered model version tag overrides."""
         mlflow_cfg = self.get_mlflow_client_config()
         tags = getattr(mlflow_cfg, "registered_model_version_tags", None) if mlflow_cfg else None
-        if not isinstance(tags, dict):
+        try:
+            return {str(k).strip(): str(v) for k, v in (tags or {}).items() if str(k).strip()}
+        except (AttributeError, TypeError):
             return {}
-        return {str(key).strip(): str(value) for key, value in tags.items() if str(key).strip()}
 
     def should_register_model(self) -> bool:
         """Check if model registration is enabled.
@@ -138,10 +130,10 @@ class ConfigAccessor:
         if not artifacts:
             return []
 
-        # Normalize to list
-        if isinstance(artifacts, (list, tuple)):
+        try:
             return list(artifacts)
-        return [artifacts]
+        except TypeError:
+            return [str(artifacts)]
 
     def get_run_tags(self) -> dict[str, str] | None:
         """Get run tags from MLflow configuration.

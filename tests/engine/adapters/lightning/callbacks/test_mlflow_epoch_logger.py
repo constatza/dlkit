@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 from lightning.pytorch import LightningModule
 
+from dlkit.common.hooks import ParamValue
 from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
 
 
@@ -37,9 +39,17 @@ class RecordingRunContext:
 
     def __init__(self) -> None:
         self.logged: list[tuple[dict[str, float], int | None]] = []
+        self.params: dict[str, ParamValue] = {}
+        self.tags: dict[str, str] = {}
 
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         self.logged.append((metrics, step))
+
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
+        self.params.update(dict(params))
+
+    def set_tag(self, key: str, value: str) -> None:
+        self.tags[key] = value
 
 
 @pytest.fixture

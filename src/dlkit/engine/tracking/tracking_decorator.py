@@ -6,18 +6,19 @@ Each service has a single responsibility following SOLID principles.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
+
 from dlkit.common import TrainingResult
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.engine.artifacts import ArtifactPolicy, NestedRunCapability
 from dlkit.engine.tracking.artifact_logger import ArtifactLogger
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
-from dlkit.engine.tracking.interfaces import (
-    IDatasetLogger,
-    IExperimentTracker,
-    IRunContext,
-    ITrackingSetup,
-)
+from dlkit.engine.tracking.dataset_logger import DatasetLogger
+from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
 from dlkit.engine.tracking.metric_logger import MetricLogger
 from dlkit.engine.tracking.result_enricher import ResultEnricher
+from dlkit.engine.tracking.settings_logger import SettingsLogger
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.interfaces import ITrainingExecutor
 from dlkit.infrastructure.config.workflow_configs import (
@@ -59,6 +60,8 @@ class TrackingDecorator(ITrainingExecutor):
         metric_logger: MetricLogger | None = None,
         artifact_logger: ArtifactLogger | None = None,
         result_enricher: ResultEnricher | None = None,
+        settings_logger: SettingsLogger | None = None,
+        dataset_logger: DatasetLogger | None = None,
     ):
         """Initialize with base executor, tracker, optional hooks, and optional services.
 
@@ -69,13 +72,17 @@ class TrackingDecorator(ITrainingExecutor):
             metric_logger: Metric logging service (optional)
             artifact_logger: Artifact logging service (optional)
             result_enricher: Result enrichment service (optional)
+            settings_logger: Settings/model-param serialization service (optional)
+            dataset_logger: Dataset lineage logging service (optional)
         """
         self._executor = executor
         self._tracker = tracker
         self._hooks = hooks
-        self._metric_logger = metric_logger or MetricLogger(tracker)
+        self._metric_logger = metric_logger or MetricLogger()
         self._artifact_logger = artifact_logger or ArtifactLogger(tracker)
-        self._result_enricher = result_enricher or ResultEnricher(tracker)
+        self._result_enricher = result_enricher or ResultEnricher()
+        self._settings_logger = settings_logger or SettingsLogger()
+        self._dataset_logger = dataset_logger or DatasetLogger()
 
     def execute(
         self,
@@ -116,26 +123,38 @@ class TrackingDecorator(ITrainingExecutor):
                 else None
             )
             is_local = self._tracker.is_local() if hasattr(self._tracker, "is_local") else False
+            tracked_components = self._with_artifact_policy(
+                components,
+                tracking_enabled=True,
+                is_local=is_local,
+            )
             if tracking_uri:
                 if is_local:
                     logger.info("Using local file-backed MLflow tracking URI: {}", tracking_uri)
                 else:
                     logger.info("Using MLflow server tracking URI: {}", tracking_uri)
             logger.debug("Executing training with tracking")
-            result = self._execute_with_tracking(components, settings, tracking_uri)
+            result = self._execute_with_tracking(
+                components,
+                tracked_components,
+                settings,
+                tracking_uri,
+            )
             logger.debug("Training completed, exiting tracker context")
             return result
 
     def _execute_with_tracking(
         self,
-        components: RuntimeComponents,
+        execution_components: RuntimeComponents,
+        tracked_components: RuntimeComponents,
         settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Execute training with tracking - separated for SRP compliance.
 
         Args:
-            components: Pre-built training components
+            execution_components: Pre-built training components passed to the executor
+            tracked_components: Tracking-enriched component view used for artifact policy
             settings: Global training settings
             tracking_uri: Resolved MLflow tracking URI if available
 
@@ -168,13 +187,13 @@ class TrackingDecorator(ITrainingExecutor):
 
                 # Log metadata and configuration
                 self._log_tracking_metadata(run_context, tracking_uri)
-                self._log_configuration(components, settings, run_context)
+                self._log_configuration(tracked_components, settings, run_context)
 
                 # Inject MLflow callbacks into trainer
-                self._inject_mlflow_callbacks(components, run_context, settings)
+                self._inject_mlflow_callbacks(tracked_components, run_context, settings)
 
                 # Execute core training
-                result = self._executor.execute(components, settings)
+                result = self._executor.execute(execution_components, settings)
 
                 # Fire on_training_complete hook
                 if self._hooks and self._hooks.on_training_complete:
@@ -192,7 +211,7 @@ class TrackingDecorator(ITrainingExecutor):
 
                 # Log training artifacts (delegate to ArtifactLogger)
                 pending_registration = self._artifact_logger.log_training_artifacts(
-                    components, settings, run_context
+                    tracked_components, settings, run_context
                 )
 
                 # Log user-defined custom artifacts and params (delegate to ArtifactLogger)
@@ -221,27 +240,17 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
     ) -> None:
-        """Setup tracking configuration.
+        """Configure the tracker before entering its context.
 
-        Delegates to tracker's configure() if available (LSP-compliant via Protocol).
-        No return value — use get_tracking_uri() after __enter__ instead.
+        Calls ``configure(mlflow_config)`` on the tracker if that method exists.
+        Uses duck typing so no optional-protocol isinstance check is needed.
 
         Args:
             settings: Global settings
         """
         accessor = ConfigAccessor(settings)
         mlflow_config = accessor.get_mlflow_config()
-
-        if isinstance(self._tracker, ITrackingSetup):
-            root_dir = accessor.get_session_root_dir()
-            try:
-                self._tracker.configure(mlflow_config, root_dir=root_dir)
-            except TypeError as exc:
-                if "unexpected keyword argument 'root_dir'" in str(exc):
-                    logger.debug("Tracker does not support root_dir parameter, using fallback")
-                    self._tracker.configure(mlflow_config)
-                else:
-                    raise
+        self._tracker.configure(mlflow_config)
 
     def _extract_run_config(
         self, settings: TrainingWorkflowConfig | OptimizationWorkflowConfig
@@ -293,23 +302,18 @@ class TrackingDecorator(ITrainingExecutor):
         settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
-        """Log configuration and model parameters.
+        """Log configuration, dataset lineage, and model parameters.
 
-        Delegates actual logging to tracker implementation.
+        Delegates each concern to a dedicated injected service.
 
         Args:
             components: Build components
             settings: Global settings
             run_context: Run context for logging
         """
-        # Log configuration
-        self._tracker.log_settings(settings, run_context)
-
-        # Log dataset
+        self._settings_logger.log_settings(settings, run_context)
         self._log_dataset_to_run(components, settings, run_context)
-
-        # Log model hyperparameters
-        self._tracker.log_model_parameters(components.model, run_context, settings)
+        self._settings_logger.log_model_parameters(components.model, run_context, settings)
 
     def _log_dataset_to_run(
         self,
@@ -317,9 +321,7 @@ class TrackingDecorator(ITrainingExecutor):
         settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
         run_context: IRunContext,
     ) -> None:
-        """Log dataset to MLflow run.
-
-        Delegates to tracker if it supports dataset logging (LSP-compliant via Protocol).
+        """Log dataset lineage via the injected DatasetLogger.
 
         Args:
             components: Build components containing datamodule
@@ -327,8 +329,7 @@ class TrackingDecorator(ITrainingExecutor):
             run_context: Run context for logging
         """
         try:
-            if isinstance(self._tracker, IDatasetLogger):
-                self._tracker.log_dataset_to_run(components.datamodule, run_context, settings)
+            self._dataset_logger.log_dataset_to_run(components.datamodule, run_context, settings)
         except Exception as e:
             logger.warning("Failed to log dataset: {}", e)
 
@@ -354,13 +355,20 @@ class TrackingDecorator(ITrainingExecutor):
                 logger.debug("No trainer found in components")
                 return
 
-            from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
+            from dlkit.engine.adapters.lightning.callbacks import (
+                CheckpointDirRouter,
+                MLflowEpochLogger,
+            )
 
             if not hasattr(trainer, "callbacks"):
                 trainer.callbacks = []
 
             trainer.callbacks.append(MLflowEpochLogger(run_context))
             logger.debug("Injected MLflow epoch logger for run '{}'", run_context.run_id)
+            checkpoint_dir = self._resolve_checkpoint_dir(components)
+            if checkpoint_dir is not None:
+                trainer.callbacks.append(CheckpointDirRouter(checkpoint_dir))
+                logger.debug("Injected checkpoint dir router for '{}'", checkpoint_dir)
 
         except Exception as e:
             logger.warning("Failed to inject MLflow epoch logger: {}", e)
@@ -371,12 +379,38 @@ class TrackingDecorator(ITrainingExecutor):
         Returns:
             True if there's already an active MLflow run (nested run required)
         """
-        try:
-            import mlflow
+        if isinstance(self._tracker, NestedRunCapability):
+            return self._tracker.has_active_parent_run()
+        return False
 
-            # Check if there's already an active MLflow run
-            active_run = mlflow.active_run()
-            return active_run is not None
-        except Exception as e:
-            logger.warning("Failed to check for active MLflow run: {}", e)
-            return False
+    def _with_artifact_policy(
+        self,
+        components: RuntimeComponents,
+        *,
+        tracking_enabled: bool,
+        is_local: bool,
+    ) -> RuntimeComponents:
+        policy = ArtifactPolicy(
+            tracking_backend="mlflow" if tracking_enabled else "none",
+            checkpoint_persistence="tracked" if tracking_enabled else "framework_local",
+            config_persistence="tracked" if tracking_enabled else "none",
+            local_root_dir=self._resolve_local_root_dir(components),
+            remove_uploaded_files=tracking_enabled and not is_local,
+        )
+        return replace(components, artifacts=components.artifacts.with_policy(policy))
+
+    @staticmethod
+    def _resolve_local_root_dir(components: RuntimeComponents) -> Path | None:
+        trainer = components.trainer
+        if trainer is None:
+            return None
+        root_dir = getattr(trainer, "default_root_dir", None)
+        if root_dir is None or not isinstance(root_dir, str | Path):
+            return None
+        return Path(root_dir)
+
+    def _resolve_checkpoint_dir(self, components: RuntimeComponents) -> Path | None:
+        local_root_dir = components.artifacts.policy.local_root_dir
+        if local_root_dir is None:
+            return None
+        return local_root_dir / "checkpoints"

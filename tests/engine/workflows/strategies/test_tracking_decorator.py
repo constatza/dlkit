@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest.mock import Mock
 import pytest
 
 from dlkit.common import TrainingResult, WorkflowError
+from dlkit.common.hooks import ParamValue
 from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training import VanillaExecutor
@@ -40,11 +42,19 @@ class MockRunContext(IRunContext):
         """Get the run ID for this tracking run."""
         return self._run_id
 
+    @property
+    def experiment_id(self) -> str | None:
+        return "mock-experiment-id"
+
+    @property
+    def tracking_uri(self) -> str | None:
+        return "sqlite:///tmp/mlflow.db"
+
     def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         self.logged_metrics.update(metrics)
 
-    def log_params(self, params: dict[str, Any]) -> None:
-        self.logged_params.update(params)
+    def log_params(self, params: Mapping[str, ParamValue]) -> None:
+        self.logged_params.update(dict(params))
 
     def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None:
         pass
@@ -114,7 +124,6 @@ class MockExperimentTracker(IExperimentTracker):
     def __init__(self):
         self.run_context = MockRunContext()
         self.created_runs = []
-        self.logged_settings = []
 
     def __enter__(self):
         """Enter context manager."""
@@ -141,14 +150,6 @@ class MockExperimentTracker(IExperimentTracker):
             }
         )
         yield self.run_context
-
-    def log_settings(self, settings: _WorkflowSettings, run_context: IRunContext) -> None:
-        self.logged_settings.append(settings)
-
-    def log_model_parameters(
-        self, model: Any, run_context: IRunContext, settings: _WorkflowSettings
-    ) -> None:
-        """Mock model parameter logging."""
 
     def get_tracking_uri(self) -> str | None:
         return None
@@ -224,7 +225,14 @@ def test_tracking_decorator_single_responsibility(
     mock_executor, mock_tracker, mlflow_settings, build_components
 ):
     """Test that TrackingDecorator has single responsibility: adding tracking to execution."""
-    decorator = TrackingDecorator(mock_executor, mock_tracker)
+    from unittest.mock import Mock
+
+    from dlkit.engine.tracking.settings_logger import SettingsLogger
+
+    mock_settings_logger = Mock(spec=SettingsLogger)
+    decorator = TrackingDecorator(
+        mock_executor, mock_tracker, settings_logger=mock_settings_logger
+    )
 
     result = decorator.execute(build_components, mlflow_settings)
 
@@ -235,8 +243,8 @@ def test_tracking_decorator_single_responsibility(
     assert mock_tracker.created_runs[0]["experiment_name"] == "test_experiment"
     assert mock_tracker.created_runs[0]["run_name"] == "test_run"
 
-    # Verify settings were logged
-    assert len(mock_tracker.logged_settings) == 1
+    # Verify settings were logged via injected SettingsLogger (not on tracker directly)
+    mock_settings_logger.log_settings.assert_called_once()
 
     # Verify underlying executor was called
     mock_executor.execute.assert_called_once_with(build_components, mlflow_settings)
@@ -291,7 +299,7 @@ def test_tracking_decorator_tracking_uri_tagging(
 
     # Mock tracker with server info capabilities
     class MockMLflowTracker(MockExperimentTracker):
-        def configure(self, mlflow_config: Any, *, root_dir: Any = None) -> None:
+        def configure(self, config: Any) -> None:
             pass
 
         def get_tracking_uri(self) -> str:

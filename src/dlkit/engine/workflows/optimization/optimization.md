@@ -33,6 +33,10 @@ Adapters for external systems:
 - MLflow tracking
 - configuration serialization
 
+Optimization configuration persistence is opt-in for local files. When an
+active tracker is available, small config artifacts should be logged through the
+tracking boundary instead of creating implicit durable files on disk.
+
 ## Runtime Boundary
 
 Runtime callers should use:
