@@ -19,13 +19,13 @@ import torch
 from lightning import Callback
 from loguru import logger
 
+from dlkit.engine.adapters.lightning.protocols import IBatchTransformer, IFittableBatchTransformer
 from dlkit.engine.artifacts import (
     ArtifactCollector,
     FileArtifactPayload,
     IMetricSink,
     ProducedArtifact,
 )
-from dlkit.engine.adapters.lightning.protocols import IBatchTransformer, IFittableBatchTransformer
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -133,9 +133,7 @@ class MLflowEpochLogger(Callback):
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning(f"Failed to log metrics with epoch logger: {exc}")
 
-    def _collect_stage_metrics(
-        self, metrics: Mapping[str, object], stage: str
-    ) -> dict[str, float]:
+    def _collect_stage_metrics(self, metrics: Mapping[str, object], stage: str) -> dict[str, float]:
         stage_aliases = {
             "train": ("train", "training"),
             "val": ("val", "valid", "validation"),
@@ -212,7 +210,7 @@ class MLflowEpochLogger(Callback):
         if isinstance(candidate, str):
             try:
                 return float(candidate)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
         return None
 

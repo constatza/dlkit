@@ -1,6 +1,7 @@
+from typing import cast
+
 import pytest
 import torch
-from typing import cast
 
 from dlkit.domain.transforms.errors import TransformNotFittedError
 from dlkit.domain.transforms.truncated_svd import TruncatedSVD

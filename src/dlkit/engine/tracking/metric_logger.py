@@ -8,9 +8,8 @@ from __future__ import annotations
 import math
 
 from dlkit.common import TrainingResult
-from dlkit.infrastructure.utils.logging_config import get_logger
-
 from dlkit.engine.artifacts import IMetricSink
+from dlkit.infrastructure.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -72,7 +71,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 
@@ -109,7 +108,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 

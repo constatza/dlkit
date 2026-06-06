@@ -202,7 +202,5 @@ def _build_split_artifact(
     return ProducedArtifact(
         kind="split",
         artifact_path=artifact_path,
-        payload=ContentArtifactPayload(
-            content=split.model_dump_json(exclude_none=True, indent=2)
-        ),
+        payload=ContentArtifactPayload(content=split.model_dump_json(exclude_none=True, indent=2)),
     )

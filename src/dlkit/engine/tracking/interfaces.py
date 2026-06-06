@@ -7,12 +7,11 @@ from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 from dlkit.common.hooks import ParamValue
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
-
 from dlkit.engine.artifacts import IMetricSink as IMetricSink  # noqa: PLC0414
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 if TYPE_CHECKING:
     from mlflow.data.dataset import Dataset as MlflowDataset
@@ -403,6 +402,7 @@ class IExperimentTracker(ABC):
         Args:
             config: Backend-specific configuration object.
         """
+        return None
 
 
 class NullRunContext(IRunContext):

@@ -18,6 +18,7 @@ from dlkit.common.geometry import FieldRole, GeometryKind
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry
 
+
 class TestModelInputField:
     """Tests for the model_input bool field on DataEntry subclasses."""
 

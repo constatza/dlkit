@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from dlkit.common import TrainingResult
 from lightning.pytorch import Trainer
 from torch import nn
 
+from dlkit.common import TrainingResult
 from dlkit.common.hooks import ParamValue
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
 from dlkit.engine.artifacts import (

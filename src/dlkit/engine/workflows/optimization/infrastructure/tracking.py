@@ -449,7 +449,7 @@ class MLflowTrialRunContext(ITrialRunContext):
             for key, value in metrics.items():
                 try:
                     numeric_metrics[key] = float(value)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     # Log non-numeric as parameters
                     self._run_context.log_params({f"metric_{key}": str(value)})
 

@@ -230,9 +230,7 @@ def test_tracking_decorator_single_responsibility(
     from dlkit.engine.tracking.settings_logger import SettingsLogger
 
     mock_settings_logger = Mock(spec=SettingsLogger)
-    decorator = TrackingDecorator(
-        mock_executor, mock_tracker, settings_logger=mock_settings_logger
-    )
+    decorator = TrackingDecorator(mock_executor, mock_tracker, settings_logger=mock_settings_logger)
 
     result = decorator.execute(build_components, mlflow_settings)
 

@@ -501,7 +501,7 @@ def _passthrough_collate(batch: TensorDict | list[TensorDict]) -> TensorDict:
 
 
 def _optimizer_lr(settings: object) -> float:
-    return cast("float", getattr(settings, "lr"))
+    return cast("float", settings.lr)
 
 
 def _fit_single_batch_wrapper(

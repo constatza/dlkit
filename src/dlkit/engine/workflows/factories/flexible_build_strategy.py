@@ -7,8 +7,8 @@ from typing import Any, cast
 from loguru import logger
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
-from dlkit.engine.data.geometry import infer_geometry_from_sample, infer_target_shapes_from_sample
 from dlkit.engine.artifacts import RuntimeArtifactManifest
+from dlkit.engine.data.geometry import infer_geometry_from_sample, infer_target_shapes_from_sample
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.contract_resolver import (
     ContractInferenceError,

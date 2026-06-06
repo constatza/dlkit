@@ -30,7 +30,7 @@ def _tcp_port_open(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host, port), timeout=0.25):
             return True
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         return False
 
 

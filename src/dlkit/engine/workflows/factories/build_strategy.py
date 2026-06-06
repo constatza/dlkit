@@ -61,7 +61,9 @@ def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:
     updates: dict[str, Any] = {}
 
     if getattr(trainer_settings.logger, "name", None):
-        updates["logger"] = trainer_settings.logger.model_copy(update={"save_dir": default_root_dir})
+        updates["logger"] = trainer_settings.logger.model_copy(
+            update={"save_dir": default_root_dir}
+        )
 
     pinned_callbacks = []
     callbacks_changed = False
@@ -69,7 +71,9 @@ def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:
         callback_name = getattr(callback, "name", None)
         dirpath = getattr(callback, "dirpath", None)
         if callback_name == "ModelCheckpoint" and dirpath is None:
-            callback = callback.model_copy(update={"dirpath": Path(default_root_dir) / "checkpoints"})
+            callback = callback.model_copy(
+                update={"dirpath": Path(default_root_dir) / "checkpoints"}
+            )
             callbacks_changed = True
         pinned_callbacks.append(callback)
 

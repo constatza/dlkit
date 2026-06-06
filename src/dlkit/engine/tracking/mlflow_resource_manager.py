@@ -28,6 +28,7 @@ from .mlflow_client_factory import MLflowClientFactory
 
 logger = get_logger(__name__)
 
+
 class _WALRegistration:
     """Thread-safe, idempotent registration of the SQLite WAL event listener."""
 

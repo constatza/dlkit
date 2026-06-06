@@ -43,6 +43,7 @@ def _as_graph(contract: ModelContractSpec) -> GraphContractSpec:
     assert isinstance(contract, GraphContractSpec)
     return contract
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

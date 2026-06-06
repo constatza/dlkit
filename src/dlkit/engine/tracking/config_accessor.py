@@ -83,7 +83,7 @@ class ConfigAccessor:
         tags = getattr(mlflow_cfg, "registered_model_version_tags", None) if mlflow_cfg else None
         try:
             return {str(k).strip(): str(v) for k, v in (tags or {}).items() if str(k).strip()}
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             return {}
 
     def should_register_model(self) -> bool:
