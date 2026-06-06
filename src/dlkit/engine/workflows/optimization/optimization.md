@@ -16,12 +16,13 @@ Its public runtime entrypoint is `dlkit.engine.workflows.entrypoints.optimize()`
 Pure optimization concepts and contracts:
 - study and trial models
 - optimization result model
-- repository and tracking protocols
+- study repository, backend-session, and tracking protocols
 
 ### Application
 
 Orchestration services that coordinate:
 - study lifecycle
+- optimization backend-session lifecycle
 - trial execution
 - configuration preparation
 - interaction with runtime build components
@@ -30,6 +31,8 @@ Orchestration services that coordinate:
 
 Adapters for external systems:
 - Optuna persistence
+- Optuna backend sessions
+- shared backend-study registry for Optuna repository/session internals
 - MLflow tracking
 - configuration serialization
 
@@ -44,17 +47,36 @@ Runtime callers should use:
 - `dlkit.engine.workflows.strategy.OptimizationStrategy`
 - concrete imports from `domain`, `application`, or `infrastructure` when needed
 
+The optimization orchestrator is responsible for:
+- entering and exiting `IOptimizationBackendSession`
+- coordinating backend-specific sampling and reporting through that session
+- entering tracker-owned nested run contexts after the backend session is active
+
 The runtime entrypoint is responsible for:
 - applying request-level overrides
 - managing path context
-- creating tracker context when required
+- entering and exiting the top-level experiment tracker when tracking is enabled
 - calling the optimization strategy
+
+The factory is responsible for:
+- creating `IStudyRepository`, `IOptimizationBackendSession`, trackers, and persisters
+- wiring the shared backend-study registry only when `OPTUNA.enabled` is true
+- returning unentered context-manager dependencies
 
 ## Import Rules
 
 - Import concrete modules directly.
 - Do not import from `dlkit.engine.workflows.optimization` as a barrel.
 - Keep `domain` independent from `application` and `infrastructure`.
+- Keep `IStudyRepository` backend-agnostic; backend-branded operations belong on
+  `IOptimizationBackendSession`.
+- Keep backend-study resolution in infrastructure internals; repositories do not
+  expose backend-native Optuna objects as a consumed contract.
+
+## Lifecycle Guarantees
+
+- Backend sessions must not leave active Optuna trial handles after context exit.
+- Sampling failures must finalize or discard backend trial state before re-raising.
 
 ## Entry from Runtime
 

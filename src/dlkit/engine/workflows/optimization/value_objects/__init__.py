@@ -32,6 +32,7 @@ from .protocols import (
     IHyperparameterApplicator,
     IHyperparameterSampler,
     IObjectiveFunction,
+    IOptimizationBackendSession,
     IPruningStrategy,
     IStudyRepository,
     IStudyRunContext,
@@ -52,6 +53,7 @@ __all__ = [
     "TrialFailedException",
     # Domain Protocols
     "IStudyRepository",
+    "IOptimizationBackendSession",
     "IHyperparameterSampler",
     "IPruningStrategy",
     "IExperimentTracker",

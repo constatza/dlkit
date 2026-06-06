@@ -25,6 +25,7 @@ from .value_objects import (
     IConfigurationPersistence,
     IExperimentTracker,
     IHyperparameterApplicator,
+    IOptimizationBackendSession,
     IStudyRepository,
     OptimizationDirection,
     OptimizationResult,
@@ -391,6 +392,7 @@ class OptimizationOrchestrator:
         self,
         study_manager: StudyManager,
         trial_executor: TrialExecutor,
+        optimization_backend_session: IOptimizationBackendSession,
         experiment_tracker: IExperimentTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
     ):
@@ -399,11 +401,13 @@ class OptimizationOrchestrator:
         Args:
             study_manager: Study lifecycle management service
             trial_executor: Trial execution service
+            optimization_backend_session: Runtime optimization backend session
             experiment_tracker: Optional experiment tracking
             config_persister: Optional configuration persistence
         """
         self._study_manager = study_manager
         self._trial_executor = trial_executor
+        self._optimization_backend_session = optimization_backend_session
         self._experiment_tracker = experiment_tracker
         self._config_persister = config_persister
 
@@ -455,12 +459,11 @@ class OptimizationOrchestrator:
                 "storage_config": storage_config,
             }
 
-            if tracker is not None:
+            with self._optimization_backend_session:
                 study = self._study_manager.create_study(**study_kwargs)
-                return self._execute_with_tracking(study, base_settings)
-
-            study = self._study_manager.create_study(**study_kwargs)
-            return self._execute_without_tracking(study, base_settings)
+                if tracker is not None:
+                    return self._execute_with_tracking(study, base_settings)
+                return self._execute_without_tracking(study, base_settings)
 
         except Exception as e:
             logger.error("Optimization workflow '{}' failed: {}", study_name, e)
@@ -499,7 +502,13 @@ class OptimizationOrchestrator:
                 ) as trial_context:
                     try:
                         # Sample hyperparameters BEFORE training
-                        hyperparameters = self._sample_hyperparameters(trial, study, base_settings)
+                        hyperparameters = (
+                            self._optimization_backend_session.suggest_hyperparameters(
+                                study,
+                                trial,
+                                base_settings,
+                            )
+                        )
                         trial_settings = self._trial_executor._apply_hyperparameters(
                             base_settings, hyperparameters
                         )
@@ -532,7 +541,7 @@ class OptimizationOrchestrator:
                         )
 
                         # Report result back to Optuna study using study.tell()
-                        self._report_trial_to_optuna(trial, objective_value, study)
+                        self._optimization_backend_session.report_trial_result(study, trial)
 
                         # Log trial results AFTER training
                         trial_context.log_trial_metrics(training_result.metrics or {})
@@ -550,7 +559,7 @@ class OptimizationOrchestrator:
                             completed_at=datetime.now(),
                         )
                         # Report pruned trial to Optuna
-                        self._report_trial_to_optuna(trial, None, study, state="pruned")
+                        self._optimization_backend_session.report_trial_result(study, trial)
                         study = study.add_trial(trial)
 
                     except TrialFailedException:
@@ -561,7 +570,7 @@ class OptimizationOrchestrator:
                             completed_at=datetime.now(),
                         )
                         # Report failed trial to Optuna
-                        self._report_trial_to_optuna(trial, None, study, state="fail")
+                        self._optimization_backend_session.report_trial_result(study, trial)
                         study = study.add_trial(trial)
 
             # Retrain with best parameters
@@ -631,7 +640,11 @@ class OptimizationOrchestrator:
             trial = self._create_trial(study, trial_number)
 
             try:
-                hyperparameters = self._sample_hyperparameters(trial, study, base_settings)
+                hyperparameters = self._optimization_backend_session.suggest_hyperparameters(
+                    study,
+                    trial,
+                    base_settings,
+                )
                 training_result = self._trial_executor.execute_trial(
                     trial, base_settings, hyperparameters
                 )
@@ -644,16 +657,27 @@ class OptimizationOrchestrator:
                     state=TrialState.COMPLETE,
                     completed_at=datetime.now(),
                 )
+                self._optimization_backend_session.report_trial_result(study, trial)
 
                 study = study.add_trial(trial)
 
-            except TrialPrunedException, TrialFailedException:
-                # Handle failed/pruned trials
+            except TrialPrunedException as e:
+                trial = replace(
+                    trial,
+                    state=TrialState.PRUNED,
+                    pruned_at_step=e.pruned_at_step,
+                    completed_at=datetime.now(),
+                )
+                self._optimization_backend_session.report_trial_result(study, trial)
+                study = study.add_trial(trial)
+
+            except TrialFailedException:
                 trial = replace(
                     trial,
                     state=TrialState.FAILED,
                     completed_at=datetime.now(),
                 )
+                self._optimization_backend_session.report_trial_result(study, trial)
                 study = study.add_trial(trial)
 
         # Retrain with best parameters
@@ -695,111 +719,3 @@ class OptimizationOrchestrator:
             hyperparameters={},
             started_at=datetime.now(),
         )
-
-    def _sample_hyperparameters(
-        self,
-        trial: Trial,
-        study: Study,
-        base_settings: OptimizationWorkflowConfig,
-    ) -> dict[str, Any]:
-        """Sample hyperparameters for a trial using Optuna's suggest methods.
-
-        Args:
-            trial: Trial to sample for
-            study: Parent study
-            base_settings: Base configuration settings
-
-        Returns:
-            Sampled hyperparameters
-        """
-        # Get the actual Optuna study from repository via study_manager
-        try:
-            optuna_study = self._study_manager._repository.get_optuna_study(study.study_id)
-        except Exception as e:
-            logger.warning("No Optuna study available for sampling: {}", e)
-            return {}
-
-        # If we don't have an Optuna study, we can't sample - return empty dict
-        if not optuna_study:
-            logger.warning("No Optuna study available for sampling, using base settings")
-            return {}
-
-        optuna_config = getattr(base_settings, "OPTUNA", None)
-        if not optuna_config:
-            logger.warning("OPTUNA not enabled in settings, using base settings")
-            return {}
-
-        # Use Optuna's study.ask() to get a trial, then sample from it
-        try:
-            optuna_trial = optuna_study.ask()
-
-            # Use the OptunaSettingsSampler to sample hyperparameters
-            from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
-
-            settings_sampler = create_settings_sampler(optuna_config)
-            base_settings = settings_sampler.sample(optuna_trial, base_settings)
-
-            # Extract ALL sampled hyperparameters from optuna_trial.params
-            # These are the actual sampled values from Optuna's suggest methods
-            hyperparameters = dict(optuna_trial.params)
-
-            # Store the optuna trial in a mapping for later reporting with study.tell()
-            if not hasattr(self, "_optuna_trials"):
-                self._optuna_trials = {}
-            self._optuna_trials[trial.trial_id] = optuna_trial
-
-            logger.debug("Sampled {} hyperparameters from Optuna", len(hyperparameters))
-            return hyperparameters
-
-        except Exception as e:
-            logger.warning("Failed to sample hyperparameters from Optuna: {}", e)
-
-        return {}
-
-    def _report_trial_to_optuna(
-        self, trial: Trial, objective_value: float | None, study: Study, state: str = "complete"
-    ) -> None:
-        """Report trial results back to Optuna using study.tell().
-
-        Args:
-            trial: Domain trial object
-            objective_value: Objective value to report (None for failed/pruned)
-            study: Parent study
-            state: Trial state ("complete", "fail", "pruned")
-        """
-        # Get the Optuna trial and study
-        optuna_trial = getattr(self, "_optuna_trials", {}).get(trial.trial_id)
-        if not optuna_trial:
-            logger.warning("No Optuna trial found for {}; skipping study.tell()", trial.trial_id)
-            return
-
-        try:
-            optuna_study = self._study_manager._repository.get_optuna_study(study.study_id)
-        except Exception as e:
-            logger.warning(
-                "No Optuna study found for {}: {}; skipping study.tell()", study.study_id, e
-            )
-            return
-
-        try:
-            # Import optuna trial states
-            import optuna
-
-            # Map state to Optuna state
-            state_map = {
-                "complete": optuna.trial.TrialState.COMPLETE,
-                "fail": optuna.trial.TrialState.FAIL,
-                "pruned": optuna.trial.TrialState.PRUNED,
-            }
-            optuna_state = state_map.get(state, optuna.trial.TrialState.COMPLETE)
-
-            # Report to Optuna
-            optuna_study.tell(optuna_trial, objective_value, state=optuna_state)
-            logger.debug(
-                "Reported trial {} to Optuna with state '{}'",
-                trial.trial_number,
-                state,
-            )
-
-        except Exception as e:
-            logger.warning("Failed to report trial to Optuna: {}", e)

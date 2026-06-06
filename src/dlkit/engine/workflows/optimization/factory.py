@@ -18,7 +18,9 @@ from .infrastructure import (
     InMemoryStudyRepository,
     MLflowTrackingAdapter,
     NullConfigurationPersister,
+    NullOptimizationBackendSession,
     NullTrackingAdapter,
+    OptunaOptimizationBackendSession,
     OptunaStudyRepository,
     TOMLConfigurationPersister,
 )
@@ -30,6 +32,7 @@ from .services import (
 from .value_objects import (
     IConfigurationPersistence,
     IExperimentTracker,
+    IOptimizationBackendSession,
     IStudyRepository,
     OptimizationDirection,
 )
@@ -38,6 +41,12 @@ from .value_objects import (
 type _WorkflowSettings = OptimizationWorkflowConfig
 
 logger = get_logger(__name__)
+
+
+def _optuna_enabled(settings: _WorkflowSettings) -> bool:
+    """Return whether Optuna-backed optimization is explicitly enabled."""
+    optuna_config = getattr(settings, "OPTUNA", None)
+    return bool(optuna_config and getattr(optuna_config, "enabled", False))
 
 
 class OptimizationServiceFactory:
@@ -57,6 +66,7 @@ class OptimizationServiceFactory:
         self,
         build_factory: BuildFactory | None = None,
         study_repository: IStudyRepository | None = None,
+        optimization_backend_session: IOptimizationBackendSession | None = None,
         experiment_tracker: IExperimentTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
     ):
@@ -65,11 +75,13 @@ class OptimizationServiceFactory:
         Args:
             build_factory: Training component factory
             study_repository: Study persistence implementation
+            optimization_backend_session: Backend runtime coordination implementation
             experiment_tracker: Experiment tracking implementation
             config_persister: Configuration persistence implementation
         """
         self._build_factory = build_factory or BuildFactory()
         self._study_repository_override = study_repository
+        self._optimization_backend_session_override = optimization_backend_session
         self._experiment_tracker_override = experiment_tracker
         self._config_persister_override = config_persister
 
@@ -90,6 +102,10 @@ class OptimizationServiceFactory:
         try:
             # Create dependencies
             study_repository = self.create_study_repository(settings)
+            optimization_backend_session = self.create_optimization_backend_session(
+                settings,
+                study_repository,
+            )
             experiment_tracker = self.create_experiment_tracker(settings)
             config_persister = self.create_config_persister(settings)
 
@@ -101,6 +117,7 @@ class OptimizationServiceFactory:
             orchestrator = OptimizationOrchestrator(
                 study_manager=study_manager,
                 trial_executor=trial_executor,
+                optimization_backend_session=optimization_backend_session,
                 experiment_tracker=experiment_tracker,
                 config_persister=config_persister,
             )
@@ -160,7 +177,7 @@ class OptimizationServiceFactory:
             return self._study_repository_override
 
         # Use Optuna repository for optimization workflows
-        if isinstance(settings, OptimizationWorkflowConfig):
+        if _optuna_enabled(settings):
             try:
                 return OptunaStudyRepository()
             except WorkflowError as e:
@@ -168,6 +185,20 @@ class OptimizationServiceFactory:
 
         # Fall back to in-memory repository for testing/development
         return InMemoryStudyRepository()
+
+    def create_optimization_backend_session(
+        self,
+        settings: _WorkflowSettings,
+        repository: IStudyRepository,
+    ) -> IOptimizationBackendSession:
+        """Create runtime backend coordination session for optimization execution."""
+        if self._optimization_backend_session_override:
+            return self._optimization_backend_session_override
+
+        if _optuna_enabled(settings) and isinstance(repository, OptunaStudyRepository):
+            return OptunaOptimizationBackendSession(repository.study_registry)
+
+        return NullOptimizationBackendSession()
 
     def create_experiment_tracker(self, settings: _WorkflowSettings) -> IExperimentTracker | None:
         """Create experiment tracker based on settings.

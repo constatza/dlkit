@@ -100,18 +100,46 @@ class IStudyRepository(ABC):
         """
         raise NotImplementedError
 
+
+class IOptimizationBackendSession(AbstractContextManager, ABC):
+    """Runtime optimization backend coordination with guaranteed cleanup.
+
+    This abstraction owns mutable backend runtime state for one optimization
+    workflow execution. Unlike ``IStudyRepository``, which persists domain
+    ``Study`` state, this session coordinates backend-native trial handles
+    and ensures external resources are released on context exit.
+    """
+
     @abstractmethod
-    def get_optuna_study(self, study_id: str) -> Any:
-        """Return the underlying Optuna study object for a domain study ID.
+    def suggest_hyperparameters(
+        self,
+        study: Study,
+        trial: Trial,
+        base_settings: Any,
+    ) -> dict[str, Any]:
+        """Suggest hyperparameters for a domain trial.
 
         Args:
-            study_id: Domain study identifier
+            study: Parent study domain model
+            trial: Trial domain model
+            base_settings: Workflow settings used to drive backend sampling
 
         Returns:
-            Optuna study object
+            Plain sampled hyperparameters keyed by parameter name.
+        """
+        raise NotImplementedError
 
-        Raises:
-            WorkflowError: If Optuna study not found for domain study
+    @abstractmethod
+    def report_trial_result(
+        self,
+        study: Study,
+        trial: Trial,
+    ) -> None:
+        """Report a completed domain trial outcome to the backend.
+
+        Args:
+            study: Parent study domain model
+            trial: Trial with final state and optional objective value
         """
         raise NotImplementedError
 

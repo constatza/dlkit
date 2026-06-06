@@ -12,6 +12,7 @@ from pathlib import Path
 import torch
 
 import dlkit
+import dlkit.engine.tracking.uri_resolver as uri_resolver
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.api import train as api_train
 
@@ -75,6 +76,55 @@ class TestBasicIntegration:
         """
         result = api_train(double_precision_settings)
         assert result.duration_seconds > 0
+
+    def test_vanilla_training_keeps_outputs_local_without_mlflow(
+        self,
+        training_settings: GeneralSettings,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """Vanilla training should avoid MLflow state and keep local outputs deterministic."""
+        monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
+        monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
+
+        training_cfg = training_settings.TRAINING
+        assert training_cfg is not None
+        trainer_cfg = training_cfg.trainer
+        assert trainer_cfg is not None
+
+        output_root = tmp_path / "local_training_output"
+        settings = training_settings.model_copy(
+            update={
+                "TRAINING": training_cfg.model_copy(
+                    update={
+                        "trainer": trainer_cfg.model_copy(
+                            update={
+                                "enable_checkpointing": True,
+                                "default_root_dir": output_root,
+                                "fast_dev_run": False,
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        training_result = api_train(settings)
+
+        assert training_result.duration_seconds > 0
+        assert training_result.mlflow_run_id is None
+        assert training_result.mlflow_tracking_uri is None
+        assert "mlflow_run_id" not in training_result.metrics
+        assert "mlflow_tracking_uri" not in training_result.metrics
+
+        checkpoint_path = training_result.checkpoint_path
+        assert checkpoint_path is not None
+        assert checkpoint_path.parent == output_root / "checkpoints"
+        assert checkpoint_path.parent.exists()
+        assert checkpoint_path.is_relative_to(output_root)
+
+        assert not (tmp_path / "mlruns").exists()
+        assert not (tmp_path / "mlartifacts").exists()
 
     def test_inference_basic_workflow(
         self, inference_settings: GeneralSettings, minimal_model_checkpoint: Path

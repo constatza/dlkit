@@ -215,7 +215,7 @@ class MLflowEpochLogger(Callback):
         return None
 
 
-def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> None:
+def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> bool:
     """Set ``dirpath`` on unset ModelCheckpoint callbacks."""
     try:
         from lightning.pytorch.callbacks import ModelCheckpoint
@@ -224,12 +224,15 @@ def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> No
             from pytorch_lightning.callbacks import ModelCheckpoint
         except ImportError:
             logger.debug("CheckpointDirRouter: ModelCheckpoint not available")
-            return
+            return False
 
+    redirected = False
     for cb in getattr(trainer, "callbacks", []):
         if isinstance(cb, ModelCheckpoint) and cb.dirpath is None:
             cb.dirpath = str(checkpoint_dir)
+            redirected = True
             logger.debug(f"CheckpointDirRouter: redirected ModelCheckpoint -> {checkpoint_dir}")
+    return redirected
 
 
 class CheckpointDirRouter(Callback):
@@ -243,8 +246,8 @@ class CheckpointDirRouter(Callback):
         checkpoint_dir = self._checkpoint_dir
         if checkpoint_dir is None:
             return
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        _redirect_checkpoint_callbacks(trainer, checkpoint_dir)
+        if _redirect_checkpoint_callbacks(trainer, checkpoint_dir):
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
 
 MlflowCheckpointRouter = CheckpointDirRouter

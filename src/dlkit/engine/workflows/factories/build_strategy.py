@@ -8,6 +8,7 @@ from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
+from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.artifacts import ProducedArtifact, RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
@@ -33,26 +34,40 @@ DATASET_TYPE_GRAPH = "graph"
 DATASET_TYPE_TIMESERIES = "timeseries"
 
 
-def _default_lightning_root_dir() -> Any:
-    from dlkit.infrastructure.config.environment import env
-
-    return env.get_internal_dir_path() / "lightning"
-
-
 def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     """Build the trainer when the workflow is in training mode."""
     if not settings.SESSION or settings.SESSION.is_inference_mode or not settings.TRAINING:
         return None
 
     trainer_settings = settings.TRAINING.trainer
-    mlflow_disabled = settings.MLFLOW is None
-    if mlflow_disabled and getattr(trainer_settings, "default_root_dir", None) is None:
-        trainer_settings = trainer_settings.model_copy(
-            update={"default_root_dir": _default_lightning_root_dir()}
-        )
-    if mlflow_disabled and getattr(trainer_settings, "default_root_dir", None) is not None:
+    if trainer_settings is None:
+        return None
+
+    if _requires_explicit_local_root(trainer_settings):
+        if getattr(trainer_settings, "default_root_dir", None) is None:
+            raise WorkflowError(
+                "TRAINING.trainer.default_root_dir is required when using local-output "
+                "trainer components such as checkpointing, loggers, or "
+                "ModelCheckpoint callbacks.",
+                {"stage": "trainer_build", "component": "trainer.default_root_dir"},
+            )
         trainer_settings = _pin_lightning_local_outputs(trainer_settings)
     return trainer_settings.build(session=settings.SESSION)
+
+
+def _requires_explicit_local_root(trainer_settings: Any) -> bool:
+    """Return whether trainer components may emit local files that need pinning."""
+    if getattr(trainer_settings, "enable_checkpointing", False):
+        return True
+
+    if getattr(trainer_settings.logger, "name", None):
+        return True
+
+    for callback in getattr(trainer_settings, "callbacks", ()):
+        if getattr(callback, "name", None) == "ModelCheckpoint":
+            return True
+
+    return False
 
 
 def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:

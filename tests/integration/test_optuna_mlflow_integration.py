@@ -7,6 +7,9 @@ Server lifecycle and HTTP-backed behavior are intentionally not covered here.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pytest
 from mlflow.tracking import MlflowClient
@@ -17,6 +20,11 @@ from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowCon
 from dlkit.interfaces.api import optimize as api_optimize
 
 FAST_TEST_TIMEOUT = int(30 * float(os.getenv("DLKIT_TEST_TIMEOUT_MULTIPLIER", "1.0")))
+
+
+def _artifact_path_from_uri(uri: str) -> Path:
+    parsed_uri = urlparse(uri)
+    return Path(url2pathname(parsed_uri.path))
 
 
 @pytest.fixture
@@ -59,12 +67,19 @@ class TestOptunaMLflowOptimization:
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_combined_settings_optimization(self, combined_settings):
         """Combined Optuna+MLflow workflow should persist multiple MLflow runs."""
+        import optuna
+
         result = api_optimize(combined_settings)
 
         assert result is not None
         assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
         assert result.best_trial is not None
+        storage_uri = combined_settings.OPTUNA.storage
+        assert isinstance(storage_uri, str)
+        assert storage_uri.startswith("sqlite:///")
+        storage_path = Path(storage_uri.removeprefix("sqlite:///"))
+        assert storage_path.exists()
 
         client = MlflowClient(tracking_uri=os.environ["MLFLOW_TRACKING_URI"])
         experiment = client.get_experiment_by_name(combined_settings.MLFLOW.experiment_name)
@@ -75,7 +90,24 @@ class TestOptunaMLflowOptimization:
             order_by=["attributes.start_time DESC"],
             max_results=10,
         )
-        assert len(runs) >= 2
+        assert len(runs) >= 3
+
+        run_names = {run.data.tags.get("mlflow.runName") for run in runs}
+        assert f"best_retrain_trial_{result.best_trial.number}" in run_names
+        assert f"trial_{result.best_trial.number}" in run_names
+
+        for run in runs:
+            artifact_path = _artifact_path_from_uri(run.info.artifact_uri)
+            assert artifact_path.exists()
+            assert artifact_path.is_relative_to(storage_path.parent)
+
+        study = optuna.load_study(
+            study_name=combined_settings.OPTUNA.study_name,
+            storage=storage_uri,
+        )
+        assert study.best_trial.number == result.best_trial.number
+        assert study.best_trial.params == result.best_trial.params
+        assert study.best_trial.value == pytest.approx(result.best_trial.value)
 
     @pytest.mark.timeout(FAST_TEST_TIMEOUT)
     def test_optuna_only_optimization(self, optuna_only_settings):

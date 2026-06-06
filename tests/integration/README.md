@@ -112,6 +112,7 @@ Simple, robust tests that manually create all test data and configurations. Thes
 
 **Key Tests:**
 - `test_vanilla_training_end_to_end()` - Basic training workflow
+- `test_vanilla_training_keeps_outputs_local_without_mlflow()` - MLflow-disabled training stays local and does not enrich results with tracking metadata
 - `test_mlflow_training_basic()` - MLflow integration
 - `test_inference_basic_workflow()` - Inference pipeline
 
@@ -124,6 +125,7 @@ Comprehensive MLflow training integration tests including:
 - Run-artifact lookup/loading when registration is disabled (`runs:/...`)
 - Artifact URI validation under pytest `tmp_path`
 - Dataset lineage artifact verification (`lineage/`)
+- Minimal runtime artifact verification for tracked runs (`model/` and `splits/`)
 - Fallback behavior when MLflow unavailable
 - Tracking endpoint health checking
 - Auto-detection from settings
@@ -136,6 +138,8 @@ Optuna hyperparameter optimization tests including:
 - Custom sampler/pruner configuration
 - Study persistence with storage backends
 - MLflow + Optuna integration (nested runs)
+- Verification that the persisted Optuna study matches the returned best trial
+- Verification that study/trial/best-retrain MLflow runs store artifacts under isolated local paths
 - Objective direction handling
 - Model hyperparameter sampling
 

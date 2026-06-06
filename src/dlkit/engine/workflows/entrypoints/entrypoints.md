@@ -8,7 +8,8 @@
 - validate and apply request-scoped overrides
 - establish path override context
 - measure elapsed time for workflow results
-- own optimization tracker context lifecycle at the runtime edge
+- own experiment-tracker lifecycle at the runtime edge
+- delegate optimization backend-session lifecycle to runtime orchestrators
 
 ## Current Layout
 - `_settings.py`: workflow settings coercion
@@ -21,6 +22,8 @@
 
 ## Design Rule
 Entrypoints stay procedural. They normalize request-level concerns and then hand
-control to runtime orchestration and optimization services.
+control to runtime orchestration and optimization services. They may enter
+top-level tracker contexts when a workflow needs runtime-owned tracking setup,
+but they do not enter optimization backend-session contexts themselves.
 
 Unknown override keys are rejected at the entrypoint boundary instead of being silently dropped.

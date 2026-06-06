@@ -28,6 +28,11 @@
 - Build strategies now attach typed split-artifact metadata to
   `RuntimeComponents.artifacts` so tracking can publish the exact split used by
   the run without reading datamodule ad hoc attributes.
-- When MLflow is disabled, trainer construction pins Lightning-owned local
-  writes under `TRAINING.trainer.default_root_dir`; when MLflow is enabled,
-  durable artifacts belong to MLflow.
+- In MLflow-off mode, DLKit treats local-output-producing trainer features as
+  opt-in. Checkpointing, local loggers, and `ModelCheckpoint` callbacks require
+  an explicit `TRAINING.trainer.default_root_dir`, and all Lightning-owned
+  local writes are pinned under it.
+- In NoOp mode, when checkpointing is disabled and no local-output-producing
+  trainer components are configured, `default_root_dir` is not required and
+  trainer construction should not create local output directories.
+- When MLflow is enabled, durable artifacts belong to MLflow.

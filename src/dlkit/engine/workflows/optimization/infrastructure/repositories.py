@@ -11,12 +11,35 @@ from typing import Any
 
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.workflows.optimization.value_objects import (
+    IOptimizationBackendSession,
     IStudyRepository,
     OptimizationDirection,
     Study,
     Trial,
     TrialState,
 )
+
+
+class _OptunaStudyRegistry:
+    """Internal registry for domain-study to backend-study resolution."""
+
+    def __init__(self) -> None:
+        self._studies: dict[str, Any] = {}
+
+    def register(self, study_id: str, backend_study: Any) -> None:
+        self._studies[study_id] = backend_study
+
+    def get(self, study_id: str) -> Any | None:
+        return self._studies.get(study_id)
+
+    def require(self, study_id: str) -> Any:
+        backend_study = self.get(study_id)
+        if backend_study is None:
+            raise WorkflowError(
+                f"Optuna study not found for domain study {study_id}",
+                {"stage": "optuna_study_retrieval", "study_id": study_id},
+            )
+        return backend_study
 
 
 class OptunaStudyRepository(IStudyRepository):
@@ -26,7 +49,11 @@ class OptunaStudyRepository(IStudyRepository):
     Optuna objects, following the Repository pattern and DIP.
     """
 
-    def __init__(self, optuna_module: Any = None):
+    def __init__(
+        self,
+        optuna_module: Any = None,
+        study_registry: _OptunaStudyRegistry | None = None,
+    ):
         """Initialize repository with optional Optuna module injection.
 
         Args:
@@ -59,6 +86,7 @@ class OptunaStudyRepository(IStudyRepository):
             self._optuna.trial.TrialState.PRUNED: TrialState.PRUNED,
             self._optuna.trial.TrialState.FAIL: TrialState.FAILED,
         }
+        self._study_registry = study_registry or _OptunaStudyRegistry()
 
     def create_study(
         self,
@@ -104,8 +132,7 @@ class OptunaStudyRepository(IStudyRepository):
             )
 
             # Store mapping between domain ID and Optuna study
-            self._study_mapping: dict[str, Any] = getattr(self, "_study_mapping", {})
-            self._study_mapping[study_id] = optuna_study
+            self._study_registry.register(study_id, optuna_study)
 
             return study
 
@@ -118,7 +145,7 @@ class OptunaStudyRepository(IStudyRepository):
     def get_study(self, study_id: str) -> Study | None:
         """Get study by domain ID."""
         try:
-            optuna_study = self._study_mapping.get(study_id)
+            optuna_study = self._study_registry.get(study_id)
             if not optuna_study:
                 return None
 
@@ -146,7 +173,7 @@ class OptunaStudyRepository(IStudyRepository):
 
     def add_trial_to_study(self, study_id: str, trial: Trial) -> None:
         """Add trial to study."""
-        optuna_study = self._study_mapping.get(study_id)
+        optuna_study = self._study_registry.get(study_id)
         if not optuna_study:
             raise WorkflowError(
                 f"Study not found: {study_id}", {"stage": "trial_addition", "study_id": study_id}
@@ -164,7 +191,7 @@ class OptunaStudyRepository(IStudyRepository):
     def get_best_trial(self, study_id: str) -> Trial | None:
         """Get best trial from study."""
         try:
-            optuna_study = self._study_mapping.get(study_id)
+            optuna_study = self._study_registry.get(study_id)
             if not optuna_study or not optuna_study.trials:
                 return None
 
@@ -179,26 +206,6 @@ class OptunaStudyRepository(IStudyRepository):
                 f"Failed to get best trial: {e}",
                 {"stage": "best_trial_retrieval", "study_id": study_id},
             ) from e
-
-    def get_optuna_study(self, study_id: str) -> Any:
-        """Return the underlying Optuna study object for a domain study ID.
-
-        Args:
-            study_id: Domain study identifier
-
-        Returns:
-            Optuna study object
-
-        Raises:
-            WorkflowError: If Optuna study not found for domain study
-        """
-        optuna_study = self._study_mapping.get(study_id)
-        if optuna_study is None:
-            raise WorkflowError(
-                f"Optuna study not found for domain study {study_id}",
-                {"stage": "optuna_study_retrieval", "study_id": study_id},
-            )
-        return optuna_study
 
     def _build_sampler(self, sampler_config: dict[str, Any]) -> Any:
         """Build Optuna sampler from configuration."""
@@ -274,6 +281,11 @@ class OptunaStudyRepository(IStudyRepository):
             pruned_at_step=pruned_at_step,
         )
 
+    @property
+    def study_registry(self) -> _OptunaStudyRegistry:
+        """Expose the internal backend-study registry for infrastructure wiring."""
+        return self._study_registry
+
 
 class InMemoryStudyRepository(IStudyRepository):
     """In-memory repository implementation for testing.
@@ -343,19 +355,180 @@ class InMemoryStudyRepository(IStudyRepository):
         study = self._studies.get(study_id)
         return study.best_trial if study else None
 
-    def get_optuna_study(self, study_id: str) -> Any:
-        """In-memory implementation does not have Optuna studies.
 
-        Args:
-            study_id: Domain study identifier
+class OptunaOptimizationBackendSession(IOptimizationBackendSession):
+    """Optuna-backed runtime session for one optimization workflow execution."""
 
-        Returns:
-            Always raises WorkflowError
+    def __init__(
+        self,
+        study_registry: _OptunaStudyRegistry,
+        optuna_module: Any = None,
+    ):
+        self._study_registry = study_registry
+        self._optuna = optuna_module
+        if self._optuna is None:
+            try:
+                import optuna
 
-        Raises:
-            WorkflowError: In-memory repository does not support Optuna studies
-        """
-        raise WorkflowError(
-            f"In-memory repository does not support Optuna studies for {study_id}",
-            {"stage": "optuna_study_retrieval", "study_id": study_id},
+                self._optuna = optuna
+            except ImportError as e:
+                raise WorkflowError(
+                    f"Optuna not available: {e}", {"stage": "backend_session_initialization"}
+                ) from e
+        self._trial_mapping: dict[str, Any] = {}
+        self._reported_trials: set[str] = set()
+        self._active_storages: dict[int, Any] = {}
+        self._entered = False
+
+    def __enter__(self) -> OptunaOptimizationBackendSession:
+        if self._entered:
+            raise RuntimeError("OptunaOptimizationBackendSession already entered")
+        self._entered = True
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        self._cleanup()
+        return False
+
+    def suggest_hyperparameters(
+        self,
+        study: Study,
+        trial: Trial,
+        base_settings: Any,
+    ) -> dict[str, Any]:
+        optuna_config = getattr(base_settings, "OPTUNA", None)
+        if not optuna_config:
+            return {}
+
+        if trial.trial_id in self._reported_trials:
+            raise WorkflowError(
+                f"Trial {trial.trial_id} already reported to Optuna",
+                {"stage": "trial_sampling", "trial_id": trial.trial_id},
+            )
+        if trial.trial_id in self._trial_mapping:
+            raise WorkflowError(
+                f"Trial {trial.trial_id} already has an active Optuna handle",
+                {"stage": "trial_sampling", "trial_id": trial.trial_id},
+            )
+
+        backend_study = self._require_backend_study(study)
+        optuna_trial = backend_study.ask()
+
+        from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
+
+        try:
+            self._trial_mapping[trial.trial_id] = optuna_trial
+            settings_sampler = create_settings_sampler(optuna_config)
+            settings_sampler.sample(optuna_trial, base_settings)
+        except Exception:
+            self._cleanup_failed_sampling(trial, backend_study, optuna_trial)
+            raise
+
+        return dict(optuna_trial.params)
+
+    def report_trial_result(
+        self,
+        study: Study,
+        trial: Trial,
+    ) -> None:
+        if trial.trial_id in self._reported_trials:
+            raise WorkflowError(
+                f"Trial {trial.trial_id} has already been reported",
+                {"stage": "trial_reporting", "trial_id": trial.trial_id},
+            )
+
+        optuna_trial = self._trial_mapping.get(trial.trial_id)
+        if optuna_trial is None:
+            raise WorkflowError(
+                f"No active Optuna trial handle for {trial.trial_id}",
+                {"stage": "trial_reporting", "trial_id": trial.trial_id},
+            )
+
+        backend_study = self._require_backend_study(study)
+        match trial.state:
+            case TrialState.COMPLETE:
+                optuna_state = self._optuna.trial.TrialState.COMPLETE
+                reported_value = trial.objective_value
+            case TrialState.FAILED:
+                optuna_state = self._optuna.trial.TrialState.FAIL
+                reported_value = None
+            case TrialState.PRUNED:
+                optuna_state = self._optuna.trial.TrialState.PRUNED
+                reported_value = None
+            case _:
+                raise WorkflowError(
+                    f"Trial {trial.trial_id} is not reportable in state {trial.state.value}",
+                    {
+                        "stage": "trial_reporting",
+                        "trial_id": trial.trial_id,
+                        "state": trial.state.value,
+                    },
+                )
+
+        backend_study.tell(
+            optuna_trial,
+            reported_value,
+            state=optuna_state,
         )
+        self._reported_trials.add(trial.trial_id)
+        self._trial_mapping.pop(trial.trial_id, None)
+
+    def _require_backend_study(self, study: Study) -> Any:
+        backend_study = self._study_registry.require(study.study_id)
+        storage = getattr(backend_study, "_storage", None)
+        if storage is not None:
+            self._active_storages[id(storage)] = storage
+        return backend_study
+
+    def _cleanup_failed_sampling(
+        self,
+        trial: Trial,
+        backend_study: Any,
+        optuna_trial: Any,
+    ) -> None:
+        """Finalize backend state after sampler failure and drop local handles."""
+        self._trial_mapping.pop(trial.trial_id, None)
+        try:
+            backend_study.tell(
+                optuna_trial,
+                None,
+                state=self._optuna.trial.TrialState.FAIL,
+            )
+        except Exception:
+            return
+        self._reported_trials.add(trial.trial_id)
+
+    def _cleanup(self) -> None:
+        for storage in self._active_storages.values():
+            remove_session = getattr(storage, "remove_session", None)
+            if callable(remove_session):
+                remove_session()
+        self._trial_mapping.clear()
+        self._reported_trials.clear()
+        self._active_storages.clear()
+        self._entered = False
+
+
+class NullOptimizationBackendSession(IOptimizationBackendSession):
+    """No-op optimization backend session for non-Optuna or test flows."""
+
+    def __enter__(self) -> NullOptimizationBackendSession:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return False
+
+    def suggest_hyperparameters(
+        self,
+        study: Study,
+        trial: Trial,
+        base_settings: Any,
+    ) -> dict[str, Any]:
+        return {}
+
+    def report_trial_result(
+        self,
+        study: Study,
+        trial: Trial,
+    ) -> None:
+        return None

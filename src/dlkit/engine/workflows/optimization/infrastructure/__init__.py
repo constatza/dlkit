@@ -19,6 +19,8 @@ from .persistence import (
 )
 from .repositories import (
     InMemoryStudyRepository,
+    NullOptimizationBackendSession,
+    OptunaOptimizationBackendSession,
     OptunaStudyRepository,
 )
 from .tracking import (
@@ -30,6 +32,8 @@ __all__ = [
     # Repositories
     "OptunaStudyRepository",
     "InMemoryStudyRepository",
+    "OptunaOptimizationBackendSession",
+    "NullOptimizationBackendSession",
     # Tracking
     "MLflowTrackingAdapter",
     "NullTrackingAdapter",

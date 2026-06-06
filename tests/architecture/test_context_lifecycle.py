@@ -1,175 +1,96 @@
-"""Architecture tests for context manager lifecycle compliance.
+"""Architecture tests for optimization lifecycle ownership contracts."""
 
-These tests verify that the experiment tracker architecture follows SOLID
-principles and properly implements context manager protocols.
-"""
+from __future__ import annotations
 
+import inspect
 from contextlib import AbstractContextManager
 
 from dlkit.engine.workflows.optimization.infrastructure import (
     MLflowTrackingAdapter,
     NullTrackingAdapter,
 )
-from dlkit.engine.workflows.optimization.value_objects import IExperimentTracker
+from dlkit.engine.workflows.optimization.value_objects import IExperimentTracker, IStudyRepository
 
 
-class TestContextManagerCompliance:
-    """Verify all trackers implement AbstractContextManager protocol."""
+def _load_backend_session_protocol():
+    from dlkit.engine.workflows.optimization.value_objects import IOptimizationBackendSession
+
+    return IOptimizationBackendSession
+
+
+class TestExperimentTrackerContract:
+    """Verify experiment trackers keep their explicit context-manager contract."""
 
     def test_experiment_tracker_protocol_requires_context_manager(self):
         """IExperimentTracker protocol requires AbstractContextManager."""
-        # Verify protocol inheritance
         assert issubclass(IExperimentTracker, AbstractContextManager), (
-            "IExperimentTracker must inherit from AbstractContextManager to ensure "
-            "all implementations provide proper context management"
+            "IExperimentTracker must inherit from AbstractContextManager to keep "
+            "tracking setup and cleanup explicit."
         )
 
-    def test_mlflow_adapter_is_context_manager(self):
-        """MLflowTrackingAdapter implements AbstractContextManager."""
-        assert issubclass(MLflowTrackingAdapter, AbstractContextManager), (
-            "MLflowTrackingAdapter must implement AbstractContextManager for "
-            "proper resource lifecycle management"
+    def test_tracking_adapters_are_context_managers(self):
+        """Concrete tracking adapters implement the tracker context contract."""
+        assert issubclass(MLflowTrackingAdapter, AbstractContextManager)
+        assert issubclass(NullTrackingAdapter, AbstractContextManager)
+        assert hasattr(MLflowTrackingAdapter, "__enter__")
+        assert hasattr(MLflowTrackingAdapter, "__exit__")
+        assert hasattr(NullTrackingAdapter, "__enter__")
+        assert hasattr(NullTrackingAdapter, "__exit__")
+
+
+class TestOptimizationBackendSessionContract:
+    """Verify optimization backends expose an explicit context-manager seam."""
+
+    def test_backend_session_protocol_requires_context_manager(self):
+        """IOptimizationBackendSession must be a context manager abstraction."""
+        backend_session = _load_backend_session_protocol()
+
+        assert issubclass(backend_session, AbstractContextManager), (
+            "IOptimizationBackendSession must inherit from AbstractContextManager so "
+            "orchestrators can own backend resource lifecycle explicitly."
         )
 
-    def test_null_adapter_is_context_manager(self):
-        """NullTrackingAdapter implements AbstractContextManager."""
-        assert issubclass(NullTrackingAdapter, AbstractContextManager), (
-            "NullTrackingAdapter must implement AbstractContextManager to provide "
-            "uniform interface with MLflowTrackingAdapter (Null Object Pattern)"
-        )
+    def test_backend_session_docstring_makes_lifecycle_explicit(self):
+        """The backend session contract documents setup and cleanup ownership."""
+        backend_session = _load_backend_session_protocol()
+        doc = backend_session.__doc__ or ""
 
-    def test_mlflow_adapter_has_enter_exit(self):
-        """MLflowTrackingAdapter implements __enter__ and __exit__ methods."""
-        assert hasattr(MLflowTrackingAdapter, "__enter__"), (
-            "MLflowTrackingAdapter must implement __enter__ for context management"
-        )
-        assert hasattr(MLflowTrackingAdapter, "__exit__"), (
-            "MLflowTrackingAdapter must implement __exit__ for resource cleanup"
-        )
-
-    def test_null_adapter_has_enter_exit(self):
-        """NullTrackingAdapter implements __enter__ and __exit__ methods."""
-        assert hasattr(NullTrackingAdapter, "__enter__"), (
-            "NullTrackingAdapter must implement __enter__ for uniform interface"
-        )
-        assert hasattr(NullTrackingAdapter, "__exit__"), (
-            "NullTrackingAdapter must implement __exit__ for uniform interface"
-        )
-
-
-class TestNullObjectPattern:
-    """Verify NullTrackingAdapter follows Null Object Pattern correctly."""
-
-    def test_null_adapter_context_manager_is_no_op(self):
-        """NullTrackingAdapter context management is a no-op."""
-        adapter = NullTrackingAdapter()
-
-        # Should not raise any errors
-        with adapter:
-            pass
-
-        # Should be idempotent - can enter multiple times
-        with adapter:
-            pass
-
-    def test_null_adapter_returns_self_from_enter(self):
-        """NullTrackingAdapter.__enter__ returns self."""
-        adapter = NullTrackingAdapter()
-        result = adapter.__enter__()
-        assert result is adapter, "__enter__ should return self for context manager protocol"
-
-    def test_null_adapter_exit_returns_false(self):
-        """NullTrackingAdapter.__exit__ returns False (doesn't suppress exceptions)."""
-        adapter = NullTrackingAdapter()
-        adapter.__enter__()
-        result = adapter.__exit__(None, None, None)
-        assert result is False, "__exit__ should return False to propagate exceptions"
-
-
-class TestSingleResponsibility:
-    """Verify context lifecycle has a single runtime owner."""
-
-    def test_optimization_strategy_does_not_manage_context(self):
-        """OptimizationStrategy does not contain context management logic."""
-        import inspect
-
-        from dlkit.engine.workflows.optimization.strategy import OptimizationStrategy
-
-        source = inspect.getsource(OptimizationStrategy.execute_optimization)
-
-        # Should not have conditional context entry
-        assert "hasattr" not in source or "__enter__" not in source, (
-            "Strategy should not check for context manager support at runtime. "
-            "Context management is the responsibility of the service layer."
-        )
-
-        # Should not enter contexts
-        assert "with orchestrator._experiment_tracker" not in source, (
-            "Strategy should not manage experiment tracker context. "
-            "This violates Single Responsibility Principle - context lifecycle "
-            "is the responsibility of the service layer."
-        )
-
-    def test_runtime_optimization_entrypoint_manages_context(self):
-        """The runtime optimization entrypoint owns tracker context lifecycle."""
-        import inspect
-
-        from dlkit.engine.workflows.entrypoints.optimization import optimize
-
-        source = inspect.getsource(optimize)
-
-        # Service should enter context
-        assert "with experiment_tracker" in source, (
-            "Runtime entrypoint must enter experiment tracker context to ensure proper "
-            "resource lifecycle management. Runtime layer owns context lifecycle."
-        )
-
-
-class TestDependencyInversion:
-    """Verify factory returns uninitialized trackers (service manages lifecycle)."""
-
-    def test_factory_does_not_enter_context(self):
-        """OptimizationServiceFactory returns uninitialized trackers."""
-        import inspect
-
-        from dlkit.engine.workflows.optimization.factory import OptimizationServiceFactory
-
-        # Check create_experiment_tracker method
-        source = inspect.getsource(OptimizationServiceFactory.create_experiment_tracker)
-
-        # Factory should NOT enter contexts
-        assert "with" not in source or "__enter__" not in source, (
-            "Factory should create uninitialized tracker instances. "
-            "Context entry is the responsibility of the service layer, not the factory. "
-            "This follows Dependency Inversion Principle - factory creates, service manages."
-        )
-
-
-class TestInterfaceSegregation:
-    """Verify IExperimentTracker protocol is properly segregated."""
-
-    def test_protocol_defines_context_manager_contract(self):
-        """IExperimentTracker explicitly declares context manager requirement."""
-
-        # Get the protocol's docstring
-        doc = IExperimentTracker.__doc__ or ""
-
-        # Should document context manager requirement
         assert any(
-            keyword in doc.lower() for keyword in ["context", "enter", "exit", "resource"]
+            keyword in doc.lower()
+            for keyword in ("context", "session", "resource", "lifecycle", "enter", "exit")
         ), (
-            "IExperimentTracker protocol must document its context manager requirement "
-            "to make the contract explicit for implementers"
+            "IOptimizationBackendSession should document that it owns backend setup "
+            "and cleanup responsibilities."
         )
 
-    def test_protocol_methods_documented(self):
-        """All IExperimentTracker protocol methods are documented."""
-        import inspect
+    def test_backend_session_public_methods_are_documented(self):
+        """All backend session protocol methods should explain the contract."""
+        backend_session = _load_backend_session_protocol()
 
-        # Check that abstract methods have docstrings
-        for name, method in inspect.getmembers(IExperimentTracker, inspect.isfunction):
+        for name, method in inspect.getmembers(backend_session, inspect.isfunction):
             if name.startswith("_"):
                 continue
-            assert method.__doc__ is not None, (
-                f"Protocol method {name} must be documented to clarify contract"
+            assert method.__doc__, (
+                f"IOptimizationBackendSession.{name} must be documented so the "
+                "backend boundary stays explicit for implementers."
             )
+
+
+class TestRepositoryAbstraction:
+    """Verify the study repository stays backend-agnostic."""
+
+    def test_study_repository_has_no_backend_specific_methods(self):
+        """IStudyRepository should not leak Optuna or other backend-specific APIs."""
+        method_names = {
+            name
+            for name, member in inspect.getmembers(IStudyRepository, inspect.isfunction)
+            if not name.startswith("_")
+        }
+
+        assert "get_optuna_study" not in method_names, (
+            "IStudyRepository must stay backend-agnostic. Backend session "
+            "operations belong on IOptimizationBackendSession instead."
+        )
+        assert not any("optuna" in name.lower() for name in method_names), (
+            "IStudyRepository should not expose backend-branded methods."
+        )

@@ -20,6 +20,10 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.engine.tracking.artifact_logger import (
+    TAG_LOGGED_MODEL_ARTIFACT_PATH,
+    TAG_LOGGED_MODEL_URI,
+)
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.api import train as api_train
 from dlkit.mlflow import (
@@ -53,6 +57,20 @@ def _expected_tracking_uri(result: Any | None = None) -> str:
     if from_env:
         return from_env
     return mlflow.get_tracking_uri()
+
+
+def _artifact_path_from_uri(uri: str) -> Path:
+    parsed_uri = urlparse(uri)
+    return Path(url2pathname(parsed_uri.path))
+
+
+def _list_artifact_paths(client: MlflowClient, run_id: str, artifact_path: str = "") -> set[str]:
+    discovered: set[str] = set()
+    for artifact in client.list_artifacts(run_id, path=artifact_path or None):
+        discovered.add(artifact.path)
+        if artifact.is_dir:
+            discovered.update(_list_artifact_paths(client, run_id, artifact.path))
+    return discovered
 
 
 @pytest.mark.slow
@@ -124,8 +142,7 @@ class TestMLflowTrainingIntegration:
         run_info = runs[0].info
 
         artifact_uri = run_info.artifact_uri
-        parsed_uri = urlparse(artifact_uri)
-        artifact_path = Path(url2pathname(parsed_uri.path))
+        artifact_path = _artifact_path_from_uri(artifact_uri)
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
         assert artifact_path.is_relative_to(tmp_path)
 
@@ -197,8 +214,7 @@ class TestMLflowTrainingIntegration:
         run_info = runs[0].info
 
         artifact_uri = run_info.artifact_uri
-        parsed_uri = urlparse(artifact_uri)
-        artifact_path = Path(url2pathname(parsed_uri.path))
+        artifact_path = _artifact_path_from_uri(artifact_uri)
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
         assert artifact_path.is_relative_to(tmp_path)
 
@@ -220,3 +236,50 @@ class TestMLflowTrainingIntegration:
             tracking_uri=tracking_uri,
         )
         assert loaded_logged is not None
+
+    def test_mlflow_training_publishes_minimal_runtime_artifacts(
+        self,
+        mlflow_settings: GeneralSettings,
+        tmp_path: Path,
+    ) -> None:
+        """Tracked training should publish only the contract-critical artifacts."""
+        unique_suffix = uuid4().hex[:8]
+        mlflow_cfg = _require_mlflow_settings(mlflow_settings)
+        settings = mlflow_settings.model_copy(
+            update={
+                "MLFLOW": mlflow_cfg.model_copy(
+                    update={
+                        "register_model": False,
+                        "experiment_name": f"artifact_e2e_{unique_suffix}",
+                        "run_name": f"artifact_run_{unique_suffix}",
+                    }
+                )
+            }
+        )
+
+        result = api_train(settings)
+        tracking_uri = _expected_tracking_uri(result)
+        client = MlflowClient(tracking_uri=tracking_uri)
+        experiment = client.get_experiment_by_name(
+            _require_mlflow_settings(settings).experiment_name
+        )
+        assert experiment is not None
+
+        runs = client.search_runs(
+            [experiment.experiment_id],
+            order_by=["attributes.start_time DESC"],
+            max_results=1,
+        )
+        assert runs, "Expected a tracked run for artifact verification"
+        run_info = runs[0].info
+
+        artifact_root = _artifact_path_from_uri(run_info.artifact_uri)
+        assert artifact_root.exists()
+        assert artifact_root.is_relative_to(tmp_path)
+
+        artifact_paths = _list_artifact_paths(client, run_info.run_id)
+        assert "lineage" in artifact_paths
+        assert any(path.startswith("splits/") for path in artifact_paths)
+        assert run_info.run_id == result.mlflow_run_id
+        assert runs[0].data.tags[TAG_LOGGED_MODEL_ARTIFACT_PATH] == "model"
+        assert runs[0].data.tags[TAG_LOGGED_MODEL_URI].startswith("models:/")
