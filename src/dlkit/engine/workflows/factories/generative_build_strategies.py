@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dlkit.engine.artifacts import (
+    ContentArtifactPayload,
+    FileArtifactPayload,
+    ProducedArtifact,
+    RuntimeArtifactManifest,
+)
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
@@ -86,7 +92,7 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         if settings.DATASET is None:
             raise ValueError("DATASET settings are required but not configured")
         split_cfg = settings.DATASET.split
-        index_split: IndexSplit = get_or_create_split(
+        split_resolution = get_or_create_split(
             num_samples=len(dataset),
             test_ratio=split_cfg.test_ratio,
             val_ratio=split_cfg.val_ratio,
@@ -98,10 +104,15 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             raise ValueError("DATAMODULE settings are required but not configured")
         dm_context = context.with_overrides(
             dataset=dataset,
-            split=index_split,
+            split=split_resolution.index_split,
             dataloader=datamodule_settings.dataloader,
         )
         datamodule = FactoryProvider.create_component(datamodule_settings, dm_context)
+        split_artifact = _build_split_artifact(
+            split_resolution.index_split,
+            split_resolution.artifact_filename,
+            split_resolution.source_path,
+        )
 
         model_settings = with_runtime_module_defaults(settings.MODEL)
         if model_settings is None:
@@ -171,5 +182,27 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             model=model_wrapper,
             datamodule=datamodule,
             trainer=build_trainer(settings),
+            artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
             meta={"dataset_type": "flow_matching"},
         )
+
+
+def _build_split_artifact(
+    split: IndexSplit,
+    artifact_filename: str,
+    source_path: Path | None,
+) -> ProducedArtifact:
+    artifact_path = f"splits/{artifact_filename}"
+    if source_path is not None:
+        return ProducedArtifact(
+            kind="split",
+            artifact_path=artifact_path,
+            payload=FileArtifactPayload(file_path=source_path),
+        )
+    return ProducedArtifact(
+        kind="split",
+        artifact_path=artifact_path,
+        payload=ContentArtifactPayload(
+            content=split.model_dump_json(exclude_none=True, indent=2)
+        ),
+    )

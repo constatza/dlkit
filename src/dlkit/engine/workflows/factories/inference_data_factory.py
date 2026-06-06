@@ -11,7 +11,6 @@ from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
 from dlkit.infrastructure.io.split_provider import get_or_create_split
-from dlkit.infrastructure.types.split import IndexSplit
 
 from .module_defaults import with_runtime_module_defaults
 
@@ -57,7 +56,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
     )
 
     split_cfg = ds_settings.split
-    index_split: IndexSplit = get_or_create_split(
+    split_resolution = get_or_create_split(
         num_samples=len(dataset),
         test_ratio=split_cfg.test_ratio,
         val_ratio=split_cfg.val_ratio,
@@ -67,7 +66,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
 
     dm_context = context.with_overrides(
         dataset=dataset,
-        split=index_split,
+        split=split_resolution.index_split,
         dataloader=settings.DATAMODULE.dataloader,
     )
     return FactoryProvider.create_component(

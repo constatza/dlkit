@@ -1,38 +1,27 @@
-"""Simple split index management with caching.
-
-Provides a straightforward function to get or create splits with automatic caching.
-"""
+"""Split index management without implicit local persistence."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
 
-from dlkit.infrastructure.io.index import load_split_indices, save_split_indices
-from dlkit.infrastructure.io.locations import splits_dir
+from dlkit.infrastructure.io.index import load_split_indices
 from dlkit.infrastructure.types.split import IndexSplit, Splitter
 
 
-def _log_split_to_mlflow(split_file: Path) -> None:
-    """Log a split file to the active MLflow run as a best-effort side effect.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SplitResolution:
+    """Resolved split payload plus optional source artifact metadata."""
 
-    Only fires when ``mlflow.active_run()`` returns a live run. Silently
-    swallows all exceptions so split generation is never blocked by tracking
-    failures.
+    index_split: IndexSplit
+    source_path: Path | None
+    artifact_filename: str
 
-    Args:
-        split_file: Path to the split JSON file to log.
-    """
-    try:
-        import mlflow
-
-        if mlflow.active_run() is None:
-            return
-        mlflow.log_artifact(str(split_file), artifact_path="splits")
-        logger.debug(f"Logged split file to MLflow: {split_file}")
-    except Exception as exc:
-        logger.warning(f"Could not log split to MLflow (non-fatal): {exc}")
+    @property
+    def has_explicit_file(self) -> bool:
+        return self.source_path is not None
 
 
 def get_or_create_split(
@@ -42,13 +31,11 @@ def get_or_create_split(
     val_ratio: float,
     session_name: str = "default",
     explicit_filepath: Path | None = None,
-) -> IndexSplit:
-    """Get or create index split with automatic caching.
+) -> SplitResolution:
+    """Get an index split, using an explicit file when provided.
 
-    Priority order:
-    1. Explicit file path (if provided)
-    2. Cached split file for this session
-    3. Generate new split and cache it
+    Generated splits remain in memory by default. Local persistence is opt-in
+    via ``explicit_filepath`` only.
 
     Args:
         num_samples: Total number of samples in dataset
@@ -58,49 +45,24 @@ def get_or_create_split(
         explicit_filepath: Optional path to specific split file
 
     Returns:
-        IndexSplit with train/val/test indices
+        SplitResolution containing the split and optional source file metadata.
     """
-    # Strategy 1: Use explicit file if provided
     if explicit_filepath is not None:
         logger.info(f"Loading split indices from {explicit_filepath}")
-        return load_split_indices(explicit_filepath)
+        return SplitResolution(
+            index_split=load_split_indices(explicit_filepath),
+            source_path=explicit_filepath,
+            artifact_filename=explicit_filepath.name,
+        )
 
-    # Strategy 2: Try loading cached split with size-aware filename
-    split_file = splits_dir() / f"{session_name}_{num_samples}_split.json"
-    if split_file.exists():
-        try:
-            logger.info(f"Loading cached split from {split_file}")
-            cached_split = load_split_indices(split_file)
-
-            # Validate cached split matches dataset size
-            total_cached = (
-                len(cached_split.train) + len(cached_split.validation) + len(cached_split.test)
-            )
-            if total_cached != num_samples:
-                logger.warning(
-                    f"Cached split size ({total_cached}) doesn't match dataset ({num_samples}). "
-                    "Regenerating split."
-                )
-            else:
-                return cached_split
-        except Exception as e:
-            logger.warning(f"Failed to load split from {split_file}: {e}. Generating new split.")
-
-    # Strategy 3: Generate new split and cache
     logger.info(f"Generating new split for session '{session_name}' ({num_samples} samples)")
     splitter = Splitter(
         num_samples=num_samples,
         test_ratio=test_ratio,
         val_ratio=val_ratio,
     )
-    index_split = splitter.split()
-
-    # Save for future use with size in filename
-    try:
-        save_split_indices(index_split, split_file)
-        logger.info(f"Saved split indices to {split_file}")
-        _log_split_to_mlflow(split_file)
-    except Exception as e:
-        logger.warning(f"Failed to save split to {split_file}: {e}")
-
-    return index_split
+    return SplitResolution(
+        index_split=splitter.split(),
+        source_path=None,
+        artifact_filename=f"{session_name}_{num_samples}_split.json",
+    )

@@ -39,22 +39,23 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
         Args:
             study: Study domain model
             configuration: Configuration to save
-            output_directory: Optional custom output directory (uses default if None)
+        output_directory: Optional custom output directory. When ``None``,
+            persistence is skipped to avoid implicit durable local writes.
 
         Returns:
             Path to saved configuration file if successful, None otherwise
         """
         try:
-            # Use environment-based output location
             from dlkit.infrastructure.config import GeneralSettings
-            from dlkit.infrastructure.io import locations
             from dlkit.infrastructure.io.config import write_config
 
-            # Use custom directory if provided, otherwise use default
-            if output_directory:
-                config_dir = output_directory
-            else:
-                config_dir = locations.output("optuna_results")
+            if output_directory is None:
+                logger.debug(
+                    "Skipping best-configuration TOML persistence for '%s' without explicit output directory",
+                    study.study_name,
+                )
+                return None
+            config_dir = output_directory
             config_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate config file name
@@ -111,7 +112,8 @@ class JSONConfigurationPersister(IConfigurationPersistence):
         Args:
             study: Study domain model
             configuration: Configuration to save
-            output_directory: Optional custom output directory (uses default if None)
+        output_directory: Optional custom output directory. When ``None``,
+            persistence is skipped to avoid implicit durable local writes.
 
         Returns:
             Path to saved configuration file if successful, None otherwise
@@ -119,13 +121,13 @@ class JSONConfigurationPersister(IConfigurationPersistence):
         try:
             import json
 
-            from dlkit.infrastructure.io import locations
-
-            # Use custom directory if provided, otherwise use default
-            if output_directory:
-                config_dir = output_directory
-            else:
-                config_dir = locations.output("optuna_results")
+            if output_directory is None:
+                logger.debug(
+                    "Skipping best-configuration JSON persistence for '%s' without explicit output directory",
+                    study.study_name,
+                )
+                return None
+            config_dir = output_directory
             config_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate config file name
@@ -168,12 +170,18 @@ class NullConfigurationPersister(IConfigurationPersistence):
     This eliminates conditional logic by providing safe no-op behavior.
     """
 
-    def save_best_configuration(self, study: Study, configuration: dict[str, Any]) -> str | None:
+    def save_best_configuration(
+        self,
+        study: Study,
+        configuration: dict[str, Any],
+        output_directory: Path | None = None,
+    ) -> str | None:
         """No-op configuration saving.
 
         Args:
             study: Study domain model (ignored)
             configuration: Configuration to save (ignored)
+            output_directory: Output directory (ignored)
 
         Returns:
             None (no file saved)

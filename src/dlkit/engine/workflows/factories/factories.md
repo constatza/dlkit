@@ -23,3 +23,11 @@
 - Flexible contract inference delegates feature and target shape propagation to `engine.data.geometry` from a single sampled item.
 - Graph dataset assembly forwards `DATASET.root` into PyG dataset constructors so processed caches do not fall back to PyG's `???` placeholder root on Windows.
 - Runtime builders, not `tools.config`, own default module-path resolution.
+- Split generation is seeded before runtime build and remains in memory unless an
+  explicit `DATASET.split.filepath` is provided.
+- Build strategies now attach typed split-artifact metadata to
+  `RuntimeComponents.artifacts` so tracking can publish the exact split used by
+  the run without reading datamodule ad hoc attributes.
+- When MLflow is disabled, trainer construction pins Lightning-owned local
+  writes under `TRAINING.trainer.default_root_dir`; when MLflow is enabled,
+  durable artifacts belong to MLflow.

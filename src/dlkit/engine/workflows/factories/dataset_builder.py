@@ -8,14 +8,18 @@ from typing import Any, cast
 
 from lightning.pytorch import LightningDataModule
 
+from dlkit.engine.artifacts import (
+    ContentArtifactPayload,
+    FileArtifactPayload,
+    ProducedArtifact,
+)
 from dlkit.engine.workflows.selectors.family_selector import DatasetFamilySelector
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
-from dlkit.infrastructure.io.split_provider import get_or_create_split
+from dlkit.infrastructure.io.split_provider import SplitResolution, get_or_create_split
 from dlkit.infrastructure.io.tensor_entries import convert_totensor_entries
-from dlkit.infrastructure.types.split import IndexSplit
 
 from .module_defaults import with_runtime_module_defaults
 
@@ -94,7 +98,7 @@ class DatasetBuilder:
             context.with_overrides(**ds_overrides),
         )
 
-    def build_split(self, settings: Any, dataset: object) -> IndexSplit:
+    def build_split(self, settings: Any, dataset: object) -> SplitResolution:
         """Get or create the dataset split."""
         if settings.DATASET is None:
             raise ValueError("DATASET settings are required but not configured")
@@ -112,7 +116,7 @@ class DatasetBuilder:
         settings: Any,
         context: BuildContext,
         dataset: object,
-        index_split: IndexSplit,
+        split_resolution: SplitResolution,
         *,
         family: DatasetFamily | None = None,
     ) -> LightningDataModule:
@@ -132,7 +136,26 @@ class DatasetBuilder:
 
         dm_context = context.with_overrides(
             dataset=dataset,
-            split=index_split,
+            split=split_resolution.index_split,
             dataloader=effective_settings.dataloader,
         )
         return FactoryProvider.create_component(effective_settings, dm_context)
+
+    def build_split_artifact(self, split_resolution: SplitResolution) -> ProducedArtifact:
+        """Create typed split artifact metadata for runtime tracking."""
+        if split_resolution.source_path is not None:
+            return ProducedArtifact(
+                kind="split",
+                artifact_path=f"splits/{split_resolution.artifact_filename}",
+                payload=FileArtifactPayload(file_path=split_resolution.source_path),
+            )
+
+        payload = split_resolution.index_split.model_dump_json(
+            exclude_none=True,
+            indent=2,
+        )
+        return ProducedArtifact(
+            kind="split",
+            artifact_path=f"splits/{split_resolution.artifact_filename}",
+            payload=ContentArtifactPayload(content=payload),
+        )

@@ -8,6 +8,7 @@ from loguru import logger
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.data.geometry import infer_geometry_from_sample, infer_target_shapes_from_sample
+from dlkit.engine.artifacts import RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.contract_resolver import (
     ContractInferenceError,
@@ -87,7 +88,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             selection.features,
             selection.targets,
         )
-        datamodule = _build_datamodule(
+        datamodule, split_artifact = _build_datamodule(
             settings,
             self._dataset_builder,
             dataset,
@@ -141,5 +142,6 @@ class FlexibleBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
+            artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
             meta={"dataset_type": "flexible"},
         )

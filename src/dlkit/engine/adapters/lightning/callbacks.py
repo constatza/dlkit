@@ -3,30 +3,45 @@
 Provides reusable Lightning Callbacks that replace lifecycle methods
 previously embedded in the wrapper classes:
 - TransformFittingCallback: Fits NamedBatchTransformer before training starts.
-- MLflowEpochLogger: Logs epoch-based metrics into the active MLflow run context.
-- MlflowCheckpointRouter: Redirects checkpoint output into the active MLflow run.
-- NumpyWriter: Persists predict-step outputs to NumPy arrays.
+- MLflowEpochLogger: Logs epoch-based metrics into the active run context.
+- CheckpointDirRouter: Redirects checkpoint output into an explicit local directory.
+- NumpyWriter: Persists predict-step outputs to NumPy arrays and records produced artifacts.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 from lightning import Callback
 from loguru import logger
-from pydantic import DirectoryPath, validate_call
 
-from dlkit.infrastructure.io.url_utils import get_url_path
+from dlkit.engine.artifacts import (
+    ArtifactCollector,
+    FileArtifactPayload,
+    IMetricSink,
+    ProducedArtifact,
+)
+from dlkit.engine.adapters.lightning.protocols import IBatchTransformer, IFittableBatchTransformer
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
     from lightning.pytorch import LightningModule, Trainer
 
 prediction_logger = get_logger(__name__)
+
+
+def _call_zero_arg_method(value: object, method_name: str) -> object | None:
+    method = getattr(value, method_name, None)
+    if not callable(method):
+        return None
+    try:
+        return method()
+    except Exception:  # pragma: no cover - defensive branch
+        return None
 
 
 class TransformFittingCallback(Callback):
@@ -50,7 +65,7 @@ class TransformFittingCallback(Callback):
         ```
     """
 
-    def __init__(self, batch_transformer: Any) -> None:
+    def __init__(self, batch_transformer: IBatchTransformer) -> None:
         """Initialize with the batch transformer to manage.
 
         Args:
@@ -68,8 +83,6 @@ class TransformFittingCallback(Callback):
             trainer: The Lightning Trainer driving the fit.
             pl_module: The LightningModule being trained (unused).
         """
-        from dlkit.engine.adapters.lightning.protocols import IFittableBatchTransformer
-
         if not isinstance(self._batch_transformer, IFittableBatchTransformer):
             return
         if self._batch_transformer.is_fitted():
@@ -86,7 +99,7 @@ class TransformFittingCallback(Callback):
 class MLflowEpochLogger(Callback):
     """Callback that logs metrics to MLflow using epoch numbers as the x-axis."""
 
-    def __init__(self, run_context: Any) -> None:
+    def __init__(self, run_context: IMetricSink) -> None:
         super().__init__()
         self.run_context = run_context
 
@@ -120,7 +133,9 @@ class MLflowEpochLogger(Callback):
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning(f"Failed to log metrics with epoch logger: {exc}")
 
-    def _collect_stage_metrics(self, metrics: dict[str, Any], stage: str) -> dict[str, float]:
+    def _collect_stage_metrics(
+        self, metrics: Mapping[str, object], stage: str
+    ) -> dict[str, float]:
         stage_aliases = {
             "train": ("train", "training"),
             "val": ("val", "valid", "validation"),
@@ -178,51 +193,27 @@ class MLflowEpochLogger(Callback):
         return False
 
     @staticmethod
-    def _to_numeric(value: Any) -> float | None:
+    def _to_numeric(value: object) -> float | None:
         candidate = value
-        if hasattr(candidate, "detach"):
-            try:
-                candidate = candidate.detach()
-            except Exception:  # pragma: no cover - defensive branch
-                return None
-        if hasattr(candidate, "cpu"):
-            try:
-                candidate = candidate.cpu()
-            except Exception:  # pragma: no cover - defensive branch
-                return None
-        if hasattr(candidate, "item") and callable(candidate.item):
-            try:
-                candidate = candidate.item()
-            except Exception:  # pragma: no cover - defensive branch
-                return None
+        detached = _call_zero_arg_method(candidate, "detach")
+        if detached is not None:
+            candidate = detached
+
+        cpu_value = _call_zero_arg_method(candidate, "cpu")
+        if cpu_value is not None:
+            candidate = cpu_value
+
+        item_value = _call_zero_arg_method(candidate, "item")
+        if item_value is not None:
+            candidate = item_value
+
         if isinstance(candidate, (int, float)):
             return float(candidate)
         if isinstance(candidate, str):
             try:
                 return float(candidate)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return None
-        return None
-
-
-def _resolve_local_artifact_dir() -> Path | None:
-    """Return the local artifact directory for the active MLflow run, or None."""
-    try:
-        import mlflow
-
-        active_run = mlflow.active_run()
-        if active_run is None:
-            return None
-
-        artifact_uri = mlflow.get_artifact_uri()
-        if not artifact_uri or not artifact_uri.startswith("file://"):
-            return None
-
-        raw_path = get_url_path(artifact_uri).lstrip("/")
-        candidate = Path("/" + raw_path) if not Path(raw_path).is_absolute() else Path(raw_path)
-        return candidate.resolve()
-    except Exception as exc:
-        logger.debug(f"MlflowCheckpointRouter: could not resolve artifact dir: {exc}")
         return None
 
 
@@ -234,41 +225,45 @@ def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> No
         try:
             from pytorch_lightning.callbacks import ModelCheckpoint
         except ImportError:
-            logger.debug("MlflowCheckpointRouter: ModelCheckpoint not available")
+            logger.debug("CheckpointDirRouter: ModelCheckpoint not available")
             return
 
     for cb in getattr(trainer, "callbacks", []):
         if isinstance(cb, ModelCheckpoint) and cb.dirpath is None:
             cb.dirpath = str(checkpoint_dir)
-            logger.debug(f"MlflowCheckpointRouter: redirected ModelCheckpoint -> {checkpoint_dir}")
+            logger.debug(f"CheckpointDirRouter: redirected ModelCheckpoint -> {checkpoint_dir}")
 
 
-class MlflowCheckpointRouter(Callback):
-    """Redirect unset ModelCheckpoint dirpaths into the MLflow artifact store."""
+class CheckpointDirRouter(Callback):
+    """Redirect unset ModelCheckpoint dirpaths into an explicit local directory."""
+
+    def __init__(self, checkpoint_dir: Path | None = None) -> None:
+        super().__init__()
+        self._checkpoint_dir = checkpoint_dir
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        artifact_dir = _resolve_local_artifact_dir()
-        if artifact_dir is None:
-            logger.debug(
-                "MlflowCheckpointRouter: no local MLflow artifact dir found; skipping redirect"
-            )
+        checkpoint_dir = self._checkpoint_dir
+        if checkpoint_dir is None:
             return
-
-        checkpoint_dir = artifact_dir / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         _redirect_checkpoint_callbacks(trainer, checkpoint_dir)
+
+
+MlflowCheckpointRouter = CheckpointDirRouter
 
 
 class NumpyWriter(Callback):
     """Accumulate prediction outputs and persist them as NumPy arrays."""
 
-    @validate_call
     def __init__(
-        self, output_dir: DirectoryPath | None = None, filenames: Sequence[str] = ("predictions",)
+        self,
+        output_dir: Path | None = None,
+        filenames: Sequence[str] = ("predictions",),
+        artifact_collector: ArtifactCollector | None = None,
     ) -> None:
         super().__init__()
         self.output_dir = output_dir
-        self._use_mlflow = False
+        self._artifact_collector = artifact_collector
 
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +272,7 @@ class NumpyWriter(Callback):
 
     def on_predict_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         if self.output_dir is None:
-            self.output_dir, self._use_mlflow = self._resolve_default_output_dir()
+            self.output_dir = self._resolve_default_output_dir(trainer)
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -315,12 +310,14 @@ class NumpyWriter(Callback):
             output_path = Path(self.output_dir) / f"{key}.npy"
             try:
                 np.save(output_path, concatenated)
-                if self._use_mlflow:
-                    import mlflow
-
-                    current_run = mlflow.active_run()
-                    if current_run is not None:
-                        mlflow.log_artifact(str(output_path), artifact_path="predictions")
+                if self._artifact_collector is not None:
+                    self._artifact_collector.record(
+                        ProducedArtifact(
+                            kind="prediction",
+                            artifact_path=f"predictions/{output_path.name}",
+                            payload=FileArtifactPayload(file_path=output_path),
+                        )
+                    )
 
                 prediction_logger.debug("Saved prediction output {}", output_path)
             except OSError as exc:
@@ -340,18 +337,5 @@ class NumpyWriter(Callback):
         self._predictions[key].append(value.detach().clone())
 
     @staticmethod
-    def _resolve_default_output_dir() -> tuple[Path, bool]:
-        from dlkit.infrastructure.io.locations import predictions_dir
-
-        try:
-            import mlflow
-
-            if mlflow.active_run() is None:
-                return predictions_dir(), False
-            artifact_uri = mlflow.get_artifact_uri()
-            if artifact_uri and artifact_uri.startswith("file://"):
-                return Path(get_url_path(artifact_uri).lstrip("/")), True
-        except Exception:
-            pass
-
-        return predictions_dir(), False
+    def _resolve_default_output_dir(trainer: Trainer) -> Path:
+        return Path(trainer.default_root_dir) / "predictions"

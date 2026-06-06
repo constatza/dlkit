@@ -10,12 +10,15 @@ import pytest
 import torch
 
 from dlkit.engine.adapters.lightning.callbacks import NumpyWriter
+from dlkit.engine.tracking.artifacts import InMemoryArtifactCollector
 
 
 @pytest.fixture
 def mock_trainer() -> Mock:
     """Create mock trainer."""
-    return Mock()
+    trainer = Mock()
+    trainer.default_root_dir = "/tmp/dlkit-lightning"
+    return trainer
 
 
 @pytest.fixture
@@ -121,6 +124,32 @@ class TestNumpyWriterBasic:
         output_files = list(output_dir.glob("*.npy"))
         assert len(output_files) > 0
 
+    def test_epoch_end_records_prediction_artifacts(
+        self,
+        tmp_path: Path,
+        mock_trainer: Mock,
+        mock_module: Mock,
+        sample_tensor_output: torch.Tensor,
+    ) -> None:
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        collector = InMemoryArtifactCollector()
+        writer = NumpyWriter(output_dir=output_dir, artifact_collector=collector)
+
+        writer.on_predict_batch_end(
+            mock_trainer,
+            mock_module,
+            cast(Any, sample_tensor_output),
+            (),
+            0,
+            0,
+        )
+        writer.on_predict_epoch_end(mock_trainer, mock_module)
+
+        artifacts = collector.snapshot()
+        assert len(artifacts) == 1
+        assert artifacts[0].artifact_path == "predictions/predictions.npy"
+
     def test_invalid_output_type(
         self, tmp_path: Path, mock_trainer: Mock, mock_module: Mock
     ) -> None:
@@ -142,3 +171,9 @@ class TestNumpyWriterBasic:
 
         # Should have no predictions stored
         assert len(writer._predictions) == 0
+
+
+def test_callbacks_module_has_no_mlflow_dependency() -> None:
+    source = Path("src/dlkit/engine/adapters/lightning/callbacks.py").read_text()
+    assert "import mlflow" not in source
+    assert "mlflow.active_run" not in source

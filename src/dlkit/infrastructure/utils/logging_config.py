@@ -134,10 +134,9 @@ def _get_default_log_file_path() -> Path:
     Returns:
         Path to default log file in DLKit internal directory
     """
-    root_dir = Path(os.getenv("DLKIT_ROOT_DIR", Path.cwd())).resolve()
     internal_dir = os.getenv("DLKIT_INTERNAL_DIR", _DEFAULT_INTERNAL_DIR)
     log_filename = os.getenv("DLKIT_LOG_FILENAME", _DEFAULT_LOG_FILENAME)
-    internal_path = root_dir / internal_dir
+    internal_path = Path.cwd().resolve() / internal_dir
     internal_path.mkdir(parents=True, exist_ok=True)
     return internal_path / log_filename
 

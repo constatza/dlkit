@@ -31,6 +31,10 @@ depends_on = [
 ]
 
 [[modules]]
+path = "dlkit.engine.artifacts"
+depends_on = []
+
+[[modules]]
 path = "dlkit.engine.data"
 depends_on = [
     { path = "dlkit.common" },
@@ -46,6 +50,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.domain" },
+    { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.training.optimization" },
 ]
 
@@ -65,7 +70,9 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.domain" },
+    { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.data" },
+    { path = "dlkit.engine.training" },
     { path = "dlkit.engine.training.optimization" },
 ]
 
@@ -74,6 +81,7 @@ path = "dlkit.engine.tracking"
 depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure" },
+    { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.data" },
     { path = "dlkit.engine.training" },
     { path = "dlkit.engine.adapters.lightning" },
@@ -128,6 +136,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.domain" },
+    { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.data" },
     { path = "dlkit.engine.training" },
     { path = "dlkit.engine.tracking" },

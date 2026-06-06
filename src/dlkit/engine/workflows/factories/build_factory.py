@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config import GeneralSettings
@@ -13,8 +11,6 @@ from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
-from dlkit.infrastructure.io.path_context import get_current_path_context, path_override_context
-from dlkit.infrastructure.io.paths import coerce_root_dir_to_absolute
 from dlkit.infrastructure.precision.context import precision_override
 
 from .build_strategy import (
@@ -49,7 +45,7 @@ class BuildFactory:
     def _build_with_context(
         self, strategy: IBuildStrategy, settings: WorkflowSettings
     ) -> RuntimeComponents:
-        """Wrap strategy build in precision and path context.
+        """Wrap strategy build in precision context after applying the run seed.
 
         Args:
             strategy: The IBuildStrategy instance to use for building.
@@ -58,20 +54,13 @@ class BuildFactory:
         Returns:
             Constructed RuntimeComponents with context applied.
         """
-        precision_strategy = settings.SESSION.get_precision_strategy()
-        context = get_current_path_context()
-        session_root_dir = coerce_root_dir_to_absolute(settings.SESSION.root_dir)
-        needs_path_context = (not context or not context.root_dir) and session_root_dir
+        from pytorch_lightning import seed_everything
 
-        precision_ctx = (
-            precision_override(precision_strategy)
-            if precision_strategy is not None
-            else contextlib.nullcontext()
-        )
-        with precision_ctx:
-            if needs_path_context:
-                with path_override_context({"root_dir": session_root_dir}):
-                    return strategy.build(settings)
+        seed_everything(settings.SESSION.seed, workers=True)
+        precision_strategy = settings.SESSION.get_precision_strategy()
+        if precision_strategy is None:
+            return strategy.build(settings)
+        with precision_override(precision_strategy):
             return strategy.build(settings)
 
     def build_components(self, settings: WorkflowSettings) -> RuntimeComponents:

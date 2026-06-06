@@ -44,7 +44,7 @@ For manual optimization programs, `training_step()` remains a thin coordinator:
 | `components.py` | Concrete protocol implementations + `WrapperComponents` value object (FR-2) |
 | `base.py` | `ProcessingLightningWrapper` — pure Lightning coordinator |
 | `datamodules/` | Lightning `DataModule` implementations for array, graph, and timeseries datasets |
-| `callbacks.py` | Lifecycle callbacks such as transform fitting, epoch metric logging, checkpoint routing, and prediction writers |
+| `callbacks.py` | Lifecycle callbacks such as transform fitting, epoch metric logging, explicit checkpoint-dir routing, and prediction writers |
 | `checkpoint_dto.py` | Checkpoint metadata normalization helpers |
 | `standard.py` | `StandardLightningWrapper` — tensor/TensorDict workflows |
 | `graph.py` | `GraphLightningWrapper` — PyG Data/Batch workflows |
@@ -70,6 +70,12 @@ wrapper = WrapperFactory.create_standard_wrapper(model, entry_configs, component
 class StandardLightningWrapper(ProcessingLightningWrapper):
     def __init__(self, model, entry_configs, components: WrapperComponents, ...): ...
 ```
+
+Callback policy:
+- callbacks never inspect ambient MLflow run state
+- checkpoint routing receives an explicit local directory
+- prediction writers only persist files to an explicit local directory and may
+  record typed produced-artifact descriptors for later publication
 
 ---
 

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
+from dlkit.engine.artifacts import ProducedArtifact, RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.data_entries import DataEntry
@@ -31,22 +33,52 @@ DATASET_TYPE_GRAPH = "graph"
 DATASET_TYPE_TIMESERIES = "timeseries"
 
 
+def _default_lightning_root_dir() -> Any:
+    from dlkit.infrastructure.config.environment import env
+
+    return env.get_internal_dir_path() / "lightning"
+
+
 def build_trainer(settings: WorkflowSettings) -> Trainer | None:
     """Build the trainer when the workflow is in training mode."""
     if not settings.SESSION or settings.SESSION.is_inference_mode or not settings.TRAINING:
         return None
 
     trainer_settings = settings.TRAINING.trainer
-    try:
-        from dlkit.infrastructure.io import locations
-
-        if getattr(trainer_settings, "default_root_dir", None) is None:
-            trainer_settings = trainer_settings.model_copy(
-                update={"default_root_dir": locations.lightning_work_dir()}
-            )
-    except Exception:
-        pass
+    mlflow_disabled = settings.MLFLOW is None
+    if mlflow_disabled and getattr(trainer_settings, "default_root_dir", None) is None:
+        trainer_settings = trainer_settings.model_copy(
+            update={"default_root_dir": _default_lightning_root_dir()}
+        )
+    if mlflow_disabled and getattr(trainer_settings, "default_root_dir", None) is not None:
+        trainer_settings = _pin_lightning_local_outputs(trainer_settings)
     return trainer_settings.build(session=settings.SESSION)
+
+
+def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:
+    """Contain Lightning-owned local writes under one default root."""
+    default_root_dir = trainer_settings.default_root_dir
+    updates: dict[str, Any] = {}
+
+    if getattr(trainer_settings.logger, "name", None):
+        updates["logger"] = trainer_settings.logger.model_copy(update={"save_dir": default_root_dir})
+
+    pinned_callbacks = []
+    callbacks_changed = False
+    for callback in trainer_settings.callbacks:
+        callback_name = getattr(callback, "name", None)
+        dirpath = getattr(callback, "dirpath", None)
+        if callback_name == "ModelCheckpoint" and dirpath is None:
+            callback = callback.model_copy(update={"dirpath": Path(default_root_dir) / "checkpoints"})
+            callbacks_changed = True
+        pinned_callbacks.append(callback)
+
+    if callbacks_changed:
+        updates["callbacks"] = tuple(pinned_callbacks)
+
+    if not updates:
+        return trainer_settings
+    return trainer_settings.model_copy(update=updates)
 
 
 def _build_datamodule(
@@ -54,7 +86,7 @@ def _build_datamodule(
     dataset_builder: DatasetBuilder,
     dataset: object,
     family: DatasetFamily | None = None,
-) -> LightningDataModule:
+) -> tuple[LightningDataModule, ProducedArtifact]:
     """Shared helper to build split and datamodule for strategies.
 
     Args:
@@ -64,17 +96,19 @@ def _build_datamodule(
         family: Optional DatasetFamily for datamodule defaults.
 
     Returns:
-        Constructed LightningDataModule.
+        Constructed LightningDataModule and the split artifact used by the run.
     """
     context = dataset_builder.build_context(settings)
-    index_split = dataset_builder.build_split(settings, dataset)
-    return dataset_builder.build_datamodule(
+    split_resolution = dataset_builder.build_split(settings, dataset)
+    datamodule = dataset_builder.build_datamodule(
         settings,
         context,
         dataset,
-        index_split,
+        split_resolution,
         family=family,
     )
+    split_artifact = dataset_builder.build_split_artifact(split_resolution)
+    return datamodule, split_artifact
 
 
 class IBuildStrategy(ABC):
@@ -110,7 +144,7 @@ class GraphBuildStrategy(IBuildStrategy):
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
         context = self._dataset_builder.build_context(settings)
         dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
-        datamodule: LightningDataModule = _build_datamodule(
+        datamodule, split_artifact = _build_datamodule(
             settings,
             self._dataset_builder,
             dataset,
@@ -143,6 +177,7 @@ class GraphBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
+            artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
             meta={"dataset_type": "graph"},
         )
 
@@ -164,7 +199,7 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
         context = self._dataset_builder.build_context(settings)
         dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
-        datamodule = _build_datamodule(
+        datamodule, split_artifact = _build_datamodule(
             settings,
             self._dataset_builder,
             dataset,
@@ -205,5 +240,6 @@ class TimeSeriesBuildStrategy(IBuildStrategy):
             model=model,
             datamodule=datamodule,
             trainer=build_trainer(settings),
+            artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
             meta={"dataset_type": "timeseries"},
         )

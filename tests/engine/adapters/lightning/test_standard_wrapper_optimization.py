@@ -14,6 +14,7 @@ These tests exercise the full config → program → controller → wrapper path
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Any, cast
 
 import pytest
 import torch
@@ -489,6 +490,20 @@ def _identity_collate(batch: TensorDict) -> TensorDict:
     return batch
 
 
+def _passthrough_collate(batch: TensorDict | list[TensorDict]) -> TensorDict:
+    match batch:
+        case TensorDict():
+            return batch
+        case [single]:
+            return single
+        case _:
+            raise AssertionError(f"Unexpected collate payload: {type(batch).__name__}")
+
+
+def _optimizer_lr(settings: object) -> float:
+    return cast("float", getattr(settings, "lr"))
+
+
 def _fit_single_batch_wrapper(
     wrapper: StandardLightningWrapper,
     *,
@@ -511,7 +526,7 @@ def _fit_single_batch_wrapper(
     dataloader = DataLoader(
         _SingleBatchDataset(batch=batch),
         batch_size=None,
-        collate_fn=_identity_collate,
+        collate_fn=_passthrough_collate,
     )
     trainer.fit(wrapper, train_dataloaders=dataloader)
 
@@ -613,8 +628,8 @@ class TestBothOptimizersStep:
             manual_backward_calls["count"] += 1
             loss.backward(*args, **kwargs)
 
-        wrapper.optimizers = lambda use_pl_optimizer=True: wrapped_optimizers  # type: ignore[method-assign]
-        wrapper.manual_backward = manual_backward  # type: ignore[method-assign]
+        cast("Any", wrapper).optimizers = lambda use_pl_optimizer=True: wrapped_optimizers
+        cast("Any", wrapper).manual_backward = manual_backward
 
         params_before = {name: p.data.clone() for name, p in wrapper.model.named_parameters()}
         result = wrapper.training_step(_make_batch(), 0)
@@ -678,7 +693,7 @@ class TestBothOptimizersStep:
         assert stage_0.optimizer.param_groups[0]["lr"] == pytest.approx(0.2)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(
-            sequential_two_stage_with_schedulers_settings.stages[1].optimizer.lr
+            _optimizer_lr(sequential_two_stage_with_schedulers_settings.stages[1].optimizer)
         )
 
         _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
@@ -687,7 +702,7 @@ class TestBothOptimizersStep:
         assert stage_0.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(
-            sequential_two_stage_with_schedulers_settings.stages[1].optimizer.lr
+            _optimizer_lr(sequential_two_stage_with_schedulers_settings.stages[1].optimizer)
         )
 
     def test_concurrent_stage_fit_steps_scheduler_for_all_inner_optimizers(
@@ -753,19 +768,22 @@ class TestBothOptimizersStep:
         assert epoch_1_start["active_index"] == 1
         assert epoch_1_start["stage_0_lr"] == pytest.approx(0.1)
         assert epoch_1_start["stage_0_lr"] == pytest.approx(
-            sequential_two_stage_transition_schedulers_settings.stages[0].optimizer.lr * 0.5
+            _optimizer_lr(sequential_two_stage_transition_schedulers_settings.stages[0].optimizer)
+            * 0.5
         )
         assert epoch_1_start["stage_1_lr"] == pytest.approx(0.05)
         assert epoch_1_start["stage_1_lr"] == pytest.approx(
-            sequential_two_stage_transition_schedulers_settings.stages[1].optimizer.lr
+            _optimizer_lr(sequential_two_stage_transition_schedulers_settings.stages[1].optimizer)
         )
 
         assert controller._program.active_index == 1
         assert controller._program.stages[0].optimizer.param_groups[0]["lr"] == pytest.approx(0.1)
         assert controller._program.stages[0].optimizer.param_groups[0]["lr"] == pytest.approx(
-            sequential_two_stage_transition_schedulers_settings.stages[0].optimizer.lr * 0.5
+            _optimizer_lr(sequential_two_stage_transition_schedulers_settings.stages[0].optimizer)
+            * 0.5
         )
         assert controller._program.stages[1].optimizer.param_groups[0]["lr"] == pytest.approx(0.025)
         assert controller._program.stages[1].optimizer.param_groups[0]["lr"] == pytest.approx(
-            sequential_two_stage_transition_schedulers_settings.stages[1].optimizer.lr * 0.5
+            _optimizer_lr(sequential_two_stage_transition_schedulers_settings.stages[1].optimizer)
+            * 0.5
         )
