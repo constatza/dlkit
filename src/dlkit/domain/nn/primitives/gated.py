@@ -7,8 +7,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.domain.nn.types import NormalizerName
-from dlkit.domain.nn.utils import make_norm_layer
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
 
 @runtime_checkable
@@ -175,29 +175,29 @@ class UVGate(nn.Module):
     Args:
         in_features (int): Dimensionality of the context input ``x``.
         hidden_size (int): Dimensionality of the hidden state ``h`` and output.
-        activation (Callable[[Tensor], Tensor], optional): Element-wise
-            activation applied to each branch.  Defaults to ``torch.sigmoid``.
+        activation (ActivationName | Callable[[Tensor], Tensor] | None, optional):
+            Element-wise activation applied to each branch.  Defaults to ``"sigmoid"``.
     """
 
     def __init__(
         self,
         in_features: int,
         hidden_size: int,
-        activation: Callable[[Tensor], Tensor] = torch.sigmoid,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = "sigmoid",
     ) -> None:
         """Initialise UVGate.
 
         Args:
             in_features (int): Size of the context input dimension.
             hidden_size (int): Size of the hidden state and output dimension.
-            activation (Callable[[Tensor], Tensor], optional): Activation
-                function for all three branches. Defaults to ``torch.sigmoid``.
+            activation (ActivationName | Callable[[Tensor], Tensor] | None, optional):
+                Activation function for all three branches. Defaults to ``"sigmoid"``.
         """
         super().__init__()
         self.encoder_u = nn.Linear(in_features, hidden_size)
         self.encoder_v = nn.Linear(in_features, hidden_size)
         self.gate = nn.Linear(hidden_size, hidden_size)
-        self.activation = activation
+        self.activation = resolve_activation(activation)
 
     def forward(self, h: Tensor, x: Tensor) -> Tensor:
         """Apply UV gating.

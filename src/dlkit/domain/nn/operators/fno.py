@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Self
 
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
 from dlkit.domain.nn.operators.base import GridOperatorBase
 from dlkit.domain.nn.spectral.layers import FourierLayer
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 
 class FourierNeuralOperator1d(GridOperatorBase):
@@ -37,11 +38,12 @@ class FourierNeuralOperator1d(GridOperatorBase):
         width: int = 64,
         n_modes: int = 16,
         n_layers: int = 4,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
     ) -> None:
+        resolved = resolve_activation(activation)
         body: nn.Module = nn.Sequential(
             *[
-                FourierLayer(channels=width, n_modes=n_modes, activation=activation)
+                FourierLayer(channels=width, n_modes=n_modes, activation=resolved)
                 for _ in range(n_layers)
             ]
         )

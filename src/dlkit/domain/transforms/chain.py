@@ -98,6 +98,7 @@ class TransformChain[BatchT](Transform):
         self,
         dataloader: Iterable[BatchT],
         tensor_selector: Callable[[BatchT], Tensor],
+        device: torch.device | None = None,
     ) -> None:
         """Fit the chain from a re-iterable dataloader.
 
@@ -109,6 +110,7 @@ class TransformChain[BatchT](Transform):
         Args:
             dataloader: Re-iterable training dataloader.
             tensor_selector: Function that extracts this chain's tensor from one batch.
+            device: Optional target device for the fitted buffers.
 
         Raises:
             ValueError: If dataloader is empty.
@@ -177,6 +179,9 @@ class TransformChain[BatchT](Transform):
                 transform_name=transform.__class__.__name__,
                 cause=e,
             ) from e
+
+        if device is not None:
+            self.to(device)
 
     def forward(self, x: Tensor) -> Tensor:
         """Apply the transform chain.

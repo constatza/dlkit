@@ -150,11 +150,12 @@ class IFittableBatchTransformer(IBatchTransformer, Protocol):
     an IFittableBatchTransformer.
     """
 
-    def fit(self, dataloader: Any) -> None:
+    def fit(self, dataloader: Any, device: torch.device | None = None) -> None:
         """Fit all fittable transforms using training data.
 
         Args:
             dataloader: Training DataLoader to iterate for fitting.
+            device: Optional target device for the fitted buffers.
         """
         ...
 

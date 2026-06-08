@@ -9,8 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
+
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 
 class SpectralConv1d(nn.Module):
@@ -112,7 +114,7 @@ class FourierLayer(nn.Module):
         channels: Number of feature channels (in == out).
         n_modes: Number of Fourier modes kept in the spectral path.
         activation: Pointwise activation applied after the residual sum.
-            Defaults to ``F.gelu``.
+            Defaults to ``F.relu``.
     """
 
     def __init__(
@@ -120,12 +122,12 @@ class FourierLayer(nn.Module):
         *,
         channels: int,
         n_modes: int,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
     ) -> None:
         super().__init__()
         self._channels = channels
         self._n_modes = n_modes
-        self.activation = activation
+        self.activation = resolve_activation(activation)
 
         self.spectral_conv = SpectralConv1d(
             in_channels=channels, out_channels=channels, n_modes=n_modes

@@ -27,7 +27,6 @@ from collections.abc import Callable
 from typing import Any, Literal, Self, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
@@ -37,6 +36,8 @@ from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ScaleEquivariantWrapper,
 )
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
@@ -85,7 +86,7 @@ class FourierFeatureNetwork(nn.Module):
         n_frequencies: int,
         sigma: float = 1.0,
         learnable_B: bool = False,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -101,7 +102,7 @@ class FourierFeatureNetwork(nn.Module):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -289,7 +290,7 @@ class HashEncodingNetwork(nn.Module):
         finest_resolution: int = 512,
         bounds: tuple[tuple[float, float], ...] | None = None,
         include_input: bool = True,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -309,7 +310,7 @@ class HashEncodingNetwork(nn.Module):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -448,14 +449,14 @@ class ModifiedMLP(nn.Module):
         out_features: int,
         hidden_size: int,
         num_layers: int,
-        activation: Callable[[Tensor], Tensor] = torch.sigmoid,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = "sigmoid",
     ) -> None:
         if num_layers < 2:
             raise ValueError(
                 "num_layers must be >= 2 (U/V gating requires at least one hidden layer)"
             )
         super().__init__()
-        self.activation = activation
+        self.activation = resolve_activation(activation)
         self.encoder_u = nn.Linear(in_features, hidden_size)
         self.encoder_v = nn.Linear(in_features, hidden_size)
         self.input_layer = nn.Linear(in_features, hidden_size)
@@ -518,7 +519,7 @@ class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
         n_frequencies: int,
         sigma: float = 1.0,
         learnable_B: bool = False,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         norm: str = _DEFAULT_NORM,
@@ -534,7 +535,7 @@ class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
                 n_frequencies=n_frequencies,
                 sigma=sigma,
                 learnable_B=learnable_B,
-                activation=activation,
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -609,7 +610,7 @@ class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
         out_features: int,
         hidden_size: int,
         num_layers: int,
-        activation: Callable[[Tensor], Tensor] = torch.sigmoid,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = "sigmoid",
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
@@ -620,7 +621,7 @@ class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
                 out_features=out_features,
                 hidden_size=hidden_size,
                 num_layers=num_layers,
-                activation=activation,
+                activation=resolve_activation(activation),
             ),
             norm=norm,
             eps_gain=eps_gain,

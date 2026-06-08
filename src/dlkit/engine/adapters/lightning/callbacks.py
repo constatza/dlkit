@@ -92,7 +92,9 @@ class TransformFittingCallback(Callback):
             return
         loader = dm.train_dataloader()
         logger.debug("Starting transform fitting from training dataloader.")
-        self._batch_transformer.fit(loader)
+        # Pass pl_module.device to ensure transforms are moved to the correct device
+        # (e.g. GPU) after being fitted with CPU data.
+        self._batch_transformer.fit(loader, device=pl_module.device)
         logger.debug("Finished transform fitting.")
 
 

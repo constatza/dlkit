@@ -27,11 +27,12 @@ from collections.abc import Callable
 from typing import Any, Literal, Self
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.residual import FFNN
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 # ---------------------------------------------------------------------------
 # Shared spectral-feature helper (pure function, no learnable parameters)
@@ -222,7 +223,7 @@ class FourierEnhancedFFNN(FourierAugmented):
         hidden_size: int,
         num_layers: int,
         n_modes: int,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -231,7 +232,7 @@ class FourierEnhancedFFNN(FourierAugmented):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -277,16 +278,17 @@ class DualPathFFNN(SpectralDualPath):
         num_layers: int,
         n_modes: int,
         merge: Literal["add", "concat"] = "add",
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
+        resolved = resolve_activation(activation)
         spatial_branch = FFNN(
             in_features=in_features,
             out_features=hidden_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
         )
@@ -295,7 +297,7 @@ class DualPathFFNN(SpectralDualPath):
             out_features=hidden_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
         )

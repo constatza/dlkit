@@ -6,10 +6,53 @@ primitives, encoders, and higher-level model modules.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 import torch
+import torch.nn.functional as F
 from torch import nn
 
-from dlkit.domain.nn.types import NormalizerName
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+
+
+def _identity(x: torch.Tensor) -> torch.Tensor:
+    """Identity activation function that returns input unchanged."""
+    return x
+
+
+def resolve_activation(
+    name: ActivationName | str | Callable | None,
+) -> Callable[[torch.Tensor], torch.Tensor]:
+    """Resolve an activation function from a name, callable, or None.
+
+    Args:
+        name: Activation name, callable, or None. Defaults to "relu".
+
+    Returns:
+        The resolved activation callable.
+    """
+    if callable(name):
+        return cast(Callable[[torch.Tensor], torch.Tensor], name)
+    match name:
+        case None:
+            return F.relu
+        case "none" | "identity":
+            return _identity
+        case "relu":
+            return F.relu
+        case "gelu":
+            return F.gelu
+        case "silu":
+            return F.silu
+        case "tanh":
+            return torch.tanh
+        case "sigmoid":
+            return torch.sigmoid
+        case "leaky_relu":
+            return F.leaky_relu
+        case _:
+            raise ValueError(f"Unsupported activation: {name!r}")
 
 
 def make_norm_layer(

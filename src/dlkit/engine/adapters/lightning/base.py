@@ -19,6 +19,7 @@ from lightning import LightningModule
 from tensordict import TensorDict
 from torch import Tensor, nn
 
+from dlkit.domain.nn.factory import model_accepts_kwarg
 from dlkit.engine.adapters.lightning.concerns import (
     DLKitCheckpointSerializer,
     LightningStepLogger,
@@ -279,6 +280,12 @@ def _build_model_from_settings(
 
     if isinstance(model_settings, ModelComponentSettings):
         hyperparams = extract_init_kwargs(model_settings)
+        if (
+            model_settings.activation is not None
+            and "activation" not in hyperparams
+            and model_accepts_kwarg(model_cls, "activation")
+        ):
+            hyperparams = {**hyperparams, "activation": model_settings.activation}
     elif hasattr(model_settings, "model_dump"):
         all_fields = model_settings.model_dump()
         excluded = {"name", "module_path", "checkpoint"}

@@ -44,7 +44,7 @@ class TensorToVectorBlock(nn.Module):
         - latent_dim (int): Dimension of the latent vector.
         """
         super().__init__()
-        self.activation = F.gelu
+        self.activation = F.relu
         self.pooling = nn.AdaptiveAvgPool1d(1)
         self.dense_block = DenseBlock(channels_in, latent_dim, activation=lambda x: x)
         self.transpose = transpose

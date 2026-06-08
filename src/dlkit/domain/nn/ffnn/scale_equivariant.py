@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any, Literal, Self
 
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import (
@@ -30,6 +30,8 @@ from dlkit.domain.nn.primitives import (
     DEFAULT_SPD_MIN_DIAG,
     ScaleEquivariantWrapper,
 )
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
@@ -37,12 +39,6 @@ _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
 
 class _ScaleEquivariantBase(ScaleEquivariantWrapper):
     """Wrap a base FFNN with input/output norm scaling to enforce scale equivariance."""
-
-
-def _default_activation(
-    activation: Callable[[Tensor], Tensor] | None,
-) -> Callable[[Tensor], Tensor]:
-    return activation if activation is not None else nn.functional.gelu
 
 
 # ── Plain dense (non-structured) ────────────────────────────────────────────
@@ -61,7 +57,7 @@ class ScaleEquivariantFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -72,7 +68,7 @@ class ScaleEquivariantFFNN(_ScaleEquivariantBase):
                 out_features=out_features,
                 hidden_size=hidden_size,
                 num_layers=num_layers,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -109,7 +105,7 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -120,7 +116,7 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
                 bias=bias,
                 min_diag=min_diag,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -148,7 +144,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -159,7 +155,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
                 bias=bias,
                 min_diag=min_diag,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -189,7 +185,7 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -202,7 +198,7 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -232,7 +228,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -245,7 +241,7 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -276,7 +272,7 @@ class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -287,7 +283,7 @@ class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
                 bias=bias,
                 min_diag=min_diag,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -315,7 +311,7 @@ class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -326,7 +322,7 @@ class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
                 bias=bias,
                 min_diag=min_diag,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -356,7 +352,7 @@ class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -369,7 +365,7 @@ class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -399,7 +395,7 @@ class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -412,7 +408,7 @@ class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -446,7 +442,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -460,7 +456,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -497,7 +493,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -511,7 +507,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -551,7 +547,7 @@ class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -565,7 +561,7 @@ class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),
@@ -602,7 +598,7 @@ class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
-        activation: Callable[[Tensor], Tensor] | None = None,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -616,7 +612,7 @@ class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
                 mean=mean,
                 std=std,
                 pos_fn=pos_fn,
-                activation=_default_activation(activation),
+                activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
             ),

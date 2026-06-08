@@ -51,7 +51,7 @@ class ProjectionNetwork(BaseGraphNetwork):
         """
         super().__init__(in_channels=in_channels, out_channels=out_channels, edge_dim=edge_dim)
 
-        activation = nn.GELU
+        activation = nn.ReLU
         self._in_proj = input_projection or SkipProjection(
             in_features=in_channels,
             hidden_features=hidden_size,

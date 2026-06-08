@@ -3,6 +3,9 @@ from collections.abc import Callable
 from torch import Tensor, nn
 from torch_geometric.nn.conv import GATv2Conv
 
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
+
 
 class _GATv2MessageBase(nn.Module):
     """Stacked Graph Attention v2 (GATv2) message-passing module.
@@ -27,7 +30,7 @@ class _GATv2MessageBase(nn.Module):
         _residual: bool = True,
         edge_dim: int | None = None,
         concat: bool = True,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
         dropout: float = 0.0,
     ):
         super().__init__()
@@ -46,7 +49,7 @@ class _GATv2MessageBase(nn.Module):
             ]
         )
 
-        self.activation = activation
+        self.activation = resolve_activation(activation)
 
     def forward(
         self,
@@ -81,7 +84,7 @@ class GATv2Message(_GATv2MessageBase):
         heads: int = 1,
         edge_dim: int | None = None,
         concat: bool = True,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
         dropout: float = 0.0,
     ):
         super().__init__(
@@ -107,7 +110,7 @@ class SimpleGATv2Message(_GATv2MessageBase):
         heads: int = 1,
         edge_dim: int | None = None,
         concat: bool = True,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
         dropout: float = 0.0,
     ):
         super().__init__(

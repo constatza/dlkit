@@ -2,10 +2,11 @@
 import math
 from collections.abc import Callable
 
+import torch
 from torch import nn
 
-from dlkit.domain.nn.types import NormalizerName
-from dlkit.domain.nn.utils import make_norm_layer
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
 
 class ConvolutionBlock1d(nn.Module):
@@ -18,7 +19,7 @@ class ConvolutionBlock1d(nn.Module):
         kernel_size: int = 3,
         stride: int = 1,
         padding: str | int = "same",
-        activation: Callable | nn.Module = nn.functional.gelu,
+        activation: ActivationName | Callable[[torch.Tensor], torch.Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         dilation: int = 1,
@@ -33,8 +34,7 @@ class ConvolutionBlock1d(nn.Module):
             kernel_size (int, optional): Convolution kernel size. Defaults to 3.
             stride (int, optional): Convolution stride. Defaults to 1.
             padding (str | int, optional): Padding mode or amount. Defaults to "same".
-            activation (Callable | nn.Module, optional): Activation function.
-                Defaults to ``nn.functional.gelu``.
+            activation (ActivationName | Callable[[torch.Tensor], torch.Tensor] | None, optional): Activation function or name. Defaults to relu.
             normalize (NormalizerName | None, optional): Normalization type
                 (``"layer"`` or ``"batch"``). Defaults to None.
             dropout (float, optional): Dropout probability. Defaults to 0.0.
@@ -42,7 +42,7 @@ class ConvolutionBlock1d(nn.Module):
             groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
         """
         super().__init__()
-        self.activation = activation
+        self.activation = resolve_activation(activation)
         self.conv1 = nn.Conv1d(
             in_channels,
             out_channels,
@@ -79,7 +79,7 @@ class DeconvolutionBlock1d(nn.Module):
         padding: str | int = "same",
         output_padding: int = 0,
         groups: int = 1,
-        activation: Callable | nn.Module | None = None,
+        activation: ActivationName | Callable[[torch.Tensor], torch.Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
     ):
@@ -98,8 +98,7 @@ class DeconvolutionBlock1d(nn.Module):
             output_padding (int, optional): Additional size added to one side of the output.
                 Defaults to 0.
             groups (int, optional): Number of groups for grouped convolutions. Defaults to 1.
-            activation (Callable | nn.Module | None, optional): Activation function.
-                Defaults to ``nn.GELU()``.
+            activation (ActivationName | Callable[[torch.Tensor], torch.Tensor] | None, optional): Activation function or name. Defaults to relu.
             normalize (NormalizerName | None, optional): Normalization type
                 (``"layer"`` or ``"batch"``). Applied before the convolution. Defaults to None.
             dropout (float, optional): Dropout probability applied after activation.
@@ -110,7 +109,7 @@ class DeconvolutionBlock1d(nn.Module):
             raise ValueError(
                 '"same" padding for DeconvolutionBlock1d is only supported when stride=1.'
             )
-        self.activation = nn.GELU() if activation is None else activation
+        self.activation = resolve_activation(activation)
         effective_padding: int = (
             (kernel_size - 1) // 2 * dilation if padding == "same" else int(padding)
         )

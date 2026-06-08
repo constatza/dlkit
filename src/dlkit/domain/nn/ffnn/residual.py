@@ -6,8 +6,9 @@ from typing import Any, Literal, Self
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
-from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 
 class VarWidthFFNN(nn.Module):
@@ -52,7 +53,7 @@ class VarWidthFFNN(nn.Module):
         in_features: int,
         out_features: int,
         layers: Sequence[int],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
@@ -62,7 +63,7 @@ class VarWidthFFNN(nn.Module):
         if not layers:
             raise ValueError("layers must contain at least one hidden width")
         self.num_layers = len(layers)
-        self.activation = activation
+        self.activation = resolve_activation(activation)
 
         self.layers = nn.ModuleList()
         self.embedding_layer = nn.Linear(in_features, layers[0], bias=bias)
@@ -71,7 +72,7 @@ class VarWidthFFNN(nn.Module):
             block = DenseBlock(
                 layers[i],
                 layers[i + 1],
-                activation=activation,
+                activation=self.activation,
                 normalize=normalize,
                 dropout=dropout,
                 bias=bias,
@@ -158,7 +159,7 @@ class FFNN(VarWidthFFNN):
         out_features: int,
         hidden_size: int | None = None,
         num_layers: int,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
@@ -166,12 +167,12 @@ class FFNN(VarWidthFFNN):
     ) -> None:
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
-        hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
+        hidden_size = hidden_size if hidden_size is not None else max(in_features, out_features)
         super().__init__(
             in_features=in_features,
             out_features=out_features,
             layers=[hidden_size] * num_layers,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -217,7 +218,7 @@ class EmbeddedFFNN(nn.Module):
         out_features: int,
         hidden_size: int | None = None,
         num_layers: int,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
@@ -226,7 +227,8 @@ class EmbeddedFFNN(nn.Module):
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
 
-        hidden = _resolve_hidden_size(hidden_size, in_features, out_features)
+        resolved_activation = resolve_activation(activation)
+        hidden = hidden_size if hidden_size is not None else max(in_features, out_features)
         self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
         self.layers = nn.ModuleList()
 
@@ -234,7 +236,7 @@ class EmbeddedFFNN(nn.Module):
             block = DenseBlock(
                 hidden,
                 hidden,
-                activation=activation,
+                activation=resolved_activation,
                 normalize=normalize,
                 dropout=dropout,
                 bias=bias,

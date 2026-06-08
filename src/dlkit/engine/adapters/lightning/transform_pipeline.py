@@ -189,11 +189,12 @@ class NamedBatchTransformer(nn.Module):
                             result[k] = cast(Tensor | TensorDictBase, v)
                 return TensorDict(result, batch_size=predictions.batch_size)  # type: ignore
 
-    def fit(self, dataloader: Iterable[TensorDictBase]) -> None:
+    def fit(self, dataloader: Iterable[TensorDictBase], device: torch.device | None = None) -> None:
         """Fit all fittable transforms using training data.
 
         Args:
             dataloader: Training DataLoader to iterate for fitting.
+            device: Optional target device for the fitted buffers.
         """
         for namespace, chains in (
             ("features", self._feature_chains),
@@ -204,16 +205,15 @@ class NamedBatchTransformer(nn.Module):
                     continue
 
                 logger.info(
-                    "Fitting transform chain for {}.{} ({})",
-                    namespace,
-                    entry_name,
-                    chain.__class__.__name__,
+                    f"Fitting transform chain for {namespace}.{entry_name} ({chain.__class__.__name__})"
                 )
 
                 if isinstance(chain, _FittableFromDataloader):
                     cast(_FittableFromDataloader, chain).fit_from_dataloader(
                         dataloader,
-                        lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]),
+                        lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]).to(
+                            device
+                        ),
                     )
                     continue
 
@@ -234,6 +234,9 @@ class NamedBatchTransformer(nn.Module):
                 raise TypeError(
                     f"Transform '{chain.__class__.__name__}' is not fittable in this path."
                 )
+
+        if device is not None:
+            self.to(device)
 
     def is_fitted(self) -> bool:
         """Check if all fittable transforms are fitted.

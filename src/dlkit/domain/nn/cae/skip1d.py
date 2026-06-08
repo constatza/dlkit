@@ -4,7 +4,6 @@ from collections.abc import Callable
 from typing import Any, Self
 
 import torch
-from torch import nn
 
 from dlkit.domain.nn.cae.base import CAE
 from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
@@ -13,8 +12,8 @@ from dlkit.domain.nn.encoder.latent import (
     VectorToTensorBlock,
 )
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
-from dlkit.domain.nn.types import NormalizerName
-from dlkit.domain.nn.utils import build_channel_schedule
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import build_channel_schedule, resolve_activation
 
 
 class SkipCAE1d(CAE):
@@ -28,7 +27,7 @@ class SkipCAE1d(CAE):
         latent_width: Width of latent feature (default: 1).
         num_layers: Number of encoder/decoder layers (default: 3).
         kernel_size: Convolution kernel size (default: 3).
-        activation: Activation function (default: gelu).
+        activation: Activation function (default: relu).
         normalize: Normalization type (default: None).
         dropout: Dropout probability (default: 0.0).
         transpose: Whether to transpose dimensions in latent encoding (default: False).
@@ -45,7 +44,7 @@ class SkipCAE1d(CAE):
         latent_width: int = 1,
         num_layers: int = 3,
         kernel_size: int = 3,
-        activation: Callable[[torch.Tensor], torch.Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[torch.Tensor], torch.Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         transpose: bool = False,
@@ -53,6 +52,7 @@ class SkipCAE1d(CAE):
     ) -> None:
         super().__init__()
 
+        resolved = resolve_activation(activation)
         channels = build_channel_schedule(in_channels, latent_channels, num_layers + 1)
         timesteps = build_channel_schedule(in_length, latent_width, num_layers + 1)
 
@@ -61,7 +61,7 @@ class SkipCAE1d(CAE):
             timesteps,
             kernel_size=kernel_size,
             normalize=normalize,
-            activation=activation,
+            activation=resolved,
             dropout=dropout,
             dilation=dilation,
         )
@@ -74,7 +74,7 @@ class SkipCAE1d(CAE):
             timesteps[::-1],
             kernel_size=kernel_size,
             normalize=normalize,
-            activation=activation,
+            activation=resolved,
             dropout=dropout,
             dilation=dilation,
         )

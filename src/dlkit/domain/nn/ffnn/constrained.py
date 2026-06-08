@@ -15,7 +15,8 @@ from dlkit.domain.nn.primitives import (
     SPDLinear,
     build_linear_skip_layer,
 )
-from dlkit.domain.nn.utils import make_norm_layer
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
 
 def _resolve_hidden_size(
@@ -53,7 +54,7 @@ class ParametricDenseBlock(nn.Module):
         size: int,
         in_size: int | None = None,
         layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -86,7 +87,7 @@ class _ConstantWidthParametricBody(nn.Module):
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -131,7 +132,7 @@ class _EmbeddedParametricBody(nn.Module):
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -173,7 +174,7 @@ class _EmbeddedSPDBody(nn.Module):
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -213,7 +214,7 @@ class _NonEmbeddedSPDBody(nn.Module):
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -250,7 +251,7 @@ class EmbeddedParametricFFNN(_EmbeddedParametricBody):
         hidden_size: int | None = None,
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -261,7 +262,7 @@ class EmbeddedParametricFFNN(_EmbeddedParametricBody):
             num_layers=num_layers,
             layer_factory=layer_factory,
             _residual=True,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -288,7 +289,7 @@ class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
         hidden_size: int | None = None,
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -299,7 +300,7 @@ class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
             num_layers=num_layers,
             layer_factory=layer_factory,
             _residual=False,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -383,7 +384,7 @@ class EmbeddedSPDFFNN(_EmbeddedSPDBody):
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -392,7 +393,7 @@ class EmbeddedSPDFFNN(_EmbeddedSPDBody):
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             _residual=True,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -413,7 +414,7 @@ class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -422,7 +423,7 @@ class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             _residual=False,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -445,7 +446,7 @@ class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -460,7 +461,7 @@ class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
                 pos_fn=pos_fn,
             ),
             _residual=True,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -483,7 +484,7 @@ class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -498,7 +499,7 @@ class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
                 pos_fn=pos_fn,
             ),
             _residual=False,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -522,7 +523,7 @@ class SPDFFNN(_NonEmbeddedSPDBody):
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -531,7 +532,7 @@ class SPDFFNN(_NonEmbeddedSPDBody):
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             _residual=True,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -552,7 +553,7 @@ class SimpleSPDFFNN(_NonEmbeddedSPDBody):
         bias: bool = False,
         min_diag: float = DEFAULT_SPD_MIN_DIAG,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -561,7 +562,7 @@ class SimpleSPDFFNN(_NonEmbeddedSPDBody):
             num_layers=num_layers,
             layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
             _residual=False,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -584,7 +585,7 @@ class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -599,7 +600,7 @@ class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
                 pos_fn=pos_fn,
             ),
             _residual=True,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -622,7 +623,7 @@ class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -637,7 +638,7 @@ class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
                 pos_fn=pos_fn,
             ),
             _residual=False,
-            activation=activation,
+            activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,
         )
@@ -664,7 +665,7 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -699,7 +700,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
@@ -743,13 +744,14 @@ class FactorizedFFNN(nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}")
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
+        resolved_activation = resolve_activation(activation)
         super().__init__()
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
@@ -757,7 +759,7 @@ class FactorizedFFNN(nn.Module):
             layer_factory=lambda h: FactorizedLinear(
                 in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
             ),
-            activation=activation,
+            activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
         )
@@ -766,7 +768,7 @@ class FactorizedFFNN(nn.Module):
             num_layers=num_layers - 1,
             layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
             _residual=True,
-            activation=activation,
+            activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
         )
@@ -807,13 +809,14 @@ class SimpleFactorizedFFNN(nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: Callable[[Tensor], Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}")
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
+        resolved_activation = resolve_activation(activation)
         super().__init__()
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
@@ -821,7 +824,7 @@ class SimpleFactorizedFFNN(nn.Module):
             layer_factory=lambda h: FactorizedLinear(
                 in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
             ),
-            activation=activation,
+            activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
         )
@@ -830,7 +833,7 @@ class SimpleFactorizedFFNN(nn.Module):
             num_layers=num_layers - 1,
             layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
             _residual=False,
-            activation=activation,
+            activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
         )

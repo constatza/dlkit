@@ -7,11 +7,12 @@ from math import prod
 from typing import Any, Literal, Self, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import BranchTrunkSpec, ModelContractSpec
 from dlkit.domain.nn.ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
+from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.utils import resolve_activation
 
 
 def _contract_to_dims(contract: ModelContractSpec) -> tuple[int, int, int]:
@@ -152,7 +153,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         trunk_width: int = 64,
         branch_layers: Sequence[int],
         trunk_layers: Sequence[int],
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
@@ -161,12 +162,13 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
             raise ValueError("branch_layers must contain at least one hidden width")
         if not trunk_layers:
             raise ValueError("trunk_layers must contain at least one hidden width")
+        resolved = resolve_activation(activation)
         latent_dim = trunk_width * out_features
         branch_net = VarWidthFFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
             layers=branch_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -175,7 +177,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
             in_features=query_dim,
             out_features=latent_dim,
             layers=trunk_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -232,18 +234,19 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         branch_num_layers: int = 4,
         trunk_hidden_size: int | None = None,
         trunk_num_layers: int = 4,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
     ) -> None:
+        resolved = resolve_activation(activation)
         latent_dim = trunk_width * out_features
         branch_net = FFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
             hidden_size=branch_hidden_size,
             num_layers=branch_num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -253,7 +256,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -310,18 +313,19 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         branch_num_layers: int = 4,
         trunk_hidden_size: int | None = None,
         trunk_num_layers: int = 4,
-        activation: Callable[[Tensor], Tensor] = F.gelu,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
         bias: bool = True,
     ) -> None:
+        resolved = resolve_activation(activation)
         latent_dim = trunk_width * out_features
         branch_net = EmbeddedFFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
             hidden_size=branch_hidden_size,
             num_layers=branch_num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -331,7 +335,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
             bias=bias,

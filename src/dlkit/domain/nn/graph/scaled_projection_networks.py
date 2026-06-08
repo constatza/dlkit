@@ -8,6 +8,8 @@ import torch
 from torch import nn
 from torch_geometric.typing import Tensor
 
+from dlkit.domain.nn.types import ActivationName
+
 from .gat import GATv2Message, SimpleGATv2Message
 from .projection_networks import GProjection, ProjectionNetwork
 
@@ -136,7 +138,7 @@ class GATv2Projection(GProjection):
         edge_dim: int = 1,
         concat: bool = True,
         dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
     ) -> None:
         """Initialize GATv2Projection.
 
@@ -194,7 +196,7 @@ class SimpleGATv2Projection(GProjection):
         edge_dim: int = 1,
         concat: bool = True,
         dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
     ) -> None:
         """Initialize SimpleGATv2Projection.
 
@@ -252,7 +254,7 @@ class ScaledGATv2Projection(ScaledGProjection):
         edge_dim: int = 1,
         concat: bool = True,
         dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
     ) -> None:
         """Initialize ScaledGATv2Projection.
 
@@ -310,7 +312,7 @@ class ScaledSimpleGATv2Projection(ScaledGProjection):
         edge_dim: int = 1,
         concat: bool = True,
         dropout: float = 0.0,
-        activation: Callable = nn.functional.relu,
+        activation: ActivationName | Callable | None = None,
     ) -> None:
         """Initialize ScaledSimpleGATv2Projection.
 

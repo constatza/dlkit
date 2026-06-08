@@ -38,7 +38,7 @@ class StackedProjection(nn.Module):
         hidden_features (int): Hidden layer width.
         out_features (int): Output feature count.
         num_layers (int): Number of hidden layers. Defaults to 2.
-        activation (type[nn.Module]): Activation class instantiated per layer. Defaults to nn.GELU.
+        activation (type[nn.Module]): Activation class instantiated per layer. Defaults to nn.ReLU.
         bias (bool): Whether linear layers use bias. Defaults to True.
     """
 
@@ -49,7 +49,7 @@ class StackedProjection(nn.Module):
         out_features: int,
         *,
         num_layers: int = 2,
-        activation: type[nn.Module] = nn.GELU,
+        activation: type[nn.Module] = nn.ReLU,
         bias: bool = True,
     ) -> None:
         super().__init__()
@@ -89,7 +89,7 @@ class SkipProjection(nn.Module):
         hidden_features (int): Hidden layer width.
         out_features (int): Output feature count.
         num_layers (int): Number of residual blocks. Defaults to 2.
-        activation (type[nn.Module]): Activation class instantiated per block. Defaults to nn.GELU.
+        activation (type[nn.Module]): Activation class instantiated per block. Defaults to nn.ReLU.
         bias (bool): Whether linear layers use bias. Defaults to True.
     """
 
@@ -100,7 +100,7 @@ class SkipProjection(nn.Module):
         out_features: int,
         *,
         num_layers: int = 2,
-        activation: type[nn.Module] = nn.GELU,
+        activation: type[nn.Module] = nn.ReLU,
         bias: bool = True,
     ) -> None:
         super().__init__()

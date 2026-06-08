@@ -9,6 +9,8 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
+from dlkit.common.types import ActivationName, NormalizerName
+
 from .core.base_settings import (
     BasicSettings,
     ComponentSettings,
@@ -380,6 +382,19 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
             "Checkpoint path for inference workflows (model weights only). "
             "For resuming training, use TRAINING.resume_from_checkpoint instead."
         ),
+        json_schema_extra={"dlkit_init_kwarg": False},
+    )
+
+    # Factory directives — resolved and injected by build_model for models that accept them,
+    # not forwarded as raw init kwargs to all models.
+    activation: ActivationName | str | None = Field(
+        default="relu",
+        description="Activation function name",
+        json_schema_extra={"dlkit_init_kwarg": False},
+    )
+    normalize: NormalizerName | None = Field(
+        default=None,
+        description="Normalization type",
         json_schema_extra={"dlkit_init_kwarg": False},
     )
 

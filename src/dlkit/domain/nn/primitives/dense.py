@@ -1,11 +1,10 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
-from dlkit.domain.nn.types import NormalizerName
-from dlkit.domain.nn.utils import make_norm_layer
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
 
 class DenseBlock(nn.Module):
@@ -13,7 +12,7 @@ class DenseBlock(nn.Module):
         self,
         in_features: int,
         out_features: int,
-        activation: Callable[[torch.Tensor], torch.Tensor] = F.gelu,
+        activation: ActivationName | Callable[[torch.Tensor], torch.Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         bias: bool = True,
@@ -23,7 +22,7 @@ class DenseBlock(nn.Module):
         Parameters:
             in_features (int): Number of input features to the layer.
             out_features (int): Number of output features from the layer.
-            activation (Callable[[torch.Tensor], torch.Tensor], optional): Activation function to be used in the layer. Defaults to F.gelu.
+            activation (ActivationName | Callable[[torch.Tensor], torch.Tensor] | None, optional): Activation function or name. Defaults to relu.
             normalize (str | None, optional): Normalization type ('layer', 'batch', or None). Defaults to None.
             dropout (float, optional): Dropout rate. Defaults to 0.0.
             bias (bool, optional): Whether to include a bias term. Defaults to True.
@@ -35,7 +34,7 @@ class DenseBlock(nn.Module):
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
         self.fc1 = nn.Linear(in_features, out_features, bias=bias)
-        self.activation = activation
+        self.activation = resolve_activation(activation)
 
     def forward(self, x):
         x = self.norm(x)

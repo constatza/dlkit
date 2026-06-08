@@ -5,7 +5,8 @@ from torch.nn import ModuleList
 
 from dlkit.domain.nn.primitives.convolutional import ConvolutionBlock1d
 from dlkit.domain.nn.primitives.skip import SkipConnection, build_conv1d_skip_layer
-from dlkit.domain.nn.types import NormalizerName
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import resolve_activation
 
 
 def _build_conv_stack(
@@ -59,7 +60,7 @@ class SkipEncoder1d(nn.Module):
         channels: Channel counts at each level (length == num_layers + 1).
         timesteps: Timestep counts at each level (length == num_layers + 1).
         kernel_size: Convolution kernel size. Defaults to 3.
-        activation: Activation function. Defaults to gelu.
+        activation: Activation function. Defaults to relu.
         normalize: Normalizer identifier. Defaults to None.
         reduce: Spatial-reduction callable (e.g. ``nn.functional.interpolate``).
         dilation: Dilation base forwarded to conv stack. Defaults to 1.
@@ -71,7 +72,7 @@ class SkipEncoder1d(nn.Module):
         channels: Sequence[int],
         timesteps: Sequence[int],
         kernel_size: int = 3,
-        activation: Callable[..., Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[..., Tensor] | None = None,
         normalize: NormalizerName | None = None,
         reduce: Callable[..., Tensor] = nn.functional.interpolate,
         dilation: int = 1,
@@ -86,7 +87,7 @@ class SkipEncoder1d(nn.Module):
             timesteps,
             kernel_size=kernel_size,
             normalize=normalize,
-            activation=activation,
+            activation=resolve_activation(activation),
             dropout=dropout,
             dilation=dilation,
         )
@@ -118,7 +119,7 @@ class SkipDecoder1d(nn.Module):
         timesteps: Timestep counts at each level (length == num_layers + 1).
                    Typically the encoder timestep schedule in reverse.
         kernel_size: Convolution kernel size. Defaults to 3.
-        activation: Activation function. Defaults to gelu.
+        activation: Activation function. Defaults to relu.
         normalize: Normalizer identifier. Defaults to None.
         reduce: Spatial-expansion callable (e.g. ``nn.functional.interpolate``).
         dilation: Dilation base forwarded to conv stack. Defaults to 1.
@@ -130,7 +131,7 @@ class SkipDecoder1d(nn.Module):
         channels: Sequence[int],
         timesteps: Sequence[int],
         kernel_size: int = 3,
-        activation: Callable[..., Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[..., Tensor] | None = None,
         normalize: NormalizerName | None = None,
         reduce: Callable[..., Tensor] = nn.functional.interpolate,
         dilation: int = 1,
@@ -145,7 +146,7 @@ class SkipDecoder1d(nn.Module):
             timesteps,
             kernel_size=kernel_size,
             normalize=normalize,
-            activation=activation,
+            activation=resolve_activation(activation),
             dropout=dropout,
             dilation=dilation,
         )

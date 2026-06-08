@@ -9,6 +9,7 @@ import torch
 
 from dlkit.common.errors import WorkflowError
 from dlkit.domain.nn.factory import build_model as _build_model
+from dlkit.domain.nn.factory import model_accepts_kwarg
 from dlkit.infrastructure.config.model_components import extract_init_kwargs
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -88,6 +89,12 @@ def build_model_from_checkpoint(
             ) from exc
 
     hyperparams = extract_init_kwargs(model_settings)
+    if (
+        model_settings.activation is not None
+        and "activation" not in hyperparams
+        and model_accepts_kwarg(model_cls, "activation")
+    ):
+        hyperparams = {**hyperparams, "activation": model_settings.activation}
     if contract is not None:
         hyperparams = _strip_contract_keys(hyperparams)
     model = _build_model(cast("type[torch.nn.Module]", model_cls), hyperparams, contract=contract)

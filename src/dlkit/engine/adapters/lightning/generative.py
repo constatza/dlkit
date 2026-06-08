@@ -53,7 +53,7 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
         loader = dm.train_dataloader()
         logger = get_logger(__name__)
         logger.debug("Starting transform fitting from training dataloader.")
-        self._batch_transformer.fit(loader)
+        self._batch_transformer.fit(loader, device=self.device)
         logger.debug("Finished transform fitting.")
 
     def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:

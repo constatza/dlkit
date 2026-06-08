@@ -1,7 +1,5 @@
 """Low-level neural-network type aliases."""
 
-from typing import Literal
+from dlkit.common.types import ActivationName, NormalizerName
 
-type NormalizerName = Literal["batch", "layer", "instance", "none"]
-
-__all__ = ["NormalizerName"]
+__all__ = ["NormalizerName", "ActivationName"]

@@ -12,8 +12,8 @@ from torch.distributions.normal import Normal
 from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
 from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
-from dlkit.domain.nn.types import NormalizerName
-from dlkit.domain.nn.utils import build_channel_schedule
+from dlkit.domain.nn.types import ActivationName, NormalizerName
+from dlkit.domain.nn.utils import build_channel_schedule, resolve_activation
 
 
 def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -74,7 +74,7 @@ class VAE1d(nn.Module):
         latent_width: Spatial width of the bottleneck feature map. Defaults to 1.
         num_layers: Number of encoder/decoder layers. Defaults to 3.
         kernel_size: Convolution kernel size. Defaults to 3.
-        activation: Activation function. Defaults to gelu.
+        activation: Activation function. Defaults to relu.
         normalize: Normalizer identifier. Defaults to None.
         dropout: Dropout probability. Defaults to 0.0.
         scale_of_latent: Multiplier for the intermediate projection size. Defaults to 4.
@@ -92,7 +92,7 @@ class VAE1d(nn.Module):
         latent_width: int = 1,
         num_layers: int = 3,
         kernel_size: int = 3,
-        activation: Callable[[torch.Tensor], torch.Tensor] = nn.functional.gelu,
+        activation: ActivationName | Callable[[torch.Tensor], torch.Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
         scale_of_latent: int = 4,
@@ -106,6 +106,7 @@ class VAE1d(nn.Module):
         self.in_length = in_length
         self.latent_size = latent_size
 
+        resolved = resolve_activation(activation)
         channels = build_channel_schedule(in_channels, latent_channels, num_layers + 1)
         timesteps = build_channel_schedule(in_length, latent_width, num_layers + 1)
 
@@ -113,7 +114,7 @@ class VAE1d(nn.Module):
             channels=channels,
             timesteps=timesteps,
             kernel_size=kernel_size,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
         )
@@ -129,7 +130,7 @@ class VAE1d(nn.Module):
             channels=channels[::-1],
             timesteps=timesteps[::-1],
             kernel_size=kernel_size,
-            activation=activation,
+            activation=resolved,
             normalize=normalize,
             dropout=dropout,
         )

@@ -73,9 +73,9 @@ class TestFFNNOptionalHiddenSize:
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
-        with pytest.raises(ValueError, match="hidden_size must be provided"):
-            FFNN(in_features=2, out_features=4, num_layers=2)
+    def test_defaults_to_max_when_not_square_and_no_hidden_size(self) -> None:
+        m = FFNN(in_features=2, out_features=4, num_layers=2)
+        assert m.embedding_layer.out_features == 4
 
 
 class TestFFNNSkipFalse:
@@ -91,9 +91,9 @@ class TestFFNNSkipFalse:
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2, skip=False)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_raises_when_not_square_and_no_hidden_size(self) -> None:
-        with pytest.raises(ValueError, match="hidden_size must be provided"):
-            FFNN(in_features=2, out_features=4, num_layers=2, skip=False)
+    def test_defaults_to_max_when_not_square_and_no_hidden_size(self) -> None:
+        m = FFNN(in_features=2, out_features=4, num_layers=2, skip=False)
+        assert m.embedding_layer.out_features == 4
 
 
 class TestVarWidthFFNN:
