@@ -35,6 +35,8 @@ _CONTRACT_KEYS: frozenset[str] = frozenset(
         "edge_dim",
         "branch_shape",
         "query_shape",
+        "branch_in_features",
+        "query_dim",
     }
 )
 

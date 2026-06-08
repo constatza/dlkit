@@ -212,6 +212,28 @@ class DatasetSettings(StringNamedComponentSettings):
             return tuple(_infer_entry_format(entry) for entry in value)
         return value
 
+    @field_validator("features", mode="after")
+    @classmethod
+    def _force_feature_role(cls, values: tuple[AnyEntry, ...]) -> tuple[AnyEntry, ...]:
+        """Ensure all feature entries have the FEATURE data role."""
+        return tuple(
+            v
+            if v.data_role == DataRole.FEATURE
+            else v.model_copy(update={"data_role": DataRole.FEATURE})
+            for v in values
+        )
+
+    @field_validator("targets", mode="after")
+    @classmethod
+    def _force_target_role(cls, values: tuple[AnyEntry, ...]) -> tuple[AnyEntry, ...]:
+        """Ensure all target entries have the TARGET data role."""
+        return tuple(
+            v
+            if v.data_role == DataRole.TARGET
+            else v.model_copy(update={"data_role": DataRole.TARGET})
+            for v in values
+        )
+
     @model_validator(mode="after")
     def validate_nested_paths(self) -> DatasetSettings:
         """Validate nested Feature/Target paths with eager validation."""
@@ -284,17 +306,7 @@ class DatasetSettings(StringNamedComponentSettings):
         base.pop("targets", None)
         # Combine features and targets into a single entries list.
         # Graph/timeseries datasets don't accept entries= so we omit when empty.
-        entries = [
-            e
-            if e.data_role == DataRole.FEATURE
-            else e.model_copy(update={"data_role": DataRole.FEATURE})
-            for e in self.features
-        ] + [
-            e
-            if e.data_role == DataRole.TARGET
-            else e.model_copy(update={"data_role": DataRole.TARGET})
-            for e in self.targets
-        ]
+        entries = list(self.features) + list(self.targets)
         if entries:
             base["entries"] = entries
         resolved = self.resolved_memmap_cache_dir

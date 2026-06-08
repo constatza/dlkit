@@ -115,10 +115,6 @@ class FlexibleBuildStrategy(IBuildStrategy):
             contract = resolve_contract(geometry, output_shapes)
         except (ValueError, ContractInferenceError) as exc:
             logger.warning("Contract inference failed ({}), falling back to shape bridge", exc)
-        except Exception as exc:
-            logger.warning(
-                "Unexpected error during contract inference ({}), model built from kwargs", exc
-            )
 
         wrapper_kwargs: dict[str, Any] = {
             "optimizer": training_settings.optimizer,

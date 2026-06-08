@@ -1,5 +1,15 @@
 # Neural Operator Architectures
 
+## Dataset Configuration & Field Roles
+
+Unlike standard regression models (e.g., FFNNs) that consume a single `FEATURE` field, continuous operator models (like DeepONet) map an input function $u$ to an output function $G(u)$ evaluated at specific query points $y$. 
+
+To successfully construct a DeepONet via the engine's automated contract resolution, the dataset configuration must explicitly distinguish these inputs:
+- **Branch Inputs** (the condition/sensor data representing $u$) must be assigned `FieldRole.FEATURE`.
+- **Trunk Inputs** (the continuous coordinates $y$) MUST be assigned `FieldRole.TARGET_COORDINATES`.
+
+If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the engine will assume a standard multi-input regression problem, fall back to a `TabulaRSpec`, and fail to initialize the DeepONet.
+
 ## Naming conventions
 
 - `branch_shape`: branch sample shape excluding batch
