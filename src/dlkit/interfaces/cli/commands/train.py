@@ -8,6 +8,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.api import train as api_train
 from dlkit.interfaces.api import validate_config
+from dlkit.interfaces.api.domain import TrainingOverrides
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result
@@ -115,14 +116,14 @@ def _run_training_impl(
         task = progress.add_task("Training in progress...", total=None)
         training_result = api_train(
             settings,
-            overrides={
-                "checkpoint_path": checkpoint,
-                "epochs": epochs,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate,
-                "experiment_name": experiment_name,
-                "run_name": run_name,
-            },
+            overrides=TrainingOverrides(
+                checkpoint_path=checkpoint,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                experiment_name=experiment_name,
+                run_name=run_name,
+            ),
             mlflow=mlflow,
         )
         progress.remove_task(task)

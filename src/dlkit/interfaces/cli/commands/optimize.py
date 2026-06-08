@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.interfaces.api import optimize as api_optimize
+from dlkit.interfaces.api.domain import OptimizationOverrides
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
@@ -77,10 +78,10 @@ def _run_optimization_impl(
 
         optimization_result = api_optimize(
             settings,
-            overrides={
-                "trials": trials,
-                "study_name": study_name,
-            },
+            overrides=OptimizationOverrides(
+                trials=trials,
+                study_name=study_name,
+            ),
             mlflow=mlflow,
         )
         progress.remove_task(task)
