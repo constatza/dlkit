@@ -51,9 +51,12 @@ The graph family follows the same residual/plain naming convention as FFNN:
 - `Simple...` prefix means plain, no residual connections
 - `Scaled...` means column-wise input scaling applied
 
-Representative exports from `dlkit.domain.nn` include:
+Representative exports from `dlkit.gnn` and `dlkit.domain.nn.graph` include:
 - residual: `GATv2Projection`, `ScaledGATv2Projection`
 - plain: `SimpleGATv2Projection`, `ScaledSimpleGATv2Projection`
+
+`dlkit.domain.nn` and `dlkit.nn` intentionally do not re-export graph classes.
+That keeps broad non-graph imports free of optional PyG side effects.
 
 For the full matrix, see `graph/graph.md`.
 
@@ -69,6 +72,14 @@ optional `ModelContractSpec`, and `**kwargs`.
 Built-in model families implement `from_contract()` accepting the appropriate
 `ModelContractSpec` variant (`TabulaRSpec`, `GridOperatorSpec`, `SequenceSpec`,
 `BranchTrunkSpec`, or `GraphContractSpec`).
+
+## Attention blocks
+
+`attention.transformer.TransformerEncoderBlock` keeps its current public
+constructor surface but disables the nested-tensor fast path whenever the live
+encoder-layer configuration cannot use it. With the current pre-LN
+(`norm_first=True`) encoder setup, that means nested tensors are disabled
+explicitly instead of relying on PyTorch to warn at runtime.
 
 ## Contract ↔ geometry mapping
 

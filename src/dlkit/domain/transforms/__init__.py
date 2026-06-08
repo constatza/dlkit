@@ -1,5 +1,3 @@
-from torch_geometric.transforms import BaseTransform
-
 from .base import (
     FittableTransform,
     IncrementalFittableTransform,
@@ -22,7 +20,6 @@ from .minmax import MinMaxScaler
 from .pca import PCA
 from .permute import Permutation
 from .sample_norm import SampleNormL2
-from .spectral import SpectralRadiusNorm
 from .standard import StandardScaler
 from .subset import TensorSubset
 from .truncated_svd import TruncatedSVD
@@ -38,8 +35,6 @@ __all__ = [
     "TruncatedSVD",
     "Permutation",
     "TensorSubset",
-    "BaseTransform",
-    "SpectralRadiusNorm",
     "SampleNormL2",
     # Protocols
     "FittableTransform",

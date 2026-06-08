@@ -252,17 +252,17 @@ class TestVectorMetrics:
 
 
 class TestEnergyNormMetrics:
-    """Test dense/sparse paths for quadratic forms with batched matrices."""
+    """Test dense-only quadratic forms with batched matrices."""
 
-    def test_quadratic_form_sparse_batched_matches_dense(self):
-        """Sparse batched (B, D, D) path should match dense reference."""
+    def test_quadratic_form_dense_shared_matrix(self):
+        """Shared dense (1, D, D) matrices should broadcast across the batch."""
         vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
         dense_matrix = torch.tensor([[[5.0, 1.0], [1.0, 6.0]]], dtype=torch.float64)
 
-        dense_result = compute_quadratic_form(vector, dense_matrix)
-        sparse_result = compute_quadratic_form(vector, dense_matrix.to_sparse_coo())
+        result = compute_quadratic_form(vector, dense_matrix)
+        expected = torch.tensor([33.0, 165.0], dtype=torch.float64)
 
-        assert torch.allclose(sparse_result, dense_result)
+        assert torch.allclose(result, expected)
 
     def test_quadratic_form_unbatched_matrix_fails(self):
         """Caller must pass at least (1, D, D), unbatched (D, D) is rejected."""
@@ -280,8 +280,8 @@ class TestEnergyNormMetrics:
         with pytest.raises(ValueError, match="Expected matrix tensor with shape \\(B, D, D\\)"):
             compute_quadratic_form(vector, cast(Any, invalid_matrix))
 
-    def test_quadratic_form_sparse_per_sample_matches_dense(self):
-        """Per-sample (B, D, D) sparse COO path should match dense batch reference."""
+    def test_quadratic_form_dense_per_sample_matrix(self):
+        """Per-sample dense (B, D, D) matrices should produce one value per sample."""
         vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
         dense_batch = torch.tensor(
             [
@@ -290,26 +290,18 @@ class TestEnergyNormMetrics:
             ],
             dtype=torch.float64,
         )
-        sparse_batch = dense_batch.to_sparse_coo()
+        result = compute_quadratic_form(vector, dense_batch)
+        expected = torch.tensor([14.0, 140.0], dtype=torch.float64)
 
-        dense_result = compute_quadratic_form(vector, dense_batch)
-        sparse_result = compute_quadratic_form(vector, sparse_batch)
+        assert torch.allclose(result, expected)
 
-        assert torch.allclose(sparse_result, dense_result)
-
-    def test_quadratic_form_sparse_batch_mismatch_fails(self):
-        """Sparse batch mismatch should raise ValueError."""
+    def test_quadratic_form_sparse_matrix_fails(self):
+        """Sparse matrices are no longer supported in energy-norm primitives."""
         vector = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
-        mismatched = torch.stack(
-            [
-                torch.eye(2, dtype=torch.float64),
-                2 * torch.eye(2, dtype=torch.float64),
-                3 * torch.eye(2, dtype=torch.float64),
-            ]
-        ).to_sparse_coo()
+        sparse_matrix = torch.eye(2, dtype=torch.float64).unsqueeze(0).to_sparse_coo()
 
-        with pytest.raises(ValueError, match="Batch mismatch"):
-            compute_quadratic_form(vector, mismatched)
+        with pytest.raises(ValueError, match="require dense batched tensors"):
+            compute_quadratic_form(vector, sparse_matrix)
 
 
 # ============================================================================
@@ -501,52 +493,29 @@ class TestUpdateComputeSplit:
 
         assert torch.allclose(direct, split)
 
-    def test_relative_energy_norm_update_sparse_matches_dense(self):
-        """Sparse and dense batched matrices should produce the same per-sample values."""
+    def test_relative_energy_norm_update_dense_matches_direct(self):
+        """Relative energy update should agree with the dense direct computation."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
         dense_matrix = torch.eye(2).unsqueeze(0)
-        sparse_matrix = dense_matrix.to_sparse_coo()
 
         dense = _relative_energy_norm_update(preds, target, dense_matrix, eps=1e-8)
-        sparse = _relative_energy_norm_update(preds, target, sparse_matrix, eps=1e-8)
+        direct = safe_divide(
+            compute_energy_norm(preds - target, dense_matrix),
+            compute_energy_norm(target, dense_matrix),
+            eps=1e-8,
+        )
 
-        assert torch.allclose(dense, sparse)
+        assert torch.allclose(dense, direct)
 
-    def test_relative_energy_norm_update_sparse_per_sample_matches_dense(self):
-        """Relative energy update should support sparse per-sample (B, D, D) matrices."""
+    def test_relative_energy_norm_update_sparse_matrix_fails(self):
+        """Relative energy updates now reject sparse matrices explicitly."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_batch = torch.tensor(
-            [
-                [[2.0, 0.0], [0.0, 1.0]],
-                [[3.0, 0.2], [0.2, 2.0]],
-            ]
-        )
-        sparse_batch = dense_batch.to_sparse_coo()
+        sparse_matrix = torch.eye(2).unsqueeze(0).to_sparse_coo()
 
-        dense = _relative_energy_norm_update(preds, target, dense_batch, eps=1e-8)
-        sparse = _relative_energy_norm_update(preds, target, sparse_batch, eps=1e-8)
-
-        assert torch.allclose(dense, sparse)
-
-    def test_relative_energy_norm_update_sparse_has_no_cross_call_state(self):
-        """Sparse preprocessing must be call-scoped with no cross-call leakage."""
-        preds = torch.tensor([[0.5, 1.5], [2.0, 3.0]])
-        target = torch.tensor([[1.0, 2.0], [2.5, 3.5]])
-
-        dense_a = torch.tensor([[[2.0, 0.0], [0.0, 1.0]]])
-        dense_b = torch.tensor([[[1.0, 0.4], [0.4, 3.0]]])
-        sparse_a = dense_a.to_sparse_coo()
-        sparse_b = dense_b.to_sparse_coo()
-
-        expected_a = _relative_energy_norm_update(preds, target, dense_a, eps=1e-8)
-        expected_b = _relative_energy_norm_update(preds, target, dense_b, eps=1e-8)
-        actual_a = _relative_energy_norm_update(preds, target, sparse_a, eps=1e-8)
-        actual_b = _relative_energy_norm_update(preds, target, sparse_b, eps=1e-8)
-
-        assert torch.allclose(actual_a, expected_a)
-        assert torch.allclose(actual_b, expected_b)
+        with pytest.raises(ValueError, match="require dense batched tensors"):
+            _relative_energy_norm_update(preds, target, sparse_matrix, eps=1e-8)
 
     @pytest.mark.parametrize(
         "compute_fn",

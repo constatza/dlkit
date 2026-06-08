@@ -1,6 +1,7 @@
 import inspect
 
 import dlkit.domain.nn as domain_nn
+import dlkit.gnn as public_gnn
 import dlkit.nn as public_nn
 
 # --- Dense FFNN exports ---
@@ -99,7 +100,7 @@ def test_graph_simple_variants_exported_from_graph_module():
         assert hasattr(graph_mod, name), f"{name!r} missing from dlkit.domain.nn.graph"
 
 
-def test_graph_variants_are_reexported_from_top_level_namespaces():
+def test_graph_variants_are_reexported_from_graph_namespaces():
     names = (
         "GATv2Message",
         "SimpleGATv2Message",
@@ -109,8 +110,9 @@ def test_graph_variants_are_reexported_from_top_level_namespaces():
         "ScaledSimpleGATv2Projection",
     )
     for name in names:
-        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
-        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+        assert not hasattr(domain_nn, name), f"{name!r} should not be exported from dlkit.domain.nn"
+        assert not hasattr(public_nn, name), f"{name!r} should not be exported from dlkit.nn"
+        assert hasattr(public_gnn, name), f"{name!r} missing from dlkit.gnn"
 
 
 def test_gatv2_projection_is_a_class():

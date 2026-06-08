@@ -212,20 +212,17 @@ class TestCorrectness:
 
         assert torch.allclose(direct, split)
 
-    def test_relative_energy_norm_loss_sparse_matches_dense(self):
-        """Sparse and dense matrices should produce the same relative energy loss."""
+    def test_relative_energy_norm_loss_sparse_matrix_fails(self):
+        """Relative energy loss now requires dense batched matrices."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
-        dense_matrix = torch.eye(2).unsqueeze(0)
-        sparse_matrix = dense_matrix.to_sparse_coo()
+        sparse_matrix = torch.eye(2).unsqueeze(0).to_sparse_coo()
 
-        dense = relative_energy_norm_loss(preds, target, dense_matrix, eps=1e-8)
-        sparse = relative_energy_norm_loss(preds, target, sparse_matrix, eps=1e-8)
+        with pytest.raises(ValueError, match="require dense batched tensors"):
+            relative_energy_norm_loss(preds, target, sparse_matrix, eps=1e-8)
 
-        assert torch.allclose(dense, sparse)
-
-    def test_relative_energy_norm_loss_sparse_per_sample_matches_dense(self):
-        """Sparse per-sample (B, D, D) relative energy loss should match dense."""
+    def test_relative_energy_norm_loss_sparse_per_sample_matrix_fails(self):
+        """Relative energy loss rejects sparse per-sample matrices too."""
         preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         target = torch.tensor([[1.5, 2.5], [2.5, 3.5]])
         dense_batch = torch.tensor(
@@ -236,10 +233,8 @@ class TestCorrectness:
         )
         sparse_batch = dense_batch.to_sparse_coo()
 
-        dense = relative_energy_norm_loss(preds, target, dense_batch, eps=1e-8)
-        sparse = relative_energy_norm_loss(preds, target, sparse_batch, eps=1e-8)
-
-        assert torch.allclose(dense, sparse)
+        with pytest.raises(ValueError, match="require dense batched tensors"):
+            relative_energy_norm_loss(preds, target, sparse_batch, eps=1e-8)
 
 
 # ============================================================================

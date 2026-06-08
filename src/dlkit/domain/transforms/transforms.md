@@ -11,7 +11,6 @@ built on `torch.nn.Module`. All transforms are checkpointable (fitted state pers
 | `StandardScaler` | `*, dim=0` | Z-score normalization: subtracts mean, divides by std |
 | `MinMaxScaler` | `*, dim=0` | Scales each feature to [-1, 1] |
 | `SampleNormL2` | `*, eps=1e-8, feature_dims=None` | Per-sample L2 normalization along specified feature dims |
-| `SpectralRadiusNorm` | — | Divides the tensor by its spectral radius (largest singular value) |
 | `PCA` | `*, n_components, n_power_iterations=2` | Reduces last dim via `torch.pca_lowrank`; requires full data in memory |
 | `IncrementalPCA` | `*, n_components, batch_size=256` | Streaming PCA via sklearn `partial_fit`; use for large datasets |
 | `TruncatedSVD` | `*, n_components, n_iter=4` | SVD without mean-centering; prefer for sparse or non-negative data |
@@ -39,6 +38,12 @@ built on `torch.nn.Module`. All transforms are checkpointable (fitted state pers
 
 All protocols are `runtime_checkable`; use `isinstance(t, FittableTransform)` to inspect
 capabilities at runtime.
+
+## Optional graph-adjacent transforms
+
+`dlkit.domain.transforms` intentionally keeps its broad package surface free of
+PyG imports. Import `SpectralRadiusNorm` directly from
+`dlkit.domain.transforms.spectral` when you need it.
 
 ## TOML configuration
 

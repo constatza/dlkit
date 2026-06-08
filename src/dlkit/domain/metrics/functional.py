@@ -48,18 +48,6 @@ Examples:
     torch.mean, torch.sum, partial(torch.mean, dim=0)
 """
 
-_SPARSE_LAYOUTS = frozenset(
-    layout
-    for layout in (
-        getattr(torch, "sparse_coo", None),
-        getattr(torch, "sparse_csr", None),
-        getattr(torch, "sparse_csc", None),
-        getattr(torch, "sparse_bsr", None),
-        getattr(torch, "sparse_bsc", None),
-    )
-    if layout is not None
-)
-
 
 # ============================================================================
 # 1. COMPOSABLE BUILDING BLOCKS
@@ -255,7 +243,7 @@ def _compute_Av(matrix: Tensor, vector: Tensor) -> Tensor:
     """Compute batched matrix-vector product.
 
     Args:
-        matrix: (B, D, D) dense or sparse tensor.
+        matrix: (B, D, D) dense tensor.
         vector: (B, D) batch of vectors.
 
     Returns:
@@ -276,70 +264,21 @@ def _compute_Av(matrix: Tensor, vector: Tensor) -> Tensor:
 
     batch_vectors, dim = vector.shape
 
-    if matrix.layout == torch.strided:
-        batch_matrices = matrix.size(0)
-        if batch_matrices == 1:
-            return torch.mm(matrix.squeeze(0), vector.T).T
-        if batch_matrices == batch_vectors:
-            return torch.bmm(matrix, vector.unsqueeze(-1)).squeeze(-1)
+    if matrix.layout != torch.strided:
         raise ValueError(
-            f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
-            "Expected matrix batch to be 1 (shared) or equal to vector batch."
+            f"Unsupported matrix layout {matrix.layout} for shape {tuple(matrix.shape)}. "
+            "Energy-norm metrics require dense batched tensors (B, D, D)."
         )
 
-    if matrix.layout in _SPARSE_LAYOUTS:
-        prepared, shared = _prepare_sparse_kernel(matrix, batch_vectors, dim)
-        return _apply_prepared_kernel(prepared, vector, shared=shared)
-
-    raise ValueError(
-        f"Unsupported matrix layout {matrix.layout} for shape {tuple(matrix.shape)}. "
-        "Expected dense or sparse batched tensor (B, D, D)."
-    )
-
-
-def _prepare_sparse_kernel(matrix: Tensor, batch_vectors: int, dim: int) -> tuple[Tensor, bool]:
-    """Prepare sparse kernel once for repeated sparse matvec operations.
-
-    Returns:
-        Tuple of (prepared_sparse_matrix, shared_matrix_flag).
-    """
-    sparse = matrix.to_sparse_coo().coalesce()
-    batch_matrices = sparse.size(0)
-    idx = sparse.indices()
-    values = sparse.values()
-
+    batch_matrices = matrix.size(0)
     if batch_matrices == 1:
-        shared_idx = torch.stack([idx[1], idx[2]])
-        shared = torch.sparse_coo_tensor(
-            shared_idx, values, (dim, dim), device=sparse.device, dtype=sparse.dtype
-        ).coalesce()
-        return shared, True
-
+        return torch.mm(matrix.squeeze(0), vector.T).T
     if batch_matrices == batch_vectors:
-        block_idx = torch.stack([idx[0] * dim + idx[1], idx[0] * dim + idx[2]])
-        block = torch.sparse_coo_tensor(
-            block_idx,
-            values,
-            (batch_vectors * dim, batch_vectors * dim),
-            device=sparse.device,
-            dtype=sparse.dtype,
-        ).coalesce()
-        return block, False
-
+        return torch.bmm(matrix, vector.unsqueeze(-1)).squeeze(-1)
     raise ValueError(
         f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
         "Expected matrix batch to be 1 (shared) or equal to vector batch."
     )
-
-
-def _apply_prepared_kernel(prepared: Tensor, vector: Tensor, *, shared: bool) -> Tensor:
-    """Apply already-prepared sparse kernel to a batch of vectors."""
-    if shared:
-        return torch.mm(prepared, vector.T).T
-
-    batch_vectors, dim = vector.shape
-    flat_result = torch.mm(prepared, vector.reshape(batch_vectors * dim, 1))
-    return flat_result.reshape(batch_vectors, dim)
 
 
 def compute_quadratic_form(vector: Tensor, matrix: Tensor) -> Tensor:
@@ -347,7 +286,7 @@ def compute_quadratic_form(vector: Tensor, matrix: Tensor) -> Tensor:
 
     Shape Contract:
         vector: (B, D)
-        matrix: (B, D, D) dense or sparse batched matrix
+        matrix: (B, D, D) dense batched matrix
         output: (B,) — one scalar per sample
 
     Args:
@@ -425,14 +364,10 @@ def _compute_relative_energy_components(
                 f"Batch mismatch: matrix batch={batch_matrices}, vector batch={batch_vectors}. "
                 "Expected matrix batch to be 1 (shared) or equal to vector batch."
             )
-    elif matrix.layout in _SPARSE_LAYOUTS:
-        prepared, shared = _prepare_sparse_kernel(matrix, batch_vectors, dim)
-        error_Av = _apply_prepared_kernel(prepared, error_vectors, shared=shared)
-        target_Av = _apply_prepared_kernel(prepared, target, shared=shared)
-    else:
+    elif matrix.layout != torch.strided:
         raise ValueError(
             f"Unsupported matrix layout {matrix.layout} for shape {tuple(matrix.shape)}. "
-            "Expected dense or sparse batched tensor (B, D, D)."
+            "Energy-norm metrics require dense batched tensors (B, D, D)."
         )
 
     error_norms = torch.sqrt((error_vectors * error_Av).sum(dim=-1).clamp(min=0))

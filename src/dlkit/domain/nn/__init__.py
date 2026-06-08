@@ -1,4 +1,4 @@
-from . import attention, cae, contracts, encoder, ffnn, graph, operators, primitives, spectral
+from . import attention, cae, contracts, encoder, ffnn, operators, primitives, spectral
 from .contracts import (
     BranchTrunkSpec,
     ContractConsumer,
@@ -49,14 +49,6 @@ from .ffnn.scale_equivariant import (
     ScaleEquivariantSimpleSPDFFNN,
     ScaleEquivariantSPDFactorizedFFNN,
     ScaleEquivariantSPDFFNN,
-)
-from .graph import (
-    GATv2Message,
-    GATv2Projection,
-    ScaledGATv2Projection,
-    ScaledSimpleGATv2Projection,
-    SimpleGATv2Message,
-    SimpleGATv2Projection,
 )
 from .operators import (
     DeepONet,
@@ -157,13 +149,6 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
     "ScaleEquivariantFactorizedFFNN",
     "ScaleEquivariantSimpleFactorizedFFNN",
-    # Graph neural networks
-    "GATv2Message",
-    "SimpleGATv2Message",
-    "GATv2Projection",
-    "SimpleGATv2Projection",
-    "ScaledGATv2Projection",
-    "ScaledSimpleGATv2Projection",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",
@@ -201,7 +186,6 @@ __all__ = [
     "cae",
     "encoder",
     "ffnn",
-    "graph",
     "operators",
     "primitives",
     "spectral",

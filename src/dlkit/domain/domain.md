@@ -9,6 +9,10 @@
 - `metrics`
 - `losses`
 
+Energy-norm metrics and the corresponding loss helpers are dense-only at the
+domain boundary: callers must provide batched dense `(B, D, D)` matrices rather
+than sparse tensors.
+
 ## Shapes
 The shape subsystem is split into focused modules:
 - `inference_engine.py`
