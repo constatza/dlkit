@@ -51,8 +51,11 @@ class FirstStageTuningPolicyAdapter:
     def adapt(self, policy: OptimizerPolicySettings) -> OptimizerPolicySettings:
         """Return a tuning-only projection of the optimizer policy."""
         if not policy.stages:
-            return policy.model_copy(deep=True)
-        projected_stage = policy.stages[0].model_copy(deep=True, update={"trigger": None})
+            return policy.model_copy(deep=True, update={"default_scheduler": None})
+        projected_stage = policy.stages[0].model_copy(
+            deep=True,
+            update={"trigger": None, "scheduler": None},
+        )
         return OptimizerPolicySettings(stages=(projected_stage,))
 
 

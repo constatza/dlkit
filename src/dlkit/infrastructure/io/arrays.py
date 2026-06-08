@@ -78,6 +78,12 @@ _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+def _numpy_array_to_tensor(data: np.ndarray, *, dtype: torch.dtype) -> Tensor:
+    """Convert a NumPy array to a tensor without exposing read-only storage."""
+    array = data if data.flags.writeable else data.copy()
+    return torch.from_numpy(array).to(dtype=dtype)
+
+
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def load_array(
     path: FilePath,
@@ -132,7 +138,7 @@ def load_array(
 
     data = loader(path, **kwargs)
     if isinstance(data, np.ndarray):
-        return torch.from_numpy(data).to(dtype=dtype)
+        return _numpy_array_to_tensor(data, dtype=dtype)
     if isinstance(data, Tensor):
         return data.to(dtype=dtype)
 

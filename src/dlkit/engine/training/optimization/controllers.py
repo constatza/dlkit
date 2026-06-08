@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
 from torch import Tensor, nn
 from torch.optim import LBFGS
@@ -20,6 +21,39 @@ from .stepping import IStepPolicy, LBFGSStageStepper, StepAllOptimizers
 
 if TYPE_CHECKING:
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+
+
+@dataclass(slots=True)
+class _ManualSchedulerState:
+    """Epoch-local state tracking whether the active manual stage actually stepped."""
+
+    stepped_stage_index: int | None = None
+
+    def record_step(self, stage_index: int) -> None:
+        self.stepped_stage_index = stage_index
+
+    def clear(self) -> None:
+        self.stepped_stage_index = None
+
+    def stepped_current_stage(self, stage_index: int) -> bool:
+        return self.stepped_stage_index == stage_index
+
+    def state_dict(self) -> dict[str, int | None]:
+        return {"stepped_stage_index": self.stepped_stage_index}
+
+    def load_state_dict(self, state: dict[str, object]) -> None:
+        stepped_stage_index = state.get("stepped_stage_index")
+        self.stepped_stage_index = (
+            stepped_stage_index if isinstance(stepped_stage_index, int) else None
+        )
+
+
+def _mark_optimizer_stepped(optimizer: nn.Module | object) -> None:
+    """Mirror PyTorch scheduler bookkeeping when Lightning owns the real step call."""
+    cast(Any, optimizer)._opt_called = True
+    if isinstance(optimizer, ConcurrentOptimizer):
+        for sub_optimizer in optimizer.sub_optimizers:
+            cast(Any, sub_optimizer)._opt_called = True
 
 
 def _requires_manual_optimization(program: RunningOptimizerPolicy) -> bool:
@@ -80,6 +114,8 @@ def _step_stage_scheduler(stage: ActiveStage, epoch: int, metrics: dict[str, flo
     frequency = max(stage.scheduler_frequency, 1)
     if (epoch + 1) % frequency != 0:
         return
+
+    _mark_optimizer_stepped(stage.optimizer)
 
     if isinstance(scheduler, ReduceLROnPlateau):
         current = metrics.get(stage.scheduler_monitor)
@@ -375,6 +411,7 @@ class ManualOptimizationController(IOptimizationController):
         self._program = program
         self._repository = repository
         self._step_policy = step_policy
+        self._scheduler_state = _ManualSchedulerState()
 
     @property
     def requires_manual_optimization(self) -> bool:
@@ -407,7 +444,9 @@ class ManualOptimizationController(IOptimizationController):
         Returns:
             The computed loss tensor.
         """
-        return self._step_policy.step(self._program.current, loss_fn, host)
+        loss = self._step_policy.step(self._program.current, loss_fn, host)
+        self._scheduler_state.record_step(self._program.current.stage_index)
+        return loss
 
     def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None:
         """Evaluate triggers and advance to next stage if needed.
@@ -417,10 +456,14 @@ class ManualOptimizationController(IOptimizationController):
             metrics: Dict of current metrics.
         """
         current = self._program.current
-        _step_stage_scheduler(current, epoch, metrics)
-        if current.trigger.update(epoch, metrics):
-            current.trigger.reset()
-            self._program.advance()
+        try:
+            if self._scheduler_state.stepped_current_stage(current.stage_index):
+                _step_stage_scheduler(current, epoch, metrics)
+            if current.trigger.update(epoch, metrics):
+                current.trigger.reset()
+                self._program.advance()
+        finally:
+            self._scheduler_state.clear()
 
     def current_learning_rates(self) -> dict[str, float]:
         """Return learning rates for all currently active optimizers.
@@ -447,7 +490,9 @@ class ManualOptimizationController(IOptimizationController):
         Returns:
             State dict from repository.
         """
-        return self._repository.save(self._program)
+        state = self._repository.save(self._program)
+        state["manual_scheduler_state"] = self._scheduler_state.state_dict()
+        return state
 
     def load_state_dict(self, state: dict[str, object]) -> None:
         """Restore state from checkpoint.
@@ -456,3 +501,6 @@ class ManualOptimizationController(IOptimizationController):
             state: State dict from state_dict().
         """
         self._repository.restore(self._program, state)
+        scheduler_state = state.get("manual_scheduler_state")
+        if isinstance(scheduler_state, dict):
+            self._scheduler_state.load_state_dict(cast(dict[str, object], scheduler_state))

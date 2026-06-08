@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 from dlkit.common import TrainingResult
 from dlkit.engine.training.optimization.controllers import ManualOptimizationController
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
@@ -86,9 +88,15 @@ def test_graph_staged_training_succeeds_without_lr_tuning(
     """Sequential graph staged training should complete successfully."""
     settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=False)
 
-    result = api_train(settings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = api_train(settings)
 
     assert isinstance(result, TrainingResult)
+    assert all(
+        "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+        for w in caught
+    )
 
 
 def test_graph_staged_training_succeeds_with_lr_tuning(
@@ -97,6 +105,12 @@ def test_graph_staged_training_succeeds_with_lr_tuning(
     """Sequential graph staged training should complete even when LR tuning is enabled."""
     settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=True)
 
-    result = api_train(settings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = api_train(settings)
 
     assert isinstance(result, TrainingResult)
+    assert all(
+        "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+        for w in caught
+    )

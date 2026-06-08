@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, cast
 
 import pytest
@@ -87,7 +88,9 @@ def test_standard_staged_training_succeeds_with_lr_tuning(
     """Executor-level staged LR tuning should update stage 0 and keep stage 1 unchanged."""
     settings = _build_standard_staged_settings(training_settings)
 
-    result = api_train(settings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = api_train(settings)
 
     assert isinstance(result, TrainingResult)
     assert result.model_state is not None
@@ -96,6 +99,10 @@ def test_standard_staged_training_succeeds_with_lr_tuning(
     stage_1_lr = controller._program.stages[1].optimizer.param_groups[0]["lr"]
     assert stage_0_lr != pytest.approx(1e-3)
     assert stage_1_lr == pytest.approx(1e-3)
+    assert all(
+        "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+        for w in caught
+    )
 
 
 def test_executor_restores_manual_controller_after_lr_tuning(

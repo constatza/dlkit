@@ -55,8 +55,12 @@ Schedulers are attached to optimizer-policy stages.
   `ConcurrentOptimizer` wrapper that owns all sub-optimizers.
 - LBFGS stages can use schedulers; closure-based stepping affects optimizer
   execution semantics, not scheduler compatibility.
-- In manual mode, the current stage scheduler is stepped at `on_epoch_end` for
-  the epoch that just finished, before any trigger evaluation or stage advance.
+- In manual mode, the current stage scheduler is stepped at `on_epoch_end` only
+  when DLKit recorded at least one successful optimizer step for that stage in
+  the epoch that just finished.
+- Before DLKit steps a manual-mode scheduler, it marks the underlying optimizer
+  as stepped for PyTorch's scheduler bookkeeping. This keeps scheduler ownership
+  inside DLKit without relying on warning suppression.
 - `scheduler_frequency` is treated as an epoch cadence in manual mode.
 - `ReduceLROnPlateau` consumes the configured monitor metric from callback
   metrics; if that metric is missing while the scheduler is due, training raises
@@ -79,6 +83,8 @@ keeps LR tuning separate from the live optimization program:
 - single-stage policies are tuned directly
 - sequential staged policies are tuned through a temporary projection that
   contains only stage 0
+- projected LR-tuning policies strip schedulers and triggers before handing the
+  optimizer view to Lightning
 - the suggested learning rate is written back only to stage 0 of the real
   policy before training starts
 - later stages keep their configured learning rates unchanged

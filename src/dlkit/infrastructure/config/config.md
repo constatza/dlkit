@@ -222,7 +222,8 @@ new_settings = update_settings(
   and `.zarr` before discriminated-union validation. Ambiguous paths should
   use an explicit `format = "..."`.
 - Component `module_path` values remain optional; when provided they are
-  validated at config load time, and runtime builders still apply default module
+  validated at config load time via module discovery without executing the
+  target module body, and runtime builders still apply default module
   namespaces when omitted.
 - `InferenceWorkflowConfig.has_dataset_config` is the explicit predicate for
   dataset-backed batch prediction.

@@ -9,6 +9,9 @@ This module tests the new eager validation system where:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import warnings
 from pathlib import Path
 from typing import cast
@@ -353,6 +356,111 @@ class TestWorkflowCrossValidation:
             OptimizationWorkflowConfig.model_validate(config_dict)
 
         assert not recorded
+
+
+class TestImportIsolation:
+    """Ensure non-graph workflows do not import graph backends eagerly."""
+
+    @staticmethod
+    def _run_warning_error_import(code: str) -> subprocess.CompletedProcess[str]:
+        repo_root = Path(__file__).resolve().parents[3]
+        env = os.environ.copy()
+        pythonpath = str(repo_root / "src")
+        env["PYTHONPATH"] = (
+            pythonpath
+            if not env.get("PYTHONPATH")
+            else f"{pythonpath}{os.pathsep}{env['PYTHONPATH']}"
+        )
+        env["MPLCONFIGDIR"] = "/tmp/matplotlib"
+        return subprocess.run(
+            [sys.executable, "-W", "error", "-c", code],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_importing_transforms_base_is_graph_free_under_warning_error(self) -> None:
+        result = self._run_warning_error_import("import dlkit.domain.transforms.base")
+        assert result.returncode == 0, result.stderr
+
+    def test_importing_broad_dataset_namespace_is_graph_free_under_warning_error(self) -> None:
+        result = self._run_warning_error_import(
+            "from dlkit.engine.data.datasets import FlexibleDataset"
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_importing_broad_datamodule_namespace_is_graph_free_under_warning_error(self) -> None:
+        result = self._run_warning_error_import(
+            "from dlkit.engine.adapters.lightning.datamodules import InMemoryModule"
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_validating_non_graph_training_config_is_warning_clean(self) -> None:
+        code = """
+from pathlib import Path
+import tempfile
+import numpy as np
+from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    tmp = Path(tmp_dir)
+    features = tmp / "features.npy"
+    targets = tmp / "targets.npy"
+    np.save(features, np.random.rand(8, 4))
+    np.save(targets, np.random.rand(8, 1))
+    TrainingWorkflowConfig.model_validate(
+        {
+            "SESSION": {"name": "train_cfg", "seed": 1},
+            "TRAINING": {
+                "epochs": 1,
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+            },
+            "DATAMODULE": {
+                "name": "InMemoryModule",
+                "module_path": "dlkit.engine.adapters.lightning.datamodules",
+                "dataloader": {"batch_size": 2},
+            },
+            "DATASET": {
+                "features": [{"name": "x", "format": "npy", "path": str(features)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets)}],
+            },
+            "MODEL": {
+                "name": "LinearNetwork",
+                "module_path": "dlkit.domain.nn.ffnn",
+                "input_size": 4,
+                "output_size": 1,
+            },
+        }
+    )
+"""
+        result = self._run_warning_error_import(code)
+        assert result.returncode == 0, result.stderr
+
+    def test_validating_non_graph_inference_config_is_warning_clean(self) -> None:
+        code = """
+from pathlib import Path
+import tempfile
+from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    checkpoint = Path(tmp_dir) / "model.ckpt"
+    checkpoint.write_text("fake checkpoint")
+    InferenceWorkflowConfig.model_validate(
+        {
+            "SESSION": {"name": "infer_cfg", "workflow": "inference", "seed": 1},
+            "MODEL": {
+                "name": "LinearNetwork",
+                "module_path": "dlkit.domain.nn.ffnn",
+                "checkpoint": str(checkpoint),
+            },
+        }
+    )
+"""
+        result = self._run_warning_error_import(code)
+        assert result.returncode == 0, result.stderr
 
 
 class TestSessionPrecisionAliases:

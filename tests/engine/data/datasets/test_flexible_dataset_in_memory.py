@@ -6,6 +6,7 @@ enabling testing without file I/O and supporting programmatic API usage.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any, cast
 
@@ -217,6 +218,20 @@ class TestLoadOrConvertTensor:
         assert isinstance(result, torch.Tensor)
         assert result.shape == (5, 2)
         assert result.dtype == torch.float32
+
+    def test_convert_read_only_numpy_array_copies_before_tensor_conversion(self) -> None:
+        """Read-only in-memory arrays must not trigger PyTorch writability warnings."""
+        array = np.arange(6, dtype=np.float32).reshape(3, 2)
+        array.flags.writeable = False
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _load_or_convert_tensor(array)
+
+        result[0, 0] = 42.0
+
+        assert result[0, 0].item() == pytest.approx(42.0)
+        assert all("not writable" not in str(warning.message) for warning in caught)
 
     def test_convert_torch_tensor(self, sample_torch_tensor: torch.Tensor):
         """Test _load_or_convert_tensor() handles torch.Tensor input."""

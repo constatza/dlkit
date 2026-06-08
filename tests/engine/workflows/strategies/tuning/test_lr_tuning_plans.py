@@ -29,7 +29,8 @@ def test_single_stage_policy_is_supported() -> None:
     plan = get_lr_tuning_plan(policy)
 
     assert isinstance(plan, SupportedLRTuningPlan)
-    assert plan.projected_policy == policy
+    assert plan.projected_policy.default_optimizer == policy.default_optimizer
+    assert plan.projected_policy.default_scheduler is None
 
 
 def test_multi_stage_policy_projects_only_first_stage() -> None:
@@ -53,7 +54,7 @@ def test_multi_stage_policy_projects_only_first_stage() -> None:
     assert isinstance(plan, SupportedLRTuningPlan)
     assert len(plan.projected_policy.stages) == 1
     assert plan.projected_policy.stages[0].optimizer == policy.stages[0].optimizer
-    assert plan.projected_policy.stages[0].scheduler == policy.stages[0].scheduler
+    assert plan.projected_policy.stages[0].scheduler is None
     assert plan.projected_policy.stages[0].trigger is None
 
 

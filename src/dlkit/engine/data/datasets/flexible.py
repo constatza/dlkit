@@ -22,6 +22,7 @@ from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-e
 from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
 from dlkit.infrastructure.config.normalized_entry import NormalizedEntry as _NormalizedEntry
 from dlkit.infrastructure.io import load_array
+from dlkit.infrastructure.io.arrays import _numpy_array_to_tensor
 from dlkit.infrastructure.zarr import ILazyReader
 
 from .base import BaseDataset, register_dataset
@@ -126,19 +127,15 @@ def _load_or_convert_tensor(
     """
     # Case 1: Already a torch.Tensor or numpy array (in-memory data)
     if isinstance(source, (torch.Tensor, np.ndarray)):
-        tensor = torch.as_tensor(source)  # Zero-copy for numpy arrays
+        resolved_dtype = dtype
+        if resolved_dtype is None:
+            from dlkit.infrastructure.precision.service import get_precision_service
 
-        # Apply dtype conversion if specified
-        if dtype is not None:
-            return tensor.to(dtype=dtype)
-
-        # Use PrecisionService for dtype if not specified
-        # This respects the global precision context set by precision_override()
-        from dlkit.infrastructure.precision.service import get_precision_service
-
-        precision_service = get_precision_service()
-        resolved_dtype = precision_service.get_torch_dtype()
-        return tensor.to(dtype=resolved_dtype)
+            precision_service = get_precision_service()
+            resolved_dtype = precision_service.get_torch_dtype()
+        if isinstance(source, np.ndarray):
+            return _numpy_array_to_tensor(source, dtype=resolved_dtype)
+        return source.to(dtype=resolved_dtype)
 
     # Case 2: File path - delegate to existing load_array()
     # load_array() already handles PrecisionService integration

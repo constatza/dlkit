@@ -23,7 +23,7 @@ Note: ``exclude=True`` fields (e.g. ``ValueBasedEntry.value``) are preserved by
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
@@ -63,8 +63,9 @@ def validate_module_path_import(v: str | None) -> str | None:
     if v is None:
         return None
     try:
-        importlib.import_module(v)
-    except ImportError as exc:
+        if importlib.util.find_spec(v) is None:
+            raise ModuleNotFoundError(v)
+    except (ImportError, ModuleNotFoundError, ValueError) as exc:
         raise ValueError(f"module_path '{v}' cannot be imported: {exc}") from exc
     return v
 

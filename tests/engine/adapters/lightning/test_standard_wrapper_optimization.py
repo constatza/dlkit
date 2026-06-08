@@ -13,6 +13,7 @@ These tests exercise the full config → program → controller → wrapper path
 
 from __future__ import annotations
 
+import warnings
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -696,13 +697,19 @@ class TestBothOptimizersStep:
             _optimizer_lr(sequential_two_stage_with_schedulers_settings.stages[1].optimizer)
         )
 
-        _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
 
         assert controller._program.active_index == 0
         assert stage_0.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
         assert stage_1.optimizer.param_groups[0]["lr"] == pytest.approx(
             _optimizer_lr(sequential_two_stage_with_schedulers_settings.stages[1].optimizer)
+        )
+        assert all(
+            "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+            for w in caught
         )
 
     def test_concurrent_stage_fit_steps_scheduler_for_all_inner_optimizers(
@@ -722,10 +729,16 @@ class TestBothOptimizersStep:
         assert optimizer.sub_optimizers[0].param_groups[0]["lr"] == pytest.approx(0.2)
         assert optimizer.sub_optimizers[1].param_groups[0]["lr"] == pytest.approx(0.05)
 
-        _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _fit_single_batch_wrapper(wrapper, max_epochs=2, batch=_make_probe_batch())
 
         assert optimizer.sub_optimizers[0].param_groups[0]["lr"] == pytest.approx(0.05)
         assert optimizer.sub_optimizers[1].param_groups[0]["lr"] == pytest.approx(0.0125)
+        assert all(
+            "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+            for w in caught
+        )
 
     def test_sequential_transition_activates_stage_1_at_its_configured_lr(
         self,
@@ -750,12 +763,14 @@ class TestBothOptimizersStep:
         assert isinstance(controller, ManualOptimizationController)
 
         callback = _StageLRCaptureCallback()
-        _fit_single_batch_wrapper(
-            wrapper,
-            max_epochs=2,
-            batch=_make_probe_batch(),
-            callbacks=[callback],
-        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _fit_single_batch_wrapper(
+                wrapper,
+                max_epochs=2,
+                batch=_make_probe_batch(),
+                callbacks=[callback],
+            )
 
         assert len(callback.records) == 2  # noqa: PLR2004
         epoch_0_start = callback.records[0]
@@ -786,4 +801,8 @@ class TestBothOptimizersStep:
         assert controller._program.stages[1].optimizer.param_groups[0]["lr"] == pytest.approx(
             _optimizer_lr(sequential_two_stage_transition_schedulers_settings.stages[1].optimizer)
             * 0.5
+        )
+        assert all(
+            "Detected call of `lr_scheduler.step()` before `optimizer.step()`" not in str(w.message)
+            for w in caught
         )

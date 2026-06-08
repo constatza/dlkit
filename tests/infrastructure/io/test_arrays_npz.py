@@ -9,6 +9,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -118,6 +119,23 @@ class TestLoadArrayWithNpz:
 
         # Convert to same dtype for comparison
         np.testing.assert_allclose(features_tensor.numpy(), features_np, rtol=1e-5, atol=1e-7)
+
+    def test_load_npy_copies_read_only_arrays_before_tensor_conversion(
+        self, tmp_path: Path
+    ) -> None:
+        """Read-only NumPy storage must not leak into returned tensors."""
+        path = tmp_path / "readonly.npy"
+        array = np.arange(6, dtype=np.float32).reshape(3, 2)
+        np.save(path, array)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = load_array(path)
+
+        result[0, 0] = 99.0
+
+        assert result[0, 0].item() == pytest.approx(99.0)
+        assert all("not writable" not in str(warning.message) for warning in caught)
 
 
 class TestNpzIntegrationWithPrecision:

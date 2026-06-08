@@ -26,6 +26,8 @@ The primary dataset for array-based data with flexible feature/target configurat
 ### GraphDataset
 
 Specialized dataset for graph-structured data (see `graph.py`).
+Import graph datasets from `dlkit.engine.data.datasets.graph`; the broad
+`dlkit.engine.data.datasets` package surface stays graph-free.
 
 ### ForecastingDataset
 

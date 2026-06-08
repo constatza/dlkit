@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -21,7 +22,7 @@ from dlkit.engine.training.optimization.state import (
     RunningOptimizerPolicy,
 )
 from dlkit.engine.training.optimization.state_repository import OptimizationStateRepository
-from dlkit.engine.training.optimization.stepping import StepAllOptimizers
+from dlkit.engine.training.optimization.stepping import LBFGSStageStepper, StepAllOptimizers
 from dlkit.engine.training.optimization.triggers import NoTransitionTrigger
 
 
@@ -39,6 +40,17 @@ class SchedulerSpy:
 
     def load_state_dict(self, state: dict[str, int]) -> None:
         self.step_calls = state["step_calls"]
+
+
+def _make_loss_fn(model: nn.Sequential) -> Callable[[], Tensor]:
+    """Build a simple differentiable loss function for manual-step tests."""
+
+    def loss_fn() -> Tensor:
+        x = torch.randn(2, 4)
+        output = model(x)
+        return output.sum()
+
+    return loss_fn
 
 
 class ManualHostOptimizerSpy:
@@ -303,12 +315,7 @@ class TestManualOptimizationController:
             tiny_model: Tiny model fixture.
         """
 
-        def loss_fn() -> Tensor:
-            x = torch.randn(2, 4)
-            output = tiny_model(x)
-            return output.sum()
-
-        loss = manual_controller.manual_step(loss_fn)
+        loss = manual_controller.manual_step(_make_loss_fn(tiny_model))
         assert isinstance(loss, Tensor)
         assert loss.item() is not None
 
@@ -321,12 +328,7 @@ class TestManualOptimizationController:
         wrapped = ManualHostOptimizerSpy(manual_controller._program.current.optimizer)
         host = ManualHostSpy([wrapped])
 
-        def loss_fn() -> Tensor:
-            x = torch.randn(2, 4)
-            output = tiny_model(x)
-            return output.sum()
-
-        loss = manual_controller.manual_step(loss_fn, host)
+        loss = manual_controller.manual_step(_make_loss_fn(tiny_model), host)
 
         assert isinstance(loss, Tensor)
         assert host.manual_backward_calls == 1
@@ -375,8 +377,9 @@ class TestManualOptimizationController:
                 ),
             )
         )
-        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+        controller = ManualOptimizationController(program, repository, LBFGSStageStepper())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(0, {})
 
         assert scheduler_stage_0.step_calls == 1
@@ -402,10 +405,13 @@ class TestManualOptimizationController:
                 ),
             )
         )
-        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+        controller = ManualOptimizationController(program, repository, LBFGSStageStepper())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(0, {})
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(1, {})
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(2, {})
 
         assert scheduler.step_calls == 1
@@ -441,14 +447,16 @@ class TestManualOptimizationController:
                 ),
             )
         )
-        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+        controller = ManualOptimizationController(program, repository, LBFGSStageStepper())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(0, {})
 
         assert scheduler_stage_0.step_calls == 1
         assert scheduler_stage_1.step_calls == 0
         assert controller._program.active_index == 1
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(1, {})
 
         assert scheduler_stage_0.step_calls == 1
@@ -472,8 +480,9 @@ class TestManualOptimizationController:
                 ),
             )
         )
-        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+        controller = ManualOptimizationController(program, repository, LBFGSStageStepper())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(0, {})
 
         assert scheduler.step_calls == 1
@@ -501,7 +510,9 @@ class TestManualOptimizationController:
         )
         controller = ManualOptimizationController(program, repository, StepAllOptimizers())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(0, {"val_loss": 1.0})
+        controller.manual_step(_make_loss_fn(tiny_model))
         controller.on_epoch_end(1, {"val_loss": 1.1})
 
         assert optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
@@ -539,8 +550,33 @@ class TestManualOptimizationController:
         )
         controller = ManualOptimizationController(program, repository, StepAllOptimizers())
 
+        controller.manual_step(_make_loss_fn(tiny_model))
         with pytest.raises(WorkflowError, match="Scheduler monitor 'val_loss' is missing"):
             controller.on_epoch_end(0, {})
+
+    def test_manual_skips_scheduler_when_no_optimizer_step_occurred(
+        self,
+        tiny_model: nn.Sequential,
+        repository: OptimizationStateRepository,
+    ) -> None:
+        """Manual epoch-end scheduling must not run for epochs with no optimization step."""
+        optimizer = torch.optim.SGD(tiny_model.parameters(), lr=0.1)
+        scheduler = SchedulerSpy()
+        program = RunningOptimizerPolicy(
+            stages=(
+                ActiveStage(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    trigger=NoTransitionTrigger(),
+                    stage_index=0,
+                ),
+            )
+        )
+        controller = ManualOptimizationController(program, repository, StepAllOptimizers())
+
+        controller.on_epoch_end(0, {})
+
+        assert scheduler.step_calls == 0
 
 
 # LBFGS detection tests

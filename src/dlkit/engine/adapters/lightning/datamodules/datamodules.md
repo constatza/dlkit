@@ -10,6 +10,10 @@ Current classes:
 - `GraphDataModule`: PyG datamodule
 - `TimeSeriesDataModule`: pytorch-forecasting datamodule
 
+Import `GraphDataModule` from `dlkit.engine.adapters.lightning.datamodules.graph`;
+the broad `dlkit.engine.adapters.lightning.datamodules` package surface stays
+graph-free.
+
 Ownership rule:
 
 - datasets live in `dlkit.engine.data.datasets`

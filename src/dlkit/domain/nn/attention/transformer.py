@@ -4,6 +4,11 @@ import torch
 from torch import nn
 
 
+def _encoder_supports_nested_tensor(layer: nn.TransformerEncoderLayer) -> bool:
+    """Return whether the current encoder layer configuration can use nested tensors."""
+    return not layer.norm_first
+
+
 def _seq_first(x: torch.Tensor) -> torch.Tensor:
     """Convert (batch, channels, time) → (time, batch, channels) for transformer input.
 
@@ -59,7 +64,7 @@ class TransformerEncoderBlock(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             self.transformer_layer,
             num_layers=num_layers,
-            enable_nested_tensor=num_heads % 2 == 0,
+            enable_nested_tensor=_encoder_supports_nested_tensor(self.transformer_layer),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

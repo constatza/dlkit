@@ -8,6 +8,8 @@
 - path preprocessing and legacy path-context state
 - array, table, index, and sparse-pack I/O
 - collision-safe filesystem imports for user modules
+- safe NumPy-to-tensor conversion, including copying read-only buffers before
+  exposing them as writable PyTorch tensors
 
 ## Current Layout
 - `config_loader.py`: TOML readers and writers
@@ -46,3 +48,6 @@ DLKit no longer uses a global project root setting.
 
 ## Notes
 - Dynamic filesystem imports use unique module names internally and only register the original module stem in `sys.modules` when that alias is safe.
+- `arrays.py` owns NumPy buffer mutability handling. Callers should not need to
+  special-case read-only `.npy`, `.npz`, or in-memory `ndarray` inputs before
+  converting them to tensors.
