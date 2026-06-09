@@ -78,3 +78,33 @@ def test_dim_not_mutated_after_fit(data_2d: torch.Tensor) -> None:
     scaler = MinMaxScaler(dim=0)
     scaler.fit(data_2d)
     assert scaler.dim == (0,)
+
+
+def test_custom_interval_output_in_range(data_2d: torch.Tensor) -> None:
+    scaler = MinMaxScaler(dim=0, low=0.0, high=1.0)
+    scaler.fit(data_2d)
+    out = scaler(data_2d)
+    assert out.min().item() >= 0.0 - 1e-6
+    assert out.max().item() <= 1.0 + 1e-6
+
+
+def test_custom_interval_round_trip(data_2d: torch.Tensor) -> None:
+    scaler = MinMaxScaler(dim=0, low=0.0, high=1.0)
+    scaler.fit(data_2d)
+    assert torch.allclose(scaler.inverse_transform(scaler(data_2d)), data_2d, atol=1e-5)
+
+
+def test_default_interval_backward_compatible(data_2d: torch.Tensor) -> None:
+    scaler = MinMaxScaler(dim=0)
+    scaler.fit(data_2d)
+    out = scaler(data_2d)
+    assert out.min().item() >= -1.0 - 1e-6
+    assert out.max().item() <= 1.0 + 1e-6
+
+
+def test_invalid_interval_raises() -> None:
+    with pytest.raises(ValueError, match="high"):
+        MinMaxScaler(dim=0, low=1.0, high=0.0)
+
+    with pytest.raises(ValueError, match="high"):
+        MinMaxScaler(dim=0, low=0.5, high=0.5)

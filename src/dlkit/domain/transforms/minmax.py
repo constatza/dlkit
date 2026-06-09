@@ -9,7 +9,7 @@ from dlkit.domain.transforms.errors import TransformNotFittedError
 
 
 class MinMaxScaler(Transform):
-    """Minimum-Maximum Scaler that normalizes data to the range [-1, 1].
+    """Minimum-Maximum Scaler that normalizes data to an arbitrary target interval.
 
     This transform computes min and max statistics along specified dimensions
     and uses them to scale the data. It supports both eager buffer allocation
@@ -20,23 +20,35 @@ class MinMaxScaler(Transform):
     """
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, *, dim: int | Sequence[int] = 0) -> None:
+    def __init__(
+        self,
+        *,
+        dim: int | Sequence[int] = 0,
+        low: float = -1.0,
+        high: float = 1.0,
+    ) -> None:
         """Initialize MinMaxScaler.
 
         Args:
             dim: The dimension(s) along which to compute min and max values.
                 Defaults to 0 (batch dimension). Can be int or sequence of ints.
+            low: Lower bound of the target output interval. Defaults to -1.0.
+            high: Upper bound of the target output interval. Defaults to 1.0.
+
+        Raises:
+            ValueError: If high <= low.
 
         Example:
-            >>> # Create scaler for normalizing along batch dimension
-            >>> scaler = MinMaxScaler(dim=0)
-            >>>
-            >>> # Fit directly (lazy allocation)
+            >>> scaler = MinMaxScaler(dim=0, low=0.0, high=1.0)
             >>> scaler.fit(train_data)
         """
+        if high <= low:
+            raise ValueError(f"high ({high}) must be greater than low ({low}).")
         super().__init__()
         dim_values = cast("Sequence[int]", dim) if isinstance(dim, Sequence) else (dim,)
         self.dim: tuple[int, ...] = tuple(int(index) for index in dim_values)
+        self.low = low
+        self.high = high
         # Register empty placeholder buffers so state_dict() always contains these keys
         # and load_state_dict() can fill them without pre-registration hacks
         self.register_buffer("min", torch.tensor([]))
@@ -115,26 +127,26 @@ class MinMaxScaler(Transform):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Scale tensor to interval [-1, 1].
+        """Scale tensor to the target interval [low, high].
 
         Args:
             x: Input tensor to scale.
 
         Returns:
-            Scaled tensor in range [-1, 1].
+            Scaled tensor in range [low, high].
 
         Raises:
             TransformNotFittedError: If fit() hasn't been called yet.
         """
         if not self.fitted:
             raise TransformNotFittedError("MinMaxScaler")
-        return 2 * (x - self.min) / (self.max - self.min + 1e-8) - 1
+        return self.low + (x - self.min) * (self.high - self.low) / (self.max - self.min + 1e-8)
 
     def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
-        """Inverse scale from [-1, 1] back to original range.
+        """Inverse scale from [low, high] back to original range.
 
         Args:
-            x: Scaled tensor in range [-1, 1].
+            x: Scaled tensor in range [low, high].
 
         Returns:
             Tensor in original value range.
@@ -144,7 +156,7 @@ class MinMaxScaler(Transform):
         """
         if not self.fitted:
             raise TransformNotFittedError("MinMaxScaler")
-        return (x + 1) / 2 * (self.max - self.min) + self.min
+        return self.min + (x - self.low) * (self.max - self.min) / (self.high - self.low)
 
     def infer_output_shape(self, in_shape: tuple[int, ...]) -> tuple[int, ...]:
         """Infer output shape. MinMaxScaler preserves input shape.

@@ -20,8 +20,9 @@ Example:
 """
 
 from abc import abstractmethod
+from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Protocol, runtime_checkable
+from typing import Protocol, final, runtime_checkable
 
 import torch
 from torch import Tensor, nn
@@ -395,3 +396,103 @@ class Transform(nn.Module):
         super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
+
+
+class PartialTransform(Transform):
+    """Abstract base for transforms applied to a selected subset of feature indices.
+
+    Subclasses implement only `_compute` and `_inverse_compute` on the (already-sliced)
+    tensor; scatter/gather bookkeeping is handled here. When `indices` is None the
+    transform is applied to the whole tensor with no copy overhead.
+
+    Args:
+        indices: Positions along `index_dim` to transform. None applies to all.
+        index_dim: Axis that holds the feature dimension. Defaults to -1 (last axis),
+            which handles (N, D), (N, T, D), (N, T, Q, D) uniformly.
+
+    Example:
+        >>> class LogTransform(PartialTransform):
+        ...     def _compute(self, x):
+        ...         return torch.log(x + 1.0)
+        ...
+        ...     def _inverse_compute(self, x):
+        ...         return torch.exp(x) - 1.0
+        >>>
+        >>> t = LogTransform(indices=[0, 3], index_dim=-1)
+        >>> y = t(data)  # only features 0 and 3 are log-transformed
+        >>> x = t.inverse_transform(y)  # reconstructed
+    """
+
+    def __init__(
+        self,
+        *,
+        indices: Sequence[int] | None = None,
+        index_dim: int = -1,
+    ) -> None:
+        """Initialize PartialTransform.
+
+        Args:
+            indices: Feature indices to transform. None means all features.
+            index_dim: Axis along which to index features.
+        """
+        super().__init__()
+        self.indices: tuple[int, ...] | None = tuple(indices) if indices is not None else None
+        self.index_dim = index_dim
+
+    @abstractmethod
+    def _compute(self, x: Tensor) -> Tensor:
+        """Apply the core transformation to the selected (or full) tensor.
+
+        Args:
+            x: Slice of the input tensor containing only the selected features.
+
+        Returns:
+            Transformed tensor with the same shape as x.
+        """
+        ...
+
+    @abstractmethod
+    def _inverse_compute(self, x: Tensor) -> Tensor:
+        """Apply the inverse of the core transformation.
+
+        Args:
+            x: Slice of the transformed tensor containing only the selected features.
+
+        Returns:
+            Reconstructed tensor with the same shape as x.
+        """
+        ...
+
+    def _scatter_compute(self, x: Tensor, fn: Callable[[Tensor], Tensor]) -> Tensor:
+        if self.indices is None:
+            return fn(x)
+        dim = self.index_dim % x.ndim
+        idx = torch.tensor(self.indices, device=x.device, dtype=torch.long)
+        selected = torch.index_select(x, dim, idx)
+        out = x.clone()
+        out.index_copy_(dim, idx, fn(selected))
+        return out
+
+    @final
+    def forward(self, x: Tensor) -> Tensor:
+        """Apply transform to selected (or all) features.
+
+        Args:
+            x: Input tensor of any shape.
+
+        Returns:
+            Tensor with the same shape as x, with selected features transformed.
+        """
+        return self._scatter_compute(x, self._compute)
+
+    @final
+    def inverse_transform(self, x: Tensor) -> Tensor:
+        """Invert the transform on selected (or all) features.
+
+        Args:
+            x: Transformed tensor of any shape.
+
+        Returns:
+            Tensor with the same shape as x, with selected features reconstructed.
+        """
+        return self._scatter_compute(x, self._inverse_compute)
