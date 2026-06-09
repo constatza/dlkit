@@ -11,7 +11,7 @@ from torchmetrics import MetricCollection
 
 from dlkit.domain.metrics import (
     MeanSquaredError,
-    NormalizedVectorNormError,
+    RelativeVectorNormError,
     TemporalDerivativeError,
 )
 from dlkit.infrastructure.config import BuildContext
@@ -28,7 +28,7 @@ class TestCustomMetricsIntegration:
         metrics = MetricCollection(
             {
                 "mse": MeanSquaredError(),
-                "norm_l2": NormalizedVectorNormError(norm_ord=2),
+                "norm_l2": RelativeVectorNormError(norm_ord=2),
             }
         )
 
@@ -72,7 +72,7 @@ class TestCustomMetricsIntegration:
         # Create metric settings
         metric_settings = MetricComponentSettings.model_validate(
             {
-                "name": "NormalizedVectorNormError",
+                "name": "RelativeVectorNormError",
                 "module_path": "dlkit.domain.metrics",
                 "norm_ord": 2,
             }
@@ -105,7 +105,7 @@ class TestCustomMetricsIntegration:
         )
         norm_settings = MetricComponentSettings.model_validate(
             {
-                "name": "NormalizedVectorNormError",
+                "name": "RelativeVectorNormError",
                 "module_path": "dlkit.domain.metrics",
                 "norm_ord": 2,
             }
@@ -138,7 +138,7 @@ class TestCustomMetricsIntegration:
 
     def test_metric_reset_functionality(self):
         """Test metric reset works correctly."""
-        metric = NormalizedVectorNormError(norm_ord=2)
+        metric = RelativeVectorNormError(norm_ord=2)
 
         # First batch
         preds1 = torch.tensor([[1.0, 2.0]])
@@ -157,7 +157,7 @@ class TestCustomMetricsIntegration:
 
     def test_batch_accumulation(self):
         """Test metric accumulates correctly across batches."""
-        metric = NormalizedVectorNormError(norm_ord=2)
+        metric = RelativeVectorNormError(norm_ord=2)
 
         # Two small batches
         preds1 = torch.tensor([[1.0, 2.0]])

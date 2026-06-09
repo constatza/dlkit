@@ -28,16 +28,16 @@ from .losses import (
     msle as msle,
 )
 from .losses import (
-    normalized_mse as normalized_mse,
-)
-from .losses import (
-    normalized_vector_norm_loss as normalized_vector_norm_loss,
-)
-from .losses import (
     quantile_loss as quantile_loss,
 )
 from .losses import (
     relative_energy_norm_loss as relative_energy_norm_loss,
+)
+from .losses import (
+    relative_mse as relative_mse,
+)
+from .losses import (
+    relative_vector_norm_loss as relative_vector_norm_loss,
 )
 from .losses import (
     smooth_l1_loss as smooth_l1_loss,

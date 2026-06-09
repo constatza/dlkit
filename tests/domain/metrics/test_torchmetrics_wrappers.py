@@ -15,11 +15,11 @@ import torch
 from torchmetrics import MetricCollection
 
 from dlkit.domain.metrics.functional import (
-    normalized_vector_norm_error,
+    relative_vector_norm_error,
     temporal_derivative_error,
 )
 from dlkit.domain.metrics.torchmetrics_wrappers import (
-    NormalizedVectorNormError,
+    RelativeVectorNormError,
     TemporalDerivativeError,
 )
 
@@ -68,13 +68,13 @@ def temporal_sequence_3d():
 # ============================================================================
 
 
-class TestNormalizedVectorNormError:
-    """Test NormalizedVectorNormError wrapper."""
+class TestRelativeVectorNormError:
+    """Test RelativeVectorNormError wrapper."""
 
     def test_single_batch(self, simple_2d_vectors):
         """Test with single batch."""
         preds, target = simple_2d_vectors
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
 
         _metric_update(metric, preds, target)
         result = _metric_compute(metric)
@@ -85,7 +85,7 @@ class TestNormalizedVectorNormError:
     def test_multi_batch_accumulation(self, simple_2d_vectors):
         """Test that multi-batch gives same result as single large batch."""
         preds, target = simple_2d_vectors
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
 
         # Process as two separate batches
         _metric_update(metric, preds[:1], target[:1])
@@ -93,7 +93,7 @@ class TestNormalizedVectorNormError:
         multi_batch_result = _metric_compute(metric)
 
         # Process as single batch
-        metric_single = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric_single = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
         _metric_update(metric_single, preds, target)
         single_batch_result = _metric_compute(metric_single)
 
@@ -104,19 +104,19 @@ class TestNormalizedVectorNormError:
         preds, target = simple_2d_vectors
 
         # TorchMetrics wrapper
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
         _metric_update(metric, preds, target)
         wrapper_result = _metric_compute(metric)
 
         # Functional implementation
-        functional_result = normalized_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
+        functional_result = relative_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
 
         assert torch.allclose(wrapper_result, functional_result, atol=1e-6)
 
     def test_reset(self, simple_2d_vectors):
         """Test reset clears state."""
         preds, target = simple_2d_vectors
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
 
         # First update
         _metric_update(metric, preds, target)
@@ -139,8 +139,8 @@ class TestNormalizedVectorNormError:
         """Test different norm orders (L1, L2, Linf)."""
         preds, target = simple_2d_vectors
 
-        metric_l1 = NormalizedVectorNormError(norm_ord=1)
-        metric_l2 = NormalizedVectorNormError(norm_ord=2)
+        metric_l1 = RelativeVectorNormError(norm_ord=1)
+        metric_l2 = RelativeVectorNormError(norm_ord=2)
 
         _metric_update(metric_l1, preds, target)
         _metric_update(metric_l2, preds, target)
@@ -159,7 +159,7 @@ class TestNormalizedVectorNormError:
         preds = torch.randn(16, 8)  # (batch, features)
         target = torch.randn(16, 8)
 
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
         _metric_update(metric, preds, target)
         result = _metric_compute(metric)
 
@@ -168,7 +168,7 @@ class TestNormalizedVectorNormError:
 
     def test_invalid_1d_input_fails(self):
         """Test that 1D input raises error."""
-        metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
         preds = torch.tensor([1.0, 2.0, 3.0])
         target = torch.tensor([1.1, 1.9, 3.1])
 
@@ -307,7 +307,7 @@ class TestMetricCollectionIntegration:
         preds, target = simple_2d_vectors
 
         # Create collection with single custom metric
-        metrics = MetricCollection([NormalizedVectorNormError(vector_dim=-1, norm_ord=2)])
+        metrics = MetricCollection([RelativeVectorNormError(vector_dim=-1, norm_ord=2)])
 
         # Update and compute
         _metric_update(metrics, preds, target)
@@ -327,8 +327,8 @@ class TestMetricCollectionIntegration:
         # Create collection with multiple metrics
         metrics = MetricCollection(
             {
-                "norm_l1": NormalizedVectorNormError(norm_ord=1),
-                "norm_l2": NormalizedVectorNormError(norm_ord=2),
+                "norm_l1": RelativeVectorNormError(norm_ord=1),
+                "norm_l2": RelativeVectorNormError(norm_ord=2),
             }
         )
 
@@ -371,7 +371,7 @@ class TestMetricCollectionIntegration:
         metrics = MetricCollection(
             {
                 "mse": MeanSquaredError(),
-                "norm_error": NormalizedVectorNormError(vector_dim=-1, norm_ord=2),
+                "norm_error": RelativeVectorNormError(vector_dim=-1, norm_ord=2),
             }
         )
 
@@ -387,7 +387,7 @@ class TestMetricCollectionIntegration:
         """Test MetricCollection reset works for custom metrics."""
         preds, target = simple_2d_vectors
 
-        metrics = MetricCollection([NormalizedVectorNormError(norm_ord=2)])
+        metrics = MetricCollection([RelativeVectorNormError(norm_ord=2)])
 
         # First batch
         _metric_update(metrics, preds, target)
@@ -418,7 +418,7 @@ class TestEdgeCases:
         preds = torch.tensor([[1.0, 1.0], [2.0, 2.0]])
         target = torch.tensor([[0.0, 0.0], [1.0, 0.0]])
 
-        metric = NormalizedVectorNormError(eps=1e-8)
+        metric = RelativeVectorNormError(eps=1e-8)
         _metric_update(metric, preds, target)
         result = _metric_compute(metric)
 
@@ -431,7 +431,7 @@ class TestEdgeCases:
         preds = torch.tensor([[1.0, 2.0, 3.0]])
         target = torch.tensor([[1.1, 1.9, 3.1]])
 
-        metric = NormalizedVectorNormError()
+        metric = RelativeVectorNormError()
         _metric_update(metric, preds, target)
         result = _metric_compute(metric)
 
@@ -443,7 +443,7 @@ class TestEdgeCases:
         preds = torch.randn(1000, 20)
         target = torch.randn(1000, 20)
 
-        metric = NormalizedVectorNormError()
+        metric = RelativeVectorNormError()
         _metric_update(metric, preds, target)
         result = _metric_compute(metric)
 

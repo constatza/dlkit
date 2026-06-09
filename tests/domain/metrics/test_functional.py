@@ -16,11 +16,11 @@ import torch
 from dlkit.domain.metrics.functional import (
     _absolute_vector_norm_compute,
     _energy_norm_compute,
-    _normalized_vector_norm_compute,
-    # Update/compute split
-    _normalized_vector_norm_update,
     _relative_energy_norm_compute,
     _relative_energy_norm_update,
+    _relative_vector_norm_compute,
+    # Update/compute split
+    _relative_vector_norm_update,
     _temporal_derivative_compute,
     _temporal_derivative_update,
     apply_aggregation,
@@ -32,10 +32,10 @@ from dlkit.domain.metrics.functional import (
     compute_temporal_derivative,
     compute_vector_norm,
     first_derivative_error,
-    normalized_l1_error,
-    normalized_linf_error,
+    relative_l1_error,
+    relative_linf_error,
     # Vector metrics
-    normalized_vector_norm_error,
+    relative_vector_norm_error,
     safe_divide,
     second_derivative_error,
     temporal_derivative_error,
@@ -185,62 +185,62 @@ class TestPrimitives:
 class TestVectorMetrics:
     """Test vector norm metrics."""
 
-    def test_normalized_vector_norm_error_l2(self, simple_2d_vectors):
-        """Test L2 normalized vector norm error."""
+    def test_relative_vector_norm_error_l2(self, simple_2d_vectors):
+        """Test L2 relative vector norm error."""
         preds, target = simple_2d_vectors
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 
         # Vector 1: ||[0, -1]|| / ||[1, 1]|| = 1.0 / sqrt(2) ≈ 0.7071
         # Vector 2: ||[-2, 2]|| / ||[2, 0]|| = sqrt(8) / 2 ≈ 1.4142
         # Mean ≈ 1.0607
         assert error.item() > 1.0 and error.item() < 1.1
 
-    def test_normalized_vector_norm_error_l1(self, simple_2d_vectors):
-        """Test L1 normalized vector norm error."""
+    def test_relative_vector_norm_error_l1(self, simple_2d_vectors):
+        """Test L1 relative vector norm error."""
         preds, target = simple_2d_vectors
-        error = normalized_l1_error(preds, target, dim=-1)
+        error = relative_l1_error(preds, target, dim=-1)
 
         # Using convenience partial
         assert error.dim() == 0  # Scalar output
 
-    def test_normalized_vector_norm_error_3d(self, batch_3d_vectors):
+    def test_relative_vector_norm_error_3d(self, batch_3d_vectors):
         """Test with 3D vectors."""
         preds, target = batch_3d_vectors
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 
         assert error.dim() == 0  # Scalar after aggregation
         assert error.item() > 0
 
-    def test_normalized_vector_norm_error_1d_fails(self):
+    def test_relative_vector_norm_error_1d_fails(self):
         """Test that 1D input fails validation."""
         preds = torch.tensor([1.0, 2.0, 3.0])
         target = torch.tensor([1.1, 1.9, 3.1])
 
         with pytest.raises(ValueError, match="at least 2D"):
-            normalized_vector_norm_error(preds, target)
+            relative_vector_norm_error(preds, target)
 
-    def test_normalized_vector_norm_error_zero_target(self, zero_target_vectors):
+    def test_relative_vector_norm_error_zero_target(self, zero_target_vectors):
         """Test epsilon handling with zero target norms."""
         preds, target = zero_target_vectors
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1, eps=1e-8)
 
         # Should not raise, epsilon prevents division by zero
         assert not torch.isnan(error)
         assert not torch.isinf(error)
 
-    def test_normalized_vector_norm_error_custom_aggregator(self, simple_2d_vectors):
+    def test_relative_vector_norm_error_custom_aggregator(self, simple_2d_vectors):
         """Test with custom aggregator (sum instead of mean)."""
         preds, target = simple_2d_vectors
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1, aggregator=torch.sum)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1, aggregator=torch.sum)
 
         # Should be sum of per-sample errors, not mean
-        error_mean = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        error_mean = relative_vector_norm_error(preds, target, ord=2, dim=-1)
         assert error > error_mean
 
-    def test_normalized_linf_error(self, simple_2d_vectors):
+    def test_relative_linf_error(self, simple_2d_vectors):
         """Test Linf norm variant."""
         preds, target = simple_2d_vectors
-        error = normalized_linf_error(preds, target, dim=-1)
+        error = relative_linf_error(preds, target, dim=-1)
 
         assert error.dim() == 0  # Scalar
         assert error.item() > 0
@@ -409,20 +409,20 @@ class TestTemporalMetrics:
 class TestUpdateComputeSplit:
     """Test update/compute functions for torchmetrics integration."""
 
-    def test_normalized_vector_norm_update(self, simple_2d_vectors):
+    def test_relative_vector_norm_update(self, simple_2d_vectors):
         """Test update function returns per-sample errors."""
         preds, target = simple_2d_vectors
-        errors = _normalized_vector_norm_update(preds, target, ord=2, dim=-1, eps=1e-8)
+        errors = _relative_vector_norm_update(preds, target, ord=2, dim=-1, eps=1e-8)
 
         # Should have one error per sample
         assert errors.shape == (2,)
         assert torch.all(errors >= 0)
 
-    def test_normalized_vector_norm_compute(self):
+    def test_relative_vector_norm_compute(self):
         """Test compute function calculates mean."""
         sum_errors = torch.tensor(10.0)
         total = 5
-        mean_error = _normalized_vector_norm_compute(sum_errors, torch.tensor(total))
+        mean_error = _relative_vector_norm_compute(sum_errors, torch.tensor(total))
 
         assert torch.allclose(mean_error, torch.tensor(2.0))
 
@@ -431,13 +431,13 @@ class TestUpdateComputeSplit:
         preds, target = simple_2d_vectors
 
         # Direct functional call
-        direct_result = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        direct_result = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 
         # Update/compute split
-        errors = _normalized_vector_norm_update(preds, target, ord=2, dim=-1, eps=1e-8)
+        errors = _relative_vector_norm_update(preds, target, ord=2, dim=-1, eps=1e-8)
         sum_errors = errors.sum()
         total = errors.numel()
-        split_result = _normalized_vector_norm_compute(sum_errors, torch.tensor(total))
+        split_result = _relative_vector_norm_compute(sum_errors, torch.tensor(total))
 
         assert torch.allclose(direct_result, split_result)
 
@@ -520,7 +520,7 @@ class TestUpdateComputeSplit:
     @pytest.mark.parametrize(
         "compute_fn",
         [
-            _normalized_vector_norm_compute,
+            _relative_vector_norm_compute,
             _temporal_derivative_compute,
             _absolute_vector_norm_compute,
             _energy_norm_compute,
@@ -559,7 +559,7 @@ class TestEdgeCases:
         """Test with batch size of 1."""
         preds = torch.tensor([[1.0, 2.0, 3.0]])
         target = torch.tensor([[1.1, 1.9, 3.1]])
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 
         assert error.dim() == 0  # Should still be scalar
         assert error.item() > 0
@@ -568,7 +568,7 @@ class TestEdgeCases:
         """Test with larger batch."""
         preds = torch.randn(100, 10)
         target = torch.randn(100, 10)
-        error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+        error = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 
         assert error.dim() == 0
         assert not torch.isnan(error)
@@ -587,9 +587,7 @@ class TestEdgeCases:
         preds, target = simple_2d_vectors
 
         # Create custom metric via partial composition
-        my_l1_sum_metric = partial(
-            normalized_vector_norm_error, ord=1, dim=-1, aggregator=torch.sum
-        )
+        my_l1_sum_metric = partial(relative_vector_norm_error, ord=1, dim=-1, aggregator=torch.sum)
 
         result = my_l1_sum_metric(preds, target)
         assert result.dim() == 0

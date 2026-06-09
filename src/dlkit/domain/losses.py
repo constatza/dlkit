@@ -217,7 +217,7 @@ def vector_norm_loss(
 ) -> Tensor:
     """Absolute vector norm loss: mean(||pred - target||_ord).
 
-    Absolute counterpart to normalized_vector_norm_loss (relative). Computes
+    Absolute counterpart to relative_vector_norm_loss (relative). Computes
     the raw error norm without dividing by the target magnitude.
 
     **Differentiable**: ✅ Yes
@@ -248,7 +248,7 @@ def vector_norm_loss(
     return apply_aggregation(per_sample_norms, aggregator)
 
 
-def normalized_vector_norm_loss(
+def relative_vector_norm_loss(
     preds: Tensor,
     target: Tensor,
     ord: int = 2,
@@ -258,8 +258,8 @@ def normalized_vector_norm_loss(
 ) -> Tensor:
     """Relative vector norm loss: mean(||pred - target||_ord / ||target||_ord).
 
-    Computes relative error normalized by target magnitude. Useful for
-    vector predictions where scale varies across samples.
+    Relative loss with respect to target magnitude (dimensionless).
+    Useful for vector predictions where magnitude varies across samples.
 
     **Differentiable**: ✅ Yes (tested with safe_divide eps=1e-8)
 
@@ -282,9 +282,9 @@ def normalized_vector_norm_loss(
     Note:
         Safe division with eps ensures gradient flow when ||target|| ≈ 0.
     """
-    from .metrics.functional import normalized_vector_norm_error
+    from .metrics.functional import relative_vector_norm_error
 
-    return normalized_vector_norm_error(
+    return relative_vector_norm_error(
         preds, target, ord=ord, dim=dim, eps=eps, aggregator=aggregator
     )
 
@@ -346,7 +346,7 @@ def relative_energy_norm_loss(
     """Relative energy norm loss: mean(||pred - target||_A / ||target||_A).
 
     Normalises the absolute energy norm error by the A-norm of the target,
-    giving a dimensionless relative error. Analogous to the "Notay loss"
+    giving a dimensionless relative error relative to target. Analogous to the "Notay loss"
     used in preconditioner learning (without the PCG-specific semantics).
 
     **Differentiable**: ✅ Yes (eps prevents division by zero)
@@ -380,13 +380,13 @@ def relative_energy_norm_loss(
     return apply_aggregation(per_sample_relative, aggregator)
 
 
-def normalized_mse(
+def relative_mse(
     preds: Tensor,
     target: Tensor,
     normalization: Literal["variance", "range", "mean"] = "variance",
     eps: float = 1e-8,
 ) -> Tensor:
-    """Normalized MSE - MSE scaled by target statistics.
+    """Relative MSE - MSE relative to target statistics.
 
     Provides scale-invariant error measurement. Useful when target
     magnitudes vary significantly across samples or features.
@@ -444,10 +444,10 @@ __all__ = [
     "smooth_l1_loss",
     "log_cosh_loss",
     "quantile_loss",
-    "normalized_mse",
+    "relative_mse",
     # Vector norm losses (absolute and relative pair)
     "vector_norm_loss",
-    "normalized_vector_norm_loss",
+    "relative_vector_norm_loss",
     # Energy norm losses (absolute and relative pair)
     "energy_norm_loss",
     "relative_energy_norm_loss",

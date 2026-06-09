@@ -8,7 +8,7 @@ instead of reimplementing to:
     - Stay compatible with torchmetrics ecosystem
     - Focus our custom implementations on specialized metrics
 
-For custom/exotic metrics (e.g., normalized vector norm error, temporal derivatives),
+For custom/exotic metrics (e.g., relative vector norm error, temporal derivatives),
 see torchmetrics_wrappers.py instead.
 """
 

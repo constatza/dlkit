@@ -20,23 +20,22 @@ from .functional import (
     _absolute_vector_norm_update,
     _energy_norm_compute,
     _energy_norm_update,
-    _normalized_vector_norm_compute,
-    _normalized_vector_norm_update,
     _relative_energy_norm_compute,
     _relative_energy_norm_update,
+    _relative_vector_norm_compute,
+    _relative_vector_norm_update,
     _temporal_derivative_compute,
     _temporal_derivative_update,
 )
 
 
-class NormalizedVectorNormError(Metric):
-    """TorchMetrics wrapper for normalized vector norm error metric.
+class RelativeVectorNormError(Metric):
+    """TorchMetrics wrapper for relative vector norm error metric.
 
     Computes: mean(||pred - target|| / ||target||) across batches.
 
-    This metric normalizes error by target magnitude, providing relative
-    error measurement. Accumulates state across batches for proper
-    distributed training support.
+    Error relative to target magnitude (dimensionless relative error).
+    Accumulates state across batches for proper distributed training support.
 
     Shape Contract:
         Input: (B, ..., D) where D is vector_dim
@@ -47,7 +46,7 @@ class NormalizedVectorNormError(Metric):
         Output: Scalar tensor after compute()
 
     Attributes:
-        sum_errors: Accumulated sum of normalized errors
+        sum_errors: Accumulated sum of relative errors
         total: Total number of samples processed
 
     Args:
@@ -61,7 +60,7 @@ class NormalizedVectorNormError(Metric):
         >>> import torch
         >>>
         >>> # Single metric usage
-        >>> metric = NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+        >>> metric = RelativeVectorNormError(vector_dim=-1, norm_ord=2)
         >>> preds = torch.tensor([[1.0, 0.0], [0.0, 2.0]])
         >>> target = torch.tensor([[1.0, 1.0], [2.0, 0.0]])
         >>>
@@ -73,8 +72,8 @@ class NormalizedVectorNormError(Metric):
         >>> # Use in MetricCollection
         >>> metrics = MetricCollection(
         ...     [
-        ...         NormalizedVectorNormError(norm_ord=1),
-        ...         NormalizedVectorNormError(norm_ord=2),
+        ...         RelativeVectorNormError(norm_ord=1),
+        ...         RelativeVectorNormError(norm_ord=2),
         ...     ]
         ... )
         >>> metrics.update(preds, target)
@@ -91,7 +90,7 @@ class NormalizedVectorNormError(Metric):
         eps: float = 1e-8,
         **kwargs,
     ):
-        """Initialize normalized vector norm error metric."""
+        """Initialize relative vector norm error metric."""
         super().__init__(**kwargs)
 
         # Store configuration
@@ -114,8 +113,8 @@ class NormalizedVectorNormError(Metric):
             ValueError: If inputs are not at least 2D
             ValueError: If shapes don't match
         """
-        # Compute per-sample normalized errors (not aggregated)
-        errors = _normalized_vector_norm_update(
+        # Compute per-sample relative errors (not aggregated)
+        errors = _relative_vector_norm_update(
             preds, target, self.norm_ord, self.vector_dim, self.eps
         )
 
@@ -127,9 +126,9 @@ class NormalizedVectorNormError(Metric):
         """Compute final metric value from accumulated state.
 
         Returns:
-            Scalar tensor with mean normalized error across all batches
+            Scalar tensor with mean relative error across all batches
         """
-        return _normalized_vector_norm_compute(self.sum_errors, self.total)
+        return _relative_vector_norm_compute(self.sum_errors, self.total)
 
 
 class TemporalDerivativeError(Metric):
@@ -241,7 +240,7 @@ class AbsoluteVectorNormError(Metric):
 
     Computes: mean(||pred - target||_ord) across batches.
 
-    Absolute counterpart to NormalizedVectorNormError (relative). Accumulates
+    Absolute counterpart to RelativeVectorNormError (relative). Accumulates
     state across batches for distributed training support.
 
     Shape Contract:
@@ -394,7 +393,7 @@ class RelativeEnergyNormError(Metric):
 __all__ = [
     "AbsoluteVectorNormError",
     "EnergyNormError",
-    "NormalizedVectorNormError",
+    "RelativeVectorNormError",
     "RelativeEnergyNormError",
     "TemporalDerivativeError",
 ]

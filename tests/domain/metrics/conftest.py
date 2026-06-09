@@ -19,7 +19,7 @@ def sample_targets() -> Tensor:
 
 @pytest.fixture
 def sample_2d_vectors() -> tuple[Tensor, Tensor]:
-    """Sample 2D vector dataflow for normalized vector norm error testing."""
+    """Sample 2D vector dataflow for relative vector norm error testing."""
     predictions = torch.tensor(
         [
             [1.0, 0.0],  # Predicted vector 1

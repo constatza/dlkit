@@ -158,7 +158,7 @@ def apply_aggregation(
 # ============================================================================
 
 
-def normalized_vector_norm_error(
+def relative_vector_norm_error(
     preds: Tensor,
     target: Tensor,
     ord: float = 2,
@@ -166,11 +166,13 @@ def normalized_vector_norm_error(
     eps: float = 1e-8,
     aggregator: Callable[[Tensor], Tensor] = torch.mean,
 ) -> Tensor:
-    """Compute normalized vector norm error: ||pred - target|| / ||target||.
+    """Compute relative vector norm error: ||pred - target|| / ||target||.
 
-    This metric normalizes error by target magnitude, providing relative
-    error measurement. Particularly useful for vector predictions where
-    magnitude varies significantly across samples.
+    Error relative to target magnitude (dimensionless relative error).
+    Useful for vector predictions where magnitude varies across samples.
+
+    Trailing size-1 dimensions are squeezed automatically so that inputs with
+    shape (B, D, 1) are treated identically to (B, D).
 
     Shape Contract:
         preds:  (B, ..., D) where D is the vector dimension
@@ -186,30 +188,27 @@ def normalized_vector_norm_error(
         aggregator: Function to aggregate per-sample errors (default: torch.mean)
 
     Returns:
-        Normalized error - scalar if aggregator reduces, else per-sample errors
+        Scaled error — scalar if aggregator reduces, else per-sample errors
 
     Raises:
         ValueError: If shapes don't match or dimension out of bounds
         ValueError: If tensor has less than 2 dimensions
 
     Examples:
-        >>> # 2D vectors (e.g., velocity predictions)
         >>> preds = torch.tensor([[1.0, 0.0], [0.0, 2.0]])
         >>> target = torch.tensor([[1.0, 1.0], [2.0, 0.0]])
-        >>> error = normalized_vector_norm_error(preds, target)
+        >>> error = relative_vector_norm_error(preds, target)
         >>> # error ≈ mean([0.7071, 1.0]) ≈ 0.8536
-        >>>
-        >>> # L1 norm variant with partial
-        >>> from functools import partial
-        >>> l1_error_fn = partial(normalized_vector_norm_error, ord=1)
-        >>> error_l1 = l1_error_fn(preds, target)
     """
-    # Validation
+    if preds.shape[-1] == 1:
+        preds = preds.squeeze(-1)
+        target = target.squeeze(-1)
+
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
     norm_fn = partial(compute_vector_norm, ord=ord, dim=dim)
-    normalized = compute_relative_norms(
+    scaled = compute_relative_norms(
         preds,
         target,
         error_fn=compute_error_vectors,
@@ -217,13 +216,13 @@ def normalized_vector_norm_error(
         divide_fn=safe_divide,
         eps=eps,
     )
-    return apply_aggregation(normalized, aggregator)
+    return apply_aggregation(scaled, aggregator)
 
 
 # Convenience partials for common norm orders
-normalized_l1_error = partial(normalized_vector_norm_error, ord=1)
-normalized_l2_error = partial(normalized_vector_norm_error, ord=2)
-normalized_linf_error = partial(normalized_vector_norm_error, ord=float("inf"))
+relative_l1_error = partial(relative_vector_norm_error, ord=1)
+relative_l2_error = partial(relative_vector_norm_error, ord=2)
+relative_linf_error = partial(relative_vector_norm_error, ord=float("inf"))
 
 
 # ============================================================================
@@ -517,17 +516,18 @@ second_derivative_error = partial(temporal_derivative_error, n=2)
 # ============================================================================
 
 
-def _normalized_vector_norm_update(
+def _relative_vector_norm_update(
     preds: Tensor, target: Tensor, ord: int, dim: int, eps: float
 ) -> Tensor:
-    """Compute per-sample normalized errors without aggregation.
+    """Compute per-sample relative errors without aggregation.
 
     Used by torchmetrics wrapper to accumulate state across batches.
+    Trailing size-1 dimensions are squeezed before computing the norm.
 
     Shape:
         preds:  (B, ..., D)
         target: (B, ..., D)
-        output: (B, ...) - one normalized error per vector
+        output: (B, ...) - one relative error per vector
 
     Args:
         preds: Predicted vectors
@@ -537,8 +537,12 @@ def _normalized_vector_norm_update(
         eps: Numerical stability epsilon
 
     Returns:
-        Per-sample normalized errors (not aggregated)
+        Per-sample relative errors (not aggregated)
     """
+    if preds.shape[-1] == 1:
+        preds = preds.squeeze(-1)
+        target = target.squeeze(-1)
+
     if preds.dim() < 2:
         raise ValueError(f"Expected at least 2D tensors for vector operations, got {preds.dim()}D")
 
@@ -553,7 +557,7 @@ def _normalized_vector_norm_update(
     )
 
 
-def _normalized_vector_norm_compute(sum_errors: Tensor, total: Tensor) -> Tensor:
+def _relative_vector_norm_compute(sum_errors: Tensor, total: Tensor) -> Tensor:
     """Compute final mean from accumulated state.
 
     Shape:
@@ -562,11 +566,11 @@ def _normalized_vector_norm_compute(sum_errors: Tensor, total: Tensor) -> Tensor
         output:     (,) - scalar mean
 
     Args:
-        sum_errors: Accumulated sum of normalized errors
+        sum_errors: Accumulated sum of relative errors
         total: Total number of error values
 
     Returns:
-        Mean normalized error
+        Mean relative error
     """
     return compute_state_mean(sum_errors, total)
 
@@ -767,10 +771,10 @@ __all__ = [
     "safe_divide",
     "apply_aggregation",
     # Vector metrics
-    "normalized_vector_norm_error",
-    "normalized_l1_error",
-    "normalized_l2_error",
-    "normalized_linf_error",
+    "relative_vector_norm_error",
+    "relative_l1_error",
+    "relative_l2_error",
+    "relative_linf_error",
     # Energy norm primitives
     "compute_quadratic_form",
     "compute_energy_norm",
@@ -779,15 +783,4 @@ __all__ = [
     "temporal_derivative_error",
     "first_derivative_error",
     "second_derivative_error",
-    # Update/compute split (for torchmetrics)
-    "_normalized_vector_norm_update",
-    "_normalized_vector_norm_compute",
-    "_absolute_vector_norm_update",
-    "_absolute_vector_norm_compute",
-    "_energy_norm_update",
-    "_energy_norm_compute",
-    "_relative_energy_norm_update",
-    "_relative_energy_norm_compute",
-    "_temporal_derivative_update",
-    "_temporal_derivative_compute",
 ]

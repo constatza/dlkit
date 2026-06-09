@@ -11,10 +11,10 @@ from dlkit.domain.losses import (
     log_cosh_loss,
     mae,
     mse,
-    normalized_mse,
-    normalized_vector_norm_loss,
     quantile_loss,
     relative_energy_norm_loss,
+    relative_mse,
+    relative_vector_norm_loss,
     smooth_l1_loss,
     vector_norm_loss,
 )
@@ -38,7 +38,7 @@ def simple_tensors():
 
 @pytest.fixture
 def vector_tensors():
-    """2D vector tensors for normalized vector norm loss."""
+    """2D vector tensors for relative vector norm loss."""
     preds = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
     target = torch.tensor([[1.1, 1.9], [3.1, 3.9]])
     return preds, target
@@ -106,19 +106,19 @@ class TestDifferentiability:
         assert preds.grad is not None
         assert not torch.isnan(preds.grad).any()
 
-    def test_normalized_mse_differentiable(self, simple_tensors):
+    def test_relative_mse_differentiable(self, simple_tensors):
         """Test normalized MSE is differentiable."""
         preds, target = simple_tensors
-        loss = normalized_mse(preds, target, normalization="variance")
+        loss = relative_mse(preds, target, normalization="variance")
         loss.backward()
 
         assert preds.grad is not None
         assert not torch.isnan(preds.grad).any()
 
-    def test_normalized_vector_norm_loss_differentiable(self, vector_tensors):
-        """Test normalized vector norm loss is differentiable."""
+    def test_relative_vector_norm_loss_differentiable(self, vector_tensors):
+        """Test relative vector norm loss is differentiable."""
         preds, target = vector_tensors
-        loss = normalized_vector_norm_loss(preds, target, ord=2, dim=-1)
+        loss = relative_vector_norm_loss(preds, target, ord=2, dim=-1)
         loss.backward()
 
         assert preds.grad is not None
@@ -180,12 +180,12 @@ class TestCorrectness:
         # Quantile loss at 0.5 is MAE/2 due to symmetric weighting
         assert torch.allclose(q_loss, mae_loss / 2)
 
-    def test_normalized_mse_variance(self):
+    def test_relative_mse_variance(self):
         """Test normalized MSE by variance."""
         preds = torch.tensor([1.0, 2.0, 3.0])
         target = torch.tensor([1.1, 2.1, 3.1])
 
-        loss = normalized_mse(preds, target, normalization="variance")
+        loss = relative_mse(preds, target, normalization="variance")
         expected = mse(preds, target) / (torch.var(target) + 1e-8)
 
         assert torch.allclose(loss, expected)
@@ -262,24 +262,24 @@ class TestEdgeCases:
         with pytest.raises(ValueError, match="Quantile must be in"):
             quantile_loss(preds, target, quantile=1.5)
 
-    def test_normalized_mse_invalid_method(self):
+    def test_relative_mse_invalid_method(self):
         """Test normalized MSE raises on invalid normalization."""
         preds = torch.tensor([1.0, 2.0, 3.0])
         target = torch.tensor([1.1, 2.1, 3.1])
 
         with pytest.raises(ValueError, match="Invalid normalization"):
-            normalized_mse(
+            relative_mse(
                 preds,
                 target,
                 normalization="invalid",  # ty: ignore[invalid-argument-type]
             )
 
     def test_normalized_vector_norm_with_zero_target(self, vector_tensors):
-        """Test normalized vector norm handles zero targets with eps."""
+        """Test relative vector norm handles zero targets with eps."""
         preds = torch.tensor([[1.0, 2.0]], requires_grad=True)
         target = torch.tensor([[0.0, 0.0]])
 
-        loss = normalized_vector_norm_loss(preds, target, eps=1e-8)
+        loss = relative_vector_norm_loss(preds, target, eps=1e-8)
 
         # Should not be NaN or Inf due to eps
         assert not torch.isnan(loss)

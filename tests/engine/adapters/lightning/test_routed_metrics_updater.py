@@ -12,7 +12,7 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 
-from dlkit.domain.metrics.torchmetrics_wrappers import NormalizedVectorNormError
+from dlkit.domain.metrics.torchmetrics_wrappers import RelativeVectorNormError
 from dlkit.engine.adapters.lightning.metrics_routing import MetricRoute, RoutedMetricsUpdater
 
 # ---------------------------------------------------------------------------
@@ -21,16 +21,16 @@ from dlkit.engine.adapters.lightning.metrics_routing import MetricRoute, RoutedM
 
 
 @pytest.fixture
-def normalized_error_metric() -> NormalizedVectorNormError:
-    """A NormalizedVectorNormError metric instance."""
-    return NormalizedVectorNormError(vector_dim=-1, norm_ord=2)
+def relative_error_metric() -> RelativeVectorNormError:
+    """A RelativeVectorNormError metric instance."""
+    return RelativeVectorNormError(vector_dim=-1, norm_ord=2)
 
 
 @pytest.fixture
-def val_route(normalized_error_metric: NormalizedVectorNormError) -> MetricRoute:
+def val_route(relative_error_metric: RelativeVectorNormError) -> MetricRoute:
     """A single MetricRoute targeting targets['y'] for val stage."""
     return MetricRoute(
-        metric=normalized_error_metric,
+        metric=relative_error_metric,
         target_ns="targets",
         target_name="y",
         extra_inputs=(),
@@ -94,8 +94,8 @@ def test_update_compute_roundtrip(
     updater = RoutedMetricsUpdater(val_routes=[val_route], test_routes=[])
     updater.update(two_vector_preds, two_vector_batch, "val")
     result = updater.compute("val")
-    assert "NormalizedVectorNormError" in result
-    assert float(result["NormalizedVectorNormError"]) >= 0.0
+    assert "RelativeVectorNormError" in result
+    assert float(result["RelativeVectorNormError"]) >= 0.0
 
 
 def test_reset_clears_accumulated_state(
@@ -114,7 +114,7 @@ def test_reset_clears_accumulated_state(
     )
     updater.update(torch.zeros(2, 4), zero_batch, "val")
     result = updater.compute("val")
-    assert float(result["NormalizedVectorNormError"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(result["RelativeVectorNormError"]) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_unknown_stage_is_silently_ignored(

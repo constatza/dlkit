@@ -26,7 +26,7 @@ Examples:
     >>> import torch
     >>> from dlkit.domain.metrics import (
     ...     MeanSquaredError,  # Standard metric from torchmetrics
-    ...     NormalizedVectorNormError,  # Custom metric
+    ...     RelativeVectorNormError,  # Custom metric
     ... )
     >>> from torchmetrics import MetricCollection
     >>>
@@ -34,7 +34,7 @@ Examples:
     >>> metrics = MetricCollection(
     ...     {
     ...         "mse": MeanSquaredError(),
-    ...         "norm_error": NormalizedVectorNormError(norm_ord=2),
+    ...         "scaled_error": RelativeVectorNormError(norm_ord=2),
     ...     }
     ... )
     >>>
@@ -47,10 +47,10 @@ Examples:
     >>>
     >>> # Functional interface (for advanced users)
     >>> from dlkit.domain.metrics.functional import (
-    ...     normalized_vector_norm_error,
+    ...     relative_vector_norm_error,
     ...     temporal_derivative_error,
     ... )
-    >>> error = normalized_vector_norm_error(preds, target, ord=2, dim=-1)
+    >>> error = relative_vector_norm_error(preds, target, ord=2, dim=-1)
 """
 
 # ============================================================================
@@ -60,7 +60,7 @@ Examples:
 # ============================================================================
 # UTILITIES
 # ============================================================================
-from .collect import MetricsPayload
+from .collect import MetricsPayload, collect_metrics
 from .compat import (
     MeanAbsoluteError,
     MeanAbsolutePercentageError,
@@ -85,11 +85,11 @@ from .functional import (
     compute_temporal_derivative,
     compute_vector_norm,
     first_derivative_error,
-    normalized_l1_error,
-    normalized_l2_error,
-    normalized_linf_error,
+    relative_l1_error,
+    relative_l2_error,
+    relative_linf_error,
     # Vector metrics
-    normalized_vector_norm_error,
+    relative_vector_norm_error,
     safe_divide,
     second_derivative_error,
     temporal_derivative_error,
@@ -101,8 +101,8 @@ from .functional import (
 from .torchmetrics_wrappers import (
     AbsoluteVectorNormError,
     EnergyNormError,
-    NormalizedVectorNormError,
     RelativeEnergyNormError,
+    RelativeVectorNormError,
     TemporalDerivativeError,
 )
 
@@ -114,6 +114,7 @@ __all__ = [
     # Type aliases
     "AggregatorFn",
     "MetricsPayload",
+    "collect_metrics",
     # Standard metrics (from torchmetrics)
     "MeanSquaredError",
     "MeanAbsoluteError",
@@ -121,7 +122,7 @@ __all__ = [
     "MeanAbsolutePercentageError",
     "R2Score",
     # Custom torchmetrics wrappers
-    "NormalizedVectorNormError",
+    "RelativeVectorNormError",
     "TemporalDerivativeError",
     "AbsoluteVectorNormError",
     "EnergyNormError",
@@ -131,10 +132,10 @@ __all__ = [
     "compute_vector_norm",
     "safe_divide",
     "apply_aggregation",
-    "normalized_vector_norm_error",
-    "normalized_l1_error",
-    "normalized_l2_error",
-    "normalized_linf_error",
+    "relative_vector_norm_error",
+    "relative_l1_error",
+    "relative_l2_error",
+    "relative_linf_error",
     "compute_quadratic_form",
     "compute_energy_norm",
     "compute_temporal_derivative",
