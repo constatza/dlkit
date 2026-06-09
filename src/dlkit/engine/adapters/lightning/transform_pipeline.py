@@ -48,11 +48,11 @@ def build_batch_transformer(
         Configured NamedBatchTransformer ready for use in a Lightning wrapper.
     """
     feature_chains: dict[str, nn.Module] = {
-        name: (TransformChain(ml) if len(ml) > 0 else nn.Identity())
+        name: (TransformChain(ml, entry_name=name) if len(ml) > 0 else nn.Identity())
         for name, ml in feature_transforms.items()
     }
     target_chains: dict[str, nn.Module] = {
-        name: (TransformChain(ml) if len(ml) > 0 else nn.Identity())
+        name: (TransformChain(ml, entry_name=name) if len(ml) > 0 else nn.Identity())
         for name, ml in target_transforms.items()
     }
     return NamedBatchTransformer(feature_chains, target_chains)

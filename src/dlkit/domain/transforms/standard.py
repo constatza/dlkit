@@ -54,13 +54,12 @@ class StandardScaler(Transform):
     def update_fit(self, batch: torch.Tensor) -> None:
         """Accumulate running mean/variance statistics from one batch."""
         dim_raw = self.dim if isinstance(self.dim, (list, tuple)) else (self.dim,)
-        dim = tuple(int(idx) % len(batch.shape) for idx in dim_raw)
-        self.dim = dim
+        effective_dim = tuple(int(idx) % len(batch.shape) for idx in dim_raw)
 
-        batch_mean = torch.mean(batch, dim=dim, keepdim=True)
-        batch_var = torch.var(batch, dim=dim, keepdim=True, unbiased=False)
+        batch_mean = torch.mean(batch, dim=effective_dim, keepdim=True)
+        batch_var = torch.var(batch, dim=effective_dim, keepdim=True, unbiased=False)
         batch_count = 1
-        for axis in dim:
+        for axis in effective_dim:
             batch_count *= int(batch.shape[axis])
 
         if self._fit_mean is None or self._fit_m2 is None or self._fit_count == 0:
