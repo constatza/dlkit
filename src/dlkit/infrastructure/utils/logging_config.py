@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,24 @@ _MLFLOW_SQLITE_BOOTSTRAP_LOGGERS = (
     "alembic.runtime.plugins",
     "mlflow.store.db.utils",
 )
+
+_NOISY_THIRD_PARTY_LOGGERS: tuple[str, ...] = ("torch.utils.flop_counter",)
+
+
+_NOISY_WARNING_PATTERNS: tuple[str, ...] = (r".*isinstance\(treespec, LeafSpec\).*is deprecated.*",)
+
+
+def suppress_noisy_loggers() -> None:
+    """Permanently suppress third-party noise: stdlib logger levels and warning patterns.
+
+    Must be called early — before noisy modules are imported — so that their
+    module-level log.warning() calls are suppressed on first import.
+    Also exported for use as a DataLoader worker_init_fn helper.
+    """
+    for name in _NOISY_THIRD_PARTY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+    for pattern in _NOISY_WARNING_PATTERNS:
+        warnings.filterwarnings("ignore", message=pattern)
 
 
 def configure_logging(
@@ -220,5 +239,6 @@ def get_logger(name: str, component: str | None = None) -> Any:
 # Always configure to ensure proper settings (loguru has default DEBUG handler)
 _module_initialized = False
 if not _module_initialized:
+    suppress_noisy_loggers()
     configure_logging()
     _module_initialized = True

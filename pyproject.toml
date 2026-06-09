@@ -117,6 +117,8 @@ filterwarnings = [
     # Suppress Pydantic serialization warnings for lazy-loaded settings
     # These occur when settings use model_construct for partial loading without defaults
     "ignore:Pydantic serializer warnings:UserWarning",
+    # Lightning _pytree.py LeafSpec deprecation — not actionable, fixed upstream
+    "ignore:.*isinstance.*LeafSpec.*deprecated.*",
 ]
 
 

@@ -42,6 +42,10 @@ def _suppress_training_runtime_warnings():
             message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
             category=UserWarning,
         )
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*isinstance\(treespec, LeafSpec\).*is deprecated.*",
+        )
         yield
 
 

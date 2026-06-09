@@ -8,6 +8,12 @@ from dlkit.engine.data.datasets.base import BaseDataset
 from dlkit.engine.data.splits import SplitDataset
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.types.split import IndexSplit
+from dlkit.infrastructure.utils.logging_config import suppress_noisy_loggers
+
+
+def _init_worker(worker_id: int) -> None:
+    """Suppress noisy third-party loggers in each DataLoader worker process."""
+    suppress_noisy_loggers()
 
 
 class BaseDataModule(ABC, LightningDataModule):
@@ -56,7 +62,10 @@ class BaseDataModule(ABC, LightningDataModule):
             if num_workers <= 0 and kwargs.get("persistent_workers"):
                 kwargs["persistent_workers"] = False
         except Exception:
+            num_workers = 0
             kwargs.pop("persistent_workers", None)
+        if num_workers > 0 and "worker_init_fn" not in kwargs:
+            kwargs["worker_init_fn"] = _init_worker
         return kwargs
 
     @abstractmethod
