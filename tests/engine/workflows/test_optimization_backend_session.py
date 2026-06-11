@@ -154,7 +154,7 @@ def test_optuna_backend_session_suggests_plain_hyperparameters(
         sampled = session.suggest_hyperparameters(
             study,
             trial,
-            SimpleNamespace(OPTUNA=SimpleNamespace(model={"hidden_size": [2, 4]})),
+            SimpleNamespace(OPTUNA=SimpleNamespace(model={"hidden_size": {"choices": [2, 4]}})),
         )
 
     assert sampled == {"hidden_size": 4}

@@ -112,6 +112,43 @@ class OptunaSettings(BasicSettings):
         """
         return len(self.model) > 0
 
+    @field_validator("model")
+    @classmethod
+    def _validate_model_ranges(cls, value: dict[str, Any]) -> dict[str, Any]:
+        cls._validate_choices_payload(value)
+        return value
+
+    @classmethod
+    def _validate_choices_payload(
+        cls,
+        payload: dict[str, Any],
+        *,
+        path: str = "OPTUNA.model",
+    ) -> None:
+        for key, item in payload.items():
+            current_path = f"{path}.{key}"
+            if isinstance(item, dict):
+                choices = item.get("choices")
+                if choices is not None:
+                    cls._validate_choice_sequence(current_path, choices)
+                cls._validate_choices_payload(
+                    {k: v for k, v in item.items() if isinstance(v, dict)},
+                    path=current_path,
+                )
+
+    @classmethod
+    def _validate_choice_sequence(cls, path: str, choices: Any) -> None:
+        if not isinstance(choices, (list, tuple)):
+            return
+
+        for choice in choices:
+            if choice is None or isinstance(choice, (bool, int, float, str)):
+                continue
+            raise ValueError(
+                f"{path}.choices must contain only None, bool, int, float, or str values; "
+                f"got {choice!r}"
+            )
+
     # Sampler/pruner config should be consumed via `.sampler.to_dict()` and
     # `.pruner.to_dict()` directly. Explicit helper methods are removed to
     # ensure consistent usage of settings serialization across the codebase.

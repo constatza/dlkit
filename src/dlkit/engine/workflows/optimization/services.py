@@ -534,6 +534,7 @@ class OptimizationOrchestrator:
                         )
                         trial = replace(
                             trial,
+                            hyperparameters=hyperparameters,
                             objective_value=objective_value,
                             training_result=training_result,
                             state=TrialState.COMPLETE,
@@ -652,6 +653,7 @@ class OptimizationOrchestrator:
                 # Update trial with results
                 trial = replace(
                     trial,
+                    hyperparameters=hyperparameters,
                     objective_value=self._trial_executor._extract_objective_value(training_result),
                     training_result=training_result,
                     state=TrialState.COMPLETE,

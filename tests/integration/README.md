@@ -134,7 +134,7 @@ Comprehensive MLflow training integration tests including:
 
 ### `test_optuna_mlflow_integration.py`
 Optuna hyperparameter optimization tests including:
-- Complete optimization pipeline with study creation
+- Complete optimization orchestration with study creation
 - Custom sampler/pruner configuration
 - Study persistence with storage backends
 - MLflow + Optuna integration (nested runs)
@@ -142,6 +142,7 @@ Optuna hyperparameter optimization tests including:
 - Verification that study/trial/best-retrain MLflow runs store artifacts under isolated local paths
 - Objective direction handling
 - Model hyperparameter sampling
+- Stubbed trial execution so the tests do not build datasets, models, or run real training
 
 ### `test_transforms_persistence_and_inference.py`
 Transform checkpoint persistence and inference workflow tests including:
@@ -177,7 +178,6 @@ Precision and learning-rate tuning tests for graph models.
 #### Settings Objects
 - `training_settings(...)` - Loaded GeneralSettings for training
 - `mlflow_settings(...)` - GeneralSettings with MLflow configured
-- `optuna_settings(...)` - GeneralSettings with Optuna enabled
 - `inference_settings(...)` - GeneralSettings for inference mode
 
 #### Test Helpers

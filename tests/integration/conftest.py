@@ -29,10 +29,8 @@ from dlkit.infrastructure.config.model_components import (
     MetricComponentSettings,
     ModelComponentSettings,
 )
-from dlkit.infrastructure.config.optuna_settings import OptunaSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
 
@@ -423,35 +421,6 @@ def mlflow_settings(
 
 
 @pytest.fixture
-def optuna_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> OptimizationWorkflowConfig:
-    """Create OptimizationWorkflowConfig with Optuna enabled."""
-    base = _make_training_settings(
-        data_dir=minimal_dataset["data_dir"],
-        output_dir=tmp_path / "outputs",
-        batch_size=BATCH_SIZE,
-        epochs=EPOCHS,
-    )
-
-    unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
-    optuna_cfg = OptunaSettings(
-        enabled=True,
-        n_trials=OPTUNA_TRIALS,
-        study_name=f"test_study_{tmp_path.name}",
-        storage=unique_storage,
-        model={"hidden_size": [2, 4]},
-    )
-
-    return OptimizationWorkflowConfig(
-        SESSION=base.SESSION,
-        TRAINING=base.TRAINING,
-        DATAMODULE=base.DATAMODULE,
-        DATASET=base.DATASET,
-        MODEL=base.MODEL,
-        OPTUNA=optuna_cfg,
-    )
-
-
-@pytest.fixture
 def expected_training_metrics() -> dict[str, Any]:
     """Expected structure and types for training metrics.
 
@@ -489,12 +458,9 @@ def optuna_config_content(minimal_dataset: dict[str, Path], tmp_path: Path) -> s
     data_dir = minimal_dataset["data_dir"]
     # Keep paths relative to DATASET.root by specifying filenames only
     return f"""
-[PATHS]
-output_dir = "outputs"
-
 [SESSION]
 name = "integration_test"
-workflow = "train"
+workflow = "optimize"
 seed = 42
 
 [DATASET]
@@ -545,6 +511,9 @@ enabled = true
 n_trials = {OPTUNA_TRIALS}
 direction = "minimize"
 study_name = "test_study"
+
+[OPTUNA.model.hidden_size]
+choices = [2, 4]
 """
 
 

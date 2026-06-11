@@ -32,6 +32,11 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 
 `TRAINING.optimizer` holds an `OptimizerPolicySettings` object.
 
+`OPTUNA.model.<param>.choices` must contain only scalar persistable values:
+`None`, `bool`, `int`, `float`, or `str`. Structured categorical choices such
+as lists are rejected during config validation instead of being forwarded to
+Optuna with persistence warnings.
+
 - When `stages` is empty, use `default_optimizer` and optional
   `default_scheduler`.
 - When `stages` is populated, each `OptimizationStageSettings` defines its own
