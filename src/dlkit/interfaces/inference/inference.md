@@ -50,6 +50,9 @@ with load_model("model.ckpt", device="auto") as predictor:
   `InferenceWorkflowConfig` unless an explicit `checkpoint_path=` override is provided.
 - `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public
   metadata properties.
+- Checkpoints produced by the standard Lightning wrapper also persist
+  `forward_arg_map`, allowing inference to reconstruct named feature dispatch
+  and apply the correct feature transform before calling `model.forward(**kwargs)`.
 - For DeepONet-style checkpoints, `feature_names` preserves both the branch
   feature entry and the query-coordinate `target_coordinates` entry in
   training-time order.

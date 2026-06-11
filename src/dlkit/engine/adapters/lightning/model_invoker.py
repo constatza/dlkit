@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -57,7 +59,7 @@ class TensorDictModelInvoker:
     batches. The actual model is threaded through a mutable cell so the closure
     (and therefore the ``TensorDictModule``) never needs to be rebuilt.
 
-    Dispatch mapping (built by ``_build_invoker_from_entries``):
+    Dispatch mapping:
 
     - *positional* (``in_keys``): tensors passed as positional args — model receives
       them in the declared order as ``model(*pos_tensors)``.
@@ -68,12 +70,10 @@ class TensorDictModelInvoker:
     After ``invoke()``, callers read ``batch["predictions"]`` (and any latent keys
     from ``output_spec.latent_keys``).
 
-    Important:
-        This class supports positional and keyword dispatch, but DLKit's default
-        feature-to-model mapping is positional. The standard build path uses
-        ``_build_invoker_from_entries()``, which only supplies ``in_keys`` and
-        therefore calls ``model(*feature_tensors)`` in ``DATASET.features``
-        config-list order for entries with ``model_input=True``.
+    Note:
+        The standard build path via ``_build_invoker_from_entries()`` uses kwarg
+        dispatch for all named features: each entry's ``name`` is the forward arg name.
+        Unnamed model-input entries use positional dispatch.
 
     Args:
         in_keys: Ordered positional key paths, e.g.
@@ -104,9 +104,6 @@ class TensorDictModelInvoker:
         def _dispatch(*args: Any) -> Any:
             model = cell[0]
             assert model is not None, "model_cell must be set before dispatch"
-            # TODO: If DLKit ever exposes model-dispatch policy in user config,
-            # keep this seam as the source of truth and document the supported
-            # positional/keyword modes there rather than only in wrapper docs.
             return model(*args[:n_pos], **dict(zip(kwarg_names, args[n_pos:], strict=True)))
 
         self._td_module = TensorDictModule(_dispatch, in_keys=all_in_keys, out_keys=self._out_keys)
@@ -139,25 +136,87 @@ class TensorDictModelInvoker:
         return self._td_module(batch)
 
 
+@dataclass(frozen=True, slots=True)
+class InvokerBuildResult:
+    """Value object returned by ``_build_invoker_from_entries``.
+
+    Carries the configured invoker, a build-time model validator, and the
+    forward-arg map used for checkpoint persistence. Keeps
+    ``StandardLightningWrapper`` decoupled from the validation implementation.
+
+    Attributes:
+        invoker: Configured ``TensorDictModelInvoker`` ready for use.
+        validator: Callable that validates ``model.forward()`` against the
+            configured dispatch. No-op lambda for positional-dispatch mode.
+        forward_arg_map: Mapping ``{kwarg_name: feature_name}`` used for
+            checkpoint metadata. Empty dict for positional mode.
+    """
+
+    invoker: TensorDictModelInvoker
+    validator: Callable[[nn.Module], None]
+    forward_arg_map: dict[str, str]
+
+
+def _validate_forward_signature(model: nn.Module, kwarg_names: frozenset[str]) -> None:
+    """Validate that model.forward() is safe for named kwarg dispatch.
+
+    Inspects the signature via ``inspect.signature`` only — never decorates or
+    wraps the model, which would corrupt Lightning checkpoint serialization.
+    Private — accessible only via ``InvokerBuildResult.validator``.
+
+    Args:
+        model: PyTorch module whose ``forward`` signature is inspected.
+        kwarg_names: Set of kwarg names that will be passed to ``forward()``.
+
+    Raises:
+        TypeError: If ``forward()`` declares ``*args`` or ``**kwargs`` (unsafe
+            for named dispatch — ambiguous routing).
+        ValueError: If any name in ``kwarg_names`` is absent from the signature.
+    """
+    sig = inspect.signature(model.forward)
+    params = sig.parameters
+
+    for param in params.values():
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            raise TypeError(
+                f"{type(model).__name__}.forward declares *{param.name} which is unsafe "
+                "for named dispatch. Remove *args or use positional dispatch."
+            )
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            raise TypeError(
+                f"{type(model).__name__}.forward declares **{param.name} which is unsafe "
+                "for named dispatch. Remove **kwargs or use positional dispatch."
+            )
+
+    allowed = {
+        name
+        for name, p in params.items()
+        if p.kind in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+    }
+    unknown = kwarg_names - allowed
+    if unknown:
+        raise ValueError(
+            f"Features {sorted(unknown)} have no matching parameter in "
+            f"{type(model).__name__}.forward. "
+            f"Rename the feature(s) to match a forward() parameter name, or set "
+            f"model_input=False to exclude them from dispatch. "
+            f"Available parameters: {sorted(allowed)}"
+        )
+
+
 def _build_invoker_from_entries(
     feature_entries: list[Any],
     output_spec: ModelOutputSpec | None = None,
-) -> TensorDictModelInvoker:
+) -> InvokerBuildResult:
     """Build a TensorDictModelInvoker from feature entry configurations.
 
-    Resolves the ``model_input`` field on each entry to determine which
-    feature tensors are forwarded to ``model.forward()``.
+    Named features (``entry.name is not None``) with ``model_input=True`` are
+    dispatched as keyword arguments — ``model(name=tensor, ...)``. Each entry's
+    ``name`` is used directly as the ``forward()`` parameter name.
 
-    Default DLKit dispatch is positional, not keyword-based. This helper only
-    builds positional ``in_keys`` and preserves ``feature_entries`` insertion
-    order, so the wrapper invokes models as:
-
-    - single input: ``model(x)``
-    - multiple inputs: ``model(x, z, ...)``
-
-    - ``model_input=True`` (default): include as a positional arg, preserving
-      the config-list order.
-    - ``model_input=False``: excluded from model dispatch entirely.
+    Unnamed features (``entry.name is None``) with ``model_input=True`` use
+    positional dispatch. Mixing named and unnamed model-input entries
+    in the same invoker is an error.
 
     Args:
         feature_entries: Feature DataEntry objects in config-insertion order.
@@ -165,22 +224,49 @@ def _build_invoker_from_entries(
             ``ModelOutputSpec()`` (single ``"predictions"`` output).
 
     Returns:
-        Configured ``TensorDictModelInvoker`` ready for use in a wrapper.
+        ``InvokerBuildResult`` with invoker, build-time validator, and forward-arg map.
 
     Raises:
-        ValueError: If no features are configured as model inputs.
+        ValueError: If no features are configured as model inputs, or if named
+            and unnamed model-input entries are mixed.
     """
-    in_keys: list[NestedKey] = [
-        ("features", entry.name)
-        for entry in feature_entries
-        if entry.model_input and entry.name is not None
-    ]
+    resolved_spec = output_spec or ModelOutputSpec()
 
-    if not in_keys:
+    named = [e for e in feature_entries if e.model_input and e.name is not None]
+    unnamed = [e for e in feature_entries if e.model_input and e.name is None]
+
+    if not named and not unnamed:
         raise ValueError(
             "No model-input features found. Configure at least one Feature with model_input=True."
         )
-    return TensorDictModelInvoker(in_keys=in_keys, output_spec=output_spec)
+
+    if named and unnamed:
+        raise ValueError(
+            "Mixed dispatch: all model-input features must either have a name (kwarg dispatch) "
+            "or all be unnamed (positional dispatch). "
+            f"Named: {[e.name for e in named]}, Unnamed count: {len(unnamed)}"
+        )
+
+    if named:
+        kwarg_in_keys: dict[str, NestedKey] = {e.name: ("features", e.name) for e in named}
+        forward_arg_map: dict[str, str] = {e.name: e.name for e in named}
+        kwarg_names = frozenset(forward_arg_map)
+        invoker = TensorDictModelInvoker(
+            in_keys=[], kwarg_in_keys=kwarg_in_keys, output_spec=resolved_spec
+        )
+        return InvokerBuildResult(
+            invoker=invoker,
+            validator=lambda model: _validate_forward_signature(model, kwarg_names),
+            forward_arg_map=forward_arg_map,
+        )
+
+    # Positional-dispatch path (unnamed entries only)
+    in_keys: list[NestedKey] = [("features", e.name) for e in unnamed]
+    return InvokerBuildResult(
+        invoker=TensorDictModelInvoker(in_keys=in_keys, output_spec=resolved_spec),
+        validator=lambda _model: None,
+        forward_arg_map={},
+    )
 
 
 def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:

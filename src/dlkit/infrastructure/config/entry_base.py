@@ -31,8 +31,10 @@ class DataEntry(BasicSettings, ABC):
             strategy at load time.
         transforms: Transform chain applied to this entry's data.
         model_input: When True (default), the entry is forwarded to
-            ``model.forward()`` as a positional arg in config-list order.
-            When False, the entry is excluded from model dispatch.
+            ``model.forward()``. Named features are dispatched as keyword
+            arguments using ``name`` as the forward-parameter name; unnamed
+            features use positional dispatch. When False, the entry is excluded
+            from model dispatch.
         loss_input: When set, routes this entry as a keyword argument to the
             loss function using the given name.
         field_role: Physics-domain role of this field (feature, coordinates,
@@ -56,7 +58,9 @@ class DataEntry(BasicSettings, ABC):
         strict=True,
         description=(
             "Controls whether this feature is passed to model.forward(). "
-            "True (default): include as positional arg, in config-list order. "
+            "True (default): include in model dispatch. Named features bind by "
+            "keyword using the entry name as the forward() parameter name; "
+            "unnamed features use positional dispatch. "
             "False: excluded from model dispatch entirely."
         ),
     )

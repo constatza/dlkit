@@ -90,3 +90,4 @@ class ModelState:
     metadata: dict[str, str | int | float | bool | dict | list] = field(default_factory=dict)
     feature_names: tuple[str, ...] = field(default_factory=tuple)
     predict_target_key: str = ""
+    forward_arg_map: dict[str, str] = field(default_factory=dict)

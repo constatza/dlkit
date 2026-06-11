@@ -309,7 +309,7 @@ class CheckpointPredictor(IPredictor):
         # Ensure eval mode
         model.eval()
 
-        # Extract feature_names and predict_target_key from checkpoint metadata
+        # Extract feature_names, forward_arg_map, and predict_target_key from checkpoint
         meta = checkpoint.get("dlkit_metadata", {})
         geometry_data = meta.get("geometry", {})
         if geometry_data:
@@ -318,6 +318,9 @@ class CheckpointPredictor(IPredictor):
             raw_fn = meta.get("feature_names", ())
             feature_names = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
         predict_target_key: str = str(meta.get("predict_target_key", ""))
+        # Empty dict = positional mode (old checkpoints); non-empty = named kwarg dispatch.
+        raw_fam = meta.get("forward_arg_map", {})
+        forward_arg_map: dict[str, str] = dict(raw_fam) if isinstance(raw_fam, dict) else {}
 
         # Create model state
         self._model_state = ModelState(
@@ -329,6 +332,7 @@ class CheckpointPredictor(IPredictor):
             metadata=meta,
             feature_names=feature_names,
             predict_target_key=predict_target_key,
+            forward_arg_map=forward_arg_map,
         )
 
         # Infer precision from model

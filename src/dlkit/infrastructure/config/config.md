@@ -221,6 +221,11 @@ new_settings = update_settings(
 
 - `DATASET.family` is the explicit dataset-family override. Runtime heuristics
   only apply when it is unset.
+- `DATASET.features[*].name` is the routing key for both dataset loading and,
+  when `model_input = true`, model dispatch. Named features bind to
+  `model.forward()` by keyword, so the entry name must match the forward
+  parameter name. Unnamed model-input features use positional dispatch, and
+  mixing named with unnamed model inputs is rejected.
 - `DATASET.features[*]` and `DATASET.targets[*]` may omit `format` for
   loadable path-based entries when the path suffix is informative. The config
   layer infers `.npy`, `.npz`, `.csv`, `.txt`, `.parquet`, `.h5`, `.hdf5`,

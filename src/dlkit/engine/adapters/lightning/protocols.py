@@ -4,7 +4,7 @@ These protocols define the interfaces for the separated concerns in the
 ProcessingLightningWrapper architecture:
 - ILossComputer: compute scalar loss from predictions + named batch
 - IMetricsUpdater: accumulate and expose metric state
-- IModelInvoker: extract tensors from TensorDict and call model positionally
+- IModelInvoker: extract tensors from TensorDict and call model
 - IBatchTransformer: forward-only transform applied every step
 - IFittableBatchTransformer: extends IBatchTransformer with fit lifecycle
 """
@@ -84,10 +84,11 @@ class IModelInvoker(Protocol):
     (and optionally latent keys). Callers read ``batch["predictions"]``
     after calling ``invoke()``.
 
-    In DLKit's default wrapper path, model-input features are passed
-    positionally in ``DATASET.features`` config-list order. Keyword dispatch is
-    supported by alternate invoker implementations, but it is not the default
-    behavior used by ``_build_invoker_from_entries()``.
+    In DLKit's default wrapper path, named model-input features are passed as
+    keyword arguments using the entry name as the ``forward()`` parameter name.
+    Unnamed model-input features use positional dispatch. Mixed named and
+    unnamed model-input dispatch is rejected by
+    ``_build_invoker_from_entries()``.
     """
 
     def invoke(self, model: nn.Module, batch: TensorDict) -> TensorDict:

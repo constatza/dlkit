@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import torch
 from torch import Tensor
 
@@ -25,7 +27,7 @@ class LogTransform(PartialTransform):
         self,
         *,
         shift: float = 1.0,
-        indices=None,
+        indices: Sequence[int] | None = None,
         index_dim: int = -1,
     ) -> None:
         """Initialize LogTransform.

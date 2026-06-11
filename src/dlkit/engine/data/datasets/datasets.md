@@ -20,6 +20,7 @@ The primary dataset for array-based data with flexible feature/target configurat
 - Default mode loads arrays into memory upfront for simple workflows
 - Optional `memmap_cache_dir` builds/uses disk-backed cache to reduce peak RAM usage
 - Configure arbitrary features and targets
+- Named `Feature` entries double as model-dispatch keys when `model_input=true`
 - Automatic precision handling via `PrecisionService`
 - Support for in-memory arrays (testing/programmatic usage)
 
@@ -52,6 +53,12 @@ dataset = FlexibleDataset(features=features, targets=targets)
 sample = dataset[0]
 # {'x': tensor([...]), 'y': tensor([...])}
 ```
+
+When a feature has `model_input=True` (the default), DLKit's standard Lightning
+wrapper dispatches it to `model.forward()` by keyword, using `Feature.name` as
+the parameter name. For example, `Feature(name="x", ...)` binds as
+`model(x=tensor)`. Set `model_input=False` to keep a feature in the batch
+without sending it to the model.
 
 ### NPZ Multi-Array Files
 
@@ -104,6 +111,8 @@ path = "data.npz"
 ```
 
 **Important:** The entry name must match an array key in the `.npz` file.
+If the same feature also uses `model_input=true`, that name must also match the
+corresponding `model.forward()` parameter name.
 
 ### Mixed File Formats
 
@@ -147,6 +156,9 @@ loss_input = "K"
 
 Dense matrices are read from the zarr pack on each sample access and stored in
 the dataset feature TensorDict.
+
+This keeps `"K"` available to losses and metrics via the batch while excluding
+it from `model.forward()` because `model_input=false`.
 
 ### In-Memory Data (Testing/Programmatic)
 
@@ -195,6 +207,10 @@ path = "data.npz"  # Loads array "latent" from same file
 name = "y"
 path = "labels.npy"
 ```
+
+If these features are consumed by the standard Lightning wrapper, the model
+must declare matching `forward()` parameters, for example
+`forward(self, x, embeddings, latent)` for the configuration above.
 
 ### Full Workflow Integration (Programmatic)
 

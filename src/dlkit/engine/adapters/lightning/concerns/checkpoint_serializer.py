@@ -69,6 +69,7 @@ class DLKitCheckpointSerializer:
             dlkit_metadata["entry_configs"] = self._serialize_entry_configs(meta.entry_configs)
             dlkit_metadata["geometry"] = self._serialize_geometry(meta.geometry)
             dlkit_metadata["feature_names"] = list(meta.feature_names)
+            dlkit_metadata["forward_arg_map"] = dict(meta.forward_arg_map)
             dlkit_metadata["predict_target_key"] = meta.predict_target_key
             dlkit_metadata["model_family"] = self._detect_model_family()
             contract = getattr(meta, "contract", None)

@@ -158,9 +158,11 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             components.feature_transforms, components.target_transforms
         )
 
-        # --- Build model invoker (resolves model_input ordering) ---
+        # --- Build model invoker (kwarg dispatch for named features) ---
         output_spec = ModelOutputSpec()
-        model_invoker = _build_invoker_from_entries(feature_entries, output_spec)
+        invoker_result = _build_invoker_from_entries(feature_entries, output_spec)
+        model_invoker = invoker_result.invoker
+        invoker_result.validator(model)
 
         # --- Build loss computer ---
         loss_spec = settings.loss_function

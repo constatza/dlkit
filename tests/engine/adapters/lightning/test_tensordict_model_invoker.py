@@ -5,8 +5,10 @@ Covers:
 - TensorDictModelInvoker positional dispatch: model args match in_keys order
 - TensorDictModelInvoker kwarg dispatch: model receives named tensors
 - TensorDictModelInvoker multi-output (VAE): named latent keys, no "0"/"1" hack
-- _build_invoker_from_entries: default dispatch is positional, not kwargs
+- _build_invoker_from_entries: named features use kwarg dispatch (name == forward arg)
+- _build_invoker_from_entries: kwarg dispatch ignores config-list order
 - _build_invoker_from_entries: model_input=True (include), model_input=False (exclude)
+- _build_invoker_from_entries: build-time signature validation via InvokerBuildResult.validator
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from tensordict import TensorDict
 from torch import Tensor, nn
 
 from dlkit.engine.adapters.lightning.model_invoker import (
+    InvokerBuildResult,
     ModelOutputSpec,
     TensorDictModelInvoker,
     _build_invoker_from_entries,
@@ -259,90 +262,96 @@ class TestTensorDictModelInvokerMultiOutput:
 
 
 class TestBuildInvokerFromEntries:
+    """Named features dispatch as kwargs; entry name == forward() parameter name."""
+
     @pytest.fixture
-    def feat_x(self) -> DataEntry:
+    def feat_x(self, bs: int) -> DataEntry:
         """Feature 'x' with default model_input=True."""
-        return ValueEntry(name="x", value=torch.zeros(4, 3), data_role=DataRole.FEATURE)
+        return ValueEntry(name="x", value=torch.zeros(bs, 3), data_role=DataRole.FEATURE)
 
     @pytest.fixture
-    def feat_z(self) -> DataEntry:
+    def feat_z(self, bs: int) -> DataEntry:
         """Feature 'z' with default model_input=True."""
-        return ValueEntry(name="z", value=torch.zeros(4, 5), data_role=DataRole.FEATURE)
+        return ValueEntry(name="z", value=torch.zeros(bs, 5), data_role=DataRole.FEATURE)
 
-    def test_model_input_true_includes_feature(
+    def test_returns_invoker_build_result(self, feat_x: DataEntry, feat_z: DataEntry) -> None:
+        """_build_invoker_from_entries returns an InvokerBuildResult."""
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        assert isinstance(result, InvokerBuildResult)
+        assert isinstance(result.invoker, TensorDictModelInvoker)
+        assert callable(result.validator)
+        assert isinstance(result.forward_arg_map, dict)
+
+    def test_forward_arg_map_contains_entry_names(
+        self, feat_x: DataEntry, feat_z: DataEntry
+    ) -> None:
+        """forward_arg_map is identity mapping {name: name} for named features."""
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        assert result.forward_arg_map == {"x": "x", "z": "z"}
+
+    def test_named_features_dispatch_as_kwargs(
         self,
         bs: int,
         two_feature_batch: TensorDict,
         x_tensor: Tensor,
         z_tensor: Tensor,
+        feat_x: DataEntry,
+        feat_z: DataEntry,
     ) -> None:
-        """model_input=True (default): features included as positional args in config order."""
-        feat_x = ValueEntry(
-            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
-        )
-        feat_z = ValueEntry(
-            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
-        )
-        received: list[tuple[Tensor, Tensor]] = []
+        """Named model-input features are dispatched as kwargs; name == forward arg."""
+        received: list[dict[str, Tensor]] = []
 
-        class _PosModel(nn.Module):
+        class _KwargModel(nn.Module):
             def forward(self, x: Tensor, z: Tensor) -> Tensor:
-                received.append((x, z))
+                received.append({"x": x, "z": z})
                 return torch.zeros(bs, 1)
 
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_PosModel(), two_feature_batch)
-        assert len(received) == 1
-        assert torch.equal(received[0][0], x_tensor)
-        assert torch.equal(received[0][1], z_tensor)
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        result.validator(_KwargModel())
+        result.invoker.invoke(_KwargModel(), two_feature_batch)
+        assert torch.equal(received[0]["x"], x_tensor)
+        assert torch.equal(received[0]["z"], z_tensor)
 
-    def test_config_order_preserved(
+    def test_kwarg_dispatch_ignores_config_order(
         self,
         bs: int,
         two_feature_batch: TensorDict,
         x_tensor: Tensor,
         z_tensor: Tensor,
+        feat_x: DataEntry,
+        feat_z: DataEntry,
     ) -> None:
-        """Features are dispatched in config-list order when both model_input=True."""
-        feat_z = ValueEntry(
-            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
-        )
-        feat_x = ValueEntry(
-            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
-        )
-        received: list[tuple[Tensor, Tensor]] = []
+        """Kwarg dispatch binds by name — config-list order does not affect routing."""
+        received: list[dict[str, Tensor]] = []
 
-        class _Rec(nn.Module):
-            def forward(self, first: Tensor, second: Tensor) -> Tensor:
-                received.append((first, second))
+        class _Model(nn.Module):
+            def forward(self, x: Tensor, z: Tensor) -> Tensor:
+                received.append({"x": x, "z": z})
                 return torch.zeros(bs, 1)
 
-        # z declared first in the list, x second
-        invoker = _build_invoker_from_entries([feat_z, feat_x])
-        invoker.invoke(_Rec(), two_feature_batch)
-        assert torch.equal(received[0][0], z_tensor)  # z is first in config
-        assert torch.equal(received[0][1], x_tensor)  # x is second in config
+        # z declared first in the list, x second — does not matter
+        result = _build_invoker_from_entries([feat_z, feat_x])
+        result.validator(_Model())
+        result.invoker.invoke(_Model(), two_feature_batch)
+        assert torch.equal(received[0]["x"], x_tensor)
+        assert torch.equal(received[0]["z"], z_tensor)
 
-    def test_default_builder_does_not_map_features_as_kwargs(
+    def test_kwarg_only_forward_works_with_named_dispatch(
         self,
         bs: int,
         two_feature_batch: TensorDict,
+        feat_x: DataEntry,
+        feat_z: DataEntry,
     ) -> None:
-        """Default entry-based dispatch is positional, so kw-only forwards fail."""
-        feat_x = ValueEntry(
-            name="x", value=torch.zeros(bs, 3), model_input=True, data_role=DataRole.FEATURE
-        )
-        feat_z = ValueEntry(
-            name="z", value=torch.zeros(bs, 5), model_input=True, data_role=DataRole.FEATURE
-        )
+        """Keyword-only forward() parameters are valid with named dispatch."""
 
         class _KwOnlyModel(nn.Module):
             def forward(self, *, x: Tensor, z: Tensor) -> Tensor:
                 return torch.zeros(bs, 1)
 
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        with pytest.raises(TypeError, match="positional"):
-            invoker.invoke(_KwOnlyModel(), two_feature_batch)
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        result.validator(_KwOnlyModel())  # must not raise
+        result.invoker.invoke(_KwOnlyModel(), two_feature_batch)
 
     def test_model_input_false_excludes_feature(
         self,
@@ -357,7 +366,6 @@ class TestBuildInvokerFromEntries:
         feat_z = ValueEntry(
             name="z", value=torch.zeros(bs, 5), model_input=False, data_role=DataRole.FEATURE
         )
-
         received: list[Tensor] = []
 
         class _Rec(nn.Module):
@@ -365,15 +373,16 @@ class TestBuildInvokerFromEntries:
                 received.append(x)
                 return torch.zeros(bs, 1)
 
-        invoker = _build_invoker_from_entries([feat_x, feat_z])
-        invoker.invoke(_Rec(), two_feature_batch)
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        result.validator(_Rec())
+        result.invoker.invoke(_Rec(), two_feature_batch)
         assert len(received) == 1
         assert torch.equal(received[0], x_tensor)
 
-    def test_no_model_input_raises_value_error(self) -> None:
+    def test_no_model_input_raises_value_error(self, bs: int) -> None:
         """All model_input=False raises ValueError (no inputs to pass)."""
         feat_x = ValueEntry(
-            name="x", value=torch.zeros(4, 3), model_input=False, data_role=DataRole.FEATURE
+            name="x", value=torch.zeros(bs, 3), model_input=False, data_role=DataRole.FEATURE
         )
         with pytest.raises(ValueError, match="No model-input features"):
             _build_invoker_from_entries([feat_x])
@@ -389,7 +398,57 @@ class TestBuildInvokerFromEntries:
             def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
                 return torch.zeros(bs, 2), torch.zeros(bs, 3)
 
-        invoker = _build_invoker_from_entries([feat_x], output_spec=spec)
-        result = invoker.invoke(_Rec(), simple_batch)
-        assert "latents" in result.keys()
-        assert "z" in cast(TensorDict, result["latents"]).keys()
+        result = _build_invoker_from_entries([feat_x], output_spec=spec)
+        result.validator(_Rec())
+        out = result.invoker.invoke(_Rec(), simple_batch)
+        assert "latents" in out.keys()
+        assert "z" in cast(TensorDict, out["latents"]).keys()
+
+
+class TestForwardSignatureValidation:
+    """Validation raised at build time for unsafe or mismatched signatures."""
+
+    @pytest.fixture
+    def bs(self) -> int:
+        return 4
+
+    @pytest.fixture
+    def feat_x(self, bs: int) -> DataEntry:
+        return ValueEntry(name="x", value=torch.zeros(bs, 3), data_role=DataRole.FEATURE)
+
+    @pytest.fixture
+    def feat_z(self, bs: int) -> DataEntry:
+        return ValueEntry(name="z", value=torch.zeros(bs, 5), data_role=DataRole.FEATURE)
+
+    def test_mismatched_name_raises_value_error(self, feat_x: DataEntry, feat_z: DataEntry) -> None:
+        """Feature name not in forward() signature raises ValueError at validation time."""
+
+        class _Model(nn.Module):
+            def forward(self, a: Tensor, b: Tensor) -> Tensor:
+                return torch.zeros(1)
+
+        result = _build_invoker_from_entries([feat_x, feat_z])
+        with pytest.raises(ValueError, match="x"):
+            result.validator(_Model())
+
+    def test_var_positional_raises_type_error(self, feat_x: DataEntry) -> None:
+        """*args in forward() raises TypeError at validation time."""
+
+        class _Model(nn.Module):
+            def forward(self, *args: Tensor) -> Tensor:
+                return torch.zeros(1)
+
+        result = _build_invoker_from_entries([feat_x])
+        with pytest.raises(TypeError, match=r"\*args"):
+            result.validator(_Model())
+
+    def test_var_keyword_raises_type_error(self, feat_x: DataEntry) -> None:
+        """**kwargs in forward() raises TypeError at validation time."""
+
+        class _Model(nn.Module):
+            def forward(self, **kwargs: Tensor) -> Tensor:
+                return torch.zeros(1)
+
+        result = _build_invoker_from_entries([feat_x])
+        with pytest.raises(TypeError, match=r"\*\*kwargs"):
+            result.validator(_Model())

@@ -117,9 +117,10 @@ objects with top-level `"features"` and `"targets"` entries.
 from dlkit.infrastructure.config.data_entries import Feature, Target, ContextFeature
 
 # Feature — fed to the model (model_input=True by default)
+# Entry name must match the model.forward() parameter name.
 Feature(name="x", path="data/features.npy")
 
-# Multiple features — default dispatch is positional: model(x_tensor, z_tensor)
+# Multiple features — dispatched as kwargs: model(x=x_tensor, z=z_tensor)
 Feature(name="x", path="data/features_x.npy")
 Feature(name="z", path="data/features_z.npy")
 
@@ -134,11 +135,13 @@ Target(name="y", path="data/targets.npy")
 
 | `model_input` value | Dispatch style | Example |
 |---|---|---|
-| `True` (default) | positional, config-list order | `model(x_tensor, z_tensor)` |
+| `True` (default) | kwarg, name == forward param | `model(x=x_tensor, z=z_tensor)` |
 | `False` | excluded from model call | context feature for loss only |
 
-`TensorDictModelInvoker` uses the config-list order of model-input features for
-both training and inference metadata reconstruction.
+Named features are dispatched as keyword arguments — `entry.name` is used directly
+as the `forward()` parameter name. Config-list order does not affect routing.
+`validate_forward_signature` checks the model signature at wrapper init time and
+raises `ValueError` if a feature name has no matching parameter.
 
 For NPZ inputs, the entry `name` is used as the array key.
 
@@ -191,10 +194,11 @@ name = "y"
 path = "data/targets.npy"
 ```
 
-With both entries marked `model_input=true`, invocation is positional in
-config-list order: `model(batch["features","x"], batch["features","z"])`.
+With both entries marked `model_input=true`, invocation dispatches by name:
+`model(x=batch["features","x"], z=batch["features","z"])`.
+Config-list order does not affect which tensor binds to which parameter.
 
-For DeepONet-style branch/trunk inputs:
+For DeepONet-style branch/trunk inputs (model must declare `forward(u, query_coords)`):
 ```toml
 [[DATASET.features]]
 name = "u"
@@ -208,7 +212,7 @@ path = "..."
 field_role = "target_coordinates"
 model_input = true
 ```
-Invocation: `model(batch["features","u"], batch["features","query_coords"])`.
+Invocation: `model(u=batch["features","u"], query_coords=batch["features","query_coords"])`.
 
 ---
 
@@ -351,8 +355,9 @@ checkpoint["dlkit_metadata"] = {
     },
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
-    "feature_names": ["x"],  # model-input entries in dispatch order (for inference)
-    "predict_target_key": "y",  # target whose inverse transform is applied at predict time
+    "feature_names": ["x"],          # model-input entry names (for inference transform lookup)
+    "forward_arg_map": {"x": "x"},   # {kwarg_name: feature_name}; empty dict = positional dispatch
+    "predict_target_key": "y",        # target whose inverse transform is applied at predict time
     "model_family": "dlkit_nn",
     "target_names": ["y"],
 }
@@ -367,11 +372,11 @@ checkpoint metadata, not as already-instantiated settings objects. Transform
 construction normalizes those mappings into typed `TransformSettings` before
 applying runtime module defaults and creating transform modules.
 
-`feature_names` is used by `CheckpointPredictor` to map positional args in
-`predictor.predict(tensor0, tensor1)` to the correct feature transform chain and
-to reconstruct the correct `model.forward()` dispatch order. The list only includes
-model-input entries (those with `model_input ≠ False/None`), in the same order as
-`TensorDictModelInvoker` uses during training.
+`feature_names` is used by `CheckpointPredictor` to look up the correct feature
+transform chain. `forward_arg_map` records the kwarg binding used during training —
+`CheckpointPredictor.predict(x=tensor)` resolves `forward_arg_map["x"] = "x"` to
+find the right transform and then calls `model(x=transformed_tensor)`. An empty
+`forward_arg_map` indicates positional dispatch.
 
 ---
 

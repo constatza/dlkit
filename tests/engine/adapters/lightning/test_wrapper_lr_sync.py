@@ -17,8 +17,8 @@ from dlkit.infrastructure.config.model_components import (
 
 
 class _IdentityModel(nn.Module):
-    def forward(self, **kwargs):
-        return next(iter(kwargs.values()))
+    def forward(self, x):
+        return x
 
 
 def _build_wrapper():

@@ -76,7 +76,7 @@ DLKit uses `SESSION.workflow` to select the runtime path:
 
 The current dataset model is entry-based. Features and targets are declared with `[[DATASET.features]]` and `[[DATASET.targets]]` blocks instead of a single shorthand dataset path.
 
-By default, DLKit maps model-input features to `model.forward()` positionally, in `[[DATASET.features]]` config order. If `x` is declared before `z`, DLKit calls `model(x_tensor, z_tensor)`, not `model(x=x_tensor, z=z_tensor)`.
+By default, DLKit maps named model-input features to `model.forward()` by keyword. If `x` and `z` are declared as named features, DLKit calls `model(x=x_tensor, z=z_tensor)`. Unnamed model-input features use positional dispatch.
 
 ### Minimal Training Config
 
@@ -144,10 +144,49 @@ write = true
 
 Default `forward()` mapping rules:
 
-- Features with `model_input = true` are passed positionally.
-- Positional order matches `[[DATASET.features]]` order in the config.
+- Named features with `model_input = true` are passed by keyword.
+- The entry `name` must match the corresponding `model.forward()` parameter name.
+- Unnamed features with `model_input = true` use positional dispatch.
 - Features with `model_input = false` are excluded from `model.forward()`.
 - `loss_input` affects loss-function kwargs only; it does not change model dispatch.
+
+Keyword-dispatch example:
+
+```toml
+[[DATASET.features]]
+name = "x"
+path = "features_x.npy"
+
+[[DATASET.features]]
+name = "z"
+path = "features_z.npy"
+```
+
+```python
+def forward(self, x, z):
+    ...
+```
+
+DLKit dispatches these as `model(x=x_tensor, z=z_tensor)`.
+
+Legacy positional example:
+
+```python
+from dlkit.infrastructure.config.data_entries import ValueEntry
+from dlkit.infrastructure.config.data_roles import DataRole
+
+features = [
+    ValueEntry(name=None, value=x_array, data_role=DataRole.FEATURE),
+    ValueEntry(name=None, value=z_array, data_role=DataRole.FEATURE),
+]
+```
+
+```python
+def forward(self, x, z):
+    ...
+```
+
+Because these model-input entries are unnamed, DLKit uses positional dispatch and calls `model(x_tensor, z_tensor)`.
 
 ## Training
 
