@@ -77,6 +77,28 @@ class _NormScalingBase(nn.Module):
             case _:
                 return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
 
+    def _validated_norms(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """Validate x and return (norms, safe_div).
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Tuple of (norms, safe_div) where safe_div = norms.clamp_min(eps).
+
+        Raises:
+            TypeError: If x is not floating point.
+            ValueError: If x has fewer than 1 dimension.
+        """
+        if not torch.is_floating_point(x):
+            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
+        if x.ndim < 1:
+            raise ValueError(
+                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
+            )
+        norms = self._vector_norm(x)
+        return norms, norms.clamp_min(self._compute_eps(x, self.eps_gain))
+
 
 class ScaleEquivariantWrapper(_NormScalingBase):
     """Wrap a base module with norm-based input/output scaling.
@@ -105,16 +127,7 @@ class ScaleEquivariantWrapper(_NormScalingBase):
             TypeError: If ``x`` is not a floating-point tensor.
             ValueError: If ``x`` has no dimensions.
         """
-        if not torch.is_floating_point(x):
-            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
-        if x.ndim < 1:
-            raise ValueError(
-                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
-            )
-
-        norms = self._vector_norm(x)
-        eps = self._compute_eps(x, self.eps_gain)
-        safe_div = norms.clamp_min(eps)
+        norms, safe_div = self._validated_norms(x)
         x_scaled = self.base_model(x / safe_div) * norms
 
         if self.keep_stats:
@@ -152,14 +165,7 @@ class ConditionedScaleEquivariantWrapper(_NormScalingBase):
             TypeError: If ``x`` is not a floating-point tensor.
             ValueError: If ``x`` has no dimensions.
         """
-        if not torch.is_floating_point(x):
-            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
-        if x.ndim < 1:
-            raise ValueError(
-                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
-            )
-        norms = self._vector_norm(x)
-        safe_div = norms.clamp_min(self._compute_eps(x, self.eps_gain))
+        norms, safe_div = self._validated_norms(x)
         out = self.base_model(x / safe_div, condition) * norms
         return (out, {"norm": norms}) if self.keep_stats else out
 

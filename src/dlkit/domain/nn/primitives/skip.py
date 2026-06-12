@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal, Protocol, cast
 
 import torch
@@ -232,7 +234,7 @@ class ResidualSequential(nn.Module):
 
     def __init__(self, *modules: nn.Module, shortcut: nn.Module | None = None) -> None:
         super().__init__()
-        self.modules_ = nn.ModuleList(modules)
+        self.modules_ = nn.ModuleList(modules)  # trailing _ avoids shadowing nn.Module.modules()
         self.shortcut = shortcut
 
     def forward(self, x: Tensor) -> Tensor:

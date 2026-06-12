@@ -101,7 +101,8 @@ class ConditionedSequential(nn.Module):
         ``x = block_0(x, condition); x = block_1(x, condition); ...``
 
     Args:
-        *blocks (IConditionedModule): Ordered conditioned blocks to apply.
+        *blocks (IConditionedModule): Conditioned modules to apply in sequence. Each block must also
+            be an ``nn.Module`` instance so PyTorch can track parameters.
     """
 
     def __init__(self, *blocks: IConditionedModule) -> None:
