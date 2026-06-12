@@ -692,7 +692,7 @@ class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
         contract: TabulaRSpec,
         condition_dim: int,
         **kwargs: Any,
-    ) -> ScaleEquivariantFiLMFFNN:
+    ) -> Self:
         """Construct from TabulaRSpec.
 
         Args:
@@ -701,7 +701,7 @@ class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
-            ScaleEquivariantFiLMFFNN: Constructed instance.
+            Self: Constructed instance.
         """
         return cls(
             in_features=contract.in_shape[0],
@@ -764,7 +764,7 @@ class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
         contract: TabulaRSpec,
         condition_dim: int,
         **kwargs: Any,
-    ) -> ScaleEquivariantFiLMEmbeddedFFNN:
+    ) -> Self:
         """Construct from TabulaRSpec.
 
         Args:
@@ -773,7 +773,7 @@ class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
-            ScaleEquivariantFiLMEmbeddedFFNN: Constructed instance.
+            Self: Constructed instance.
         """
         return cls(
             in_features=contract.in_shape[0],
