@@ -1,22 +1,26 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
 
 import torch.nn as nn
 from torch import Tensor
 
 
-@runtime_checkable
-class IConditionedModule(Protocol):
-    """Protocol for modules that accept a conditioning tensor alongside the primary input.
+class IConditionedModule(ABC, nn.Module):
+    """Abstract base for modules that accept a conditioning tensor alongside the primary input.
 
-    Any module implementing ``forward(x, condition)`` satisfies this protocol.
+    Inherits from both ``ABC`` and ``nn.Module``: ``ABC`` enforces the abstract
+    contract (direct instantiation raises ``TypeError``), while ``nn.Module`` ensures
+    any concrete subclass is usable in ``nn.ModuleList`` and other PyTorch containers.
+    ``ABC`` must precede ``nn.Module`` in the MRO for correct metaclass resolution.
+    Concrete classes must implement ``forward(x, condition) -> Tensor``.
     """
 
+    @abstractmethod
     def forward(self, x: Tensor, condition: Tensor) -> Tensor: ...
 
 
-class AsConditioned(nn.Module):
+class AsConditioned(IConditionedModule):
     """Adapt an unconditional ``nn.Module`` to the ``IConditionedModule`` interface.
 
     ``forward(x, condition)`` calls ``self.module(x)``, silently discarding the
@@ -44,7 +48,7 @@ class AsConditioned(nn.Module):
         return self.module(x)
 
 
-class FiLMLayer(nn.Module):
+class FiLMLayer(IConditionedModule):
     """Feature-wise Linear Modulation (FiLM) conditioning layer.
 
     Applies the affine transformation ``(1 + γ(c)) * x + β(c)`` where
@@ -107,7 +111,7 @@ class ConditionedSequential(nn.Module):
 
     def __init__(self, *blocks: IConditionedModule) -> None:
         super().__init__()
-        self.blocks: nn.ModuleList = nn.ModuleList(list(blocks))  # ty: ignore[invalid-argument-type]
+        self.blocks: nn.ModuleList = nn.ModuleList(list(blocks))
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         """Pass ``x`` through every block, injecting ``condition`` at each step.
@@ -120,7 +124,7 @@ class ConditionedSequential(nn.Module):
             Tensor: Output after the full conditioned chain.
         """
         for block in self.blocks:
-            x = block(x, condition)  # type: ignore[arg-type]
+            x = block(x, condition)
         return x
 
 
