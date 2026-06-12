@@ -18,6 +18,22 @@ def test_scale_equivariant_ffnn_exported():
         assert hasattr(ns, "ScaleEquivariantFFNN")
 
 
+def test_film_family_exported():
+    names = (
+        "FiLMBlock",
+        "FiLMResidualBlock",
+        "FiLMFFNN",
+        "FiLMEmbeddedFFNN",
+        "VarWidthFiLMFFNN",
+        "ScaleEquivariantFiLMFFNN",
+        "ScaleEquivariantFiLMEmbeddedFFNN",
+        "ScaleEquivariantVarWidthFiLMFFNN",
+    )
+    for name in names:
+        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
+        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+
+
 def test_removed_se_varwidth_not_exported():
     for ns in (domain_nn, public_nn):
         assert not hasattr(ns, "ScaleEquivariantVarWidthFFNN")

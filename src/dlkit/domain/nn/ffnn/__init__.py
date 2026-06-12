@@ -15,6 +15,7 @@ from .constrained import (
     SimpleSPDFFNN,
     SPDFactorizedFFNN,
 )
+from .film import FiLMBlock, FiLMEmbeddedFFNN, FiLMFFNN, FiLMResidualBlock, VarWidthFiLMFFNN
 from .gated import GatedMLP
 from .linear import (
     FactorizedLinearNetwork,
@@ -34,11 +35,14 @@ from .scale_equivariant import (
     ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFactorizedFFNN,
     ScaleEquivariantFFNN,
+    ScaleEquivariantFiLMEmbeddedFFNN,
+    ScaleEquivariantFiLMFFNN,
     ScaleEquivariantSimpleFactorizedFFNN,
     ScaleEquivariantSimpleSPDFactorizedFFNN,
     ScaleEquivariantSimpleSPDFFNN,
     ScaleEquivariantSPDFactorizedFFNN,
     ScaleEquivariantSPDFFNN,
+    ScaleEquivariantVarWidthFiLMFFNN,
 )
 
 __all__ = [
@@ -47,6 +51,12 @@ __all__ = [
     # Constant-width
     "FFNN",
     "EmbeddedFFNN",
+    # FiLM-conditioned
+    "FiLMBlock",
+    "FiLMEmbeddedFFNN",
+    "FiLMFFNN",
+    "FiLMResidualBlock",
+    "VarWidthFiLMFFNN",
     # Gated
     "GatedMLP",
     # Linear baseline
@@ -58,6 +68,10 @@ __all__ = [
     "SPDFactorizedLinearNetwork",
     # Scale-equivariant constant-width
     "ScaleEquivariantFFNN",
+    # Scale-equivariant FiLM-conditioned
+    "ScaleEquivariantFiLMFFNN",
+    "ScaleEquivariantFiLMEmbeddedFFNN",
+    "ScaleEquivariantVarWidthFiLMFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",

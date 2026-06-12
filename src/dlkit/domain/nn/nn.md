@@ -15,7 +15,23 @@ semantic parameter contracts. No engine orchestration belongs here.
 | `generative/` | VAE and generative samplers |
 | `spectral/` | Spectral convolution, Fourier-enhanced models, and coordinate spectral-bias networks |
 | `operators/` | Physics-informed operator networks |
-| `primitives/` | Reusable low-level blocks, constrained linear layers, and gating mechanisms |
+| `primitives/` | Reusable low-level blocks, constrained linear layers, gating mechanisms, and conditioning primitives |
+
+## Conditioned network primitives
+
+`primitives/conditioning.py` provides the building blocks for externally-conditioned modules:
+
+| Class | Role |
+|---|---|
+| `IConditionedModule` | Abstract base; enforces `forward(x, condition) -> Tensor` |
+| `AsConditioned` | Adapter that wraps an unconditional `nn.Module` to satisfy `IConditionedModule`; discards the condition |
+| `FiLMLayer` | Feature-wise Linear Modulation: `(1 + γ(c)) * x + β(c)`; zero-initialised so it is identity at init |
+| `ConditionedSequential` | Sequential chain forwarding the same condition to every block |
+| `ConditionedResidualSequential` | `ConditionedSequential` with an end-to-end skip connection (`body(x, c) + shortcut(x)`) |
+
+`primitives/skip.py` also contains `ResidualSequential` — an unconditional sequential with an end-to-end skip: `chain(x) + shortcut(x)`.
+
+`primitives/scale_equivariant.py` contains `ConditionedScaleEquivariantWrapper`, which extends the norm-scaling pattern to conditioned modules: `base_model(x / ||x||, condition) * ||x||`. Scale equivariance applies to the features input only; the condition passes through unchanged.
 
 ## FFNN surface
 
@@ -29,10 +45,14 @@ The FFNN family is organized symmetrically around architecture and naming:
 
 Representative exports from `dlkit.domain.nn` include:
 - dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`
+- FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
 - constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
 - constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
 - scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
 - gated: `GatedMLP`
+
+`dlkit.nn` is the user-facing shim for this non-graph NN surface and re-exports the same
+families, including the FiLM-conditioned variants above.
 
 For the full matrix, see `ffnn/ffnn.md`.
 

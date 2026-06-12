@@ -17,6 +17,7 @@ The package distinguishes:
 | `constrained.py` | Constrained linear FFNN builders and explicit plain/residual variants |
 | `scale_equivariant.py` | Class-based scale-equivariant wrappers for dense and constrained FFNNs |
 | `gated.py` | Pluggable-gate feed-forward network (`GatedMLP`) |
+| `film.py` | FiLM-conditioned FFNNs: `FiLMBlock`, `FiLMResidualBlock`, `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN` |
 
 ## Single-layer linear baselines (`linear.py`)
 
@@ -245,4 +246,86 @@ model = GatedMLP(
     num_layers=3,
     gate_factory=lambda: UVGate(in_features=64, hidden_size=128),
 )
+```
+
+---
+
+## FiLM-conditioned Networks
+
+All FiLM classes accept a conditioning vector alongside the primary input via `forward(x, condition)`.
+The FiLM modulation formula is `(1 + γ(c)) * x + β(c)` where `γ` and `β` are linear projections of
+the condition, zero-initialised so the layer is identity at the start of training.
+
+### Variant matrix
+
+| Class | Body style | Mirrors |
+|---|---|---|
+| `VarWidthFiLMFFNN` | Variable-width (`layers` list); embedding `Linear` → N `FiLMBlock`s → output `Linear` | `VarWidthFFNN` |
+| `FiLMFFNN` | Constant-width (`hidden_size`, `num_layers`); embedding `Linear` → N `FiLMBlock`s → output `Linear` | `FFNN` |
+| `FiLMEmbeddedFFNN` | Constant-width residual body; `Linear` embed → N `FiLMResidualBlock`s (with per-block skip) wrapped in `ConditionedResidualSequential` (end-to-end skip) → `Linear` head | `EmbeddedFFNN` |
+| `ScaleEquivariantVarWidthFiLMFFNN` | `ConditionedScaleEquivariantWrapper` around `VarWidthFiLMFFNN`; `f(αx, c) = α·f(x, c)` | `VarWidthFiLMFFNN` |
+| `ScaleEquivariantFiLMFFNN` | `ConditionedScaleEquivariantWrapper` around `FiLMFFNN`; `f(αx, c) = α·f(x, c)` | `ScaleEquivariantFFNN` |
+| `ScaleEquivariantFiLMEmbeddedFFNN` | `ConditionedScaleEquivariantWrapper` around `FiLMEmbeddedFFNN` | — |
+
+Scale equivariance applies to the features branch only; the condition vector passes through unchanged.
+
+### Low-level FiLM blocks
+
+| Class | Role |
+|---|---|
+| `FiLMBlock` | Single dense block (`Norm → Act → Lin → Drop`) followed by `FiLMLayer` modulation |
+| `FiLMResidualBlock` | Two dense blocks + `FiLMLayer` + identity residual skip (square: `in_features == out_features`) |
+
+### Parameters
+
+All FiLM network classes require `condition_dim` in addition to the standard FFNN knobs.
+
+| Parameter | Applies to | Description |
+|---|---|---|
+| `condition_dim` | all FiLM classes | Dimensionality of the external conditioning vector |
+| `layers` | `VarWidthFiLMFFNN`, `ScaleEquivariantVarWidthFiLMFFNN` | Explicit per-layer width list (same role as `VarWidthFFNN`) |
+| `hidden_size` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN` | Constant hidden width |
+| `num_layers` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN` | Number of hidden states in the width ladder (>= 2) |
+| `num_layers` | `FiLMEmbeddedFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN` | Number of `FiLMResidualBlock`s in the body (>= 1) |
+
+### Contract-based construction
+
+All five FiLM network classes implement `from_contract(TabulaRSpec, condition_dim, **kwargs)`:
+
+```python
+from dlkit.domain.nn.ffnn.film import FiLMFFNN
+from dlkit.domain.nn.contracts import TabulaRSpec
+
+spec = TabulaRSpec(in_shape=(16,), out_shape=(4,))
+model = FiLMFFNN.from_contract(spec, condition_dim=8, hidden_size=64, num_layers=3)
+```
+
+`from_contract` extracts `in_features` and `out_features` from the contract; passing them again as kwargs raises `TypeError`.
+
+### Configuration guidance
+
+```toml
+[MODEL]
+name = "FiLMFFNN"
+module_path = "dlkit.domain.nn.ffnn"
+condition_dim = 8
+hidden_size = 64
+num_layers = 3
+```
+
+```toml
+[MODEL]
+name = "VarWidthFiLMFFNN"
+module_path = "dlkit.domain.nn.ffnn"
+condition_dim = 8
+layers = [128, 64, 64]
+```
+
+```toml
+[MODEL]
+name = "FiLMEmbeddedFFNN"
+module_path = "dlkit.domain.nn.ffnn"
+condition_dim = 8
+hidden_size = 64
+num_layers = 4
 ```
