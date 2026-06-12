@@ -1,7 +1,7 @@
 from typing import Literal, Protocol, cast
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 
 class _HasChannels(Protocol):
@@ -208,3 +208,44 @@ class SkipConnection(nn.Module):
         if self._how == "concat":
             return agg_concat(skip, x_out)
         return agg_sum(skip, x_out)
+
+
+class ResidualSequential(nn.Module):
+    """Sequential chain of modules with an end-to-end skip connection.
+
+    Computes ``output = chain(x) + shortcut(x)`` where ``chain`` applies
+    each module in order.
+
+    When ``shortcut=None``, an identity skip is used; this requires the
+    input and output dimensions of the full chain to match.
+
+    Op chain:
+        1. ``out = module_0(x)``
+        2. ``out = module_1(out)``  (repeated for all modules)
+        3. ``skip = shortcut(x)`` if ``shortcut`` is not ``None``, else ``x``
+        4. return ``out + skip``
+
+    Args:
+        *modules (nn.Module): Ordered modules forming the main body.
+        shortcut (nn.Module | None): Optional skip-path projection. ``None`` for identity.
+    """
+
+    def __init__(self, *modules: nn.Module, shortcut: nn.Module | None = None) -> None:
+        super().__init__()
+        self.modules_ = nn.ModuleList(modules)
+        self.shortcut = shortcut
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Apply the sequential body and add the skip connection.
+
+        Args:
+            x (Tensor): Input tensor.
+
+        Returns:
+            Tensor: ``chain(x) + shortcut(x)`` (or ``+ x`` if no shortcut).
+        """
+        out = x
+        for m in self.modules_:
+            out = m(out)
+        skip = self.shortcut(x) if self.shortcut is not None else x
+        return out + skip

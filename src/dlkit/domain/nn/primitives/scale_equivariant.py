@@ -11,8 +11,17 @@ DEFAULT_SCALE_EQUIVARIANT_NORM = "l2"
 DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN = 10.0
 
 
-class ScaleEquivariantWrapper(nn.Module):
-    """Wrap a base module with norm-based input/output scaling."""
+class _NormScalingBase(nn.Module):
+    """Base class owning norm validation, eps computation, and vector-norm logic.
+
+    Subclasses implement ``forward`` with their own signature.
+
+    Args:
+        base_model (nn.Module): The wrapped module to apply after normalisation.
+        norm (str): Norm type; one of ``SUPPORTED_NORMS``.
+        eps_gain (float): Multiplier applied to ``finfo.eps`` to form the safe-division floor.
+        keep_stats (bool): When ``True``, ``forward`` returns ``(output, {"norm": norms})``.
+    """
 
     SUPPORTED_NORMS = {"l2", "l1", "linf"}
 
@@ -39,10 +48,27 @@ class ScaleEquivariantWrapper(nn.Module):
 
     @staticmethod
     def _compute_eps(x: Tensor, gain: float) -> float:
+        """Return a dtype-appropriate epsilon floor.
+
+        Args:
+            x (Tensor): Tensor whose dtype determines machine epsilon.
+            gain (float): Multiplier applied to ``torch.finfo(x.dtype).eps``.
+
+        Returns:
+            float: Safe-division floor value.
+        """
         finfo = torch.finfo(x.dtype)
         return float(gain * finfo.eps)
 
     def _vector_norm(self, x: Tensor) -> Tensor:
+        """Compute the per-sample vector norm along the last dimension.
+
+        Args:
+            x (Tensor): Input tensor of any shape with at least one dimension.
+
+        Returns:
+            Tensor: Norm values with the last dimension kept (``keepdim=True``).
+        """
         match self.norm:
             case "l2":
                 return torch.linalg.vector_norm(x, ord=2, dim=-1, keepdim=True)
@@ -51,7 +77,34 @@ class ScaleEquivariantWrapper(nn.Module):
             case _:
                 return torch.linalg.vector_norm(x, ord=float("inf"), dim=-1, keepdim=True)
 
+
+class ScaleEquivariantWrapper(_NormScalingBase):
+    """Wrap a base module with norm-based input/output scaling.
+
+    Applies the transformation ``base_model(x / ||x||) * ||x||`` so that the
+    module is scale-equivariant: ``f(α x) = α f(x)`` for any scalar ``α > 0``.
+
+    Args:
+        base_model (nn.Module): Module to wrap.
+        norm (str): Norm type; one of ``{"l2", "l1", "linf"}``.
+        eps_gain (float): Safe-division floor multiplier (relative to ``finfo.eps``).
+        keep_stats (bool): If ``True``, return ``(output, {"norm": norms})``.
+    """
+
     def forward(self, x: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
+        """Normalise ``x``, pass through ``base_model``, then rescale.
+
+        Args:
+            x (Tensor): Floating-point input with at least one dimension.
+
+        Returns:
+            Tensor | tuple[Tensor, dict[str, Tensor]]: Scaled output, or
+            ``(output, {"norm": norms})`` when ``keep_stats=True``.
+
+        Raises:
+            TypeError: If ``x`` is not a floating-point tensor.
+            ValueError: If ``x`` has no dimensions.
+        """
         if not torch.is_floating_point(x):
             raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
         if x.ndim < 1:
@@ -67,6 +120,48 @@ class ScaleEquivariantWrapper(nn.Module):
         if self.keep_stats:
             return x_scaled, {"norm": norms}
         return x_scaled
+
+
+class ConditionedScaleEquivariantWrapper(_NormScalingBase):
+    """Scale-equivariant wrapper for conditioned modules accepting ``(x, condition)``.
+
+    Applies ``base_model(x / ||x||, condition) * ||x||`` so that the wrapped
+    module is scale-equivariant in ``x`` while still receiving an external
+    conditioning signal.
+
+    Args:
+        base_model (nn.Module): Conditioned module with signature
+            ``forward(x, condition)``.
+        norm (str): Norm type; one of ``{"l2", "l1", "linf"}``.
+        eps_gain (float): Safe-division floor multiplier (relative to ``finfo.eps``).
+        keep_stats (bool): If ``True``, return ``(output, {"norm": norms})``.
+    """
+
+    def forward(self, x: Tensor, condition: Tensor) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
+        """Normalise ``x``, pass ``(x_norm, condition)`` through ``base_model``, rescale.
+
+        Args:
+            x (Tensor): Floating-point input with at least one dimension.
+            condition (Tensor): Conditioning tensor forwarded as-is to ``base_model``.
+
+        Returns:
+            Tensor | tuple[Tensor, dict[str, Tensor]]: Scaled output, or
+            ``(output, {"norm": norms})`` when ``keep_stats=True``.
+
+        Raises:
+            TypeError: If ``x`` is not a floating-point tensor.
+            ValueError: If ``x`` has no dimensions.
+        """
+        if not torch.is_floating_point(x):
+            raise TypeError(f"Expected floating point tensor, received dtype={x.dtype}.")
+        if x.ndim < 1:
+            raise ValueError(
+                f"Expected x to have at least 1 dimension, got shape {tuple(x.shape)}."
+            )
+        norms = self._vector_norm(x)
+        safe_div = norms.clamp_min(self._compute_eps(x, self.eps_gain))
+        out = self.base_model(x / safe_div, condition) * norms
+        return (out, {"norm": norms}) if self.keep_stats else out
 
 
 def contract_aware_kwargs(contract: TabulaRSpec, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -90,6 +185,7 @@ def contract_aware_kwargs(contract: TabulaRSpec, kwargs: dict[str, Any]) -> dict
 __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN",
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
+    "ConditionedScaleEquivariantWrapper",
     "ScaleEquivariantWrapper",
     "contract_aware_kwargs",
 ]

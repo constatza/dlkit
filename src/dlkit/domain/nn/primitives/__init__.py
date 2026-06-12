@@ -1,3 +1,10 @@
+from .conditioning import (
+    AsConditioned,
+    ConditionedResidualSequential,
+    ConditionedSequential,
+    FiLMLayer,
+    IConditionedModule,
+)
 from .convolutional import ConvolutionBlock1d
 from .dense import DenseBlock
 from .gated import (
@@ -32,10 +39,12 @@ from .parametrized_layers import (
 from .scale_equivariant import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
+    ConditionedScaleEquivariantWrapper,
     ScaleEquivariantWrapper,
     contract_aware_kwargs,
 )
 from .skip import (
+    ResidualSequential,
     SkipConnection,
     build_conv1d_skip_layer,
     build_conv2d_skip_layer,
@@ -47,18 +56,25 @@ __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
     "DEFAULT_SPD_MIN_DIAG",
     "SPD",
+    "AsConditioned",
+    "ConditionedResidualSequential",
+    "ConditionedScaleEquivariantWrapper",
+    "ConditionedSequential",
     "ConvolutionBlock1d",
     "DenseBlock",
     "FactorizedLinear",
+    "FiLMLayer",
     "GLUGate",
     "GRNGate",
     "GatedConvolutionBlock1d",
     "GatedDeconvolutionBlock1d",
+    "IConditionedModule",
     "IGatingMechanism",
     "PositiveColumnScale",
     "PositiveRowScale",
     "PositiveSandwichScale",
     "PositiveScalarScale",
+    "ResidualSequential",
     "SPDFactorizedLinear",
     "SPDLinear",
     "SkipConnection",
