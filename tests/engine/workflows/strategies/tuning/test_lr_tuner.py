@@ -251,3 +251,52 @@ class TestLRTuner:
 
             with pytest.raises(RuntimeError, match="only supports a single optimizer"):
                 tuner.tune(mock_trainer, mock_model, lr_tuner_settings, None)
+
+    def test_tune_attaches_datamodule_to_trainer_before_lr_find(
+        self,
+        mock_trainer: Mock,
+        mock_model: Mock,
+        mock_datamodule: Mock,
+        lr_tuner_settings: LRTunerSettings,
+    ) -> None:
+        """trainer.datamodule is set before lr_find so TransformFittingCallback
+        can access the datamodule during on_fit_start to fit stateful transforms."""
+        datamodule_at_lr_find: list[object] = []
+
+        def capture_and_return(*args: object, **kwargs: object) -> Mock:
+            datamodule_at_lr_find.append(mock_trainer.datamodule)
+            result = Mock()
+            result.suggestion.return_value = 0.01
+            return result
+
+        mock_trainer.datamodule = None
+
+        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+            mock_tuner_instance = Mock()
+            mock_tuner_instance.lr_find.side_effect = capture_and_return
+            MockTuner.return_value = mock_tuner_instance
+
+            LRTuner().tune(mock_trainer, mock_model, lr_tuner_settings, mock_datamodule)
+
+        assert datamodule_at_lr_find == [mock_datamodule]
+
+    def test_tune_does_not_set_datamodule_when_none(
+        self,
+        mock_trainer: Mock,
+        mock_model: Mock,
+        lr_tuner_settings: LRTunerSettings,
+    ) -> None:
+        """When datamodule is None, trainer.datamodule is left unchanged."""
+        sentinel = object()
+        mock_trainer.datamodule = sentinel
+
+        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+            mock_tuner_instance = Mock()
+            mock_finder = Mock()
+            mock_finder.suggestion.return_value = 0.01
+            mock_tuner_instance.lr_find.return_value = mock_finder
+            MockTuner.return_value = mock_tuner_instance
+
+            LRTuner().tune(mock_trainer, mock_model, lr_tuner_settings, None)
+
+        assert mock_trainer.datamodule is sentinel

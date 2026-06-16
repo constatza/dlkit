@@ -157,12 +157,12 @@ class VanillaExecutor(ITrainingExecutor):
 
         tuning_plan = get_lr_tuning_plan(settings.TRAINING.optimizer)
         if isinstance(tuning_plan, UnsupportedLRTuningPlan):
-            logger.warning("%s Skipping LR tuner.", tuning_plan.reason)
+            logger.warning("{} Skipping LR tuner.", tuning_plan.reason)
             return
 
         if not isinstance(model, ILRTunable):
             logger.warning(
-                "Model %s does not implement ILRTunable; LR tuner result cannot be applied.",
+                "Model {} does not implement ILRTunable; LR tuner result cannot be applied.",
                 type(model).__name__,
             )
             return
@@ -173,7 +173,7 @@ class VanillaExecutor(ITrainingExecutor):
             )
         except Exception as e:
             logger.warning(
-                "Learning rate tuning failed: %s. Continuing with configured learning rate.", e
+                "Learning rate tuning failed: {}. Continuing with configured learning rate.", e
             )
             return
 

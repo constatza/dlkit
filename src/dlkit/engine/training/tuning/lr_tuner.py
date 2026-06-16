@@ -65,6 +65,10 @@ class LRTuner:
         # Collect all dlkit config classes that might be in checkpoints
         safe_classes = self._get_safe_globals()
 
+        if datamodule is not None:
+            # Trainer.datamodule is a mutable attribute; cast to Any to satisfy ty stubs
+            cast(Any, trainer).datamodule = datamodule
+
         tuner = Tuner(trainer)
         original_callbacks = self._snapshot_callbacks(trainer)
 
@@ -117,7 +121,7 @@ class LRTuner:
                 "or using a manual learning rate instead."
             )
 
-        logger.info("Learning rate tuner suggested: %s", suggested_lr)
+        logger.info("Learning rate tuner suggested: {}", suggested_lr)
 
         return float(suggested_lr)
 
