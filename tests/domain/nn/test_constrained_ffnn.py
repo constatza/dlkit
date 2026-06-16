@@ -89,8 +89,8 @@ def test_embedded_spd_variants_body_has_skip_iff_residual(
     residual_cls: type[nn.Module],
     plain_cls: type[nn.Module],
 ) -> None:
-    residual = residual_cls(in_features=4, num_layers=3)  # 1 body block
-    plain = plain_cls(in_features=4, num_layers=3)
+    residual = residual_cls(in_features=4, num_layers=1)
+    plain = plain_cls(in_features=4, num_layers=1)
     assert isinstance(cast(Any, residual).body.blocks[0], SkipConnection)
     assert not isinstance(cast(Any, plain).body.blocks[0], SkipConnection)
 
@@ -104,11 +104,11 @@ def test_embedded_spd_variants_body_has_skip_iff_residual(
         EmbeddedSimpleSPDFactorizedFFNN,
     ],
 )
-def test_embedded_spd_variants_require_num_layers_ge_2(
+def test_embedded_spd_variants_allow_zero_hidden_body_blocks(
     model_cls: type[nn.Module],
 ) -> None:
-    with pytest.raises(ValueError, match="num_layers >= 2"):
-        model_cls(in_features=4, num_layers=1)
+    model = model_cls(in_features=4, num_layers=0)
+    assert len(cast(Any, model).body.blocks) == 0
 
 
 @pytest.mark.parametrize(
@@ -166,8 +166,8 @@ def test_nonembedded_spd_variants_body_has_skip_iff_residual(
     residual_cls: type[nn.Module],
     plain_cls: type[nn.Module],
 ) -> None:
-    residual = residual_cls(in_features=4, num_layers=3)  # 2 body blocks
-    plain = plain_cls(in_features=4, num_layers=3)
+    residual = residual_cls(in_features=4, num_layers=1)
+    plain = plain_cls(in_features=4, num_layers=1)
     assert isinstance(cast(Any, residual).body.blocks[0], SkipConnection)
     assert not isinstance(cast(Any, plain).body.blocks[0], SkipConnection)
 
@@ -175,8 +175,8 @@ def test_nonembedded_spd_variants_body_has_skip_iff_residual(
 @pytest.mark.parametrize(
     ("cls",), [(SPDFFNN,), (SimpleSPDFFNN,), (SPDFactorizedFFNN,), (SimpleSPDFactorizedFFNN,)]
 )
-def test_nonembedded_spd_single_layer_has_no_body_blocks(cls: type[nn.Module]) -> None:
-    model = cls(in_features=4, num_layers=1)
+def test_nonembedded_spd_zero_layers_has_no_body_blocks(cls: type[nn.Module]) -> None:
+    model = cls(in_features=4, num_layers=0)
     x = torch.randn(3, 4)
     assert model(x).shape == (3, 4)
     assert len(cast(Any, model).body.blocks) == 0

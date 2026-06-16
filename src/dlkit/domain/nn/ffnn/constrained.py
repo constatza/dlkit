@@ -163,7 +163,8 @@ class _EmbeddedSPDBody(nn.Module):
     """All-SPD FFNN: initial no-act SPD layer → activated body → final no-act SPD layer.
 
     All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
-    Requires ``num_layers >= 2`` (at least initial + final no-act layers).
+    ``num_layers`` counts activated hidden body blocks between the mandatory
+    initial and final no-activation structured layers.
     Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
     """
 
@@ -178,13 +179,13 @@ class _EmbeddedSPDBody(nn.Module):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        if num_layers < 2:
-            raise ValueError(f"Embedded SPD variants require num_layers >= 2, got {num_layers}")
+        if num_layers < 0:
+            raise ValueError(f"Embedded SPD variants require num_layers >= 0, got {num_layers}")
         super().__init__()
         self.initial_layer = layer_factory(in_features)
         self.body = _ConstantWidthParametricBody(
             size=in_features,
-            num_layers=num_layers - 2,
+            num_layers=num_layers,
             layer_factory=layer_factory,
             _residual=_residual,
             activation=activation,
@@ -203,7 +204,8 @@ class _NonEmbeddedSPDBody(nn.Module):
     """Non-embedded all-SPD FFNN: activated body → final no-act SPD layer.
 
     All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
-    Requires ``num_layers >= 1``.
+    ``num_layers`` counts activated hidden body blocks before the mandatory
+    final no-activation structured layer.
     Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
     """
 
@@ -218,12 +220,12 @@ class _NonEmbeddedSPDBody(nn.Module):
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
     ) -> None:
-        if num_layers < 1:
-            raise ValueError(f"Non-embedded SPD variants require num_layers >= 1, got {num_layers}")
+        if num_layers < 0:
+            raise ValueError(f"Non-embedded SPD variants require num_layers >= 0, got {num_layers}")
         super().__init__()
         self.body = _ConstantWidthParametricBody(
             size=in_features,
-            num_layers=num_layers - 1,
+            num_layers=num_layers,
             layer_factory=layer_factory,
             _residual=_residual,
             activation=activation,

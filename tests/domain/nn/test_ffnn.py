@@ -39,7 +39,7 @@ def ffnn() -> VarWidthFFNN:
 @pytest.fixture
 def constant_ffnn() -> FFNN:
     """FFNN with constant width hidden layers."""
-    return FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=3)
+    return FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=2)
 
 
 @pytest.fixture
@@ -164,7 +164,7 @@ class TestVarWidthFFNN:
 
     def test_num_layers_stored(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should store num_layers."""
-        assert ffnn.num_layers == 2  # len([4, 4])
+        assert ffnn.num_layers == 1  # transitions in [4, 4]
 
     def test_activation_stored(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should store activation function."""
@@ -210,19 +210,25 @@ class TestFFNN:
         """All hidden layers should have width = hidden_size."""
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=4)
         # Check that layers were created with constant width
-        # First layer: 2 → 8, then 8 → 8 × (num_layers-1)
+        # First layer: 2 → 8, then 8 → 8 × num_layers hidden transitions.
         assert m.embedding_layer.out_features == 8
         assert m.regression_layer.in_features == 8
 
-    def test_zero_layers_raises(self) -> None:
-        """Zero hidden layers should raise ValueError."""
-        with pytest.raises(ValueError):
-            FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=0)
+    def test_zero_layers_is_valid(self, dense_input: torch.Tensor) -> None:
+        """Zero hidden transitions should produce the embed-head degenerate case."""
+        m = FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=0)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+        assert len(m.layers) == 0
 
     def test_single_hidden_layer(self, dense_input: torch.Tensor) -> None:
-        """FFNN with single layer should work."""
+        """FFNN with one hidden transition should work."""
         m = FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=1)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_negative_layers_raise(self) -> None:
+        """Negative hidden-transition counts should raise ValueError."""
+        with pytest.raises(ValueError):
+            FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=-1)
 
     def test_many_hidden_layers(self, dense_input: torch.Tensor) -> None:
         """FFNN with many layers should work."""

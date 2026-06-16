@@ -127,7 +127,7 @@ class VarWidthFiLMFFNN(nn.Module):
         in_features (int): Input dimension.
         out_features (int): Output dimension.
         condition_dim (int): Condition vector dimension.
-        layers (Sequence[int]): Hidden layer widths, e.g. ``[128, 64, 64]``.
+        layers (Sequence[int]): Hidden-state widths, e.g. ``[128, 64, 64]``.
         activation (ActivationName | Callable | None): Activation for DenseBlocks.
         normalize (NormalizerName | None): Norm layer name or None.
         dropout (float): Dropout rate.
@@ -151,6 +151,7 @@ class VarWidthFiLMFFNN(nn.Module):
                 f"FiLM-conditioned hidden blocks; got {len(layers)}."
             )
         widths = list(layers)
+        self.num_layers = len(widths) - 1
         self.embed = nn.Linear(in_features, widths[0])
         self.hidden: nn.ModuleList = nn.ModuleList(
             [
@@ -300,7 +301,7 @@ class FiLMFFNN(VarWidthFiLMFFNN):
     """Constant-width FiLM-conditioned feedforward network.
 
     Op chain:
-        ``Lin(in→H) → [FiLMBlock(H→H)] × (N - 1) → Lin(H→out)``
+        ``Lin(in→H) → [FiLMBlock(H→H)] × N → Lin(H→out)``
 
     This mirrors :class:`dlkit.domain.nn.ffnn.residual.FFNN` but keeps the FiLM
     conditioned hidden transitions non-residual.
@@ -310,13 +311,13 @@ class FiLMFFNN(VarWidthFiLMFFNN):
         out_features (int): Output dimension.
         condition_dim (int): Condition vector dimension.
         hidden_size (int): Width of all hidden states.
-        num_layers (int): Number of hidden states in the width ladder.
+        num_layers (int): Number of hidden ``FiLMBlock`` transitions.
         activation (ActivationName | Callable | None): Activation for DenseBlocks.
         normalize (NormalizerName | None): Norm layer name or None.
         dropout (float): Dropout rate.
 
     Note:
-        ``num_layers`` must be at least 2 so at least one FiLM-conditioned
+        ``num_layers`` must be at least 1 so at least one FiLM-conditioned
         hidden transition exists.
     """
 
@@ -332,13 +333,13 @@ class FiLMFFNN(VarWidthFiLMFFNN):
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
     ) -> None:
-        if num_layers < 2:
-            raise ValueError("FiLMFFNN requires num_layers >= 2.")
+        if num_layers < 1:
+            raise ValueError("FiLMFFNN requires num_layers >= 1.")
         super().__init__(
             in_features=in_features,
             out_features=out_features,
             condition_dim=condition_dim,
-            layers=[hidden_size] * num_layers,
+            layers=[hidden_size] * (num_layers + 1),
             activation=activation,
             normalize=normalize,
             dropout=dropout,

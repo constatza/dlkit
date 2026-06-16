@@ -38,7 +38,7 @@ class VarWidthFFNN(nn.Module):
     Args:
         in_features: Input dimension.
         out_features: Output dimension.
-        layers: Hidden-layer widths as an explicit list; each entry is one hidden layer.
+        layers: Hidden-state widths as an explicit list.
         activation: Element-wise activation between layers.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
         dropout: Dropout probability between layers.
@@ -62,16 +62,17 @@ class VarWidthFFNN(nn.Module):
         super().__init__()
         if not layers:
             raise ValueError("layers must contain at least one hidden width")
-        self.num_layers = len(layers)
+        widths = list(layers)
+        self.num_layers = len(widths) - 1
         self.activation = resolve_activation(activation)
 
         self.layers = nn.ModuleList()
-        self.embedding_layer = nn.Linear(in_features, layers[0], bias=bias)
+        self.embedding_layer = nn.Linear(in_features, widths[0], bias=bias)
 
-        for i in range(self.num_layers - 1):
+        for i in range(len(widths) - 1):
             block = DenseBlock(
-                layers[i],
-                layers[i + 1],
+                widths[i],
+                widths[i + 1],
                 activation=self.activation,
                 normalize=normalize,
                 dropout=dropout,
@@ -82,7 +83,7 @@ class VarWidthFFNN(nn.Module):
             )
             self.layers.append(layer)
 
-        self.regression_layer = nn.Linear(layers[-1], out_features, bias=bias)
+        self.regression_layer = nn.Linear(widths[-1], out_features, bias=bias)
 
     @classmethod
     def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
@@ -116,7 +117,7 @@ class FFNN(VarWidthFFNN):
     Shape diagram:
         ``(B, in_features)``
         -> embedding to ``hidden_size``
-        -> ``num_layers - 1`` hidden transitions at width ``hidden_size``
+        -> ``num_layers`` hidden transitions at width ``hidden_size``
         -> regression head to ``(B, out_features)``
 
     More explicitly:
@@ -127,7 +128,8 @@ class FFNN(VarWidthFFNN):
 
     Parameter intuition:
         ``hidden_size`` controls the width of every hidden state.
-        ``num_layers`` controls how many hidden states appear in that ladder.
+        ``num_layers`` controls how many hidden ``DenseBlock`` transitions appear
+        after the embedding projection.
         ``skip=True`` keeps the same dimensions but adds residual shortcuts
         between hidden transitions.
 
@@ -136,7 +138,7 @@ class FFNN(VarWidthFFNN):
         out_features: Output dimension.
         hidden_size: Width of all hidden layers; defaults to
             ``max(in_features, out_features)`` when omitted.
-        num_layers: Number of hidden layers.
+        num_layers: Number of hidden ``DenseBlock`` transitions.
         activation: Element-wise activation between layers.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
         dropout: Dropout probability between layers.
@@ -145,11 +147,8 @@ class FFNN(VarWidthFFNN):
             ``SkipConnection``; set to ``False`` for a plain dense network.
 
     Note:
-        The number of nonlinear ``DenseBlock`` layers created is
-        ``num_layers - 1`` (transitions between adjacent entries).
-        With ``num_layers=1`` the network is an embedding linear followed
-        immediately by the regression linear — no nonlinearity.  Use
-        ``num_layers >= 2`` for a genuinely nonlinear network.
+        With ``num_layers=0`` the network is an embedding linear followed
+        immediately by the regression linear, with no hidden block between them.
     """
 
     def __init__(
@@ -165,13 +164,13 @@ class FFNN(VarWidthFFNN):
         bias: bool = True,
         skip: bool = True,
     ) -> None:
-        if num_layers <= 0:
-            raise ValueError("num_layers must be a positive integer")
+        if num_layers < 0:
+            raise ValueError("num_layers must be a non-negative integer")
         hidden_size = hidden_size if hidden_size is not None else max(in_features, out_features)
         super().__init__(
             in_features=in_features,
             out_features=out_features,
-            layers=[hidden_size] * num_layers,
+            layers=[hidden_size] * (num_layers + 1),
             activation=resolve_activation(activation),
             normalize=normalize,
             dropout=dropout,

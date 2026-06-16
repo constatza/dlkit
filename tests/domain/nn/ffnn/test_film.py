@@ -125,10 +125,10 @@ def film_ffnn_from_contract(tabular_contract: TabulaRSpec) -> FiLMFFNN:
 
 @pytest.fixture
 def film_ffnn_single_layer_factory() -> Callable[[], FiLMFFNN]:
-    """Callable that constructs a FiLMFFNN with num_layers=1.
+    """Callable that constructs a minimum-depth FiLMFFNN with num_layers=1.
 
     Returns:
-        A zero-argument callable whose invocation raises ValueError.
+        A zero-argument callable whose invocation succeeds.
     """
     return lambda: FiLMFFNN(
         in_features=IN_FEATURES,
@@ -437,10 +437,14 @@ def test_film_ffnn_zero_layers_raises(
 
 def test_film_ffnn_single_layer_raises(
     film_ffnn_single_layer_factory: Callable[[], FiLMFFNN],
+    feature_input: Tensor,
+    condition_input: Tensor,
 ) -> None:
-    """FiLMFFNN with num_layers=1 raises ValueError."""
-    with pytest.raises(ValueError):
-        film_ffnn_single_layer_factory()
+    """FiLMFFNN with num_layers=1 is the minimum valid conditioned model."""
+    model = film_ffnn_single_layer_factory()
+    with torch.no_grad():
+        out = model(feature_input, condition_input)
+    assert out.shape == (BATCH, OUT_FEATURES)
 
 
 # ── VarWidthFiLMFFNN tests ─────────────────────────────────────────────────────
@@ -482,6 +486,13 @@ def test_varwidth_film_ffnn_single_layer_raises(
     """VarWidthFiLMFFNN with a single-element layers list raises ValueError."""
     with pytest.raises(ValueError):
         varwidth_film_ffnn_single_layer_factory()
+
+
+def test_varwidth_film_ffnn_num_layers_tracks_conditioned_transitions(
+    varwidth_film_ffnn: VarWidthFiLMFFNN,
+) -> None:
+    """VarWidthFiLMFFNN.num_layers counts FiLM-conditioned transitions."""
+    assert varwidth_film_ffnn.num_layers == len(LAYERS_NARROW) - 1
 
 
 # ── FiLMEmbeddedFFNN tests ─────────────────────────────────────────────────────

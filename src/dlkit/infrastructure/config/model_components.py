@@ -400,7 +400,10 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
 
     # Model architecture hyperparameters
     heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
-    num_layers: IntHyperparameter | None = Field(default=None, description="Number of layers")
+    num_layers: IntHyperparameter | None = Field(
+        default=None,
+        description="Number of hidden blocks/layers on the model main path",
+    )
     hidden_size: IntHyperparameter | None = Field(default=None, description="Hidden dimension size")
     latent_size: IntHyperparameter | None = Field(default=None, description="Latent dimension size")
     kernel_size: IntHyperparameter | None = Field(

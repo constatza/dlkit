@@ -42,6 +42,7 @@ The FFNN family is organized symmetrically around architecture and naming:
 - `Embedded...` means the network has a dedicated initial projection layer before the body; `EmbeddedFFNN` is the dense constant-width version
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
 - Square layer types (SPD, SPDFactorized) expose only `in_features`; rectangular types (Factorized) expose `in_features`, `hidden_size`, and `out_features`
+- `num_layers` counts learned hidden blocks on the model's main path; pure embedding and readout projections are not included
 
 Representative exports from `dlkit.domain.nn` include:
 - dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`

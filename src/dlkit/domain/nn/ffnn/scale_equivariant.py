@@ -795,7 +795,7 @@ class ScaleEquivariantFiLMFFNN(_ConditionedScaleEquivariantBase):
         out_features (int): Output dimension.
         condition_dim (int): Condition vector dimension.
         hidden_size (int): Constant hidden width.
-        num_layers (int): Number of hidden states in the width ladder.
+        num_layers (int): Number of hidden FiLM-conditioned transitions.
         norm (str): Vector norm for equivariance (``"l2"``, ``"l1"``, ``"linf"``).
         eps_gain (float): Gain applied to machine epsilon for safe division.
         keep_stats (bool): If True, also return a dict with ``"norm"`` key.

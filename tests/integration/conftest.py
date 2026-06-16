@@ -176,7 +176,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
         in_features=FEATURE_SIZE,
         out_features=TARGET_SIZE,
         hidden_size=FEATURE_SIZE,
-        num_layers=1,
+        num_layers=0,
     )
     checkpoint_payload = {
         "state_dict": {f"model.{k}": v for k, v in _model.state_dict().items()},
@@ -192,7 +192,7 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                 "module_path": "dlkit.domain.nn",
                 "params": {
                     "hidden_size": FEATURE_SIZE,
-                    "num_layers": 1,
+                    "num_layers": 0,
                 },
             },
             "entry_configs": [
@@ -245,7 +245,7 @@ def _make_training_settings(
         name="FFNN",
         module_path="dlkit.domain.nn",
         hidden_size=4,
-        num_layers=1,
+        num_layers=0,
         checkpoint=checkpoint,
     )
 
@@ -496,7 +496,7 @@ persistent_workers = false
 name = "FFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 4
-num_layers = 1
+num_layers = 0
 
 [TRAINING]
 epochs = {EPOCHS}

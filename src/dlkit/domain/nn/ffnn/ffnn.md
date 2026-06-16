@@ -50,9 +50,9 @@ Square layer types (SPD, SPDFactorized) are always square. These networks expose
 
 All layers in these networks belong to the same constrained type; no plain `nn.Linear` appears inside the model.
 
-**Embedded**: `StructuredLayer(n)` no-act → `[StructuredLayer(n) × (num_layers-2)]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 2`.
+**Embedded**: `StructuredLayer(n)` no-act → `[StructuredLayer(n) × num_layers]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 0`.
 
-**Non-embedded**: `[StructuredLayer(n) × (num_layers-1)]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 1`.
+**Non-embedded**: `[StructuredLayer(n) × num_layers]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 0`.
 
 | Layer family | Plain (non-embedded) | Residual (non-embedded) | Plain (embedded) | Residual (embedded) |
 |---|---|---|---|---|
@@ -89,7 +89,7 @@ VarWidthFFNN
 FFNN
   (B, in_features)
   -> embed to hidden_size
-  -> constant-width body repeated by num_layers
+  -> constant-width hidden transitions repeated by num_layers
   -> (B, out_features)
 
 EmbeddedFFNN
@@ -142,6 +142,8 @@ It exposes the same dense-network knobs as `FFNN`:
 
 For square layer types, "Embedded" means the initial projection is also a structured (SPD/Symmetric) layer without activation — not a plain `nn.Linear`.
 
+Unless stated otherwise, `num_layers` counts learned hidden blocks on the model's main path. Dedicated embedding/setup layers and terminal readout layers are excluded from that count.
+
 ## Contract-based construction
 
 All constrained FFNNs implement `from_contract(contract, **kwargs)` via `TabulaRSpec`.
@@ -158,7 +160,7 @@ All constrained FFNNs implement `from_contract(contract, **kwargs)` via `TabulaR
 name = "SPDFFNN"
 module_path = "dlkit.domain.nn"
 in_features = 8
-num_layers = 4
+num_layers = 3
 ```
 
 ```toml
@@ -166,7 +168,7 @@ num_layers = 4
 name = "EmbeddedSPDFFNN"
 module_path = "dlkit.domain.nn"
 in_features = 8
-num_layers = 4
+num_layers = 2
 ```
 
 ```toml
@@ -285,7 +287,7 @@ All FiLM network classes require `condition_dim` in addition to the standard FFN
 | `condition_dim` | all FiLM classes | Dimensionality of the external conditioning vector |
 | `layers` | `VarWidthFiLMFFNN`, `ScaleEquivariantVarWidthFiLMFFNN` | Explicit per-layer width list (same role as `VarWidthFFNN`) |
 | `hidden_size` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN` | Constant hidden width |
-| `num_layers` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN` | Number of hidden states in the width ladder (>= 2) |
+| `num_layers` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN` | Number of hidden `FiLMBlock` transitions (>= 1) |
 | `num_layers` | `FiLMEmbeddedFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN` | Number of `FiLMResidualBlock`s in the body (>= 1) |
 
 ### Contract-based construction

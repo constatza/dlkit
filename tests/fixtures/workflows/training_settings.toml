@@ -7,7 +7,7 @@ seed = 42
 name = "ConstantWidthSimpleFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 3
-num_layers = 1
+num_layers = 0
 
 [trainer]
 max_epochs = 1

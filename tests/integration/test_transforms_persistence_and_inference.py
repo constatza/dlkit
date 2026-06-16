@@ -98,7 +98,7 @@ def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper
             "in_features": 4,
             "out_features": 4,
             "hidden_size": 4,
-            "num_layers": 1,
+            "num_layers": 0,
         }
     )
     wrapper_settings = WrapperComponentSettings()
@@ -220,7 +220,7 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
             "in_features": 4,
             "out_features": 4,
             "hidden_size": 4,
-            "num_layers": 1,
+            "num_layers": 0,
         }
     )
     loaded = StandardLightningWrapper.load_from_checkpoint(
