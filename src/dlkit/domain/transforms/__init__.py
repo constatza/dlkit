@@ -31,6 +31,7 @@ from .standard import StandardScaler
 from .subset import TensorSubset
 from .tanh_transform import TanhTransform
 from .truncated_svd import TruncatedSVD
+from .unsqueeze import Unsqueeze
 
 __all__ = [
     # Base
@@ -55,6 +56,7 @@ __all__ = [
     "PowerTransform",
     "SignedLogTransform",
     "TanhTransform",
+    "Unsqueeze",
     # Protocols
     "FittableTransform",
     "IncrementalFittableTransform",
