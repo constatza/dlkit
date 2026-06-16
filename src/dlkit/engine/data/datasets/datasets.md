@@ -18,7 +18,6 @@ The primary dataset for array-based data with flexible feature/target configurat
 
 **Key Features:**
 - Default mode loads arrays into memory upfront for simple workflows
-- Optional `memmap_cache_dir` builds/uses disk-backed cache to reduce peak RAM usage
 - Configure arbitrary features and targets
 - Named `Feature` entries double as model-dispatch keys when `model_input=true`
 - Automatic precision handling via `PrecisionService`

@@ -6,16 +6,12 @@ and target files based on data entry configurations.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
 import numpy as np
 import torch
-from loguru import logger
 from torch import Tensor
 
 from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-exported for callers)
@@ -145,107 +141,6 @@ def _load_or_convert_tensor(
     return load_array(source, dtype=dtype, **load_kwargs)
 
 
-def _get_source_dtype() -> torch.dtype:
-    """Get the active precision dtype from PrecisionService.
-
-    Returns:
-        torch.dtype: Dtype from the active precision context.
-    """
-    from dlkit.infrastructure.precision.service import get_precision_service
-
-    return get_precision_service().get_torch_dtype()
-
-
-def _compute_source_fingerprint(
-    all_maps: dict[str, _NormalizedEntry],
-    dtype: torch.dtype,
-) -> str:
-    """Compute SHA-256 fingerprint over source files and dtype.
-
-    Args:
-        all_maps: Mapping from entry name to _NormalizedEntry (Path sources only).
-        dtype: Target tensor dtype included in the fingerprint.
-
-    Returns:
-        str: Full hex-digest fingerprint string.
-    """
-    h = hashlib.sha256()
-    for name in sorted(all_maps):
-        ne = all_maps[name]
-        assert isinstance(ne.source, Path)
-        h.update(name.encode())
-        h.update(ne.source.as_posix().encode())
-        h.update(str(ne.source.stat().st_mtime_ns).encode())
-    h.update(str(dtype).encode())
-    return h.hexdigest()
-
-
-def _read_cache_fingerprint(cache_dir: Path) -> str | None:
-    """Read the stored fingerprint from a cache directory.
-
-    Args:
-        cache_dir: Cache directory path.
-
-    Returns:
-        str | None: Fingerprint string, or None if not present.
-    """
-    fp_file = cache_dir / "dlkit_fingerprint.txt"
-    return fp_file.read_text().strip() if fp_file.exists() else None
-
-
-def _write_cache_fingerprint(cache_dir: Path, fp: str) -> None:
-    """Persist fingerprint into a cache directory.
-
-    Args:
-        cache_dir: Cache directory path.
-        fp: Fingerprint string to write.
-    """
-    (cache_dir / "dlkit_fingerprint.txt").write_text(fp)
-
-
-def _write_entry_to_memmap(
-    name: str,
-    source: Path,
-    array_key: str | None,
-    group_dir: Path,
-    dtype: torch.dtype,
-    chunk_size: int,
-) -> Any:
-    """OOM-safe write of a single array entry into a MemoryMappedTensor file.
-
-    For .npy sources the source is read via numpy mmap (no full RAM load).
-    For all other sources the tensor is loaded normally then chunked into the file.
-
-    Args:
-        name: Entry name (used for output filename).
-        source: Source file path.
-        array_key: Array key for .npz files; equals entry name by convention.  ``None`` for non-npz.
-        group_dir: Directory to write the .memmap file into.
-        dtype: Target tensor dtype.
-        chunk_size: Number of rows written per iteration.
-
-    Returns:
-        MemoryMappedTensor: Disk-backed tensor filled with the entry data.
-    """
-    from tensordict.memmap import MemoryMappedTensor
-
-    suffix = source.suffix.lower()
-    src: np.ndarray
-    if suffix == ".npy":
-        src = np.load(str(source), mmap_mode="r")
-    else:
-        tensor = _load_or_convert_tensor(source, dtype=dtype, array_key=array_key)
-        src = tensor.numpy()
-
-    shape = src.shape
-    filename = str(group_dir / f"{name}.memmap")
-    mmt = MemoryMappedTensor.empty(list(shape), dtype=dtype, filename=filename)
-    for start in range(0, shape[0], chunk_size):
-        end = min(start + chunk_size, shape[0])
-        mmt[start:end] = torch.as_tensor(np.array(src[start:end])).to(dtype=dtype)
-    return mmt
-
-
 def _determine_n_total(
     dense_tensors: dict[str, Any],
     pack_bindings: dict[str, ILazyReader] | None = None,
@@ -286,29 +181,6 @@ def _determine_n_total(
         return next(iter(pack_ns))
 
     raise ValueError("No entries provided to determine dataset size.")
-
-
-def _validate_memmap_entries(
-    all_maps: dict[str, _NormalizedEntry],
-) -> None:
-    """Raise ValueError if any entry is not a file path.
-
-    Callers must strip ``ZarrLazyReader`` entries before calling this function;
-    zarr readers bypass the memmap cache entirely.
-
-    Args:
-        all_maps: Mapping from entry name to _NormalizedEntry.
-            Must not contain ``ZarrLazyReader`` entries (strip them before calling).
-
-    Raises:
-        ValueError: If any source is not a Path.
-    """
-    for name, ne in all_maps.items():
-        if not isinstance(ne.source, Path):
-            raise ValueError(
-                f"Entry '{name}' is not file-backed. "
-                "memmap_cache_dir requires PathBasedEntry entries."
-            )
 
 
 def _partition_entry_map(
@@ -440,144 +312,6 @@ def _assemble_dataset_tensordict(
     return td, n
 
 
-def _load_entry_from_memmap(filename: Path, info: dict[str, Any]) -> Tensor:
-    """Load a single entry from a .memmap file using numpy mmap (zero-copy).
-
-    Args:
-        filename: Path to the .memmap file.
-        info: Metadata dict with ``shape`` (list[int]) and ``dtype`` (str).
-
-    Returns:
-        Tensor: Memory-mapped tensor backed by the file.
-    """
-    shape = tuple(info["shape"])
-    torch_dtype: torch.dtype = getattr(torch, info["dtype"].replace("torch.", ""))
-    np_dtype = torch.empty(0, dtype=torch_dtype).numpy().dtype
-    # mode='c' (copy-on-write): writable view so torch.from_numpy won't warn;
-    # pages are still loaded lazily from disk on read — OOM benefit is preserved.
-    arr = np.memmap(str(filename), dtype=np_dtype, mode="c", shape=shape)
-    # torch.from_numpy keeps a reference to arr, preventing GC / mmap closure
-    return torch.from_numpy(arr)
-
-
-def _build_memmap_cache(
-    feat_map: dict[str, _NormalizedEntry],
-    targ_map: dict[str, _NormalizedEntry],
-    cache_dir: Path,
-    dtype: torch.dtype,
-    chunk_size: int = 5_000,
-) -> TensorDict:
-    """Build an OOM-safe memmap cache for a dataset.
-
-    Args:
-        feat_map: Feature entry map: name → _NormalizedEntry (Path sources only).
-        targ_map: Target entry map: name → _NormalizedEntry (Path sources only).
-        cache_dir: Root directory for the cache.
-        dtype: Target tensor dtype for all entries.
-        chunk_size: Rows per write iteration.
-
-    Returns:
-        TensorDict: Dataset TensorDict backed by the new memmap files.
-
-    Raises:
-        BatchComplianceError: If feature/target sample counts disagree.
-        ValueError: If N cannot be inferred from available entries.
-    """
-    features_dir = cache_dir / "features"
-    targets_dir = cache_dir / "targets"
-    for d in (cache_dir, features_dir, targets_dir):
-        d.mkdir(parents=True, exist_ok=True)
-
-    meta: dict[str, dict[str, Any]] = {"features": {}, "targets": {}}
-    feat_tensors: _TensorMap = {}
-    targ_tensors: _TensorMap = {}
-
-    for name, ne in feat_map.items():
-        assert isinstance(ne.source, Path)
-        mmt = _write_entry_to_memmap(name, ne.source, ne.array_key, features_dir, dtype, chunk_size)
-        feat_tensors[name] = mmt
-        meta["features"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
-
-    for name, ne in targ_map.items():
-        assert isinstance(ne.source, Path)
-        mmt = _write_entry_to_memmap(name, ne.source, ne.array_key, targets_dir, dtype, chunk_size)
-        targ_tensors[name] = mmt
-        meta["targets"][name] = {"shape": list(mmt.shape), "dtype": str(dtype)}
-
-    n = _determine_n_total({**feat_tensors, **targ_tensors})
-
-    with open(cache_dir / "meta.json", "w") as f:
-        json.dump(meta, f)
-
-    return _build_nested_tensordict(feat_tensors, targ_tensors, batch_size=[n])
-
-
-def _load_memmap_from_cache(cache_dir: Path) -> TensorDict:
-    """Reconstruct a TensorDict from an existing memmap cache directory.
-
-    Args:
-        cache_dir: Cache directory previously built by ``_build_memmap_cache``.
-
-    Returns:
-        TensorDict: Dataset TensorDict backed by memory-mapped files.
-    """
-    with open(cache_dir / "meta.json") as f:
-        meta = json.load(f)
-
-    def _load_group(group_key: str, group_dir: Path) -> tuple[dict[str, Tensor], int]:
-        tensors: dict[str, Tensor] = {}
-        n = 0
-        for name, info in meta[group_key].items():
-            n = info["shape"][0]
-            tensors[name] = _load_entry_from_memmap(group_dir / f"{name}.memmap", info)
-        return tensors, n
-
-    feat_tensors, n = _load_group("features", cache_dir / "features")
-    targ_tensors, _ = _load_group("targets", cache_dir / "targets")
-    return _build_nested_tensordict(feat_tensors, targ_tensors, batch_size=[n])
-
-
-def _load_or_build_memmap(
-    feat_map: dict[str, _NormalizedEntry],
-    targ_map: dict[str, _NormalizedEntry],
-    cache_dir: Path,
-    dtype: torch.dtype,
-    chunk_size: int = 5_000,
-) -> TensorDict:
-    """Load a memmap dataset from cache, rebuilding if stale or absent.
-
-    Cache invalidation is fingerprint-based: any change to source file mtimes
-    or dtype triggers a full wipe-and-rebuild (no stale sub-directories).
-
-    Args:
-        feat_map: Feature entry map: name → _NormalizedEntry (Path sources only).
-        targ_map: Target entry map: name → _NormalizedEntry (Path sources only).
-        cache_dir: Directory for memmap cache files.
-        dtype: Target tensor dtype (included in fingerprint).
-        chunk_size: Rows written per iteration when building the cache.
-
-    Returns:
-        TensorDict: Dataset TensorDict backed by memory-mapped files.
-    """
-    all_maps: dict[str, _NormalizedEntry] = {**feat_map, **targ_map}
-    fingerprint = _compute_source_fingerprint(all_maps, dtype)
-    stored_fp = _read_cache_fingerprint(cache_dir)
-
-    if stored_fp == fingerprint and (cache_dir / "meta.json").exists():
-        logger.info(f"Loading memmap dataset from cache: {cache_dir}")
-        return _load_memmap_from_cache(cache_dir)
-
-    if cache_dir.exists() and stored_fp != fingerprint:
-        logger.info(f"Cache fingerprint mismatch — rebuilding memmap cache at {cache_dir}")
-        shutil.rmtree(cache_dir)
-    else:
-        logger.info(f"Building memmap cache at {cache_dir}")
-
-    td = _build_memmap_cache(feat_map, targ_map, cache_dir, dtype, chunk_size)
-    _write_cache_fingerprint(cache_dir, fingerprint)
-    return td
-
-
 @register_dataset
 class FlexibleDataset(BaseDataset["TensorDict"]):
     """Dataset that loads an arbitrary set of feature and target entries.
@@ -620,27 +354,16 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
     def __init__(
         self,
         entries: Sequence[AnyEntry],
-        *,
-        memmap_cache_dir: Path | None = None,
-        memmap_chunk_size: int = 5_000,
     ) -> None:
         """Initialize FlexibleDataset with a list of entries.
 
         Args:
             entries: Unified list of DataEntry objects with ``data_role`` set.
                 Role filtering is performed via ``is_feature()`` / ``is_target()``.
-            memmap_cache_dir: If set, load dataset via OS memory-mapped files stored in
-                this directory.  Entries must be file-backed (PathBasedEntry).
-                Zarr entries bypass the memmap cache — zarr handles OOM natively.
-                The cache is invalidated when source files or dtype change.
-            memmap_chunk_size: Rows written per iteration when building the memmap cache.
-                Bounds peak RAM to ``chunk_size × feature_width × sizeof(dtype)``.
-                Ignored when ``memmap_cache_dir`` is ``None``.
 
         Raises:
             BatchComplianceError: If any entry is scalar (0-D) or N sizes do not agree.
-            ValueError: If no features or targets are provided, or a non-file-backed
-                entry is used with memmap_cache_dir.
+            ValueError: If no features or targets are provided.
             PlaceholderNotResolvedError: If placeholder entry without value.
             TypeError: If raw dicts are passed (use entry constructors instead).
         """
@@ -655,53 +378,24 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
 
         self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
         self._target_names: tuple[str, ...] = tuple(targ_map.keys())
-        self._feature_lazy_readers: dict[str, ILazyReader] = {}
-        self._target_lazy_readers: dict[str, ILazyReader] = {}
 
-        if memmap_cache_dir is not None:
-            # ILazyReader entries bypass the memmap cache — zarr handles OOM natively.
-            # Strip zarr readers from both maps before passing to memmap validation.
-            feat_zarr = {
-                n: ne.source for n, ne in feat_map.items() if isinstance(ne.source, ILazyReader)
-            }
-            targ_zarr = {
-                n: ne.source for n, ne in targ_map.items() if isinstance(ne.source, ILazyReader)
-            }
-            self._feature_lazy_readers = feat_zarr
-            self._target_lazy_readers = targ_zarr
-            non_zarr_feat = {k: v for k, v in feat_map.items() if k not in feat_zarr}
-            non_zarr_targ = {k: v for k, v in targ_map.items() if k not in targ_zarr}
-            _validate_memmap_entries({**non_zarr_feat, **non_zarr_targ})
-            active_dtype = _get_source_dtype()
-            self._dataset_td = _load_or_build_memmap(
-                non_zarr_feat,
-                non_zarr_targ,
-                Path(memmap_cache_dir),
-                active_dtype,
-                memmap_chunk_size,
+        dense_feats, feat_lazy = _partition_entry_map(feat_map)
+        dense_targs, targ_lazy = _partition_entry_map(targ_map)
+        self._feature_lazy_readers = feat_lazy
+        self._target_lazy_readers = targ_lazy
+
+        non_scalar_dense = {k: v for k, v in {**dense_feats, **dense_targs}.items() if v.dim() > 0}
+        n = _determine_n_total(non_scalar_dense, {**feat_lazy, **targ_lazy})
+
+        if dense_feats or dense_targs:
+            self._dataset_td, _ = _assemble_dataset_tensordict(
+                dense_feats,
+                dense_targs,
+                tuple(dense_feats.keys()),
+                tuple(dense_targs.keys()),
             )
         else:
-            dense_feats, feat_lazy = _partition_entry_map(feat_map)
-            dense_targs, targ_lazy = _partition_entry_map(targ_map)
-            self._feature_lazy_readers = feat_lazy
-            self._target_lazy_readers = targ_lazy
-
-            # Resolve canonical N: dense entries → zarr readers.
-            non_scalar_dense = {
-                k: v for k, v in {**dense_feats, **dense_targs}.items() if v.dim() > 0
-            }
-            n = _determine_n_total(non_scalar_dense, {**feat_lazy, **targ_lazy})
-
-            if dense_feats or dense_targs:
-                self._dataset_td, _ = _assemble_dataset_tensordict(
-                    dense_feats,
-                    dense_targs,
-                    tuple(dense_feats.keys()),
-                    tuple(dense_targs.keys()),
-                )
-            else:
-                # Pack-only dataset: keep an empty dense base, inject per sample.
-                self._dataset_td = _make_empty_dataset_tensordict(n)
+            self._dataset_td = _make_empty_dataset_tensordict(n)
 
         self._length = int(self._dataset_td.batch_size[0])
 

@@ -43,51 +43,6 @@ def small_npy_target_file(tmp_path: Path) -> dict[str, Any]:
 
 
 @pytest.fixture
-def npy_feature_file(tmp_path: Path) -> dict[str, Any]:
-    """Create a .npy feature file for memmap tests.
-
-    Args:
-        tmp_path: pytest temporary directory fixture.
-
-    Returns:
-        Dictionary with ``path``, ``data`` (ndarray), and ``shape``.
-    """
-    data = np.random.randn(100, 8).astype(np.float32)
-    path = tmp_path / "features.npy"
-    np.save(path, data)
-    return {"path": path, "data": data, "shape": data.shape}
-
-
-@pytest.fixture
-def npy_target_file(tmp_path: Path) -> dict[str, Any]:
-    """Create a .npy target file for memmap tests.
-
-    Args:
-        tmp_path: pytest temporary directory fixture.
-
-    Returns:
-        Dictionary with ``path``, ``data`` (ndarray), and ``shape``.
-    """
-    data = np.random.randn(100, 1).astype(np.float32)
-    path = tmp_path / "targets.npy"
-    np.save(path, data)
-    return {"path": path, "data": data, "shape": data.shape}
-
-
-@pytest.fixture
-def memmap_cache_dir(tmp_path: Path) -> Path:
-    """Provide a fresh cache directory for memmap tests.
-
-    Args:
-        tmp_path: pytest temporary directory fixture.
-
-    Returns:
-        Path to ``tmp_path / "cache"`` (not yet created).
-    """
-    return tmp_path / "cache"
-
-
-@pytest.fixture
 def npz_single_array(tmp_path: Path) -> dict[str, Any]:
     """Create NPZ file with single array for auto-detection testing.
 

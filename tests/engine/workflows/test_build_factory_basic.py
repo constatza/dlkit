@@ -273,7 +273,6 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         module_path="dlkit.engine.data.datasets",
         features=(NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),),
         targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-        memmap_cache=True,
     )
     dm = DataModuleSettings(
         name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
@@ -292,10 +291,9 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     captured: dict[str, Any] = {}
 
     class _CapturedFlexibleDataset:
-        def __init__(self, *, entries, memmap_cache_dir=None):
+        def __init__(self, *, entries):
             captured["features"] = [e for e in entries if e.data_role == DataRole.FEATURE]
             captured["targets"] = [e for e in entries if e.data_role == DataRole.TARGET]
-            captured["memmap_cache_dir"] = memmap_cache_dir
             self._n = 8
 
         def __len__(self) -> int:
@@ -333,7 +331,6 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     comps = BuildFactory().build_components(_as_workflow_settings(settings))
 
     assert isinstance(comps.datamodule, _FakeDataModule)
-    assert captured["memmap_cache_dir"] is not None
     assert captured["features"]
     assert captured["targets"]
     first_feature = captured["features"][0]

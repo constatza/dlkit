@@ -87,7 +87,6 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
         dataset = FlexibleDataset(
             entries=(*configured_features, *configured_targets),  # ty: ignore[invalid-argument-type]
-            memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
         )
         if settings.DATASET is None:
             raise ValueError("DATASET settings are required but not configured")

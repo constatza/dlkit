@@ -191,14 +191,6 @@ class DatasetSettings(StringNamedComponentSettings):
         exclude=True,
         description="Index split configuration (used by DataModule, not dataset constructor)",
     )
-    memmap_cache: bool = Field(
-        default=False,
-        exclude=True,
-        description=(
-            "If true, load dataset using OS memory-mapped files. "
-            "Resolved to memmap_cache_dir at build time."
-        ),
-    )
 
     @field_validator("features", "targets", mode="before")
     @classmethod
@@ -249,19 +241,6 @@ class DatasetSettings(StringNamedComponentSettings):
         return validate_module_path_import(v)
 
     @property
-    def resolved_memmap_cache_dir(self) -> Path | None:
-        """Resolve the OS-standard memmap cache directory when enabled.
-
-        Returns:
-            Path | None: Cache directory path, or None when memmap_cache is False.
-        """
-        if not self.memmap_cache:
-            return None
-        from platformdirs import user_cache_path
-
-        return user_cache_path("dlkit") / "memmap"
-
-    @property
     def has_targets(self) -> bool:
         """Check if any target entries are configured."""
         return len(self.targets) > 0
@@ -309,7 +288,4 @@ class DatasetSettings(StringNamedComponentSettings):
         entries = list(self.features) + list(self.targets)
         if entries:
             base["entries"] = entries
-        resolved = self.resolved_memmap_cache_dir
-        if resolved is not None:
-            base["memmap_cache_dir"] = resolved
         return base

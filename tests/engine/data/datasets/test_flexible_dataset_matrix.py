@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -10,8 +9,7 @@ import torch
 
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
 from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.entry_types import NpyEntry, ValueEntry, ZarrEntry
-from dlkit.infrastructure.io.zarr import ZarrLazyReader
+from dlkit.infrastructure.config.entry_types import ValueEntry, ZarrEntry
 
 
 def _expect_float32_tensor(value: object) -> torch.Tensor:
@@ -82,34 +80,6 @@ def test_broadcast_pack_replicates(zarr_broadcast_pack: dict[str, Any]) -> None:
     assert mat.shape == (3, 4, 4)
     expected = torch.from_numpy(np.stack([expected_matrix] * 3))
     assert torch.allclose(mat, expected)
-
-
-def test_memmap_cache_dir_bypassed_for_zarr_feature(
-    zarr_matrix_pack: dict[str, Any],
-    npy_target_3x1: Path,
-    tmp_path: Path,
-) -> None:
-    """With memmap_cache_dir set, zarr pack reader must NOT be replaced by a MemoryMappedTensor."""
-    pack_path = zarr_matrix_pack["path"]
-    cache_dir = tmp_path / "cache"
-
-    # A file-backed target is required so the memmap path can write the cache.
-    # The pack entry bypasses the memmap and is kept as-is.
-    dataset = FlexibleDataset(
-        entries=[
-            ZarrEntry(name="mat", path=pack_path, data_role=DataRole.FEATURE),
-            NpyEntry(name="y", path=npy_target_3x1, data_role=DataRole.TARGET),
-        ],
-        memmap_cache_dir=cache_dir,
-    )
-
-    # The lazy reader must still be a ZarrLazyReader, not a MemoryMappedTensor.
-    assert "mat" in dataset._feature_lazy_readers
-    assert isinstance(dataset._feature_lazy_readers["mat"], ZarrLazyReader)
-
-    # Functional sanity: index still works when memmap path is active.
-    mat = _expect_float32_tensor(dataset[0]["features", "mat"])
-    assert mat.shape == (4, 4)
 
 
 def test_zarr_target_lazy_injection(zarr_matrix_pack: dict[str, Any]) -> None:

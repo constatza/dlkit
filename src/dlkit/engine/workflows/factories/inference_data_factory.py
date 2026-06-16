@@ -52,7 +52,6 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
 
     dataset = FlexibleDataset(
         entries=(*selected_features, *selected_targets),
-        memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
     )
 
     split_cfg = ds_settings.split

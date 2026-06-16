@@ -58,7 +58,6 @@ class DatasetBuilder:
 
             return FlexibleDataset(
                 entries=(*selected_features, *selected_targets),  # ty: ignore[invalid-argument-type]
-                memmap_cache_dir=getattr(ds_settings, "resolved_memmap_cache_dir", None),
             )
 
         ds_overrides = {
