@@ -9,6 +9,7 @@ import pytest
 import torch
 import zarr
 
+from dlkit.common.sources import ArraySource
 from dlkit.infrastructure.io.zarr import ZarrLazyReader
 
 # ---------------------------------------------------------------------------
@@ -108,3 +109,43 @@ def test_values_match_source(zarr_array: tuple[Path, np.ndarray]) -> None:
     result = reader[indices]
     expected = torch.from_numpy(data[indices])
     assert torch.allclose(result, expected)
+
+
+def test_zarr_lazy_reader_satisfies_array_source_protocol(
+    zarr_array: tuple[Path, np.ndarray],
+) -> None:
+    """ZarrLazyReader is recognised as an ArraySource at runtime.
+
+    Args:
+        zarr_array: Fixture providing (path, data).
+    """
+    path, _ = zarr_array
+    reader = ZarrLazyReader(path)
+    assert isinstance(reader, ArraySource)
+
+
+def test_get_item_returns_single_sample_tensor(zarr_array: tuple[Path, np.ndarray]) -> None:
+    """get_item(idx) returns a 1-D tensor matching the underlying sample.
+
+    Args:
+        zarr_array: Fixture providing (path, data).
+    """
+    path, data = zarr_array
+    reader = ZarrLazyReader(path)
+    result = reader.get_item(3)
+    assert result.shape == torch.Size([4])
+    assert torch.allclose(result.float(), torch.from_numpy(data[3]).float())
+
+
+def test_get_batch_returns_batched_tensor(zarr_array: tuple[Path, np.ndarray]) -> None:
+    """get_batch(indices) returns a (B, *sample_shape) tensor.
+
+    Args:
+        zarr_array: Fixture providing (path, data).
+    """
+    path, data = zarr_array
+    reader = ZarrLazyReader(path)
+    indices = [1, 7, 15]
+    result = reader.get_batch(indices)
+    assert result.shape == torch.Size([3, 4])
+    assert torch.allclose(result.float(), torch.from_numpy(data[indices]).float())

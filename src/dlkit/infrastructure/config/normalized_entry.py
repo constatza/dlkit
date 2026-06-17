@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from torch import Tensor
 
+from dlkit.common.sources import ArraySource
+
 if TYPE_CHECKING:
-    from dlkit.infrastructure.zarr import ILazyReader
+    pass
 
 
 @dataclass(frozen=True)
@@ -19,13 +21,13 @@ class NormalizedEntry:
     """Normalized entry after source extraction.
 
     Attributes:
-        source: Data source — ILazyReader for lazy arrays, Path for
+        source: Data source — ArraySource for lazy arrays (e.g. zarr), Path for
             file-backed entries, or Tensor/ndarray for in-memory data.
         array_key: Array key for .npz files; equals entry name by convention.
             None for non-npz sources.
         load_kwargs: Extra keyword arguments forwarded to load_array().
     """
 
-    source: ILazyReader | Path | Tensor | np.ndarray
+    source: ArraySource | Path | Tensor | np.ndarray
     array_key: str | None
     load_kwargs: dict[str, Any] = dc_field(default_factory=dict)

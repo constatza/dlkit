@@ -26,7 +26,8 @@ import torch
 from pydantic import Field, PrivateAttr, ValidationInfo, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.infrastructure.zarr import ILazyReader, ZarrLazyReader
+from dlkit.common.sources import ArraySource
+from dlkit.infrastructure.zarr import ZarrLazyReader
 
 from .data_roles import DataRole
 from .entry_base import DataEntry
@@ -104,13 +105,13 @@ class PathBasedEntry(DataEntry, IPathBased, ABC):
         return self
 
     @abstractmethod
-    def open_reader(self) -> ILazyReader | Path:
+    def open_reader(self) -> ArraySource | Path:
         """Return the IO source for this entry.
 
         Returns:
-            ``ILazyReader`` for lazy formats (zarr) — callers iterate samples
-            via ``reader[idx]``.  ``Path`` for all eager formats — callers
-            load the whole array via ``load_array()``.
+            ``ArraySource`` for lazy formats (zarr) — callers iterate samples
+            via ``get_item()`` / ``get_batch()``.  ``Path`` for all eager formats
+            — callers load the whole array via ``load_array()``.
         """
 
     @property
@@ -382,11 +383,12 @@ class ZarrEntry(PathBasedEntry):
             raise ValueError(f"Not a native zarr store (missing zarr.json): {self.path}")
         return self
 
-    def open_reader(self) -> ILazyReader:
+    def open_reader(self) -> ArraySource:
         """Return a lazy reader for the zarr array.
 
         Returns:
-            ``ZarrLazyReader`` wrapping the native zarr array at ``self.path``.
+            ``ZarrLazyReader`` wrapping the native zarr array at ``self.path``,
+            which satisfies the ``ArraySource`` protocol.
         """
         if self.path is None:
             raise ValueError(f"{type(self).__name__} has no path — call is_placeholder() first")

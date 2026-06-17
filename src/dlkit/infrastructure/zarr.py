@@ -93,3 +93,38 @@ class ZarrLazyReader:
     def sample_shape(self) -> tuple[int, ...]:
         """Shape of a single sample (all dims after axis 0)."""
         return tuple(self._arr.shape[1:])
+
+    def get_item(self, idx: int) -> torch.Tensor:
+        """Return a single sample tensor, cast to the configured precision dtype.
+
+        Args:
+            idx: Zero-based sample index.
+
+        Returns:
+            Tensor of shape ``(*sample_shape,)`` cast via ``PrecisionService``.
+        """
+        from dlkit.infrastructure.precision.service import PrecisionService
+
+        tensor = self[idx]
+        return PrecisionService().cast_tensor(tensor)
+
+    def get_batch(self, indices: list[int]) -> torch.Tensor:
+        """Return a batch tensor for the given indices, cast to the configured precision dtype.
+
+        Args:
+            indices: List of zero-based sample indices.
+
+        Returns:
+            Tensor of shape ``(B, *sample_shape)`` cast via ``PrecisionService``.
+        """
+        from dlkit.infrastructure.precision.service import PrecisionService
+
+        tensor = self[indices]
+        return PrecisionService().cast_tensor(tensor)
+
+
+# Structural conformance check: ZarrLazyReader satisfies ArraySource.
+# Protocol membership is verified by checking required members on the class.
+assert all(hasattr(ZarrLazyReader, attr) for attr in ("n_samples", "get_item", "get_batch")), (
+    "ZarrLazyReader is missing required ArraySource members"
+)

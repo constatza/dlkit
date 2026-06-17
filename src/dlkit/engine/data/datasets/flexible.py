@@ -6,7 +6,8 @@ and target files based on data entry configurations.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import functools
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
@@ -15,11 +16,14 @@ import torch
 from torch import Tensor
 
 from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-exported for callers)
-from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
+from dlkit.engine.data.sources import RoleSourceMap, build_role_source_map
+from dlkit.engine.data.sources.role_map import (
+    BatchComplianceError,  # noqa: F401  (re-exported for callers)
+)
+from dlkit.infrastructure.config.entry_factories import AnyEntry
 from dlkit.infrastructure.config.normalized_entry import NormalizedEntry as _NormalizedEntry
 from dlkit.infrastructure.io import load_array
 from dlkit.infrastructure.io.arrays import _numpy_array_to_tensor
-from dlkit.infrastructure.zarr import ILazyReader
 
 from .base import BaseDataset, register_dataset
 
@@ -49,21 +53,13 @@ def _build_nested_tensordict(
     )
 
 
-class BatchComplianceError(ValueError):
-    """Raised when dataset entries violate batch-shape invariants.
-
-    Enforces the contract that every entry must carry an explicit sample
-    dimension N as its first axis, and all entries must agree on N.
-    """
-
-
 def _normalize_entries(
     entries: Any,
 ) -> dict[str, _NormalizedEntry]:
     """Extract normalized data sources from DataEntry objects.
 
     Each entry's normalize() method produces a _NormalizedEntry containing
-    the appropriate source (ILazyReader, Path, Tensor, or ndarray).
+    the appropriate source (ArraySource, Path, Tensor, or ndarray).
 
     Args:
         entries: Collection of DataEntry objects
@@ -121,7 +117,6 @@ def _load_or_convert_tensor(
     Returns:
         torch.Tensor with appropriate dtype
     """
-    # Case 1: Already a torch.Tensor or numpy array (in-memory data)
     if isinstance(source, (torch.Tensor, np.ndarray)):
         resolved_dtype = dtype
         if resolved_dtype is None:
@@ -133,91 +128,9 @@ def _load_or_convert_tensor(
             return _numpy_array_to_tensor(source, dtype=resolved_dtype)
         return source.to(dtype=resolved_dtype)
 
-    # Case 2: File path - delegate to existing load_array()
-    # load_array() already handles PrecisionService integration
-    # For .npz files, pass array_key to select specific array
     if isinstance(source, Path) and source.suffix.lower() == ".npz":
         return load_array(source, dtype=dtype, array_key=array_key, **load_kwargs)
     return load_array(source, dtype=dtype, **load_kwargs)
-
-
-def _determine_n_total(
-    dense_tensors: dict[str, Any],
-    pack_bindings: dict[str, ILazyReader] | None = None,
-) -> int:
-    """Pure function: resolve the canonical sample count N from available tensors.
-
-    Precedence: dense tensors (features + targets) → zarr lazy readers (n_samples > 1).
-
-    Args:
-        dense_tensors: Already-written tensors keyed by entry name.
-        pack_bindings: ILazyReader instances.  Readers with
-            ``n_samples > 1`` contribute to N resolution when no dense entries
-            are present.
-
-    Returns:
-        int: Canonical dataset size N.
-
-    Raises:
-        BatchComplianceError: If dense sizes disagree or pack sample counts disagree.
-        ValueError: If N cannot be inferred (no dense entries, all-broadcast packs).
-    """
-    dense_n_set = {int(t.shape[0]) for t in dense_tensors.values()}
-    if dense_n_set:
-        if len(dense_n_set) > 1:
-            raise BatchComplianceError(
-                f"All entries must share the same first dimension N, "
-                f"but found differing sizes: {sorted(dense_n_set)}."
-            )
-        return next(iter(dense_n_set))
-
-    resolved_pack_bindings = pack_bindings or {}
-    pack_ns = {r.n_samples for r in resolved_pack_bindings.values() if r.n_samples > 1}
-    if pack_ns:
-        if len(pack_ns) > 1:
-            raise BatchComplianceError(
-                f"Matrix pack entries have differing sample counts: {sorted(pack_ns)}."
-            )
-        return next(iter(pack_ns))
-
-    raise ValueError("No entries provided to determine dataset size.")
-
-
-def _partition_entry_map(
-    entry_map: dict[str, _NormalizedEntry],
-) -> tuple[dict[str, Tensor], dict[str, ILazyReader]]:
-    """Split a normalised entry map into eager tensors and lazy zarr readers.
-
-    Args:
-        entry_map: Mapping from entry name to _NormalizedEntry.
-
-    Returns:
-        Tuple of (dense_tensors, lazy_readers) where dense_tensors contains
-        pre-loaded tensors and lazy_readers contains ILazyReader instances.
-    """
-    dense: dict[str, Tensor] = {}
-    lazy: dict[str, ILazyReader] = {}
-    for name, ne in entry_map.items():
-        if isinstance(ne.source, ILazyReader):
-            lazy[name] = ne.source
-        else:
-            dense[name] = _load_or_convert_tensor(
-                ne.source, array_key=ne.array_key, **ne.load_kwargs
-            )
-    return dense, lazy
-
-
-def _make_empty_dataset_tensordict(n: int) -> TensorDict:
-    """Create an empty dataset TensorDict with batch size [n]."""
-    from tensordict import TensorDict
-
-    return TensorDict(
-        {
-            "features": TensorDict({}, batch_size=[n]),
-            "targets": TensorDict({}, batch_size=[n]),
-        },
-        batch_size=[n],
-    )
 
 
 def _normalize_index(idx: int, n: int) -> int:
@@ -233,83 +146,67 @@ def _normalize_indices(indices: list[int], n: int) -> list[int]:
     return [_normalize_index(int(idx), n) for idx in indices]
 
 
-def _inject_lazy_readers(
-    td: TensorDict,
-    *,
-    idx: int | list[int],
-    readers: dict[str, ILazyReader],
-    namespace: str,
-) -> TensorDict:
-    """Inject lazy-reader tensors into a TensorDict at the given nested namespace.
+def _check_no_placeholders(entries: Sequence[AnyEntry]) -> None:
+    """Raise PlaceholderNotResolvedError if any entry is a placeholder.
 
     Args:
-        td: TensorDict to enrich (mutated in place).
-        idx: Single sample index (int) or batch of indices (list[int]).
-        readers: Lazy zarr readers keyed by entry name.
-        namespace: Nested key prefix (e.g. ``"features"`` or ``"targets"``).
-
-    Returns:
-        The enriched TensorDict.
-    """
-    if not readers:
-        return td
-
-    for name, reader in readers.items():
-        td[namespace, name] = reader[idx]
-    return td
-
-
-def _assemble_dataset_tensordict(
-    feat_tensors: dict[str, Tensor],
-    targ_tensors: dict[str, Tensor],
-    feat_names: tuple[str, ...],
-    targ_names: tuple[str, ...],
-) -> tuple[TensorDict, int]:
-    """Validate batch compliance once and assemble nested TensorDict.
-
-    Performs the single authoritative compliance check: no scalars, all lengths
-    agree, N >= 1.  Feature and target sub-dicts are ordered by feat_names /
-    targ_names to match the original entry ordering.
-
-    Args:
-        feat_tensors: Feature tensor map.
-        targ_tensors: Target tensor map.
-        feat_names: Feature entry names in insertion order.
-        targ_names: Target entry names in insertion order.
-
-    Returns:
-        Tuple of (assembled TensorDict with batch_size=[N], canonical N).
+        entries: Entries to check.
 
     Raises:
-        BatchComplianceError: If any tensor is scalar, sizes disagree, or N < 1.
-        ValueError: If no tensors are provided.
+        PlaceholderNotResolvedError: If any entry has no path or value resolved.
     """
-    all_tensors = {**feat_tensors, **targ_tensors}
-    for tensor in all_tensors.values():
-        if tensor.dim() == 0:
+    for entry in entries:
+        if hasattr(entry, "is_placeholder") and entry.is_placeholder():
+            raise PlaceholderNotResolvedError(str(getattr(entry, "name", None) or "unknown"))
+
+
+def _validate_no_scalars(entries: Sequence[AnyEntry]) -> None:
+    """Validate that no entry produces a scalar (0-D) tensor.
+
+    Args:
+        entries: Entries to validate.
+
+    Raises:
+        BatchComplianceError: If any value-based entry holds a 0-D tensor/array.
+    """
+    from dlkit.infrastructure.config.entry_protocols import IValueBased
+
+    for entry in entries:
+        if not isinstance(entry, IValueBased):
+            continue
+        value = entry.get_value()
+        if value is None:
+            continue
+        ndim = value.ndim if hasattr(value, "ndim") else 0
+        if ndim == 0:
             raise BatchComplianceError(
                 "Scalar (0-D) tensor entries are not allowed. "
                 "Every entry must include the sample dimension N as its first axis. "
                 "Reshape scalars to (N, 1) tensors before use."
             )
 
-    sizes = {int(t.size(0)) for t in all_tensors.values()}
-    if len(sizes) > 1:
-        raise BatchComplianceError(
-            f"All entries must share the same first dimension N, "
-            f"but found differing sizes: {sorted(sizes)}."
-        )
-    if not sizes:
-        raise ValueError("At least one feature or target entry is required after validation")
 
-    n = next(iter(sizes))
-    if n < 1:
-        raise BatchComplianceError("Entries must contain at least one sample (N >= 1).")
+def _build_dataset_tensordict(role_map: RoleSourceMap, n: int) -> TensorDict:
+    """Build a full TensorDict with batch_size=[n] from a RoleSourceMap.
 
-    feature_batch: _TensorMap = {name: feat_tensors[name] for name in feat_names}
-    target_batch: _TensorMap = {name: targ_tensors[name] for name in targ_names}
-    td = _build_nested_tensordict(feature_batch, target_batch, batch_size=[n])
-    return td, n
+    Loads all sources eagerly to produce a TensorDict that mirrors the legacy
+    ``_dataset_td`` attribute expected by test consumers.
+
+    Args:
+        role_map: The role source map to load from.
+        n: Number of samples.
+
+    Returns:
+        Nested TensorDict with ``batch_size=[n]``.
+    """
+    all_indices = list(range(n))
+    feature_tensors: _TensorMap = {
+        name: src.get_batch(all_indices) for name, src in role_map.features
+    }
+    target_tensors: _TensorMap = {
+        name: src.get_batch(all_indices) for name, src in role_map.targets
+    }
+    return _build_nested_tensordict(feature_tensors, target_tensors, batch_size=[n])
 
 
 @register_dataset
@@ -362,42 +259,24 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
                 Role filtering is performed via ``is_feature()`` / ``is_target()``.
 
         Raises:
-            BatchComplianceError: If any entry is scalar (0-D) or N sizes do not agree.
-            ValueError: If no features or targets are provided.
+            BatchComplianceError: If a value-based entry is scalar (0-D), or if
+                sources report conflicting sample counts.  File-backed scalar
+                arrays are not detected at construction time — they raise on
+                first access.
+            ValueError: If no entries are provided.
             PlaceholderNotResolvedError: If placeholder entry without value.
-            TypeError: If raw dicts are passed (use entry constructors instead).
+            TypeError: If entry is value-based but ``get_value()`` returns None.
         """
-        feature_entries: list[Any] = [e for e in entries if is_feature(e)]
-        target_entries: list[Any] = [e for e in entries if is_target(e)]
-
-        feat_map = _normalize_entries(feature_entries)
-        targ_map = _normalize_entries(target_entries)
-
-        if not feat_map and not targ_map:
+        if not entries:
             raise ValueError("At least one feature or target entry is required")
 
-        self._feature_names: tuple[str, ...] = tuple(feat_map.keys())
-        self._target_names: tuple[str, ...] = tuple(targ_map.keys())
+        _check_no_placeholders(entries)
+        _validate_no_scalars(entries)
 
-        dense_feats, feat_lazy = _partition_entry_map(feat_map)
-        dense_targs, targ_lazy = _partition_entry_map(targ_map)
-        self._feature_lazy_readers = feat_lazy
-        self._target_lazy_readers = targ_lazy
-
-        non_scalar_dense = {k: v for k, v in {**dense_feats, **dense_targs}.items() if v.dim() > 0}
-        n = _determine_n_total(non_scalar_dense, {**feat_lazy, **targ_lazy})
-
-        if dense_feats or dense_targs:
-            self._dataset_td, _ = _assemble_dataset_tensordict(
-                dense_feats,
-                dense_targs,
-                tuple(dense_feats.keys()),
-                tuple(dense_targs.keys()),
-            )
-        else:
-            self._dataset_td = _make_empty_dataset_tensordict(n)
-
-        self._length = int(self._dataset_td.batch_size[0])
+        self._role_map: RoleSourceMap = build_role_source_map(entries)
+        self._length: int = self._role_map.n_samples
+        self._feature_names: tuple[str, ...] = tuple(n for n, _ in self._role_map.features)
+        self._target_names: tuple[str, ...] = tuple(n for n, _ in self._role_map.targets)
 
     def __len__(self) -> int:
         """Return number of samples in dataset.
@@ -416,34 +295,54 @@ class FlexibleDataset(BaseDataset["TensorDict"]):
         Returns:
             TensorDict with feature and target nested TensorDicts (batch_size=[])
         """
-        sample_index = _normalize_index(int(idx), self._length)
-        sample = cast("TensorDict", self._dataset_td[sample_index])
-        _inject_lazy_readers(
-            sample, idx=sample_index, readers=self._feature_lazy_readers, namespace="features"
-        )
-        _inject_lazy_readers(
-            sample, idx=sample_index, readers=self._target_lazy_readers, namespace="targets"
-        )
-        return sample
+        i = _normalize_index(int(idx), self._length)
+        feature_tensors = {name: src.get_item(i) for name, src in self._role_map.features}
+        target_tensors = {name: src.get_item(i) for name, src in self._role_map.targets}
+        return _build_nested_tensordict(feature_tensors, target_tensors, batch_size=[])
 
     def __getitems__(self, indices: list[int]) -> TensorDict:
         """Get a batched TensorDict for a list of indices.
 
         This path is used by PyTorch DataLoader for map-style datasets when
-        auto-collation is enabled, allowing pack feature injection once per batch.
+        auto-collation is enabled, allowing source reads to be batched once
+        per batch rather than one sample at a time.
+
+        Args:
+            indices: List of sample indices.
+
+        Returns:
+            Batched TensorDict with ``batch_size=[len(indices)]``.
+
+        Raises:
+            ValueError: If ``indices`` is empty.
         """
         if not indices:
             raise ValueError("indices must be non-empty")
+        idxs = _normalize_indices(indices, self._length)
+        feature_tensors = {name: src.get_batch(idxs) for name, src in self._role_map.features}
+        target_tensors = {name: src.get_batch(idxs) for name, src in self._role_map.targets}
+        return _build_nested_tensordict(feature_tensors, target_tensors, batch_size=[len(idxs)])
 
-        sample_indices = _normalize_indices(indices, self._length)
-        batch = cast("TensorDict", self._dataset_td[sample_indices])
-        _inject_lazy_readers(
-            batch, idx=sample_indices, readers=self._feature_lazy_readers, namespace="features"
-        )
-        _inject_lazy_readers(
-            batch, idx=sample_indices, readers=self._target_lazy_readers, namespace="targets"
-        )
-        return batch
+    @functools.cached_property
+    def _dataset_td(self) -> TensorDict:
+        """Full dataset as a TensorDict, built lazily on first access.
+
+        Returns:
+            Nested TensorDict with ``batch_size=[n]`` containing all features
+            and targets.
+        """
+        return _build_dataset_tensordict(self._role_map, self._length)
+
+    @property
+    def collate_fn(self) -> Callable[[list[TensorDictBase]], TensorDict]:
+        """Collate function for DataLoaders.
+
+        Returns:
+            ``collate_tensordict`` function, which merges a list of TensorDict
+            samples (or a pre-batched TensorDict from ``__getitems__``) into a
+            single batched TensorDict.
+        """
+        return collate_tensordict
 
 
 def collate_tensordict(batch: list[TensorDictBase] | TensorDictBase) -> TensorDict:
