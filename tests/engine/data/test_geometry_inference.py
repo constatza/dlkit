@@ -12,6 +12,7 @@ from tensordict import TensorDict
 from dlkit.common.geometry import FieldRole, GeometryKind, GeometrySpec, TopologyKind
 from dlkit.engine.data.geometry import infer_geometry
 from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -302,6 +303,21 @@ class TestTransformPropagation:
 
         with pytest.raises(ValueError, match="infer_output_shape"):
             infer_geometry((entry,), dataset)
+
+    def test_batch_sensitive_transform_uses_runtime_batch_axis_semantics(self) -> None:
+        """Unsqueeze(dim=1) is inferred against the runtime batched tensor shape."""
+
+        entry = _make_entry(
+            "coords",
+            FieldRole.TARGET_COORDINATES,
+            GeometryKind.TABULAR,
+            transforms=[TransformSettings(name="Unsqueeze", dim=1)],
+        )
+        dataset = _make_dataset({"coords": torch.zeros(4)})
+
+        result = infer_geometry((entry,), dataset)
+
+        assert result.fields[0].shape == (1, 4)
 
 
 class TestInferGeometryErrors:

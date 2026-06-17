@@ -31,6 +31,7 @@ from dlkit.infrastructure.config.model_components import (
 )
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 
 class _FakeDataset:
@@ -561,6 +562,24 @@ def test_infer_target_shapes_from_sample_propagates_target_transforms() -> None:
     output_shapes = infer_target_shapes_from_sample((target,), sample)
 
     assert output_shapes == ((7,),)
+
+
+def test_infer_target_shapes_from_sample_uses_runtime_batch_axis_semantics() -> None:
+    sample = TensorDict(
+        {
+            "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
+            "targets": TensorDict({"y": torch.zeros(4)}, batch_size=[]),
+        },
+        batch_size=[],
+    )
+    target = _make_target_entry(
+        "y",
+        transforms=[TransformSettings(name="Unsqueeze", dim=1)],
+    )
+
+    output_shapes = infer_target_shapes_from_sample((target,), sample)
+
+    assert output_shapes == ((1, 4),)
 
 
 def test_flexible_build_strategy_samples_dataset_once_for_contract_inference(

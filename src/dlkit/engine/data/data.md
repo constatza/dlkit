@@ -10,3 +10,5 @@ Current responsibilities:
 - dataset implementations in `datasets/`
 - dataset split views in `splits.py`
 - shared sample-driven shape inference helpers for runtime services
+- runtime-shape projection for feature/target transform chains, including
+  batch-aware shape changes used during contract inference

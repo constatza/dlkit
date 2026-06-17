@@ -60,6 +60,8 @@ def _extract_transform_kwargs(transform_settings: Any) -> dict[str, Any]:
 def _propagate_shape_through_chain(
     shape: tuple[int, ...],
     transform_settings_list: Sequence[Any],
+    *,
+    leading_axes: tuple[int, ...] = (),
 ) -> tuple[int, ...]:
     """Propagate a shape through an ordered list of transform settings analytically.
 
@@ -67,6 +69,9 @@ def _propagate_shape_through_chain(
         shape: Input shape to propagate.
         transform_settings_list: Ordered transform settings (each has ``name``
             and ``module_path`` attributes).
+        leading_axes: Synthetic leading axes to prepend before propagation and
+            strip afterward. Use this when runtime transforms operate on batched
+            tensors but ``shape`` excludes the batch dimension.
 
     Returns:
         Output shape after all transforms.
@@ -74,7 +79,7 @@ def _propagate_shape_through_chain(
     Raises:
         ValueError: If a transform has no ``infer_output_shape()`` instance method.
     """
-    current = shape
+    current = (*leading_axes, *shape)
     for ts in transform_settings_list:
         transform_cls = _resolve_transform_class(ts)
         all_kwargs = _extract_transform_kwargs(ts)
@@ -87,7 +92,22 @@ def _propagate_shape_through_chain(
                 "infer_output_shape() method. Cannot infer geometry analytically."
             )
         current = instance.infer_output_shape(current)
-    return current
+    if not leading_axes:
+        return current
+
+    # Preserve batch-axis semantics during analytical inference by removing the
+    # synthetic leading axes wherever transforms moved them.
+    remaining = list(current)
+    for axis_size in leading_axes:
+        try:
+            axis_index = remaining.index(axis_size)
+        except ValueError as exc:
+            raise ValueError(
+                "Transform chain altered a synthetic leading axis during shape inference. "
+                "This transform is incompatible with analytical runtime-shape projection."
+            ) from exc
+        remaining.pop(axis_index)
+    return tuple(remaining)
 
 
 def _require_tensordict_sample(sample: Any, *, context: str) -> TensorDictBase:
@@ -143,7 +163,11 @@ def infer_target_shapes_from_sample(
     target_entries: tuple[DataEntry, ...],
     sample: Any,
 ) -> tuple[tuple[int, ...], ...]:
-    """Infer target output shapes from a dataset sample."""
+    """Infer target output shapes from a dataset sample.
+
+    Target transforms execute on batched tensors at runtime, so analytical
+    projection simulates one leading batch axis before stripping it back out.
+    """
     sample_td = _require_tensordict_sample(sample, context="infer_target_shapes_from_sample()")
     if "targets" not in sample_td.keys():
         return ()
@@ -159,7 +183,13 @@ def infer_target_shapes_from_sample(
             shapes.append(raw_shape)
             continue
         transform_settings = getattr(entry, "transforms", ()) or ()
-        shapes.append(_propagate_shape_through_chain(raw_shape, transform_settings))
+        shapes.append(
+            _propagate_shape_through_chain(
+                raw_shape,
+                transform_settings,
+                leading_axes=(1_000_003,),
+            )
+        )
     return tuple(shapes)
 
 
@@ -213,7 +243,11 @@ def _build_field_spec(entry: DataEntry, tensor: Any) -> FieldSpec:
         )
     raw_shape = tuple(int(d) for d in tensor.shape)
     transform_settings = getattr(entry, "transforms", ()) or ()
-    post_shape = _propagate_shape_through_chain(raw_shape, transform_settings)
+    post_shape = _propagate_shape_through_chain(
+        raw_shape,
+        transform_settings,
+        leading_axes=(1_000_003,),
+    )
     return FieldSpec(
         name=entry.name,
         shape=post_shape,
