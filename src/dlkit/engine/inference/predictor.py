@@ -301,10 +301,14 @@ class CheckpointPredictor(IPredictor):
         logger.debug("Loading fitted transforms")
         feature_transforms, target_transforms = load_transforms_from_checkpoint(checkpoint)
 
-        # Place model on device
+        # Place model and transforms on device
         device = self._resolve_device()
         logger.debug("Moving model to device: {}", device)
         model = model.to(device)
+        for chain in feature_transforms.values():
+            chain.to(device)
+        for chain in target_transforms.values():
+            chain.to(device)
 
         # Ensure eval mode
         model.eval()
