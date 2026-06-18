@@ -1,12 +1,12 @@
-"""Array source protocol and shape type aliases for the DLKit data layer.
+"""Array source protocol and open-reader result type for the DLKit data layer.
 
 Defines the ``ArraySource`` protocol that unifies eager and lazy per-sample
-array access, plus type aliases used throughout the data pipeline.
+array access, and the ``OpenReaderResult`` sum type returned by
+``PathBasedEntry.open_reader()``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -54,22 +54,6 @@ class ArraySource(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
-# Shape type aliases (PEP 695 syntax)
-# ---------------------------------------------------------------------------
-
-type Shape = tuple[int, ...]
-"""Shape of a single tensor sample, e.g. ``(64, 128)``."""
-
-type InputShapes = Mapping[str, Shape]
-"""Read-only mapping from feature name to its shape."""
-
-type OutputShapes = Mapping[str, Shape]
-"""Read-only mapping from target name to its shape."""
-
-type EntryShapes = tuple[InputShapes, OutputShapes]
-"""Pair of ``(InputShapes, OutputShapes)`` describing a dataset's IO contract."""
-
 # Sum type for open_reader() return: either a lazy ArraySource or a file Path.
 type OpenReaderResult = ArraySource | Path
 """Return type of ``PathBasedEntry.open_reader()``."""
@@ -77,9 +61,5 @@ type OpenReaderResult = ArraySource | Path
 
 __all__ = [
     "ArraySource",
-    "EntryShapes",
-    "InputShapes",
     "OpenReaderResult",
-    "OutputShapes",
-    "Shape",
 ]

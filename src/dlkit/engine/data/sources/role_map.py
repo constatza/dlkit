@@ -19,6 +19,7 @@ from pathlib import Path
 
 import torch
 
+from dlkit.common.errors import BatchComplianceError
 from dlkit.common.sources import ArraySource
 from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
 from dlkit.infrastructure.config.entry_protocols import IValueBased, PathBasedEntry
@@ -28,10 +29,6 @@ from ._helpers import _require_name
 from .base import BroadcastSource, NamedSources
 from .eager import EagerFileSource
 from .tensor import TensorSource
-
-
-class BatchComplianceError(ValueError):
-    """Raised when sources violate batch-shape invariants."""
 
 
 @dataclass(frozen=True)

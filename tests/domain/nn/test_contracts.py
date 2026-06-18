@@ -13,7 +13,7 @@ import pytest
 import torch.nn as nn
 from pydantic import BaseModel
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.contracts import EntryConsumer, InputSpec
 from dlkit.domain.nn.ffnn.residual import FFNN
 

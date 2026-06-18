@@ -12,7 +12,7 @@ from .metrics_routing import MetricRoute
 from .model_invoker import ModelOutputSpec
 
 if TYPE_CHECKING:
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
     from dlkit.infrastructure.config import ModelComponentSettings, WrapperComponentSettings
     from dlkit.infrastructure.config.data_entries import DataEntry
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings

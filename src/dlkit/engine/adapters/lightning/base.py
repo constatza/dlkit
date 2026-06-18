@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
 from dlkit.engine.adapters.lightning.security import configure_checkpoint_loading

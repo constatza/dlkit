@@ -9,7 +9,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
     deserialize_shapes,
     serialize_shapes,

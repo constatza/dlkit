@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import torch
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.cae.base import CAE
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,

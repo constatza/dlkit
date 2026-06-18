@@ -72,3 +72,7 @@ class PlaceholderNotResolvedError(ValueError):
             f"Entry '{entry_name}' is a placeholder without path or value. "
             f"Either specify 'path' in config or inject 'value' programmatically."
         )
+
+
+class BatchComplianceError(ValueError):
+    """Raised when dataset sources violate batch-shape invariants."""

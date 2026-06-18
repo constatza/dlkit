@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 import torch
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 from dlkit.domain.nn.spectral.coordinate import (
     FourierFeatureNetwork,

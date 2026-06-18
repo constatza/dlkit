@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )

@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING, SupportsIndex, cast
 
 from torch import Tensor
 
-from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-exported for callers)
-from dlkit.engine.data.sources import RoleSourceMap, build_role_source_map
-from dlkit.engine.data.sources.role_map import (
+from dlkit.common.errors import (
     BatchComplianceError,  # noqa: F401  (re-exported for callers)
+    PlaceholderNotResolvedError,  # noqa: F401  (re-exported for callers)
 )
+from dlkit.engine.data.sources import RoleSourceMap, build_role_source_map
 from dlkit.infrastructure.config.entry_factories import AnyEntry
 
 from .base import BaseDataset, register_dataset

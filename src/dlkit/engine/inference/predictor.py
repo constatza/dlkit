@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 
 if TYPE_CHECKING:
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
 
 import torch
 from tensordict import TensorDict

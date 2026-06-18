@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Self
 from torch import Tensor, nn
 
 if TYPE_CHECKING:
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
 
 
 class BaseGraphNetwork(nn.Module):
@@ -18,6 +18,8 @@ class BaseGraphNetwork(nn.Module):
         edge_dim: Edge feature dimensionality; ``None`` if no edge features.
         **kwargs: Additional model-specific parameters.
     """
+
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_channels", "out_channels"})
 
     def __init__(
         self, *, in_channels: int, out_channels: int, edge_dim: int | None = None, **kwargs

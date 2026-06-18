@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.factory import build_model
 from dlkit.domain.nn.operators.deeponet import VarWidthDeepONet
 

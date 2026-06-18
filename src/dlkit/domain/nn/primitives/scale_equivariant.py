@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 
 DEFAULT_SCALE_EQUIVARIANT_NORM = "l2"
 DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN = 10.0

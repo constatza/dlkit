@@ -6,7 +6,7 @@ from typing import Protocol, Self, runtime_checkable
 
 from pydantic import BaseModel
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 
 type HyperParam = int | float | str | bool | list[int] | list[float] | list[str] | None
 

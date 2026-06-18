@@ -16,7 +16,7 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .checkpoint_reader import detect_checkpoint_dtype, extract_model_settings
 
 if TYPE_CHECKING:
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
 
 logger = get_logger(__name__)
 

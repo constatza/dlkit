@@ -9,9 +9,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
+import torch
 from tensordict import TensorDictBase
 
-from dlkit.common.sources import EntryShapes, Shape
+from dlkit.common.shapes import EntryShapes, Shape
+from dlkit.infrastructure.precision.service import PrecisionService
 
 from ._shape_helpers import _propagate_shape_through_chain
 
@@ -47,13 +49,19 @@ def _infer_shapes_for_entries(
     sub_td: TensorDictBase,
     *,
     leading_axes: tuple[int, ...],
+    precision_service: PrecisionService,
 ) -> dict[str, Shape]:
     """Read raw shapes from ``sub_td`` and propagate per-entry transform chains.
+
+    Tensors are precision-cast before shape extraction so that the reported
+    shapes reflect the dtype the model will actually receive at runtime.
 
     Args:
         entries: Entries whose transform chains drive shape propagation.
         sub_td: Nested ``TensorDict`` keyed by entry name.
         leading_axes: Synthetic leading axes passed to transform propagation.
+        precision_service: Shared ``PrecisionService`` used to cast each
+            sampled tensor before its shape is read.
 
     Returns:
         Mapping from entry name to its post-transform shape.
@@ -61,7 +69,8 @@ def _infer_shapes_for_entries(
     result: dict[str, Shape] = {}
     entry_by_name = {e.name: e for e in entries if e.name is not None}
     for key in sub_td.keys():
-        raw = tuple(int(d) for d in sub_td[key].shape)
+        sample = precision_service.cast_tensor(cast(torch.Tensor, sub_td[key]))
+        raw = tuple(int(d) for d in sample.shape)
         entry = entry_by_name.get(str(key))
         transforms = (getattr(entry, "transforms", ()) or ()) if entry else ()
         result[str(key)] = _propagate_shape_through_chain(
@@ -89,11 +98,13 @@ def infer_entry_shapes(
         ValueError: If ``sample`` is not a ``TensorDictBase``.
     """
     sample_td = _require_tensordict_sample(sample, context="infer_entry_shapes()")
+    precision_service = PrecisionService()
 
     input_shapes = _infer_shapes_for_entries(
         feature_entries,
         cast("TensorDictBase", sample_td["features"]),
         leading_axes=(),
+        precision_service=precision_service,
     )
     target_shapes: dict[str, Shape] = {}
     if "targets" in sample_td.keys():
@@ -101,6 +112,7 @@ def infer_entry_shapes(
             target_entries,
             cast("TensorDictBase", sample_td["targets"]),
             leading_axes=_PLACEHOLDER_BATCH_AXIS,
+            precision_service=precision_service,
         )
     return input_shapes, target_shapes
 

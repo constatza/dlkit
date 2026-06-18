@@ -12,7 +12,7 @@ from dlkit.domain.nn.contracts import HyperParam
 if TYPE_CHECKING:
     from torch import nn
 
-    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.common.shapes import InputShapes, OutputShapes
     from dlkit.domain.nn.contracts import EntryConsumer
 
 type ModelFactory = type[nn.Module] | Callable[..., nn.Module]

@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torch.distributions.normal import Normal
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
