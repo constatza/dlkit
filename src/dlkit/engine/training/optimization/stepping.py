@@ -152,7 +152,8 @@ class StepAllOptimizers:
         optimizer = _resolve_host_optimizer(host, stage.stage_index)
         if optimizer is None:
             return _raw_step(stage, loss_fn)
-        assert host is not None
+        if host is None:
+            raise RuntimeError("host must not be None when optimizer is resolved")
         return _manual_step(host, optimizer, loss_fn)
 
 
@@ -226,11 +227,13 @@ class LBFGSStageStepper:
             optimizer = _resolve_host_optimizer(host, stage.stage_index)
             if optimizer is None:
                 return _raw_step(stage, loss_fn)
-            assert host is not None
+            if host is None:
+                raise RuntimeError("host must not be None when optimizer is resolved")
             return _manual_step(host, optimizer, loss_fn)
 
         optimizer = _resolve_host_optimizer(host, stage.stage_index)
         if optimizer is None:
             return _raw_lbfgs_step(stage, loss_fn)
-        assert host is not None
+        if host is None:
+            raise RuntimeError("host must not be None when optimizer is resolved")
         return _manual_lbfgs_step(host, optimizer, loss_fn)

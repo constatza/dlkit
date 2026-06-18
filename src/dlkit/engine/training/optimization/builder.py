@@ -190,9 +190,10 @@ def _create_optimizer(
             ns_coefficients=opt_config.ns_coefficients,
             adjust_lr_fn=opt_config.adjust_lr_fn,
         )
-    assert not isinstance(opt_config, ConcurrentOptimizerSettings), (
-        "Nested ConcurrentOptimizerSettings must be handled by _build_concurrent_optimizer"
-    )
+    if isinstance(opt_config, ConcurrentOptimizerSettings):
+        raise TypeError(
+            "Nested ConcurrentOptimizerSettings must be handled by _build_concurrent_optimizer"
+        )
     return TorchOptimizerFactory(opt_config).create(param_groups)
 
 
