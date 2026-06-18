@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, Self
+from typing import Literal
 
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import (
+    SquareEntryConsumer,
+    StandardEntryConsumer,
+    _square_input_features,
+)
 from dlkit.domain.nn.primitives import (
     DEFAULT_SPD_MIN_DIAG,
     FactorizedLinear,
@@ -239,107 +246,6 @@ class _NonEmbeddedSPDBody(nn.Module):
         return self.output_layer(x)
 
 
-# ── Public generic builders ──────────────────────────────────────────────────
-
-
-class EmbeddedParametricFFNN(_EmbeddedParametricBody):
-    """Residual constrained FFNN with embedding and regression projections."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=True,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
-    """Plain constrained FFNN with embedding and regression projections."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=False,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
 # ── Layer factories ──────────────────────────────────────────────────────────
 
 
@@ -380,40 +286,80 @@ def _factorized_layer_factory(
     return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std, pos_fn=pos_fn)
 
 
-def _square_input_features(
-    cls_name: str,
-    input_shapes: InputShapes,
-    output_shapes: OutputShapes,
-) -> int:
-    """Validate square IO shapes and return the shared feature dimension.
+# ── Public generic builders ──────────────────────────────────────────────────
 
-    Args:
-        cls_name: Name of the requesting class, used in error messages.
-        input_shapes: Mapping from feature entry name to its shape.
-        output_shapes: Mapping from target entry name to its shape.
 
-    Returns:
-        The leading dimension of the input shape (equal to the output's).
+class EmbeddedParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBody):
+    """Residual constrained FFNN with embedding and regression projections."""
 
-    Raises:
-        ValueError: If the input and output shapes are not equal.
-    """
-    in_shape = next(iter(input_shapes.values()))
-    out_shape = next(iter(output_shapes.values()))
-    if in_shape != out_shape:
-        raise ValueError(
-            f"{cls_name} requires a square contract (in_shape == out_shape), "
-            f"got in_shape={in_shape}, out_shape={out_shape}"
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=True,
+            activation=resolve_activation(activation),
+            normalize=normalize,
+            dropout=dropout,
         )
-    return in_shape[0]
+
+
+class EmbeddedSimpleParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBody):
+    """Plain constrained FFNN with embedding and regression projections."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        layer_factory: Callable[[int], nn.Module],
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            layer_factory=layer_factory,
+            _residual=False,
+            activation=resolve_activation(activation),
+            normalize=normalize,
+            dropout=dropout,
+        )
 
 
 # ── Embedded SPD variants (all-SPD, no plain Linear) ────────────────────────
 
 
-class EmbeddedSPDFFNN(_EmbeddedSPDBody):
+class EmbeddedSPDFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
     """Residual all-SPD FFNN: initial no-act SPD → activated residual body → final no-act SPD."""
 
+    class InputSpec(_InputSpec):
+        pass
+
     def __init__(
         self,
         *,
@@ -436,33 +382,13 @@ class EmbeddedSPDFFNN(_EmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
+class EmbeddedSimpleSPDFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
     """Plain all-SPD FFNN: initial no-act SPD → activated plain body → final no-act SPD."""
 
+    class InputSpec(_InputSpec):
+        pass
+
     def __init__(
         self,
         *,
@@ -485,32 +411,12 @@ class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
+class EmbeddedSPDFactorizedFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
     """Residual all-SPDFactorized FFNN: initial no-act → residual body → final no-act."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -542,32 +448,12 @@ class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
+class EmbeddedSimpleSPDFactorizedFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
     """Plain all-SPDFactorized FFNN: initial no-act → plain body → final no-act."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -598,37 +484,17 @@ class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
             normalize=normalize,
             dropout=dropout,
         )
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
 
 
 # ── Non-embedded SPD variants ────────────────────────────────────────────────
 
 
-class SPDFFNN(_NonEmbeddedSPDBody):
+class SPDFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
     """Residual non-embedded SPD FFNN: activated residual body → final no-act SPD layer."""
 
+    class InputSpec(_InputSpec):
+        pass
+
     def __init__(
         self,
         *,
@@ -651,33 +517,13 @@ class SPDFFNN(_NonEmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class SimpleSPDFFNN(_NonEmbeddedSPDBody):
+class SimpleSPDFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
     """Plain non-embedded SPD FFNN: activated plain body → final no-act SPD layer."""
 
+    class InputSpec(_InputSpec):
+        pass
+
     def __init__(
         self,
         *,
@@ -700,32 +546,12 @@ class SimpleSPDFFNN(_NonEmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
+class SPDFactorizedFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
     """Residual non-embedded SPDFactorized FFNN: activated residual body → final no-act layer."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -757,32 +583,12 @@ class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
             dropout=dropout,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
+class SimpleSPDFactorizedFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
     """Plain non-embedded SPDFactorized FFNN: activated plain body → final no-act layer."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -813,29 +619,6 @@ class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
             normalize=normalize,
             dropout=dropout,
         )
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
 
 
 # ── Embedded Factorized variants (plain Linear projections) ─────────────────
@@ -914,7 +697,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
 # ── Non-embedded Factorized variants ────────────────────────────────────────
 
 
-class FactorizedFFNN(nn.Module):
+class FactorizedFFNN(StandardEntryConsumer, nn.Module):
     """Residual non-embedded Factorized FFNN.
 
     First block maps ``in_features → hidden_size`` using a structured Factorized
@@ -922,6 +705,9 @@ class FactorizedFFNN(nn.Module):
     ``hidden_size → hidden_size`` with residual connections. Final plain
     ``nn.Linear(hidden_size → out_features)`` regression layer.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -969,35 +755,17 @@ class FactorizedFFNN(nn.Module):
         x = self.body(x)
         return self.regression_layer(x)
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class SimpleFactorizedFFNN(nn.Module):
+class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
     """Plain non-embedded Factorized FFNN.
 
     First block maps ``in_features → hidden_size`` (no skip). Remaining body
     blocks are square ``hidden_size → hidden_size`` without residual. Final
     plain ``nn.Linear(hidden_size → out_features)`` regression layer.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -1045,23 +813,24 @@ class SimpleFactorizedFFNN(nn.Module):
         x = self.body(x)
         return self.regression_layer(x)
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
+# Re-export _square_input_features so scale_equivariant.py keeps working unchanged.
+__all__ = [
+    "EmbeddedFactorizedFFNN",
+    "EmbeddedParametricFFNN",
+    "EmbeddedSimpleFactorizedFFNN",
+    "EmbeddedSimpleParametricFFNN",
+    "EmbeddedSimpleSPDFactorizedFFNN",
+    "EmbeddedSimpleSPDFFNN",
+    "EmbeddedSPDFactorizedFFNN",
+    "EmbeddedSPDFFNN",
+    "FactorizedFFNN",
+    "ParametricDenseBlock",
+    "SimpleFactorizedFFNN",
+    "SimpleSPDFactorizedFFNN",
+    "SimpleSPDFFNN",
+    "SPDFFNN",
+    "SPDFactorizedFFNN",
+    "_resolve_hidden_size",
+    "_square_input_features",
+]

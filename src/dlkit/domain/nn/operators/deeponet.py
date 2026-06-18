@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from math import prod
-from typing import Any, Literal, Self, cast
+from typing import Literal, cast
 
 import torch
 from torch import Tensor, nn
 
 from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
@@ -97,7 +101,7 @@ class DeepONet(nn.Module):
         return values
 
 
-class _FlatBranchDeepONet(DeepONet):
+class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
     """Internal DeepONet base for flattened branch inputs.
 
     Input/output dimensions:
@@ -105,7 +109,52 @@ class _FlatBranchDeepONet(DeepONet):
         flattened branch input: ``(batch, prod(branch_shape))``
         query input: ``(batch, n_queries, query_dim)``
         output: ``(batch, n_queries, out_features)``
+
+    Expected entry names: ``"branch"`` for sensor readings, ``"query"`` for
+    coordinate points. When only one entry is provided it serves as both.
     """
+
+    class InputSpec(_InputSpec):
+        branch: tuple[int, ...]  # sensor readings — flat or multi-dimensional
+        query: tuple[int, ...]  # coordinate points, last dim = query_dim
+
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset(
+        {"branch_in_features", "query_dim", "out_features"}
+    )
+
+    @classmethod
+    def _constructor_dims(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+    ) -> dict[str, int]:
+        """Derive branch/query/output dimensions from entry shapes.
+
+        Uses named lookup (``"branch"`` / ``"query"``); falls back to
+        positional order when those names are absent.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+
+        Returns:
+            Dict with ``branch_in_features``, ``query_dim``, and ``out_features``.
+
+        Raises:
+            ValueError: If the query shape has fewer than 1 dimension.
+        """
+        shapes = list(input_shapes.values())
+        branch_shape = input_shapes.get("branch") or shapes[0]
+        query_shape = input_shapes.get("query") or (shapes[1] if len(shapes) > 1 else shapes[0])
+        if len(query_shape) < 1:
+            raise ValueError(
+                f"{cls.__name__} requires at least 1-D query shape but got {query_shape}"
+            )
+        return {
+            "branch_in_features": prod(branch_shape),
+            "query_dim": query_shape[-1],
+            "out_features": next(iter(output_shapes.values()))[0],
+        }
 
     def forward(self, u: Tensor, y: Tensor) -> Tensor:
         """Flatten the branch input before dispatch."""
@@ -176,34 +225,6 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
             trunk_net=trunk_net,
             trunk_width=trunk_width,
             out_features=out_features,
-        )
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the operator from dataset entry shapes.
-
-        The first input is the branch (sensor) function and the second is the
-        query coordinate grid. When only one input is provided it serves as both.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed DeepONet variant instance.
-        """
-        shapes = list(input_shapes.values())
-        branch_shape = shapes[0]
-        query_shape = shapes[1] if len(shapes) > 1 else shapes[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            branch_in_features=prod(branch_shape),
-            query_dim=query_shape[-1],
-            out_features=out_features,
-            **kwargs,
         )
 
 

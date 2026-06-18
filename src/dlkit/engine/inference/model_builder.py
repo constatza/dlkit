@@ -20,38 +20,19 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Shape keys that from_entries() derives and supplies to the constructor. Stripping them
-# from hyperparams prevents "got multiple values for keyword argument" errors when both
-# the checkpoint's init_kwargs and from_entries() supply the same parameter.
-_SHAPE_KEYS: frozenset[str] = frozenset(
-    {
-        "in_features",
-        "out_features",
-        "in_shape",
-        "out_shape",
-        "in_channels",
-        "out_channels",
-        "spatial_shape",
-        "seq_len",
-        "edge_dim",
-        "branch_shape",
-        "query_shape",
-        "branch_in_features",
-        "query_dim",
-    }
-)
 
-
-def _strip_shape_keys(hyperparams: dict[str, Any]) -> dict[str, Any]:
-    """Remove shape keys that ``from_entries()`` will supply via construction.
+def _strip_shape_keys(model_cls: type, hyperparams: dict[str, Any]) -> dict[str, Any]:
+    """Remove constructor kwargs that from_entries() will supply from shapes.
 
     Args:
-        hyperparams: Raw init kwargs extracted from checkpoint model settings.
+        model_cls: The model class being constructed.
+        hyperparams: Raw init kwargs from checkpoint.
 
     Returns:
         Filtered kwargs with shape-owned keys removed.
     """
-    return {k: v for k, v in hyperparams.items() if k not in _SHAPE_KEYS}
+    shape_keys = getattr(model_cls, "_SHAPE_KWARG_NAMES", frozenset())
+    return {k: v for k, v in hyperparams.items() if k not in shape_keys}
 
 
 def build_model_from_checkpoint(
@@ -98,7 +79,7 @@ def build_model_from_checkpoint(
         hyperparams = {**hyperparams, "activation": model_settings.activation}
     has_shapes = input_shapes is not None and output_shapes is not None
     if has_shapes:
-        hyperparams = _strip_shape_keys(hyperparams)
+        hyperparams = _strip_shape_keys(model_cls, hyperparams)
     model = _build_model(
         cast("type[torch.nn.Module]", model_cls),
         hyperparams,

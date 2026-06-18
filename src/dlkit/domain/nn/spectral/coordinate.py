@@ -24,12 +24,15 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Any, Literal, Self, cast
+from typing import Literal, cast
 
 import torch
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
@@ -53,7 +56,7 @@ _DEFAULT_HASH_PRIMES = (
 )
 
 
-class FourierFeatureNetwork(nn.Module):
+class FourierFeatureNetwork(StandardEntryConsumer, nn.Module):
     """MLP with coordinate-wise Fourier feature mapping (Tancik et al. 2020).
 
     Maps input coordinates through:
@@ -75,6 +78,9 @@ class FourierFeatureNetwork(nn.Module):
         normalize: Normalisation type for the internal MLP.
         dropout: Dropout probability for the internal MLP.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -119,24 +125,6 @@ class FourierFeatureNetwork(nn.Module):
         proj = 2 * math.pi * x @ self.B.T
         encoded = torch.cat([proj.sin(), proj.cos()], dim=-1)
         return self.mlp(encoded)
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build from dataset entry shapes.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed FourierFeatureNetwork.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 class MultiresolutionHashEncoding(nn.Module):
@@ -272,8 +260,11 @@ class MultiresolutionHashEncoding(nn.Module):
         return torch.cat(levels, dim=-1)
 
 
-class HashEncodingNetwork(nn.Module):
+class HashEncodingNetwork(StandardEntryConsumer, nn.Module):
     """Coordinate network using a multiresolution hashed grid encoder."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -317,26 +308,8 @@ class HashEncodingNetwork(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self.mlp(self.encoding(x))
 
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build from dataset entry shapes.
 
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed HashEncodingNetwork.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class Siren(nn.Module):
+class Siren(StandardEntryConsumer, nn.Module):
     """Sinusoidal representation network (Sitzmann et al. 2020, NeurIPS).
 
     Uses sin activations throughout with layer-specific weight initialisation:
@@ -351,6 +324,9 @@ class Siren(nn.Module):
         num_layers: Number of hidden layers (each is sin + linear).
         omega0: Frequency multiplier for the first layer (default 30).
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -406,26 +382,8 @@ class Siren(nn.Module):
             x = torch.sin(layer(x))
         return self.output_layer(x)
 
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build from dataset entry shapes.
 
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed Siren.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class ModifiedMLP(nn.Module):
+class ModifiedMLP(StandardEntryConsumer, nn.Module):
     """Modified MLP with U/V encoder gating (Wang et al. 2022).
 
     Two learned encoder branches U and V modulate each hidden layer:
@@ -447,6 +405,9 @@ class ModifiedMLP(nn.Module):
         num_layers: Number of hidden linear layers (>= 2).
         activation: Gating activation σ. Defaults to torch.sigmoid.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -488,53 +449,12 @@ class ModifiedMLP(nn.Module):
             h = z * u + (1.0 - z) * v
         return self.output_layer(h)
 
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build from dataset entry shapes.
 
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed ModifiedMLP.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class _ScaleEquivariantCoordinateBase(ScaleEquivariantWrapper):
-    """Shared scale-equivariant wrapper for coordinate spectral-bias models."""
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build a scale-equivariant coordinate model from dataset entry shapes.
-
-        Explicit ``in_features``/``out_features`` in ``kwargs`` are dropped so the
-        shape-derived values take precedence.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed scale-equivariant coordinate model.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        filtered = {k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")}
-        return cls(in_features=in_features, out_features=out_features, **filtered)  # ty: ignore[unknown-argument]  # concrete subclasses accept these args
-
-
-class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
+class ScaleEquivariantFourierFeatureNetwork(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant Fourier feature network."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -572,8 +492,11 @@ class ScaleEquivariantFourierFeatureNetwork(_ScaleEquivariantCoordinateBase):
         )
 
 
-class ScaleEquivariantSiren(_ScaleEquivariantCoordinateBase):
+class ScaleEquivariantSiren(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant sinusoidal representation network."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -601,8 +524,11 @@ class ScaleEquivariantSiren(_ScaleEquivariantCoordinateBase):
         )
 
 
-class ScaleEquivariantModifiedMLP(_ScaleEquivariantCoordinateBase):
+class ScaleEquivariantModifiedMLP(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant modified MLP with U/V gating."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,

@@ -24,12 +24,15 @@ parameters:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, Self
+from typing import Literal
 
 import torch
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
@@ -195,7 +198,7 @@ class SpectralDualPath(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class FourierEnhancedFFNN(FourierAugmented):
+class FourierEnhancedFFNN(StandardEntryConsumer, FourierAugmented):
     """FFNN augmented with truncated Fourier features.
 
     Inherits ``FourierAugmented`` and builds a ``FFNN`` backbone
@@ -214,6 +217,9 @@ class FourierEnhancedFFNN(FourierAugmented):
         normalize: Normalisation type for the internal MLP.
         dropout: Dropout probability for the internal MLP.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -238,26 +244,8 @@ class FourierEnhancedFFNN(FourierAugmented):
         )
         super().__init__(backbone=backbone, n_modes=n_modes)
 
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the network from dataset entry shapes.
 
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed network instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class DualPathFFNN(SpectralDualPath):
+class DualPathFFNN(StandardEntryConsumer, SpectralDualPath):
     """FFNN with parallel spatial and spectral ``FFNN`` branches.
 
     Inherits ``SpectralDualPath`` and builds both branches as
@@ -275,6 +263,9 @@ class DualPathFFNN(SpectralDualPath):
         normalize: Normalisation type for both branches.
         dropout: Dropout probability for both branches.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -317,21 +308,3 @@ class DualPathFFNN(SpectralDualPath):
             n_modes=n_modes,
             merge=merge,
         )
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the network from dataset entry shapes.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed network instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)

@@ -456,7 +456,7 @@ class TestSymmetricLinearNetwork:
     ) -> None:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
-        with pytest.raises(ValueError, match="square contract"):
+        with pytest.raises(ValueError, match="in_features == out_features|square contract"):
             SymmetricLinearNetwork.from_entries(in_shapes, out_shapes)
 
     def test_from_entries_respects_kwargs(
@@ -502,7 +502,7 @@ class TestSPDLinearNetwork:
     ) -> None:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
-        with pytest.raises(ValueError, match="square contract"):
+        with pytest.raises(ValueError, match="in_features == out_features|square contract"):
             SPDLinearNetwork.from_entries(in_shapes, out_shapes)
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
@@ -550,7 +550,7 @@ class TestSymmetricFactorizedLinearNetwork:
     ) -> None:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
-        with pytest.raises(ValueError, match="square contract"):
+        with pytest.raises(ValueError, match="in_features == out_features|square contract"):
             SymmetricFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
 
     def test_from_entries_respects_kwargs(
@@ -601,7 +601,7 @@ class TestSPDFactorizedLinearNetwork:
     ) -> None:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
-        with pytest.raises(ValueError, match="square contract"):
+        with pytest.raises(ValueError, match="in_features == out_features|square contract"):
             SPDFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
 
     def test_from_entries_respects_kwargs(

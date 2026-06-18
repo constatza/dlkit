@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal, Self
+from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import InputSpec as _InputSpec
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
 
 
-class VarWidthFFNN(nn.Module):
+class VarWidthFFNN(StandardEntryConsumer, nn.Module):
     """Feed-forward network with explicit per-layer widths.
 
     Shape diagram:
@@ -46,6 +47,9 @@ class VarWidthFFNN(nn.Module):
         skip: If ``True`` (default) each hidden transition is wrapped in a
             ``SkipConnection``; set to ``False`` for a plain dense network.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -84,27 +88,6 @@ class VarWidthFFNN(nn.Module):
             self.layers.append(layer)
 
         self.regression_layer = nn.Linear(widths[-1], out_features, bias=bias)
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)
@@ -181,7 +164,7 @@ class FFNN(VarWidthFFNN):
         )
 
 
-class EmbeddedFFNN(nn.Module):
+class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
     """Embedded constant-width residual feed-forward network.
 
     Architecture:
@@ -211,6 +194,9 @@ class EmbeddedFFNN(nn.Module):
         dropout: Dropout probability between hidden layers.
         bias: Whether linear layers include a bias term.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -245,27 +231,6 @@ class EmbeddedFFNN(nn.Module):
             self.layers.append(SkipConnection(block, build_linear_skip_layer(block, bias=bias)))
 
         self.regression_layer = nn.Linear(hidden, out_features, bias=bias)
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)

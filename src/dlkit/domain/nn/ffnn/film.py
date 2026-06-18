@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Self
 
 import torch.nn as nn
 from torch import Tensor
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import InputSpec as _InputSpec
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.primitives.conditioning import (
     ConditionedResidualSequential,
     FiLMLayer,
@@ -109,7 +109,7 @@ class FiLMResidualBlock(IConditionedModule):
         return x + self.film(h, condition)
 
 
-class VarWidthFiLMFFNN(nn.Module):
+class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
     """Variable-width FiLM-conditioned feedforward network.
 
     Op chain:
@@ -132,6 +132,9 @@ class VarWidthFiLMFFNN(nn.Module):
         normalize (NormalizerName | None): Norm layer name or None.
         dropout (float): Dropout rate.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -183,36 +186,8 @@ class VarWidthFiLMFFNN(nn.Module):
             x = block(x, condition)
         return self.head(x)
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            condition_dim (int): Condition vector dimension.
-            **kwargs: Passed to __init__ (layers, activation, etc.)
-
-        Returns:
-            Self: Constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            in_features=in_features,
-            out_features=out_features,
-            condition_dim=condition_dim,
-            **kwargs,
-        )
-
-
-class FiLMEmbeddedFFNN(nn.Module):
+class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
     """Embedded FiLM-conditioned network with constant-width residual body.
 
     Op chain:
@@ -231,6 +206,9 @@ class FiLMEmbeddedFFNN(nn.Module):
         normalize (NormalizerName | None): Norm layer or None.
         dropout (float): Dropout rate.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -275,34 +253,6 @@ class FiLMEmbeddedFFNN(nn.Module):
         x = self.embed(x)
         x = self.body(x, condition)
         return self.head(x)
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            condition_dim (int): Condition vector dimension.
-            **kwargs: Passed to __init__ (hidden_size, num_layers, etc.)
-
-        Returns:
-            Self: Constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            in_features=in_features,
-            out_features=out_features,
-            condition_dim=condition_dim,
-            **kwargs,
-        )
 
 
 class FiLMFFNN(VarWidthFiLMFFNN):

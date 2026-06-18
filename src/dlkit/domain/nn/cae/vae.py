@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Self
 
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
 
 from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import ActivationName, NormalizerName
@@ -58,7 +61,7 @@ def vae_loss(
     return mse + kld
 
 
-class VAE1d(nn.Module):
+class VAE1d(StandardEntryConsumer, nn.Module):
     """Variational Autoencoder for 1D convolutional data.
 
     Encodes input to a (mu, logvar) latent distribution, samples via
@@ -81,6 +84,38 @@ class VAE1d(nn.Module):
         alpha: Reconstruction loss weight (stored for convenience). Defaults to 1.0.
         beta: KL divergence loss weight (stored for convenience). Defaults to 0.1.
     """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_channels", "in_length"})
+
+    @classmethod
+    def _constructor_dims(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+    ) -> dict[str, int]:
+        """Derive channel and length dimensions from the first entry shape.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+
+        Returns:
+            Dict with ``in_channels`` and ``in_length``.
+
+        Raises:
+            ValueError: If input shape has fewer than 2 dimensions.
+        """
+        first_shape = next(iter(input_shapes.values()))
+        if len(first_shape) < 2:
+            raise ValueError(
+                f"{cls.__name__} requires at least 2-D input (in_channels, in_length) "
+                f"but entry has shape {first_shape}. "
+                "Check that your feature entry produces a multi-dimensional tensor."
+            )
+        return {"in_channels": first_shape[0], "in_length": first_shape[1]}
 
     def __init__(
         self,
@@ -136,25 +171,6 @@ class VAE1d(nn.Module):
         )
         self.mu_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
         self.logvar_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the VAE from dataset entry shapes.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed VAE instance.
-        """
-        first_shape = next(iter(input_shapes.values()))
-        in_channels = first_shape[0]
-        in_length = first_shape[1] if len(first_shape) > 1 else 1
-        return cls(in_channels=in_channels, in_length=in_length, **kwargs)
 
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode input to latent distribution parameters.

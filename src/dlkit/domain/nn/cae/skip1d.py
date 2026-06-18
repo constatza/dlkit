@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Self
 
 import torch
 
 from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.cae.base import CAE
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.encoder.latent import (
     TensorToVectorBlock,
     VectorToTensorBlock,
@@ -16,7 +19,7 @@ from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule, resolve_activation
 
 
-class SkipCAE1d(CAE):
+class SkipCAE1d(StandardEntryConsumer, CAE):
     """1D Skip Connection Convolutional Autoencoder.
 
     Args:
@@ -33,6 +36,38 @@ class SkipCAE1d(CAE):
         transpose: Whether to transpose dimensions in latent encoding (default: False).
         dilation: Dilation for convolutions (default: 1).
     """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_channels", "in_length"})
+
+    @classmethod
+    def _constructor_dims(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+    ) -> dict[str, int]:
+        """Derive channel and length dimensions from the first entry shape.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+
+        Returns:
+            Dict with ``in_channels`` and ``in_length``.
+
+        Raises:
+            ValueError: If input shape has fewer than 2 dimensions.
+        """
+        first_shape = next(iter(input_shapes.values()))
+        if len(first_shape) < 2:
+            raise ValueError(
+                f"{cls.__name__} requires at least 2-D input (in_channels, in_length) "
+                f"but entry has shape {first_shape}. "
+                "Check that your feature entry produces a multi-dimensional tensor."
+            )
+        return {"in_channels": first_shape[0], "in_length": first_shape[1]}
 
     def __init__(
         self,
@@ -78,25 +113,6 @@ class SkipCAE1d(CAE):
             dropout=dropout,
             dilation=dilation,
         )
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the autoencoder from dataset entry shapes.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed autoencoder instance.
-        """
-        first_shape = next(iter(input_shapes.values()))
-        in_channels = first_shape[0]
-        in_length = first_shape[1] if len(first_shape) > 1 else 1
-        return cls(in_channels=in_channels, in_length=in_length, **kwargs)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode input to latent space.

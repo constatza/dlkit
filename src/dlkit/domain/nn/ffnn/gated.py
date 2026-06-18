@@ -11,11 +11,12 @@ states against the original features.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Self, TypeVar
+from typing import TypeVar
 
 from torch import Tensor, nn
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import InputSpec as _InputSpec
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer
@@ -23,7 +24,7 @@ from dlkit.domain.nn.utils import make_norm_layer
 _GateT = TypeVar("_GateT", bound=nn.Module)
 
 
-class GatedMLP(nn.Module):
+class GatedMLP(StandardEntryConsumer, nn.Module):
     """Feed-forward network with per-layer pluggable gating.
 
     Each hidden layer applies a gating mechanism (e.g. GLU or SwiGLU)
@@ -64,6 +65,9 @@ class GatedMLP(nn.Module):
         ValueError: If ``num_layers < 1``.
     """
 
+    class InputSpec(_InputSpec):
+        pass
+
     def __init__(
         self,
         *,
@@ -102,25 +106,3 @@ class GatedMLP(nn.Module):
         for gate, norm, drop in zip(self.gates, self.norms, self.drops, strict=True):
             h = drop(norm(gate(h, x)))
         return self.output(h)
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build a :class:`GatedMLP` from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to
-                :meth:`__init__`.
-
-        Returns:
-            Constructed :class:`GatedMLP`.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)

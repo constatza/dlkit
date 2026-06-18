@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal, Self
+from typing import Literal
 
 import torch.nn.functional as F
 from torch import Tensor
 
-from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import (
+    SquareEntryConsumer,
+    StandardEntryConsumer,
+)
 from dlkit.domain.nn.ffnn.constrained import (
     SPDFFNN,
     EmbeddedFactorizedFFNN,
@@ -21,7 +27,6 @@ from dlkit.domain.nn.ffnn.constrained import (
     SimpleSPDFFNN,
     SPDFactorizedFFNN,
     _resolve_hidden_size,
-    _square_input_features,
 )
 from dlkit.domain.nn.ffnn.film import FiLMEmbeddedFFNN, FiLMFFNN, VarWidthFiLMFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
@@ -39,19 +44,14 @@ _DEFAULT_NORM = DEFAULT_SCALE_EQUIVARIANT_NORM
 _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
 
 
-class _ScaleEquivariantBase(ScaleEquivariantWrapper):
-    """Wrap a base FFNN with input/output norm scaling to enforce scale equivariance."""
-
-
-class _ConditionedScaleEquivariantBase(ConditionedScaleEquivariantWrapper):
-    """Private base for conditioned scale-equivariant FFNN variants."""
-
-
 # ── Plain dense (non-structured) ────────────────────────────────────────────
 
 
-class ScaleEquivariantFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual constant-width FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -83,33 +83,15 @@ class ScaleEquivariantFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
 
 # ── Embedded SPD (all-SPD, square) ──────────────────────────────────────────
 
 
-class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedSPDFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual embedded all-SPD FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -142,32 +124,12 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedSimpleSPDFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain embedded all-SPD FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -200,32 +162,12 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedSPDFactorizedFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual embedded all-SPDFactorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -262,32 +204,12 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain embedded all-SPDFactorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -324,35 +246,15 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
 
 # ── Non-embedded SPD (all-SPD, square) ──────────────────────────────────────
 
 
-class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantSPDFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual non-embedded all-SPD FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -385,32 +287,12 @@ class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantSimpleSPDFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain non-embedded all-SPD FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -443,32 +325,12 @@ class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantSPDFactorizedFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual non-embedded all-SPDFactorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -505,32 +367,12 @@ class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
-
-class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantSimpleSPDFactorizedFFNN(SquareEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain non-embedded all-SPDFactorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -567,35 +409,15 @@ class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes (square required).
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-
-        Raises:
-            ValueError: If the input and output shapes are not equal.
-        """
-        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
-        return cls(in_features=in_features, **kwargs)
-
 
 # ── Embedded Factorized (plain Linear projections) ───────────────────────────
 
 
-class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual embedded factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -634,30 +456,12 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain embedded factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -696,33 +500,15 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
 
 # ── Non-embedded Factorized ──────────────────────────────────────────────────
 
 
-class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant residual non-embedded factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -761,30 +547,12 @@ class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
-
-class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
+class ScaleEquivariantSimpleFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
     """Scale-equivariant plain non-embedded factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -823,32 +591,11 @@ class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
             keep_stats=keep_stats,
         )
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        **kwargs: Any,
-    ) -> Self:
-        """Build the network from named input and output shapes.
-
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            A fully constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(in_features=in_features, out_features=out_features, **kwargs)
-
 
 # ── FiLM-conditioned scale-equivariant variants ──────────────────────────────
 
 
-class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
+class ScaleEquivariantVarWidthFiLMFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
     """Scale-equivariant variable-width FiLM-conditioned FFNN.
 
     Scale equivariance applies to the features branch only:
@@ -867,6 +614,9 @@ class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
         normalize (NormalizerName | None): Norm layer or None.
         dropout (float): Dropout rate.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -893,36 +643,8 @@ class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
         )
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            condition_dim (int): Condition vector dimension.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            Self: Constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            in_features=in_features,
-            out_features=out_features,
-            condition_dim=condition_dim,
-            **kwargs,
-        )
-
-
-class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
+class ScaleEquivariantFiLMEmbeddedFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
     """Scale-equivariant FiLM-conditioned embedded constant-width FFNN.
 
     Scale equivariance applies to the features branch only:
@@ -941,6 +663,9 @@ class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
         normalize (NormalizerName | None): Norm layer or None.
         dropout (float): Dropout rate.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -969,36 +694,8 @@ class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
         )
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from named input and output shapes.
 
-        Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
-            condition_dim (int): Condition vector dimension.
-            **kwargs: Additional keyword arguments forwarded to the constructor.
-
-        Returns:
-            Self: Constructed instance.
-        """
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            in_features=in_features,
-            out_features=out_features,
-            condition_dim=condition_dim,
-            **kwargs,
-        )
-
-
-class ScaleEquivariantFiLMFFNN(_ConditionedScaleEquivariantBase):
+class ScaleEquivariantFiLMFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
     """Scale-equivariant constant-width FiLM-conditioned FFNN.
 
     Scale equivariance applies to the features branch only:
@@ -1018,6 +715,9 @@ class ScaleEquivariantFiLMFFNN(_ConditionedScaleEquivariantBase):
         normalize (NormalizerName | None): Norm layer or None.
         dropout (float): Dropout rate.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,
@@ -1045,21 +745,3 @@ class ScaleEquivariantFiLMFFNN(_ConditionedScaleEquivariantBase):
             dropout=dropout,
         )
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
-
-    @classmethod
-    def from_entries(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from named input and output shapes."""
-        in_features = next(iter(input_shapes.values()))[0]
-        out_features = next(iter(output_shapes.values()))[0]
-        return cls(
-            in_features=in_features,
-            out_features=out_features,
-            condition_dim=condition_dim,
-            **kwargs,
-        )

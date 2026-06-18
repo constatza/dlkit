@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Self
 
 from torch import Tensor, nn
 
 from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import (
+    InputSpec as _InputSpec,
+)
+from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.operators.base import GridOperatorBase
 from dlkit.domain.nn.spectral.layers import FourierLayer
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
 
 
-class FourierNeuralOperator1d(GridOperatorBase):
+class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
     """Fourier Neural Operator for 1-D spatial functions.
 
     Input/output dimensions:
@@ -29,6 +32,43 @@ class FourierNeuralOperator1d(GridOperatorBase):
     Constructor dimensions:
         ``in_channels``, ``out_channels``, ``width``, ``n_modes``, ``n_layers``
     """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_channels", "out_channels"})
+
+    @classmethod
+    def _constructor_dims(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+    ) -> dict[str, int]:
+        """Derive channel dimensions from entry shapes.
+
+        Expects at least 1-D input of shape ``(channels, ...)``.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+
+        Returns:
+            Dict with ``in_channels`` and ``out_channels``.
+
+        Raises:
+            ValueError: If input shape has fewer than 1 dimension.
+        """
+        in_shape = next(iter(input_shapes.values()))
+        if len(in_shape) < 1:
+            raise ValueError(
+                f"{cls.__name__} requires at least 1-D input (channels, ...) "
+                f"but entry has shape {in_shape}. "
+                "Check that your feature entry produces a multi-dimensional tensor."
+            )
+        return {
+            "in_channels": in_shape[0],
+            "out_channels": next(iter(output_shapes.values()))[0],
+        }
 
     def __init__(
         self,
@@ -53,21 +93,3 @@ class FourierNeuralOperator1d(GridOperatorBase):
             out_channels=out_channels,
             width=width,
         )
-
-    @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Build the operator from dataset entry shapes.
-
-        Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
-            **kwargs: Additional constructor arguments.
-
-        Returns:
-            Constructed operator instance.
-        """
-        in_channels = next(iter(input_shapes.values()))[0]
-        out_channels = next(iter(output_shapes.values()))[0]
-        return cls(in_channels=in_channels, out_channels=out_channels, **kwargs)
