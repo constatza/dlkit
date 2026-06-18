@@ -143,9 +143,8 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
         Raises:
             ValueError: If the query shape has fewer than 1 dimension.
         """
-        shapes = list(input_shapes.values())
-        branch_shape = input_shapes.get("branch") or shapes[0]
-        query_shape = input_shapes.get("query") or (shapes[1] if len(shapes) > 1 else shapes[0])
+        branch_shape = input_shapes["branch"]
+        query_shape = input_shapes["query"]
         if len(query_shape) < 1:
             raise ValueError(
                 f"{cls.__name__} requires at least 1-D query shape but got {query_shape}"

@@ -83,16 +83,133 @@ For the full matrix, see `graph/graph.md`.
 
 ## Model factory
 
-`dlkit.domain.nn.factory.build_model` constructs any `nn.Module` from a class,
-optional `ModelContractSpec`, and `**kwargs`.
+`dlkit.domain.nn.factory.build_model` constructs any `nn.Module`:
 
-- If the model implements `ContractConsumer` (exposes `from_contract(contract, **kwargs)`),
-  the factory calls that contract-aware constructor.
-- Otherwise the factory calls the model directly with `**kwargs`.
+- If both `input_shapes` and `output_shapes` are provided and the model implements
+  `from_entries` (i.e. inherits `StandardEntryConsumer`), it calls
+  `model_cls.from_entries(input_shapes, output_shapes, **kwargs)`.
+- Otherwise it calls `model_cls(**kwargs)` directly.
 
-Built-in model families implement `from_contract()` accepting the appropriate
-`ModelContractSpec` variant (`TabulaRSpec`, `GridOperatorSpec`, `SequenceSpec`,
-`BranchTrunkSpec`, or `GraphContractSpec`).
+## Shape-providing protocol
+
+All built-in model families implement the **entry-consumer pattern** defined in
+`contracts.py`. Understanding it is essential when adding a new model family.
+
+### Three components
+
+| Component | Where | Role |
+|-----------|-------|------|
+| `InputSpec` | per-model inner class | Declares expected entry names (field names = `forward` arg names) |
+| `_constructor_dims` | classmethod hook | Maps `(InputShapes, OutputShapes)` → `{constructor_kwarg: int}` |
+| `_SHAPE_KWARG_NAMES` | class attribute | Names the kwargs that `_constructor_dims` supplies (for checkpoint stripping) |
+
+### `StandardEntryConsumer` — the base mixin
+
+Provides a sealed `from_entries` classmethod (Template Method pattern).
+
+```python
+class StandardEntryConsumer:
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_features", "out_features"})
+
+    @classmethod
+    def _constructor_dims(cls, input_shapes, output_shapes) -> dict[str, int]:
+        # Default: take the first feature dim and first output dim.
+        return {
+            "in_features": next(iter(input_shapes.values()))[0],
+            "out_features": next(iter(output_shapes.values()))[0],
+        }
+
+    @classmethod
+    def from_entries(cls, input_shapes, output_shapes, **kwargs) -> Self:
+        # 1. Validate that all entries declared in InputSpec are present.
+        # 2. Extract constructor dims via the hook.
+        # 3. Construct cls(**dims, **kwargs).
+        ...
+```
+
+`SquareEntryConsumer` is a subclass whose `_constructor_dims` validates that
+`in_shape == out_shape` (used for SPD-family models).
+
+### Entry name validation (early error before PyTorch runs)
+
+`from_entries` checks `InputSpec.model_fields` against the available
+`input_shapes` keys **before** calling `_constructor_dims`. If a required entry
+is missing, it raises immediately:
+
+```
+ValueError: MySPDModel requires entries ['x'] but only ['y'] are available
+```
+
+### Shape dimensionality validation in `_constructor_dims`
+
+`_constructor_dims` is also the right place to validate the **rank** of an input
+shape — e.g. a spectral model that requires at least a 2-D sample `(C, L)` would
+fail with a cryptic PyTorch error deep in the forward pass if fed a 1-D sample.
+Catch it here instead:
+
+```python
+@classmethod
+def _constructor_dims(cls, input_shapes, output_shapes):
+    in_shape = next(iter(input_shapes.values()))
+    if len(in_shape) < 2:
+        raise ValueError(
+            f"{cls.__name__} requires at least 2-D input shape (C, L) "
+            f"but got shape {in_shape} — check your feature entry configuration."
+        )
+    return {"in_channels": in_shape[0], "seq_len": in_shape[1], ...}
+```
+
+Any shape invariant a model needs (minimum rank, minimum size, parity, square
+constraint) should be validated in `_constructor_dims`, not in `__init__`. That
+way the engine catches the problem at model-build time, before any tensor ever
+flows through the network.
+
+### Adding a new model family
+
+```python
+class MyModel(StandardEntryConsumer, nn.Module):
+    # 1. Declare what entries forward() expects.
+    class InputSpec(InputSpec):
+        x: Shape         # forward(self, x: Tensor)
+        context: Shape   # forward(self, x: Tensor, context: Tensor)
+
+    # 2. Override _SHAPE_KWARG_NAMES to match your constructor kwargs.
+    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({
+        "in_features", "context_dim", "out_features"
+    })
+
+    # 3. Override _constructor_dims to extract and VALIDATE dims.
+    @classmethod
+    def _constructor_dims(cls, input_shapes, output_shapes):
+        x_shape = input_shapes["x"]
+        ctx_shape = input_shapes["context"]
+        if len(x_shape) != 1:
+            raise ValueError(
+                f"{cls.__name__} requires 1-D 'x' shape but got {x_shape}"
+            )
+        return {
+            "in_features": x_shape[0],
+            "context_dim": ctx_shape[0],
+            "out_features": next(iter(output_shapes.values()))[0],
+        }
+
+    def __init__(self, *, in_features, context_dim, out_features, ...): ...
+```
+
+Rules:
+- `InputSpec` field names must match `forward` parameter names exactly.
+- `_SHAPE_KWARG_NAMES` must list every key that `_constructor_dims` returns.
+- Shape rank/size validation belongs in `_constructor_dims`.
+- `__init__` may repeat simple range checks (`if n < 0: raise`) but should not
+  re-validate shape contracts — that's `_constructor_dims`' job.
+
+### Checkpoint round-trip
+
+`engine/inference/model_builder.py` strips `_SHAPE_KWARG_NAMES` from the
+checkpoint hyperparams before calling `from_entries`, preventing "got multiple
+values for keyword argument" errors when both the checkpoint and `_constructor_dims`
+supply the same key. If you add a new kwarg that comes from shapes, add it to
+`_SHAPE_KWARG_NAMES` or the round-trip will break.
 
 ## Attention blocks
 
@@ -101,50 +218,6 @@ constructor surface but disables the nested-tensor fast path whenever the live
 encoder-layer configuration cannot use it. With the current pre-LN
 (`norm_first=True`) encoder setup, that means nested tensors are disabled
 explicitly instead of relying on PyTorch to warn at runtime.
-
-## Contract ↔ geometry mapping
-
-`contract_resolver.resolve_contract(geometry, output_shapes)` maps a `GeometrySpec`
-to the right `ModelContractSpec` variant.  The dispatch table:
-
-| Geometry kind | Has TARGET_COORDINATES? | Contract produced |
-|---------------|------------------------|-------------------|
-| `TABULAR` | no | `TabulaRSpec(in_shape, out_shape)` |
-| `TABULAR` | yes | `BranchTrunkSpec(branch_shape, query_shape, out_features)` |
-| `SEQUENCE` | — | `SequenceSpec(in_channels, seq_len, out_channels)` |
-| `REGULAR_GRID` / `POINT_CLOUD` | no | `GridOperatorSpec(in_channels, out_channels, spatial_shape)` |
-| `REGULAR_GRID` / `POINT_CLOUD` | yes | `BranchTrunkSpec(...)` |
-| `GRAPH` | — | `GraphContractSpec(in_channels, out_channels, edge_dim)` |
-
-`output_shapes` must contain the target field shapes in config order; the first
-element supplies the output dimension(s).  For tabular models the engine infers
-`out_shape` from the dataset at training time — if none is available at inference
-the resolver raises `WorkflowError` (prefer retraining over silent fallbacks).
-
-For `BranchTrunkSpec`, the output-shape rules follow DeepONet semantics:
-- canonical query-mode scalar targets: `(n_queries,)` -> `out_features = 1`
-- canonical query-mode vector targets: `(n_queries, out_features)` -> `out_features = out_features`
-- paired single-query targets: `(out_features,)` -> `out_features = out_features`
-
-## Contract checkpoint serialization
-
-Contracts are serialized to `dlkit_metadata["contract"]` in Lightning checkpoints.
-This makes checkpoints self-sufficient: inference reconstructs the exact
-`from_contract(contract, **kwargs)` call without re-running geometry inference.
-
-```python
-from dlkit.domain.nn.contracts import serialize_contract, deserialize_contract, TabulaRSpec
-
-spec = TabulaRSpec(in_shape=(16,), out_shape=(4,))
-data = serialize_contract(spec)
-# {"_type": "TabulaRSpec", "in_shape": (16,), "out_shape": (4,)}
-
-restored = deserialize_contract(data)
-assert restored == spec
-```
-
-`deserialize_contract` handles list→tuple coercion from JSON round-trips and
-returns `None` for unrecognized `_type` values rather than raising.
 
 ## Parameter role contracts
 

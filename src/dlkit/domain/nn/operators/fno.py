@@ -46,7 +46,7 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
     ) -> dict[str, int]:
         """Derive channel dimensions from entry shapes.
 
-        Expects at least 1-D input of shape ``(channels, ...)``.
+        Expects 2-D input of shape ``(channels, length)``.
 
         Args:
             input_shapes: Mapping from feature entry name to its shape.
@@ -56,14 +56,14 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
             Dict with ``in_channels`` and ``out_channels``.
 
         Raises:
-            ValueError: If input shape has fewer than 1 dimension.
+            ValueError: If input shape has fewer than 2 dimensions.
         """
         in_shape = next(iter(input_shapes.values()))
-        if len(in_shape) < 1:
+        if len(in_shape) < 2:
             raise ValueError(
-                f"{cls.__name__} requires at least 1-D input (channels, ...) "
-                f"but entry has shape {in_shape}. "
-                "Check that your feature entry produces a multi-dimensional tensor."
+                f"{cls.__name__} requires a 2-D input shape (channels, length) "
+                f"but got shape {in_shape}. "
+                "Check that your feature entry produces a (C, L) tensor."
             )
         return {
             "in_channels": in_shape[0],
