@@ -8,7 +8,7 @@ Concrete entry types live in ``entry_types``; factory functions in
 ``entry_factories``.
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import torch
 from pydantic import Field, field_validator, model_validator
@@ -18,7 +18,6 @@ from dlkit.common.geometry import FieldRole, GeometryKind
 
 from .core.base_settings import BasicSettings
 from .data_roles import DataRole
-from .normalized_entry import NormalizedEntry
 from .transform_settings import TransformSettings
 
 
@@ -181,11 +180,3 @@ class DataEntry(BasicSettings, ABC):
             False by default; overridden by PathBasedEntry and ValueBasedEntry.
         """
         return False
-
-    @abstractmethod
-    def normalize(self) -> NormalizedEntry:
-        """Return a resolved data source for this entry.
-
-        Returns:
-            NormalizedEntry with the appropriate source, array_key, and load_kwargs.
-        """

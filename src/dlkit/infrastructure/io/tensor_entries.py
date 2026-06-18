@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-
-if TYPE_CHECKING:
-    from dlkit.infrastructure.config.normalized_entry import NormalizedEntry
 
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
@@ -29,16 +25,6 @@ class TensorDataEntry:
     tensor: torch.Tensor
     write: bool = False
     transforms: tuple[TransformSettings, ...] = ()
-
-    def normalize(self) -> NormalizedEntry:
-        """Return a NormalizedEntry wrapping the pre-resolved tensor.
-
-        Returns:
-            NormalizedEntry with tensor as source.
-        """
-        from dlkit.infrastructure.config.normalized_entry import NormalizedEntry
-
-        return NormalizedEntry(source=self.tensor, array_key=self.name)
 
 
 def _coerce_tensor(value: torch.Tensor | np.ndarray, dtype: torch.dtype | None) -> torch.Tensor:

@@ -8,11 +8,8 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
-import numpy as np
-import torch
 from torch import Tensor
 
 from dlkit.common.errors import PlaceholderNotResolvedError  # noqa: F401  (re-exported for callers)
@@ -21,9 +18,6 @@ from dlkit.engine.data.sources.role_map import (
     BatchComplianceError,  # noqa: F401  (re-exported for callers)
 )
 from dlkit.infrastructure.config.entry_factories import AnyEntry
-from dlkit.infrastructure.config.normalized_entry import NormalizedEntry as _NormalizedEntry
-from dlkit.infrastructure.io import load_array
-from dlkit.infrastructure.io.arrays import _numpy_array_to_tensor
 
 from .base import BaseDataset, register_dataset
 
@@ -51,86 +45,6 @@ def _build_nested_tensordict(
         },
         batch_size=batch_size,
     )
-
-
-def _normalize_entries(
-    entries: Any,
-) -> dict[str, _NormalizedEntry]:
-    """Extract normalized data sources from DataEntry objects.
-
-    Each entry's normalize() method produces a _NormalizedEntry containing
-    the appropriate source (ArraySource, Path, Tensor, or ndarray).
-
-    Args:
-        entries: Collection of DataEntry objects
-
-    Returns:
-        Dictionary mapping entry name to _NormalizedEntry.
-
-    Raises:
-        TypeError: If entries is a raw dict
-        PlaceholderNotResolvedError: If any entry is a placeholder
-    """
-    result: dict[str, _NormalizedEntry] = {}
-    if entries is None:
-        return result
-
-    if isinstance(entries, dict):
-        raise TypeError(
-            "FlexibleDataset no longer accepts raw dicts. "
-            "Use NpyEntry, ZarrEntry, or ValueEntry instead."
-        )
-
-    for item in entries:
-        if isinstance(item, dict):
-            raise TypeError(
-                "FlexibleDataset no longer accepts raw dicts. "
-                "Use NpyEntry, ZarrEntry, or ValueEntry instead."
-            )
-        if not hasattr(item, "name") or item.name is None:
-            raise TypeError(
-                f"Entry {type(item).__name__} has no name. "
-                "All entries must have a name set before normalization."
-            )
-        result[item.name] = item.normalize()
-
-    return result
-
-
-def _load_or_convert_tensor(
-    source: Path | Tensor | np.ndarray,
-    dtype: torch.dtype | None = None,
-    array_key: str | None = None,
-    **load_kwargs: Any,
-) -> Tensor:
-    """Pure function: convert source to torch.Tensor with dtype handling.
-
-    Handles both file paths (production) and in-memory data (testing).
-    Respects precision context via PrecisionService for dtype resolution.
-
-    Args:
-        source: File path OR in-memory tensor/array
-        dtype: Target dtype (uses PrecisionService if None)
-        array_key: For .npz files, the array name to extract
-        **load_kwargs: Extra kwargs forwarded to load_array() (e.g. mmap_mode)
-
-    Returns:
-        torch.Tensor with appropriate dtype
-    """
-    if isinstance(source, (torch.Tensor, np.ndarray)):
-        resolved_dtype = dtype
-        if resolved_dtype is None:
-            from dlkit.infrastructure.precision.service import get_precision_service
-
-            precision_service = get_precision_service()
-            resolved_dtype = precision_service.get_torch_dtype()
-        if isinstance(source, np.ndarray):
-            return _numpy_array_to_tensor(source, dtype=resolved_dtype)
-        return source.to(dtype=resolved_dtype)
-
-    if isinstance(source, Path) and source.suffix.lower() == ".npz":
-        return load_array(source, dtype=dtype, array_key=array_key, **load_kwargs)
-    return load_array(source, dtype=dtype, **load_kwargs)
 
 
 def _normalize_index(idx: int, n: int) -> int:

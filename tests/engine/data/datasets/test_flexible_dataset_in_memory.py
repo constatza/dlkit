@@ -6,7 +6,6 @@ enabling testing without file I/O and supporting programmatic API usage.
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,9 +18,6 @@ from dlkit.engine.data.datasets.flexible import (
     BatchComplianceError,
     FlexibleDataset,
     PlaceholderNotResolvedError,
-    _load_or_convert_tensor,
-    _normalize_entries,
-    _NormalizedEntry,
 )
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry, PathBasedEntry, ValueEntry
@@ -91,183 +87,6 @@ def placeholder_feature() -> PathBasedEntry:
 
     # NpyEntry without path = placeholder
     return _NpyEntry(name="placeholder_feat", data_role=DataRole.FEATURE)
-
-
-# ============================================================================
-# Tests for _normalize_entries() with new hierarchy
-# ============================================================================
-
-
-class TestNormalizeEntriesNewHierarchy:
-    """Tests for _normalize_entries() with new PathBasedEntry/ValueBasedEntry hierarchy."""
-
-    def test_normalize_value_feature(self, value_feature: ValueEntry):
-        """Test _normalize_entries() extracts value from ValueEntry (feature)."""
-        result = _normalize_entries([value_feature])
-
-        assert "feat1" in result
-        ne = result["feat1"]
-        assert isinstance(ne, _NormalizedEntry)
-        assert isinstance(ne.source, np.ndarray)
-        assert ne.source.shape == (5, 2)
-        assert ne.array_key == "feat1"
-
-    def test_normalize_path_feature(self, path_feature: NpyEntry):
-        """Test _normalize_entries() extracts path from NpyEntry (feature)."""
-        result = _normalize_entries([path_feature])
-
-        assert "feat_file" in result
-        ne = result["feat_file"]
-        assert isinstance(ne, _NormalizedEntry)
-        assert isinstance(ne.source, Path)
-        assert ne.array_key == "feat_file"
-
-    def test_normalize_value_target(self, value_target: ValueEntry):
-        """Test _normalize_entries() extracts value from ValueEntry (target)."""
-        result = _normalize_entries([value_target])
-
-        assert "target1" in result
-        ne = result["target1"]
-        assert isinstance(ne, _NormalizedEntry)
-        assert isinstance(ne.source, torch.Tensor)
-        assert ne.source.shape == (5, 3)
-        assert ne.array_key == "target1"
-
-    def test_normalize_path_target(self, path_target: NpyEntry):
-        """Test _normalize_entries() extracts path from NpyEntry (target)."""
-        result = _normalize_entries([path_target])
-
-        assert "target_file" in result
-        ne = result["target_file"]
-        assert isinstance(ne, _NormalizedEntry)
-        assert isinstance(ne.source, Path)
-        assert ne.array_key == "target_file"
-
-    def test_normalize_placeholder_raises_error(self, placeholder_feature: PathBasedEntry):
-        """Test _normalize_entries() raises error for placeholder entries."""
-        with pytest.raises(PlaceholderNotResolvedError, match="placeholder without path or value"):
-            _normalize_entries([placeholder_feature])
-
-    def test_normalize_mixed_value_and_path(self, value_feature: ValueEntry, path_target: NpyEntry):
-        """Test _normalize_entries() handles mixed value and path entries."""
-        result = _normalize_entries([value_feature, path_target])
-
-        assert len(result) == 2
-        ne1 = result["feat1"]
-        assert isinstance(ne1, _NormalizedEntry)
-        assert isinstance(ne1.source, np.ndarray)
-        assert ne1.array_key == "feat1"
-        ne2 = result["target_file"]
-        assert isinstance(ne2, _NormalizedEntry)
-        assert isinstance(ne2.source, Path)
-        assert ne2.array_key == "target_file"
-
-
-class TestNormalizeEntriesFactoryValidation:
-    """Tests for _normalize_entries() with factory-created entries."""
-
-    def test_normalize_rejects_dict_input(self):
-        """Test _normalize_entries() rejects raw dict input."""
-        with pytest.raises(TypeError, match="no longer accepts raw dicts"):
-            _normalize_entries({"feat": "/path/to/file.npy"})
-
-    def test_normalize_rejects_dict_in_list(self):
-        """Test _normalize_entries() rejects dict in list."""
-        with pytest.raises(TypeError, match="no longer accepts raw dicts"):
-            _normalize_entries([{"name": "feat", "path": "/path/to/file.npy"}])
-
-    def test_normalize_empty_returns_empty(self):
-        """Test _normalize_entries() returns empty dict for None input."""
-        result = _normalize_entries(None)
-        assert result == {}
-
-    def test_normalize_factory_created_entries(self, tmp_path: Path):
-        """Test _normalize_entries() handles NpyEntry/ValueEntry factory output."""
-        # Create actual file for NpyEntry
-        x_path = tmp_path / "x.npy"
-        np.save(x_path, np.ones((5, 2), dtype=np.float32))
-
-        feat = NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE)
-        targ = ValueEntry(name="y", value=np.ones((5, 1)), data_role=DataRole.TARGET)
-
-        result = _normalize_entries([feat, targ])
-
-        assert len(result) == 2
-        ne_x = result["x"]
-        assert isinstance(ne_x, _NormalizedEntry)
-        assert isinstance(ne_x.source, Path)
-        assert ne_x.array_key == "x"
-        ne_y = result["y"]
-        assert isinstance(ne_y, _NormalizedEntry)
-        assert isinstance(ne_y.source, np.ndarray)
-        assert ne_y.array_key == "y"
-
-
-# ============================================================================
-# Tests for _load_or_convert_tensor()
-# ============================================================================
-
-
-class TestLoadOrConvertTensor:
-    """Tests for _load_or_convert_tensor() function."""
-
-    def test_convert_numpy_array(self, sample_numpy_array: np.ndarray):
-        """Test _load_or_convert_tensor() converts numpy array to tensor."""
-        result = _load_or_convert_tensor(sample_numpy_array)
-
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (5, 2)
-        assert result.dtype == torch.float32
-
-    def test_convert_read_only_numpy_array_copies_before_tensor_conversion(self) -> None:
-        """Read-only in-memory arrays must not trigger PyTorch writability warnings."""
-        array = np.arange(6, dtype=np.float32).reshape(3, 2)
-        array.flags.writeable = False
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = _load_or_convert_tensor(array)
-
-        result[0, 0] = 42.0
-
-        assert result[0, 0].item() == pytest.approx(42.0)
-        assert all("not writable" not in str(warning.message) for warning in caught)
-
-    def test_convert_torch_tensor(self, sample_torch_tensor: torch.Tensor):
-        """Test _load_or_convert_tensor() handles torch.Tensor input."""
-        result = _load_or_convert_tensor(sample_torch_tensor)
-
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (5, 3)
-        assert result.dtype == torch.float32
-
-    def test_convert_with_explicit_dtype(self, sample_numpy_array: np.ndarray):
-        """Test _load_or_convert_tensor() respects explicit dtype parameter."""
-        result = _load_or_convert_tensor(sample_numpy_array, dtype=torch.float64)
-
-        assert result.dtype == torch.float64
-        assert result.shape == (5, 2)
-
-    def test_load_from_file_path(self, tmp_path: Path):
-        """Test _load_or_convert_tensor() loads from file path."""
-        X = np.arange(10, dtype=np.float32).reshape(5, 2)
-        path = tmp_path / "test.npy"
-        np.save(path, X)
-
-        result = _load_or_convert_tensor(path)
-
-        assert isinstance(result, torch.Tensor)
-        assert result.shape == (5, 2)
-        assert result.dtype == torch.float32
-
-    def test_zero_copy_for_numpy(self):
-        """Test _load_or_convert_tensor() uses zero-copy for numpy arrays."""
-        arr = np.ones((3, 3), dtype=np.float32)
-        tensor = _load_or_convert_tensor(arr)
-
-        # Verify zero-copy by modifying original array
-        arr[0, 0] = 999.0
-        assert tensor[0, 0].item() == 999.0
 
 
 # ============================================================================

@@ -37,7 +37,6 @@ from .entry_protocols import (
     IRuntimeGenerated,
     IValueBased,
 )
-from .normalized_entry import NormalizedEntry
 
 # ---------------------------------------------------------------------------
 # Abstract path-based and value-based bases
@@ -132,25 +131,6 @@ class PathBasedEntry(DataEntry, IPathBased, ABC):
         """
         return self.name or ""
 
-    def normalize(self) -> NormalizedEntry:
-        """Return a NormalizedEntry with the path-based source.
-
-        Returns:
-            NormalizedEntry wrapping the open_reader() result.
-
-        Raises:
-            PlaceholderNotResolvedError: If path is None.
-        """
-        if self.is_placeholder():
-            from dlkit.common.errors import PlaceholderNotResolvedError
-
-            raise PlaceholderNotResolvedError(str(self.name or "unknown"))
-        return NormalizedEntry(
-            source=self.open_reader(),
-            array_key=self.array_key,
-            load_kwargs=self.load_kwargs,
-        )
-
 
 class ValueBasedEntry(DataEntry, IValueBased, ABC):
     """Base for entries that receive data programmatically.
@@ -197,25 +177,6 @@ class ValueBasedEntry(DataEntry, IValueBased, ABC):
         """
         return self.value is None
 
-    def normalize(self) -> NormalizedEntry:
-        """Return a NormalizedEntry with the in-memory value as source.
-
-        Returns:
-            NormalizedEntry wrapping self.value.
-
-        Raises:
-            PlaceholderNotResolvedError: If value is None.
-        """
-        if self.is_placeholder():
-            from dlkit.common.errors import PlaceholderNotResolvedError
-
-            raise PlaceholderNotResolvedError(str(self.name or "unknown"))
-        assert self.name is not None
-        return NormalizedEntry(
-            source=self.value,  # ty: ignore[invalid-argument-type]
-            array_key=self.name,
-        )
-
 
 # ---------------------------------------------------------------------------
 # Runtime / special entry types
@@ -234,17 +195,6 @@ class Latent(DataEntry, IRuntimeGenerated):
 
     data_role: DataRole = DataRole.LATENT
     write: bool = Field(default=False, description="Save this latent during inference")
-
-    def normalize(self) -> NormalizedEntry:
-        """Latents are runtime-generated and cannot be normalized.
-
-        Raises:
-            TypeError: Always — latents are not valid FlexibleDataset inputs.
-        """
-        raise TypeError(
-            f"Latent entry '{self.name}' is runtime-generated and cannot be normalized. "
-            "Latents are not inputs to FlexibleDataset."
-        )
 
 
 class AutoencoderTarget(PathBasedEntry, IFeatureReference):
@@ -343,17 +293,6 @@ class Prediction(DataEntry, IRuntimeGenerated):
     data_role: DataRole = DataRole.TARGET
     target_name: str = Field(..., description="Corresponding target name")
     write: bool = Field(default=True, description="Save predictions during inference")
-
-    def normalize(self) -> NormalizedEntry:
-        """Predictions are runtime-generated and cannot be normalized.
-
-        Raises:
-            TypeError: Always — predictions are not valid FlexibleDataset inputs.
-        """
-        raise TypeError(
-            f"Prediction entry '{self.name}' is runtime-generated and cannot be normalized. "
-            "Predictions are not inputs to FlexibleDataset."
-        )
 
 
 # ---------------------------------------------------------------------------
