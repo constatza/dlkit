@@ -44,13 +44,15 @@ class BroadcastSource:
         torch.Size([3, 4])
     """
 
-    def __init__(self, inner: ArraySource) -> None:
+    def __init__(self, inner: ArraySource, precision: PrecisionService | None = None) -> None:
         """Initialize with an ``ArraySource`` that holds exactly one sample.
 
         Args:
             inner: The underlying single-sample source.
+            precision: Optional shared ``PrecisionService``.
         """
         self._inner = inner
+        self._precision = precision or PrecisionService()
 
     @property
     def n_samples(self) -> int:
@@ -83,7 +85,7 @@ class BroadcastSource:
         """
         single = self._inner.get_item(0)
         stacked = torch.stack([single] * len(indices))
-        return PrecisionService().cast_tensor(stacked)
+        return self._precision.cast_tensor(stacked)
 
 
 __all__ = [

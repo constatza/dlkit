@@ -9,13 +9,17 @@ Interfaces:
     IValueBased - entry holds an in-memory tensor/array
     IRuntimeGenerated - entry is produced by the model at run-time
     IFeatureReference - entry references another feature (e.g. AutoencoderTarget)
+    PathBasedEntry - structural protocol for entries that resolve to a file path
 """
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
+
+from dlkit.common.sources import OpenReaderResult
 
 
 class IPathBased(ABC):
@@ -76,3 +80,77 @@ class IFeatureReference:
         >>> isinstance(target, IFeatureReference)
         True
     """
+
+
+@runtime_checkable
+class PathBasedEntry(Protocol):
+    """Structural protocol for entries that resolve to a file path via open_reader().
+
+    This protocol formalises the attributes consumed by ``source_from_entry()``
+    in the ``case Path()`` branch, replacing ad-hoc ``getattr()`` duck-typing
+    with a typed structural check.
+
+    Implementations:
+        All concrete ``PathBasedEntry`` subclasses in ``entry_types`` satisfy
+        this protocol — ``NpyEntry``, ``NpzEntry``, ``CsvEntry``, ``ParquetEntry``,
+        ``Hdf5Entry``, and ``AutoencoderTarget``.
+
+    Example:
+        >>> from dlkit.infrastructure.config.entry_types import NpyEntry
+        >>> entry = NpyEntry(name="x", path=some_path, data_role=DataRole.FEATURE)
+        >>> isinstance(entry, PathBasedEntry)
+        True
+    """
+
+    @property
+    def name(self) -> str | None:
+        """Entry name, used as identifier in the data pipeline.
+
+        Returns:
+            Name string or None in placeholder mode.
+        """
+        ...
+
+    def open_reader(self) -> OpenReaderResult:
+        """Return the IO source for this entry.
+
+        Returns:
+            ``ArraySource`` for lazy formats or ``Path`` for eager formats.
+        """
+        ...
+
+    @property
+    def array_key(self) -> str:
+        """Array key used when loading multi-array sources (e.g. .npz).
+
+        Returns:
+            Key string identifying which array to load.
+        """
+        ...
+
+    @property
+    def is_multi_array(self) -> bool:
+        """Whether this entry's source contains multiple named arrays.
+
+        Returns:
+            True for .npz archives; False for single-array formats.
+        """
+        ...
+
+    @property
+    def dtype(self) -> torch.dtype | None:
+        """Optional dtype override for loaded tensors.
+
+        Returns:
+            ``torch.dtype`` when explicitly set; None defers to precision service.
+        """
+        ...
+
+    @property
+    def load_kwargs(self) -> dict[str, Any]:
+        """Extra keyword arguments forwarded to ``load_array()``.
+
+        Returns:
+            Dict of kwargs (e.g. ``{"mmap_mode": "r"}`` for memory-mapped npy).
+        """
+        ...

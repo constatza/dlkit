@@ -51,6 +51,7 @@ class EagerFileSource:
         path: Path,
         dtype: torch.dtype | None = None,
         array_key: str | None = None,
+        precision: PrecisionService | None = None,
         **load_kwargs: str | int | bool | float | None,
     ) -> None:
         """Load the array from ``path`` into memory.
@@ -59,12 +60,14 @@ class EagerFileSource:
             path: Path to the data file.
             dtype: Optional dtype override; ``None`` defers to precision service.
             array_key: Array key for multi-array formats such as ``.npz``.
+            precision: Optional shared ``PrecisionService``.
             **load_kwargs: Forwarded verbatim to ``load_array``.
         """
         kwargs: LoadKwargs = {**load_kwargs}
         if array_key is not None:
             kwargs["array_key"] = array_key
         self._data: torch.Tensor = load_array(path, dtype=dtype, **kwargs)
+        self._precision = precision or PrecisionService()
 
     @property
     def n_samples(self) -> int:
@@ -84,7 +87,7 @@ class EagerFileSource:
         Returns:
             Tensor of shape ``(*sample_shape,)``.
         """
-        return PrecisionService().cast_tensor(self._data[idx])
+        return self._precision.cast_tensor(self._data[idx])
 
     def get_batch(self, indices: list[int]) -> torch.Tensor:
         """Return a batch tensor for the given indices.
@@ -95,7 +98,7 @@ class EagerFileSource:
         Returns:
             Tensor of shape ``(B, *sample_shape)`` where ``B = len(indices)``.
         """
-        return PrecisionService().cast_tensor(self._data[indices])
+        return self._precision.cast_tensor(self._data[indices])
 
 
 __all__ = ["EagerFileSource"]

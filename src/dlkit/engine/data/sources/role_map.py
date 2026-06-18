@@ -21,7 +21,7 @@ import torch
 
 from dlkit.common.sources import ArraySource
 from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
-from dlkit.infrastructure.config.entry_protocols import IValueBased
+from dlkit.infrastructure.config.entry_protocols import IValueBased, PathBasedEntry
 from dlkit.infrastructure.precision.service import PrecisionService
 
 from ._helpers import _require_name
@@ -110,7 +110,10 @@ class RoleSourceMap:
         return multi[0]
 
 
-def source_from_entry(entry: AnyEntry) -> ArraySource:
+def source_from_entry(
+    entry: AnyEntry,
+    precision: PrecisionService | None = None,
+) -> ArraySource:
     """Dispatch an entry to its ``ArraySource``.  Exactly three cases.
 
     Cases:
@@ -123,6 +126,8 @@ def source_from_entry(entry: AnyEntry) -> ArraySource:
 
     Args:
         entry: A ``DataEntry`` with role and data-access interface.
+        precision: Optional shared ``PrecisionService``.  When ``None`` a
+            new instance is constructed inside the created source.
 
     Returns:
         An ``ArraySource`` for this entry's data.
@@ -131,55 +136,65 @@ def source_from_entry(entry: AnyEntry) -> ArraySource:
         TypeError: If ``entry`` is ``IValueBased`` but ``get_value()``
             returns ``None`` (placeholder mode).
     """
+    ps = precision or PrecisionService()
+
     if isinstance(entry, IValueBased):
         value = entry.get_value()
         if value is None:
             raise TypeError(f"ValueBased entry '{entry.name}' returned None from get_value()")
         tensor = value if isinstance(value, torch.Tensor) else torch.tensor(value)
-        tensor = PrecisionService().cast_tensor(tensor)
-        return TensorSource(tensor)
+        tensor = ps.cast_tensor(tensor)
+        return TensorSource(tensor, precision=ps)
 
     # PathBasedEntry branch: open_reader() returns ArraySource | Path
     reader = entry.open_reader()
     match reader:
         case Path():
-            # Only pass array_key for multi-array formats (e.g. .npz).
-            # For single-array formats (.npy, .csv, etc.) the loader does
-            # not accept array_key and PathBasedEntry.array_key would
-            # return the entry name as a fallback — not a format key.
-            array_key = (
-                getattr(entry, "array_key", None)
-                if getattr(entry, "is_multi_array", False)
-                else None
-            )
-            return EagerFileSource(
-                reader,
-                dtype=getattr(entry, "dtype", None),
-                array_key=array_key,
-                **getattr(entry, "load_kwargs", {}),
-            )
+            if isinstance(entry, PathBasedEntry):
+                # Only pass array_key for multi-array formats (e.g. .npz).
+                # For single-array formats (.npy, .csv, etc.) the loader does
+                # not accept array_key and PathBasedEntry.array_key would
+                # return the entry name as a fallback — not a format key.
+                array_key = entry.array_key if entry.is_multi_array else None
+                return EagerFileSource(
+                    reader,
+                    dtype=entry.dtype,
+                    array_key=array_key,
+                    precision=ps,
+                    **entry.load_kwargs,
+                )
+            return EagerFileSource(reader, precision=ps)
         case _:
             # Already an ArraySource (e.g. ZarrLazyReader)
             return reader
 
 
-def _maybe_broadcast(name: str, src: ArraySource) -> tuple[str, ArraySource]:
+def _maybe_broadcast(
+    name: str,
+    src: ArraySource,
+    precision: PrecisionService | None = None,
+) -> tuple[str, ArraySource]:
     """Wrap ``src`` in ``BroadcastSource`` when it is a singleton.
 
     Args:
         name: The entry name.
         src: The resolved ``ArraySource``.
+        precision: Optional shared ``PrecisionService`` forwarded to
+            ``BroadcastSource``.
 
     Returns:
         ``(name, src)`` unchanged when ``src.n_samples != 1``, otherwise
-        ``(name, BroadcastSource(src))``.
+        ``(name, BroadcastSource(src, precision=precision))``.
     """
     if src.n_samples == 1:
-        return name, BroadcastSource(src)
+        return name, BroadcastSource(src, precision=precision)
     return name, src
 
 
-def build_role_source_map(entries: Sequence[AnyEntry]) -> RoleSourceMap:
+def build_role_source_map(
+    entries: Sequence[AnyEntry],
+    precision: PrecisionService | None = None,
+) -> RoleSourceMap:
     """Build a ``RoleSourceMap`` from a sequence of entries.
 
     Steps:
@@ -191,6 +206,9 @@ def build_role_source_map(entries: Sequence[AnyEntry]) -> RoleSourceMap:
 
     Args:
         entries: Sequence of ``DataEntry`` objects.
+        precision: Optional shared ``PrecisionService``.  When ``None`` a
+            single ``PrecisionService()`` is constructed and reused for all
+            sources in this map, avoiding repeated instantiation.
 
     Returns:
         A frozen ``RoleSourceMap``.
@@ -198,18 +216,20 @@ def build_role_source_map(entries: Sequence[AnyEntry]) -> RoleSourceMap:
     Raises:
         ValueError: If multi-sample sources have conflicting ``n_samples``.
     """
+    ps = precision or PrecisionService()
+
     feature_entries = [e for e in entries if is_feature(e)]
     target_entries = [e for e in entries if is_target(e)]
 
     raw_features: list[tuple[str, ArraySource]] = [
-        (_require_name(e), source_from_entry(e)) for e in feature_entries
+        (_require_name(e), source_from_entry(e, precision=ps)) for e in feature_entries
     ]
     raw_targets: list[tuple[str, ArraySource]] = [
-        (_require_name(e), source_from_entry(e)) for e in target_entries
+        (_require_name(e), source_from_entry(e, precision=ps)) for e in target_entries
     ]
 
-    features = tuple(_maybe_broadcast(n, s) for n, s in raw_features)
-    targets = tuple(_maybe_broadcast(n, s) for n, s in raw_targets)
+    features = tuple(_maybe_broadcast(n, s, precision=ps) for n, s in raw_features)
+    targets = tuple(_maybe_broadcast(n, s, precision=ps) for n, s in raw_targets)
 
     return RoleSourceMap(features=features, targets=targets)
 

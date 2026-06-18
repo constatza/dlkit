@@ -20,6 +20,8 @@ class TensorSource:
 
     Args:
         data: A ``torch.Tensor`` whose leading dimension is the sample axis.
+        precision: Optional ``PrecisionService`` for dtype casting.  When
+            ``None`` a new instance is constructed on first use.
 
     Example:
         >>> import torch
@@ -32,14 +34,20 @@ class TensorSource:
         torch.Size([3, 16])
     """
 
-    def __init__(self, data: torch.Tensor) -> None:
+    def __init__(
+        self,
+        data: torch.Tensor,
+        precision: PrecisionService | None = None,
+    ) -> None:
         """Wrap ``data`` as a per-sample source.
 
         Args:
             data: Tensor of shape ``(N, *sample_shape)`` where ``N`` is the
                   number of samples.
+            precision: Optional shared ``PrecisionService``.
         """
         self._data = data
+        self._precision = precision or PrecisionService()
 
     @property
     def n_samples(self) -> int:
@@ -59,7 +67,7 @@ class TensorSource:
         Returns:
             Tensor of shape ``(*sample_shape,)``.
         """
-        return PrecisionService().cast_tensor(self._data[idx])
+        return self._precision.cast_tensor(self._data[idx])
 
     def get_batch(self, indices: list[int]) -> torch.Tensor:
         """Return a batch tensor for the given indices.
@@ -70,7 +78,7 @@ class TensorSource:
         Returns:
             Tensor of shape ``(B, *sample_shape)`` where ``B = len(indices)``.
         """
-        return PrecisionService().cast_tensor(self._data[indices])
+        return self._precision.cast_tensor(self._data[indices])
 
 
 __all__ = ["TensorSource"]
