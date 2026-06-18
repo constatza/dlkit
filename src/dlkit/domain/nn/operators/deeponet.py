@@ -9,21 +9,10 @@ from typing import Any, Literal, Self, cast
 import torch
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import BranchTrunkSpec, ModelContractSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
-
-
-def _contract_to_dims(contract: ModelContractSpec) -> tuple[int, int, int]:
-    """Resolve flattened branch width, query-coordinate width, and output width."""
-    match contract:
-        case BranchTrunkSpec(branch_shape=b, query_shape=q, out_features=o):
-            return prod(b), q[-1], o
-        case _:
-            raise TypeError(
-                f"DeepONet variants require BranchTrunkSpec, got {type(contract).__name__}"
-            )
 
 
 class DeepONet(nn.Module):
@@ -137,10 +126,10 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
-        ``branch_in_features = prod(branch_shape)`` when built from ``BranchTrunkSpec``
+        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` when built from ``BranchTrunkSpec``
+        ``query_dim = query_shape[-1]`` derived from the query input shape
         ``trunk_width``, ``out_features``, ``branch_layers``, ``trunk_layers``
     """
 
@@ -190,12 +179,29 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the operator from a model contract spec."""
-        branch_in_features, query_dim, out_features = _contract_to_dims(contract)
+    def from_entries(
+        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
+    ) -> Self:
+        """Build the operator from dataset entry shapes.
+
+        The first input is the branch (sensor) function and the second is the
+        query coordinate grid. When only one input is provided it serves as both.
+
+        Args:
+            input_shapes: Mapping from input name to its per-sample shape.
+            output_shapes: Mapping from output name to its per-sample shape.
+            **kwargs: Additional constructor arguments.
+
+        Returns:
+            Constructed DeepONet variant instance.
+        """
+        shapes = list(input_shapes.values())
+        branch_shape = shapes[0]
+        query_shape = shapes[1] if len(shapes) > 1 else shapes[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            branch_in_features=branch_in_features,
-            query_dim=query_dim,
+            branch_in_features=prod(branch_shape),
+            query_dim=query_shape[-1],
             out_features=out_features,
             **kwargs,
         )
@@ -215,10 +221,10 @@ class FFNNDeepONet(_FlatBranchDeepONet):
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
-        ``branch_in_features = prod(branch_shape)`` when built from ``BranchTrunkSpec``
+        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` when built from ``BranchTrunkSpec``
+        ``query_dim = query_shape[-1]`` derived from the query input shape
         ``trunk_width``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
@@ -268,17 +274,6 @@ class FFNNDeepONet(_FlatBranchDeepONet):
             out_features=out_features,
         )
 
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the operator from a model contract spec."""
-        branch_in_features, query_dim, out_features = _contract_to_dims(contract)
-        return cls(
-            branch_in_features=branch_in_features,
-            query_dim=query_dim,
-            out_features=out_features,
-            **kwargs,
-        )
-
 
 class EmbeddedDeepONet(_FlatBranchDeepONet):
     """DeepONet with embedded dense residual FFNN branch and trunk networks.
@@ -294,10 +289,10 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
-        ``branch_in_features = prod(branch_shape)`` when built from ``BranchTrunkSpec``
+        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` when built from ``BranchTrunkSpec``
+        ``query_dim = query_shape[-1]`` derived from the query input shape
         ``trunk_width``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
@@ -345,15 +340,4 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
             trunk_net=trunk_net,
             trunk_width=trunk_width,
             out_features=out_features,
-        )
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the operator from a model contract spec."""
-        branch_in_features, query_dim, out_features = _contract_to_dims(contract)
-        return cls(
-            branch_in_features=branch_in_features,
-            query_dim=query_dim,
-            out_features=out_features,
-            **kwargs,
         )

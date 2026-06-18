@@ -183,10 +183,8 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
         "dlkit_metadata": {
             "model_family": "dlkit_nn",
             "wrapper_type": "StandardLightningWrapper",
-            "shape_summary": {
-                "in_shapes": [[FEATURE_SIZE]],
-                "out_shapes": [[TARGET_SIZE]],
-            },
+            "input_shapes": {"x": [FEATURE_SIZE]},
+            "output_shapes": {"y": [TARGET_SIZE]},
             "model_settings": {
                 "name": "FFNN",
                 "module_path": "dlkit.domain.nn",
@@ -226,12 +224,12 @@ def _make_training_settings(
         root_dir=data_dir,
         features=(NpyEntry(name="x", path=data_dir / "features.npy", data_role=DataRole.FEATURE),),
         targets=(NpyEntry(name="y", path=data_dir / "targets.npy", data_role=DataRole.TARGET),),
-        split=IndexSplitSettings(),
     )
 
     datamodule = DataModuleSettings(
-        name="InMemoryModule",
+        name="ArrayDataModule",
         module_path="dlkit.engine.adapters.lightning.datamodules",
+        split=IndexSplitSettings(),
         dataloader=DataloaderSettings(
             num_workers=0,
             batch_size=batch_size,
@@ -478,12 +476,12 @@ name = "y"
 format = "npy"
 path = "targets.npy"
 
-[DATASET.split]
-filepath = "split.txt"
-
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
+
+[DATAMODULE.split]
+filepath = "{data_dir.as_posix()}/split.txt"
 
 [DATAMODULE.dataloader]
 num_workers = 0

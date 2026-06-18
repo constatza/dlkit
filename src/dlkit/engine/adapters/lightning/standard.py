@@ -105,7 +105,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             settings=wrapper_settings,
             model_settings=model_settings,
             entry_configs=data_configs,
-            geometry=geometry_spec,
+            components=components,
         )
         ```
     """
@@ -116,8 +116,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        geometry: Any = None,
-        contract: Any = None,
+        input_shapes: Any = None,
+        output_shapes: Any = None,
         components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
@@ -127,9 +127,8 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations in config-insertion order.
-            geometry: GeometrySpec from dataset inference (for shape-aware models).
-            contract: Optional ModelContractSpec. When provided, used directly for model
-                construction.
+            input_shapes: Optional feature-name-to-shape mapping for model construction.
+            output_shapes: Optional target-name-to-shape mapping for model construction.
             components: Pre-built WrapperComponents containing loss, metrics, transforms,
                 optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule (ignored otherwise).
@@ -137,7 +136,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         entry_configs = entry_configs or ()
 
         # --- Build model ---
-        model = _build_model_from_settings(model_settings, contract=contract)
+        model = _build_model_from_settings(
+            model_settings, input_shapes=input_shapes, output_shapes=output_shapes
+        )
 
         # --- Partition entries ---
         feature_entries = [e for e in entry_configs if is_feature(e)]
@@ -195,9 +196,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             wrapper_settings=settings,
             entry_configs=entry_configs,
             predict_target_key=predict_target_key,
-            geometry=geometry,
             output_spec=output_spec,
-            contract=contract,
+            input_shapes=input_shapes,
+            output_shapes=output_shapes,
         )
 
         prediction_strategy = DiscriminativePredictionStrategy(

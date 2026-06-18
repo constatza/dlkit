@@ -103,7 +103,8 @@ class TensorDictModelInvoker:
 
         def _dispatch(*args: Any) -> Any:
             model = cell[0]
-            assert model is not None, "model_cell must be set before dispatch"
+            if model is None:
+                raise RuntimeError("model_cell must be set before dispatch")
             return model(*args[:n_pos], **dict(zip(kwarg_names, args[n_pos:], strict=True)))
 
         self._td_module = TensorDictModule(_dispatch, in_keys=all_in_keys, out_keys=self._out_keys)

@@ -8,11 +8,13 @@ RAM and benefit from zero per-item I/O overhead during training.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import torch
 
 from dlkit.infrastructure.io import load_array
+from dlkit.infrastructure.precision.service import PrecisionService
+
+type LoadKwargs = dict[str, str | int | bool | float | None]
 
 
 class EagerFileSource:
@@ -49,7 +51,7 @@ class EagerFileSource:
         path: Path,
         dtype: torch.dtype | None = None,
         array_key: str | None = None,
-        **load_kwargs: Any,
+        **load_kwargs: str | int | bool | float | None,
     ) -> None:
         """Load the array from ``path`` into memory.
 
@@ -59,7 +61,7 @@ class EagerFileSource:
             array_key: Array key for multi-array formats such as ``.npz``.
             **load_kwargs: Forwarded verbatim to ``load_array``.
         """
-        kwargs: dict[str, Any] = {**load_kwargs}
+        kwargs: LoadKwargs = {**load_kwargs}
         if array_key is not None:
             kwargs["array_key"] = array_key
         self._data: torch.Tensor = load_array(path, dtype=dtype, **kwargs)
@@ -82,7 +84,7 @@ class EagerFileSource:
         Returns:
             Tensor of shape ``(*sample_shape,)``.
         """
-        return self._data[idx]
+        return PrecisionService().cast_tensor(self._data[idx])
 
     def get_batch(self, indices: list[int]) -> torch.Tensor:
         """Return a batch tensor for the given indices.
@@ -93,7 +95,7 @@ class EagerFileSource:
         Returns:
             Tensor of shape ``(B, *sample_shape)`` where ``B = len(indices)``.
         """
-        return self._data[indices]
+        return PrecisionService().cast_tensor(self._data[indices])
 
 
 __all__ = ["EagerFileSource"]

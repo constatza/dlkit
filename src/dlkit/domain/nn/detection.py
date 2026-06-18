@@ -21,7 +21,6 @@ class ModelType(Enum):
     SHAPE_AWARE_DLKIT = "shape_aware_dlkit"
     SHAPE_AGNOSTIC_EXTERNAL = "shape_agnostic_external"
     GRAPH = "graph"
-    TIMESERIES = "timeseries"
 
 
 class IModelTypeDetector(ABC):

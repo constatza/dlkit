@@ -9,7 +9,7 @@
 
 ## Current Layout
 - `build_factory.py`: dispatcher and public re-export surface
-- `build_strategy.py`: shared strategy protocol and graph/timeseries strategies
+- `build_strategy.py`: shared strategy protocol and graph strategy
 - `flexible_build_strategy.py`: flexible-array strategy
 - `generative_build_strategies.py`: generative/flow-matching strategy
 - `dataset_builder.py`: runtime dataset and datamodule assembly

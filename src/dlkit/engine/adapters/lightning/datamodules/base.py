@@ -56,14 +56,10 @@ class BaseDataModule(ABC, LightningDataModule):
 
         kwargs.update(overrides)
         # Safety: persistent_workers requires num_workers > 0
-        try:
-            _nw = kwargs.get("num_workers", 0)
-            num_workers = int(_nw) if isinstance(_nw, (int, str, float)) else 0
-            if num_workers <= 0 and kwargs.get("persistent_workers"):
-                kwargs["persistent_workers"] = False
-        except Exception:
-            num_workers = 0
-            kwargs.pop("persistent_workers", None)
+        raw_nw = kwargs.get("num_workers", 0)
+        num_workers = int(raw_nw) if isinstance(raw_nw, (int, float, str)) else 0
+        if num_workers <= 0 and kwargs.get("persistent_workers"):
+            kwargs["persistent_workers"] = False
         if num_workers > 0 and "worker_init_fn" not in kwargs:
             kwargs["worker_init_fn"] = _init_worker
         return kwargs

@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.primitives.parametrizations import DEFAULT_SPD_MIN_DIAG
 from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
@@ -17,6 +17,34 @@ from dlkit.domain.nn.primitives.parametrized_layers import (
     SymmetricLinear,
 )
 from dlkit.domain.nn.utils import make_norm_layer
+
+
+def _square_input_features(
+    cls_name: str,
+    input_shapes: InputShapes,
+    output_shapes: OutputShapes,
+) -> int:
+    """Validate square IO shapes and return the shared feature dimension.
+
+    Args:
+        cls_name: Name of the requesting class, used in error messages.
+        input_shapes: Mapping from feature entry name to its shape.
+        output_shapes: Mapping from target entry name to its shape.
+
+    Returns:
+        The leading dimension of the input shape (equal to the output's).
+
+    Raises:
+        ValueError: If the input and output shapes are not equal.
+    """
+    in_shape = next(iter(input_shapes.values()))
+    out_shape = next(iter(output_shapes.values()))
+    if in_shape != out_shape:
+        raise ValueError(
+            f"{cls_name} requires a square contract (in_shape == out_shape), "
+            f"got in_shape={in_shape}, out_shape={out_shape}"
+        )
+    return in_shape[0]
 
 
 class LinearNetwork(nn.Module):
@@ -45,23 +73,25 @@ class LinearNetwork(nn.Module):
         self.norm: nn.Module = make_norm_layer(normalize, out_features)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the network from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
             A fully constructed instance.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass through the linear network.
@@ -109,23 +139,25 @@ class FactorizedLinearNetwork(nn.Module):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build from named input and output shapes.
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Forwarded to the constructor.
 
         Returns:
             A new FactorizedLinearNetwork instance.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.
@@ -167,28 +199,27 @@ class SymmetricLinearNetwork(nn.Module):
         self.linear = SymmetricLinear(in_features, bias)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build from named input and output shapes (square shapes required).
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec with square shapes.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Forwarded to the constructor.
 
         Returns:
             A new SymmetricLinearNetwork instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                if ins != outs:
-                    raise ValueError(
-                        f"{cls.__name__} requires a square contract (in_shape == out_shape), "
-                        f"got in_shape={ins}, out_shape={outs}"
-                    )
-                return cls(in_features=ins[0], out_features=ins[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, out_features=in_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.
@@ -234,28 +265,27 @@ class SPDLinearNetwork(nn.Module):
         self.linear = SPDLinear(in_features, bias, min_diag=min_diag, pos_fn=pos_fn)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build from named input and output shapes (square shapes required).
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec with square shapes.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Forwarded to the constructor.
 
         Returns:
             A new SPDLinearNetwork instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                if ins != outs:
-                    raise ValueError(
-                        f"{cls.__name__} requires a square contract (in_shape == out_shape), "
-                        f"got in_shape={ins}, out_shape={outs}"
-                    )
-                return cls(in_features=ins[0], out_features=ins[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, out_features=in_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.
@@ -301,28 +331,27 @@ class SymmetricFactorizedLinearNetwork(nn.Module):
         self.linear = SymmetricFactorizedLinear(in_features, bias, mean=mean, std=std)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build from named input and output shapes (square shapes required).
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec with square shapes.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Forwarded to the constructor.
 
         Returns:
             A new SymmetricFactorizedLinearNetwork instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                if ins != outs:
-                    raise ValueError(
-                        f"{cls.__name__} requires a square contract (in_shape == out_shape), "
-                        f"got in_shape={ins}, out_shape={outs}"
-                    )
-                return cls(in_features=ins[0], out_features=ins[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, out_features=in_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.
@@ -374,28 +403,27 @@ class SPDFactorizedLinearNetwork(nn.Module):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build from named input and output shapes (square shapes required).
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec with square shapes.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Forwarded to the constructor.
 
         Returns:
             A new SPDFactorizedLinearNetwork instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                if ins != outs:
-                    raise ValueError(
-                        f"{cls.__name__} requires a square contract (in_shape == out_shape), "
-                        f"got in_shape={ins}, out_shape={outs}"
-                    )
-                return cls(in_features=ins[0], out_features=ins[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, out_features=in_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.

@@ -6,7 +6,7 @@ from typing import Any, Literal, Self
 import torch.nn.functional as F
 from torch import Tensor
 
-from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.ffnn.constrained import (
     SPDFFNN,
     EmbeddedFactorizedFFNN,
@@ -21,7 +21,7 @@ from dlkit.domain.nn.ffnn.constrained import (
     SimpleSPDFFNN,
     SPDFactorizedFFNN,
     _resolve_hidden_size,
-    _square_contract,
+    _square_input_features,
 )
 from dlkit.domain.nn.ffnn.film import FiLMEmbeddedFFNN, FiLMFFNN, VarWidthFiLMFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
@@ -84,14 +84,25 @@ class ScaleEquivariantFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 # ── Embedded SPD (all-SPD, square) ──────────────────────────────────────────
@@ -132,8 +143,27 @@ class ScaleEquivariantEmbeddedSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
@@ -171,8 +201,27 @@ class ScaleEquivariantEmbeddedSimpleSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -214,8 +263,27 @@ class ScaleEquivariantEmbeddedSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -257,8 +325,27 @@ class ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 # ── Non-embedded SPD (all-SPD, square) ──────────────────────────────────────
@@ -299,8 +386,27 @@ class ScaleEquivariantSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
@@ -338,8 +444,27 @@ class ScaleEquivariantSimpleSPDFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -381,8 +506,27 @@ class ScaleEquivariantSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
@@ -424,8 +568,27 @@ class ScaleEquivariantSimpleSPDFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 # ── Embedded Factorized (plain Linear projections) ───────────────────────────
@@ -472,14 +635,25 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
@@ -523,14 +697,25 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 # ── Non-embedded Factorized ──────────────────────────────────────────────────
@@ -577,14 +762,25 @@ class ScaleEquivariantFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
@@ -628,14 +824,25 @@ class ScaleEquivariantSimpleFactorizedFFNN(_ScaleEquivariantBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 # ── FiLM-conditioned scale-equivariant variants ──────────────────────────────
@@ -687,25 +894,29 @@ class ScaleEquivariantVarWidthFiLMFFNN(_ConditionedScaleEquivariantBase):
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
     @classmethod
-    def from_contract(
+    def from_entries(
         cls,
-        contract: TabulaRSpec,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
         condition_dim: int,
         **kwargs: Any,
     ) -> Self:
-        """Construct from TabulaRSpec.
+        """Construct from named input and output shapes.
 
         Args:
-            contract (TabulaRSpec): Shape contract with in_shape and out_shape.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             condition_dim (int): Condition vector dimension.
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
             Self: Constructed instance.
         """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
+            in_features=in_features,
+            out_features=out_features,
             condition_dim=condition_dim,
             **kwargs,
         )
@@ -759,25 +970,29 @@ class ScaleEquivariantFiLMEmbeddedFFNN(_ConditionedScaleEquivariantBase):
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
     @classmethod
-    def from_contract(
+    def from_entries(
         cls,
-        contract: TabulaRSpec,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
         condition_dim: int,
         **kwargs: Any,
     ) -> Self:
-        """Construct from TabulaRSpec.
+        """Construct from named input and output shapes.
 
         Args:
-            contract (TabulaRSpec): Shape contract with in_shape and out_shape.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             condition_dim (int): Condition vector dimension.
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
             Self: Constructed instance.
         """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
+            in_features=in_features,
+            out_features=out_features,
             condition_dim=condition_dim,
             **kwargs,
         )
@@ -832,16 +1047,19 @@ class ScaleEquivariantFiLMFFNN(_ConditionedScaleEquivariantBase):
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
     @classmethod
-    def from_contract(
+    def from_entries(
         cls,
-        contract: TabulaRSpec,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
         condition_dim: int,
         **kwargs: Any,
     ) -> Self:
-        """Construct from TabulaRSpec."""
+        """Construct from named input and output shapes."""
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
+            in_features=in_features,
+            out_features=out_features,
             condition_dim=condition_dim,
             **kwargs,
         )

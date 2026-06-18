@@ -1,4 +1,4 @@
-"""Integration test: contract-based model checkpoint round-trip."""
+"""Integration test: entry-shapes model checkpoint round-trip."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import torch
 from torch import nn
 from torch.nn import ModuleList
 
-from dlkit.domain.nn.contracts import TabulaRSpec, deserialize_contract
+from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
+    deserialize_shapes,
+)
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.engine.inference.model_builder import build_model_from_checkpoint
@@ -29,9 +31,15 @@ _BATCH_SIZE: int = 1
 
 
 @pytest.fixture
-def contract() -> TabulaRSpec:
-    """TabulaRSpec contract used for building the model."""
-    return TabulaRSpec(in_shape=_IN_SHAPE, out_shape=_OUT_SHAPE)
+def input_shapes() -> dict[str, tuple[int, ...]]:
+    """Feature-name-to-shape mapping used to build the model."""
+    return {"x": _IN_SHAPE}
+
+
+@pytest.fixture
+def output_shapes() -> dict[str, tuple[int, ...]]:
+    """Target-name-to-shape mapping used to build the model."""
+    return {"y": _OUT_SHAPE}
 
 
 @pytest.fixture
@@ -77,16 +85,17 @@ def components(entry_configs) -> WrapperComponents:
 # ---------------------------------------------------------------------------
 
 
-def test_contract_checkpoint_round_trip(
-    contract, model_settings, wrapper_settings, entry_configs, components
+def test_shapes_checkpoint_round_trip(
+    input_shapes, output_shapes, model_settings, wrapper_settings, entry_configs, components
 ):
-    """Full save→reconstruct cycle: contract persists to checkpoint and reloads."""
+    """Full save→reconstruct cycle: entry shapes persist to checkpoint and reload."""
     wrapper = StandardLightningWrapper(
         settings=wrapper_settings,
         model_settings=model_settings,
         components=components,
         entry_configs=entry_configs,
-        contract=contract,
+        input_shapes=input_shapes,
+        output_shapes=output_shapes,
     )
 
     # Build a Lightning-style checkpoint with prefixed state dict keys
@@ -94,14 +103,19 @@ def test_contract_checkpoint_round_trip(
     checkpoint: dict = {"state_dict": state_dict}
     wrapper.on_save_checkpoint(checkpoint)
 
-    # Assert contract was persisted
-    assert checkpoint["dlkit_metadata"]["contract"]["_type"] == "TabulaRSpec"
+    # Assert shapes were persisted under the new metadata keys
+    assert checkpoint["dlkit_metadata"]["input_shapes"] == {"x": list(_IN_SHAPE)}
+    assert checkpoint["dlkit_metadata"]["output_shapes"] == {"y": list(_OUT_SHAPE)}
 
-    # Reconstruct contract from checkpoint and rebuild model
-    restored_contract = deserialize_contract(checkpoint["dlkit_metadata"]["contract"])
-    assert restored_contract is not None
+    # Reconstruct shape mappings from checkpoint and rebuild model
+    restored_inputs = deserialize_shapes(checkpoint["dlkit_metadata"]["input_shapes"])
+    restored_outputs = deserialize_shapes(checkpoint["dlkit_metadata"]["output_shapes"])
+    assert restored_inputs == {"x": _IN_SHAPE}
+    assert restored_outputs == {"y": _OUT_SHAPE}
 
-    model = build_model_from_checkpoint(checkpoint, contract=restored_contract)
+    model = build_model_from_checkpoint(
+        checkpoint, input_shapes=restored_inputs, output_shapes=restored_outputs
+    )
 
     # Verify model produces correct output shape
     x = torch.zeros(_BATCH_SIZE, _IN_SHAPE[0])

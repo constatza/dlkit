@@ -6,9 +6,8 @@ data-module implementations for DLKit.
 Current classes:
 
 - `BaseDataModule`: shared Lightning `DataModule` base with split handling
-- `InMemoryModule`: array/TensorDict datamodule
+- `ArrayDataModule`: array/TensorDict datamodule
 - `GraphDataModule`: PyG datamodule
-- `TimeSeriesDataModule`: pytorch-forecasting datamodule
 
 Import `GraphDataModule` from `dlkit.engine.adapters.lightning.datamodules.graph`;
 the broad `dlkit.engine.adapters.lightning.datamodules` package surface stays

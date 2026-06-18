@@ -16,7 +16,6 @@ from dlkit.infrastructure.precision.context import precision_override
 from .build_strategy import (
     GraphBuildStrategy,
     IBuildStrategy,
-    TimeSeriesBuildStrategy,
     WorkflowSettings,
 )
 from .flexible_build_strategy import FlexibleBuildStrategy
@@ -31,7 +30,6 @@ class BuildFactory:
         self._strategies = strategies or [
             FlowMatchingBuildStrategy(),
             GraphBuildStrategy(),
-            TimeSeriesBuildStrategy(),
             FlexibleBuildStrategy(),
         ]
 

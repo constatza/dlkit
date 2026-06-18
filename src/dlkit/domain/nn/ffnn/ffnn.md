@@ -21,7 +21,7 @@ The package distinguishes:
 
 ## Single-layer linear baselines (`linear.py`)
 
-All classes are keyword-only, expose `in_features` and `out_features`, and implement `from_contract(contract, **kwargs)`.
+All classes are keyword-only, expose `in_features` and `out_features`, and implement `from_entries(input_shapes, output_shapes, **kwargs)`.
 
 | Class | Primitive | Constraint | Shape |
 |---|---|---|---|
@@ -144,14 +144,15 @@ For square layer types, "Embedded" means the initial projection is also a struct
 
 Unless stated otherwise, `num_layers` counts learned hidden blocks on the model's main path. Dedicated embedding/setup layers and terminal readout layers are excluded from that count.
 
-## Contract-based construction
+## Shape-based construction
 
-All constrained FFNNs implement `from_contract(contract, **kwargs)` via `TabulaRSpec`.
+All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwargs)` where
+`input_shapes` and `output_shapes` are `Mapping[str, tuple[int, ...]]`.
 
-- **Square-type classes** (`SPDFFNN`, `EmbeddedSPDFFNN`, etc.): require `in_shape == out_shape`; extract `in_features = in_shape[0]`.
-- **Rectangular-type classes** (`FactorizedFFNN`, `EmbeddedFactorizedFFNN`, etc.): extract `in_features = in_shape[0]`, `out_features = out_shape[0]`.
+- **Square-type classes** (`SPDFFNN`, `EmbeddedSPDFFNN`, etc.): require the first input and output shapes to be equal; extract `in_features` from the input shape's leading dim.
+- **Rectangular-type classes** (`FactorizedFFNN`, `EmbeddedFactorizedFFNN`, etc.): extract `in_features` from the first input shape and `out_features` from the first output shape.
 
-`from_contract` does **not** filter kwargs — passing duplicate `in_features` or `out_features` raises a `TypeError`.
+`from_entries` does **not** filter kwargs — passing duplicate `in_features` or `out_features` raises a `TypeError`.
 
 ## Configuration guidance
 
@@ -219,7 +220,7 @@ return Linear(h)                 # output projection
 | `normalize` | `NormalizerName \| None` | `None` | Normalisation after each gate |
 | `dropout` | `float` | `0.0` | Dropout after normalisation |
 
-Raises `ValueError` if `num_layers < 1`. Supports `from_contract(contract, **kwargs)`.
+Raises `ValueError` if `num_layers < 1`. Supports `from_entries(input_shapes, output_shapes, **kwargs)`.
 
 **Example — context-free gating with SwiGLU:**
 
@@ -290,19 +291,19 @@ All FiLM network classes require `condition_dim` in addition to the standard FFN
 | `num_layers` | `FiLMFFNN`, `ScaleEquivariantFiLMFFNN` | Number of hidden `FiLMBlock` transitions (>= 1) |
 | `num_layers` | `FiLMEmbeddedFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN` | Number of `FiLMResidualBlock`s in the body (>= 1) |
 
-### Contract-based construction
+### Shape-based construction
 
-All five FiLM network classes implement `from_contract(TabulaRSpec, condition_dim, **kwargs)`:
+All FiLM network classes implement `from_entries(input_shapes, output_shapes, condition_dim, **kwargs)`:
 
 ```python
 from dlkit.domain.nn.ffnn.film import FiLMFFNN
-from dlkit.domain.nn.contracts import TabulaRSpec
 
-spec = TabulaRSpec(in_shape=(16,), out_shape=(4,))
-model = FiLMFFNN.from_contract(spec, condition_dim=8, hidden_size=64, num_layers=3)
+model = FiLMFFNN.from_entries(
+    {"x": (16,)}, {"y": (4,)}, condition_dim=8, hidden_size=64, num_layers=3
+)
 ```
 
-`from_contract` extracts `in_features` and `out_features` from the contract; passing them again as kwargs raises `TypeError`.
+`from_entries` extracts `in_features` and `out_features` from the first input and output shapes; passing them again as kwargs raises `TypeError`.
 
 ### Configuration guidance
 

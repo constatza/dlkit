@@ -21,7 +21,7 @@ Same as the FFNN family:
 
 All built-ins are concrete classes. No public `residual: bool` on any constructor.
 
-Graph models implement `from_contract(GraphContractSpec, **kwargs)` for dataset-driven construction.
+Graph models implement `from_entries(input_shapes, output_shapes, **kwargs)` for dataset-driven construction. `in_channels` and `out_channels` are read from the last dimension of the first input and output shapes; `edge_dim` may be passed via `kwargs`.
 
 ## Config example
 

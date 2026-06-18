@@ -1,10 +1,12 @@
-from collections.abc import Sequence
 from typing import cast
+
+from tensordict.base import TensorDictBase
+from torch.utils.data import Dataset
 
 from dlkit.infrastructure.types.split import IndexSplit
 
 
-class SplitDataset[T]:
+class SplitDataset[T: Dataset]:
     """A split of a dataset based on indices."""
 
     raw: T
@@ -16,7 +18,6 @@ class SplitDataset[T]:
     def __init__(self, dataset: T, split: IndexSplit) -> None:
         self.raw = dataset
         self.split = split
-        # Initialize private attributes
         self._train = None
         self._validation = None
         self._test = None
@@ -87,14 +88,28 @@ class _SubsetDataset:
     to a base dataset using a precomputed index list.
     """
 
-    def __init__(self, base_dataset: object, indices: list[int] | None) -> None:
+    def __init__(self, base_dataset: Dataset, indices: list[int] | None) -> None:
         self._base = base_dataset
-        # Convert to a plain list of ints for robustness
         self._indices: list[int] = list(indices) if indices is not None else []
 
     def __len__(self) -> int:
         return len(self._indices)
 
     def __getitem__(self, i: int) -> object:
-        base_idx = self._indices[i]
-        return cast(Sequence[object], self._base)[base_idx]
+        return self._base[self._indices[i]]
+
+    def __getitems__(self, indices: list[int]) -> TensorDictBase | list[object]:
+        """Batch-retrieve items, remapping split indices to base dataset indices.
+
+        Args:
+            indices: List of indices into this split view.
+
+        Returns:
+            Batch TensorDict from the base dataset if it supports ``__getitems__``,
+            otherwise a list of individual items.
+        """
+        remapped = [self._indices[i] for i in indices]
+        getitems = getattr(self._base, "__getitems__", None)
+        if getitems is not None:
+            return getitems(remapped)
+        return [self._base[i] for i in remapped]

@@ -9,7 +9,7 @@ import torch
 from torch import nn
 from torch.distributions.normal import Normal
 
-from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import ActivationName, NormalizerName
@@ -138,15 +138,23 @@ class VAE1d(nn.Module):
         self.logvar_layer = nn.Linear(scale_of_latent * latent_size, latent_size)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the VAE from a model contract spec."""
-        match contract:
-            case GridOperatorSpec(in_channels=c, spatial_shape=spatial):
-                return cls(in_channels=c, in_length=spatial[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires GridOperatorSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
+    ) -> Self:
+        """Build the VAE from dataset entry shapes.
+
+        Args:
+            input_shapes: Mapping from input name to its per-sample shape.
+            output_shapes: Mapping from output name to its per-sample shape.
+            **kwargs: Additional constructor arguments.
+
+        Returns:
+            Constructed VAE instance.
+        """
+        first_shape = next(iter(input_shapes.values()))
+        in_channels = first_shape[0]
+        in_length = first_shape[1] if len(first_shape) > 1 else 1
+        return cls(in_channels=in_channels, in_length=in_length, **kwargs)
 
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode input to latent distribution parameters.

@@ -16,14 +16,14 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .checkpoint_reader import detect_checkpoint_dtype, extract_model_settings
 
 if TYPE_CHECKING:
-    from dlkit.domain.nn.contracts import ModelContractSpec
+    from dlkit.common.sources import InputShapes, OutputShapes
 
 logger = get_logger(__name__)
 
-# Keys that contract variants inject into from_contract(**kwargs). Stripping them
-# from hyperparams prevents "got multiple values for keyword argument" errors when
-# both the checkpoint's init_kwargs and the contract supply the same parameter.
-_CONTRACT_KEYS: frozenset[str] = frozenset(
+# Shape keys that from_entries() derives and supplies to the constructor. Stripping them
+# from hyperparams prevents "got multiple values for keyword argument" errors when both
+# the checkpoint's init_kwargs and from_entries() supply the same parameter.
+_SHAPE_KEYS: frozenset[str] = frozenset(
     {
         "in_features",
         "out_features",
@@ -42,21 +42,22 @@ _CONTRACT_KEYS: frozenset[str] = frozenset(
 )
 
 
-def _strip_contract_keys(hyperparams: dict[str, Any]) -> dict[str, Any]:
-    """Remove shape keys that a ModelContractSpec will supply via from_contract().
+def _strip_shape_keys(hyperparams: dict[str, Any]) -> dict[str, Any]:
+    """Remove shape keys that ``from_entries()`` will supply via construction.
 
     Args:
         hyperparams: Raw init kwargs extracted from checkpoint model settings.
 
     Returns:
-        Filtered kwargs with contract-owned keys removed.
+        Filtered kwargs with shape-owned keys removed.
     """
-    return {k: v for k, v in hyperparams.items() if k not in _CONTRACT_KEYS}
+    return {k: v for k, v in hyperparams.items() if k not in _SHAPE_KEYS}
 
 
 def build_model_from_checkpoint(
     checkpoint: dict[str, Any],
-    contract: ModelContractSpec | None = None,
+    input_shapes: InputShapes | None = None,
+    output_shapes: OutputShapes | None = None,
 ) -> torch.nn.Module:
     """Instantiate and load a model from checkpoint metadata and weights."""
     model_settings = extract_model_settings(checkpoint)
@@ -95,9 +96,15 @@ def build_model_from_checkpoint(
         and model_accepts_kwarg(model_cls, "activation")
     ):
         hyperparams = {**hyperparams, "activation": model_settings.activation}
-    if contract is not None:
-        hyperparams = _strip_contract_keys(hyperparams)
-    model = _build_model(cast("type[torch.nn.Module]", model_cls), hyperparams, contract=contract)
+    has_shapes = input_shapes is not None and output_shapes is not None
+    if has_shapes:
+        hyperparams = _strip_shape_keys(hyperparams)
+    model = _build_model(
+        cast("type[torch.nn.Module]", model_cls),
+        hyperparams,
+        input_shapes=input_shapes,
+        output_shapes=output_shapes,
+    )
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
     try:

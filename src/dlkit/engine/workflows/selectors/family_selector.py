@@ -25,10 +25,6 @@ class DatasetFamilySelector:
         return resolve_family(settings) is DatasetFamily.GRAPH
 
     @staticmethod
-    def is_timeseries(settings: Any) -> bool:
-        return resolve_family(settings) is DatasetFamily.TIMESERIES
-
-    @staticmethod
     def default_datamodule_class_for(settings: Any) -> type[LightningDataModule]:
         """Get default datamodule class for the given settings.
 
@@ -89,16 +85,10 @@ class DatasetFamilySelector:
                 from dlkit.engine.adapters.lightning.datamodules.graph import GraphDataModule
 
                 return GraphDataModule
-            case DatasetFamily.TIMESERIES:
-                from dlkit.engine.adapters.lightning.datamodules.timeseries import (
-                    TimeSeriesDataModule,
-                )
-
-                return TimeSeriesDataModule
             case _:
-                from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
+                from dlkit.engine.adapters.lightning.datamodules.array import ArrayDataModule
 
-                return InMemoryModule
+                return ArrayDataModule
 
     @staticmethod
     def default_wrapper_class_for_family(family: DatasetFamily) -> type[CoreLightningWrapper]:
@@ -115,10 +105,6 @@ class DatasetFamilySelector:
                 from dlkit.engine.adapters.lightning.graph import GraphLightningWrapper
 
                 return GraphLightningWrapper
-            case DatasetFamily.TIMESERIES:
-                from dlkit.engine.adapters.lightning.timeseries import TimeSeriesLightningWrapper
-
-                return TimeSeriesLightningWrapper
             case _:
                 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 

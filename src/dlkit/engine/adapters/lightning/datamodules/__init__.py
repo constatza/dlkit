@@ -1,5 +1,4 @@
-from .array import InMemoryModule
+from .array import ArrayDataModule
 from .base import BaseDataModule
-from .timeseries import TimeSeriesDataModule
 
-__all__ = ["BaseDataModule", "InMemoryModule", "TimeSeriesDataModule"]
+__all__ = ["BaseDataModule", "ArrayDataModule"]

@@ -15,7 +15,7 @@ from typing import Any, Self, TypeVar
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer
@@ -104,21 +104,23 @@ class GatedMLP(nn.Module):
         return self.output(h)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build a :class:`GatedMLP` from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build a :class:`GatedMLP` from named input and output shapes.
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Additional keyword arguments forwarded to
                 :meth:`__init__`.
 
         Returns:
             Constructed :class:`GatedMLP`.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)

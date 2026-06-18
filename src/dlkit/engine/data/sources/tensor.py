@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import torch
 
+from dlkit.infrastructure.precision.service import PrecisionService
+
 
 class TensorSource:
     """Wraps an already-resolved in-memory ``Tensor`` as an ``ArraySource``.
@@ -57,7 +59,7 @@ class TensorSource:
         Returns:
             Tensor of shape ``(*sample_shape,)``.
         """
-        return self._data[idx]
+        return PrecisionService().cast_tensor(self._data[idx])
 
     def get_batch(self, indices: list[int]) -> torch.Tensor:
         """Return a batch tensor for the given indices.
@@ -68,7 +70,7 @@ class TensorSource:
         Returns:
             Tensor of shape ``(B, *sample_shape)`` where ``B = len(indices)``.
         """
-        return self._data[indices]
+        return PrecisionService().cast_tensor(self._data[indices])
 
 
 __all__ = ["TensorSource"]

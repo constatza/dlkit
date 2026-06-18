@@ -64,7 +64,10 @@ class TensorSubset(Transform):
     @property
     def keep(self) -> Sequence[int]:
         if isinstance(self._keep, slice):
-            assert self.length is not None, "length must be set before accessing keep as slice"
+            if self.length is None:
+                raise RuntimeError(
+                    "length must be set before accessing keep as slice; call fit() first"
+                )
             return _slice_to_list(self._keep, self.length)
         return self._keep
 
@@ -89,10 +92,12 @@ class TensorSubset(Transform):
         # Auto-fit from data if not already fitted
         if self.length is None:
             self.fit(x)
-        assert self.length is not None  # guaranteed by fit()
+        length = self.length
+        if length is None:
+            raise RuntimeError("fit() must set self.length before forward()")
 
         # Build sorted list of indices to keep
-        final_indices = sorted(set(range(self.length)) & set(self.keep))
+        final_indices = sorted(set(range(length)) & set(self.keep))
 
         # Create full-dimensional slice(None) list; element type is slice | list[int]
         indexer = cast(list[slice | list[int]], [slice(None)] * x.ndim)

@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 
 DEFAULT_SCALE_EQUIVARIANT_NORM = "l2"
 DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN = 10.0
@@ -170,20 +170,25 @@ class ConditionedScaleEquivariantWrapper(_NormScalingBase):
         return (out, {"norm": norms}) if self.keep_stats else out
 
 
-def contract_aware_kwargs(contract: TabulaRSpec, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Merge explicit kwargs with contract-derived in/out feature sizes.
+def shape_aware_kwargs(
+    input_shapes: InputShapes,
+    output_shapes: OutputShapes,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge explicit kwargs with shape-derived in/out feature sizes.
 
     Args:
-        contract: A TabulaRSpec providing in_shape and out_shape.
+        input_shapes: Mapping from feature entry name to its shape.
+        output_shapes: Mapping from target entry name to its shape.
         kwargs: Additional keyword arguments; in_features/out_features are stripped.
 
     Returns:
-        A dict with in_features and out_features from the contract, plus remaining kwargs.
+        A dict with in_features and out_features from the shapes, plus remaining kwargs.
     """
     filtered = {k: v for k, v in kwargs.items() if k not in ("in_features", "out_features")}
     return {
-        "in_features": contract.in_shape[0],
-        "out_features": contract.out_shape[0],
+        "in_features": next(iter(input_shapes.values()))[0],
+        "out_features": next(iter(output_shapes.values()))[0],
         **filtered,
     }
 
@@ -193,5 +198,5 @@ __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
     "ConditionedScaleEquivariantWrapper",
     "ScaleEquivariantWrapper",
-    "contract_aware_kwargs",
+    "shape_aware_kwargs",
 ]

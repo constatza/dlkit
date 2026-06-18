@@ -7,7 +7,7 @@ from typing import Any, Self
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.operators.base import GridOperatorBase
 from dlkit.domain.nn.spectral.layers import FourierLayer
 from dlkit.domain.nn.types import ActivationName
@@ -55,12 +55,19 @@ class FourierNeuralOperator1d(GridOperatorBase):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the operator from a model contract spec."""
-        match contract:
-            case GridOperatorSpec(in_channels=c_in, out_channels=c_out):
-                return cls(in_channels=c_in, out_channels=c_out, **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires GridOperatorSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
+    ) -> Self:
+        """Build the operator from dataset entry shapes.
+
+        Args:
+            input_shapes: Mapping from input name to its per-sample shape.
+            output_shapes: Mapping from output name to its per-sample shape.
+            **kwargs: Additional constructor arguments.
+
+        Returns:
+            Constructed operator instance.
+        """
+        in_channels = next(iter(input_shapes.values()))[0]
+        out_channels = next(iter(output_shapes.values()))[0]
+        return cls(in_channels=in_channels, out_channels=out_channels, **kwargs)

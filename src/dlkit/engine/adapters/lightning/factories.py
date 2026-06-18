@@ -18,7 +18,6 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 from .base import CoreLightningWrapper
 from .graph import GraphLightningWrapper
 from .standard import StandardLightningWrapper
-from .timeseries import TimeSeriesLightningWrapper
 from .wrapper_types import WrapperComponents
 
 logger = get_logger(__name__)
@@ -54,7 +53,7 @@ class WrapperFactory:
         Args:
             model_settings: Model configuration settings.
             settings: Wrapper configuration settings.
-            wrapper_type: Type of wrapper ('auto', 'standard', 'graph', 'timeseries').
+            wrapper_type: Type of wrapper ('auto', 'standard', 'graph').
             entry_configs: Data entry configurations for pipeline setup.
             components: Pre-built WrapperComponents (required).
             **kwargs: Additional arguments passed to wrapper.
@@ -68,14 +67,6 @@ class WrapperFactory:
         match wrapper_type:
             case "graph":
                 return WrapperFactory.create_graph_wrapper(
-                    model_settings=model_settings,
-                    settings=settings,
-                    entry_configs=entry_configs,
-                    components=components,
-                    **kwargs,
-                )
-            case "timeseries":
-                return WrapperFactory.create_timeseries_wrapper(
                     model_settings=model_settings,
                     settings=settings,
                     entry_configs=entry_configs,
@@ -97,8 +88,6 @@ class WrapperFactory:
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents | None = None,
-        contract: Any = None,
-        geometry: Any = None,
         **kwargs: Any,
     ) -> StandardLightningWrapper:
         """Create a standard Lightning wrapper for tensor/TensorDict-based models.
@@ -108,8 +97,6 @@ class WrapperFactory:
             settings: Wrapper configuration settings.
             entry_configs: Data entry configurations.
             components: Pre-built WrapperComponents (required).
-            contract: Optional ModelContractSpec forwarded to model construction.
-            geometry: Optional GeometrySpec for checkpoint metadata.
             **kwargs: Additional arguments passed to wrapper.
 
         Returns:
@@ -128,8 +115,6 @@ class WrapperFactory:
             settings=settings,
             components=components,
             entry_configs=entry_configs or (),
-            contract=contract,
-            geometry=geometry,
             **kwargs,
         )
 
@@ -162,42 +147,6 @@ class WrapperFactory:
                 "Call build_wrapper_components() from dlkit.engine.workflows.factories.component_builders first."
             )
         return GraphLightningWrapper(
-            model_settings=model_settings,
-            settings=settings,
-            entry_configs=entry_configs,
-            components=components,
-            **kwargs,
-        )
-
-    @staticmethod
-    def create_timeseries_wrapper(
-        model_settings: ModelComponentSettings,
-        settings: WrapperComponentSettings,
-        entry_configs: tuple[DataEntry, ...] | None = None,
-        components: WrapperComponents | None = None,
-        **kwargs: Any,
-    ) -> TimeSeriesLightningWrapper:
-        """Create a timeseries Lightning wrapper.
-
-        Args:
-            model_settings: Model configuration settings.
-            settings: Wrapper configuration settings.
-            entry_configs: Data entry configurations.
-            components: Pre-built WrapperComponents (required).
-            **kwargs: Additional arguments passed to wrapper.
-
-        Returns:
-            TimeSeriesLightningWrapper instance.
-
-        Raises:
-            TypeError: If components is None (must be provided by caller).
-        """
-        if components is None:
-            raise TypeError(
-                "WrapperFactory.create_timeseries_wrapper() requires components. "
-                "Call build_wrapper_components() from dlkit.engine.workflows.factories.component_builders first."
-            )
-        return TimeSeriesLightningWrapper(
             model_settings=model_settings,
             settings=settings,
             entry_configs=entry_configs,
@@ -273,7 +222,6 @@ class WrapperFactory:
         return {
             "standard": StandardLightningWrapper,
             "graph": GraphLightningWrapper,
-            "timeseries": TimeSeriesLightningWrapper,
         }
 
     @staticmethod

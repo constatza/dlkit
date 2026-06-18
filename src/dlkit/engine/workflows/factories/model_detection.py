@@ -16,9 +16,7 @@ from dlkit.domain.nn.detection import (  # noqa: F401
 def should_skip_wrapper(model_settings: Any, dataset: Any) -> bool:
     """Return True if the model should be used directly without a Lightning wrapper.
 
-    Skips wrapping when either:
-    - The dataset is a ``ForecastingDataset`` (has its own Lightning lifecycle), or
-    - The model class is already a ``LightningModule`` subclass.
+    Skips wrapping when the model class is already a ``LightningModule`` subclass.
 
     Args:
         model_settings: Component settings with ``name`` and ``module_path`` attributes.
@@ -27,14 +25,7 @@ def should_skip_wrapper(model_settings: Any, dataset: Any) -> bool:
     Returns:
         bool: True if wrapping should be skipped, False otherwise.
     """
-    try:
-        from dlkit.engine.data.datasets.timeseries import ForecastingDataset
-
-        if isinstance(dataset, ForecastingDataset):
-            return True
-    except Exception:
-        pass
-
+    del dataset  # no longer used for skip detection
     try:
         model_ref = getattr(model_settings, "name", None)
         model_cls = None

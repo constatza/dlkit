@@ -5,8 +5,8 @@ from typing import Any, Self
 
 import torch
 
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.cae.base import CAE
-from dlkit.domain.nn.contracts import GridOperatorSpec, ModelContractSpec
 from dlkit.domain.nn.encoder.latent import (
     TensorToVectorBlock,
     VectorToTensorBlock,
@@ -80,15 +80,23 @@ class SkipCAE1d(CAE):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the autoencoder from a model contract spec."""
-        match contract:
-            case GridOperatorSpec(in_channels=c, spatial_shape=spatial):
-                return cls(in_channels=c, in_length=spatial[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires GridOperatorSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
+    ) -> Self:
+        """Build the autoencoder from dataset entry shapes.
+
+        Args:
+            input_shapes: Mapping from input name to its per-sample shape.
+            output_shapes: Mapping from output name to its per-sample shape.
+            **kwargs: Additional constructor arguments.
+
+        Returns:
+            Constructed autoencoder instance.
+        """
+        first_shape = next(iter(input_shapes.values()))
+        in_channels = first_shape[0]
+        in_length = first_shape[1] if len(first_shape) > 1 else 1
+        return cls(in_channels=in_channels, in_length=in_length, **kwargs)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode input to latent space.

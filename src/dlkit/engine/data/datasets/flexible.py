@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, SupportsIndex, cast
+from typing import TYPE_CHECKING, SupportsIndex, cast
 
 from torch import Tensor
 
@@ -40,8 +40,8 @@ def _build_nested_tensordict(
 
     return TensorDict(
         {
-            "features": TensorDict(cast(Any, feature_tensors), batch_size=batch_size),
-            "targets": TensorDict(cast(Any, target_tensors), batch_size=batch_size),
+            "features": TensorDict(feature_tensors, batch_size=batch_size),  # type: ignore
+            "targets": TensorDict(target_tensors, batch_size=batch_size),  # type: ignore
         },
         batch_size=batch_size,
     )

@@ -1,37 +1,61 @@
+"""Regression tests for DeepONet construction via the entry-shapes API."""
+
+from __future__ import annotations
+
 import pytest
 
-from dlkit.common.errors import WorkflowError
-from dlkit.domain.nn.contracts import BranchTrunkSpec, ContractConsumer, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.factory import build_model
 from dlkit.domain.nn.operators.deeponet import VarWidthDeepONet
 
 
-def test_deeponet_protocol_match():
-    assert issubclass(VarWidthDeepONet, ContractConsumer), "Must match protocol structurally"
+@pytest.fixture
+def deeponet_input_shapes() -> InputShapes:
+    """Branch and query input shapes keyed by entry name."""
+    return {"branch": (10,), "query": (2,)}
 
 
-def test_deeponet_missing_contract_args():
-    # If contract is None, it should fail with a WorkflowError explicitly stating that a contract is expected
-    with pytest.raises(WorkflowError, match="This model expects a contract"):
-        build_model(
-            VarWidthDeepONet, kwargs={"branch_layers": [64], "trunk_layers": [64]}, contract=None
-        )
+@pytest.fixture
+def deeponet_output_shapes() -> OutputShapes:
+    """Output shape keyed by target entry name."""
+    return {"y": (1,)}
 
 
-def test_deeponet_wrong_contract():
-    # If contract is wrong, it should fail with a different error
-    with pytest.raises(TypeError, match="require BranchTrunkSpec"):
-        build_model(
-            VarWidthDeepONet,
-            kwargs={"branch_layers": [64], "trunk_layers": [64]},
-            contract=TabulaRSpec(in_shape=(10,), out_shape=(1,)),
-        )
+@pytest.fixture
+def deeponet_kwargs() -> dict[str, list[int]]:
+    """Branch/trunk layer widths for VarWidthDeepONet."""
+    return {"branch_layers": [64], "trunk_layers": [64]}
 
 
-def test_deeponet_correct_contract():
-    # If contract is correct, it should succeed
-    contract = BranchTrunkSpec(branch_shape=(10,), query_shape=(2,), out_features=1)
+def test_deeponet_exposes_from_entries() -> None:
+    """VarWidthDeepONet exposes a from_entries classmethod for entry-shape build."""
+    assert callable(VarWidthDeepONet.from_entries)
+
+
+def test_deeponet_build_via_factory(
+    deeponet_input_shapes: InputShapes,
+    deeponet_output_shapes: OutputShapes,
+    deeponet_kwargs: dict[str, list[int]],
+) -> None:
+    """build_model constructs a VarWidthDeepONet from entry shapes."""
     model = build_model(
-        VarWidthDeepONet, kwargs={"branch_layers": [64], "trunk_layers": [64]}, contract=contract
+        VarWidthDeepONet,
+        deeponet_kwargs,
+        input_shapes=deeponet_input_shapes,
+        output_shapes=deeponet_output_shapes,
     )
     assert isinstance(model, VarWidthDeepONet)
+
+
+def test_deeponet_from_entries_derives_dims(
+    deeponet_input_shapes: InputShapes,
+    deeponet_output_shapes: OutputShapes,
+    deeponet_kwargs: dict[str, list[int]],
+) -> None:
+    """from_entries derives branch/query/out dimensions from the shapes."""
+    model = VarWidthDeepONet.from_entries(
+        deeponet_input_shapes,
+        deeponet_output_shapes,
+        **deeponet_kwargs,
+    )
+    assert model.out_features == deeponet_output_shapes["y"][0]

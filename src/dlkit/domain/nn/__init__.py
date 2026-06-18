@@ -1,12 +1,7 @@
 from . import attention, cae, contracts, encoder, ffnn, operators, primitives, spectral
 from .contracts import (
-    BranchTrunkSpec,
-    ContractConsumer,
-    GraphContractSpec,
-    GridOperatorSpec,
-    ModelContractSpec,
-    SequenceSpec,
-    TabulaRSpec,
+    EntryConsumer,
+    InputSpec,
 )
 from .ffnn.constrained import (
     SPDFFNN,
@@ -92,13 +87,8 @@ from .spectral import (
 
 __all__ = [
     # Contracts
-    "BranchTrunkSpec",
-    "ContractConsumer",
-    "GraphContractSpec",
-    "GridOperatorSpec",
-    "ModelContractSpec",
-    "SequenceSpec",
-    "TabulaRSpec",
+    "EntryConsumer",
+    "InputSpec",
     "contracts",
     # VarWidth (explicit per-layer widths)
     "VarWidthFFNN",

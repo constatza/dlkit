@@ -1,23 +1,51 @@
-"""Unit tests for domain/nn/contracts.py and the contract path in factory.py."""
+"""Unit tests for the public surface of ``dlkit.domain.nn.contracts``.
+
+The contracts module now exposes only ``EntryConsumer`` (a runtime-checkable
+protocol) and ``InputSpec`` (a permissive pydantic base). These tests cover the
+structural protocol check and the ``InputSpec`` extra-field behaviour.
+"""
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 from typing import Any, Self
 
 import pytest
 import torch.nn as nn
+from pydantic import BaseModel
 
-from dlkit.domain.nn.contracts import (
-    BranchTrunkSpec,
-    ContractConsumer,
-    GraphContractSpec,
-    GridOperatorSpec,
-    ModelContractSpec,
-    SequenceSpec,
-    TabulaRSpec,
-)
-from dlkit.domain.nn.factory import build_model
+from dlkit.common.sources import InputShapes, OutputShapes
+from dlkit.domain.nn.contracts import EntryConsumer, InputSpec
+from dlkit.domain.nn.ffnn.residual import FFNN
+
+# ---------------------------------------------------------------------------
+# Helper models
+# ---------------------------------------------------------------------------
+
+
+class _EntryConsumerModel(nn.Module):
+    """nn.Module that structurally satisfies ``EntryConsumer``."""
+
+    InputSpec: type[InputSpec] = InputSpec
+
+    @classmethod
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        return cls()
+
+    def forward(self, x: Any) -> Any:  # noqa: ANN401
+        return x
+
+
+class _NoEntriesModel(nn.Module):
+    """nn.Module lacking both ``from_entries`` and ``InputSpec``."""
+
+    def forward(self, x: Any) -> Any:  # noqa: ANN401
+        return x
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -25,385 +53,95 @@ from dlkit.domain.nn.factory import build_model
 
 
 @pytest.fixture
-def tabular_spec() -> TabulaRSpec:
-    """A basic TabulaRSpec."""
-    return TabulaRSpec(in_shape=(16,), out_shape=(4,))
+def entry_consumer_cls() -> type[_EntryConsumerModel]:
+    """A model class that satisfies the EntryConsumer protocol."""
+    return _EntryConsumerModel
 
 
 @pytest.fixture
-def grid_spec() -> GridOperatorSpec:
-    """A basic GridOperatorSpec."""
-    return GridOperatorSpec(in_channels=3, out_channels=1, spatial_shape=(64, 64))
+def non_consumer_cls() -> type[_NoEntriesModel]:
+    """A model class that does not satisfy the EntryConsumer protocol."""
+    return _NoEntriesModel
 
 
 @pytest.fixture
-def sequence_spec() -> SequenceSpec:
-    """A basic SequenceSpec with default out_len."""
-    return SequenceSpec(in_channels=8, seq_len=100, out_channels=4)
+def input_shapes() -> InputShapes:
+    """Single named feature shape."""
+    return {"x": (4,)}
 
 
 @pytest.fixture
-def sequence_spec_with_horizon() -> SequenceSpec:
-    """A SequenceSpec with explicit out_len."""
-    return SequenceSpec(in_channels=8, seq_len=100, out_channels=4, out_len=10)
+def output_shapes() -> OutputShapes:
+    """Single named target shape."""
+    return {"y": (2,)}
 
 
 @pytest.fixture
-def branch_trunk_spec() -> BranchTrunkSpec:
-    """A basic BranchTrunkSpec."""
-    return BranchTrunkSpec(branch_shape=(200,), query_shape=(2,), out_features=32)
-
-
-@pytest.fixture
-def graph_spec() -> GraphContractSpec:
-    """A GraphContractSpec with edge features."""
-    return GraphContractSpec(in_channels=16, out_channels=8, edge_dim=4)
-
-
-@pytest.fixture
-def graph_spec_no_edges() -> GraphContractSpec:
-    """A GraphContractSpec without edge features."""
-    return GraphContractSpec(in_channels=16, out_channels=8, edge_dim=None)
-
-
-class _MinimalModule(nn.Module):
-    """Minimal nn.Module that does nothing."""
-
-    def forward(self, x: Any) -> Any:  # noqa: ANN401
-        return x
-
-
-class _ContractConsumerModel(_MinimalModule):
-    """nn.Module that implements ContractConsumer."""
-
-    received_contract: ModelContractSpec | None = None
-    received_kwargs: dict[str, Any] | None = None
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        instance = cls()
-        instance.received_contract = contract
-        instance.received_kwargs = kwargs
-        return instance
-
-
-class _StrictContractConsumerModel(_MinimalModule):
-    """nn.Module that only accepts TabulaRSpec and raises TypeError on others."""
-
-    @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        if not isinstance(contract, TabulaRSpec):
-            raise TypeError(
-                f"{cls.__name__} only accepts TabulaRSpec, got {type(contract).__name__}"
-            )
-        return cls()
-
-
-class _NoContractModel(_MinimalModule):
-    """nn.Module that does NOT implement ContractConsumer."""
-
-    def __init__(self, hidden: int = 64) -> None:
-        super().__init__()
-        self.hidden = hidden
+def input_spec_payload() -> dict[str, Any]:
+    """Arbitrary keyword payload for InputSpec extra-field tests."""
+    return {"x": (4,), "extra_entry": (8, 8)}
 
 
 # ---------------------------------------------------------------------------
-# Frozen dataclass tests
+# EntryConsumer protocol
 # ---------------------------------------------------------------------------
 
 
-class TestTabulaRSpec:
-    @staticmethod
-    def _mutate_attr(obj: object, name: str, value: object) -> None:
-        setattr(obj, name, value)
+class TestEntryConsumerProtocol:
+    def test_is_runtime_checkable(self) -> None:
+        """EntryConsumer supports isinstance/issubclass at runtime."""
+        assert hasattr(EntryConsumer, "_is_runtime_protocol")
 
-    def test_fields_are_accessible(self, tabular_spec: TabulaRSpec) -> None:
-        assert tabular_spec.in_shape == (16,)
-        assert tabular_spec.out_shape == (4,)
-
-    def test_is_frozen(self, tabular_spec: TabulaRSpec) -> None:
-        with pytest.raises(FrozenInstanceError):
-            self._mutate_attr(tabular_spec, "in_shape", (32,))
-
-
-class TestGridOperatorSpec:
-    def test_fields_are_accessible(self, grid_spec: GridOperatorSpec) -> None:
-        assert grid_spec.in_channels == 3
-        assert grid_spec.out_channels == 1
-        assert grid_spec.spatial_shape == (64, 64)
-
-    def test_is_frozen(self, grid_spec: GridOperatorSpec) -> None:
-        with pytest.raises(FrozenInstanceError):
-            TestTabulaRSpec._mutate_attr(grid_spec, "in_channels", 99)
-
-
-class TestSequenceSpec:
-    def test_fields_are_accessible(self, sequence_spec: SequenceSpec) -> None:
-        assert sequence_spec.in_channels == 8
-        assert sequence_spec.seq_len == 100
-        assert sequence_spec.out_channels == 4
-
-    def test_default_out_len_is_none(self, sequence_spec: SequenceSpec) -> None:
-        assert sequence_spec.out_len is None
-
-    def test_explicit_out_len(self, sequence_spec_with_horizon: SequenceSpec) -> None:
-        assert sequence_spec_with_horizon.out_len == 10
-
-    def test_is_frozen(self, sequence_spec: SequenceSpec) -> None:
-        with pytest.raises(FrozenInstanceError):
-            TestTabulaRSpec._mutate_attr(sequence_spec, "seq_len", 200)
-
-
-class TestBranchTrunkSpec:
-    def test_fields_are_accessible(self, branch_trunk_spec: BranchTrunkSpec) -> None:
-        assert branch_trunk_spec.branch_shape == (200,)
-        assert branch_trunk_spec.query_shape == (2,)
-        assert branch_trunk_spec.out_features == 32
-
-    def test_is_frozen(self, branch_trunk_spec: BranchTrunkSpec) -> None:
-        with pytest.raises(FrozenInstanceError):
-            TestTabulaRSpec._mutate_attr(branch_trunk_spec, "out_features", 0)
-
-
-class TestGraphContractSpec:
-    def test_with_edge_dim(self, graph_spec: GraphContractSpec) -> None:
-        assert graph_spec.edge_dim == 4
-
-    def test_without_edge_dim(self, graph_spec_no_edges: GraphContractSpec) -> None:
-        assert graph_spec_no_edges.edge_dim is None
-
-    def test_is_frozen(self, graph_spec: GraphContractSpec) -> None:
-        with pytest.raises(FrozenInstanceError):
-            TestTabulaRSpec._mutate_attr(graph_spec, "in_channels", 0)
-
-
-# ---------------------------------------------------------------------------
-# ContractConsumer protocol tests
-# ---------------------------------------------------------------------------
-
-
-class TestContractConsumerProtocol:
-    def test_implementor_satisfies_protocol(self) -> None:
-        assert issubclass(_ContractConsumerModel, ContractConsumer)
-
-    def test_non_implementor_does_not_satisfy_protocol(self) -> None:
-        assert not isinstance(_NoContractModel, ContractConsumer)
-
-    def test_issubclass_is_correct_check_for_factory(self) -> None:
-        """The factory dispatches on the class (type), not an instance.
-
-        issubclass is the correct check; isinstance on the class also works for
-        runtime_checkable protocols because the class itself is the checked object.
-        """
-        # issubclass is the correct check for factory usage.
-        assert issubclass(_ContractConsumerModel, ContractConsumer)
-
-    def test_missing_from_contract_fails_issubclass(self) -> None:
-        assert not issubclass(_NoContractModel, ContractConsumer)
-
-
-# ---------------------------------------------------------------------------
-# build_model — contract path
-# ---------------------------------------------------------------------------
-
-
-class TestBuildModelContractPath:
-    def test_calls_from_contract_when_consumer(self, tabular_spec: TabulaRSpec) -> None:
-        model = build_model(
-            _ContractConsumerModel,
-            contract=tabular_spec,
-        )
-        assert isinstance(model, _ContractConsumerModel)
-        assert model.received_contract is tabular_spec
-
-    def test_forwards_kwargs_to_from_contract(self, tabular_spec: TabulaRSpec) -> None:
-        model = build_model(
-            _ContractConsumerModel,
-            contract=tabular_spec,
-            kwargs={"hidden": 128},
-        )
-        assert isinstance(model, _ContractConsumerModel)
-        assert model.received_kwargs == {"hidden": 128}
-
-    def test_no_contract_falls_through_to_kwargs(self) -> None:
-        model = build_model(_NoContractModel, kwargs={"hidden": 32})
-        assert isinstance(model, _NoContractModel)
-        assert model.hidden == 32
-
-    def test_none_contract_with_non_consumer_uses_kwargs(self) -> None:
-        model = build_model(_NoContractModel, contract=None, kwargs={"hidden": 16})
-        assert isinstance(model, _NoContractModel)
-        assert model.hidden == 16
-
-    def test_contract_ignored_for_non_consumer(self, tabular_spec: TabulaRSpec) -> None:
-        """If model_cls doesn't implement ContractConsumer, contract is ignored."""
-        model = build_model(
-            _NoContractModel,
-            contract=tabular_spec,
-            kwargs={"hidden": 64},
-        )
-        assert isinstance(model, _NoContractModel)
-        assert model.hidden == 64
-
-    def test_uses_issubclass_not_isinstance(self, tabular_spec: TabulaRSpec) -> None:
-        """Ensure the factory dispatches on the class (type), not an instance."""
-        # Passing the class (not an instance) must work correctly
-        model = build_model(_ContractConsumerModel, contract=tabular_spec)
-        assert isinstance(model, _ContractConsumerModel)
-
-    def test_empty_kwargs_defaults_to_empty_dict(self, tabular_spec: TabulaRSpec) -> None:
-        model = build_model(_ContractConsumerModel, contract=tabular_spec)
-        assert model.received_kwargs == {}
-
-    def test_callable_factory_bypasses_contract_dispatch(self, tabular_spec: TabulaRSpec) -> None:
-        """A plain callable (not a type) skips the ContractConsumer path."""
-
-        def _factory(**kwargs: Any) -> nn.Module:
-            return _NoContractModel(**kwargs)
-
-        model = build_model(_factory, kwargs={"hidden": 7}, contract=tabular_spec)
-        assert isinstance(model, _NoContractModel)
-        assert model.hidden == 7
-
-
-# ---------------------------------------------------------------------------
-# from_contract variant rejection
-# ---------------------------------------------------------------------------
-
-
-class TestFromContractVariantRejection:
-    """from_contract raises TypeError when passed the wrong contract variant."""
-
-    def test_wrong_contract_raises_type_error_tabular(self, grid_spec: GridOperatorSpec) -> None:
-        """_StrictContractConsumerModel rejects a GridOperatorSpec."""
-        with pytest.raises(TypeError, match="TabulaRSpec"):
-            _StrictContractConsumerModel.from_contract(grid_spec)
-
-    def test_wrong_contract_raises_type_error_sequence(self, sequence_spec: SequenceSpec) -> None:
-        """_StrictContractConsumerModel rejects a SequenceSpec."""
-        with pytest.raises(TypeError, match="TabulaRSpec"):
-            _StrictContractConsumerModel.from_contract(sequence_spec)
-
-    def test_wrong_contract_raises_type_error_branch_trunk(
-        self, branch_trunk_spec: BranchTrunkSpec
+    def test_structural_consumer_satisfies_protocol(
+        self, entry_consumer_cls: type[_EntryConsumerModel]
     ) -> None:
-        """_StrictContractConsumerModel rejects a BranchTrunkSpec."""
-        with pytest.raises(TypeError, match="TabulaRSpec"):
-            _StrictContractConsumerModel.from_contract(branch_trunk_spec)
+        """A class declaring from_entries + InputSpec satisfies the protocol."""
+        assert isinstance(entry_consumer_cls, EntryConsumer)
 
-    def test_wrong_contract_raises_type_error_graph(self, graph_spec: GraphContractSpec) -> None:
-        """_StrictContractConsumerModel rejects a GraphContractSpec."""
-        with pytest.raises(TypeError, match="TabulaRSpec"):
-            _StrictContractConsumerModel.from_contract(graph_spec)
-
-    def test_correct_contract_accepted(self, tabular_spec: TabulaRSpec) -> None:
-        """_StrictContractConsumerModel accepts the correct TabulaRSpec."""
-        model = _StrictContractConsumerModel.from_contract(tabular_spec)
-        assert isinstance(model, _StrictContractConsumerModel)
-
-
-# ---------------------------------------------------------------------------
-# __post_init__ invariant tests
-# ---------------------------------------------------------------------------
-
-
-class TestTabulaRSpecInvariants:
-    def test_empty_in_shape_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty"):
-            TabulaRSpec(in_shape=(), out_shape=(4,))
-
-    def test_empty_out_shape_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty"):
-            TabulaRSpec(in_shape=(16,), out_shape=())
-
-
-class TestGridOperatorSpecInvariants:
-    def test_zero_in_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GridOperatorSpec(in_channels=0, out_channels=1, spatial_shape=(64, 64))
-
-    def test_zero_out_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GridOperatorSpec(in_channels=3, out_channels=0, spatial_shape=(64, 64))
-
-    def test_negative_in_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GridOperatorSpec(in_channels=-1, out_channels=1, spatial_shape=(64, 64))
-
-    def test_empty_spatial_shape_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty"):
-            GridOperatorSpec(in_channels=3, out_channels=1, spatial_shape=())
-
-
-class TestSequenceSpecInvariants:
-    def test_zero_in_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            SequenceSpec(in_channels=0, seq_len=100, out_channels=4)
-
-    def test_zero_seq_len_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            SequenceSpec(in_channels=8, seq_len=0, out_channels=4)
-
-    def test_zero_out_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            SequenceSpec(in_channels=8, seq_len=100, out_channels=0)
-
-    def test_zero_out_len_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            SequenceSpec(in_channels=8, seq_len=100, out_channels=4, out_len=0)
-
-    def test_negative_out_len_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            SequenceSpec(in_channels=8, seq_len=100, out_channels=4, out_len=-1)
-
-    def test_none_out_len_is_valid(self) -> None:
-        spec = SequenceSpec(in_channels=8, seq_len=100, out_channels=4)
-        assert spec.out_len is None
-
-    def test_effective_out_len_returns_out_len_when_set(
-        self, sequence_spec_with_horizon: SequenceSpec
+    def test_non_consumer_does_not_satisfy_protocol(
+        self, non_consumer_cls: type[_NoEntriesModel]
     ) -> None:
-        assert sequence_spec_with_horizon.effective_out_len == sequence_spec_with_horizon.out_len
+        """A class missing the protocol members is rejected."""
+        assert not isinstance(non_consumer_cls, EntryConsumer)
 
-    def test_effective_out_len_returns_seq_len_when_none(self, sequence_spec: SequenceSpec) -> None:
-        assert sequence_spec.effective_out_len == sequence_spec.seq_len
+    def test_from_entries_constructs_instance(
+        self,
+        entry_consumer_cls: type[_EntryConsumerModel],
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+    ) -> None:
+        """from_entries builds an instance of the consumer class."""
+        model = entry_consumer_cls.from_entries(input_shapes, output_shapes)
+        assert isinstance(model, entry_consumer_cls)
+
+    def test_real_model_exposes_from_entries_classmethod(self) -> None:
+        """Real DLKit models expose a from_entries classmethod."""
+        assert callable(FFNN.from_entries)
+
+    def test_real_model_builds_from_entries(
+        self, input_shapes: InputShapes, output_shapes: OutputShapes
+    ) -> None:
+        """A real model builds with correct in/out dims from entry shapes."""
+        model = FFNN.from_entries(input_shapes, output_shapes, hidden_size=8, num_layers=2)
+        assert isinstance(model, FFNN)
 
 
-class TestBranchTrunkSpecInvariants:
-    def test_empty_branch_shape_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty"):
-            BranchTrunkSpec(branch_shape=(), query_shape=(2,), out_features=32)
-
-    def test_empty_query_shape_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty"):
-            BranchTrunkSpec(branch_shape=(200,), query_shape=(), out_features=32)
-
-    def test_zero_out_features_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            BranchTrunkSpec(branch_shape=(200,), query_shape=(2,), out_features=0)
-
-    def test_negative_out_features_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            BranchTrunkSpec(branch_shape=(200,), query_shape=(2,), out_features=-1)
+# ---------------------------------------------------------------------------
+# InputSpec
+# ---------------------------------------------------------------------------
 
 
-class TestGraphContractSpecInvariants:
-    def test_zero_in_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GraphContractSpec(in_channels=0, out_channels=8, edge_dim=None)
+class TestInputSpec:
+    def test_is_pydantic_base_model(self) -> None:
+        """InputSpec is a pydantic BaseModel subclass."""
+        assert issubclass(InputSpec, BaseModel)
 
-    def test_zero_out_channels_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GraphContractSpec(in_channels=16, out_channels=0, edge_dim=None)
+    def test_allows_extra_fields(self, input_spec_payload: dict[str, Any]) -> None:
+        """Extra (unmodelled) fields are permitted."""
+        spec = InputSpec(**input_spec_payload)
+        for key, value in input_spec_payload.items():
+            assert getattr(spec, key) == value
 
-    def test_zero_edge_dim_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GraphContractSpec(in_channels=16, out_channels=8, edge_dim=0)
-
-    def test_negative_edge_dim_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            GraphContractSpec(in_channels=16, out_channels=8, edge_dim=-4)
-
-    def test_none_edge_dim_is_valid(self) -> None:
-        spec = GraphContractSpec(in_channels=16, out_channels=8, edge_dim=None)
-        assert spec.edge_dim is None
+    def test_empty_construction_is_valid(self) -> None:
+        """InputSpec can be constructed with no fields."""
+        assert isinstance(InputSpec(), InputSpec)

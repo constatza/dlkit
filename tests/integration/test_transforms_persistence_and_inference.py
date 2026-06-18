@@ -11,7 +11,7 @@ from torch import Tensor
 
 import dlkit
 from dlkit.domain.nn import FFNN
-from dlkit.engine.adapters.lightning.datamodules.array import InMemoryModule
+from dlkit.engine.adapters.lightning.datamodules.array import ArrayDataModule
 from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
@@ -43,7 +43,7 @@ def _make_data(
     return fx, fy, X, Y
 
 
-def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule:
+def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> ArrayDataModule:
     dataset = FlexibleDataset(
         entries=[
             NpyEntry(name="x", path=fx, data_role=DataRole.FEATURE),
@@ -59,7 +59,7 @@ def _build_datamodule(fx: Path, fy: Path, batch_size: int = 8) -> InMemoryModule
     split = IndexSplit(train=train, validation=val, test=test, predict=train)
     from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 
-    dm = InMemoryModule(
+    dm = ArrayDataModule(
         dataset=dataset,
         split=split,
         dataloader=DataloaderSettings(
@@ -86,7 +86,6 @@ def _entry_configs(fx: Path, fy: Path) -> tuple[NpyEntry, ...]:
 
 
 def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper:
-    from dlkit.common.geometry import FieldRole, FieldSpec, GeometrySpec
     from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
 
     # Include in_features and out_features explicitly so the model can be rebuilt
@@ -103,15 +102,11 @@ def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper
     )
     wrapper_settings = WrapperComponentSettings()
 
-    # Geometry stores field metadata so inference can recover feature_names.
-    geometry = GeometrySpec(fields=(FieldSpec(name="x", shape=(4,), role=FieldRole.FEATURE),))
-
     components = build_wrapper_components(wrapper_settings, entry_cfgs)
     wrapper = StandardLightningWrapper(
         settings=wrapper_settings,
         model_settings=model_settings,
         components=components,
-        geometry=geometry,
         entry_configs=entry_cfgs,
     )
     assert isinstance(wrapper.model, FFNN)

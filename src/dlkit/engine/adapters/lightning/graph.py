@@ -56,7 +56,6 @@ class GraphLightningWrapper(CoreLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        geometry: Any = None,
         components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
@@ -69,7 +68,6 @@ class GraphLightningWrapper(CoreLightningWrapper):
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations.
-            geometry: GeometrySpec from dataset inference (optional).
             components: Pre-built WrapperComponents containing loss, metrics, transforms,
                 optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule.
@@ -89,7 +87,6 @@ class GraphLightningWrapper(CoreLightningWrapper):
             wrapper_settings=settings,
             entry_configs=entry_configs,
             predict_target_key="",
-            geometry=geometry,
         )
 
         # Graph wrappers use the same optimization-controller selection rules

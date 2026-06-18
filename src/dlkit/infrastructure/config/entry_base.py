@@ -14,8 +14,6 @@ import torch
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from dlkit.common.geometry import FieldRole, GeometryKind
-
 from .core.base_settings import BasicSettings
 from .data_roles import DataRole
 from .transform_settings import TransformSettings
@@ -36,10 +34,6 @@ class DataEntry(BasicSettings, ABC):
             from model dispatch.
         loss_input: When set, routes this entry as a keyword argument to the
             loss function using the given name.
-        field_role: Physics-domain role of this field (feature, coordinates,
-            etc.).  Excluded from serialization.
-        geometry_kind: Spatial structure of the field data.  Excluded from
-            serialization.
     """
 
     model_config = SettingsConfigDict(arbitrary_types_allowed=True)
@@ -78,16 +72,6 @@ class DataEntry(BasicSettings, ABC):
     write: bool = Field(
         default=False,
         description="When True, save predictions/latents for this entry during inference.",
-    )
-    field_role: FieldRole = Field(
-        default=FieldRole.FEATURE,
-        exclude=True,
-        description="Physics-domain role of this field. Excluded from model_dump() output.",
-    )
-    geometry_kind: GeometryKind = Field(
-        default=GeometryKind.TABULAR,
-        exclude=True,
-        description="Spatial structure of the field data. Excluded from model_dump() output.",
     )
 
     @field_validator("name")

@@ -123,12 +123,12 @@ class DatasetSettings(StringNamedComponentSettings):
     family: DatasetFamily | None = Field(
         default=None,
         exclude=True,
-        description="Explicit dataset family (flexible, graph, timeseries)",
+        description="Explicit dataset family (flexible, graph)",
     )
     type: DatasetFamily | None = Field(
         default=None,
         exclude=True,
-        description="Dataset family type hint (flexible, graph, timeseries)",
+        description="Dataset family type hint (flexible, graph)",
     )
     root: DirectoryPath | None = Field(
         default=None, exclude=True, description="Root directory of the dataset", alias="root_dir"
@@ -221,7 +221,7 @@ class DatasetSettings(StringNamedComponentSettings):
         base.pop("features", None)
         base.pop("targets", None)
         # Combine features and targets into a single entries list.
-        # Graph/timeseries datasets don't accept entries= so we omit when empty.
+        # Graph datasets don't accept entries= so we omit when empty.
         entries = list(self.features) + list(self.targets)
         if entries:
             base["entries"] = entries

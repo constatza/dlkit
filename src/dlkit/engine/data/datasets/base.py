@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
+from tensordict.base import TensorDictBase
 from torch.utils.data import Dataset
 
 from dlkit.infrastructure.registry.registry import Registry
@@ -17,6 +19,11 @@ class BaseDataset[T](Dataset[T], ABC):
     def __len__(self) -> int:
         """Returns the length of the dataset."""
         raise NotImplementedError
+
+    @property
+    def collate_fn(self) -> Callable[[list[TensorDictBase]], TensorDictBase] | None:
+        """Collate function for DataLoaders. None means use PyTorch default."""
+        return None
 
 
 _dataset_registry = Registry[type[BaseDataset[Any]]]()

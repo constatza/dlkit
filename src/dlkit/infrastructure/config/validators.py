@@ -113,7 +113,7 @@ def _validate_flexible_dataset_entries(dataset: object) -> None:
 
     if not isinstance(dataset, DatasetSettings):
         return
-    if dataset.family in (DatasetFamily.GRAPH, DatasetFamily.TIMESERIES):
+    if dataset.family in (DatasetFamily.GRAPH,):
         return
     if getattr(dataset, "name", None) in _NON_FLEXIBLE_DATASET_NAMES:
         return
@@ -164,7 +164,7 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
     """
     _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "training")
 
-    # Only FlexibleDataset configs require features/targets; graph/timeseries use own schema.
+    # Only FlexibleDataset configs require features/targets; graph datasets use their own schema.
     if config.DATASET is not None:
         _validate_flexible_dataset_entries(config.DATASET)
 

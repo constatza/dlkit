@@ -6,7 +6,7 @@ from typing import Any, Self
 import torch.nn as nn
 from torch import Tensor
 
-from dlkit.domain.nn.contracts import TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.primitives.conditioning import (
     ConditionedResidualSequential,
     FiLMLayer,
@@ -184,25 +184,29 @@ class VarWidthFiLMFFNN(nn.Module):
         return self.head(x)
 
     @classmethod
-    def from_contract(
+    def from_entries(
         cls,
-        contract: TabulaRSpec,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
         condition_dim: int,
         **kwargs: Any,
     ) -> Self:
-        """Construct from a TabulaRSpec contract.
+        """Construct from named input and output shapes.
 
         Args:
-            contract (TabulaRSpec): Shape contract with in_shape and out_shape.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             condition_dim (int): Condition vector dimension.
             **kwargs: Passed to __init__ (layers, activation, etc.)
 
         Returns:
             Self: Constructed instance.
         """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
+            in_features=in_features,
+            out_features=out_features,
             condition_dim=condition_dim,
             **kwargs,
         )
@@ -273,25 +277,29 @@ class FiLMEmbeddedFFNN(nn.Module):
         return self.head(x)
 
     @classmethod
-    def from_contract(
+    def from_entries(
         cls,
-        contract: TabulaRSpec,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
         condition_dim: int,
         **kwargs: Any,
     ) -> Self:
-        """Construct from a TabulaRSpec contract.
+        """Construct from named input and output shapes.
 
         Args:
-            contract (TabulaRSpec): Shape contract with in_shape and out_shape.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             condition_dim (int): Condition vector dimension.
             **kwargs: Passed to __init__ (hidden_size, num_layers, etc.)
 
         Returns:
             Self: Constructed instance.
         """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
         return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
+            in_features=in_features,
+            out_features=out_features,
             condition_dim=condition_dim,
             **kwargs,
         )
@@ -343,21 +351,6 @@ class FiLMFFNN(VarWidthFiLMFFNN):
             activation=activation,
             normalize=normalize,
             dropout=dropout,
-        )
-
-    @classmethod
-    def from_contract(
-        cls,
-        contract: TabulaRSpec,
-        condition_dim: int,
-        **kwargs: Any,
-    ) -> Self:
-        """Construct from a TabulaRSpec contract."""
-        return cls(
-            in_features=contract.in_shape[0],
-            out_features=contract.out_shape[0],
-            condition_dim=condition_dim,
-            **kwargs,
         )
 
 

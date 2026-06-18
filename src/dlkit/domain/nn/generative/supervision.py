@@ -83,8 +83,10 @@ class FlowMatchingSupervisionBuilder:
         device = x1.device
         dtype = x1.dtype
 
-        assert device is not None, "x1 device must not be None"
-        assert dtype is not None, "x1 dtype must not be None"
+        if device is None:
+            raise ValueError("x1 device must not be None")
+        if dtype is None:
+            raise ValueError("x1 dtype must not be None")
 
         # Sample x0 ~ N(0, I) and t ~ Uniform(0, 1)
         x0: Tensor = self._noise_sampler(x1, generator)

@@ -60,6 +60,11 @@ class RoleSourceMap:
     features: NamedSources
     targets: NamedSources
 
+    def __post_init__(self) -> None:
+        """Validate n_samples consistency eagerly at construction time."""
+        if self.features or self.targets:
+            _ = self.n_samples  # raises BatchComplianceError if sources conflict
+
     def features_dict(self) -> dict[str, ArraySource]:
         """Return features as a mutable ``dict`` for ad-hoc lookups.
 
@@ -142,8 +147,11 @@ def source_from_entry(entry: AnyEntry) -> ArraySource:
             # For single-array formats (.npy, .csv, etc.) the loader does
             # not accept array_key and PathBasedEntry.array_key would
             # return the entry name as a fallback — not a format key.
-            is_multi_array = reader.suffix.lower() == ".npz"
-            array_key = getattr(entry, "array_key", None) if is_multi_array else None
+            array_key = (
+                getattr(entry, "array_key", None)
+                if getattr(entry, "is_multi_array", False)
+                else None
+            )
             return EagerFileSource(
                 reader,
                 dtype=getattr(entry, "dtype", None),
@@ -199,15 +207,6 @@ def build_role_source_map(entries: Sequence[AnyEntry]) -> RoleSourceMap:
     raw_targets: list[tuple[str, ArraySource]] = [
         (_require_name(e), source_from_entry(e)) for e in target_entries
     ]
-
-    all_sources = [src for _, src in (*raw_features, *raw_targets)]
-    multi_n = {src.n_samples for src in all_sources if src.n_samples != 1}
-
-    if len(multi_n) > 1:
-        raise BatchComplianceError(
-            f"All entries must share the same first dimension N, "
-            f"but found conflicting sizes: {multi_n}"
-        )
 
     features = tuple(_maybe_broadcast(n, s) for n, s in raw_features)
     targets = tuple(_maybe_broadcast(n, s) for n, s in raw_targets)

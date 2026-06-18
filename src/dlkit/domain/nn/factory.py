@@ -1,23 +1,28 @@
-"""Contract-based and plain model construction helpers."""
+"""Entry-shape-based and plain model construction helpers."""
 
 from __future__ import annotations
 
 import inspect
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
+
+from dlkit.domain.nn.contracts import HyperParam
 
 if TYPE_CHECKING:
     from torch import nn
 
-from dlkit.domain.nn.contracts import ContractConsumer, ModelContractSpec
+    from dlkit.common.sources import InputShapes, OutputShapes
+    from dlkit.domain.nn.contracts import EntryConsumer
 
 type ModelFactory = type[nn.Module] | Callable[..., nn.Module]
 
 _log = logging.getLogger(__name__)
 
 
-def _filter_to_accepted_kwargs(model_cls: ModelFactory, kwargs: dict[str, Any]) -> dict[str, Any]:
+def _filter_to_accepted_kwargs(
+    model_cls: ModelFactory, kwargs: dict[str, HyperParam]
+) -> dict[str, HyperParam]:
     """Return only kwargs that model_cls's constructor will accept.
 
     ``**kwargs`` is only treated as "accept everything" when the class defines
@@ -48,7 +53,8 @@ def _filter_to_accepted_kwargs(model_cls: ModelFactory, kwargs: dict[str, Any]) 
         if dropped:
             cls_name = getattr(model_cls, "__name__", repr(model_cls))
             _log.warning(
-                f"build_model: {cls_name} does not accept {sorted(dropped)} — dropping from constructor call"
+                f"build_model: {cls_name} does not accept {sorted(dropped)} — "
+                "dropping from constructor call"
             )
         return accepted
     except ValueError, TypeError:
@@ -75,48 +81,52 @@ def model_accepts_kwarg(model_cls: ModelFactory, kwarg: str) -> bool:
 
 def build_model(
     model_cls: ModelFactory,
-    kwargs: dict[str, Any] | None = None,
+    kwargs: dict[str, HyperParam] | None = None,
     *,
-    contract: ModelContractSpec | None = None,
+    input_shapes: InputShapes | None = None,
+    output_shapes: OutputShapes | None = None,
 ) -> nn.Module:
-    """Construct a model with explicit opt-in contract handling.
+    """Construct a model with explicit opt-in entry-shape handling.
 
     Dispatch priority:
-    1. If ``contract`` is provided and ``model_cls`` implements ``from_contract``,
-       call ``model_cls.from_contract(contract, **kwargs)``.
+
+    1. If both ``input_shapes`` and ``output_shapes`` are provided and
+       ``model_cls`` implements ``from_entries``, call
+       ``model_cls.from_entries(input_shapes, output_shapes, **kwargs)``.
     2. Fall through to plain ``model_cls(**kwargs)``.
 
     Args:
         model_cls: A model class or callable that returns an ``nn.Module``.
         kwargs: Keyword arguments forwarded to the constructor or factory method.
-        contract: Optional lean shape-bundle contract.
+        input_shapes: Optional mapping from feature name to shape.
+        output_shapes: Optional mapping from target name to shape.
 
     Returns:
         A fully constructed ``nn.Module``.
 
     Raises:
-        WorkflowError: If fallback construction fails and the model expects a contract.
+        WorkflowError: If fallback construction fails and the model expects
+            entry shapes that were not provided.
     """
-    raw_kwargs: dict[str, Any] = kwargs or {}
-    is_consumer = isinstance(model_cls, type) and hasattr(model_cls, "from_contract")
+    raw_kwargs: dict[str, HyperParam] = kwargs or {}
+    is_consumer = isinstance(model_cls, type) and hasattr(model_cls, "from_entries")
 
-    if contract is not None and is_consumer:
-        consumer_cls = cast(type[ContractConsumer], model_cls)
-        return cast("nn.Module", consumer_cls.from_contract(contract, **raw_kwargs))
+    if input_shapes is not None and output_shapes is not None and is_consumer:
+        consumer = cast("EntryConsumer", model_cls)
+        return cast("nn.Module", consumer.from_entries(input_shapes, output_shapes, **raw_kwargs))
 
     # Plain construction — drop kwargs that __init__ won't accept.
     init_kwargs = _filter_to_accepted_kwargs(model_cls, raw_kwargs)
     try:
         return model_cls(**init_kwargs)
     except TypeError as exc:
-        if is_consumer and contract is None:
+        if is_consumer:
             from dlkit.common.errors import WorkflowError
 
             raise WorkflowError(
-                f"Failed to build {model_cls.__name__} from kwargs. This model expects a "
-                "contract (e.g. from dataset geometry inference), but no contract was provided. "
-                "Check your DATASET configuration (e.g. feature roles) and ensure contract "
-                "inference succeeded.",
+                f"Failed to build {model_cls.__name__} — input_shapes and output_shapes "
+                "are required for this model but were not provided. Check your DATASET "
+                "configuration and ensure shape inference succeeded.",
                 {"error": str(exc), "model_cls": model_cls.__name__},
             ) from exc
         raise

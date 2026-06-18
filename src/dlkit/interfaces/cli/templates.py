@@ -36,7 +36,6 @@ def _dataset_template(*, include_targets: bool) -> dict[str, Any]:
                 "name": "x",
                 "path": "features.npy",
                 "data_role": "feature",
-                "field_role": "feature",
             }
         ],
     }
@@ -46,7 +45,6 @@ def _dataset_template(*, include_targets: bool) -> dict[str, Any]:
                 "name": "y",
                 "path": "targets.npy",
                 "data_role": "target",
-                "field_role": "target",
             }
         ]
     return dataset

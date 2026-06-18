@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 from loguru import logger
+from tensordict import TensorDictBase
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.artifacts import RuntimeArtifactManifest
-from dlkit.engine.data.geometry import infer_geometry_from_sample, infer_target_shapes_from_sample
+from dlkit.engine.data.shape_inference import infer_entry_shapes
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.engine.workflows.factories.contract_resolver import (
-    ContractInferenceError,
-    resolve_contract,
-)
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
@@ -106,15 +104,12 @@ class FlexibleBuildStrategy(IBuildStrategy):
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
 
-        geometry: Any = None
-        contract: Any = None
-        try:
-            sample = cast(Any, dataset)[0]
-            geometry = infer_geometry_from_sample(tuple(selection.features), sample)
-            output_shapes = infer_target_shapes_from_sample(selection.targets, sample)
-            contract = resolve_contract(geometry, output_shapes)
-        except (ValueError, ContractInferenceError) as exc:
-            logger.warning("Contract inference failed ({}), falling back to shape bridge", exc)
+        sample = cast(TensorDictBase, cast(Sequence[object], dataset)[0])
+        input_shapes, output_shapes = infer_entry_shapes(
+            selection.features,
+            selection.targets,
+            sample,
+        )
 
         wrapper_kwargs: dict[str, Any] = {
             "optimizer": training_settings.optimizer,
@@ -129,8 +124,8 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model = WrapperFactory.create_standard_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
-            contract=contract,
-            geometry=geometry,
+            input_shapes=input_shapes,
+            output_shapes=output_shapes,
             entry_configs=entry_configs,
             components=components,
         )

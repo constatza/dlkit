@@ -22,12 +22,10 @@ Example:
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Protocol, final, runtime_checkable
+from typing import Any, Protocol, final, runtime_checkable
 
 import torch
 from torch import Tensor, nn
-
-from dlkit.common.geometry import GeometrySpec
 
 
 def reshaper2d(func):
@@ -167,7 +165,7 @@ class ShapeAwareTransform(Protocol):
         >>> isinstance(scaler, ShapeAwareTransform)  # True
     """
 
-    def configure_shape(self, shape_spec: GeometrySpec, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
         """Configure transform with shape information.
 
         Args:
@@ -312,7 +310,7 @@ class Transform(nn.Module):
     #     class NonInvertible(Transform):  # Will NOT pass (no inverse_transform method)
     #         pass
 
-    def configure_shape(self, shape_spec: GeometrySpec, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
         """Configure transform with shape information (OPTIONAL).
 
         Override this method if your transform benefits from eager buffer allocation.

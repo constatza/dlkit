@@ -43,12 +43,11 @@ For manual optimization programs, `training_step()` remains a thin coordinator:
 | `protocols.py` | SOLID protocols (ISP-compliant interfaces) |
 | `components.py` | Concrete protocol implementations + `WrapperComponents` value object (FR-2) |
 | `base.py` | `ProcessingLightningWrapper` — pure Lightning coordinator |
-| `datamodules/` | Lightning `DataModule` implementations for array, graph, and timeseries datasets |
+| `datamodules/` | Lightning `DataModule` implementations for array and graph datasets |
 | `callbacks.py` | Lifecycle callbacks such as transform fitting, epoch metric logging, explicit checkpoint-dir routing, and prediction writers |
 | `checkpoint_dto.py` | Checkpoint metadata normalization helpers |
 | `standard.py` | `StandardLightningWrapper` — tensor/TensorDict workflows |
 | `graph.py` | `GraphLightningWrapper` — PyG Data/Batch workflows |
-| `timeseries.py` | `TimeSeriesLightningWrapper` — tuple-batch workflows |
 | `factories.py` | `WrapperFactory` — detects model family, returns correct wrapper |
 | `security.py` | Checkpoint security — `configure_checkpoint_loading()`, `register_dlkit_safe_globals()` |
 

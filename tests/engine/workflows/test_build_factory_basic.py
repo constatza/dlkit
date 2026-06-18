@@ -3,19 +3,16 @@ from __future__ import annotations
 import types
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.engine.data.geometry import infer_target_shapes, infer_target_shapes_from_sample
 from dlkit.engine.workflows.factories.build_factory import BuildFactory, WorkflowSettings
 from dlkit.engine.workflows.factories.model_detection import ModelType
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
@@ -31,7 +28,6 @@ from dlkit.infrastructure.config.model_components import (
 )
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
-from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 
 class _FakeDataset:
@@ -58,6 +54,22 @@ def _as_workflow_settings(settings: GeneralSettings) -> WorkflowSettings:
 
 
 @pytest.fixture
+def nested_xy_sample() -> TensorDict:
+    """Single nested-TensorDict sample with feature ``x`` and target ``y``.
+
+    Returns:
+        A ``batch_size=[]`` TensorDict shaped for ``infer_entry_shapes``.
+    """
+    return TensorDict(
+        {
+            "features": TensorDict({"x": torch.zeros(2)}, batch_size=[]),
+            "targets": TensorDict({"y": torch.zeros(1)}, batch_size=[]),
+        },
+        batch_size=[],
+    )
+
+
+@pytest.fixture
 def tmp_checkpoint(tmp_path: Path) -> Path:
     ckpt = tmp_path / "model.ckpt"
     ckpt.write_text("dummy")
@@ -68,7 +80,7 @@ def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> Ge
     # Minimal flattened settings; we will patch factories to avoid importing real components
     ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.engine.data.datasets")
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.domain.nn", checkpoint=ckpt)
     tr = TrainingSettings()
@@ -84,7 +96,6 @@ def test_build_factory_flexible_uses_contract_pipeline(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     # TensorDict-returning dataset so contract inference can sample from it.
-    import torch
 
     batch_sample = TensorDict(
         {
@@ -183,60 +194,6 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     assert comps.meta.get("dataset_type") == "graph"
 
 
-def test_build_factory_selects_timeseries_strategy(
-    monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
-) -> None:
-    # Timeseries hint via type; fallback uses flexible inference
-    ts_sample = {"x": np.zeros((12, 2)), "y": np.zeros((1,))}
-    ds = DatasetSettings(
-        name="Any",
-        module_path="dlkit.engine.data.datasets",
-        type=DatasetFamily.TIMESERIES,
-    )
-    dm = DataModuleSettings()
-    mdl = ModelComponentSettings(
-        name="Dummy",
-        module_path="dlkit.domain.nn.ffnn",
-        checkpoint=tmp_checkpoint,
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=mdl,
-        DATASET=ds,
-        DATAMODULE=dm,
-        TRAINING=TrainingSettings(),
-    )
-
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            return _FakeDataset(ts_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
-
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.TIMESERIES,
-    )
-
-    captured_spec: dict[str, Any] = {}
-
-    def _capture_timeseries_wrapper(*_, **kwargs):
-        captured_spec["summary"] = kwargs.get("shape_summary")
-        return _FakeModel()
-
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_timeseries_wrapper",
-        staticmethod(_capture_timeseries_wrapper),
-    )
-
-    comps = BuildFactory().build_components(_as_workflow_settings(settings))
-    assert comps.meta.get("dataset_type") == "timeseries"
-    assert captured_spec["summary"] is None
-
-
 def test_build_factory_passes_training_optimizer_scheduler_to_wrapper(
     tmp_checkpoint: Path,
 ) -> None:
@@ -276,7 +233,7 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
         targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
@@ -301,7 +258,6 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
             return self._n
 
         def __getitem__(self, idx: int) -> TensorDict:
-            import torch
 
             return TensorDict(
                 {
@@ -346,6 +302,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tmp_checkpoint: Path,
+    nested_xy_sample: TensorDict,
 ) -> None:
     x_path = tmp_path / "x.npy"
     y_path = tmp_path / "y.npy"
@@ -359,7 +316,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
         targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
     )
     dm = DataModuleSettings(
-        name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
     )
     mdl = ModelComponentSettings(
         name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
@@ -379,7 +336,7 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
             all_entries = list(ctx.overrides.get("entries", ()))
             captured["features"] = [e for e in all_entries if e.data_role == DataRole.FEATURE]
             captured["targets"] = [e for e in all_entries if e.data_role == DataRole.TARGET]
-            return _FakeDataset({"x": np.zeros((2,))})
+            return _FakeDataset(nested_xy_sample)
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -410,6 +367,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tmp_checkpoint: Path,
+    nested_xy_sample: TensorDict,
 ) -> None:
     x_path = tmp_path / "x.npy"
     matrix_path = tmp_path / "matrix.npy"
@@ -439,7 +397,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=TrainingSettings(),
     )
@@ -455,7 +413,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
             captured["dataset_target_names"] = [
                 e.name for e in all_entries if e.data_role == DataRole.TARGET
             ]
-            return _FakeDataset({"x": np.zeros((2,))})
+            return _FakeDataset(nested_xy_sample)
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -485,6 +443,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tmp_checkpoint: Path,
+    nested_xy_sample: TensorDict,
 ) -> None:
     x_path = tmp_path / "x.npy"
     matrix_path = tmp_path / "matrix.npy"
@@ -516,7 +475,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=training,
     )
@@ -529,7 +488,7 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
             captured["dataset_feature_names"] = [
                 e.name for e in all_entries if e.data_role == DataRole.FEATURE
             ]
-            return _FakeDataset({"x": np.zeros((2,))})
+            return _FakeDataset(nested_xy_sample)
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -549,88 +508,11 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     assert captured["dataset_feature_names"] == ["x", "matrix"]
 
 
-def test_infer_target_shapes_from_sample_propagates_target_transforms() -> None:
-    sample = TensorDict(
-        {
-            "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
-            "targets": TensorDict({"y": torch.zeros(4)}, batch_size=[]),
-        },
-        batch_size=[],
-    )
-    target = _make_target_entry("y", transforms=[_make_reducing_transform(7)])
-
-    output_shapes = infer_target_shapes_from_sample((target,), sample)
-
-    assert output_shapes == ((7,),)
-
-
-def test_infer_target_shapes_from_sample_uses_runtime_batch_axis_semantics() -> None:
-    sample = TensorDict(
-        {
-            "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
-            "targets": TensorDict({"y": torch.zeros(4)}, batch_size=[]),
-        },
-        batch_size=[],
-    )
-    target = _make_target_entry(
-        "y",
-        transforms=[TransformSettings(name="Unsqueeze", dim=1)],
-    )
-
-    output_shapes = infer_target_shapes_from_sample((target,), sample)
-
-    assert output_shapes == ((1, 4),)
-
-
-def test_flexible_build_strategy_samples_dataset_once_for_contract_inference(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_checkpoint: Path,
-) -> None:
-    sample = TensorDict(
-        {
-            "features": TensorDict({"x": torch.zeros(8, 3)}, batch_size=[8]),
-            "targets": TensorDict({"y": torch.ones(1)}, batch_size=[]),
-        },
-        batch_size=[],
-    )
-    settings = _make_min_settings(sample, inference=True, ckpt=tmp_checkpoint)
-
-    class _CountingDataset:
-        def __init__(self, sample: Any) -> None:
-            self._sample = sample
-            self.calls = 0
-
-        def __len__(self) -> int:
-            return 100
-
-        def __getitem__(self, idx: int) -> Any:
-            self.calls += 1
-            return self._sample
-
-    dataset = _CountingDataset(sample)
-
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            return dataset
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
-
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.adapters.lightning.factories.WrapperFactory.create_standard_wrapper",
-        staticmethod(lambda *_, **__: _FakeModel()),
-    )
-
-    BuildFactory().build_components(_as_workflow_settings(settings))
-
-    assert dataset.calls == 1
-
-
 def test_flexible_build_strategy_keeps_metric_routed_feature(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tmp_checkpoint: Path,
+    nested_xy_sample: TensorDict,
 ) -> None:
     x_path = tmp_path / "x.npy"
     matrix_path = tmp_path / "matrix.npy"
@@ -664,7 +546,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=training,
     )
@@ -677,7 +559,7 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
             captured["dataset_feature_names"] = [
                 e.name for e in all_entries if e.data_role == DataRole.FEATURE
             ]
-            return _FakeDataset({"x": np.zeros((2,))})
+            return _FakeDataset(nested_xy_sample)
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -701,6 +583,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     tmp_checkpoint: Path,
+    nested_xy_sample: TensorDict,
 ) -> None:
     matrix_path = tmp_path / "matrix.npy"
     y_path = tmp_path / "y.npy"
@@ -724,7 +607,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
         ),
         DATASET=ds,
         DATAMODULE=DataModuleSettings(
-            name="InMemoryModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
         ),
         TRAINING=TrainingSettings(),
     )
@@ -741,7 +624,7 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
             captured["dataset_feature_names"] = [
                 e.name for e in all_entries if getattr(e, "data_role", None) == DataRole.FEATURE
             ]
-            return _FakeDataset({"x": np.zeros((2,))})
+            return _FakeDataset(nested_xy_sample)
         if s is settings.DATAMODULE:
             return _FakeDataModule()
         return _FakeModel()
@@ -778,7 +661,13 @@ def test_build_factory_handles_none_scheduler_correctly(
         epochs=10,
     )
 
-    sample = {"x": np.random.randn(5, 3), "y": np.random.randn(5, 2)}
+    sample = TensorDict(
+        {
+            "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
+            "targets": TensorDict({"y": torch.zeros(2)}, batch_size=[]),
+        },
+        batch_size=[],
+    )
     settings = _make_min_settings(sample, inference=False, ckpt=tmp_checkpoint)
     settings = settings.model_copy(update={"TRAINING": training_settings})
 
@@ -832,102 +721,3 @@ def test_build_factory_handles_none_scheduler_correctly(
     assert passed_optimizer.default_optimizer.lr == 0.001
     assert passed_optimizer.default_optimizer.name == "Adam"
     assert "scheduler" not in wrapper_kwargs
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_target_entry(name: str, transforms: list | None = None) -> DataEntry:
-    entry = MagicMock(spec=DataEntry)
-    entry.name = name
-    entry.transforms = transforms or []
-    return entry
-
-
-def _make_dataset_with_targets(target_dict: dict[str, torch.Tensor]) -> MagicMock:
-    targets_td = TensorDict(cast(Any, dict(target_dict)), batch_size=[])
-    sample = TensorDict({"targets": targets_td}, batch_size=[])
-    dataset = MagicMock()
-    dataset.__getitem__ = MagicMock(return_value=sample)
-    return dataset
-
-
-def _make_reducing_transform(out_size: int) -> MagicMock:
-    ts = MagicMock()
-    ts.name = type(
-        "_ReducingTransform",
-        (),
-        {"infer_output_shape": lambda self, s: s[:-1] + (out_size,)},
-    )
-    ts.module_path = None
-    ts.model_dump.return_value = {}
-    return ts
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-class TestInferTargetShapes:
-    """Regression tests for target transform propagation in contract inference."""
-
-    def test_pca_transform_reduces_target_shape(self) -> None:
-        dataset = _make_dataset_with_targets({"y": torch.zeros(504)})
-        entry = _make_target_entry("y", transforms=[_make_reducing_transform(50)])
-
-        result = infer_target_shapes((entry,), dataset)
-
-        assert result == ((50,),)
-
-    def test_no_transform_returns_raw_shape(self) -> None:
-        dataset = _make_dataset_with_targets({"y": torch.zeros(504)})
-        entry = _make_target_entry("y")
-
-        result = infer_target_shapes((entry,), dataset)
-
-        assert result == ((504,),)
-
-    def test_unmatched_key_returns_raw_shape(self) -> None:
-        dataset = _make_dataset_with_targets({"y": torch.zeros(504)})
-        entry = _make_target_entry("solutions", transforms=[_make_reducing_transform(50)])
-
-        result = infer_target_shapes((entry,), dataset)
-
-        assert result == ((504,),)
-
-    def test_no_targets_key_returns_empty(self) -> None:
-        sample = TensorDict(
-            {"features": TensorDict({"x": torch.zeros(8)}, batch_size=[])}, batch_size=[]
-        )
-        dataset = MagicMock()
-        dataset.__getitem__ = MagicMock(return_value=sample)
-
-        result = infer_target_shapes((), dataset)
-
-        assert result == ()
-
-    def test_non_tensordict_sample_returns_empty(self) -> None:
-        dataset = MagicMock()
-        dataset.__getitem__ = MagicMock(return_value={"targets": {"y": torch.zeros(504)}})
-
-        with pytest.raises(ValueError, match="nested TensorDict sample"):
-            infer_target_shapes((), dataset)
-
-    def test_multiple_targets_propagate_independently(self) -> None:
-        dataset = _make_dataset_with_targets(
-            {
-                "y": torch.zeros(504),
-                "solutions": torch.zeros(504),
-            }
-        )
-        entries = (
-            _make_target_entry("y", transforms=[_make_reducing_transform(50)]),
-            _make_target_entry("solutions"),
-        )
-
-        result = infer_target_shapes(entries, dataset)
-
-        assert result == ((50,), (504,))

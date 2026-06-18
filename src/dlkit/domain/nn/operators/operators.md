@@ -8,7 +8,7 @@ To successfully construct a DeepONet via the engine's automated contract resolut
 - **Branch Inputs** (the condition/sensor data representing $u$) must be assigned `FieldRole.FEATURE`.
 - **Trunk Inputs** (the continuous coordinates $y$) MUST be assigned `FieldRole.TARGET_COORDINATES`.
 
-If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the engine will assume a standard multi-input regression problem, fall back to a `TabulaRSpec`, and fail to initialize the DeepONet.
+If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the engine will assume a standard multi-input regression problem and fail to initialize the DeepONet.
 
 ## Naming conventions
 
@@ -89,9 +89,9 @@ Architecture dimensions:
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
-- `branch_in_features = prod(branch_shape)` when built from `BranchTrunkSpec`
+- `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` when built from `BranchTrunkSpec`
+- `query_dim = query_shape[-1]` derived from the query input shape
 - `trunk_width`
 - `out_features`
 - `branch_layers`
@@ -110,9 +110,9 @@ Architecture dimensions:
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
-- `branch_in_features = prod(branch_shape)` when built from `BranchTrunkSpec`
+- `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` when built from `BranchTrunkSpec`
+- `query_dim = query_shape[-1]` derived from the query input shape
 - `trunk_width`
 - `out_features`
 - `branch_hidden_size`
@@ -133,9 +133,9 @@ Architecture dimensions:
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
-- `branch_in_features = prod(branch_shape)` when built from `BranchTrunkSpec`
+- `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` when built from `BranchTrunkSpec`
+- `query_dim = query_shape[-1]` derived from the query input shape
 - `trunk_width`
 - `out_features`
 - `branch_hidden_size`

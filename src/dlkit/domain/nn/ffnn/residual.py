@@ -5,7 +5,7 @@ from typing import Any, Literal, Self
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
@@ -86,23 +86,25 @@ class VarWidthFFNN(nn.Module):
         self.regression_layer = nn.Linear(widths[-1], out_features, bias=bias)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the network from a model contract spec.
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
 
         Args:
-            contract: A ModelContractSpec variant; must be TabulaRSpec.
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
             A fully constructed instance.
         """
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)
@@ -245,15 +247,25 @@ class EmbeddedFFNN(nn.Module):
         self.regression_layer = nn.Linear(hidden, out_features, bias=bias)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        """Build the network from a model contract spec."""
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)

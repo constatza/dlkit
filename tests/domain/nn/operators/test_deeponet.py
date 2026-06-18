@@ -8,7 +8,6 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.contracts import BranchTrunkSpec
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.operators import (
     DeepONet,
@@ -179,16 +178,30 @@ class TestDeepONetVariants:
         assert y.grad is not None
 
 
+@pytest.fixture
+def non_flat_branch_input_shapes() -> dict[str, tuple[int, ...]]:
+    """Branch (non-flat) and query input shapes keyed by entry name."""
+    return {"branch": (1, 100), "query": (32, 2)}
+
+
+@pytest.fixture
+def deeponet_output_shapes() -> dict[str, tuple[int, ...]]:
+    """Output shape keyed by target entry name."""
+    return {"y": (3,)}
+
+
 class TestDeepONetContractAndProtocols:
-    def test_from_contract_flattens_non_flat_branch_inputs(self) -> None:
-        contract = BranchTrunkSpec(branch_shape=(1, 100), query_shape=(32, 2), out_features=3)
-        model = FFNNDeepONet.from_contract(
-            contract,
+    def test_from_entries_flattens_non_flat_branch_inputs(
+        self,
+        non_flat_branch_input_shapes: dict[str, tuple[int, ...]],
+        deeponet_output_shapes: dict[str, tuple[int, ...]],
+    ) -> None:
+        model = VarWidthDeepONet.from_entries(
+            non_flat_branch_input_shapes,
+            deeponet_output_shapes,
             trunk_width=8,
-            branch_hidden_size=16,
-            branch_num_layers=2,
-            trunk_hidden_size=12,
-            trunk_num_layers=2,
+            branch_layers=[16, 16],
+            trunk_layers=[12, 12],
         )
         branch_linear = cast(FFNN, model.branch_net).embedding_layer
         trunk_linear = cast(FFNN, model.trunk_net).embedding_layer

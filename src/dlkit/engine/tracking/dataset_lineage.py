@@ -101,21 +101,6 @@ class GraphConfigSourceStrategy:
         return sources
 
 
-class TimeSeriesConfigSourceStrategy:
-    """Extract timeseries source paths from explicit config path fields."""
-
-    _FIELDS = ("features_path", "features_file", "data_path", "table_path", "file_path", "path")
-
-    def collect(self, settings: _WorkflowSettings) -> list[str]:
-        sources: list[str] = []
-        ds_settings = settings.DATASET
-        if ds_settings is None:
-            return sources
-        for field_name in self._FIELDS:
-            _append_unique_path(sources, getattr(ds_settings, field_name, None))
-        return sources
-
-
 class CustomConfigSourceStrategy:
     """Extract custom lineage source list from DATASET.source_paths."""
 
@@ -140,7 +125,6 @@ class DatasetSourceCollector:
 
     def __init__(self) -> None:
         self._graph = GraphConfigSourceStrategy()
-        self._timeseries = TimeSeriesConfigSourceStrategy()
         self._custom = CustomConfigSourceStrategy()
 
     def collect(self, settings: _WorkflowSettings) -> list[str]:
@@ -152,8 +136,6 @@ class DatasetSourceCollector:
         match family:
             case DatasetFamily.GRAPH:
                 extras = self._graph.collect(settings)
-            case DatasetFamily.TIMESERIES:
-                extras = self._timeseries.collect(settings)
             case _:
                 extras = self._custom.collect(settings)
 

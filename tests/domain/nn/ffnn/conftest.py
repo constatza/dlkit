@@ -3,8 +3,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.primitives.gated import GLUGate, GRNGate, SwiGLUGate, UVGate
+
+ShapeMapping = dict[str, tuple[int, ...]]
 
 _IN = 4
 _OUT = 2
@@ -44,9 +45,9 @@ def uv_factory():
 
 
 @pytest.fixture
-def tabular_contract() -> TabulaRSpec:
-    """TabulaRSpec matching the standard GatedMLP test dimensions."""
-    return TabulaRSpec(in_shape=(_IN,), out_shape=(_OUT,))
+def tabular_shapes() -> tuple[ShapeMapping, ShapeMapping]:
+    """Feature/target shape mappings matching the standard GatedMLP test dimensions."""
+    return {"x": (_IN,)}, {"y": (_OUT,)}
 
 
 @pytest.fixture

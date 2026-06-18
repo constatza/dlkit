@@ -203,6 +203,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.interfaces" },
     { path = "dlkit.interfaces.api" },
+    { path = "dlkit.interfaces.api.domain" },
     { path = "dlkit.interfaces.inference" },
     { path = "dlkit.engine.workflows.entrypoints" },
     { path = "dlkit.engine.workflows.factories" },
@@ -246,6 +247,12 @@ path = "dlkit.interfaces.inference"
 depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.engine.inference" },
+]
+
+[[modules]]
+path = "dlkit.gnn"
+depends_on = [
+    { path = "dlkit.domain" },
 ]
 
 [[modules]]

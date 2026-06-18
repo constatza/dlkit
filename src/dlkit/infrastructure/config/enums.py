@@ -4,10 +4,8 @@ from enum import StrEnum
 class DatasetFamily(StrEnum):
     FLEXIBLE = "flexible"
     GRAPH = "graph"
-    TIMESERIES = "timeseries"
 
 
 class DataModuleName(StrEnum):
-    IN_MEMORY = "InMemoryModule"
+    IN_MEMORY = "ArrayDataModule"
     GRAPH = "GraphDataModule"
-    TIMESERIES = "TimeSeriesDataModule"

@@ -21,11 +21,12 @@ from dlkit.domain.nn import (
     SimpleSPDFFNN,
     SPDFactorizedFFNN,
 )
-from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn.constrained import (
     EmbeddedParametricFFNN,
     EmbeddedSimpleParametricFFNN,
 )
+
+ShapeMapping = dict[str, tuple[int, ...]]
 from dlkit.domain.nn.primitives import SkipConnection
 
 
@@ -37,18 +38,21 @@ def _dummy_factory(n: int) -> nn.Module:
 
 
 @pytest.fixture
-def spd_contract_square() -> TabulaRSpec:
-    return TabulaRSpec(in_shape=(4,), out_shape=(4,))
+def spd_shapes_square() -> tuple[ShapeMapping, ShapeMapping]:
+    """Square (in=4, out=4) feature/target shape mappings."""
+    return {"x": (4,)}, {"y": (4,)}
 
 
 @pytest.fixture
-def spd_contract_nonsquare() -> TabulaRSpec:
-    return TabulaRSpec(in_shape=(4,), out_shape=(2,))
+def spd_shapes_nonsquare() -> tuple[ShapeMapping, ShapeMapping]:
+    """Mismatched (in=4, out=2) shape mappings for square-constraint errors."""
+    return {"x": (4,)}, {"y": (2,)}
 
 
 @pytest.fixture
-def factorized_contract() -> TabulaRSpec:
-    return TabulaRSpec(in_shape=(3,), out_shape=(2,))
+def factorized_shapes() -> tuple[ShapeMapping, ShapeMapping]:
+    """Rectangular (in=3, out=2) feature/target shape mappings."""
+    return {"x": (3,)}, {"y": (2,)}
 
 
 # ── Embedded SPD (all-SPD, square) ───────────────────────────────────────────
@@ -120,12 +124,13 @@ def test_embedded_spd_variants_allow_zero_hidden_body_blocks(
         EmbeddedSimpleSPDFactorizedFFNN,
     ],
 )
-def test_embedded_spd_from_contract_requires_square(
+def test_embedded_spd_from_entries_requires_square(
     model_cls: type[nn.Module],
-    spd_contract_nonsquare: TabulaRSpec,
+    spd_shapes_nonsquare: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
+    in_shapes, out_shapes = spd_shapes_nonsquare
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, model_cls).from_contract(spd_contract_nonsquare, num_layers=3)
+        cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=3)
 
 
 @pytest.mark.parametrize(
@@ -137,13 +142,14 @@ def test_embedded_spd_from_contract_requires_square(
         EmbeddedSimpleSPDFactorizedFFNN,
     ],
 )
-def test_embedded_spd_from_contract_works_for_square(
+def test_embedded_spd_from_entries_works_for_square(
     model_cls: type[nn.Module],
-    spd_contract_square: TabulaRSpec,
+    spd_shapes_square: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
-    model = cast(Any, model_cls).from_contract(spd_contract_square, num_layers=3)
-    x = torch.randn(4, spd_contract_square.in_shape[0])
-    assert model(x).shape == (4, spd_contract_square.out_shape[0])
+    in_shapes, out_shapes = spd_shapes_square
+    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+    x = torch.randn(4, in_shapes["x"][0])
+    assert model(x).shape == (4, out_shapes["y"][0])
 
 
 # ── Non-embedded SPD ──────────────────────────────────────────────────────────
@@ -185,12 +191,13 @@ def test_nonembedded_spd_zero_layers_has_no_body_blocks(cls: type[nn.Module]) ->
 @pytest.mark.parametrize(
     "model_cls", [SPDFFNN, SimpleSPDFFNN, SPDFactorizedFFNN, SimpleSPDFactorizedFFNN]
 )
-def test_nonembedded_spd_from_contract_requires_square(
+def test_nonembedded_spd_from_entries_requires_square(
     model_cls: type[nn.Module],
-    spd_contract_nonsquare: TabulaRSpec,
+    spd_shapes_nonsquare: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
+    in_shapes, out_shapes = spd_shapes_nonsquare
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, model_cls).from_contract(spd_contract_nonsquare, num_layers=2)
+        cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=2)
 
 
 # ── Embedded Factorized ───────────────────────────────────────────────────────
@@ -220,13 +227,14 @@ def test_embedded_factorized_variants_body_has_skip_iff_residual(
 
 
 @pytest.mark.parametrize("model_cls", [EmbeddedFactorizedFFNN, EmbeddedSimpleFactorizedFFNN])
-def test_embedded_factorized_from_contract(
+def test_embedded_factorized_from_entries(
     model_cls: type[nn.Module],
-    factorized_contract: TabulaRSpec,
+    factorized_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
-    model = cast(Any, model_cls).from_contract(factorized_contract, hidden_size=4, num_layers=2)
-    x = torch.randn(4, factorized_contract.in_shape[0])
-    assert model(x).shape == (4, factorized_contract.out_shape[0])
+    in_shapes, out_shapes = factorized_shapes
+    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, hidden_size=4, num_layers=2)
+    x = torch.randn(4, in_shapes["x"][0])
+    assert model(x).shape == (4, out_shapes["y"][0])
 
 
 # ── Non-embedded Factorized ───────────────────────────────────────────────────
@@ -266,13 +274,14 @@ def test_nonembedded_factorized_single_layer_has_no_body_blocks(
 
 
 @pytest.mark.parametrize("model_cls", [FactorizedFFNN, SimpleFactorizedFFNN])
-def test_nonembedded_factorized_from_contract(
+def test_nonembedded_factorized_from_entries(
     model_cls: type[nn.Module],
-    factorized_contract: TabulaRSpec,
+    factorized_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
-    model = cast(Any, model_cls).from_contract(factorized_contract, hidden_size=8, num_layers=2)
-    x = torch.randn(4, factorized_contract.in_shape[0])
-    assert model(x).shape == (4, factorized_contract.out_shape[0])
+    in_shapes, out_shapes = factorized_shapes
+    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, hidden_size=8, num_layers=2)
+    x = torch.randn(4, in_shapes["x"][0])
+    assert model(x).shape == (4, out_shapes["y"][0])
 
 
 @pytest.mark.parametrize("model_cls", [FactorizedFFNN, SimpleFactorizedFFNN])

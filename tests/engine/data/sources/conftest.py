@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from dlkit.common.sources import ArraySource
+from dlkit.engine.data.sources import BroadcastSource, TensorSource
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry, NpzEntry, ValueEntry
 
@@ -319,3 +320,66 @@ def zarr_stub_entry(zarr_stub_source: _StubArraySource) -> _StubArrayBasedEntry:
         ``_StubArrayBasedEntry`` named ``"x"``.
     """
     return _StubArrayBasedEntry(name="x", source=zarr_stub_source)
+
+
+# ---------------------------------------------------------------------------
+# Precision enforcement fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def float32_tensor() -> torch.Tensor:
+    """Float32 tensor of shape ``(10, 4)`` for precision override tests.
+
+    Returns:
+        Deterministic float32 tensor.
+    """
+    rng = torch.Generator()
+    rng.manual_seed(42)
+    return torch.rand(10, 4, generator=rng, dtype=torch.float32)
+
+
+@pytest.fixture
+def precision_tensor_source(float32_tensor: torch.Tensor) -> TensorSource:
+    """``TensorSource`` wrapping a float32 tensor, used to test precision casting.
+
+    Args:
+        float32_tensor: Float32 tensor fixture.
+
+    Returns:
+        ``TensorSource`` with float32 data.
+    """
+    return TensorSource(float32_tensor)
+
+
+@pytest.fixture
+def precision_broadcast_source(precision_tensor_source: TensorSource) -> BroadcastSource:
+    """``BroadcastSource`` wrapping a single-row slice of ``precision_tensor_source``.
+
+    Wraps a single-sample ``TensorSource`` so that broadcast get_batch can be
+    tested for precision enforcement.
+
+    Args:
+        precision_tensor_source: ``TensorSource`` fixture.
+
+    Returns:
+        ``BroadcastSource`` backed by a single-row ``TensorSource``.
+    """
+    single_row = precision_tensor_source._data[:1]  # shape (1, 4)
+    return BroadcastSource(TensorSource(single_row))
+
+
+@pytest.fixture
+def npy_float32_path(tmp_path: Path, float32_tensor: torch.Tensor) -> Path:
+    """Save ``float32_tensor`` as a ``.npy`` file for precision override tests.
+
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+        float32_tensor: Float32 tensor fixture.
+
+    Returns:
+        Path to the saved ``.npy`` file.
+    """
+    path = tmp_path / "precision_x.npy"
+    np.save(path, float32_tensor.numpy())
+    return path

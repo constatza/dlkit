@@ -29,10 +29,6 @@ Specialized dataset for graph-structured data (see `graph.py`).
 Import graph datasets from `dlkit.engine.data.datasets.graph`; the broad
 `dlkit.engine.data.datasets` package surface stays graph-free.
 
-### ForecastingDataset
-
-Specialized dataset for temporal/sequential data with windowing support (see `timeseries.py`).
-
 ---
 
 ## FlexibleDataset Usage
@@ -352,7 +348,6 @@ for key in npz.keys():
 DLKit follows the **specialized dataset pattern** (like PyTorch/torchvision):
 - `FlexibleDataset`: Upfront array loading (NPY, NPZ, PT)
 - `GraphDataset`: Graph-structured data
-- `TimeSeriesDataset`: Temporal/sequential data
 
 **Not** a universal dataset with pluggable loaders. Each dataset is optimized for its use case.
 

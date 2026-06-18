@@ -4,10 +4,11 @@ Normalizes each sample by its L2 norm, treating all features as a single vector.
 This is useful when the magnitude of feature vectors matters less than their direction.
 """
 
+from typing import Any
+
 import torch
 from pydantic import ConfigDict, validate_call
 
-from dlkit.common.geometry import GeometrySpec
 from dlkit.domain.transforms.base import Transform
 
 
@@ -78,7 +79,7 @@ class SampleNormL2(Transform):
         self._last_norms = None
         self._shape_configured = False
 
-    def configure_shape(self, shape_spec: GeometrySpec, entry_name: str) -> None:
+    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
         """Configure feature dimensions from shape information.
 
         Args:

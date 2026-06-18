@@ -16,7 +16,7 @@ accelerator = "cpu"
 enable_checkpointing = false
 
 [datamodule]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [datamodule.dataset]
 x = "data/features.npy"

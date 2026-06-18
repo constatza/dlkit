@@ -131,6 +131,15 @@ class PathBasedEntry(DataEntry, IPathBased, ABC):
         """
         return self.name or ""
 
+    @property
+    def is_multi_array(self) -> bool:
+        """Whether this entry's source contains multiple named arrays.
+
+        Returns:
+            False for all single-array formats; overridden by NpzEntry.
+        """
+        return False
+
 
 class ValueBasedEntry(DataEntry, IValueBased, ABC):
     """Base for entries that receive data programmatically.
@@ -425,6 +434,15 @@ class NpzEntry(PathBasedEntry):
             Explicit key if set, otherwise the entry name.
         """
         return self.key or self.name or ""
+
+    @property
+    def is_multi_array(self) -> bool:
+        """Whether this entry's source contains multiple named arrays.
+
+        Returns:
+            True for .npz archives.
+        """
+        return True
 
 
 class CsvEntry(PathBasedEntry):

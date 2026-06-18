@@ -41,7 +41,7 @@ from .scale_equivariant import (
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ConditionedScaleEquivariantWrapper,
     ScaleEquivariantWrapper,
-    contract_aware_kwargs,
+    shape_aware_kwargs,
 )
 from .skip import (
     ResidualSequential,
@@ -84,7 +84,7 @@ __all__ = [
     "SymmetricLinear",
     "UVGate",
     "ScaleEquivariantWrapper",
-    "contract_aware_kwargs",
+    "shape_aware_kwargs",
     "build_conv1d_skip_layer",
     "build_conv2d_skip_layer",
     "build_linear_skip_layer",

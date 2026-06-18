@@ -77,7 +77,7 @@ class TestEagerValidationSuccessCases:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -182,7 +182,7 @@ class TestEagerValidationSuccessCases:
                     "checkpoint": str(checkpoint_path),
                 },
                 "DATAMODULE": {
-                    "name": "InMemoryModule",
+                    "name": "ArrayDataModule",
                     "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 },
                 "DATASET": {"name": "FlexibleDataset"},
@@ -393,7 +393,7 @@ class TestImportIsolation:
 
     def test_importing_broad_datamodule_namespace_is_graph_free_under_warning_error(self) -> None:
         result = self._run_warning_error_import(
-            "from dlkit.engine.adapters.lightning.datamodules import InMemoryModule"
+            "from dlkit.engine.adapters.lightning.datamodules import ArrayDataModule"
         )
         assert result.returncode == 0, result.stderr
 
@@ -419,7 +419,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 2},
             },
@@ -515,7 +515,7 @@ class TestCompletenessValidation:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -570,7 +570,7 @@ class TestCompletenessValidation:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -606,7 +606,7 @@ class TestCompletenessValidation:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -720,7 +720,7 @@ class TestCompletenessValidation:
                 "model": {"lr": [0.0001, 0.01]},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -803,7 +803,7 @@ class TestProgrammaticOverrideWorkflow:
         )
 
         datamodule = DataModuleSettings(
-            name="InMemoryModule",
+            name="ArrayDataModule",
             module_path="dlkit.engine.adapters.lightning.datamodules",
             dataloader=DataloaderSettings(batch_size=16),
         )
@@ -888,7 +888,7 @@ class TestEdgeCasesAndErrorMessages:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },
@@ -951,7 +951,7 @@ class TestEdgeCasesAndErrorMessages:
                 "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "module_path": "dlkit.engine.adapters.lightning.datamodules",
                 "dataloader": {"batch_size": 16},
             },

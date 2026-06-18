@@ -70,7 +70,7 @@ class DatasetBuilder:
         settings: Any,
         context: BuildContext,
     ) -> object:
-        """Build graph/timeseries datasets after resolving entry tensors eagerly."""
+        """Build graph datasets after resolving entry tensors eagerly."""
         ds_overrides: dict[str, Any] = {}
         ds_settings = settings.DATASET
         if ds_settings is not None:

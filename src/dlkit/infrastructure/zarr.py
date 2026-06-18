@@ -121,10 +121,3 @@ class ZarrLazyReader:
 
         tensor = self[indices]
         return PrecisionService().cast_tensor(tensor)
-
-
-# Structural conformance check: ZarrLazyReader satisfies ArraySource.
-# Protocol membership is verified by checking required members on the class.
-assert all(hasattr(ZarrLazyReader, attr) for attr in ("n_samples", "get_item", "get_batch")), (
-    "ZarrLazyReader is missing required ArraySource members"
-)

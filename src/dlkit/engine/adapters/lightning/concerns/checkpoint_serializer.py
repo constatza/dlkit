@@ -9,6 +9,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from torch import nn
 
+from ._checkpoint_serializer_helpers import serialize_shapes as _serialize_shapes
+
 
 @runtime_checkable
 class ICheckpointSerializer(Protocol):
@@ -67,24 +69,20 @@ class DLKitCheckpointSerializer:
             meta = self._checkpoint_metadata
             dlkit_metadata["model_settings"] = self._serialize_model_settings(meta.model_settings)
             dlkit_metadata["entry_configs"] = self._serialize_entry_configs(meta.entry_configs)
-            dlkit_metadata["geometry"] = self._serialize_geometry(meta.geometry)
             dlkit_metadata["feature_names"] = list(meta.feature_names)
             dlkit_metadata["forward_arg_map"] = dict(meta.forward_arg_map)
             dlkit_metadata["predict_target_key"] = meta.predict_target_key
             dlkit_metadata["model_family"] = self._detect_model_family()
-            contract = getattr(meta, "contract", None)
-            if contract is not None:
-                from dlkit.domain.nn.contracts import serialize_contract
-
-                dlkit_metadata["contract"] = serialize_contract(contract)
-            else:
-                dlkit_metadata["contract"] = None
+            dlkit_metadata["input_shapes"] = _serialize_shapes(getattr(meta, "input_shapes", None))
+            dlkit_metadata["output_shapes"] = _serialize_shapes(
+                getattr(meta, "output_shapes", None)
+            )
         else:
             dlkit_metadata["model_settings"] = {}
             dlkit_metadata["entry_configs"] = []
-            dlkit_metadata["geometry"] = {}
             dlkit_metadata["model_family"] = "external"
-            dlkit_metadata["contract"] = None
+            dlkit_metadata["input_shapes"] = None
+            dlkit_metadata["output_shapes"] = None
 
         checkpoint["dlkit_metadata"] = dlkit_metadata
 
@@ -200,21 +198,3 @@ class DLKitCheckpointSerializer:
             ]
         except Exception:
             return []
-
-    def _serialize_geometry(self, geometry: Any) -> dict[str, Any]:
-        """Serialize GeometrySpec for checkpoint persistence.
-
-        Args:
-            geometry: GeometrySpec instance or None.
-
-        Returns:
-            Dict representation of the geometry spec, or empty dict.
-        """
-        if geometry is None:
-            return {}
-        try:
-            import dataclasses
-
-            return dataclasses.asdict(geometry)
-        except Exception:
-            return {}

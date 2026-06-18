@@ -12,7 +12,6 @@ from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.artifacts import ProducedArtifact, RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
@@ -23,7 +22,6 @@ from dlkit.infrastructure.config.workflow_configs import (
 
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
-from .model_detection import should_skip_wrapper
 from .module_defaults import with_runtime_module_defaults
 
 type WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
@@ -31,7 +29,6 @@ type WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 # Dataset type constants for can_handle() checks
 DATASET_TYPE_FLEXIBLE = "flexible"
 DATASET_TYPE_GRAPH = "graph"
-DATASET_TYPE_TIMESERIES = "timeseries"
 
 
 def build_trainer(settings: WorkflowSettings) -> Trainer | None:
@@ -198,67 +195,4 @@ class GraphBuildStrategy(IBuildStrategy):
             trainer=build_trainer(settings),
             artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
             meta={"dataset_type": "graph"},
-        )
-
-
-class TimeSeriesBuildStrategy(IBuildStrategy):
-    """Build strategy for timeseries datasets and wrappers."""
-
-    def __init__(
-        self,
-        dataset_builder: DatasetBuilder | None = None,
-    ) -> None:
-        self._dataset_builder = dataset_builder or DatasetBuilder()
-
-    def can_handle(self, settings: WorkflowSettings) -> bool:
-        from dlkit.engine.data.families import resolve_family
-
-        return resolve_family(settings) is DatasetFamily.TIMESERIES
-
-    def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
-        context = self._dataset_builder.build_context(settings)
-        dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
-        datamodule, split_artifact = _build_datamodule(
-            settings,
-            self._dataset_builder,
-            dataset,
-            family=DatasetFamily.TIMESERIES,
-        )
-
-        entry_configs: tuple[DataEntry, ...] = ()
-        model_settings = with_runtime_module_defaults(settings.MODEL)
-        if model_settings is None:
-            raise ValueError("MODEL settings are required but not configured")
-
-        skip_wrapper = should_skip_wrapper(model_settings, dataset)
-
-        if skip_wrapper:
-            model = FactoryProvider.create_component(model_settings, context)
-        else:
-            if settings.TRAINING is None:
-                raise ValueError("TRAINING settings are required but not configured")
-            wrapper_kwargs: dict[str, Any] = {
-                "optimizer": settings.TRAINING.optimizer,
-                "loss_function": settings.TRAINING.loss_function,
-                "metrics": settings.TRAINING.metrics,
-            }
-            if settings.TRAINING.scheduler is not None:
-                wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
-            wrapper_settings = with_runtime_module_defaults(
-                WrapperComponentSettings(**wrapper_kwargs)
-            )
-            components = build_wrapper_components(wrapper_settings, entry_configs)
-            model = WrapperFactory.create_timeseries_wrapper(
-                model_settings=model_settings,
-                settings=wrapper_settings,
-                entry_configs=entry_configs,
-                components=components,
-            )
-
-        return RuntimeComponents(
-            model=model,
-            datamodule=datamodule,
-            trainer=build_trainer(settings),
-            artifacts=RuntimeArtifactManifest(split_artifact=split_artifact),
-            meta={"dataset_type": "timeseries"},
         )

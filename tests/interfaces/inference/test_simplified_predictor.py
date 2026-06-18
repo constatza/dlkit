@@ -16,7 +16,6 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.common.geometry import FieldRole
 from dlkit.engine.inference.loading import (
     build_model_from_checkpoint,
     detect_checkpoint_dtype,
@@ -25,7 +24,6 @@ from dlkit.engine.inference.loading import (
     load_checkpoint,
     validate_checkpoint,
 )
-from dlkit.engine.inference.predictor import _feature_names_from_geometry
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
@@ -428,17 +426,6 @@ class TestLoadPredictorAPI:
         predictor = load_model(simple_checkpoint, device="cpu")
         assert predictor.feature_names == ()
         assert predictor.predict_target_key == ""
-
-    def test_feature_names_include_trunk_coordinates_from_geometry(self) -> None:
-        """DeepONet checkpoints must preserve branch and trunk input ordering."""
-        geometry_data = {
-            "fields": [
-                {"name": "u", "role": FieldRole.FEATURE},
-                {"name": "query_coords", "role": FieldRole.TARGET_COORDINATES},
-            ]
-        }
-
-        assert _feature_names_from_geometry(geometry_data) == ("u", "query_coords")
 
     def test_load_model_from_settings_uses_explicit_override(self, simple_checkpoint: Path):
         """Explicit checkpoint override should win over settings."""

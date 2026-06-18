@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 import torch
 
-from dlkit.domain.nn.contracts import TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 from dlkit.domain.nn.spectral.coordinate import (
     FourierFeatureNetwork,
@@ -26,6 +26,24 @@ def _assert_positive_scale_equivariant(model: torch.nn.Module, x: torch.Tensor) 
     y = model(x)
     scaled_y = model(scale * x)
     torch.testing.assert_close(scaled_y, scale * y, atol=1e-4, rtol=1e-4)
+
+
+@pytest.fixture
+def coord_input_shapes() -> InputShapes:
+    """Single coordinate feature shape keyed by entry name."""
+    return {"x": (3,)}
+
+
+@pytest.fixture
+def coord_output_shapes() -> OutputShapes:
+    """Scalar output shape keyed by target entry name."""
+    return {"y": (1,)}
+
+
+@pytest.fixture
+def coord_output_shapes_2d() -> OutputShapes:
+    """Two-dimensional output shape keyed by target entry name."""
+    return {"y": (2,)}
 
 
 class TestFourierFeatureNetwork:
@@ -59,13 +77,14 @@ class TestFourierFeatureNetwork:
         param_names = {n for n, _ in net.named_parameters()}
         assert any("B" in n for n in param_names)
 
-    def test_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(1,))
-        net = FourierFeatureNetwork.from_contract(
-            contract, hidden_size=16, num_layers=2, n_frequencies=8
+    def test_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
+    ) -> None:
+        net = FourierFeatureNetwork.from_entries(
+            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=2, n_frequencies=8
         )
-        x = torch.randn(4, contract.in_shape[0])
-        assert net(x).shape == (4, contract.out_shape[0])
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes["y"][0])
 
 
 class TestSiren:
@@ -95,11 +114,14 @@ class TestSiren:
             linear = cast("torch.nn.Linear", layer)
             assert linear.weight.data.abs().max() <= bound + 1e-5
 
-    def test_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(2,), out_shape=(1,))
-        net = Siren.from_contract(contract, hidden_size=16, num_layers=3)
-        x = torch.randn(4, contract.in_shape[0])
-        assert net(x).shape == (4, contract.out_shape[0])
+    def test_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
+    ) -> None:
+        net = Siren.from_entries(
+            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=3
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes["y"][0])
 
 
 class TestHashEncodingNetwork:
@@ -124,11 +146,14 @@ class TestHashEncodingNetwork:
         out.sum().backward()
         assert coords.grad is not None
 
-    def test_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(1,))
-        net = HashEncodingNetwork.from_contract(contract, hidden_size=16, num_layers=2)
-        x = torch.randn(4, contract.in_shape[0])
-        assert net(x).shape == (4, contract.out_shape[0])
+    def test_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
+    ) -> None:
+        net = HashEncodingNetwork.from_entries(
+            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=2
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes["y"][0])
 
     def test_rejects_mismatched_bounds(self) -> None:
         with pytest.raises(ValueError, match="exactly one"):
@@ -175,11 +200,14 @@ class TestModifiedMLP:
         out.sum().backward()
         assert coords.grad is not None
 
-    def test_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(1,))
-        net = ModifiedMLP.from_contract(contract, hidden_size=16, num_layers=3)
-        x = torch.randn(4, contract.in_shape[0])
-        assert net(x).shape == (4, contract.out_shape[0])
+    def test_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
+    ) -> None:
+        net = ModifiedMLP.from_entries(
+            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=3
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes["y"][0])
 
 
 @pytest.mark.parametrize(
@@ -273,31 +301,46 @@ class TestScaleEquivariantCoordinateNetworks:
             model_cls(**kwargs, eps_gain=0.0)
 
 
-class TestContractAwareScaleEquivariantCoordinateNetworks:
-    def test_fourier_feature_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
-        net = ScaleEquivariantFourierFeatureNetwork.from_contract(
-            contract,
+class TestEntryAwareScaleEquivariantCoordinateNetworks:
+    def test_fourier_feature_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
+    ) -> None:
+        net = ScaleEquivariantFourierFeatureNetwork.from_entries(
+            coord_input_shapes,
+            coord_output_shapes_2d,
             hidden_size=16,
             num_layers=2,
             n_frequencies=8,
         )
-        assert net(torch.randn(4, contract.in_shape[0])).shape == (4, contract.out_shape[0])
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
 
-    def test_siren_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
-        net = ScaleEquivariantSiren.from_contract(contract, hidden_size=16, num_layers=2)
-        assert net(torch.randn(4, contract.in_shape[0])).shape == (4, contract.out_shape[0])
+    def test_siren_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
+    ) -> None:
+        net = ScaleEquivariantSiren.from_entries(
+            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=2
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
 
-    def test_modified_mlp_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
-        net = ScaleEquivariantModifiedMLP.from_contract(contract, hidden_size=16, num_layers=3)
-        assert net(torch.randn(4, contract.in_shape[0])).shape == (4, contract.out_shape[0])
+    def test_modified_mlp_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
+    ) -> None:
+        net = ScaleEquivariantModifiedMLP.from_entries(
+            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=3
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
 
-    def test_hash_encoding_from_contract(self) -> None:
-        contract = TabulaRSpec(in_shape=(3,), out_shape=(2,))
-        net = HashEncodingNetwork.from_contract(contract, hidden_size=16, num_layers=2)
-        assert net(torch.randn(4, contract.in_shape[0])).shape == (4, contract.out_shape[0])
+    def test_hash_encoding_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
+    ) -> None:
+        net = HashEncodingNetwork.from_entries(
+            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=2
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
 
 
 class TestScaleEquivariantDenseRegression:

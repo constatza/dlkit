@@ -10,6 +10,7 @@ from __future__ import annotations
 import torch
 
 from dlkit.common.sources import ArraySource
+from dlkit.infrastructure.precision.service import PrecisionService
 
 # Ordered association list — preserves insertion order, fully immutable.
 type NamedSources = tuple[tuple[str, ArraySource], ...]
@@ -81,7 +82,8 @@ class BroadcastSource:
             Tensor of shape ``(B, *sample_shape)`` where ``B = len(indices)``.
         """
         single = self._inner.get_item(0)
-        return torch.stack([single] * len(indices))
+        stacked = torch.stack([single] * len(indices))
+        return PrecisionService().cast_tensor(stacked)
 
 
 __all__ = [

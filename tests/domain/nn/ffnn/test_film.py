@@ -13,7 +13,6 @@ import pytest
 import torch
 from torch import Tensor
 
-from dlkit.domain.nn.contracts import TabulaRSpec
 from dlkit.domain.nn.ffnn import (
     FiLMBlock,
     FiLMEmbeddedFFNN,
@@ -36,6 +35,8 @@ NUM_LAYERS = 2
 LAYERS_NARROW = [32, 16, 8]
 SEED = 99
 EQUIVARIANCE_ATOL = 1e-4
+
+ShapeMapping = dict[str, tuple[int, ...]]
 
 
 # ── Shared fixtures ────────────────────────────────────────────────────────────
@@ -70,9 +71,9 @@ def square_condition_input() -> Tensor:
 
 
 @pytest.fixture
-def tabular_contract() -> TabulaRSpec:
-    """TabulaRSpec with IN_FEATURES -> OUT_FEATURES."""
-    return TabulaRSpec(in_shape=(IN_FEATURES,), out_shape=(OUT_FEATURES,))
+def tabular_shapes() -> tuple[ShapeMapping, ShapeMapping]:
+    """Feature/target shape mappings with IN_FEATURES -> OUT_FEATURES."""
+    return {"x": (IN_FEATURES,)}, {"y": (OUT_FEATURES,)}
 
 
 # ── FiLMBlock fixtures ─────────────────────────────────────────────────────────
@@ -113,10 +114,12 @@ def film_ffnn() -> FiLMFFNN:
 
 
 @pytest.fixture
-def film_ffnn_from_contract(tabular_contract: TabulaRSpec) -> FiLMFFNN:
-    """FiLMFFNN constructed via from_contract."""
-    return FiLMFFNN.from_contract(
-        tabular_contract,
+def film_ffnn_from_entries(tabular_shapes: tuple[ShapeMapping, ShapeMapping]) -> FiLMFFNN:
+    """FiLMFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return FiLMFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -170,10 +173,14 @@ def varwidth_film_ffnn() -> VarWidthFiLMFFNN:
 
 
 @pytest.fixture
-def varwidth_film_ffnn_from_contract(tabular_contract: TabulaRSpec) -> VarWidthFiLMFFNN:
-    """VarWidthFiLMFFNN constructed via from_contract."""
-    return VarWidthFiLMFFNN.from_contract(
-        tabular_contract,
+def varwidth_film_ffnn_from_entries(
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
+) -> VarWidthFiLMFFNN:
+    """VarWidthFiLMFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return VarWidthFiLMFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         layers=[HIDDEN_SIZE, HIDDEN_SIZE],
     )
@@ -225,10 +232,14 @@ def film_embedded_ffnn() -> FiLMEmbeddedFFNN:
 
 
 @pytest.fixture
-def film_embedded_ffnn_from_contract(tabular_contract: TabulaRSpec) -> FiLMEmbeddedFFNN:
-    """FiLMEmbeddedFFNN constructed via from_contract."""
-    return FiLMEmbeddedFFNN.from_contract(
-        tabular_contract,
+def film_embedded_ffnn_from_entries(
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
+) -> FiLMEmbeddedFFNN:
+    """FiLMEmbeddedFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return FiLMEmbeddedFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -308,10 +319,14 @@ def se_film_embedded_ffnn() -> ScaleEquivariantFiLMEmbeddedFFNN:
 
 
 @pytest.fixture
-def se_film_ffnn_from_contract(tabular_contract: TabulaRSpec) -> ScaleEquivariantFiLMFFNN:
-    """ScaleEquivariantFiLMFFNN constructed via from_contract."""
-    return ScaleEquivariantFiLMFFNN.from_contract(
-        tabular_contract,
+def se_film_ffnn_from_entries(
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
+) -> ScaleEquivariantFiLMFFNN:
+    """ScaleEquivariantFiLMFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return ScaleEquivariantFiLMFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -319,24 +334,28 @@ def se_film_ffnn_from_contract(tabular_contract: TabulaRSpec) -> ScaleEquivarian
 
 
 @pytest.fixture
-def se_varwidth_film_ffnn_from_contract(
-    tabular_contract: TabulaRSpec,
+def se_varwidth_film_ffnn_from_entries(
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> ScaleEquivariantVarWidthFiLMFFNN:
-    """ScaleEquivariantVarWidthFiLMFFNN constructed via from_contract."""
-    return ScaleEquivariantVarWidthFiLMFFNN.from_contract(
-        tabular_contract,
+    """ScaleEquivariantVarWidthFiLMFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return ScaleEquivariantVarWidthFiLMFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         layers=[HIDDEN_SIZE, HIDDEN_SIZE],
     )
 
 
 @pytest.fixture
-def se_film_embedded_ffnn_from_contract(
-    tabular_contract: TabulaRSpec,
+def se_film_embedded_ffnn_from_entries(
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> ScaleEquivariantFiLMEmbeddedFFNN:
-    """ScaleEquivariantFiLMEmbeddedFFNN constructed via from_contract."""
-    return ScaleEquivariantFiLMEmbeddedFFNN.from_contract(
-        tabular_contract,
+    """ScaleEquivariantFiLMEmbeddedFFNN constructed via from_entries."""
+    in_shapes, out_shapes = tabular_shapes
+    return ScaleEquivariantFiLMEmbeddedFFNN.from_entries(
+        in_shapes,
+        out_shapes,
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -407,24 +426,25 @@ def test_film_ffnn_output_shape(
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
-def test_film_ffnn_from_contract_output_shape(
-    film_ffnn_from_contract: FiLMFFNN,
+def test_film_ffnn_from_entries_output_shape(
+    film_ffnn_from_entries: FiLMFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """from_contract FiLMFFNN produces correct output shape."""
+    """from_entries FiLMFFNN produces correct output shape."""
     with torch.no_grad():
-        out = film_ffnn_from_contract(feature_input, condition_input)
+        out = film_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
-def test_film_ffnn_from_contract_uses_contract_dimensions(
-    film_ffnn_from_contract: FiLMFFNN,
-    tabular_contract: TabulaRSpec,
+def test_film_ffnn_from_entries_uses_shape_dimensions(
+    film_ffnn_from_entries: FiLMFFNN,
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
-    """from_contract creates a network with in_features and out_features from the contract."""
-    assert film_ffnn_from_contract.embed.in_features == tabular_contract.in_shape[0]
-    assert film_ffnn_from_contract.head.out_features == tabular_contract.out_shape[0]
+    """from_entries creates a network with in_features and out_features from the shapes."""
+    in_shapes, out_shapes = tabular_shapes
+    assert film_ffnn_from_entries.embed.in_features == in_shapes["x"][0]
+    assert film_ffnn_from_entries.head.out_features == out_shapes["y"][0]
 
 
 def test_film_ffnn_zero_layers_raises(
@@ -461,14 +481,14 @@ def test_varwidth_film_ffnn_output_shape(
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
-def test_varwidth_film_ffnn_from_contract_output_shape(
-    varwidth_film_ffnn_from_contract: VarWidthFiLMFFNN,
+def test_varwidth_film_ffnn_from_entries_output_shape(
+    varwidth_film_ffnn_from_entries: VarWidthFiLMFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """from_contract VarWidthFiLMFFNN produces correct output shape."""
+    """from_entries VarWidthFiLMFFNN produces correct output shape."""
     with torch.no_grad():
-        out = varwidth_film_ffnn_from_contract(feature_input, condition_input)
+        out = varwidth_film_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
@@ -509,24 +529,25 @@ def test_film_embedded_ffnn_output_shape(
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
-def test_film_embedded_ffnn_from_contract_output_shape(
-    film_embedded_ffnn_from_contract: FiLMEmbeddedFFNN,
+def test_film_embedded_ffnn_from_entries_output_shape(
+    film_embedded_ffnn_from_entries: FiLMEmbeddedFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """from_contract FiLMEmbeddedFFNN produces correct output shape."""
+    """from_entries FiLMEmbeddedFFNN produces correct output shape."""
     with torch.no_grad():
-        out = film_embedded_ffnn_from_contract(feature_input, condition_input)
+        out = film_embedded_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
-def test_film_embedded_ffnn_from_contract_uses_contract_dimensions(
-    film_embedded_ffnn_from_contract: FiLMEmbeddedFFNN,
-    tabular_contract: TabulaRSpec,
+def test_film_embedded_ffnn_from_entries_uses_shape_dimensions(
+    film_embedded_ffnn_from_entries: FiLMEmbeddedFFNN,
+    tabular_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
-    """from_contract creates a network with dimensions matching the contract."""
-    assert film_embedded_ffnn_from_contract.embed.in_features == tabular_contract.in_shape[0]
-    assert film_embedded_ffnn_from_contract.head.out_features == tabular_contract.out_shape[0]
+    """from_entries creates a network with dimensions matching the shapes."""
+    in_shapes, out_shapes = tabular_shapes
+    assert film_embedded_ffnn_from_entries.embed.in_features == in_shapes["x"][0]
+    assert film_embedded_ffnn_from_entries.head.out_features == out_shapes["y"][0]
 
 
 def test_film_embedded_ffnn_e2e_skip_works(
@@ -580,14 +601,14 @@ def test_se_film_ffnn_scale_equivariance(
     )
 
 
-def test_se_film_ffnn_from_contract_output_shape(
-    se_film_ffnn_from_contract: ScaleEquivariantFiLMFFNN,
+def test_se_film_ffnn_from_entries_output_shape(
+    se_film_ffnn_from_entries: ScaleEquivariantFiLMFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """ScaleEquivariantFiLMFFNN.from_contract produces correct output shape."""
+    """ScaleEquivariantFiLMFFNN.from_entries produces correct output shape."""
     with torch.no_grad():
-        out = se_film_ffnn_from_contract(feature_input, condition_input)
+        out = se_film_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
@@ -623,14 +644,14 @@ def test_se_varwidth_film_ffnn_scale_equivariance(
     )
 
 
-def test_se_varwidth_film_ffnn_from_contract_output_shape(
-    se_varwidth_film_ffnn_from_contract: ScaleEquivariantVarWidthFiLMFFNN,
+def test_se_varwidth_film_ffnn_from_entries_output_shape(
+    se_varwidth_film_ffnn_from_entries: ScaleEquivariantVarWidthFiLMFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """ScaleEquivariantVarWidthFiLMFFNN.from_contract produces correct output shape."""
+    """ScaleEquivariantVarWidthFiLMFFNN.from_entries produces correct output shape."""
     with torch.no_grad():
-        out = se_varwidth_film_ffnn_from_contract(feature_input, condition_input)
+        out = se_varwidth_film_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)
 
 
@@ -666,12 +687,12 @@ def test_se_film_embedded_ffnn_scale_equivariance(
     )
 
 
-def test_se_film_embedded_ffnn_from_contract_output_shape(
-    se_film_embedded_ffnn_from_contract: ScaleEquivariantFiLMEmbeddedFFNN,
+def test_se_film_embedded_ffnn_from_entries_output_shape(
+    se_film_embedded_ffnn_from_entries: ScaleEquivariantFiLMEmbeddedFFNN,
     feature_input: Tensor,
     condition_input: Tensor,
 ) -> None:
-    """ScaleEquivariantFiLMEmbeddedFFNN.from_contract produces correct output shape."""
+    """ScaleEquivariantFiLMEmbeddedFFNN.from_entries produces correct output shape."""
     with torch.no_grad():
-        out = se_film_embedded_ffnn_from_contract(feature_input, condition_input)
+        out = se_film_embedded_ffnn_from_entries(feature_input, condition_input)
     assert out.shape == (BATCH, OUT_FEATURES)

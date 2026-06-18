@@ -21,19 +21,6 @@ def _is_graph_hint(settings: Any) -> bool:
         return False
 
 
-def _is_timeseries_hint(settings: Any) -> bool:
-    try:
-        ds = settings.DATASET
-        dm = settings.DATAMODULE
-        name_mod = (
-            f"{getattr(ds, 'name', '')} {getattr(ds, 'module_path', '')} "
-            f"{getattr(dm, 'name', '')} {getattr(dm, 'module_path', '')}"
-        ).lower()
-        return any(k in name_mod for k in ("timeseries", "forecast"))
-    except Exception:
-        return False
-
-
 def resolve_family_from_dataset(dataset: object) -> DatasetFamily:
     """Resolve dataset family from a constructed dataset instance."""
     try:
@@ -51,15 +38,6 @@ def resolve_family_from_dataset(dataset: object) -> DatasetFamily:
     except Exception:
         pass
 
-    try:
-        from pytorch_forecasting import TimeSeriesDataSet
-
-        timeseries = getattr(dataset, "timeseries", None)
-        if isinstance(timeseries, TimeSeriesDataSet):
-            return DatasetFamily.TIMESERIES
-    except Exception:
-        pass
-
     return DatasetFamily.FLEXIBLE
 
 
@@ -73,8 +51,6 @@ def resolve_family(settings: Any) -> DatasetFamily:
             match str(explicit).lower():
                 case "graph":
                     return DatasetFamily.GRAPH
-                case "timeseries":
-                    return DatasetFamily.TIMESERIES
                 case _:
                     return DatasetFamily.FLEXIBLE
     except Exception:
@@ -88,8 +64,6 @@ def resolve_family(settings: Any) -> DatasetFamily:
             match str(explicit).lower():
                 case "graph":
                     return DatasetFamily.GRAPH
-                case "timeseries":
-                    return DatasetFamily.TIMESERIES
                 case _:
                     return DatasetFamily.FLEXIBLE
     except Exception:
@@ -97,6 +71,4 @@ def resolve_family(settings: Any) -> DatasetFamily:
 
     if _is_graph_hint(settings):
         return DatasetFamily.GRAPH
-    if _is_timeseries_hint(settings):
-        return DatasetFamily.TIMESERIES
     return DatasetFamily.FLEXIBLE

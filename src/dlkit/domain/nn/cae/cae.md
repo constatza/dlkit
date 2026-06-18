@@ -7,11 +7,11 @@ The CAE module provides convolutional autoencoder architectures for 1D temporal 
 - **Abstract Base Class Pattern**: `CAE` defines the encode/decode interface that all autoencoders implement
 - **Template Method Pattern**: Base `CAE.forward()` orchestrates encode→decode flow
 - **Composition over Inheritance**: Models compose encoder/decoder modules from the encoder package
-- **Contract-Based Construction**: All models implement `from_contract(GridOperatorSpec, **kwargs)` via the `ContractConsumer` protocol
+- **Entry-Based Construction**: All models implement `from_entries(input_shapes, output_shapes, **kwargs)` via the `EntryConsumer` protocol
 - **Reparameterization Trick**: VAE uses standard Gaussian reparameterization for differentiable sampling
 
 Key architectural decisions:
-- All CAEs require explicit shape kwargs (`in_channels`, `in_length`) or a `GridOperatorSpec` contract
+- All CAEs require explicit shape kwargs (`in_channels`, `in_length`) or dataset entry shapes via `from_entries`
 - Latent representation always bottlenecks through vector space
 - Skip connections in encoder/decoder for better gradient flow
 - Flexible activation, normalization, and dropout options
@@ -37,7 +37,7 @@ Key architectural decisions:
 ## Dependencies
 
 ### Internal Dependencies
-- `dlkit.domain.nn.contracts`: `GridOperatorSpec`, `ModelContractSpec` for contract-based construction
+- `dlkit.common.sources`: `InputShapes`, `OutputShapes` for entry-based construction
 - `dlkit.domain.nn.encoder.skip`: `SkipEncoder1d`, `SkipDecoder1d` for feature extraction
 - `dlkit.domain.nn.encoder.latent`: `VectorToTensorBlock`, `TensorToVectorBlock` for latent space conversion
 - `dlkit.domain.nn.types`: `NormalizerName` for normalization type hints
@@ -81,20 +81,20 @@ Key architectural decisions:
 - `dilation: int` - Convolution dilation rate (default: 1)
 
 **Class Method**:
-- `from_contract(contract: ModelContractSpec, **kwargs) -> Self` — requires a `GridOperatorSpec`; extracts `in_channels` and `spatial_shape[0]` as `in_length`
+- `from_entries(input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs) -> Self` — extracts `in_channels` from the first input shape's channel dim and `in_length` from its second dim (defaults to 1)
 
 **Example**:
 ```python
 from dlkit.domain.nn.cae import SkipCAE1d
-from dlkit.domain.nn.contracts import GridOperatorSpec
 import torch
 
 # Direct construction
 cae = SkipCAE1d(in_channels=32, in_length=100, latent_channels=8, latent_size=64, num_layers=3)
 
-# Contract-based construction (used by the build factory)
-contract = GridOperatorSpec(in_channels=32, out_channels=32, spatial_shape=(100,))
-cae = SkipCAE1d.from_contract(contract, latent_channels=8, latent_size=64, num_layers=3)
+# Entry-based construction (used by the build factory)
+input_shapes = {"x": (32, 100)}
+output_shapes = {"y": (32, 100)}
+cae = SkipCAE1d.from_entries(input_shapes, output_shapes, latent_channels=8, latent_size=64, num_layers=3)
 
 x = torch.randn(16, 32, 100)  # (batch, channels, timesteps)
 latent = cae.encode(x)        # Shape: (16, 64)
@@ -152,7 +152,7 @@ output = cae(x)
 - `scale_of_latent: int` - Multiplier for intermediate latent dimension (default: 4)
 
 **Class Method**:
-- `from_contract(contract: ModelContractSpec, **kwargs) -> Self` — requires `GridOperatorSpec`
+- `from_entries(input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs) -> Self`
 
 **Forward Methods**:
 - `encode(x: Tensor) -> tuple[Tensor, Tensor]` - Returns (mu, logvar)
@@ -186,7 +186,7 @@ loss = vae_loss(recon, x, mu, logvar, alpha=1.0, beta=0.1)
 - Integration coverage via `tests/integration/`
 
 ## Related Modules
-- `dlkit.domain.nn.contracts`: `GridOperatorSpec`, `ModelContractSpec`
+- `dlkit.common.sources`: `InputShapes`, `OutputShapes`
 - `dlkit.domain.nn.encoder`: Encoder/decoder building blocks
 - `dlkit.domain.nn.primitives`: Convolution and dense blocks
 - `dlkit.engine.adapters.lightning`: Lightning wrappers for training CAEs

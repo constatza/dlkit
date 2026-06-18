@@ -6,7 +6,7 @@ from typing import Any, Literal, Self
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import ModelContractSpec, TabulaRSpec
+from dlkit.common.sources import InputShapes, OutputShapes
 from dlkit.domain.nn.primitives import (
     DEFAULT_SPD_MIN_DIAG,
     FactorizedLinear,
@@ -270,14 +270,25 @@ class EmbeddedParametricFFNN(_EmbeddedParametricBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
@@ -308,14 +319,25 @@ class EmbeddedSimpleParametricFFNN(_EmbeddedParametricBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 # ── Layer factories ──────────────────────────────────────────────────────────
@@ -358,18 +380,32 @@ def _factorized_layer_factory(
     return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std, pos_fn=pos_fn)
 
 
-def _square_contract(cls_name: str, contract: ModelContractSpec) -> int:
-    """Validate a square TabulaRSpec and return ``in_features``."""
-    match contract:
-        case TabulaRSpec(in_shape=ins, out_shape=outs):
-            if ins != outs:
-                raise ValueError(
-                    f"{cls_name} requires a square contract (in_shape == out_shape), "
-                    f"got in_shape={ins}, out_shape={outs}"
-                )
-            return ins[0]
-        case _:
-            raise TypeError(f"{cls_name} requires TabulaRSpec, got {type(contract).__name__}")
+def _square_input_features(
+    cls_name: str,
+    input_shapes: InputShapes,
+    output_shapes: OutputShapes,
+) -> int:
+    """Validate square IO shapes and return the shared feature dimension.
+
+    Args:
+        cls_name: Name of the requesting class, used in error messages.
+        input_shapes: Mapping from feature entry name to its shape.
+        output_shapes: Mapping from target entry name to its shape.
+
+    Returns:
+        The leading dimension of the input shape (equal to the output's).
+
+    Raises:
+        ValueError: If the input and output shapes are not equal.
+    """
+    in_shape = next(iter(input_shapes.values()))
+    out_shape = next(iter(output_shapes.values()))
+    if in_shape != out_shape:
+        raise ValueError(
+            f"{cls_name} requires a square contract (in_shape == out_shape), "
+            f"got in_shape={in_shape}, out_shape={out_shape}"
+        )
+    return in_shape[0]
 
 
 # ── Embedded SPD variants (all-SPD, no plain Linear) ────────────────────────
@@ -401,8 +437,27 @@ class EmbeddedSPDFFNN(_EmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
@@ -431,8 +486,27 @@ class EmbeddedSimpleSPDFFNN(_EmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
@@ -469,8 +543,27 @@ class EmbeddedSPDFactorizedFFNN(_EmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
@@ -507,8 +600,27 @@ class EmbeddedSimpleSPDFactorizedFFNN(_EmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 # ── Non-embedded SPD variants ────────────────────────────────────────────────
@@ -540,8 +652,27 @@ class SPDFFNN(_NonEmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class SimpleSPDFFNN(_NonEmbeddedSPDBody):
@@ -570,8 +701,27 @@ class SimpleSPDFFNN(_NonEmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
@@ -608,8 +758,27 @@ class SPDFactorizedFFNN(_NonEmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
@@ -646,8 +815,27 @@ class SimpleSPDFactorizedFFNN(_NonEmbeddedSPDBody):
         )
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        return cls(in_features=_square_contract(cls.__name__, contract), **kwargs)
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes (square required).
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+
+        Raises:
+            ValueError: If the input and output shapes are not equal.
+        """
+        in_features = _square_input_features(cls.__name__, input_shapes, output_shapes)
+        return cls(in_features=in_features, **kwargs)
 
 
 # ── Embedded Factorized variants (plain Linear projections) ─────────────────
@@ -782,14 +970,25 @@ class FactorizedFFNN(nn.Module):
         return self.regression_layer(x)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)
 
 
 class SimpleFactorizedFFNN(nn.Module):
@@ -847,11 +1046,22 @@ class SimpleFactorizedFFNN(nn.Module):
         return self.regression_layer(x)
 
     @classmethod
-    def from_contract(cls, contract: ModelContractSpec, **kwargs: Any) -> Self:
-        match contract:
-            case TabulaRSpec(in_shape=ins, out_shape=outs):
-                return cls(in_features=ins[0], out_features=outs[0], **kwargs)
-            case _:
-                raise TypeError(
-                    f"{cls.__name__} requires TabulaRSpec, got {type(contract).__name__}"
-                )
+    def from_entries(
+        cls,
+        input_shapes: InputShapes,
+        output_shapes: OutputShapes,
+        **kwargs: Any,
+    ) -> Self:
+        """Build the network from named input and output shapes.
+
+        Args:
+            input_shapes: Mapping from feature entry name to its shape.
+            output_shapes: Mapping from target entry name to its shape.
+            **kwargs: Additional keyword arguments forwarded to the constructor.
+
+        Returns:
+            A fully constructed instance.
+        """
+        in_features = next(iter(input_shapes.values()))[0]
+        out_features = next(iter(output_shapes.values()))[0]
+        return cls(in_features=in_features, out_features=out_features, **kwargs)

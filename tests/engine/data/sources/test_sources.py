@@ -7,6 +7,7 @@ Covers:
 - ``RoleSourceMap.n_samples``: canonical-N resolution
 - ``source_from_entry``: the three dispatch cases
 - ``build_role_source_map``: end-to-end with real entry objects
+- ``TestPrecisionEnforcement``: all three sources respect ``precision_override``
 """
 
 from __future__ import annotations
@@ -14,8 +15,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import hypothesis
+import numpy as np
 import pytest
 import torch
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from dlkit.common.sources import ArraySource
 from dlkit.engine.data.sources import (
@@ -27,6 +32,9 @@ from dlkit.engine.data.sources import (
     source_from_entry,
 )
 from dlkit.infrastructure.config.entry_types import NpyEntry, NpzEntry, ValueEntry
+from dlkit.infrastructure.precision import PrecisionStrategy, precision_override
+
+from ._helpers import assert_dtype
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EagerFileSource
@@ -354,17 +362,15 @@ class TestRoleSourceMap:
         """n_samples raises ValueError when sources disagree on sample count."""
         src_a = TensorSource(torch.zeros(10, 4))
         src_b = TensorSource(torch.zeros(20, 4))
-        rsm = RoleSourceMap(features=(("x", src_a),), targets=(("y", src_b),))
-        with pytest.raises(ValueError, match="Conflicting n_samples"):
-            _ = rsm.n_samples
+        with pytest.raises(ValueError, match="conflicting sizes"):
+            RoleSourceMap(features=(("x", src_a),), targets=(("y", src_b),))
 
     def test_n_samples_raises_when_only_broadcasts(self) -> None:
         """n_samples raises ValueError when all sources are BroadcastSource."""
         inner = TensorSource(torch.zeros(1, 4))
         broadcast = BroadcastSource(inner)
-        rsm = RoleSourceMap(features=(("x", broadcast),), targets=())
         with pytest.raises(ValueError, match="no non-broadcast sources"):
-            _ = rsm.n_samples
+            RoleSourceMap(features=(("x", broadcast),), targets=())
 
     def test_features_dict_roundtrip(self, feature_tensor: torch.Tensor) -> None:
         """features_dict returns a regular dict mirroring the features tuple.
@@ -587,7 +593,7 @@ class TestBuildRoleSourceMap:
             conflicting_feature_entry: Feature entry with canonical sample count.
             conflicting_target_entry: Target entry with a mismatched sample count.
         """
-        with pytest.raises(ValueError, match="Conflicting n_samples"):
+        with pytest.raises(ValueError, match="conflicting sizes"):
             build_role_source_map([conflicting_feature_entry, conflicting_target_entry])
 
     def test_npy_entry_integration(
@@ -628,3 +634,316 @@ class TestBuildRoleSourceMap:
         rsm = build_role_source_map([])
         assert rsm.features == ()
         assert rsm.targets == ()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TestPrecisionEnforcement
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Named constants for override strategies under test
+_FULL_64 = PrecisionStrategy.FULL_64
+_TRUE_16 = PrecisionStrategy.TRUE_16
+_FULL_32 = PrecisionStrategy.FULL_32
+
+_DTYPE_64 = torch.float64
+_DTYPE_16 = torch.float16
+_DTYPE_32 = torch.float32
+
+# Indices used in get_item / get_batch calls
+_ITEM_IDX = 0
+_BATCH_INDICES = [0, 1, 2]
+
+
+class TestPrecisionEnforcement:
+    """Verify that all ``ArraySource`` implementations respect ``precision_override``.
+
+    Each source (``TensorSource``, ``EagerFileSource``, ``BroadcastSource``) must
+    apply the active precision context on every ``get_item`` / ``get_batch`` call,
+    not at construction time.  Tests use the real global ``precision_override``
+    context manager — no mocks.
+    """
+
+    # ── TensorSource ──────────────────────────────────────────────────────
+
+    def test_tensor_source_get_item_float64_override(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """get_item returns float64 when FULL_64 override is active.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        with precision_override(_FULL_64):
+            item = precision_tensor_source.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_64)
+
+    def test_tensor_source_get_batch_float64_override(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """get_batch returns float64 tensors when FULL_64 override is active.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        with precision_override(_FULL_64):
+            batch = precision_tensor_source.get_batch(_BATCH_INDICES)
+        assert_dtype(batch, _DTYPE_64)
+
+    def test_tensor_source_get_item_float16_override(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """get_item returns float16 when TRUE_16 override is active.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        with precision_override(_TRUE_16):
+            item = precision_tensor_source.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_16)
+
+    def test_tensor_source_get_batch_float16_override(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """get_batch returns float16 tensors when TRUE_16 override is active.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        with precision_override(_TRUE_16):
+            batch = precision_tensor_source.get_batch(_BATCH_INDICES)
+        assert_dtype(batch, _DTYPE_16)
+
+    def test_tensor_source_default_precision_is_float32(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """get_item returns float32 under default (no) precision override.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        item = precision_tensor_source.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_32)
+
+    def test_tensor_source_override_reverts_after_context_exit(
+        self,
+        precision_tensor_source: TensorSource,
+    ) -> None:
+        """Precision reverts to the default after the override context exits.
+
+        Args:
+            precision_tensor_source: ``TensorSource`` backed by float32 data.
+        """
+        with precision_override(_FULL_64):
+            pass
+        item = precision_tensor_source.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_32)
+
+    # ── EagerFileSource ───────────────────────────────────────────────────
+
+    def test_eager_file_source_get_item_float64_override(
+        self,
+        npy_float32_path: Path,
+    ) -> None:
+        """get_item returns float64 even though the file was loaded as float32.
+
+        The cast is applied per-call, not at load time.
+
+        Args:
+            npy_float32_path: Path to a float32 ``.npy`` file.
+        """
+        src = EagerFileSource(npy_float32_path)
+        with precision_override(_FULL_64):
+            item = src.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_64)
+
+    def test_eager_file_source_get_batch_float64_override(
+        self,
+        npy_float32_path: Path,
+    ) -> None:
+        """get_batch returns float64 tensors under FULL_64 override.
+
+        Args:
+            npy_float32_path: Path to a float32 ``.npy`` file.
+        """
+        src = EagerFileSource(npy_float32_path)
+        with precision_override(_FULL_64):
+            batch = src.get_batch(_BATCH_INDICES)
+        assert_dtype(batch, _DTYPE_64)
+
+    def test_eager_file_source_post_construction_override(
+        self,
+        npy_float32_path: Path,
+    ) -> None:
+        """Override applied after construction changes the returned dtype on get_item.
+
+        The source is constructed *outside* the override block (so internal
+        ``_data`` tensor stays float32) then ``get_item`` is called *inside*
+        the override block.  The returned tensor must be float64.
+
+        Args:
+            npy_float32_path: Path to a float32 ``.npy`` file.
+        """
+        src = EagerFileSource(npy_float32_path)
+        assert src._data.dtype == _DTYPE_32  # sanity: file loaded as float32
+
+        with precision_override(_FULL_64):
+            item = src.get_item(_ITEM_IDX)
+
+        assert_dtype(item, _DTYPE_64)
+
+    def test_eager_file_source_default_precision_is_float32(
+        self,
+        npy_float32_path: Path,
+    ) -> None:
+        """get_item returns float32 under default (no) precision override.
+
+        Args:
+            npy_float32_path: Path to a float32 ``.npy`` file.
+        """
+        src = EagerFileSource(npy_float32_path)
+        item = src.get_item(_ITEM_IDX)
+        assert_dtype(item, _DTYPE_32)
+
+    # ── BroadcastSource ───────────────────────────────────────────────────
+
+    def test_broadcast_source_get_item_float64_override(
+        self,
+        precision_broadcast_source: BroadcastSource,
+    ) -> None:
+        """get_item returns float64 under FULL_64 override.
+
+        The cast propagates from the inner ``TensorSource.get_item(0)``.
+
+        Args:
+            precision_broadcast_source: ``BroadcastSource`` backed by float32 data.
+        """
+        with precision_override(_FULL_64):
+            item = precision_broadcast_source.get_item(99)
+        assert_dtype(item, _DTYPE_64)
+
+    def test_broadcast_source_get_batch_float64_override(
+        self,
+        precision_broadcast_source: BroadcastSource,
+    ) -> None:
+        """get_batch returns float64 tensors under FULL_64 override.
+
+        ``BroadcastSource.get_batch`` stacks then calls ``PrecisionService().cast_tensor``.
+
+        Args:
+            precision_broadcast_source: ``BroadcastSource`` backed by float32 data.
+        """
+        with precision_override(_FULL_64):
+            batch = precision_broadcast_source.get_batch(_BATCH_INDICES)
+        assert_dtype(batch, _DTYPE_64)
+
+    def test_broadcast_source_default_precision_is_float32(
+        self,
+        precision_broadcast_source: BroadcastSource,
+    ) -> None:
+        """get_item returns float32 under default (no) precision override.
+
+        Args:
+            precision_broadcast_source: ``BroadcastSource`` backed by float32 data.
+        """
+        item = precision_broadcast_source.get_item(0)
+        assert_dtype(item, _DTYPE_32)
+
+    def test_broadcast_source_get_batch_float16_override(
+        self,
+        precision_broadcast_source: BroadcastSource,
+    ) -> None:
+        """get_batch returns float16 tensors under TRUE_16 override.
+
+        Args:
+            precision_broadcast_source: ``BroadcastSource`` backed by float32 data.
+        """
+        with precision_override(_TRUE_16):
+            batch = precision_broadcast_source.get_batch(_BATCH_INDICES)
+        assert_dtype(batch, _DTYPE_16)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Property-based precision tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Strategies that produce a distinct dtype — omit MIXED_ variants whose
+# ``to_torch_dtype()`` overlaps with TRUE_ variants (float16 / bfloat16).
+_DETERMINISTIC_STRATEGIES: list[PrecisionStrategy] = [
+    PrecisionStrategy.FULL_64,
+    PrecisionStrategy.FULL_32,
+    PrecisionStrategy.TRUE_16,
+    PrecisionStrategy.TRUE_BF16,
+]
+
+_strategy_st = st.sampled_from(_DETERMINISTIC_STRATEGIES)
+
+
+@given(strategy=_strategy_st)
+@settings(max_examples=len(_DETERMINISTIC_STRATEGIES))
+def test_tensor_source_dtype_matches_any_override(strategy: PrecisionStrategy) -> None:
+    """For any deterministic PrecisionStrategy, TensorSource returns the correct dtype.
+
+    Args:
+        strategy: A ``PrecisionStrategy`` sampled from the deterministic subset.
+    """
+    data = torch.ones(5, 3, dtype=torch.float32)
+    src = TensorSource(data)
+    expected = strategy.to_torch_dtype()
+    with precision_override(strategy):
+        item = src.get_item(0)
+        batch = src.get_batch([0, 1])
+    assert_dtype(item, expected)
+    assert_dtype(batch, expected)
+
+
+@given(strategy=_strategy_st)
+@settings(
+    max_examples=len(_DETERMINISTIC_STRATEGIES),
+    suppress_health_check=[hypothesis.HealthCheck.function_scoped_fixture],
+)
+def test_eager_file_source_dtype_matches_any_override(
+    strategy: PrecisionStrategy,
+    tmp_path: Path,
+) -> None:
+    """For any deterministic PrecisionStrategy, EagerFileSource returns the correct dtype.
+
+    ``tmp_path`` is reused across Hypothesis examples but each example writes to a
+    unique path keyed by strategy name, so there is no cross-example state pollution.
+    The ``function_scoped_fixture`` health check is suppressed for this reason.
+
+    Args:
+        strategy: A ``PrecisionStrategy`` sampled from the deterministic subset.
+        tmp_path: Pytest temporary directory fixture.
+    """
+    path = tmp_path / f"prop_{strategy.name}.npy"
+    np.save(path, torch.ones(5, 3, dtype=torch.float32).numpy())
+    src = EagerFileSource(path)
+    expected = strategy.to_torch_dtype()
+    with precision_override(strategy):
+        item = src.get_item(0)
+        batch = src.get_batch([0, 1])
+    assert_dtype(item, expected)
+    assert_dtype(batch, expected)
+
+
+@given(strategy=_strategy_st)
+@settings(max_examples=len(_DETERMINISTIC_STRATEGIES))
+def test_broadcast_source_dtype_matches_any_override(strategy: PrecisionStrategy) -> None:
+    """For any deterministic PrecisionStrategy, BroadcastSource returns the correct dtype.
+
+    Args:
+        strategy: A ``PrecisionStrategy`` sampled from the deterministic subset.
+    """
+    inner = TensorSource(torch.ones(1, 3, dtype=torch.float32))
+    src = BroadcastSource(inner)
+    expected = strategy.to_torch_dtype()
+    with precision_override(strategy):
+        item = src.get_item(0)
+        batch = src.get_batch([0, 1, 2])
+    assert_dtype(item, expected)
+    assert_dtype(batch, expected)

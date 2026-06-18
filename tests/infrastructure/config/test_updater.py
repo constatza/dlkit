@@ -75,7 +75,7 @@ class TestBasicUpdates:
 name = "original_name"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -121,7 +121,7 @@ module_path = "torch.nn"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -173,7 +173,7 @@ max_epochs = 100
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -235,7 +235,7 @@ class TestPartialUpdatesPreservation:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -299,7 +299,7 @@ class TestNonDictTypes:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -361,7 +361,7 @@ module_path = "torch.nn"
 name = "original"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -399,7 +399,7 @@ module_path = "torch.nn"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -442,7 +442,7 @@ module_path = "torch.nn"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -485,7 +485,7 @@ class TestPydanticModelUpdates:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -533,7 +533,7 @@ module_path = "torch.nn"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -587,7 +587,7 @@ class TestExtrasHandling:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -648,7 +648,7 @@ custom_field2 = "value2"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -705,7 +705,7 @@ class TestValidation:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -756,7 +756,7 @@ module_path = "torch.nn"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -800,7 +800,7 @@ class TestEdgeCases:
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]
@@ -854,7 +854,7 @@ existing_field = "value"
 name = "test"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 module_path = "dlkit.engine.adapters.lightning.datamodules"
 
 [DATAMODULE.dataloader]

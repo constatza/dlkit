@@ -197,7 +197,6 @@ def checkpoint_metadata(
         wrapper_settings=wrapper_settings,
         entry_configs=(),
         predict_target_key="ut",
-        geometry=None,
         output_spec=output_spec,
     )
 

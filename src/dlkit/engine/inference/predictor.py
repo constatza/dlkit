@@ -9,8 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 
 if TYPE_CHECKING:
-    from dlkit.common.geometry import GeometrySpec
-    from dlkit.domain.nn.contracts import ModelContractSpec
+    from dlkit.common.sources import InputShapes, OutputShapes
 
 import torch
 from tensordict import TensorDict
@@ -25,140 +24,34 @@ from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .config import ModelState, PredictionOutput, PredictorConfig
-from .geometry import infer_geometry_from_checkpoint
 from .loading import build_model_from_checkpoint, load_checkpoint
 from .transforms import load_transforms_from_checkpoint
 
 logger = get_logger(__name__)
 
 
-def _extract_output_shapes_from_checkpoint(
+def _load_entry_shapes_from_checkpoint(
     checkpoint: dict,
-) -> tuple[tuple[int, ...], ...]:
-    """Extract output shapes from checkpoint metadata.
-
-    New-format checkpoints should carry a serialized contract directly.
-    Legacy checkpoints may still provide ``shape_summary.out_shapes``.
-
-    Args:
-        checkpoint: Loaded checkpoint dictionary.
-
-    Returns:
-        Tuple of output shape tuples, empty if unavailable.
-    """
-    metadata = checkpoint.get("dlkit_metadata", {})
-
-    # Legacy format: shape_summary.out_shapes
-    shape_data = metadata.get("shape_summary", {})
-    if shape_data:
-        out_shapes = shape_data.get("out_shapes")
-        if out_shapes:
-            return tuple(tuple(int(d) for d in s) for s in out_shapes)
-
-    return ()
-
-
-from .model_builder import _CONTRACT_KEYS as _CONTRACT_SHAPE_KEYS
-
-
-def _checkpoint_has_explicit_shape_kwargs(checkpoint: dict) -> bool:
-    """Return True if the checkpoint already stores explicit constructor shape kwargs.
-
-    When ``resolved_init_kwargs`` contains any contract-owned key the checkpoint
-    is self-sufficient and does not need a contract to build the model.
+) -> tuple[InputShapes | None, OutputShapes | None]:
+    """Load entry input/output shapes serialized in checkpoint metadata.
 
     Args:
         checkpoint: Loaded checkpoint dict.
 
     Returns:
-        True if the checkpoint has explicit shape kwargs in model_settings.
+        Tuple of ``(input_shapes, output_shapes)``. Either element is ``None``
+        when the corresponding shapes are absent (e.g. external checkpoints).
     """
-    try:
-        from dlkit.engine.adapters.lightning.checkpoint_dto import normalize_checkpoint_metadata
+    from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
+        deserialize_shapes,
+    )
 
-        metadata = normalize_checkpoint_metadata(checkpoint.get("dlkit_metadata", {}))
-        kwargs = metadata.get("model_settings", {}).get("resolved_init_kwargs", {})
-        return bool(_CONTRACT_SHAPE_KEYS & set(kwargs))
-    except Exception:
-        return False
-
-
-def _maybe_resolve_contract(
-    checkpoint: dict,
-    geometry: GeometrySpec | None,
-) -> ModelContractSpec | None:
-    """Resolve a ModelContractSpec only when the checkpoint lacks explicit shape kwargs.
-
-    New-format checkpoints (with ``resolved_init_kwargs``) already encode
-    ``in_features``, ``out_features``, etc. — the contract would duplicate them
-    and cause "multiple values" errors.  Legacy checkpoints store only
-    non-shape hyperparams so a contract is required to supply the shapes.
-
-    Priority:
-    1. Contract serialized directly in ``dlkit_metadata["contract"]`` (new format).
-    2. Geometry-based resolution (legacy path).
-
-    Args:
-        checkpoint: Loaded checkpoint dict.
-        geometry: Geometry inferred from the checkpoint or dataset, or None.
-
-    Returns:
-        ModelContractSpec if a contract is needed and geometry allows it,
-        else None.
-    """
-    # New format: contract serialized directly in metadata
     metadata = checkpoint.get("dlkit_metadata", {})
-    contract_data = metadata.get("contract") or {}
-    if contract_data:
-        from dlkit.domain.nn.contracts import deserialize_contract
-
-        contract = deserialize_contract(contract_data)
-        if contract is not None:
-            logger.debug("Loaded contract from checkpoint metadata: {}", type(contract).__name__)
-            return contract
-
-    if geometry is None:
-        return None
-    if _checkpoint_has_explicit_shape_kwargs(checkpoint):
-        logger.debug("Checkpoint has explicit shape kwargs — skipping contract resolution")
-        return None
-
-    from dlkit.domain.nn.contract_resolver import resolve_contract
-
-    output_shapes = _extract_output_shapes_from_checkpoint(checkpoint)
-    try:
-        return resolve_contract(geometry, output_shapes=output_shapes)
-    except Exception as exc:
-        logger.warning("Could not resolve contract from geometry: {}", exc)
-        return None
-
-
-from dlkit.common.geometry import FieldRole as _FieldRole
-
-_FEATURE_ROLES: frozenset[str] = frozenset(
-    {
-        _FieldRole.FEATURE,
-        _FieldRole.FEATURE_COORDINATES,
-        _FieldRole.TARGET_COORDINATES,
-    }
-)
-
-
-def _feature_names_from_geometry(geometry_data: dict) -> tuple[str, ...]:
-    """Derive ordered feature names from serialized GeometrySpec data.
-
-    Extracts the ``name`` of each model-input field in the geometry,
-    preserving insertion order. DeepONet-style trunk coordinates are stored as
-    ``TARGET_COORDINATES`` and must remain part of the ordered input list.
-
-    Args:
-        geometry_data: Dict produced by ``dataclasses.asdict(GeometrySpec)``.
-
-    Returns:
-        Tuple of feature name strings (empty if no named feature fields).
-    """
-    fields = geometry_data.get("fields", [])
-    return tuple(f["name"] for f in fields if f.get("name") and f.get("role") in _FEATURE_ROLES)
+    input_shapes = deserialize_shapes(metadata.get("input_shapes"))
+    output_shapes = deserialize_shapes(metadata.get("output_shapes"))
+    if input_shapes is not None:
+        logger.debug("Loaded entry shapes from checkpoint metadata: {}", input_shapes)
+    return input_shapes, output_shapes
 
 
 class PredictorError(WorkflowError):
@@ -286,16 +179,13 @@ class CheckpointPredictor(IPredictor):
         # Load checkpoint
         checkpoint = load_checkpoint(self._config.checkpoint_path)
 
-        # Infer geometry from checkpoint (for ModelState storage + feature names).
-        # Contract resolution is skipped when the checkpoint already has explicit
-        # constructor kwargs (resolved_init_kwargs path) — those are authoritative.
-        logger.debug("Inferring geometry from checkpoint")
-        geometry = infer_geometry_from_checkpoint(checkpoint)
-        contract = _maybe_resolve_contract(checkpoint, geometry)
+        # Load entry shapes from checkpoint metadata for entry-consumer reconstruction.
+        logger.debug("Loading entry shapes from checkpoint metadata")
+        input_shapes, output_shapes = _load_entry_shapes_from_checkpoint(checkpoint)
 
         # Build and load model
         logger.debug("Building model from checkpoint")
-        model = build_model_from_checkpoint(checkpoint, contract)
+        model = build_model_from_checkpoint(checkpoint, input_shapes, output_shapes)
 
         # Load transforms (separated by type)
         logger.debug("Loading fitted transforms")
@@ -315,12 +205,8 @@ class CheckpointPredictor(IPredictor):
 
         # Extract feature_names, forward_arg_map, and predict_target_key from checkpoint
         meta = checkpoint.get("dlkit_metadata", {})
-        geometry_data = meta.get("geometry", {})
-        if geometry_data:
-            feature_names: tuple[str, ...] = _feature_names_from_geometry(geometry_data)
-        else:
-            raw_fn = meta.get("feature_names", ())
-            feature_names = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
+        raw_fn = meta.get("feature_names", ())
+        feature_names: tuple[str, ...] = tuple(raw_fn) if isinstance(raw_fn, (list, tuple)) else ()
         predict_target_key: str = str(meta.get("predict_target_key", ""))
         # Empty dict = positional mode (old checkpoints); non-empty = named kwarg dispatch.
         raw_fam = meta.get("forward_arg_map", {})
@@ -330,7 +216,6 @@ class CheckpointPredictor(IPredictor):
         self._model_state = ModelState(
             model=model,
             device=device,
-            geometry=geometry,
             feature_transforms=feature_transforms if feature_transforms else None,
             target_transforms=target_transforms if target_transforms else None,
             metadata=meta,
