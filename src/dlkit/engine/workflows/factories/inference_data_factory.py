@@ -54,7 +54,7 @@ def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDa
         entries=(*selected_features, *selected_targets),
     )
 
-    split_cfg = ds_settings.split
+    split_cfg = settings.DATAMODULE.split
     split_resolution = get_or_create_split(
         num_samples=len(dataset),
         test_ratio=split_cfg.test_ratio,

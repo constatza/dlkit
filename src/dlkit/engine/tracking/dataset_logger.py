@@ -96,13 +96,14 @@ class DatasetLogger:
 
     def _build_dataset_tags(self, settings: _WorkflowSettings, dataset: Any) -> dict[str, str]:
         tags: dict[str, str] = {}
-        if settings.DATASET:
+        if settings.DATAMODULE:
             try:
-                split_cfg = settings.DATASET.split
+                split_cfg = settings.DATAMODULE.split
                 tags["split_test_ratio"] = str(split_cfg.test_ratio)
                 tags["split_val_ratio"] = str(split_cfg.val_ratio)
             except Exception:
                 pass
+        if settings.DATASET:
             dataset_type = getattr(settings.DATASET, "type", None)
             if dataset_type:
                 tags["dataset_type"] = str(dataset_type)

@@ -90,7 +90,9 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
         )
         if settings.DATASET is None:
             raise ValueError("DATASET settings are required but not configured")
-        split_cfg = settings.DATASET.split
+        if settings.DATAMODULE is None:
+            raise ValueError("DATAMODULE settings are required but not configured")
+        split_cfg = settings.DATAMODULE.split
         split_resolution = get_or_create_split(
             num_samples=len(dataset),
             test_ratio=split_cfg.test_ratio,
@@ -160,7 +162,6 @@ class FlowMatchingBuildStrategy(GenerativeBuildStrategy):
             wrapper_settings=wrapper_settings,
             entry_configs=entry_configs,
             predict_target_key="ut",
-            geometry=None,
             output_spec=output_spec,
         )
         model_wrapper = FlowMatchingWrapper(

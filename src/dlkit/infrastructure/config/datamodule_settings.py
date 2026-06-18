@@ -11,6 +11,7 @@ from .core.base_settings import (
 )
 from .dataloader_settings import DataloaderSettings
 from .enums import DataModuleName
+from .split_settings import IndexSplitSettings
 
 
 class DataModuleSettings(ComponentSettings, HyperParameterSettings):
@@ -27,6 +28,7 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
         component_name: DataModule class name
         module_path: Module path to datamodule
         dataloader: DataLoader configuration
+        split: Index split configuration
     """
 
     # Accept either a known StrEnum or any custom string
@@ -45,6 +47,11 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
 
     dataloader: DataloaderSettings = Field(
         default_factory=DataloaderSettings, description="DataLoader configuration"
+    )
+    split: IndexSplitSettings = Field(
+        default_factory=IndexSplitSettings,
+        exclude=True,
+        description="Index split configuration",
     )
 
     @field_validator("module_path", mode="after")

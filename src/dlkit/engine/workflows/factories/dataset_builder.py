@@ -101,7 +101,9 @@ class DatasetBuilder:
         """Get or create the dataset split."""
         if settings.DATASET is None:
             raise ValueError("DATASET settings are required but not configured")
-        split_cfg = settings.DATASET.split
+        if settings.DATAMODULE is None:
+            raise ValueError("DATAMODULE settings are required but not configured")
+        split_cfg = settings.DATAMODULE.split
         return get_or_create_split(
             num_samples=len(cast(Sized, dataset)),
             test_ratio=split_cfg.test_ratio,
@@ -127,7 +129,7 @@ class DatasetBuilder:
         effective_settings = datamodule_settings
         if family is not None:
             name = getattr(effective_settings, "name", None)
-            if not name or str(name) == "InMemoryModule":
+            if not name or str(name) == "ArrayDataModule":
                 datamodule_class = DatasetFamilySelector.default_datamodule_class_for_family(family)
                 effective_settings = effective_settings.model_copy(
                     update={"name": datamodule_class}

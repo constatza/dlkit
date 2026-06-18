@@ -9,20 +9,18 @@ from typing import Any
 from pydantic import (
     DirectoryPath,
     Field,
-    FilePath,
-    NonNegativeFloat,
     field_validator,
     model_validator,
 )
 
 from .core.base_settings import (
-    BasicSettings,
     StringNamedComponentSettings,
     validate_module_path_import,
 )
 from .data_entries import AnyEntry, PathBasedEntry
 from .data_roles import DataRole
 from .enums import DatasetFamily
+from .split_settings import IndexSplitSettings as IndexSplitSettings
 
 _FORMAT_BY_SUFFIX: dict[str, str] = {
     ".npy": "npy",
@@ -92,52 +90,6 @@ def _infer_entry_format(entry: RawEntryItem) -> RawEntryItem:
     )
 
 
-class IndexSplitSettings(BasicSettings):
-    """Index split configuration for train/val/test dataflow splitting.
-
-    Pure configuration without build methods - uses factory pattern.
-
-    Args:
-        filepath: Path to existing index split file
-        test_ratio: Fraction of dataflow for testing
-        val_ratio: Fraction of dataflow for validation
-    """
-
-    filepath: FilePath | None = Field(default=None, description="Path to index split file")
-    test_ratio: NonNegativeFloat = Field(
-        default=0.15, description="Fraction of dataflow used for testing", alias="test"
-    )
-    val_ratio: NonNegativeFloat = Field(
-        default=0.15, description="Fraction of dataflow used for validation", alias="val"
-    )
-
-    @property
-    def has_existing_split(self) -> bool:
-        """Check if existing split file is configured.
-
-        Returns:
-            bool: True if filepath is specified
-        """
-        return self.filepath is not None
-
-    @property
-    def train_ratio(self) -> float:
-        """Calculate training ratio.
-
-        Returns:
-            float: Fraction of dataflow for training
-        """
-        return 1.0 - self.test_ratio - self.val_ratio
-
-    def get_split_ratios(self) -> tuple[float, float, float]:
-        """Get all split ratios.
-
-        Returns:
-            tuple[float, float, float]: (train, val, test) ratios
-        """
-        return (self.train_ratio, self.val_ratio, self.test_ratio)
-
-
 class DatasetSettings(StringNamedComponentSettings):
     """Top-level Dataset configuration.
 
@@ -151,9 +103,8 @@ class DatasetSettings(StringNamedComponentSettings):
         component_name: Dataset class name
         module_path: Module path to dataset
         root: Root directory of the dataset
-        x: Features file path
-        y: Targets file path
-        split: Index split configuration
+        features: Feature entries
+        targets: Target entries
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
@@ -185,12 +136,6 @@ class DatasetSettings(StringNamedComponentSettings):
     # Flexible entries only: tuples of DataEntry settings (immutable for consistency)
     features: tuple[AnyEntry, ...] = Field(default=(), description="Flexible feature entries")
     targets: tuple[AnyEntry, ...] = Field(default=(), description="Flexible target entries")
-
-    split: IndexSplitSettings = Field(
-        default_factory=IndexSplitSettings,
-        exclude=True,
-        description="Index split configuration (used by DataModule, not dataset constructor)",
-    )
 
     @field_validator("features", "targets", mode="before")
     @classmethod
@@ -268,14 +213,6 @@ class DatasetSettings(StringNamedComponentSettings):
             if isinstance(t, PathBasedEntry) and t.name is not None and t.path is not None:
                 files[t.name] = Path(t.path)
         return files
-
-    def get_split_config(self) -> dict:
-        """Get split configuration as dictionary.
-
-        Returns:
-            dict: Index split configuration
-        """
-        return self.split.to_dict()
 
     def get_init_kwargs(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Return initialization kwargs preserving nested DataEntry objects."""

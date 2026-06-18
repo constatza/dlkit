@@ -50,7 +50,7 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
     Handles:
         - ``TRAINING.trainer.default_root_dir``
         - ``MODEL.checkpoint``
-        - ``DATASET.split.filepath``
+        - ``DATAMODULE.split.filepath``
         - ``DATASET.features[*].path`` and ``DATASET.targets[*].path``
 
     Args:
@@ -119,20 +119,6 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
             dataset_copy["root_dir"] = processed_root
             dataset_base = Path(processed_root)
 
-        split = dataset_copy.get("split")
-        if isinstance(split, dict) and "filepath" in split:
-            split_copy = dict(split)
-            value = split_copy["filepath"]
-            if isinstance(value, str) and dataset_base and not _is_url(value):
-                p = Path(tilde_expand_strict(value))
-                if not p.is_absolute():
-                    split_copy["filepath"] = str((dataset_base / p).resolve())
-                else:
-                    split_copy["filepath"] = str(p)
-            else:
-                split_copy["filepath"] = _process_path_field(value, root_dir)
-            dataset_copy["split"] = split_copy
-
         for list_key in ("features", "targets"):
             entries = dataset_copy.get(list_key)
             if isinstance(entries, (list, tuple)):
@@ -162,6 +148,18 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
                     dataset_copy[list_key] = new_entries
 
         processed["DATASET"] = dataset_copy
+
+    # DATAMODULE.split.filepath
+    datamodule_sec = processed.get("DATAMODULE")
+    if isinstance(datamodule_sec, dict):
+        datamodule_copy = dict(datamodule_sec)
+        split = datamodule_copy.get("split")
+        if isinstance(split, dict) and "filepath" in split:
+            split_copy = dict(split)
+            value = split_copy["filepath"]
+            split_copy["filepath"] = _process_path_field(value, root_dir)
+            datamodule_copy["split"] = split_copy
+        processed["DATAMODULE"] = datamodule_copy
 
     return processed
 
