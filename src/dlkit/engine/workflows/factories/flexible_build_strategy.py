@@ -105,11 +105,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
             raise ValueError("MODEL settings are required but not configured")
 
         sample = cast(TensorDictBase, cast(Sequence[object], dataset)[0])
-        input_shapes, output_shapes = infer_entry_shapes(
-            selection.features,
-            selection.targets,
-            sample,
-        )
+        context = infer_entry_shapes(selection.features, selection.targets, sample)
 
         wrapper_kwargs: dict[str, Any] = {
             "optimizer": training_settings.optimizer,
@@ -124,8 +120,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
         model = WrapperFactory.create_standard_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,
-            input_shapes=input_shapes,
-            output_shapes=output_shapes,
+            context=context,
             entry_configs=entry_configs,
             components=components,
         )

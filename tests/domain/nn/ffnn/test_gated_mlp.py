@@ -12,6 +12,7 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn.gated import GatedMLP
 
 ShapeMapping = dict[str, tuple[int, ...]]
@@ -170,9 +171,8 @@ class TestGatedMLP:
     ) -> None:
         """from_entries classmethod constructs a working GatedMLP."""
         in_shapes, out_shapes = tabular_shapes
-        model = GatedMLP.from_entries(
-            in_shapes,
-            out_shapes,
+        model = GatedMLP.from_context(
+            ShapeContext(in_shapes, out_shapes),
             hidden_size=_HIDDEN,
             num_layers=_LAYERS,
             gate_factory=glu_factory,

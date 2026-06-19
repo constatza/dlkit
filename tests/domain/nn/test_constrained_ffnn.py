@@ -7,6 +7,7 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn import (
     SPDFFNN,
     EmbeddedFactorizedFFNN,
@@ -130,7 +131,7 @@ def test_embedded_spd_from_entries_requires_square(
 ) -> None:
     in_shapes, out_shapes = spd_shapes_nonsquare
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+        cast(Any, model_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=3)
 
 
 @pytest.mark.parametrize(
@@ -147,7 +148,7 @@ def test_embedded_spd_from_entries_works_for_square(
     spd_shapes_square: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = spd_shapes_square
-    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+    model = cast(Any, model_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=3)
     x = torch.randn(4, in_shapes["x"][0])
     assert model(x).shape == (4, out_shapes["y"][0])
 
@@ -197,7 +198,7 @@ def test_nonembedded_spd_from_entries_requires_square(
 ) -> None:
     in_shapes, out_shapes = spd_shapes_nonsquare
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, model_cls).from_entries(in_shapes, out_shapes, num_layers=2)
+        cast(Any, model_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=2)
 
 
 # ── Embedded Factorized ───────────────────────────────────────────────────────
@@ -232,7 +233,9 @@ def test_embedded_factorized_from_entries(
     factorized_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = factorized_shapes
-    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, hidden_size=4, num_layers=2)
+    model = cast(Any, model_cls).from_context(
+        ShapeContext(in_shapes, out_shapes), hidden_size=4, num_layers=2
+    )
     x = torch.randn(4, in_shapes["x"][0])
     assert model(x).shape == (4, out_shapes["y"][0])
 
@@ -279,7 +282,9 @@ def test_nonembedded_factorized_from_entries(
     factorized_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = factorized_shapes
-    model = cast(Any, model_cls).from_entries(in_shapes, out_shapes, hidden_size=8, num_layers=2)
+    model = cast(Any, model_cls).from_context(
+        ShapeContext(in_shapes, out_shapes), hidden_size=8, num_layers=2
+    )
     x = torch.randn(4, in_shapes["x"][0])
     assert model(x).shape == (4, out_shapes["y"][0])
 

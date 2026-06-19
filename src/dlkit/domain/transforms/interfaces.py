@@ -10,6 +10,7 @@ from .base import (
     IncrementalFittableTransform,
     InvertibleTransform,
     ShapeAwareTransform,
+    ShapeInferringTransform,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "IncrementalFittableTransform",
     "InvertibleTransform",
     "ShapeAwareTransform",
+    "ShapeInferringTransform",
 ]

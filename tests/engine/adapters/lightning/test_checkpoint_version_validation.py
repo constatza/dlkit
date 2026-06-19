@@ -104,38 +104,6 @@ def test_checkpoint_load_rejects_missing_metadata(
         wrapper.on_load_checkpoint(checkpoint)
 
 
-def test_checkpoint_load_accepts_legacy_checkpoint(
-    dummy_components,
-    dummy_wrapper_settings,
-    dummy_model_settings,
-    dummy_entry_configs,
-):
-    """Test that older checkpoints are accepted via normalization."""
-    wrapper = StandardLightningWrapper(
-        settings=dummy_wrapper_settings,
-        model_settings=dummy_model_settings,
-        components=dummy_components,
-        entry_configs=dummy_entry_configs,
-    )
-
-    checkpoint = {
-        "state_dict": {},
-        "dlkit_metadata": {
-            "model_family": "dlkit_nn",
-            "wrapper_type": "StandardLightningWrapper",
-            "model_settings": {
-                "name": "_DummyModel",
-                "module_path": "tests.engine.adapters.lightning.test_checkpoint_version_validation",
-                "params": {"hidden_size": 64},
-                "class_name": "ModelComponentSettings",
-            },
-        },
-    }
-
-    # Should not raise — migration handles old format transparently
-    wrapper.on_load_checkpoint(checkpoint)
-
-
 def test_checkpoint_save_is_pure(
     dummy_components,
     dummy_wrapper_settings,

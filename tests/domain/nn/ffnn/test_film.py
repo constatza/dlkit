@@ -13,6 +13,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn import (
     FiLMBlock,
     FiLMEmbeddedFFNN,
@@ -117,9 +118,8 @@ def film_ffnn() -> FiLMFFNN:
 def film_ffnn_from_entries(tabular_shapes: tuple[ShapeMapping, ShapeMapping]) -> FiLMFFNN:
     """FiLMFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return FiLMFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return FiLMFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -178,9 +178,8 @@ def varwidth_film_ffnn_from_entries(
 ) -> VarWidthFiLMFFNN:
     """VarWidthFiLMFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return VarWidthFiLMFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return VarWidthFiLMFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         layers=[HIDDEN_SIZE, HIDDEN_SIZE],
     )
@@ -237,9 +236,8 @@ def film_embedded_ffnn_from_entries(
 ) -> FiLMEmbeddedFFNN:
     """FiLMEmbeddedFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return FiLMEmbeddedFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return FiLMEmbeddedFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -324,9 +322,8 @@ def se_film_ffnn_from_entries(
 ) -> ScaleEquivariantFiLMFFNN:
     """ScaleEquivariantFiLMFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return ScaleEquivariantFiLMFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return ScaleEquivariantFiLMFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
@@ -339,9 +336,8 @@ def se_varwidth_film_ffnn_from_entries(
 ) -> ScaleEquivariantVarWidthFiLMFFNN:
     """ScaleEquivariantVarWidthFiLMFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return ScaleEquivariantVarWidthFiLMFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return ScaleEquivariantVarWidthFiLMFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         layers=[HIDDEN_SIZE, HIDDEN_SIZE],
     )
@@ -353,9 +349,8 @@ def se_film_embedded_ffnn_from_entries(
 ) -> ScaleEquivariantFiLMEmbeddedFFNN:
     """ScaleEquivariantFiLMEmbeddedFFNN constructed via from_entries."""
     in_shapes, out_shapes = tabular_shapes
-    return ScaleEquivariantFiLMEmbeddedFFNN.from_entries(
-        in_shapes,
-        out_shapes,
+    return ScaleEquivariantFiLMEmbeddedFFNN.from_context(
+        ShapeContext(in_shapes, out_shapes),
         condition_dim=CONDITION_DIM,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,

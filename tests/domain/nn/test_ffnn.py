@@ -10,6 +10,7 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.ffnn.linear import (
     FactorizedLinearNetwork,
@@ -395,7 +396,7 @@ class TestFactorizedLinearNetwork:
     ) -> None:
         """from_entries should wire in_features and out_features from shapes."""
         in_shapes, out_shapes = rect_shapes
-        m = FactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
+        m = FactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -406,7 +407,7 @@ class TestFactorizedLinearNetwork:
     ) -> None:
         """from_entries should forward extra kwargs to __init__."""
         in_shapes, out_shapes = rect_shapes
-        m = FactorizedLinearNetwork.from_entries(in_shapes, out_shapes, bias=False)
+        m = FactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes), bias=False)
         assert m.linear.bias is None
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
@@ -445,7 +446,7 @@ class TestSymmetricLinearNetwork:
     ) -> None:
         """from_entries should wire features from square shapes."""
         in_shapes, out_shapes = square_shapes
-        m = SymmetricLinearNetwork.from_entries(in_shapes, out_shapes)
+        m = SymmetricLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -457,14 +458,14 @@ class TestSymmetricLinearNetwork:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
         with pytest.raises(ValueError, match="in_features == out_features|square contract"):
-            SymmetricLinearNetwork.from_entries(in_shapes, out_shapes)
+            SymmetricLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
 
     def test_from_entries_respects_kwargs(
         self, square_shapes: tuple[ShapeMapping, ShapeMapping]
     ) -> None:
         """from_entries should forward extra kwargs."""
         in_shapes, out_shapes = square_shapes
-        m = SymmetricLinearNetwork.from_entries(in_shapes, out_shapes, bias=True)
+        m = SymmetricLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes), bias=True)
         assert m.linear.bias is not None
 
 
@@ -491,7 +492,7 @@ class TestSPDLinearNetwork:
     ) -> None:
         """from_entries should wire features from square shapes."""
         in_shapes, out_shapes = square_shapes
-        m = SPDLinearNetwork.from_entries(in_shapes, out_shapes)
+        m = SPDLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -503,7 +504,7 @@ class TestSPDLinearNetwork:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
         with pytest.raises(ValueError, match="in_features == out_features|square contract"):
-            SPDLinearNetwork.from_entries(in_shapes, out_shapes)
+            SPDLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
 
     def test_gradient_flow(self, dense_input: torch.Tensor) -> None:
         """Gradients should flow through the SPD layer."""
@@ -539,7 +540,7 @@ class TestSymmetricFactorizedLinearNetwork:
     ) -> None:
         """from_entries should wire features from square shapes."""
         in_shapes, out_shapes = square_shapes
-        m = SymmetricFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
+        m = SymmetricFactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -551,14 +552,16 @@ class TestSymmetricFactorizedLinearNetwork:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
         with pytest.raises(ValueError, match="in_features == out_features|square contract"):
-            SymmetricFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
+            SymmetricFactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
 
     def test_from_entries_respects_kwargs(
         self, batch_size: int, square_shapes: tuple[ShapeMapping, ShapeMapping]
     ) -> None:
         """from_entries should forward extra kwargs."""
         in_shapes, out_shapes = square_shapes
-        m = SymmetricFactorizedLinearNetwork.from_entries(in_shapes, out_shapes, std=0.5)
+        m = SymmetricFactorizedLinearNetwork.from_context(
+            ShapeContext(in_shapes, out_shapes), std=0.5
+        )
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -590,7 +593,7 @@ class TestSPDFactorizedLinearNetwork:
     ) -> None:
         """from_entries should wire features from square shapes."""
         in_shapes, out_shapes = square_shapes
-        m = SPDFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
+        m = SPDFactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],
@@ -602,14 +605,16 @@ class TestSPDFactorizedLinearNetwork:
         """from_entries with mismatched dimensions should raise ValueError."""
         in_shapes, out_shapes = nonsquare_shapes
         with pytest.raises(ValueError, match="in_features == out_features|square contract"):
-            SPDFactorizedLinearNetwork.from_entries(in_shapes, out_shapes)
+            SPDFactorizedLinearNetwork.from_context(ShapeContext(in_shapes, out_shapes))
 
     def test_from_entries_respects_kwargs(
         self, batch_size: int, square_shapes: tuple[ShapeMapping, ShapeMapping]
     ) -> None:
         """from_entries should forward extra kwargs."""
         in_shapes, out_shapes = square_shapes
-        m = SPDFactorizedLinearNetwork.from_entries(in_shapes, out_shapes, mean=0.1, std=0.2)
+        m = SPDFactorizedLinearNetwork.from_context(
+            ShapeContext(in_shapes, out_shapes), mean=0.1, std=0.2
+        )
         assert m(torch.randn(batch_size, in_shapes["x"][0])).shape == (
             batch_size,
             out_shapes["y"][0],

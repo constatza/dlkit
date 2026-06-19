@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, cast
 import torch
 from tensordict import TensorDictBase
 
-from dlkit.common.shapes import EntryShapes, Shape
+from dlkit.common.shapes import Shape, ShapeContext
 from dlkit.infrastructure.precision.service import PrecisionService
 
 from ._shape_helpers import _propagate_shape_through_chain
@@ -83,7 +83,7 @@ def infer_entry_shapes(
     feature_entries: Sequence[DataEntry],
     target_entries: Sequence[DataEntry],
     sample: TensorDictBase,
-) -> EntryShapes:
+) -> ShapeContext:
     """Infer post-transform shapes for all feature and target entries.
 
     Args:
@@ -92,7 +92,7 @@ def infer_entry_shapes(
         sample: A single-sample ``TensorDict`` from the dataset (``batch_size=[]``).
 
     Returns:
-        Tuple of ``(input_shapes, output_shapes)`` — each a ``Mapping[str, Shape]``.
+        ``ShapeContext`` with ``input_shapes`` and ``output_shapes`` mappings.
 
     Raises:
         ValueError: If ``sample`` is not a ``TensorDictBase``.
@@ -111,10 +111,10 @@ def infer_entry_shapes(
         target_shapes = _infer_shapes_for_entries(
             target_entries,
             cast("TensorDictBase", sample_td["targets"]),
-            leading_axes=_PLACEHOLDER_BATCH_AXIS,
+            leading_axes=_PLACEHOLDER_BATCH_AXIS,  # ponytail: sentinel batch-axis for target shape propagation
             precision_service=precision_service,
         )
-    return input_shapes, target_shapes
+    return ShapeContext(input_shapes=input_shapes, output_shapes=target_shapes)
 
 
 __all__ = ["infer_entry_shapes"]

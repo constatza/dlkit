@@ -5,6 +5,7 @@ from typing import Any, cast
 import pytest
 import torch
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
@@ -113,9 +114,9 @@ def test_se_embedded_spd_from_entries_requires_square(
 ) -> None:
     in_shapes, out_shapes = nonsquare_shapes
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, residual_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+        cast(Any, residual_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=3)
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, plain_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+        cast(Any, plain_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=3)
 
 
 @pytest.mark.parametrize(("residual_cls", "plain_cls"), SE_EMBEDDED_SPD_PAIRS)
@@ -125,7 +126,7 @@ def test_se_embedded_spd_from_entries_works_square(
     square_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = square_shapes
-    model = cast(Any, residual_cls).from_entries(in_shapes, out_shapes, num_layers=3)
+    model = cast(Any, residual_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=3)
     x = torch.randn(4, in_shapes["x"][0])
     assert model(x).shape == (4, out_shapes["y"][0])
 
@@ -153,7 +154,7 @@ def test_se_nonembedded_spd_from_entries_requires_square(
 ) -> None:
     in_shapes, out_shapes = nonsquare_shapes
     with pytest.raises(ValueError, match="square contract"):
-        cast(Any, residual_cls).from_entries(in_shapes, out_shapes, num_layers=2)
+        cast(Any, residual_cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=2)
 
 
 # ── Embedded Factorized ───────────────────────────────────────────────────────
@@ -187,7 +188,9 @@ def test_se_embedded_factorized_from_entries(
     rect_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = rect_shapes
-    model = cast(Any, residual_cls).from_entries(in_shapes, out_shapes, hidden_size=8, num_layers=2)
+    model = cast(Any, residual_cls).from_context(
+        ShapeContext(in_shapes, out_shapes), hidden_size=8, num_layers=2
+    )
     assert model(torch.randn(4, in_shapes["x"][0])).shape == (4, out_shapes["y"][0])
 
 
@@ -213,5 +216,7 @@ def test_se_nonembedded_factorized_from_entries(
     rect_shapes: tuple[ShapeMapping, ShapeMapping],
 ) -> None:
     in_shapes, out_shapes = rect_shapes
-    model = cast(Any, residual_cls).from_entries(in_shapes, out_shapes, hidden_size=8, num_layers=2)
+    model = cast(Any, residual_cls).from_context(
+        ShapeContext(in_shapes, out_shapes), hidden_size=8, num_layers=2
+    )
     assert model(torch.randn(4, in_shapes["x"][0])).shape == (4, out_shapes["y"][0])

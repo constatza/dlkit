@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 import torch
 
 from dlkit.common.errors import WorkflowError
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.factory import build_model as _build_model
 from dlkit.domain.nn.factory import model_accepts_kwarg
 from dlkit.infrastructure.config.model_components import extract_init_kwargs
@@ -19,20 +20,6 @@ if TYPE_CHECKING:
     from dlkit.common.shapes import InputShapes, OutputShapes
 
 logger = get_logger(__name__)
-
-
-def _strip_shape_keys(model_cls: type, hyperparams: dict[str, Any]) -> dict[str, Any]:
-    """Remove constructor kwargs that from_entries() will supply from shapes.
-
-    Args:
-        model_cls: The model class being constructed.
-        hyperparams: Raw init kwargs from checkpoint.
-
-    Returns:
-        Filtered kwargs with shape-owned keys removed.
-    """
-    shape_keys = getattr(model_cls, "_SHAPE_KWARG_NAMES", frozenset())
-    return {k: v for k, v in hyperparams.items() if k not in shape_keys}
 
 
 def build_model_from_checkpoint(
@@ -77,14 +64,15 @@ def build_model_from_checkpoint(
         and model_accepts_kwarg(model_cls, "activation")
     ):
         hyperparams = {**hyperparams, "activation": model_settings.activation}
-    has_shapes = input_shapes is not None and output_shapes is not None
-    if has_shapes:
-        hyperparams = _strip_shape_keys(model_cls, hyperparams)
+
+    context: ShapeContext | None = None
+    if input_shapes is not None and output_shapes is not None:
+        context = ShapeContext(input_shapes=input_shapes, output_shapes=output_shapes)
+
     model = _build_model(
         cast("type[torch.nn.Module]", model_cls),
         hyperparams,
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
+        context=context,
     )
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)

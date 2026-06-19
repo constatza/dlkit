@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch import nn
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.operators import (
     DeepONet,
@@ -196,9 +197,8 @@ class TestDeepONetContractAndProtocols:
         non_flat_branch_input_shapes: dict[str, tuple[int, ...]],
         deeponet_output_shapes: dict[str, tuple[int, ...]],
     ) -> None:
-        model = VarWidthDeepONet.from_entries(
-            non_flat_branch_input_shapes,
-            deeponet_output_shapes,
+        model = VarWidthDeepONet.from_context(
+            ShapeContext(non_flat_branch_input_shapes, deeponet_output_shapes),
             trunk_width=8,
             branch_layers=[16, 16],
             trunk_layers=[12, 12],

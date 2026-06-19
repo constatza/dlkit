@@ -9,7 +9,11 @@ from typing import Any, Protocol, runtime_checkable
 
 from torch import nn
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
 from ._checkpoint_serializer_helpers import serialize_shapes as _serialize_shapes
+
+logger = get_logger(__name__)
 
 
 @runtime_checkable
@@ -67,7 +71,10 @@ class DLKitCheckpointSerializer:
 
         if self._checkpoint_metadata is not None:
             meta = self._checkpoint_metadata
-            dlkit_metadata["model_settings"] = self._serialize_model_settings(meta.model_settings)
+            has_context = getattr(meta, "context", None) is not None
+            dlkit_metadata["model_settings"] = self._serialize_model_settings(
+                meta.model_settings, has_context=has_context
+            )
             dlkit_metadata["entry_configs"] = self._serialize_entry_configs(meta.entry_configs)
             dlkit_metadata["feature_names"] = list(meta.feature_names)
             dlkit_metadata["forward_arg_map"] = dict(meta.forward_arg_map)
@@ -102,10 +109,6 @@ class DLKitCheckpointSerializer:
                 "a compatible checkpoint."
             )
 
-        from dlkit.engine.adapters.lightning.checkpoint_dto import normalize_checkpoint_metadata
-
-        checkpoint["dlkit_metadata"] = normalize_checkpoint_metadata(checkpoint["dlkit_metadata"])
-
     def _detect_model_family(self) -> str:
         """Detect model family identifier.
 
@@ -118,12 +121,17 @@ class DLKitCheckpointSerializer:
             if self._checkpoint_metadata is not None:
                 model_type = detect_model_type(self._checkpoint_metadata.model_settings)
                 return model_type.value
-        except Exception:
-            pass
+        except (ImportError, AttributeError) as exc:
+            logger.warning("Could not detect model family, falling back to 'external': {}", exc)
         return "external"
 
-    def _serialize_model_settings(self, model_settings: Any) -> dict[str, Any]:
+    def _serialize_model_settings(
+        self, model_settings: Any, *, has_context: bool = True
+    ) -> dict[str, Any]:
         """Serialize model settings to a flat checkpoint DTO.
+
+        Shape kwargs are excluded from ``hyper_kwargs`` at save time so that
+        inference can reconstruct them via ``from_context`` without stripping.
 
         Args:
             model_settings: Model configuration settings.
@@ -131,49 +139,69 @@ class DLKitCheckpointSerializer:
         Returns:
             Serialized model configuration dict.
         """
-        try:
-            from dlkit.engine.adapters.lightning.checkpoint_dto import ModelCheckpointDTO
-            from dlkit.infrastructure.config.model_components import (
-                ModelComponentSettings,
-                extract_init_kwargs,
-            )
+        import importlib
 
-            name = getattr(model_settings, "name", None)
-            module_path = getattr(model_settings, "module_path", None) or ""
-            if name is None:
-                return {}
+        from dlkit.engine.adapters.lightning.checkpoint_dto import ModelCheckpointDTO
+        from dlkit.infrastructure.config.model_components import (
+            ModelComponentSettings,
+            extract_init_kwargs,
+        )
 
-            if isinstance(model_settings, ModelComponentSettings):
-                init_kwargs = extract_init_kwargs(model_settings)
-                all_hyperparams = model_settings.model_dump()
-            elif hasattr(model_settings, "model_dump"):
-                all_fields = model_settings.model_dump()
-                excluded = {"name", "module_path", "checkpoint"}
-                init_kwargs = {
-                    k: v for k, v in all_fields.items() if k not in excluded and v is not None
-                }
-                all_hyperparams = all_fields
-            else:
-                init_kwargs = {}
-                all_hyperparams = {}
-
-            # When name is a type, extract the proper string name and module path
-            if isinstance(name, type):
-                serialized_name = name.__qualname__
-                serialized_module = name.__module__
-            else:
-                serialized_name = str(name)
-                serialized_module = module_path
-
-            dto = ModelCheckpointDTO(
-                name=serialized_name,
-                module_path=serialized_module,
-                resolved_init_kwargs=init_kwargs,
-                all_hyperparams=all_hyperparams,
-            )
-            return dto.model_dump()
-        except Exception:
+        name = getattr(model_settings, "name", None)
+        module_path = getattr(model_settings, "module_path", None) or ""
+        if name is None:
             return {}
+
+        if isinstance(model_settings, ModelComponentSettings):
+            init_kwargs = extract_init_kwargs(model_settings)
+            all_hyperparams = model_settings.model_dump()
+        elif hasattr(model_settings, "model_dump"):
+            all_fields = model_settings.model_dump()
+            excluded = {"name", "module_path", "checkpoint"}
+            init_kwargs = {
+                k: v for k, v in all_fields.items() if k not in excluded and v is not None
+            }
+            all_hyperparams = all_fields
+        else:
+            init_kwargs = {}
+            all_hyperparams = {}
+
+        # When name is a type, extract the proper string name and module path
+        if isinstance(name, type):
+            serialized_name = name.__qualname__
+            serialized_module = name.__module__
+            model_cls: type | None = name
+        else:
+            serialized_name = str(name)
+            serialized_module = module_path
+            try:
+                mod = importlib.import_module(module_path or "dlkit.domain.nn")
+                model_cls = getattr(mod, serialized_name, None)
+            except (ImportError, AttributeError) as exc:
+                logger.warning(
+                    "Could not import model class {}.{}, shape_kwarg_names will not be applied: {}",
+                    module_path,
+                    serialized_name,
+                    exc,
+                )
+                model_cls = None
+
+        # Strip shape kwargs only when a ShapeContext was provided — if the user
+        # passed in_features/out_features explicitly in config, keep them.
+        shape_keys: frozenset[str] = (
+            model_cls.shape_kwarg_names()
+            if has_context and model_cls is not None and hasattr(model_cls, "shape_kwarg_names")
+            else frozenset()
+        )
+        hyper_kwargs = {k: v for k, v in init_kwargs.items() if k not in shape_keys}
+
+        dto = ModelCheckpointDTO(
+            name=serialized_name,
+            module_path=serialized_module,
+            hyper_kwargs=hyper_kwargs,
+            all_hyperparams=all_hyperparams,
+        )
+        return dto.model_dump()
 
     def _serialize_entry_configs(self, entry_configs: tuple) -> list[dict[str, Any]]:
         """Serialize entry configurations.
@@ -184,17 +212,14 @@ class DLKitCheckpointSerializer:
         Returns:
             List of serialized entry config dicts.
         """
-        try:
-            return [
-                {
-                    "name": e.name,
-                    "class_name": e.__class__.__name__,
-                    "transforms": [
-                        t.model_dump() if hasattr(t, "model_dump") else t
-                        for t in getattr(e, "transforms", [])
-                    ],
-                }
-                for e in entry_configs
-            ]
-        except Exception:
-            return []
+        return [
+            {
+                "name": e.name,
+                "class_name": e.__class__.__name__,
+                "transforms": [
+                    t.model_dump() if hasattr(t, "model_dump") else t
+                    for t in getattr(e, "transforms", [])
+                ],
+            }
+            for e in entry_configs
+        ]

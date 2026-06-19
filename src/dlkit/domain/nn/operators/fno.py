@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from torch import Tensor, nn
 
-from dlkit.common.shapes import InputShapes, OutputShapes
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
@@ -39,18 +39,13 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
     _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_channels", "out_channels"})
 
     @classmethod
-    def _constructor_dims(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-    ) -> dict[str, int]:
+    def resolve_shape_kwargs(cls, context: ShapeContext) -> dict[str, int]:
         """Derive channel dimensions from entry shapes.
 
         Expects 2-D input of shape ``(channels, length)``.
 
         Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
+            context: Shape context carrying input and output shapes.
 
         Returns:
             Dict with ``in_channels`` and ``out_channels``.
@@ -58,8 +53,13 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
         Raises:
             ValueError: If input shape has fewer than 2 dimensions.
         """
-        in_shape = next(iter(input_shapes.values()))
-        if len(in_shape) < 2:
+        input_spec: type[_InputSpec] | None = getattr(cls, "InputSpec", None)
+        if input_spec and input_spec.model_fields:
+            first_in = next(iter(input_spec.model_fields))
+            in_shape = context.get_shape(first_in)
+        else:
+            in_shape = next(iter(context.input_shapes.values()))
+        if in_shape is None or len(in_shape) < 2:
             raise ValueError(
                 f"{cls.__name__} requires a 2-D input shape (channels, length) "
                 f"but got shape {in_shape}. "
@@ -67,7 +67,7 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
             )
         return {
             "in_channels": in_shape[0],
-            "out_channels": next(iter(output_shapes.values()))[0],
+            "out_channels": next(iter(context.output_shapes.values()))[0],
         }
 
     def __init__(

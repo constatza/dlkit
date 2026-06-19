@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 import torch
 
-from dlkit.common.shapes import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes, ShapeContext
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 from dlkit.domain.nn.spectral.coordinate import (
     FourierFeatureNetwork,
@@ -80,8 +80,11 @@ class TestFourierFeatureNetwork:
     def test_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
     ) -> None:
-        net = FourierFeatureNetwork.from_entries(
-            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=2, n_frequencies=8
+        net = FourierFeatureNetwork.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes),
+            hidden_size=16,
+            num_layers=2,
+            n_frequencies=8,
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes["y"][0])
@@ -117,8 +120,8 @@ class TestSiren:
     def test_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
     ) -> None:
-        net = Siren.from_entries(
-            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=3
+        net = Siren.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes), hidden_size=16, num_layers=3
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes["y"][0])
@@ -149,8 +152,8 @@ class TestHashEncodingNetwork:
     def test_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
     ) -> None:
-        net = HashEncodingNetwork.from_entries(
-            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=2
+        net = HashEncodingNetwork.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes), hidden_size=16, num_layers=2
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes["y"][0])
@@ -203,8 +206,8 @@ class TestModifiedMLP:
     def test_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
     ) -> None:
-        net = ModifiedMLP.from_entries(
-            coord_input_shapes, coord_output_shapes, hidden_size=16, num_layers=3
+        net = ModifiedMLP.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes), hidden_size=16, num_layers=3
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes["y"][0])
@@ -305,9 +308,8 @@ class TestEntryAwareScaleEquivariantCoordinateNetworks:
     def test_fourier_feature_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
     ) -> None:
-        net = ScaleEquivariantFourierFeatureNetwork.from_entries(
-            coord_input_shapes,
-            coord_output_shapes_2d,
+        net = ScaleEquivariantFourierFeatureNetwork.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes_2d),
             hidden_size=16,
             num_layers=2,
             n_frequencies=8,
@@ -318,8 +320,8 @@ class TestEntryAwareScaleEquivariantCoordinateNetworks:
     def test_siren_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
     ) -> None:
-        net = ScaleEquivariantSiren.from_entries(
-            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=2
+        net = ScaleEquivariantSiren.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes_2d), hidden_size=16, num_layers=2
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
@@ -327,8 +329,8 @@ class TestEntryAwareScaleEquivariantCoordinateNetworks:
     def test_modified_mlp_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
     ) -> None:
-        net = ScaleEquivariantModifiedMLP.from_entries(
-            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=3
+        net = ScaleEquivariantModifiedMLP.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes_2d), hidden_size=16, num_layers=3
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes_2d["y"][0])
@@ -336,8 +338,8 @@ class TestEntryAwareScaleEquivariantCoordinateNetworks:
     def test_hash_encoding_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes_2d: OutputShapes
     ) -> None:
-        net = HashEncodingNetwork.from_entries(
-            coord_input_shapes, coord_output_shapes_2d, hidden_size=16, num_layers=2
+        net = HashEncodingNetwork.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes_2d), hidden_size=16, num_layers=2
         )
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes_2d["y"][0])

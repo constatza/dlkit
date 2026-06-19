@@ -114,8 +114,8 @@ class TestCheckpointLoading:
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
-                    "in_features": 10,
-                    "out_features": 5,
+                    "hyper_kwargs": {"in_features": 10, "out_features": 5},
+                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -160,8 +160,8 @@ class TestBuildModelFromCheckpoint:
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
-                    "in_features": 10,
-                    "out_features": 5,
+                    "hyper_kwargs": {"in_features": 10, "out_features": 5},
+                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -188,8 +188,8 @@ class TestBuildModelFromCheckpoint:
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
-                    "in_features": 10,
-                    "out_features": 5,
+                    "hyper_kwargs": {"in_features": 10, "out_features": 5},
+                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -219,8 +219,8 @@ class TestCheckpointPredictor:
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
-                    "in_features": 10,
-                    "out_features": 5,
+                    "hyper_kwargs": {"in_features": 10, "out_features": 5},
+                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -333,8 +333,8 @@ class TestLoadPredictorAPI:
                 "model_settings": {
                     "name": "Linear",
                     "module_path": "torch.nn",
-                    "in_features": 10,
-                    "out_features": 5,
+                    "hyper_kwargs": {"in_features": 10, "out_features": 5},
+                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Self
 from torch import Tensor, nn
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import InputShapes, OutputShapes
+    from dlkit.common.shapes import ShapeContext
 
 
 class BaseGraphNetwork(nn.Module):
@@ -38,25 +38,31 @@ class BaseGraphNetwork(nn.Module):
         self._edge_dim = edge_dim
 
     @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
-        """Construct the model from dataset entry shapes.
+    def shape_kwarg_names(cls) -> frozenset[str]:
+        """Return the set of constructor kwargs derived from shapes.
+
+        Returns:
+            Frozenset of kwarg names supplied by ``from_context``.
+        """
+        return cls._SHAPE_KWARG_NAMES
+
+    @classmethod
+    def from_context(cls, context: ShapeContext, **kwargs: Any) -> Self:
+        """Construct the model from a ShapeContext.
 
         Node and output channels are read from the last dimension of the first
         input and output shapes respectively. An optional ``edge_dim`` may be
         supplied via ``kwargs``.
 
         Args:
-            input_shapes: Mapping from input name to its per-sample shape.
-            output_shapes: Mapping from output name to its per-sample shape.
+            context: Shape context with input and output shape mappings.
             **kwargs: Additional keyword arguments forwarded to the constructor.
 
         Returns:
             A fully constructed instance of this model.
         """
-        node_shape = next(iter(input_shapes.values()))
-        out_shape = next(iter(output_shapes.values()))
+        node_shape = next(iter(context.input_shapes.values()))
+        out_shape = next(iter(context.output_shapes.values()))
         in_channels = node_shape[-1]
         out_channels = out_shape[-1]
         edge_dim = kwargs.pop("edge_dim", None)

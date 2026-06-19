@@ -5,8 +5,8 @@ from __future__ import annotations
 import importlib
 import inspect
 from collections.abc import Sequence
-from contextlib import suppress
 
+from dlkit.domain.transforms.interfaces import ShapeInferringTransform
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 
 _DEFAULT_TRANSFORM_MODULE = "dlkit.domain.transforms"
@@ -49,15 +49,12 @@ def _extract_transform_kwargs(transform_settings: TransformSettings) -> Transfor
 
     Returns:
         Mapping of keyword arguments, excluding ``name`` and ``module_path``.
-        An empty dict is returned when ``model_dump()`` is unavailable.
     """
-    with suppress(AttributeError):
-        return {
-            k: v
-            for k, v in transform_settings.model_dump().items()
-            if k not in _EXCLUDED_TRANSFORM_FIELDS
-        }
-    return {}
+    return {
+        k: v
+        for k, v in transform_settings.model_dump().items()
+        if k not in _EXCLUDED_TRANSFORM_FIELDS
+    }
 
 
 def _propagate_shape_through_chain(
@@ -80,6 +77,8 @@ def _propagate_shape_through_chain(
     Raises:
         ValueError: If a transform lacks an ``infer_output_shape`` method.
     """
+    from contextlib import suppress
+
     current = (*leading_axes, *shape)
     for ts in transform_settings_list:
         transform_cls = _resolve_transform_class(ts)
@@ -87,10 +86,11 @@ def _propagate_shape_through_chain(
         valid_params = set(inspect.signature(transform_cls.__init__).parameters) - {"self"}
         kwargs = {k: v for k, v in all_kwargs.items() if k in valid_params}
         instance = transform_cls(**kwargs)
-        if not hasattr(instance, "infer_output_shape"):
+        if not isinstance(instance, ShapeInferringTransform):
             raise ValueError(
-                f"Transform '{getattr(ts, 'name', transform_cls)}' has no "
-                "infer_output_shape() method. Cannot propagate shape analytically."
+                f"Transform '{getattr(ts, 'name', transform_cls)}' does not implement "
+                "ShapeInferringTransform (missing infer_output_shape method). "
+                "Cannot propagate shape analytically."
             )
         current = instance.infer_output_shape(current)
     if not leading_axes:

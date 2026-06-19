@@ -9,7 +9,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.common.shapes import InputShapes, OutputShapes
+from dlkit.common.shapes import ShapeContext
 from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
     deserialize_shapes,
     serialize_shapes,
@@ -32,9 +32,7 @@ class _DummyModel(nn.Module):
     """Minimal entry-consumer model referenced by model_settings."""
 
     @classmethod
-    def from_entries(
-        cls, input_shapes: InputShapes, output_shapes: OutputShapes, **kwargs: Any
-    ) -> Self:
+    def from_context(cls, context: ShapeContext, **kwargs: Any) -> Self:
         return cls()
 
     def forward(self, x: Any) -> Any:  # noqa: ANN401
@@ -96,8 +94,7 @@ def metadata_with_shapes(
         entry_configs=entry_configs,
         predict_target_key="y",
         output_spec=ModelOutputSpec(),
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
+        context=ShapeContext(input_shapes, output_shapes),
     )
 
 
@@ -118,8 +115,7 @@ def serializer_without_shapes(
         entry_configs=entry_configs,
         predict_target_key="y",
         output_spec=ModelOutputSpec(),
-        input_shapes=None,
-        output_shapes=None,
+        context=None,
     )
     return DLKitCheckpointSerializer(meta, model=MagicMock())
 
@@ -153,8 +149,7 @@ def test_build_checkpoint_metadata_stores_shapes(
         entry_configs=entry_configs,
         predict_target_key="y",
         output_spec=ModelOutputSpec(),
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
+        context=ShapeContext(input_shapes, output_shapes),
     )
     assert meta.input_shapes == input_shapes
     assert meta.output_shapes == output_shapes

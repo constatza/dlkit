@@ -12,7 +12,7 @@ from dlkit.domain.nn.contracts import HyperParam
 if TYPE_CHECKING:
     from torch import nn
 
-    from dlkit.common.shapes import InputShapes, OutputShapes
+    from dlkit.common.shapes import ShapeContext
     from dlkit.domain.nn.contracts import EntryConsumer
 
 type ModelFactory = type[nn.Module] | Callable[..., nn.Module]
@@ -83,23 +83,20 @@ def build_model(
     model_cls: ModelFactory,
     kwargs: dict[str, HyperParam] | None = None,
     *,
-    input_shapes: InputShapes | None = None,
-    output_shapes: OutputShapes | None = None,
+    context: ShapeContext | None = None,
 ) -> nn.Module:
     """Construct a model with explicit opt-in entry-shape handling.
 
     Dispatch priority:
 
-    1. If both ``input_shapes`` and ``output_shapes`` are provided and
-       ``model_cls`` implements ``from_entries``, call
-       ``model_cls.from_entries(input_shapes, output_shapes, **kwargs)``.
+    1. If ``context`` is provided and ``model_cls`` implements ``from_context``,
+       call ``model_cls.from_context(context, **kwargs)``.
     2. Fall through to plain ``model_cls(**kwargs)``.
 
     Args:
         model_cls: A model class or callable that returns an ``nn.Module``.
         kwargs: Keyword arguments forwarded to the constructor or factory method.
-        input_shapes: Optional mapping from feature name to shape.
-        output_shapes: Optional mapping from target name to shape.
+        context: Optional ``ShapeContext`` carrying input and output shapes.
 
     Returns:
         A fully constructed ``nn.Module``.
@@ -109,11 +106,11 @@ def build_model(
             entry shapes that were not provided.
     """
     raw_kwargs: dict[str, HyperParam] = kwargs or {}
-    is_consumer = isinstance(model_cls, type) and hasattr(model_cls, "from_entries")
+    is_consumer = isinstance(model_cls, type) and hasattr(model_cls, "from_context")
 
-    if input_shapes is not None and output_shapes is not None and is_consumer:
+    if context is not None and is_consumer:
         consumer = cast("EntryConsumer", model_cls)
-        return cast("nn.Module", consumer.from_entries(input_shapes, output_shapes, **raw_kwargs))
+        return cast("nn.Module", consumer.from_context(context, **raw_kwargs))
 
     # Plain construction — drop kwargs that __init__ won't accept.
     init_kwargs = _filter_to_accepted_kwargs(model_cls, raw_kwargs)
@@ -124,8 +121,8 @@ def build_model(
             from dlkit.common.errors import WorkflowError
 
             raise WorkflowError(
-                f"Failed to build {model_cls.__name__} — input_shapes and output_shapes "
-                "are required for this model but were not provided. Check your DATASET "
+                f"Failed to build {model_cls.__name__} — a ShapeContext is required "
+                "for this model but was not provided. Check your DATASET "
                 "configuration and ensure shape inference succeeded.",
                 {"error": str(exc), "model_cls": model_cls.__name__},
             ) from exc

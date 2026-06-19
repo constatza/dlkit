@@ -116,8 +116,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         settings: WrapperComponentSettings,
         model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
-        input_shapes: Any = None,
-        output_shapes: Any = None,
+        context: Any = None,
         components: WrapperComponents,
         **kwargs: Any,
     ) -> None:
@@ -127,8 +126,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             settings: Wrapper configuration (loss, metrics, optimizer, scheduler).
             model_settings: Model configuration for building the nn.Module.
             entry_configs: Data entry configurations in config-insertion order.
-            input_shapes: Optional feature-name-to-shape mapping for model construction.
-            output_shapes: Optional target-name-to-shape mapping for model construction.
+            context: Optional ``ShapeContext`` for entry-consumer model construction.
             components: Pre-built WrapperComponents containing loss, metrics, transforms,
                 optimizer factory, and scheduler factory.
             **kwargs: Forwarded to LightningModule (ignored otherwise).
@@ -136,9 +134,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         entry_configs = entry_configs or ()
 
         # --- Build model ---
-        model = _build_model_from_settings(
-            model_settings, input_shapes=input_shapes, output_shapes=output_shapes
-        )
+        model = _build_model_from_settings(model_settings, context=context)
 
         # --- Partition entries ---
         feature_entries = [e for e in entry_configs if is_feature(e)]
@@ -197,8 +193,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             entry_configs=entry_configs,
             predict_target_key=predict_target_key,
             output_spec=output_spec,
-            input_shapes=input_shapes,
-            output_shapes=output_shapes,
+            context=context,
         )
 
         prediction_strategy = DiscriminativePredictionStrategy(

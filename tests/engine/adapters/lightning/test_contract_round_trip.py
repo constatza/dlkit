@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.nn import ModuleList
 
+from dlkit.common.shapes import ShapeContext
 from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
     deserialize_shapes,
 )
@@ -94,8 +95,7 @@ def test_shapes_checkpoint_round_trip(
         model_settings=model_settings,
         components=components,
         entry_configs=entry_configs,
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
+        context=ShapeContext(input_shapes, output_shapes),
     )
 
     # Build a Lightning-style checkpoint with prefixed state dict keys

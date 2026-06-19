@@ -13,7 +13,7 @@ from .errors import (
 from .hooks import LifecycleHooks
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import InferenceResult, OptimizationResult, TrainingResult
-from .shapes import EntryShapes, InputShapes, OutputShapes, Shape
+from .shapes import InputShapes, OutputShapes, Shape, ShapeContext, ShapeProvider
 from .sources import ArraySource
 from .state import ModelState
 
@@ -22,7 +22,6 @@ __all__ = [
     "BatchComplianceError",
     "ConfigurationError",
     "DLKitError",
-    "EntryShapes",
     "ExecutionOverrides",
     "InferenceResult",
     "InputShapes",
@@ -35,6 +34,8 @@ __all__ = [
     "OutputShapes",
     "PluginError",
     "Shape",
+    "ShapeContext",
+    "ShapeProvider",
     "StrategyError",
     "TrainingResult",
     "TrainingOverrides",

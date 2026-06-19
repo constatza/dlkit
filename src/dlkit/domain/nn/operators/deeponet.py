@@ -9,7 +9,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor, nn
 
-from dlkit.common.shapes import InputShapes, OutputShapes
+from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
@@ -123,19 +123,13 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
     )
 
     @classmethod
-    def _constructor_dims(
-        cls,
-        input_shapes: InputShapes,
-        output_shapes: OutputShapes,
-    ) -> dict[str, int]:
+    def resolve_shape_kwargs(cls, context: ShapeContext) -> dict[str, int]:
         """Derive branch/query/output dimensions from entry shapes.
 
-        Uses named lookup (``"branch"`` / ``"query"``); falls back to
-        positional order when those names are absent.
+        Uses named lookup via InputSpec (``"branch"`` / ``"query"``).
 
         Args:
-            input_shapes: Mapping from feature entry name to its shape.
-            output_shapes: Mapping from target entry name to its shape.
+            context: Shape context carrying input and output shapes.
 
         Returns:
             Dict with ``branch_in_features``, ``query_dim``, and ``out_features``.
@@ -143,8 +137,8 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
         Raises:
             ValueError: If the query shape has fewer than 1 dimension.
         """
-        branch_shape = input_shapes["branch"]
-        query_shape = input_shapes["query"]
+        branch_shape = context.input_shapes["branch"]
+        query_shape = context.input_shapes["query"]
         if len(query_shape) < 1:
             raise ValueError(
                 f"{cls.__name__} requires at least 1-D query shape but got {query_shape}"
@@ -152,7 +146,7 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
         return {
             "branch_in_features": prod(branch_shape),
             "query_dim": query_shape[-1],
-            "out_features": next(iter(output_shapes.values()))[0],
+            "out_features": next(iter(context.output_shapes.values()))[0],
         }
 
     def forward(self, u: Tensor, y: Tensor) -> Tensor:

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import InputShapes, OutputShapes
+    from dlkit.common.shapes import ShapeContext
 
 # Configure checkpoint loading for PyTorch 2.6+ to allow Pydantic settings
 from dlkit.engine.adapters.lightning.security import configure_checkpoint_loading
@@ -254,15 +254,13 @@ def _leaf_device(value: Tensor | TensorDict) -> torch.device:
 def _build_model_from_settings(
     model_settings: Any,
     *,
-    input_shapes: InputShapes | None = None,
-    output_shapes: OutputShapes | None = None,
+    context: ShapeContext | None = None,
 ) -> nn.Module:
     """Build a PyTorch model from configuration settings.
 
     Args:
         model_settings: Model configuration (ModelComponentSettings).
-        input_shapes: Optional feature-name-to-shape mapping for entry-consumer models.
-        output_shapes: Optional target-name-to-shape mapping for entry-consumer models.
+        context: Optional ``ShapeContext`` for entry-consumer models.
 
     Returns:
         Instantiated and precision-cast nn.Module.
@@ -297,9 +295,7 @@ def _build_model_from_settings(
     else:
         hyperparams = {}
 
-    return build_model(
-        model_cls, hyperparams, input_shapes=input_shapes, output_shapes=output_shapes
-    )
+    return build_model(model_cls, hyperparams, context=context)
 
 
 class CoreLightningWrapper(LightningModule, ABC):

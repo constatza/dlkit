@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dlkit.common.shapes import InputShapes, OutputShapes
+from dlkit.common.shapes import InputShapes, OutputShapes, ShapeContext
 from dlkit.domain.nn.factory import build_model
 from dlkit.domain.nn.operators.deeponet import VarWidthDeepONet
 
@@ -29,7 +29,7 @@ def deeponet_kwargs() -> dict[str, list[int]]:
 
 def test_deeponet_exposes_from_entries() -> None:
     """VarWidthDeepONet exposes a from_entries classmethod for entry-shape build."""
-    assert callable(VarWidthDeepONet.from_entries)
+    assert callable(VarWidthDeepONet.from_context)
 
 
 def test_deeponet_build_via_factory(
@@ -41,8 +41,7 @@ def test_deeponet_build_via_factory(
     model = build_model(
         VarWidthDeepONet,
         deeponet_kwargs,
-        input_shapes=deeponet_input_shapes,
-        output_shapes=deeponet_output_shapes,
+        context=ShapeContext(deeponet_input_shapes, deeponet_output_shapes),
     )
     assert isinstance(model, VarWidthDeepONet)
 
@@ -53,9 +52,8 @@ def test_deeponet_from_entries_derives_dims(
     deeponet_kwargs: dict[str, list[int]],
 ) -> None:
     """from_entries derives branch/query/out dimensions from the shapes."""
-    model = VarWidthDeepONet.from_entries(
-        deeponet_input_shapes,
-        deeponet_output_shapes,
+    model = VarWidthDeepONet.from_context(
+        ShapeContext(deeponet_input_shapes, deeponet_output_shapes),
         **deeponet_kwargs,
     )
     assert model.out_features == deeponet_output_shapes["y"][0]

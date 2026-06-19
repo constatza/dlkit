@@ -188,7 +188,11 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
             "model_settings": {
                 "name": "FFNN",
                 "module_path": "dlkit.domain.nn",
-                "params": {
+                "hyper_kwargs": {
+                    "hidden_size": FEATURE_SIZE,
+                    "num_layers": 0,
+                },
+                "all_hyperparams": {
                     "hidden_size": FEATURE_SIZE,
                     "num_layers": 0,
                 },

@@ -22,10 +22,12 @@ Example:
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any, Protocol, final, runtime_checkable
+from typing import Protocol, final, runtime_checkable
 
 import torch
 from torch import Tensor, nn
+
+from dlkit.common.shapes import Shape, ShapeProvider
 
 
 def reshaper2d(func):
@@ -147,6 +149,13 @@ class InvertibleTransform(Protocol):
 
 
 @runtime_checkable
+class ShapeInferringTransform(Protocol):
+    """Transforms that can analytically propagate their output shape."""
+
+    def infer_output_shape(self, shape: Shape) -> Shape: ...
+
+
+@runtime_checkable
 class ShapeAwareTransform(Protocol):
     """Protocol for transforms that benefit from shape information.
 
@@ -155,8 +164,8 @@ class ShapeAwareTransform(Protocol):
 
     Example:
         >>> class MinMaxScaler(Transform):
-        ...     def configure_shape(self, shape_spec, entry_name: str) -> None:
-        ...         shape = shape_spec.get_shape(entry_name)
+        ...     def configure_shape(self, provider: ShapeProvider, entry_name: str) -> None:
+        ...         shape = provider.get_shape(entry_name)
         ...         moments_shape = self._compute_moments_shape(shape)
         ...         self.register_buffer("min", torch.zeros(moments_shape))
         ...         self.register_buffer("max", torch.ones(moments_shape))
@@ -165,11 +174,11 @@ class ShapeAwareTransform(Protocol):
         >>> isinstance(scaler, ShapeAwareTransform)  # True
     """
 
-    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
+    def configure_shape(self, provider: ShapeProvider, entry_name: str) -> None:
         """Configure transform with shape information.
 
         Args:
-            shape_spec: Shape specification containing entry shapes.
+            provider: Shape provider implementing ``get_shape(entry_name)``.
             entry_name: Name of the entry to get shape for.
         """
         ...
@@ -310,7 +319,7 @@ class Transform(nn.Module):
     #     class NonInvertible(Transform):  # Will NOT pass (no inverse_transform method)
     #         pass
 
-    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
+    def configure_shape(self, provider: ShapeProvider, entry_name: str) -> None:
         """Configure transform with shape information (OPTIONAL).
 
         Override this method if your transform benefits from eager buffer allocation.
@@ -319,13 +328,13 @@ class Transform(nn.Module):
         Default implementation does nothing (transforms can allocate lazily during fit()).
 
         Args:
-            shape_spec: Shape specification containing all entry shapes.
+            provider: ShapeProvider with ``get_shape(entry_name)`` method.
             entry_name: Name of the entry to get shape for.
 
         Example:
             >>> class MinMaxScaler(Transform):
-            ...     def configure_shape(self, shape_spec, entry_name):
-            ...         shape = shape_spec.get_shape(entry_name)
+            ...     def configure_shape(self, provider, entry_name):
+            ...         shape = provider.get_shape(entry_name)
             ...         moments_shape = self._compute_moments_shape(shape)
             ...         self.register_buffer("min", torch.zeros(moments_shape))
             ...         self.register_buffer("max", torch.ones(moments_shape))

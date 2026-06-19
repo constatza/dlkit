@@ -4,11 +4,10 @@ Normalizes each sample by its L2 norm, treating all features as a single vector.
 This is useful when the magnitude of feature vectors matters less than their direction.
 """
 
-from typing import Any
-
 import torch
 from pydantic import ConfigDict, validate_call
 
+from dlkit.common.shapes import ShapeProvider
 from dlkit.domain.transforms.base import Transform
 
 
@@ -79,14 +78,14 @@ class SampleNormL2(Transform):
         self._last_norms = None
         self._shape_configured = False
 
-    def configure_shape(self, shape_spec: Any, entry_name: str) -> None:
+    def configure_shape(self, provider: ShapeProvider, entry_name: str) -> None:
         """Configure feature dimensions from shape information.
 
         Args:
-            shape_spec: Shape specification containing entry shapes.
+            provider: Shape provider with ``get_shape(entry_name)`` method.
             entry_name: Name of the entry to get shape for.
         """
-        shape = shape_spec.get_shape(entry_name)
+        shape = provider.get_shape(entry_name)
         if shape is None:
             return
 

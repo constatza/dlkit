@@ -66,18 +66,19 @@ def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings
         raise WorkflowError("Checkpoint 'dlkit_metadata' missing 'model_settings'.")
 
     try:
-        from dlkit.engine.adapters.lightning.checkpoint_dto import normalize_checkpoint_metadata
-
-        metadata = normalize_checkpoint_metadata(checkpoint["dlkit_metadata"])
-        settings_data = metadata["model_settings"]
-        if "resolved_init_kwargs" in settings_data:
-            reconstructed = {
-                "name": settings_data.get("name") or "",
-                "module_path": settings_data.get("module_path") or "dlkit.domain.nn",
-                **(settings_data.get("resolved_init_kwargs") or {}),
-            }
-            return ModelComponentSettings.model_validate(reconstructed)
-        return ModelComponentSettings.model_validate(settings_data)
+        settings_data = checkpoint["dlkit_metadata"]["model_settings"]
+        if not isinstance(settings_data, dict) or "hyper_kwargs" not in settings_data:
+            raise WorkflowError(
+                "Checkpoint model_settings is missing 'hyper_kwargs'. "
+                "This checkpoint was saved with a legacy format that is no longer supported. "
+                "Re-train your model to generate a compatible checkpoint."
+            )
+        reconstructed = {
+            "name": settings_data.get("name") or "",
+            "module_path": settings_data.get("module_path") or "dlkit.domain.nn",
+            **settings_data["hyper_kwargs"],
+        }
+        return ModelComponentSettings.model_validate(reconstructed)
     except WorkflowError:
         raise
     except Exception as exc:
@@ -146,11 +147,9 @@ def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResu
             has_model_settings = True
         except WorkflowError:
             pass
-        if "dlkit_metadata" in checkpoint and bool(
-            checkpoint["dlkit_metadata"].get("geometry")
-            or checkpoint["dlkit_metadata"].get("shape_summary")
-        ):
-            has_shape_metadata = True
+        has_shape_metadata = bool(
+            "dlkit_metadata" in checkpoint and checkpoint["dlkit_metadata"].get("input_shapes")
+        )
     except Exception as exc:
         logger.error("Checkpoint validation failed: {}", exc)
 
@@ -181,7 +180,7 @@ def get_checkpoint_info(checkpoint_path: Path | str) -> CheckpointInfo:
         metadata = checkpoint["dlkit_metadata"]
         model_family = metadata.get("model_family")
         wrapper_type = metadata.get("wrapper_type")
-        has_shape_spec = bool(metadata.get("geometry") or metadata.get("shape_summary"))
+        has_shape_spec = bool(metadata.get("input_shapes"))
         has_model_settings = "model_settings" in metadata
 
     state_dict = extract_state_dict(checkpoint)

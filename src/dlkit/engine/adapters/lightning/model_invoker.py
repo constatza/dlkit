@@ -5,11 +5,14 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from tensordict import NestedKey, TensorDict
 from tensordict.nn import TensorDictModule
-from torch import nn
+from torch import Tensor, nn
+
+if TYPE_CHECKING:
+    from dlkit.domain.nn.contracts import OutputSpec
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -286,3 +289,59 @@ def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:
     return tuple(
         entry.name for entry in feature_entries if entry.model_input and entry.name is not None
     )
+
+
+def normalize_model_output(
+    output: Tensor | tuple[Tensor, ...] | dict[str, Tensor] | TensorDict,
+    *,
+    output_spec: type[OutputSpec] | None,
+    out_keys: list[NestedKey],
+) -> dict[NestedKey, Tensor]:
+    """Map any model return form to the canonical out_keys mapping.
+
+    Positional forms (``Tensor``, ``tuple``) are zipped with ``out_keys`` directly.
+    Named forms (``dict``, ``TensorDict``) use ``OutputSpec`` to identify which
+    key is the prediction; the first ``OutputSpec`` field name is the prediction,
+    remainder are latents.
+
+    All forms produce ``{out_keys[0]: pred_tensor, out_keys[1]: latent0, ...}``.
+
+    Args:
+        output: Raw model forward() return value.
+        output_spec: Optional declared output spec; required for dict/TensorDict forms.
+        out_keys: Ordered key paths to write into the batch TensorDict.
+
+    Returns:
+        Mapping from out_key to tensor, ready to be written into the batch.
+
+    Raises:
+        ValueError: If a tuple length mismatches out_keys, or dict/TensorDict output
+            lacks a matching OutputSpec.
+    """
+    match output:
+        case Tensor():
+            return {out_keys[0]: output}
+        case tuple():
+            if len(output) != len(out_keys):
+                raise ValueError(
+                    f"Model returned {len(output)} tensors but out_keys has {len(out_keys)}"
+                )
+            return {k: cast(Tensor, v) for k, v in zip(out_keys, output, strict=True)}
+        case dict() | TensorDict():
+            fields = (
+                list(output_spec.model_fields)
+                if (output_spec is not None and output_spec.model_fields)
+                else []
+            )
+            if not fields:
+                raise ValueError(
+                    "dict/TensorDict model output requires an OutputSpec with declared field names"
+                )
+            pred_key = fields[0]
+            result: dict[NestedKey, Tensor] = {out_keys[0]: cast(Tensor, output[pred_key])}
+            for i, lk in enumerate(fields[1:], start=1):
+                if i < len(out_keys):
+                    result[out_keys[i]] = cast(Tensor, output[lk])
+            return result
+        case _:
+            raise TypeError(f"Unsupported model output type: {type(output).__name__}")
