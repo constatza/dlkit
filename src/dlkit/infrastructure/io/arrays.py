@@ -64,6 +64,27 @@ def _load_torch_array(path: Path | str, **kwargs) -> object:
     return torch.load(path, **kwargs)
 
 
+def _load_hdf5(path: Path | str, array_key: str, **kwargs) -> np.ndarray:
+    """Load a dataset from an HDF5 file.
+
+    Args:
+        path: Path to the .h5 / .hdf5 file.
+        array_key: Full dataset path within the file (e.g. ``"arrays/x"``).
+            Always required — HDF5 has no auto-detect for a single dataset.
+        **kwargs: Forwarded to ``h5py.File`` (e.g. ``swmr=True``).
+
+    Returns:
+        NumPy array loaded from the specified dataset.
+
+    Raises:
+        KeyError: If ``array_key`` does not exist in the file.
+    """
+    import h5py
+
+    with h5py.File(path, "r", **kwargs) as f:
+        return np.array(f[array_key])
+
+
 # Frozen, immutable loader map, typed as a Mapping
 _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType(
     {
@@ -73,6 +94,8 @@ _LOADER_MAP: Mapping[str, Callable[..., object]] = MappingProxyType(
         ".csv": np.loadtxt,
         ".pt": _load_torch_array,
         ".pth": _load_torch_array,
+        ".h5": _load_hdf5,
+        ".hdf5": _load_hdf5,
     }
 )
 # ──────────────────────────────────────────────────────────────────────────────

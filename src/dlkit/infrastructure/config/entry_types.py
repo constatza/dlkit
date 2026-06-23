@@ -27,6 +27,7 @@ from pydantic import Field, PrivateAttr, ValidationInfo, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.common.sources import ArraySource
+from dlkit.infrastructure.hdf5 import Hdf5LazyReader
 from dlkit.infrastructure.zarr import ZarrLazyReader
 
 from .data_roles import DataRole
@@ -508,12 +509,27 @@ class ParquetEntry(PathBasedEntry):
 
 
 class Hdf5Entry(PathBasedEntry):
-    """Feature or target stored in an HDF5 file."""
+    """Feature or target stored in an HDF5 file.
+
+    Supports both lazy (default) and eager loading.  Lazy mode keeps the file
+    handle open across calls — safe with ``DataLoader`` multi-processing because
+    the handle is opened on first access inside each worker process.
+
+    Attributes:
+        group: Optional HDF5 group path (e.g. ``"arrays"`` or ``"data/train"``).
+        key: Dataset name within the group (or at root if group is None).
+        lazy: When True (default) returns an ``Hdf5LazyReader``; when False
+            returns the ``Path`` for eager loading via ``EagerFileSource``.
+    """
 
     format: Literal["hdf5"] = "hdf5"
-    dataset_key: str = Field(
-        default="data",
-        description="HDF5 dataset path within the file",
+    group: str | None = Field(
+        default=None,
+        description="HDF5 group path, e.g. 'arrays' or 'data/train'. None = root level.",
+    )
+    key: str = Field(default="data", description="Dataset name within the group (or at root).")
+    lazy: bool = Field(
+        default=True, description="Lazy (file handle kept open) vs eager (load once into RAM)."
     )
 
     @model_validator(mode="after")
@@ -530,14 +546,47 @@ class Hdf5Entry(PathBasedEntry):
             raise ValueError(f"Hdf5Entry requires .h5/.hdf5, got: {self.path}")
         return self
 
-    def open_reader(self) -> Path:
-        """Return the file path as the IO source.
+    @property
+    def _dataset_path(self) -> str:
+        """Full dataset path within the HDF5 file.
 
         Returns:
-            The path to the HDF5 file.
+            ``"group/key"`` when group is set, else ``"key"``.
+        """
+        return f"{self.group}/{self.key}".lstrip("/") if self.group else self.key
+
+    @property
+    def array_key(self) -> str:
+        """Full HDF5 dataset path used by EagerFileSource dispatch.
+
+        Returns:
+            Dataset path string (e.g. ``"arrays/x"``).
+        """
+        return self._dataset_path
+
+    @property
+    def is_multi_array(self) -> bool:
+        """Always True — HDF5 files always require a dataset path to select.
+
+        Returns:
+            True.
+        """
+        return True
+
+    def open_reader(self) -> Hdf5LazyReader | Path:
+        """Return the IO source for this entry.
+
+        Returns:
+            ``Hdf5LazyReader`` when ``lazy=True`` (default), or the ``Path``
+            when ``lazy=False`` (eager loading via ``EagerFileSource``).
+
+        Raises:
+            ValueError: If the entry has no path set (placeholder mode).
         """
         if self.path is None:
             raise ValueError(f"{type(self).__name__} has no path — call is_placeholder() first")
+        if self.lazy:
+            return Hdf5LazyReader(self.path, self._dataset_path)
         return self.path
 
 

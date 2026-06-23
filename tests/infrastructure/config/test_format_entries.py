@@ -465,6 +465,80 @@ def test_hdf5_entry_write_default(hdf5_path: Path) -> None:
     assert entry.write is False
 
 
+def test_hdf5_entry_lazy_default(hdf5_path: Path) -> None:
+    """Hdf5Entry.lazy defaults to True (lazy loading enabled).
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path)
+    assert entry.lazy is True
+
+
+def test_hdf5_entry_is_multi_array(hdf5_path: Path) -> None:
+    """Hdf5Entry.is_multi_array is always True so dispatch passes array_key.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path)
+    assert entry.is_multi_array is True
+
+
+def test_hdf5_entry_array_key_no_group(hdf5_path: Path) -> None:
+    """array_key equals key when group is None.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path, key="y")
+    assert entry.array_key == "y"
+
+
+def test_hdf5_entry_array_key_with_group(hdf5_path: Path) -> None:
+    """array_key equals 'group/key' when group is set.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path, group="arrays", key="x")
+    assert entry.array_key == "arrays/x"
+
+
+def test_hdf5_entry_array_key_nested_group(hdf5_path: Path) -> None:
+    """array_key handles nested group paths correctly.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path, group="data/train", key="features")
+    assert entry.array_key == "data/train/features"
+
+
+def test_hdf5_entry_open_reader_lazy_returns_lazy_reader(hdf5_path: Path) -> None:
+    """open_reader() returns Hdf5LazyReader when lazy=True.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    from dlkit.infrastructure.hdf5 import Hdf5LazyReader
+
+    entry = Hdf5Entry(name="feat", path=hdf5_path, group="arrays", key="x")
+    reader = entry.open_reader()
+    assert isinstance(reader, Hdf5LazyReader)
+
+
+def test_hdf5_entry_open_reader_eager_returns_path(hdf5_path: Path) -> None:
+    """open_reader() returns Path when lazy=False.
+
+    Args:
+        hdf5_path: Path to a stub .h5 file.
+    """
+    entry = Hdf5Entry(name="feat", path=hdf5_path, lazy=False)
+    reader = entry.open_reader()
+    assert reader == hdf5_path
+
+
 # ---------------------------------------------------------------------------
 # ValueEntry tests
 # ---------------------------------------------------------------------------
