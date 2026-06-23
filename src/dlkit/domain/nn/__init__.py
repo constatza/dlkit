@@ -72,12 +72,14 @@ from .primitives import (
 )
 from .spectral import (
     DualPathFFNN,
+    FactorizedFourierFeatureNetwork,
     FourierAugmented,
     FourierEnhancedFFNN,
     FourierFeatureNetwork,
     HashEncodingNetwork,
     ISpectralLayer,
     ModifiedMLP,
+    ScaleEquivariantFactorizedFourierFeatureNetwork,
     ScaleEquivariantFourierFeatureNetwork,
     ScaleEquivariantModifiedMLP,
     ScaleEquivariantSiren,
@@ -161,9 +163,11 @@ __all__ = [
     "DualPathFFNN",
     # Coordinate spectral-bias networks
     "FourierFeatureNetwork",
+    "FactorizedFourierFeatureNetwork",
     "HashEncodingNetwork",
     "Siren",
     "ModifiedMLP",
+    "ScaleEquivariantFactorizedFourierFeatureNetwork",
     "ScaleEquivariantFourierFeatureNetwork",
     "ScaleEquivariantSiren",
     "ScaleEquivariantModifiedMLP",

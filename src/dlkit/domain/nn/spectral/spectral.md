@@ -159,6 +159,20 @@ where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
 
 `from_entries` extracts `in_features` and `out_features` from the first input and output shapes.
 
+### FactorizedFourierFeatureNetwork
+
+Uses the same Fourier feature encoder, but swaps the dense backbone for the
+paper-style random-weight-factorized FFNN:
+
+```text
+γ(x) = [sin(2π B x), cos(2π B x)]
+output = FactorizedFFNN(γ(x))
+```
+
+This is the recommended coordinate-MLP pairing when following the Perdikaris /
+Wang PINN guidance: Fourier features plus exponential random weight
+factorization.
+
 ### HashEncodingNetwork
 
 Multiresolution hashed grid encoder in the style of Instant-NGP. The input is

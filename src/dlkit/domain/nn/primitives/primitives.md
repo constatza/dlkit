@@ -299,7 +299,8 @@ All layers live in `parametrized_layers.py`. Constrained layers use PyTorch's
 | `SymmetricLinear` | Hard (parametrize) | $W = W^\top$ | Yes |
 | `SPDLinear` | Hard (parametrize) | SPD via Gershgorin | Yes |
 | `SPDFactorizedLinear` | Hard (parametrize) | $W = D\,\text{SPD}(A)\,D$ | Yes |
-| `FactorizedLinear` | Modelling choice (plain Module) | $W = \text{diag}(\phi(\mathbf{s}))\,A$ | No |
+| `FactorizedLinear` | Modelling choice (plain Module) | $W = \text{diag}(e^{\mathbf{s}})\,A$ | No |
+| `SoftplusFactorizedLinear` | Modelling choice (plain Module) | $W = \text{diag}(\text{softplus}(\mathbf{s}))\,A$ | No |
 | `SymmetricFactorizedLinear` | Hard (parametrize) | $W = D\,\text{Sym}(A)\,D$ | Yes |
 
 ### `SPDLinear`
@@ -355,13 +356,21 @@ separately for a flat, transparent state dict.
 
 **Mathematical form:**
 
-$$W = \text{diag}\!\left(\phi(\mathbf{s})\right) A, \qquad \phi = \exp \text{ (default)}$$
+$$W = \text{diag}\!\left(e^{\mathbf{s}}\right) A$$
 
-Equivalently: row $i$ of $W$ is $\phi(s_i)$ times row $i$ of $A$.
+Equivalently: row $i$ of $W$ is $e^{s_i}$ times row $i$ of $A$.
 
 **Key parameters**:
-- `mean`, `std`: initialisation of `log_scale` $\mathbf{s}$.
-- `pos_fn` (callable, default `torch.exp`): maps $\mathbf{s}$ to positive row scales. Alternatives: `F.softplus`, `lambda x: F.relu(x) + 1e-6`.
+- `mean`, `std`: literal Gaussian parameters used to sample `log_scale`
+  $\mathbf{s}$ (paper-style RWF defaults: `mean=1.0`, `std=0.1`).
+
+### `SoftplusFactorizedLinear`
+
+Advanced rectangular factorized primitive using
+$$W = \text{diag}(\text{softplus}(\mathbf{s})) A.$$
+
+This keeps the softplus path available for custom compositions without making
+it the default public factorized architecture.
 
 ### Configuring `pos_fn`
 
@@ -385,11 +394,11 @@ SPDLinear(n, n, pos_fn=torch.exp)
 # Bounded alternative
 SPDLinear(n, n, pos_fn=lambda x: F.relu(x) + 1e-4)
 
-# FactorizedLinear: rectangular matrices are allowed (not square-constrained)
+# FactorizedLinear: paper-style exponential RWF
 FactorizedLinear(16, 32)
 
-# FactorizedLinear with softplus
-FactorizedLinear(16, 32, pos_fn=F.softplus)
+# Advanced softplus variant
+SoftplusFactorizedLinear(16, 32)
 ```
 
 ### Parametrization Modules

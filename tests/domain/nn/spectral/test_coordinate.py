@@ -11,9 +11,11 @@ import torch
 from dlkit.common.shapes import InputShapes, OutputShapes, ShapeContext
 from dlkit.domain.nn.ffnn.scale_equivariant import ScaleEquivariantFFNN
 from dlkit.domain.nn.spectral.coordinate import (
+    FactorizedFourierFeatureNetwork,
     FourierFeatureNetwork,
     HashEncodingNetwork,
     ModifiedMLP,
+    ScaleEquivariantFactorizedFourierFeatureNetwork,
     ScaleEquivariantFourierFeatureNetwork,
     ScaleEquivariantModifiedMLP,
     ScaleEquivariantSiren,
@@ -81,6 +83,33 @@ class TestFourierFeatureNetwork:
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
     ) -> None:
         net = FourierFeatureNetwork.from_context(
+            ShapeContext(coord_input_shapes, coord_output_shapes),
+            hidden_size=16,
+            num_layers=2,
+            n_frequencies=8,
+        )
+        x = torch.randn(4, coord_input_shapes["x"][0])
+        assert net(x).shape == (4, coord_output_shapes["y"][0])
+
+
+class TestFactorizedFourierFeatureNetwork:
+    def test_output_shape(self, coords: torch.Tensor) -> None:
+        net = FactorizedFourierFeatureNetwork(
+            in_features=3, out_features=2, hidden_size=32, num_layers=3, n_frequencies=16
+        )
+        assert net(coords).shape == (8, 2)
+
+    def test_uses_factorized_backbone(self) -> None:
+        net = FactorizedFourierFeatureNetwork(
+            in_features=3, out_features=2, hidden_size=16, num_layers=2, n_frequencies=8
+        )
+        first_layer = net.mlp.first_block.layer
+        assert first_layer.__class__.__name__ == "FactorizedLinear"
+
+    def test_from_entries(
+        self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes
+    ) -> None:
+        net = FactorizedFourierFeatureNetwork.from_context(
             ShapeContext(coord_input_shapes, coord_output_shapes),
             hidden_size=16,
             num_layers=2,
@@ -218,6 +247,16 @@ class TestModifiedMLP:
     [
         (
             ScaleEquivariantFourierFeatureNetwork,
+            {
+                "in_features": 3,
+                "out_features": 2,
+                "hidden_size": 16,
+                "num_layers": 2,
+                "n_frequencies": 8,
+            },
+        ),
+        (
+            ScaleEquivariantFactorizedFourierFeatureNetwork,
             {
                 "in_features": 3,
                 "out_features": 2,

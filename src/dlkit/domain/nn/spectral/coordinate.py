@@ -33,6 +33,7 @@ from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
 from dlkit.domain.nn.contracts import StandardEntryConsumer
+from dlkit.domain.nn.ffnn.constrained import FactorizedFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
@@ -54,6 +55,12 @@ _DEFAULT_HASH_PRIMES = (
     1_934_966_399,
     83_492_791,
 )
+
+
+def _fourier_encode(x: Tensor, B: Tensor) -> Tensor:
+    """Return the standard sine/cosine Fourier feature encoding."""
+    proj = 2 * math.pi * x @ B.T
+    return torch.cat([proj.sin(), proj.cos()], dim=-1)
 
 
 class FourierFeatureNetwork(StandardEntryConsumer, nn.Module):
@@ -122,9 +129,52 @@ class FourierFeatureNetwork(StandardEntryConsumer, nn.Module):
         Returns:
             Output tensor of shape (batch, out_features).
         """
-        proj = 2 * math.pi * x @ self.B.T
-        encoded = torch.cat([proj.sin(), proj.cos()], dim=-1)
-        return self.mlp(encoded)
+        return self.mlp(_fourier_encode(x, self.B))
+
+
+class FactorizedFourierFeatureNetwork(StandardEntryConsumer, nn.Module):
+    """Fourier-feature coordinate network with paper-style factorized MLP backbone."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        n_frequencies: int,
+        sigma: float = 1.0,
+        learnable_B: bool = False,
+        mean: float = 1.0,
+        std: float = 0.1,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        B = sigma * torch.randn(n_frequencies, in_features)
+        if learnable_B:
+            self.B = nn.Parameter(B)
+        else:
+            self.register_buffer("B", B)
+
+        self.mlp = FactorizedFFNN(
+            in_features=2 * n_frequencies,
+            out_features=out_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            mean=mean,
+            std=std,
+            activation=resolve_activation(activation),
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.mlp(_fourier_encode(x, self.B))
 
 
 class MultiresolutionHashEncoding(nn.Module):
@@ -549,6 +599,54 @@ class ScaleEquivariantModifiedMLP(StandardEntryConsumer, ScaleEquivariantWrapper
                 hidden_size=hidden_size,
                 num_layers=num_layers,
                 activation=resolve_activation(activation),
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantFactorizedFourierFeatureNetwork(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant factorized Fourier-feature network."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int,
+        num_layers: int,
+        n_frequencies: int,
+        sigma: float = 1.0,
+        learnable_B: bool = False,
+        mean: float = 1.0,
+        std: float = 0.1,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+    ) -> None:
+        super().__init__(
+            base_model=FactorizedFourierFeatureNetwork(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                n_frequencies=n_frequencies,
+                sigma=sigma,
+                learnable_B=learnable_B,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
             ),
             norm=norm,
             eps_gain=eps_gain,

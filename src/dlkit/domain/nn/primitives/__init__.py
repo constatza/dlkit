@@ -27,6 +27,7 @@ from .parametrizations import (
 )
 from .parametrized_layers import (
     FactorizedLinear,
+    SoftplusFactorizedLinear,
     SPDFactorizedLinear,
     SPDLinear,
     SymmetricFactorizedLinear,
@@ -77,6 +78,7 @@ __all__ = [
     "ResidualSequential",
     "SPDFactorizedLinear",
     "SPDLinear",
+    "SoftplusFactorizedLinear",
     "SkipConnection",
     "SwiGLUGate",
     "Symmetric",

@@ -49,6 +49,7 @@ Representative exports from `dlkit.domain.nn` include:
 - FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
 - constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
 - constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
+- coordinate spectral-bias: `FourierFeatureNetwork`, `FactorizedFourierFeatureNetwork`, `Siren`, `ModifiedMLP`, `ScaleEquivariantFourierFeatureNetwork`, `ScaleEquivariantFactorizedFourierFeatureNetwork`
 - scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
 - gated: `GatedMLP`
 

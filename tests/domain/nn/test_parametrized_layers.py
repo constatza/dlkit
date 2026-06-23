@@ -9,6 +9,7 @@ from torch.nn.utils import parametrize
 
 from dlkit.domain.nn.primitives.parametrized_layers import (
     FactorizedLinear,
+    SoftplusFactorizedLinear,
     SPDFactorizedLinear,
     SPDLinear,
     SymmetricFactorizedLinear,
@@ -322,11 +323,11 @@ class TestFactorizedLinear:
         assert factorized_linear.log_scale.grad is not None
 
     def test_weight_reflects_scale_change(self) -> None:
-        """weight must equal pos_fn(log_scale).unsqueeze(1) * base_weight for any scale."""
+        """weight must equal exp(log_scale).unsqueeze(1) * base_weight."""
         layer = FactorizedLinear(2, 3, bias=False)
         with torch.no_grad():
             layer.log_scale.fill_(0.0)
-        scale = torch.nn.functional.softplus(layer.log_scale).unsqueeze(1)
+        scale = torch.exp(layer.log_scale).unsqueeze(1)
         assert torch.allclose(layer.weight, scale * layer.base_weight)
 
     def test_not_using_parametrize_machinery(
@@ -336,11 +337,25 @@ class TestFactorizedLinear:
         """FactorizedLinear must NOT use parametrize (flat state dict)."""
         assert not parametrize.is_parametrized(factorized_linear, "base_weight")
 
-    def test_default_mean_gives_near_unit_scale(self) -> None:
-        """Default mean=0.0 should give pos_fn(log_scale) ≈ 1 at initialisation."""
+    def test_default_mean_matches_paper_rwf_scales(self) -> None:
+        """Default scales should follow the paper-style exp-normal initialization."""
         layer = FactorizedLinear(8, 16)
-        effective_scale = layer._pos_fn(layer.log_scale).mean().item()
-        assert abs(effective_scale - 1.0) < 0.2
+        assert abs(layer.log_scale.mean().item() - 1.0) < 0.3
+        effective_scale = torch.exp(layer.log_scale).mean().item()
+        assert effective_scale > 2.0
+
+    def test_constructor_signature_does_not_expose_pos_fn(self) -> None:
+        import inspect
+
+        sig = inspect.signature(FactorizedLinear.__init__)
+        assert "pos_fn" not in sig.parameters
+
+
+class TestSoftplusFactorizedLinear:
+    def test_softplus_variant_preserves_advanced_path(self) -> None:
+        layer = SoftplusFactorizedLinear(2, 3, bias=False)
+        scale = torch.nn.functional.softplus(layer.log_scale).unsqueeze(1)
+        assert torch.allclose(layer.weight, scale * layer.base_weight)
 
 
 # ---------------------------------------------------------------------------

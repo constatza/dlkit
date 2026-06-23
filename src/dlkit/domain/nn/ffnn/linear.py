@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Literal
 
-import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -65,17 +64,16 @@ class LinearNetwork(StandardEntryConsumer, nn.Module):
 class FactorizedLinearNetwork(StandardEntryConsumer, nn.Module):
     """Single-layer network backed by one FactorizedLinear layer.
 
-    The effective weight is ``W = diag(pos_fn(log_scale)) @ base_weight``,
-    giving per-output-neuron scale control independent of base weight
-    initialisation. No normalization wrapper — contrast with LinearNetwork.
+    The effective weight is ``W = diag(exp(log_scale)) @ base_weight`` with
+    latent scales sampled directly from the paper-style RWF Gaussian.
+    No normalization wrapper — contrast with LinearNetwork.
 
     Args:
         in_features: Size of the input features.
         out_features: Size of the output features.
         bias: Whether to include a bias term.
-        mean: Mean for log-scale initialisation (0.0 → unit scale at init).
+        mean: Mean of the Gaussian used to sample the latent scale parameter.
         std: Standard deviation for log-scale initialisation.
-        pos_fn: Element-wise function mapping log-scale to positive scale factors.
     """
 
     class InputSpec(_InputSpec):
@@ -87,14 +85,11 @@ class FactorizedLinearNetwork(StandardEntryConsumer, nn.Module):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        mean: float = 0.0,
+        mean: float = 1.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = torch.exp,
     ) -> None:
         super().__init__()
-        self.linear = FactorizedLinear(
-            in_features, out_features, bias, mean=mean, std=std, pos_fn=pos_fn
-        )
+        self.linear = FactorizedLinear(in_features, out_features, bias, mean=mean, std=std)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass.

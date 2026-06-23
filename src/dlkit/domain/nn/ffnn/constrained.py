@@ -18,6 +18,7 @@ from dlkit.domain.nn.primitives import (
     DEFAULT_SPD_MIN_DIAG,
     FactorizedLinear,
     SkipConnection,
+    SoftplusFactorizedLinear,
     SPDFactorizedLinear,
     SPDLinear,
     build_linear_skip_layer,
@@ -281,9 +282,17 @@ def _factorized_layer_factory(
     bias: bool,
     mean: float,
     std: float,
-    pos_fn: Callable[[Tensor], Tensor],
 ) -> Callable[[int], nn.Module]:
-    return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std, pos_fn=pos_fn)
+    return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std)
+
+
+def _softplus_factorized_layer_factory(
+    *,
+    bias: bool,
+    mean: float,
+    std: float,
+) -> Callable[[int], nn.Module]:
+    return lambda n: SoftplusFactorizedLinear(n, n, bias=bias, mean=mean, std=std)
 
 
 # ── Public generic builders ──────────────────────────────────────────────────
@@ -635,9 +644,8 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 0.0,
+        mean: float = 1.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -651,7 +659,6 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
                 bias=bias,
                 mean=mean,
                 std=std,
-                pos_fn=pos_fn,
             ),
             activation=activation,
             normalize=normalize,
@@ -670,9 +677,8 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 0.0,
+        mean: float = 1.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -686,7 +692,6 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
                 bias=bias,
                 mean=mean,
                 std=std,
-                pos_fn=pos_fn,
             ),
             activation=activation,
             normalize=normalize,
@@ -717,9 +722,8 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 0.0,
+        mean: float = 1.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -732,9 +736,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
             in_size=in_features,
-            layer_factory=lambda h: FactorizedLinear(
-                in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
-            ),
+            layer_factory=lambda h: FactorizedLinear(in_features, h, bias=bias, mean=mean, std=std),
             activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
@@ -742,7 +744,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         self.body = _ConstantWidthParametricBody(
             size=hidden_size,
             num_layers=num_layers - 1,
-            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
             _residual=True,
             activation=resolved_activation,
             normalize=normalize,
@@ -775,9 +777,8 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 0.0,
+        mean: float = 1.0,
         std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
         dropout: float = 0.0,
@@ -790,9 +791,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
             in_size=in_features,
-            layer_factory=lambda h: FactorizedLinear(
-                in_features, h, bias=bias, mean=mean, std=std, pos_fn=pos_fn
-            ),
+            layer_factory=lambda h: FactorizedLinear(in_features, h, bias=bias, mean=mean, std=std),
             activation=resolved_activation,
             normalize=normalize,
             dropout=dropout,
@@ -800,7 +799,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         self.body = _ConstantWidthParametricBody(
             size=hidden_size,
             num_layers=num_layers - 1,
-            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std, pos_fn=pos_fn),
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
             _residual=False,
             activation=resolved_activation,
             normalize=normalize,

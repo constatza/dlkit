@@ -21,11 +21,20 @@ from dlkit.domain.nn.ffnn import (
     ScaleEquivariantSPDFactorizedFFNN,
     ScaleEquivariantSPDFFNN,
 )
+from dlkit.domain.nn.primitives import FactorizedLinear, SkipConnection
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
 ShapeMapping = dict[str, tuple[int, ...]]
+
+
+def _unwrap_factorized_layer(module: torch.nn.Module) -> FactorizedLinear:
+    if isinstance(module, SkipConnection):
+        module = cast(Any, module).module
+    layer = cast(Any, module).layer
+    assert isinstance(layer, FactorizedLinear)
+    return layer
 
 
 @pytest.fixture
@@ -220,3 +229,37 @@ def test_se_nonembedded_factorized_from_entries(
         ShapeContext(in_shapes, out_shapes), hidden_size=8, num_layers=2
     )
     assert model(torch.randn(4, in_shapes["x"][0])).shape == (4, out_shapes["y"][0])
+
+
+@pytest.mark.parametrize(
+    "model_cls",
+    [
+        ScaleEquivariantEmbeddedFactorizedFFNN,
+        ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
+    ],
+)
+def test_se_embedded_factorized_variants_default_to_exp_rwf(
+    model_cls: type[torch.nn.Module],
+) -> None:
+    model = model_cls(in_features=3, out_features=2, hidden_size=4, num_layers=1)
+    body_layer = _unwrap_factorized_layer(cast(Any, model.base_model).body.blocks[0])
+    assert body_layer._pos_fn is torch.exp
+
+
+@pytest.mark.parametrize(
+    "model_cls",
+    [
+        ScaleEquivariantFactorizedFFNN,
+        ScaleEquivariantSimpleFactorizedFFNN,
+    ],
+)
+def test_se_nonembedded_factorized_variants_default_to_exp_rwf(
+    model_cls: type[torch.nn.Module],
+) -> None:
+    model = model_cls(in_features=3, out_features=2, hidden_size=4, num_layers=2)
+    base_model = cast(Any, model.base_model)
+    first_layer = base_model.first_block.layer
+    body_layer = _unwrap_factorized_layer(base_model.body.blocks[0])
+    assert isinstance(first_layer, FactorizedLinear)
+    assert first_layer._pos_fn is torch.exp
+    assert body_layer._pos_fn is torch.exp

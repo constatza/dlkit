@@ -50,9 +50,11 @@ def test_removed_simple_classes_not_exported():
 def test_coordinate_spectral_bias_models_exported():
     names = (
         "FourierFeatureNetwork",
+        "FactorizedFourierFeatureNetwork",
         "HashEncodingNetwork",
         "ModifiedMLP",
         "Siren",
+        "ScaleEquivariantFactorizedFourierFeatureNetwork",
         "ScaleEquivariantFourierFeatureNetwork",
         "ScaleEquivariantModifiedMLP",
         "ScaleEquivariantSiren",

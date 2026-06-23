@@ -65,6 +65,15 @@ Scale-equivariant wrappers follow the same naming: `ScaleEquivariant[Embedded]SP
 
 Factorized layers can be rectangular. These networks expose `in_features`, `hidden_size`, and `out_features` as independent parameters.
 
+Each factorized layer uses an explicit positive scaling factor on top of a base
+weight matrix. In `FactorizedLinear`, the effective weight is
+`exp(log_scale).unsqueeze(1) * base_weight`, matching the paper-style random
+weight factorization `diag(exp(s)) @ V`. The public rectangular `Factorized*`
+family uses this exponential parameterization by default with literal RWF
+initialization semantics (`mean=mu`, `std=sigma`, default `mu=1.0`,
+`sigma=0.1`). A softplus-based alternative remains an advanced low-level
+primitive, not the public FFNN default.
+
 **Embedded**: `Linear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` with act → `Linear(h→out)`.
 
 **Non-embedded**: `FactorizedLinear(in→h)` (no skip) → `[FactorizedLinear(h→h) × (num_layers-1)]` with act → `Linear(h→out)`.

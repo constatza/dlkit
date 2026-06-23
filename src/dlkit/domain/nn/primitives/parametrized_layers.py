@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Iterable
 
 import torch
@@ -159,30 +158,6 @@ def register_spd_factorized(
     )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _unit_scale_log_mean(pos_fn: Callable[[Tensor], Tensor]) -> float:
-    """Return x such that pos_fn(x) = 1.0 for the two supported pos_fns.
-
-    - ``torch.exp``  → ``ln(1) = 0.0``           (exact)
-    - ``F.softplus`` → ``ln(e − 1) ≈ 0.5413``    (exact: softplus(ln(e−1)) = 1)
-    - anything else  → ``0.0``                    (no correction; old behaviour)
-    """
-    if pos_fn is torch.exp:
-        return 0.0
-    if pos_fn is F.softplus:
-        return math.log(math.e - 1)
-    return 0.0
-
-
-# ---------------------------------------------------------------------------
-# Parametrized linear layer classes
-# ---------------------------------------------------------------------------
-
-
 class SymmetricLinear(nn.Linear):
     """Linear layer whose weight is constrained to be symmetric.
 
@@ -254,12 +229,11 @@ class SPDLinear(nn.Linear):
         register_spd(self, min_diag=min_diag, pos_fn=pos_fn)
 
 
-class FactorizedLinear(nn.Module):
-    """Linear layer with an explicit positive row-wise scale factor.
+class _FactorizedLinearBase(nn.Module):
+    """Shared implementation for row-wise factorized linear layers.
 
     Stores two independent parameters — ``base_weight`` and ``log_scale`` —
-    and computes the effective weight as
-    ``W = diag(exp(log_scale)) @ base_weight``.
+    and computes the effective weight as ``W = diag(phi(log_scale)) @ base_weight``.
 
     Using a plain :class:`~torch.nn.Module` (rather than ``parametrize``)
     keeps the state dict flat and the semantics clear: the factorisation is a
@@ -277,9 +251,9 @@ class FactorizedLinear(nn.Module):
         out_features: int,
         bias: bool = True,
         *,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
+        mean: float,
+        std: float,
+        pos_fn: Callable[[Tensor], Tensor],
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -289,13 +263,10 @@ class FactorizedLinear(nn.Module):
             in_features: Input feature size.
             out_features: Output feature size.
             bias: Whether to include a bias term.
-            mean: Offset from the unit-scale point in log-scale space
-                (``0.0`` → ``pos_fn(log_scale) ≈ 1`` at initialisation,
-                regardless of which pos_fn is active). Negative values start
-                the scale below one; positive values start it above one.
+            mean: Mean of the Gaussian used to sample ``log_scale``.
             std: Standard deviation for log-scale initialisation.
             pos_fn: Element-wise function mapping log-scale to positive scale
-                factors (default: softplus). Alternatives: exp, relu+ε, etc.
+                factors.
             device: Optional device for parameter initialisation.
             dtype: Optional dtype for parameter initialisation.
         """
@@ -317,11 +288,8 @@ class FactorizedLinear(nn.Module):
 
     def reset_parameters(self) -> None:
         """Initialize parameters for the factorized linear layer."""
-        nn.init.kaiming_uniform_(self.base_weight, a=math.sqrt(5))
-        unit_mean = _unit_scale_log_mean(self._pos_fn)
-        nn.init.normal_(
-            self.log_scale, mean=unit_mean + self._log_scale_mean, std=self._log_scale_std
-        )
+        nn.init.kaiming_uniform_(self.base_weight, a=5**0.5)
+        nn.init.normal_(self.log_scale, mean=self._log_scale_mean, std=self._log_scale_std)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
@@ -340,6 +308,63 @@ class FactorizedLinear(nn.Module):
             Output tensor of shape ``(*, out_features)``.
         """
         return F.linear(x, self.weight, self.bias)
+
+
+class FactorizedLinear(_FactorizedLinearBase):
+    """Paper-style random-weight-factorized linear layer.
+
+    This is the public rectangular factorized primitive. It fixes
+    ``phi = exp`` and interprets ``mean`` / ``std`` as the literal Gaussian
+    parameters used to sample the latent scale variable.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        *,
+        mean: float = 1.0,
+        std: float = 0.1,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            mean=mean,
+            std=std,
+            pos_fn=torch.exp,
+            device=device,
+            dtype=dtype,
+        )
+
+
+class SoftplusFactorizedLinear(_FactorizedLinearBase):
+    """Advanced rectangular factorized linear layer with softplus row scales."""
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        *,
+        mean: float = 0.0,
+        std: float = 0.1,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            mean=mean,
+            std=std,
+            pos_fn=F.softplus,
+            device=device,
+            dtype=dtype,
+        )
 
 
 class SymmetricFactorizedLinear(nn.Linear):
