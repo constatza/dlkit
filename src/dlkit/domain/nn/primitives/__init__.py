@@ -17,25 +17,14 @@ from .gated import (
     UVGate,
 )
 from .parametrizations import (
-    DEFAULT_SPD_MIN_DIAG,
-    SPD,
     PositiveColumnScale,
     PositiveRowScale,
     PositiveSandwichScale,
     PositiveScalarScale,
-    Symmetric,
 )
 from .parametrized_layers import (
     FactorizedLinear,
     SoftplusFactorizedLinear,
-    SPDFactorizedLinear,
-    SPDLinear,
-    SymmetricFactorizedLinear,
-    SymmetricLinear,
-    register_spd,
-    register_spd_factorized,
-    register_symmetric,
-    register_symmetric_factorized,
 )
 from .scale_equivariant import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
@@ -55,8 +44,6 @@ from .skip import (
 __all__ = [
     "DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN",
     "DEFAULT_SCALE_EQUIVARIANT_NORM",
-    "DEFAULT_SPD_MIN_DIAG",
-    "SPD",
     "AsConditioned",
     "ConditionedResidualSequential",
     "ConditionedScaleEquivariantWrapper",
@@ -76,22 +63,13 @@ __all__ = [
     "PositiveSandwichScale",
     "PositiveScalarScale",
     "ResidualSequential",
-    "SPDFactorizedLinear",
-    "SPDLinear",
     "SoftplusFactorizedLinear",
     "SkipConnection",
     "SwiGLUGate",
-    "Symmetric",
-    "SymmetricFactorizedLinear",
-    "SymmetricLinear",
     "UVGate",
     "ScaleEquivariantWrapper",
     "shape_aware_kwargs",
     "build_conv1d_skip_layer",
     "build_conv2d_skip_layer",
     "build_linear_skip_layer",
-    "register_spd",
-    "register_spd_factorized",
-    "register_symmetric",
-    "register_symmetric_factorized",
 ]

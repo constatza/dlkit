@@ -4,49 +4,29 @@ from .contracts import (
     InputSpec,
 )
 from .ffnn.constrained import (
-    SPDFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
     EmbeddedSimpleParametricFFNN,
-    EmbeddedSimpleSPDFactorizedFFNN,
-    EmbeddedSimpleSPDFFNN,
-    EmbeddedSPDFactorizedFFNN,
-    EmbeddedSPDFFNN,
     FactorizedFFNN,
     ParametricDenseBlock,
     SimpleFactorizedFFNN,
-    SimpleSPDFactorizedFFNN,
-    SimpleSPDFFNN,
-    SPDFactorizedFFNN,
 )
 from .ffnn.film import FiLMBlock, FiLMEmbeddedFFNN, FiLMFFNN, FiLMResidualBlock, VarWidthFiLMFFNN
 from .ffnn.gated import GatedMLP
 from .ffnn.linear import (
     FactorizedLinearNetwork,
     LinearNetwork,
-    SPDFactorizedLinearNetwork,
-    SPDLinearNetwork,
-    SymmetricFactorizedLinearNetwork,
-    SymmetricLinearNetwork,
 )
 from .ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
-    ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN,
-    ScaleEquivariantEmbeddedSimpleSPDFFNN,
-    ScaleEquivariantEmbeddedSPDFactorizedFFNN,
-    ScaleEquivariantEmbeddedSPDFFNN,
     ScaleEquivariantFactorizedFFNN,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
     ScaleEquivariantFiLMFFNN,
     ScaleEquivariantSimpleFactorizedFFNN,
-    ScaleEquivariantSimpleSPDFactorizedFFNN,
-    ScaleEquivariantSimpleSPDFFNN,
-    ScaleEquivariantSPDFactorizedFFNN,
-    ScaleEquivariantSPDFFNN,
     ScaleEquivariantVarWidthFiLMFFNN,
 )
 from .operators import (
@@ -108,10 +88,6 @@ __all__ = [
     # Linear baseline
     "LinearNetwork",
     "FactorizedLinearNetwork",
-    "SymmetricLinearNetwork",
-    "SPDLinearNetwork",
-    "SymmetricFactorizedLinearNetwork",
-    "SPDFactorizedLinearNetwork",
     # Parameter roles
     "ParameterRole",
     # Scale-equivariant constant-width
@@ -124,32 +100,12 @@ __all__ = [
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
-    # Embedded SPD variants (all-SPD, square)
-    "EmbeddedSPDFFNN",
-    "EmbeddedSimpleSPDFFNN",
-    "EmbeddedSPDFactorizedFFNN",
-    "EmbeddedSimpleSPDFactorizedFFNN",
-    # Non-embedded SPD variants (all-SPD, square)
-    "SPDFFNN",
-    "SimpleSPDFFNN",
-    "SPDFactorizedFFNN",
-    "SimpleSPDFactorizedFFNN",
     # Embedded Factorized variants
     "EmbeddedFactorizedFFNN",
     "EmbeddedSimpleFactorizedFFNN",
     # Non-embedded Factorized variants
     "FactorizedFFNN",
     "SimpleFactorizedFFNN",
-    # Scale-equivariant embedded SPD variants
-    "ScaleEquivariantEmbeddedSPDFFNN",
-    "ScaleEquivariantEmbeddedSimpleSPDFFNN",
-    "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
-    "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
-    # Scale-equivariant non-embedded SPD variants
-    "ScaleEquivariantSPDFFNN",
-    "ScaleEquivariantSimpleSPDFFNN",
-    "ScaleEquivariantSPDFactorizedFFNN",
-    "ScaleEquivariantSimpleSPDFactorizedFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",

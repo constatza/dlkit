@@ -75,18 +75,9 @@ def test_named_parametric_bases_exported():
         assert hasattr(ns, "EmbeddedSimpleParametricFFNN")
 
 
-def test_public_namespaces_export_symmetric_constrained_pairs():
+def test_public_namespaces_export_factorized_pairs():
     pairs = [
-        ("EmbeddedSPDFFNN", "EmbeddedSimpleSPDFFNN"),
-        ("SPDFFNN", "SimpleSPDFFNN"),
-        ("SPDFactorizedFFNN", "SimpleSPDFactorizedFFNN"),
-        ("EmbeddedSPDFactorizedFFNN", "EmbeddedSimpleSPDFactorizedFFNN"),
         ("FactorizedFFNN", "SimpleFactorizedFFNN"),
-        (
-            "ScaleEquivariantEmbeddedSPDFactorizedFFNN",
-            "ScaleEquivariantEmbeddedSimpleSPDFactorizedFFNN",
-        ),
-        ("ScaleEquivariantSPDFFNN", "ScaleEquivariantSimpleSPDFFNN"),
         ("ScaleEquivariantFactorizedFFNN", "ScaleEquivariantSimpleFactorizedFFNN"),
     ]
     for residual_name, plain_name in pairs:

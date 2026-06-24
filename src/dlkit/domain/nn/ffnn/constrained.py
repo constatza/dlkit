@@ -3,24 +3,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Literal
 
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
 from dlkit.domain.nn.contracts import (
-    SquareEntryConsumer,
     StandardEntryConsumer,
-    _square_input_features,
 )
 from dlkit.domain.nn.primitives import (
-    DEFAULT_SPD_MIN_DIAG,
     FactorizedLinear,
     SkipConnection,
     SoftplusFactorizedLinear,
-    SPDFactorizedLinear,
-    SPDLinear,
     build_linear_skip_layer,
 )
 from dlkit.domain.nn.types import ActivationName
@@ -164,117 +158,7 @@ class _EmbeddedParametricBody(nn.Module):
         return self.regression_layer(x)
 
 
-# ── All-SPD base classes ─────────────────────────────────────────────────────
-
-
-class _EmbeddedSPDBody(nn.Module):
-    """All-SPD FFNN: initial no-act SPD layer → activated body → final no-act SPD layer.
-
-    All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
-    ``num_layers`` counts activated hidden body blocks between the mandatory
-    initial and final no-activation structured layers.
-    Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        if num_layers < 0:
-            raise ValueError(f"Embedded SPD variants require num_layers >= 0, got {num_layers}")
-        super().__init__()
-        self.initial_layer = layer_factory(in_features)
-        self.body = _ConstantWidthParametricBody(
-            size=in_features,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=_residual,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-        self.output_layer = layer_factory(in_features)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.initial_layer(x)
-        x = self.body(x)
-        return self.output_layer(x)
-
-
-class _NonEmbeddedSPDBody(nn.Module):
-    """Non-embedded all-SPD FFNN: activated body → final no-act SPD layer.
-
-    All layers share the same SPD type; no plain ``nn.Linear`` is used anywhere.
-    ``num_layers`` counts activated hidden body blocks before the mandatory
-    final no-activation structured layer.
-    Only ``in_features`` is exposed — hidden and output sizes equal ``in_features``.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        layer_factory: Callable[[int], nn.Module],
-        _residual: bool = False,
-        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        if num_layers < 0:
-            raise ValueError(f"Non-embedded SPD variants require num_layers >= 0, got {num_layers}")
-        super().__init__()
-        self.body = _ConstantWidthParametricBody(
-            size=in_features,
-            num_layers=num_layers,
-            layer_factory=layer_factory,
-            _residual=_residual,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-        self.output_layer = layer_factory(in_features)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.body(x)
-        return self.output_layer(x)
-
-
 # ── Layer factories ──────────────────────────────────────────────────────────
-
-
-def _spd_layer_factory(
-    *,
-    bias: bool,
-    min_diag: float,
-    pos_fn: Callable[[Tensor], Tensor],
-) -> Callable[[int], nn.Module]:
-    return lambda n: SPDLinear(n, bias=bias, min_diag=min_diag, pos_fn=pos_fn)
-
-
-def _spd_factorized_layer_factory(
-    *,
-    bias: bool,
-    min_diag: float,
-    mean: float,
-    std: float,
-    pos_fn: Callable[[Tensor], Tensor],
-) -> Callable[[int], nn.Module]:
-    return lambda n: SPDFactorizedLinear(
-        n,
-        bias=bias,
-        min_diag=min_diag,
-        mean=mean,
-        std=std,
-        pos_fn=pos_fn,
-    )
 
 
 def _factorized_layer_factory(
@@ -353,276 +237,6 @@ class EmbeddedSimpleParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBod
             hidden_size=hidden_size,
             num_layers=num_layers,
             layer_factory=layer_factory,
-            _residual=False,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-# ── Embedded SPD variants (all-SPD, no plain Linear) ────────────────────────
-
-
-class EmbeddedSPDFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
-    """Residual all-SPD FFNN: initial no-act SPD → activated residual body → final no-act SPD."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            _residual=True,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleSPDFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
-    """Plain all-SPD FFNN: initial no-act SPD → activated plain body → final no-act SPD."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            _residual=False,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSPDFactorizedFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
-    """Residual all-SPDFactorized FFNN: initial no-act → residual body → final no-act."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            _residual=True,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleSPDFactorizedFFNN(SquareEntryConsumer, _EmbeddedSPDBody):
-    """Plain all-SPDFactorized FFNN: initial no-act → plain body → final no-act."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            _residual=False,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-# ── Non-embedded SPD variants ────────────────────────────────────────────────
-
-
-class SPDFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
-    """Residual non-embedded SPD FFNN: activated residual body → final no-act SPD layer."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            _residual=True,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class SimpleSPDFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
-    """Plain non-embedded SPD FFNN: activated plain body → final no-act SPD layer."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_layer_factory(bias=bias, min_diag=min_diag, pos_fn=pos_fn),
-            _residual=False,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class SPDFactorizedFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
-    """Residual non-embedded SPDFactorized FFNN: activated residual body → final no-act layer."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
-            _residual=True,
-            activation=resolve_activation(activation),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class SimpleSPDFactorizedFFNN(SquareEntryConsumer, _NonEmbeddedSPDBody):
-    """Plain non-embedded SPDFactorized FFNN: activated plain body → final no-act layer."""
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        num_layers: int,
-        bias: bool = False,
-        min_diag: float = DEFAULT_SPD_MIN_DIAG,
-        mean: float = 0.0,
-        std: float = 0.1,
-        pos_fn: Callable[[Tensor], Tensor] = F.softplus,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            num_layers=num_layers,
-            layer_factory=_spd_factorized_layer_factory(
-                bias=bias,
-                min_diag=min_diag,
-                mean=mean,
-                std=std,
-                pos_fn=pos_fn,
-            ),
             _residual=False,
             activation=resolve_activation(activation),
             normalize=normalize,
@@ -813,23 +427,13 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         return self.regression_layer(x)
 
 
-# Re-export _square_input_features so scale_equivariant.py keeps working unchanged.
 __all__ = [
     "EmbeddedFactorizedFFNN",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleFactorizedFFNN",
     "EmbeddedSimpleParametricFFNN",
-    "EmbeddedSimpleSPDFactorizedFFNN",
-    "EmbeddedSimpleSPDFFNN",
-    "EmbeddedSPDFactorizedFFNN",
-    "EmbeddedSPDFFNN",
     "FactorizedFFNN",
     "ParametricDenseBlock",
     "SimpleFactorizedFFNN",
-    "SimpleSPDFactorizedFFNN",
-    "SimpleSPDFFNN",
-    "SPDFFNN",
-    "SPDFactorizedFFNN",
     "_resolve_hidden_size",
-    "_square_input_features",
 ]

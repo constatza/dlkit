@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from dlkit.common.shapes import InputShapes, OutputShapes, ShapeContext
+    from dlkit.common.shapes import ShapeContext
 
 type HyperParam = int | float | str | bool | list[int] | list[float] | list[str] | None
 
@@ -82,34 +82,6 @@ class EntryConsumer(Protocol):
             A fully constructed instance of this model.
         """
         ...
-
-
-def _square_input_features(
-    cls_name: str,
-    input_shapes: InputShapes,
-    output_shapes: OutputShapes,
-) -> int:
-    """Validate square IO shapes and return the shared feature dimension.
-
-    Args:
-        cls_name: Name of the requesting class, used in error messages.
-        input_shapes: Mapping from feature entry name to its shape.
-        output_shapes: Mapping from target entry name to its shape.
-
-    Returns:
-        The leading dimension of the input shape (equal to the output's).
-
-    Raises:
-        ValueError: If the input and output shapes are not equal.
-    """
-    in_shape = next(iter(input_shapes.values()))
-    out_shape = next(iter(output_shapes.values()))
-    if in_shape != out_shape:
-        raise ValueError(
-            f"{cls_name} requires a square contract (in_shape == out_shape), "
-            f"got in_shape={in_shape}, out_shape={out_shape}"
-        )
-    return in_shape[0]
 
 
 class StandardEntryConsumer:
@@ -223,42 +195,10 @@ class StandardEntryConsumer:
         return cls(**shape_kwargs, **kwargs)  # type: ignore[call-arg]
 
 
-class SquareEntryConsumer(StandardEntryConsumer):
-    """Mixin for models requiring in_features == out_features.
-
-    Only ``in_features`` is derived from shapes; ``out_features`` is not
-    supplied by this mixin (the constructor must not require it, or must
-    default it).
-    """
-
-    _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_features"})
-
-    @classmethod
-    def resolve_shape_kwargs(cls, context: ShapeContext) -> dict[str, int]:
-        """Validate square IO and return in_features.
-
-        Args:
-            context: Shape context carrying input and output shapes.
-
-        Returns:
-            Dict with ``in_features`` key only (in == out is validated).
-
-        Raises:
-            ValueError: If input and output shapes differ.
-        """
-        return {
-            "in_features": _square_input_features(
-                cls.__name__, context.input_shapes, context.output_shapes
-            )
-        }
-
-
 __all__ = [
     "EntryConsumer",
     "HyperParam",
     "InputSpec",
     "OutputSpec",
-    "SquareEntryConsumer",
     "StandardEntryConsumer",
-    "_square_input_features",
 ]

@@ -1,7 +1,7 @@
 """Unit tests for the public surface of ``dlkit.domain.nn.contracts``.
 
 The contracts module exposes ``EntryConsumer`` (a runtime-checkable protocol),
-``InputSpec``, ``OutputSpec``, ``StandardEntryConsumer``, and ``SquareEntryConsumer``.
+``InputSpec``, ``OutputSpec``, and ``StandardEntryConsumer``.
 These tests cover the structural protocol check, spec behaviour, and the
 ``from_context`` / ``resolve_shape_kwargs`` / ``shape_kwarg_names`` lifecycle.
 """
