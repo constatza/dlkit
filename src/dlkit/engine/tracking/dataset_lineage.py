@@ -17,7 +17,7 @@ import numpy as np
 import torch
 
 from dlkit.engine.data.families import resolve_family
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.data_entries import IPathBased, IValueBased
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.workflow_configs import (

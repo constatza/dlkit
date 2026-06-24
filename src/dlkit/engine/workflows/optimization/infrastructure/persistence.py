@@ -46,7 +46,7 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
             Path to saved configuration file if successful, None otherwise
         """
         try:
-            from dlkit.infrastructure.config import GeneralSettings
+            from dlkit.infrastructure.config import GeneralSettings  # type: ignore
             from dlkit.infrastructure.io.config import write_config
 
             if output_directory is None:

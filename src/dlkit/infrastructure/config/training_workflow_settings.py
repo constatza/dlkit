@@ -7,8 +7,6 @@ from typing import Any, ClassVar
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from .mlflow_settings import MLflowSettings
-from .optuna_settings import OptunaSettings
 from .training_settings import TrainingSettings
 from .workflow_settings_base import BaseWorkflowSettings
 
@@ -33,13 +31,13 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
         default=None,
         description="Core training configuration with nested library settings",
     )
-    MLFLOW: MLflowSettings | None = Field(
+    MLFLOW: None = Field(
         default=None,
-        description="MLflow experiment tracking configuration",
+        description="MLflow configuration (removed — use tracking_settings.TrackingSettings)",
     )
-    OPTUNA: OptunaSettings | None = Field(
+    OPTUNA: None = Field(
         default=None,
-        description="Optuna hyperparameter optimization configuration",
+        description="Optuna configuration (removed — use search_settings.SearchSettings)",
     )
 
     _workflow_type: ClassVar[str] = "training"
@@ -50,7 +48,7 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
 
     @property
     def optuna_enabled(self) -> bool:
-        return self.OPTUNA is not None and self.OPTUNA.enabled
+        return False
 
     @property
     def has_training_config(self) -> bool:

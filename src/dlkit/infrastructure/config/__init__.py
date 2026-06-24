@@ -3,20 +3,13 @@
 This module provides a comprehensive settings system for DLKit with:
 - SOLID principle compliance
 - Factory pattern for object construction
-- Mode separation (training vs inference)
-- Plugin architecture for optional features
 - Flattened hierarchy for maintainability
 
 Main Classes:
-- GeneralSettings: Top-level settings with mode separation
-- SessionSettings: Session mode control and configuration
-- TrainingModeSettings: Full training pipeline with plugins
-- InferenceModeSettings: Lightweight inference configuration
-
-Plugin System:
-- PluginConfig: Base plugin configuration
-- MLflowPluginConfig: MLflow experiment tracking
-- OptunaPluginConfig: Hyperparameter optimization
+- JobConfig: Top-level job configuration (base)
+- TrainingJobConfig: Validated training job
+- InferenceJobConfig: Validated inference job
+- SearchJobConfig: Validated HPO job
 """
 
 # Core infrastructure
@@ -31,12 +24,16 @@ from .core import (
 )
 from .core.updater import update_settings
 
+# New settings classes
+from .data_settings import DataModuleSelector, DataSettings
+
 # Partial loading factories
 # Component settings
 # Utility settings
 from .dataloader_settings import DataloaderSettings
 from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings, IndexSplitSettings
+from .experiment_settings import ExperimentSettings
 from .extras_settings import ExtrasSettings
 from .factories import (
     WorkflowSettingsLoader,
@@ -45,14 +42,16 @@ from .factories import (
     load_settings,
 )
 
-# Main settings
-from .general_settings import GeneralSettings
-
 # Generative algorithm settings
 from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSettings
 
-# Flattened functional settings
-from .mlflow_settings import MLflowSettings
+# Job config (new top-level API)
+from .job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 from .model_components import (
     CrossEntropyLossSettings,
     HuberLossSettings,
@@ -68,6 +67,7 @@ from .model_components import (
     R2ScoreSettings,
     WrapperComponentSettings,
 )
+from .model_settings import ModelParams, ModelSettings
 from .optimization_selector import ParameterSelectorSettings
 from .optimization_stage import OptimizationStageSettings
 from .optimization_trigger import TriggerSettings
@@ -89,12 +89,24 @@ from .optimizer_component import (
 )
 from .optimizer_policy import OptimizerPolicySettings
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
-from .optuna_settings import OptunaSettings
-from .session_settings import SessionSettings
+from .run_settings import RunSettings, RunType
+from .search_settings import (
+    CategoricalParam,
+    ConstantParam,
+    FloatParam,
+    IntParam,
+    LogFloatParam,
+    LogIntParam,
+    PrunerSettings,
+    SamplerSettings,
+    SearchSettings,
+    SpaceParam,
+)
+from .tracking_settings import TrackingSettings
 
 # External library settings (unchanged - kept compact as requested)
 from .trainer_settings import TrainerSettings
-from .training_settings import TrainingSettings
+from .training_settings import StoppingSettings, TrainingSettings
 from .transform_settings import TransformSettings
 
 # Workflow-specific settings (SOLID-compliant)
@@ -105,9 +117,32 @@ from .workflow_settings import (
 )
 
 __all__ = [
-    # Main settings
-    "GeneralSettings",
-    "SessionSettings",
+    # Job config (new top-level API)
+    "JobConfig",
+    "TrainingJobConfig",
+    "InferenceJobConfig",
+    "SearchJobConfig",
+    # New settings classes
+    "RunSettings",
+    "RunType",
+    "ExperimentSettings",
+    "ModelSettings",
+    "ModelParams",
+    "DataSettings",
+    "DataModuleSelector",
+    "TrainingSettings",
+    "StoppingSettings",
+    "SearchSettings",
+    "SpaceParam",
+    "FloatParam",
+    "LogFloatParam",
+    "IntParam",
+    "LogIntParam",
+    "CategoricalParam",
+    "ConstantParam",
+    "SamplerSettings",
+    "PrunerSettings",
+    "TrackingSettings",
     # Workflow-specific settings (SOLID-compliant)
     "BaseWorkflowSettings",
     "TrainingWorkflowSettings",
@@ -127,12 +162,9 @@ __all__ = [
     "HyperParameterSettings",
     "update_settings",
     # Flattened functional settings
-    "MLflowSettings",
-    "OptunaSettings",
     "DataModuleSettings",
     "DatasetSettings",
     "IndexSplitSettings",
-    "TrainingSettings",
     # Component settings
     "ModelComponentSettings",
     "MetricComponentSettings",
@@ -167,7 +199,6 @@ __all__ = [
     # Optimization configuration
     "OptimizerPolicySettings",
     "OptimizationStageSettings",
-    "ConcurrentOptimizerSettings",
     # Selector
     "ParameterSelectorSettings",
     # Trigger

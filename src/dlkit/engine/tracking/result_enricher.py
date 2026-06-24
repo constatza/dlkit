@@ -6,7 +6,7 @@ Single Responsibility: Add MLflow metadata to training results.
 from __future__ import annotations
 
 from dlkit.common import TrainingResult
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,

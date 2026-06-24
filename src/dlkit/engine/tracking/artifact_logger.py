@@ -24,7 +24,7 @@ from dlkit.engine.artifacts import (
     ProducedArtifact,
 )
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from torch import nn
 
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,

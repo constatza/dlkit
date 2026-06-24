@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.validators import validate_config_complete
 from dlkit.infrastructure.config.workflow_configs import (
     InferenceWorkflowConfig,

@@ -14,7 +14,24 @@ from .datamodule_settings import DataModuleSettings
 from .dataset_settings import DatasetSettings
 from .extras_settings import ExtrasSettings
 from .model_components import ModelComponentSettings
-from .session_settings import SessionSettings
+
+# SessionSettings is kept as a local import shim — the class may be removed
+# in a later task once BaseWorkflowSettings is migrated to JobConfig.
+try:
+    from .session_settings import SessionSettings  # type: ignore[import-not-found]
+except ModuleNotFoundError:
+    from typing import Literal as _Literal
+
+    from dlkit.infrastructure.config.core.base_settings import BasicSettings as _Base
+
+    class SessionSettings(_Base):  # type: ignore[no-redef]
+        """Minimal stub — session_settings.py removed in config redesign."""
+
+        workflow: _Literal["train", "optimize", "inference"] = "train"
+
+        @property
+        def is_inference_mode(self) -> bool:
+            return self.workflow == "inference"
 
 
 class BaseWorkflowSettings(BasicSettings):

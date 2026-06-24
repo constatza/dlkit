@@ -2,11 +2,11 @@
 
 Thin re-exports from ``dlkit.infrastructure.config`` so users can write::
 
-    from dlkit.settings import GeneralSettings, TrainingSettings
+    from dlkit.settings import TrainingSettings
 
 instead of the internal path::
 
-    from dlkit.infrastructure.config import GeneralSettings, TrainingSettings
+    from dlkit.infrastructure.config import TrainingSettings
 """
 
 from dlkit.infrastructure.config import (
@@ -20,23 +20,30 @@ from dlkit.infrastructure.config import (
     DataloaderSettings,
     DataModuleSettings,
     DatasetSettings,
+    DataSettings,
+    ExperimentSettings,
     ExtrasSettings,
     FactoryProvider,
     FlowMatchingSettings,
-    GeneralSettings,
     GenerativeSettings,
     HyperParameterSettings,
     IndexSplitSettings,
+    InferenceJobConfig,
     InferenceWorkflowSettings,
+    JobConfig,
     LossComponentSettings,
     MetricComponentSettings,
-    MLflowSettings,
     ModelComponentSettings,
+    ModelSettings,
     OptimizerSettings,
-    OptunaSettings,
+    RunSettings,
     SchedulerSettings,
-    SessionSettings,
+    SearchJobConfig,
+    SearchSettings,
+    StoppingSettings,
+    TrackingSettings,
     TrainerSettings,
+    TrainingJobConfig,
     TrainingSettings,
     TrainingWorkflowSettings,
     TransformSettings,
@@ -58,16 +65,24 @@ __all__ = [
     "AutoencoderTarget",
     "Latent",
     "DataEntry",
-    # Top-level unified config
-    "GeneralSettings",
-    "SessionSettings",
+    # Job config (new top-level API)
+    "JobConfig",
+    "TrainingJobConfig",
+    "InferenceJobConfig",
+    "SearchJobConfig",
+    # New settings classes
+    "RunSettings",
+    "ExperimentSettings",
+    "ModelSettings",
+    "DataSettings",
+    "TrackingSettings",
+    "SearchSettings",
+    "StoppingSettings",
     # Workflow-specific settings
     "BaseWorkflowSettings",
     "TrainingWorkflowSettings",
     "InferenceWorkflowSettings",
     # Functional settings
-    "MLflowSettings",
-    "OptunaSettings",
     "TrainingSettings",
     "DatasetSettings",
     "DataModuleSettings",

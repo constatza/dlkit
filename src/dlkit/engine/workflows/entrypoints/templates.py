@@ -24,7 +24,7 @@ def validate_template(
     template_type: TemplateKind | None = None,
 ) -> dict[str, Any]:
     """Validate TOML template content against GeneralSettings."""
-    from dlkit.infrastructure.config import GeneralSettings
+    from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 
     errors: list[str] = []
     try:

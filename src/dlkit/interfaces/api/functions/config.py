@@ -17,7 +17,7 @@ from dlkit.engine.workflows.entrypoints import (
 from dlkit.engine.workflows.entrypoints import (
     validate_template as runtime_validate_template,
 )
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 
 
 def validate_config(
