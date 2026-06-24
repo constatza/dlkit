@@ -1,0 +1,46 @@
+[run]
+type = "train"
+seed = 42
+precision = "32"
+
+[experiment]
+name = "test-ffnn"
+
+[model]
+class = "ConstantWidthFFNN"
+module_path = "dlkit.domain.nn"
+[model.params]
+hidden_size = 64
+num_layers = 2
+
+[data]
+class = "FlexibleDataset"
+batch_size = 8
+num_workers = 0
+[[data.features]]
+name = "x"
+format = "npy"
+model_input = true
+[[data.targets]]
+name = "y"
+format = "npy"
+[data.splits]
+val = 0.15
+test = 0.15
+
+[training]
+loss = "mse"
+[[training.metrics]]
+name = "MeanSquaredError"
+num_outputs = 1
+[training.stopping]
+monitor = "val/loss"
+patience = 5
+direction = "min"
+[training.trainer]
+max_epochs = 1
+accelerator = "cpu"
+[training.optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-4

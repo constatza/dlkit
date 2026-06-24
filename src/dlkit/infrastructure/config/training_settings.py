@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .core.base_settings import BasicSettings
 from .lr_tuner_settings import LRTunerSettings
@@ -84,3 +84,41 @@ class TrainingSettings(BasicSettings):
     metrics: tuple[MetricComponentSettings, ...] = Field(
         default=tuple(), description="List of metrics to compute on the model at test time"
     )
+
+    @field_validator("loss", mode="before")
+    @classmethod
+    def _coerce_loss_string(cls, v: object) -> object:
+        """Coerce a bare string loss name to a LossComponentSettings dict.
+
+        Args:
+            v: Raw field value from TOML (string) or an already-valid dict/model.
+
+        Returns:
+            Dict or model suitable for LossComponentSettings validation.
+        """
+        if isinstance(v, str):
+            return {"name": v}
+        return v
+
+    @field_validator("optimizer", mode="before")
+    @classmethod
+    def _coerce_optimizer_flat(cls, v: object) -> object:
+        """Coerce a flat optimizer dict (name/lr/…) to OptimizerPolicySettings dict.
+
+        When the TOML provides ``[training.optimizer]`` with ``name``, ``lr``, etc.
+        at the top level, wrap it as ``{"default_optimizer": v}`` so that
+        ``OptimizerPolicySettings`` validation succeeds.
+
+        Args:
+            v: Raw field value from TOML or an already-valid dict/model.
+
+        Returns:
+            Dict suitable for OptimizerPolicySettings validation.
+        """
+        if not isinstance(v, dict):
+            return v
+        # Already in policy format if it has 'stages' or 'default_optimizer'
+        if "stages" in v or "default_optimizer" in v:
+            return v
+        # Flat optimizer dict: wrap into default_optimizer
+        return {"default_optimizer": v}

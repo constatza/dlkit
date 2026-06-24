@@ -1,0 +1,9 @@
+[run]
+type = "train"
+seed = 42
+model = "./profiles/model.toml"
+data = "./profiles/data.toml"
+training = "./profiles/training.toml"
+
+[experiment]
+name = "test-composed"

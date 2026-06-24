@@ -1,0 +1,12 @@
+[training]
+loss = "mse"
+[training.stopping]
+monitor = "val/loss"
+patience = 5
+direction = "min"
+[training.trainer]
+max_epochs = 1
+accelerator = "cpu"
+[training.optimizer]
+name = "AdamW"
+lr = 1e-3

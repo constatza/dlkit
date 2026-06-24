@@ -74,5 +74,9 @@ class PlaceholderNotResolvedError(ValueError):
         )
 
 
+class ConfigValidationError(ValueError):
+    """Raised when configuration is incomplete, invalid, or fails validation."""
+
+
 class BatchComplianceError(ValueError):
     """Raised when dataset sources violate batch-shape invariants."""

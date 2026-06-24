@@ -44,14 +44,22 @@ class DLKitTomlSource:
 def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]:
     """Unified path resolver for DLKit TOML configs.
 
-    Always processes the full dict before any section filter so that DATASET path
+    Always processes the full dict before any section filter so that data path
     resolution can reference sibling config sections when needed.
 
-    Handles:
+    Handles new lowercase section names (JobConfig schema):
+        - ``training.trainer.default_root_dir``
+        - ``model.checkpoint``
+        - ``data.root``
+        - ``data.features[*].path`` and ``data.targets[*].path``
+        - ``data.splits.filepath``
+
+    Also handles legacy uppercase section names for backward compatibility:
         - ``TRAINING.trainer.default_root_dir``
         - ``MODEL.checkpoint``
-        - ``DATAMODULE.split.filepath``
+        - ``DATASET.root_dir`` / ``DATASET.root``
         - ``DATASET.features[*].path`` and ``DATASET.targets[*].path``
+        - ``DATAMODULE.split.filepath``
 
     Args:
         data: Full TOML dict loaded from disk.
@@ -88,8 +96,8 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
     processed = dict(data)
     root_dir = config_dir if config_dir.exists() else Path.cwd().resolve()
 
-    # TRAINING.trainer.default_root_dir
-    training = processed.get("TRAINING")
+    # training.trainer.default_root_dir  (new lowercase schema)
+    training = processed.get("training")
     if isinstance(training, dict):
         trainer = training.get("trainer")
         if isinstance(trainer, dict) and "default_root_dir" in trainer:
@@ -99,16 +107,84 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
             )
             training_copy = dict(training)
             training_copy["trainer"] = trainer_copy
+            processed["training"] = training_copy
+
+    # TRAINING.trainer.default_root_dir  (legacy uppercase schema)
+    training_upper = processed.get("TRAINING")
+    if isinstance(training_upper, dict):
+        trainer = training_upper.get("trainer")
+        if isinstance(trainer, dict) and "default_root_dir" in trainer:
+            trainer_copy = dict(trainer)
+            trainer_copy["default_root_dir"] = _process_path_field(
+                trainer_copy["default_root_dir"], root_dir
+            )
+            training_copy = dict(training_upper)
+            training_copy["trainer"] = trainer_copy
             processed["TRAINING"] = training_copy
 
-    # MODEL.checkpoint
-    model_sec = processed.get("MODEL")
+    # model.checkpoint  (new lowercase schema)
+    model_sec = processed.get("model")
     if isinstance(model_sec, dict) and "checkpoint" in model_sec:
         model_copy = dict(model_sec)
         model_copy["checkpoint"] = _process_path_field(model_copy["checkpoint"], root_dir)
+        processed["model"] = model_copy
+
+    # MODEL.checkpoint  (legacy uppercase schema)
+    model_sec_upper = processed.get("MODEL")
+    if isinstance(model_sec_upper, dict) and "checkpoint" in model_sec_upper:
+        model_copy = dict(model_sec_upper)
+        model_copy["checkpoint"] = _process_path_field(model_copy["checkpoint"], root_dir)
         processed["MODEL"] = model_copy
 
-    # DATASET paths
+    # data paths  (new lowercase schema: data.root, data.features/targets, data.splits.filepath)
+    data_sec = processed.get("data")
+    if isinstance(data_sec, dict):
+        data_copy = dict(data_sec)
+        data_root_val = data_copy.get("root")
+        data_base: Path | None = None
+        if isinstance(data_root_val, str) and data_root_val:
+            processed_root = _process_path_field(data_root_val, root_dir)
+            data_copy["root"] = processed_root
+            data_base = Path(processed_root)
+
+        for list_key in ("features", "targets"):
+            entries = data_copy.get(list_key)
+            if isinstance(entries, (list, tuple)):
+                new_entries = []
+                changed = False
+                for item in entries:
+                    if not isinstance(item, dict):
+                        new_entries.append(item)
+                        continue
+                    if "path" in item:
+                        new_item = dict(item)
+                        path_val = new_item["path"]
+                        if isinstance(path_val, str) and data_base and not _is_url(path_val):
+                            p_val = Path(tilde_expand_strict(path_val))
+                            if not p_val.is_absolute():
+                                new_item["path"] = str((data_base / p_val).resolve())
+                            else:
+                                new_item["path"] = str(p_val)
+                        else:
+                            new_item["path"] = _process_path_field(path_val, root_dir)
+                        if new_item["path"] != item.get("path"):
+                            changed = True
+                        new_entries.append(new_item)
+                    else:
+                        new_entries.append(item)
+                if changed:
+                    data_copy[list_key] = new_entries
+
+        # data.splits.filepath
+        splits = data_copy.get("splits")
+        if isinstance(splits, dict) and "filepath" in splits:
+            splits_copy = dict(splits)
+            splits_copy["filepath"] = _process_path_field(splits_copy["filepath"], root_dir)
+            data_copy["splits"] = splits_copy
+
+        processed["data"] = data_copy
+
+    # DATASET paths  (legacy uppercase schema)
     dataset_sec = processed.get("DATASET")
     if isinstance(dataset_sec, dict):
         dataset_copy = dict(dataset_sec)
@@ -149,7 +225,7 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
 
         processed["DATASET"] = dataset_copy
 
-    # DATAMODULE.split.filepath
+    # DATAMODULE.split.filepath  (legacy uppercase schema)
     datamodule_sec = processed.get("DATAMODULE")
     if isinstance(datamodule_sec, dict):
         datamodule_copy = dict(datamodule_sec)
@@ -167,15 +243,16 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
 def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
     """Read ``os.environ`` into a nested dict for use with :func:`patch_model`.
 
-    Matching is case-insensitive on the prefix. The first component after the
-    prefix is uppercased (section name); all remaining components are lowercased
-    (field names). When only one component remains after stripping the prefix
-    (i.e. the prefix already encoded the section name), that component is
-    lowercased so it matches Pydantic field names.
+    Matching is case-insensitive on the prefix. All components after the prefix
+    are lowercased so they match lowercase section and field names in the new
+    JobConfig schema.
 
     Examples:
-        ``DLKIT_SESSION__precision=double`` with prefix ``"DLKIT_"``
-        → ``{"SESSION": {"precision": "double"}}``
+        ``DLKIT_RUN__type=train`` with prefix ``"DLKIT"``
+        → ``{"run": {"type": "train"}}``
+
+        ``DLKIT_TRAINING__loss=mse`` with prefix ``"DLKIT"``
+        → ``{"training": {"loss": "mse"}}``
 
         ``DLKIT_SESSION__precision=double`` with prefix ``"DLKIT_SESSION__"``
         → ``{"precision": "double"}``
@@ -206,10 +283,8 @@ def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
 
         nested: dict[str, Any] = result
         for i, part in enumerate(parts):
-            # Multiple components: first is a section name (uppercase),
-            # rest are field names (lowercase).
-            # Single component: it's a field name (lowercase).
-            k = part.upper() if (i == 0 and len(parts) > 1) else part.lower()
+            # All components are lowercased to match the new lowercase schema.
+            k = part.lower()
             if i == len(parts) - 1:
                 nested[k] = value
             else:
