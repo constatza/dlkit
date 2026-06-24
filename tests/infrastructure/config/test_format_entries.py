@@ -105,16 +105,20 @@ def parquet_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def hdf5_path(tmp_path: Path) -> Path:
-    """Create a stub .h5 file (suffix validation only).
+    """Create a minimal HDF5 file with an ``arrays/x`` dataset.
 
     Args:
         tmp_path: pytest temporary directory.
 
     Returns:
-        Path to the stub .h5 file.
+        Path to the HDF5 file.
     """
+    import h5py
+    import numpy as np
+
     p = tmp_path / "data.h5"
-    p.touch()
+    with h5py.File(p, "w") as f:
+        f.create_dataset("arrays/x", data=np.zeros((10, 4), dtype="float32"))
     return p
 
 

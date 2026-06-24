@@ -137,14 +137,40 @@ def test_getitem_slice_returns_batch(hdf5_array: tuple[Path, np.ndarray]) -> Non
 def test_lazy_open_file_not_opened_before_first_access(hdf5_array: tuple[Path, np.ndarray]) -> None:
     """_file is None before any data access, ensuring per-worker lazy open.
 
+    Shape metadata is cached at init without holding an open handle, so
+    _file must remain None until the first __getitem__ call.
+
     Args:
         hdf5_array: Fixture providing (path, data).
     """
     path, _ = hdf5_array
     reader = Hdf5LazyReader(path, "x")
+    # n_samples / sample_shape are now cached — _file must still be None
+    _ = reader.n_samples
+    _ = reader.sample_shape
     assert reader._file is None
     _ = reader[0]
     assert reader._file is not None
+
+
+def test_pickle_round_trip_preserves_data(hdf5_array: tuple[Path, np.ndarray]) -> None:
+    """Pickling a reader (e.g. for DataLoader spawn workers) round-trips correctly.
+
+    _file must be None before pickling so h5py objects are never serialised.
+
+    Args:
+        hdf5_array: Fixture providing (path, data).
+    """
+    import pickle
+
+    path, data = hdf5_array
+    reader = Hdf5LazyReader(path, "x")
+    # Trigger n_samples access (as _maybe_broadcast does during dataset build)
+    assert reader.n_samples == 20
+    assert reader._file is None  # must not have opened the file
+    unpickled = pickle.loads(pickle.dumps(reader))
+    assert unpickled._file is None
+    assert torch.allclose(unpickled[0], torch.from_numpy(data[0]))
 
 
 def test_satisfies_array_source_protocol(hdf5_array: tuple[Path, np.ndarray]) -> None:

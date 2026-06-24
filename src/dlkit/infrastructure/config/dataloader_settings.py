@@ -21,6 +21,13 @@ class DataloaderSettings(BasicSettings):
     shuffle: bool = Field(default=True, description="Whether to shuffle the training dataflow set.")
     persistent_workers: bool = Field(default=True, description="Whether to use persistent workers.")
     pin_memory: bool = Field(default=True, description="Whether to pin memory.")
+    prefetch_factor: PositiveInt | None = Field(
+        default=None,
+        description=(
+            "Batches prefetched per worker. None uses PyTorch's default (2). "
+            "Ignored when num_workers=0."
+        ),
+    )
     follow_batch: tuple[str, ...] | None = Field(
         default=None, description="Follow batch dimensions."
     )

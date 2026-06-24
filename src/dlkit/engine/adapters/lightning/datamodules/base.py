@@ -60,6 +60,8 @@ class BaseDataModule(ABC, LightningDataModule):
         num_workers = int(raw_nw) if isinstance(raw_nw, (int, float, str)) else 0
         if num_workers <= 0 and kwargs.get("persistent_workers"):
             kwargs["persistent_workers"] = False
+        if num_workers <= 0:
+            kwargs.pop("prefetch_factor", None)
         if num_workers > 0 and "worker_init_fn" not in kwargs:
             kwargs["worker_init_fn"] = _init_worker
         return kwargs
