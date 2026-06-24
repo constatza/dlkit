@@ -70,7 +70,7 @@ class BaseWorkflowSettings(BasicSettings):
         """Load workflow settings from a TOML file."""
         source = DLKitTomlSource(Path(config_path), sections=sections)
         settings: Self = cls.model_validate(source())
-        if env := _read_env_patches("DLKIT_", "__"):
+        if env := _read_env_patches("DLKIT_", "__", uppercase_section=True):
             settings = patch_model(settings, env)
         if overrides:
             settings = patch_model(settings, overrides)

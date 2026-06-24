@@ -240,7 +240,12 @@ def _preprocess_paths(data: dict[str, Any], config_path: Path) -> dict[str, Any]
     return processed
 
 
-def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
+def _read_env_patches(
+    prefix: str,
+    delimiter: str = "__",
+    *,
+    uppercase_section: bool = False,
+) -> dict[str, Any]:
     """Read ``os.environ`` into a nested dict for use with :func:`patch_model`.
 
     Matching is case-insensitive on the prefix. All components after the prefix
@@ -257,9 +262,17 @@ def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
         ``DLKIT_SESSION__precision=double`` with prefix ``"DLKIT_SESSION__"``
         → ``{"precision": "double"}``
 
+        With ``uppercase_section=True``:
+        ``DLKIT_SESSION__precision=double`` with prefix ``"DLKIT_"``
+        → ``{"SESSION": {"precision": "double"}}``
+
     Args:
         prefix: Env var prefix to strip (case-insensitive match).
         delimiter: Component separator (default ``"__"``).
+        uppercase_section: When ``True``, the first component of a multi-part
+            key is uppercased to match legacy uppercase section names (e.g.
+            ``SESSION``, ``MODEL``). When ``False`` (default) all components
+            are lowercased to match the new lowercase JobConfig schema.
 
     Returns:
         Nested dict suitable for :func:`~dlkit.infrastructure.config.core.patching.patch_model`.
@@ -283,8 +296,7 @@ def _read_env_patches(prefix: str, delimiter: str = "__") -> dict[str, Any]:
 
         nested: dict[str, Any] = result
         for i, part in enumerate(parts):
-            # All components are lowercased to match the new lowercase schema.
-            k = part.lower()
+            k = part.upper() if (i == 0 and len(parts) > 1 and uppercase_section) else part.lower()
             if i == len(parts) - 1:
                 nested[k] = value
             else:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.validators import (
@@ -100,7 +100,7 @@ class WorkflowSettingsLoader:
                 )
 
         # Apply environment variable patches if present
-        if env := _read_env_patches("DLKIT_", "__"):
+        if env := _read_env_patches("DLKIT_", "__", uppercase_section=True):
             config = patch_model(config, env)
 
         return config
@@ -178,8 +178,9 @@ def load_sections(
 
 _PROFILE_KEYS: tuple[str, ...] = ("model", "data", "training", "tracking")
 
-# TOML dicts are heterogeneous; use dict[str, object] as the canonical type.
-_TomlDict = dict[str, object]
+type _TomlScalar = str | int | float | bool | None
+type _TomlValue = _TomlScalar | list["_TomlValue"] | dict[str, "_TomlValue"]
+type _TomlDict = dict[str, _TomlValue]
 
 
 def _deep_merge(base: _TomlDict, override: _TomlDict) -> _TomlDict:
@@ -196,10 +197,7 @@ def _deep_merge(base: _TomlDict, override: _TomlDict) -> _TomlDict:
     for key, val in override.items():
         existing = result.get(key)
         if isinstance(existing, dict) and isinstance(val, dict):
-            result[key] = _deep_merge(
-                cast(_TomlDict, existing),
-                cast(_TomlDict, val),
-            )
+            result[key] = _deep_merge(existing, val)
         else:
             result[key] = val
     return result
@@ -253,9 +251,8 @@ def load_job(
     profile_base: _TomlDict = {}
 
     if isinstance(run_raw, dict):
-        run_dict = cast(_TomlDict, run_raw)
         for section_key in _PROFILE_KEYS:
-            profile_path_str = run_dict.get(section_key)
+            profile_path_str = run_raw.get(section_key)
             if not isinstance(profile_path_str, str):
                 continue  # absent or already a dict — not a profile reference
             profile_path = (job_dir / profile_path_str).resolve()
@@ -281,9 +278,7 @@ def load_job(
 
     # 5. Resolve run.type.
     effective_run_raw = merged.get("run", {})
-    effective_run = (
-        cast(_TomlDict, effective_run_raw) if isinstance(effective_run_raw, dict) else {}
-    )
+    effective_run: _TomlDict = effective_run_raw if isinstance(effective_run_raw, dict) else {}
     toml_type = effective_run.get("type")
     resolved_type: str | None = run_type or (toml_type if isinstance(toml_type, str) else None)
     if resolved_type is None:
