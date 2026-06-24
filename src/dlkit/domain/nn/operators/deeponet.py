@@ -24,7 +24,7 @@ class DeepONet(nn.Module):
 
     Input/output dimensions:
         branch input: ``(batch, *branch_shape)``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
@@ -56,47 +56,48 @@ class DeepONet(nn.Module):
         """Number of output values per query point."""
         return self._out_features
 
-    def forward(self, u: Tensor, y: Tensor) -> Tensor:
+    def forward(self, branch: Tensor, trunk: Tensor) -> Tensor:
         """Evaluate the operator.
 
         Input/output dimensions:
             branch input: ``(batch, *branch_shape)``
-            query input: ``(batch, n_queries, query_dim)``
+            trunk input: ``(batch, n_queries, trunk_dim)``
             output: ``(batch, n_queries, out_features)``
         """
-        if y.dim() != 3:
+        if trunk.dim() != 3:
             raise ValueError(
-                f"DeepONet trunk input must have canonical shape (B, Q, d); got {tuple(y.shape)}"
+                "DeepONet trunk input must have canonical shape "
+                f"(B, Q, d); got {tuple(trunk.shape)}"
             )
-        batch = u.shape[0]
-        if y.shape[0] != batch:
+        batch = branch.shape[0]
+        if trunk.shape[0] != batch:
             raise ValueError(
                 "DeepONet branch and trunk batch dimensions must match; "
-                f"got u.shape[0]={batch} and y.shape[0]={y.shape[0]}"
+                f"got branch.shape[0]={batch} and trunk.shape[0]={trunk.shape[0]}"
             )
 
         expected_width = self._out_features * self._trunk_width
 
-        branch = self.branch_net(u)
-        if branch.shape != (batch, expected_width):
+        branch_values = self.branch_net(branch)
+        if branch_values.shape != (batch, expected_width):
             raise ValueError(
                 "branch_net must return shape "
-                f"{(batch, expected_width)} for DeepONet; got {tuple(branch.shape)}"
+                f"{(batch, expected_width)} for DeepONet; got {tuple(branch_values.shape)}"
             )
-        branch = branch.reshape(batch, self._out_features, self._trunk_width)
+        branch_values = branch_values.reshape(batch, self._out_features, self._trunk_width)
 
-        y_flat = y.reshape(batch * y.shape[1], -1)
-        trunk = self.trunk_net(y_flat)
-        n_queries = y.shape[1]
-        if trunk.shape != (batch * n_queries, expected_width):
+        trunk_flat = trunk.reshape(batch * trunk.shape[1], -1)
+        trunk_values = self.trunk_net(trunk_flat)
+        n_queries = trunk.shape[1]
+        if trunk_values.shape != (batch * n_queries, expected_width):
             raise ValueError(
                 "trunk_net must return shape "
-                f"{(batch * n_queries, expected_width)} for DeepONet; got {tuple(trunk.shape)}"
+                f"{(batch * n_queries, expected_width)} for DeepONet; got {tuple(trunk_values.shape)}"
             )
-        trunk = trunk.reshape(batch, n_queries, self._out_features, self._trunk_width)
+        trunk_values = trunk_values.reshape(batch, n_queries, self._out_features, self._trunk_width)
         trunk_scale = cast(Tensor, self._trunk_scale)
         values: Tensor = (
-            torch.einsum("bop,bqop->bqo", branch, trunk) / trunk_scale
+            torch.einsum("bop,bqop->bqo", branch_values, trunk_values) / trunk_scale
         ) + self.bias.view(1, 1, -1)
         return values
 
@@ -107,51 +108,51 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
     Input/output dimensions:
         branch input: ``(batch, *branch_shape)``
         flattened branch input: ``(batch, prod(branch_shape))``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
 
-    Expected entry names: ``"branch"`` for sensor readings, ``"query"`` for
+    Expected entry names: ``"branch"`` for sensor readings, ``"trunk"`` for
     coordinate points. When only one entry is provided it serves as both.
     """
 
     class InputSpec(_InputSpec):
         branch: tuple[int, ...]  # sensor readings — flat or multi-dimensional
-        query: tuple[int, ...]  # coordinate points, last dim = query_dim
+        trunk: tuple[int, ...]  # coordinate points, last dim = trunk_dim
 
     _SHAPE_KWARG_NAMES: frozenset[str] = frozenset(
-        {"branch_in_features", "query_dim", "out_features"}
+        {"branch_in_features", "trunk_dim", "out_features"}
     )
 
     @classmethod
     def resolve_shape_kwargs(cls, context: ShapeContext) -> dict[str, int]:
-        """Derive branch/query/output dimensions from entry shapes.
+        """Derive branch/trunk/output dimensions from entry shapes.
 
-        Uses named lookup via InputSpec (``"branch"`` / ``"query"``).
+        Uses named lookup via InputSpec (``"branch"`` / ``"trunk"``).
 
         Args:
             context: Shape context carrying input and output shapes.
 
         Returns:
-            Dict with ``branch_in_features``, ``query_dim``, and ``out_features``.
+            Dict with ``branch_in_features``, ``trunk_dim``, and ``out_features``.
 
         Raises:
-            ValueError: If the query shape has fewer than 1 dimension.
+            ValueError: If the trunk shape has fewer than 1 dimension.
         """
         branch_shape = context.input_shapes["branch"]
-        query_shape = context.input_shapes["query"]
-        if len(query_shape) < 1:
+        trunk_shape = context.input_shapes["trunk"]
+        if len(trunk_shape) < 1:
             raise ValueError(
-                f"{cls.__name__} requires at least 1-D query shape but got {query_shape}"
+                f"{cls.__name__} requires at least 1-D trunk shape but got {trunk_shape}"
             )
         return {
             "branch_in_features": prod(branch_shape),
-            "query_dim": query_shape[-1],
+            "trunk_dim": trunk_shape[-1],
             "out_features": next(iter(context.output_shapes.values()))[0],
         }
 
-    def forward(self, u: Tensor, y: Tensor) -> Tensor:
+    def forward(self, branch: Tensor, trunk: Tensor) -> Tensor:
         """Flatten the branch input before dispatch."""
-        return super().forward(u.reshape(u.shape[0], -1), y)
+        return super().forward(branch.reshape(branch.shape[0], -1), trunk)
 
 
 class VarWidthDeepONet(_FlatBranchDeepONet):
@@ -159,7 +160,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
 
     Input/output dimensions:
         branch input after flattening: ``(batch, flattened_branch_width)``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
@@ -171,7 +172,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` derived from the query input shape
+        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
         ``trunk_width``, ``out_features``, ``branch_layers``, ``trunk_layers``
     """
 
@@ -180,7 +181,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         *,
         branch_in_features: int,
         out_features: int,
-        query_dim: int,
+        trunk_dim: int,
         trunk_width: int = 64,
         branch_layers: Sequence[int],
         trunk_layers: Sequence[int],
@@ -205,7 +206,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
             bias=bias,
         )
         trunk_net = VarWidthFFNN(
-            in_features=query_dim,
+            in_features=trunk_dim,
             out_features=latent_dim,
             layers=trunk_layers,
             activation=resolved,
@@ -226,7 +227,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
 
     Input/output dimensions:
         branch input after flattening: ``(batch, flattened_branch_width)``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
@@ -238,7 +239,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` derived from the query input shape
+        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
         ``trunk_width``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
@@ -248,7 +249,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         *,
         branch_in_features: int,
         out_features: int,
-        query_dim: int,
+        trunk_dim: int,
         trunk_width: int = 64,
         branch_hidden_size: int | None = None,
         branch_num_layers: int = 4,
@@ -272,7 +273,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
             bias=bias,
         )
         trunk_net = FFNN(
-            in_features=query_dim,
+            in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
@@ -294,7 +295,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
 
     Input/output dimensions:
         branch input after flattening: ``(batch, flattened_branch_width)``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
@@ -306,7 +307,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         ``branch_in_features = prod(branch_shape)`` derived from the first input shape
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
-        ``query_dim = query_shape[-1]`` derived from the query input shape
+        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
         ``trunk_width``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
@@ -316,7 +317,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         *,
         branch_in_features: int,
         out_features: int,
-        query_dim: int,
+        trunk_dim: int,
         trunk_width: int = 64,
         branch_hidden_size: int | None = None,
         branch_num_layers: int = 4,
@@ -340,7 +341,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
             bias=bias,
         )
         trunk_net = EmbeddedFFNN(
-            in_features=query_dim,
+            in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,

@@ -31,7 +31,7 @@ class TestDeepONetShapes:
         model = VarWidthDeepONet(
             branch_in_features=20,
             out_features=1,
-            query_dim=1,
+            trunk_dim=1,
             trunk_width=32,
             branch_layers=[32, 24, 32],
             trunk_layers=[16, 32],
@@ -48,13 +48,13 @@ class TestDeepONetShapes:
         model = VarWidthDeepONet(
             branch_in_features=20,
             out_features=1,
-            query_dim=2,
+            trunk_dim=2,
             trunk_width=32,
             branch_layers=[32, 24, 32],
             trunk_layers=[16, 32],
         )
-        y = torch.randn(batch_size, n_queries, 2)
-        assert model(deeponet_branch, y).shape == (batch_size, n_queries, 1)
+        trunk = torch.randn(batch_size, n_queries, 2)
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 1)
 
     def test_multi_output_query_shape(
         self,
@@ -66,26 +66,26 @@ class TestDeepONetShapes:
         model = VarWidthDeepONet(
             branch_in_features=20,
             out_features=out_features,
-            query_dim=2,
+            trunk_dim=2,
             trunk_width=32,
             branch_layers=[32, 48],
             trunk_layers=[24, 24, 32],
         )
-        y = torch.randn(batch_size, n_queries, 2)
-        assert model(deeponet_branch, y).shape == (batch_size, n_queries, out_features)
+        trunk = torch.randn(batch_size, n_queries, 2)
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, out_features)
 
-    def test_parent_requires_canonical_query_shape(self, deeponet_branch: torch.Tensor) -> None:
+    def test_parent_requires_canonical_trunk_shape(self, deeponet_branch: torch.Tensor) -> None:
         model = VarWidthDeepONet(
             branch_in_features=20,
             out_features=1,
-            query_dim=1,
+            trunk_dim=1,
             trunk_width=16,
             branch_layers=[16, 24],
             trunk_layers=[16, 16],
         )
-        y = torch.randn(10, 1)
+        trunk = torch.randn(10, 1)
         with pytest.raises(ValueError, match="canonical shape"):
-            model(deeponet_branch, y)
+            model(deeponet_branch, trunk)
 
 
 class TestDeepONetVariants:
@@ -97,15 +97,15 @@ class TestDeepONetVariants:
         model = FFNNDeepONet(
             branch_in_features=20,
             out_features=5,
-            query_dim=1,
+            trunk_dim=1,
             trunk_width=12,
             branch_hidden_size=24,
             branch_num_layers=3,
             trunk_hidden_size=18,
             trunk_num_layers=2,
         )
-        y = torch.randn(batch_size, 1, 1)
-        assert model(deeponet_branch, y).shape == (batch_size, 1, 5)
+        trunk = torch.randn(batch_size, 1, 1)
+        assert model(deeponet_branch, trunk).shape == (batch_size, 1, 5)
 
     def test_embedded_deeponet_uses_regular_vector_and_coordinate_input(
         self,
@@ -115,17 +115,17 @@ class TestDeepONetVariants:
         model = EmbeddedDeepONet(
             branch_in_features=20,
             out_features=4,
-            query_dim=2,
+            trunk_dim=2,
             trunk_width=10,
             branch_hidden_size=32,
             branch_num_layers=2,
             trunk_hidden_size=28,
             trunk_num_layers=3,
         )
-        y = torch.randn(batch_size, 1, 2)
-        assert model(deeponet_branch, y).shape == (batch_size, 1, 4)
+        trunk = torch.randn(batch_size, 1, 2)
+        assert model(deeponet_branch, trunk).shape == (batch_size, 1, 4)
 
-    def test_variants_support_query_batches(
+    def test_variants_support_trunk_batches(
         self,
         deeponet_branch: torch.Tensor,
         batch_size: int,
@@ -135,7 +135,7 @@ class TestDeepONetVariants:
             FFNNDeepONet(
                 branch_in_features=20,
                 out_features=2,
-                query_dim=2,
+                trunk_dim=2,
                 trunk_width=8,
                 branch_hidden_size=16,
                 branch_num_layers=2,
@@ -145,7 +145,7 @@ class TestDeepONetVariants:
             EmbeddedDeepONet(
                 branch_in_features=20,
                 out_features=2,
-                query_dim=2,
+                trunk_dim=2,
                 trunk_width=8,
                 branch_hidden_size=16,
                 branch_num_layers=2,
@@ -153,8 +153,8 @@ class TestDeepONetVariants:
                 trunk_num_layers=2,
             ),
         ):
-            y = torch.randn(batch_size, n_queries, 2)
-            assert model(deeponet_branch, y).shape == (batch_size, n_queries, 2)
+            trunk = torch.randn(batch_size, n_queries, 2)
+            assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 2)
 
     def test_variants_are_differentiable(
         self,
@@ -162,27 +162,27 @@ class TestDeepONetVariants:
         batch_size: int,
         n_queries: int,
     ) -> None:
-        u = deeponet_branch.requires_grad_(True)
-        y = torch.randn(batch_size, n_queries, 2, requires_grad=True)
+        branch = deeponet_branch.requires_grad_(True)
+        trunk = torch.randn(batch_size, n_queries, 2, requires_grad=True)
         model = FFNNDeepONet(
             branch_in_features=20,
             out_features=2,
-            query_dim=2,
+            trunk_dim=2,
             trunk_width=8,
             branch_hidden_size=16,
             branch_num_layers=2,
             trunk_hidden_size=12,
             trunk_num_layers=2,
         )
-        model(u, y).sum().backward()
-        assert u.grad is not None
-        assert y.grad is not None
+        model(branch, trunk).sum().backward()
+        assert branch.grad is not None
+        assert trunk.grad is not None
 
 
 @pytest.fixture
 def non_flat_branch_input_shapes() -> dict[str, tuple[int, ...]]:
-    """Branch (non-flat) and query input shapes keyed by entry name."""
-    return {"branch": (1, 100), "query": (32, 2)}
+    """Branch (non-flat) and trunk input shapes keyed by entry name."""
+    return {"branch": (1, 100), "trunk": (32, 2)}
 
 
 @pytest.fixture
@@ -218,16 +218,16 @@ class TestDeepONetContractAndProtocols:
         branch = nn.Sequential(
             nn.Flatten(1), nn.Linear(20, 32), nn.ReLU(), nn.Linear(32, latent_dim)
         )
-        trunk = nn.Linear(1, latent_dim)
-        u = torch.randn(batch_size, 2, 10)
-        y = torch.randn(batch_size, n_queries, 1)
+        trunk_net = nn.Linear(1, latent_dim)
+        branch_input = torch.randn(batch_size, 2, 10)
+        trunk = torch.randn(batch_size, n_queries, 1)
         model = DeepONet(
             branch_net=branch,
-            trunk_net=trunk,
+            trunk_net=trunk_net,
             trunk_width=trunk_width,
             out_features=out_features,
         )
-        assert model(u, y).shape == (batch_size, n_queries, 1)
+        assert model(branch_input, trunk).shape == (batch_size, n_queries, 1)
 
     def test_composable_deeponet_raises_helpful_shape_error(
         self,
@@ -235,24 +235,24 @@ class TestDeepONetContractAndProtocols:
         n_queries: int,
     ) -> None:
         branch = nn.Linear(20, 15)
-        trunk = nn.Linear(1, 16)
+        trunk_net = nn.Linear(1, 16)
         model = DeepONet(
             branch_net=branch,
-            trunk_net=trunk,
+            trunk_net=trunk_net,
             trunk_width=16,
             out_features=1,
         )
-        u = torch.randn(batch_size, 20)
-        y = torch.randn(batch_size, n_queries, 1)
+        branch_input = torch.randn(batch_size, 20)
+        trunk = torch.randn(batch_size, n_queries, 1)
 
         with pytest.raises(ValueError, match="branch_net must return shape"):
-            model(u, y)
+            model(branch_input, trunk)
 
     def test_implements_protocols(self) -> None:
         model = FFNNDeepONet(
             branch_in_features=10,
             out_features=1,
-            query_dim=1,
+            trunk_dim=1,
             trunk_width=16,
             branch_hidden_size=16,
             branch_num_layers=2,

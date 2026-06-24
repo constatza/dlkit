@@ -197,21 +197,21 @@ With both entries marked `model_input=true`, invocation dispatches by name:
 `model(x=batch["features","x"], z=batch["features","z"])`.
 Config-list order does not affect which tensor binds to which parameter.
 
-For DeepONet-style branch/trunk inputs (model must declare `forward(u, query_coords)`):
+For DeepONet-style branch/trunk inputs (model must declare `forward(branch, trunk)`):
 ```toml
 [[DATASET.features]]
-name = "u"
+name = "branch"
 path = "..."
 field_role = "feature"
 model_input = true
 
 [[DATASET.features]]
-name = "query_coords"
+name = "trunk"
 path = "..."
 field_role = "target_coordinates"
 model_input = true
 ```
-Invocation: `model(u=batch["features","u"], query_coords=batch["features","query_coords"])`.
+Invocation: `model(branch=batch["features","branch"], trunk=batch["features","trunk"])`.
 
 ---
 

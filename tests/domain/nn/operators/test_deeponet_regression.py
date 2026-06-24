@@ -11,8 +11,8 @@ from dlkit.domain.nn.operators.deeponet import VarWidthDeepONet
 
 @pytest.fixture
 def deeponet_input_shapes() -> InputShapes:
-    """Branch and query input shapes keyed by entry name."""
-    return {"branch": (10,), "query": (2,)}
+    """Branch and trunk input shapes keyed by entry name."""
+    return {"branch": (10,), "trunk": (2,)}
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ def test_deeponet_from_entries_derives_dims(
     deeponet_output_shapes: OutputShapes,
     deeponet_kwargs: dict[str, list[int]],
 ) -> None:
-    """from_entries derives branch/query/out dimensions from the shapes."""
+    """from_entries derives branch/trunk/out dimensions from the shapes."""
     model = VarWidthDeepONet.from_context(
         ShapeContext(deeponet_input_shapes, deeponet_output_shapes),
         **deeponet_kwargs,

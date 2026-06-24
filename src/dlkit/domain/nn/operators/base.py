@@ -42,16 +42,16 @@ class IQueryOperator(IOperatorNetwork, Protocol):
 
     Input/output dimensions:
         branch input: ``(batch, *branch_shape)``
-        query input: ``(batch, n_queries, query_dim)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
         output: ``(batch, n_queries, out_features)``
     """
 
-    def forward(self, u: Tensor, y: Tensor) -> Tensor:
+    def forward(self, branch: Tensor, trunk: Tensor) -> Tensor:
         """Apply the operator.
 
         Input/output dimensions:
             branch input: ``(batch, *branch_shape)``
-            query input: ``(batch, n_queries, query_dim)``
+            trunk input: ``(batch, n_queries, trunk_dim)``
             output: ``(batch, n_queries, out_features)``
         """
         ...

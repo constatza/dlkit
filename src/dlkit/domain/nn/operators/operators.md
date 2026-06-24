@@ -2,26 +2,26 @@
 
 ## Dataset Configuration & Field Roles
 
-Unlike standard regression models (e.g., FFNNs) that consume a single `FEATURE` field, continuous operator models (like DeepONet) map an input function $u$ to an output function $G(u)$ evaluated at specific query points $y$. 
+Unlike standard regression models (e.g., FFNNs) that consume a single `FEATURE` field, continuous operator models (like DeepONet) map a branch signal to an output operator evaluated at explicit query coordinates.
 
 To successfully construct a DeepONet via the engine's automated contract resolution, the dataset configuration must explicitly distinguish these inputs:
-- **Branch Inputs** (the condition/sensor data representing $u$) must be assigned `FieldRole.FEATURE`.
-- **Trunk Inputs** (the continuous coordinates $y$) MUST be assigned `FieldRole.TARGET_COORDINATES`.
+- **Branch Inputs** (the condition or sensor data) must be assigned `FieldRole.FEATURE`.
+- **Trunk Inputs** (the continuous coordinates) MUST be assigned `FieldRole.TARGET_COORDINATES`.
 
 If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the engine will assume a standard multi-input regression problem and fail to initialize the DeepONet.
 
 ## Naming conventions
 
 - `branch_shape`: branch sample shape excluding batch
-- `query_shape`: query sample shape excluding batch
+- `trunk_shape`: trunk sample shape excluding batch
 - `out_features`: output feature count per query location
 - `n_queries`: number of query locations in one batch item
-- `query_dim`: width of one query-coordinate vector
+- `trunk_dim`: width of one trunk-coordinate vector
 - `trunk_width`: shared latent width on the DeepONet branch/trunk side
 
-Use `query` for DeepONet data tensors and tensor shapes. Use `trunk` only for
-the network side. Use `spatial_shape` for generic grid operators and `length`
-only for 1-D operators.
+Use `branch` and `trunk` consistently for DeepONet data tensors, forward
+parameters, and constructor kwargs. Use `spatial_shape` for generic grid
+operators and `length` only for 1-D operators.
 
 ## Shared interfaces
 
@@ -40,7 +40,7 @@ Input/output dimensions:
 
 Input/output dimensions:
 - branch input: `(B, *branch_shape)`
-- query input: `(B, n_queries, query_dim)`
+- trunk input: `(B, n_queries, trunk_dim)`
 - output: `(B, n_queries, out_features)`
 
 ## `FourierNeuralOperator1d`
@@ -65,7 +65,7 @@ Constructor dimensions:
 
 Input/output dimensions:
 - branch input: `(B, *branch_shape)`
-- query input: `(B, n_queries, query_dim)`
+- trunk input: `(B, n_queries, trunk_dim)`
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
@@ -80,7 +80,7 @@ Constructor dimensions:
 
 Input/output dimensions:
 - branch input after flattening: `(B, flattened_branch_width)`
-- query input: `(B, n_queries, query_dim)`
+- trunk input: `(B, n_queries, trunk_dim)`
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
@@ -91,7 +91,7 @@ Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` derived from the query input shape
+- `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
 - `trunk_width`
 - `out_features`
 - `branch_layers`
@@ -101,7 +101,7 @@ Constructor dimensions:
 
 Input/output dimensions:
 - branch input after flattening: `(B, flattened_branch_width)`
-- query input: `(B, n_queries, query_dim)`
+- trunk input: `(B, n_queries, trunk_dim)`
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
@@ -112,7 +112,7 @@ Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` derived from the query input shape
+- `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
 - `trunk_width`
 - `out_features`
 - `branch_hidden_size`
@@ -124,7 +124,7 @@ Constructor dimensions:
 
 Input/output dimensions:
 - branch input after flattening: `(B, flattened_branch_width)`
-- query input: `(B, n_queries, query_dim)`
+- trunk input: `(B, n_queries, trunk_dim)`
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
@@ -135,7 +135,7 @@ Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `query_dim = query_shape[-1]` derived from the query input shape
+- `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
 - `trunk_width`
 - `out_features`
 - `branch_hidden_size`
