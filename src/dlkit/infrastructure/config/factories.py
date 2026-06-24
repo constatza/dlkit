@@ -9,9 +9,21 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from dlkit.infrastructure.config.validators import ConfigValidationError
+
+if TYPE_CHECKING:
+    from dlkit.infrastructure.config.inference_workflow_settings import (
+        InferenceWorkflowSettings,
+    )
+    from dlkit.infrastructure.config.training_workflow_settings import (
+        TrainingWorkflowSettings,
+    )
+
+# Union of all concrete types returned by load_settings() / load_sections().
+# Extended in Task 3 when OptimizationWorkflowSettings is introduced.
+WorkflowSettings = "TrainingWorkflowSettings | InferenceWorkflowSettings"
 
 
 class WorkflowSettingsLoader:
@@ -23,7 +35,9 @@ class WorkflowSettingsLoader:
     compatibility until engine and CLI are wired to ``JobConfig``.
     """
 
-    def load_settings(self, config_path: Path | str) -> Any:
+    def load_settings(
+        self, config_path: Path | str
+    ) -> TrainingWorkflowSettings | InferenceWorkflowSettings:
         """Load workflow config from TOML, dispatching on SESSION.workflow.
 
         Args:
@@ -90,7 +104,9 @@ default_settings_loader = WorkflowSettingsLoader()
 # Convenience function that delegates to the default loader
 
 
-def load_settings(config_path: Path | str) -> Any:
+def load_settings(
+    config_path: Path | str,
+) -> TrainingWorkflowSettings | InferenceWorkflowSettings:
     """Load workflow configuration from TOML file with automatic dispatching.
 
     This is a legacy entrypoint. Use ``load_job()`` (Task 2) for new code.
@@ -108,7 +124,9 @@ def load_settings(config_path: Path | str) -> Any:
     return default_settings_loader.load_settings(config_path)
 
 
-def load_sections(config_path: Path | str, sections: list[str], *, strict: bool = False) -> Any:
+def load_sections(
+    config_path: Path | str, sections: list[str], *, strict: bool = False
+) -> TrainingWorkflowSettings | InferenceWorkflowSettings:
     """Load specific configuration sections for custom workflows.
 
     For most workflows, use ``load_settings()`` instead. This function is for

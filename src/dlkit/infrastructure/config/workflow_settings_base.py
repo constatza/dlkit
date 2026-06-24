@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, ClassVar, Self
+from typing import ClassVar, Self
 
 from pydantic import Field, model_validator
 
@@ -15,23 +15,17 @@ from .dataset_settings import DatasetSettings
 from .extras_settings import ExtrasSettings
 from .model_components import ModelComponentSettings
 
-# SessionSettings is kept as a local import shim — the class may be removed
-# in a later task once BaseWorkflowSettings is migrated to JobConfig.
-try:
-    from .session_settings import SessionSettings  # type: ignore[import-not-found]
-except ModuleNotFoundError:
-    from typing import Literal as _Literal
 
-    from dlkit.infrastructure.config.core.base_settings import BasicSettings as _Base
+# ponytail: minimal stub; engine files that use BaseWorkflowSettings still depend on this.
+# Removed by Task 3 (engine wiring) when BaseWorkflowSettings is fully retired.
+class SessionSettings(BasicSettings):
+    """Minimal stub — session_settings.py removed in config redesign."""
 
-    class SessionSettings(_Base):  # type: ignore[no-redef]
-        """Minimal stub — session_settings.py removed in config redesign."""
+    workflow: str = "train"
 
-        workflow: _Literal["train", "optimize", "inference"] = "train"
-
-        @property
-        def is_inference_mode(self) -> bool:
-            return self.workflow == "inference"
+    @property
+    def is_inference_mode(self) -> bool:
+        return self.workflow == "inference"
 
 
 class BaseWorkflowSettings(BasicSettings):
@@ -71,7 +65,7 @@ class BaseWorkflowSettings(BasicSettings):
         config_path: Path | str,
         *,
         sections: list[str] | None = None,
-        **overrides: Any,
+        **overrides: str | int | float | bool | None,
     ) -> Self:
         """Load workflow settings from a TOML file."""
         source = DLKitTomlSource(Path(config_path), sections=sections)

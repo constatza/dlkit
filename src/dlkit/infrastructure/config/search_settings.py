@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 from pydantic.types import PositiveInt
@@ -77,7 +77,7 @@ class CategoricalParam(BasicSettings):
     """
 
     type: Literal["categorical"]
-    choices: list[Any]
+    choices: list[str | int | float | bool | None]
 
 
 class ConstantParam(BasicSettings):
@@ -89,7 +89,7 @@ class ConstantParam(BasicSettings):
     """
 
     type: Literal["constant"]
-    value: Any
+    value: str | int | float | bool | None
 
 
 SpaceParam = Annotated[
