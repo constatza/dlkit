@@ -19,6 +19,7 @@ from dlkit.engine.workflows.optimization.value_objects import (
     Trial,
     TrialState,
 )
+from dlkit.infrastructure.config.search_settings import CategoricalParam, SearchSettings
 
 
 class _FakeStorage:
@@ -119,6 +120,20 @@ def _make_trial(state: TrialState = TrialState.RUNNING, *, value: float | None =
     )
 
 
+@pytest.fixture
+def search_settings_with_choices() -> SearchSettings:
+    """Search settings with a single categorical hyperparameter."""
+    return SearchSettings(
+        space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+    )
+
+
+@pytest.fixture
+def empty_search_settings() -> SearchSettings:
+    """Search settings with no hyperparameters (empty space)."""
+    return SearchSettings(space={})
+
+
 def test_null_backend_session_is_noop() -> None:
     study = Study(
         study_id="study",
@@ -133,31 +148,27 @@ def test_null_backend_session_is_noop() -> None:
 
 
 def test_optuna_backend_session_suggests_plain_hyperparameters(
-    monkeypatch: pytest.MonkeyPatch,
+    search_settings_with_choices: SearchSettings,
 ) -> None:
     optuna = _FakeOptunaModule()
     repository = OptunaStudyRepository(optuna_module=optuna)
     study = _make_study(repository)
     trial = _make_trial()
 
-    class _FakeSettingsSampler:
-        def sample(self, optuna_trial: _FakeOptunaTrial, base_settings: object) -> None:
-            optuna_trial.params["hidden_size"] = 4
+    # _FakeOptunaTrial.suggest_categorical must record the suggestion in params
+    def _fake_suggest_categorical(self: _FakeOptunaTrial, name: str, choices: list) -> object:
+        value = choices[0]
+        self.params[name] = value
+        return value
 
-    monkeypatch.setattr(
-        "dlkit.infrastructure.config.samplers.optuna_sampler.create_settings_sampler",
-        lambda config: _FakeSettingsSampler(),
-    )
+    _FakeOptunaTrial.suggest_categorical = _fake_suggest_categorical  # type: ignore[attr-defined]
 
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
+    base_settings = SimpleNamespace(search=search_settings_with_choices)
     with session:
-        sampled = session.suggest_hyperparameters(
-            study,
-            trial,
-            SimpleNamespace(OPTUNA=SimpleNamespace(model={"hidden_size": {"choices": [2, 4]}})),
-        )
+        sampled = session.suggest_hyperparameters(study, trial, base_settings)
 
-    assert sampled == {"hidden_size": 4}
+    assert sampled == {"hidden_size": 2}
 
 
 @pytest.mark.parametrize(
@@ -169,7 +180,7 @@ def test_optuna_backend_session_suggests_plain_hyperparameters(
     ],
 )
 def test_optuna_backend_session_reports_terminal_trial_states(
-    monkeypatch: pytest.MonkeyPatch,
+    empty_search_settings: SearchSettings,
     trial_state: TrialState,
     objective_value: float | None,
     expected_backend_state: str,
@@ -180,14 +191,10 @@ def test_optuna_backend_session_reports_terminal_trial_states(
     study = _make_study(repository)
     trial = _make_trial()
 
-    monkeypatch.setattr(
-        "dlkit.infrastructure.config.samplers.optuna_sampler.create_settings_sampler",
-        lambda config: SimpleNamespace(sample=lambda optuna_trial, base_settings: None),
-    )
-
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
+    base_settings = SimpleNamespace(search=empty_search_settings)
     with session:
-        session.suggest_hyperparameters(study, trial, SimpleNamespace(OPTUNA=SimpleNamespace()))
+        session.suggest_hyperparameters(study, trial, base_settings)
         completed_trial = replace(trial, state=trial_state, objective_value=objective_value)
         session.report_trial_result(study, completed_trial)
 
@@ -200,21 +207,17 @@ def test_optuna_backend_session_reports_terminal_trial_states(
 
 
 def test_optuna_backend_session_rejects_duplicate_reporting(
-    monkeypatch: pytest.MonkeyPatch,
+    empty_search_settings: SearchSettings,
 ) -> None:
     optuna = _FakeOptunaModule()
     repository = OptunaStudyRepository(optuna_module=optuna)
     study = _make_study(repository)
     trial = _make_trial()
 
-    monkeypatch.setattr(
-        "dlkit.infrastructure.config.samplers.optuna_sampler.create_settings_sampler",
-        lambda config: SimpleNamespace(sample=lambda optuna_trial, base_settings: None),
-    )
-
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
+    base_settings = SimpleNamespace(search=empty_search_settings)
     with session:
-        session.suggest_hyperparameters(study, trial, SimpleNamespace(OPTUNA=SimpleNamespace()))
+        session.suggest_hyperparameters(study, trial, base_settings)
         completed_trial = replace(trial, state=TrialState.COMPLETE, objective_value=1.0)
         session.report_trial_result(study, completed_trial)
 
@@ -223,21 +226,17 @@ def test_optuna_backend_session_rejects_duplicate_reporting(
 
 
 def test_optuna_backend_session_cleans_storage_and_mappings(
-    monkeypatch: pytest.MonkeyPatch,
+    empty_search_settings: SearchSettings,
 ) -> None:
     optuna = _FakeOptunaModule()
     repository = OptunaStudyRepository(optuna_module=optuna)
     study = _make_study(repository)
     trial = _make_trial()
 
-    monkeypatch.setattr(
-        "dlkit.infrastructure.config.samplers.optuna_sampler.create_settings_sampler",
-        lambda config: SimpleNamespace(sample=lambda optuna_trial, base_settings: None),
-    )
-
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
+    base_settings = SimpleNamespace(search=empty_search_settings)
     with session:
-        session.suggest_hyperparameters(study, trial, SimpleNamespace(OPTUNA=SimpleNamespace()))
+        session.suggest_hyperparameters(study, trial, base_settings)
         backend_study = optuna.created_studies[0]
         assert session._trial_mapping
         assert session._active_storages
@@ -253,25 +252,28 @@ def test_optuna_backend_session_cleans_storage_and_mappings(
 
 
 def test_optuna_backend_session_cleans_up_after_sampling_failure(
-    monkeypatch: pytest.MonkeyPatch,
+    empty_search_settings: SearchSettings,
 ) -> None:
     optuna = _FakeOptunaModule()
     repository = OptunaStudyRepository(optuna_module=optuna)
     study = _make_study(repository)
     trial = _make_trial()
 
-    def _raise_sampling_error(optuna_trial: _FakeOptunaTrial, base_settings: object) -> None:
+    # Use a search_settings with a param that will cause suggest_from_space to be called,
+    # but patch suggest_categorical on the fake trial class to raise an error.
+    search_settings = SearchSettings(
+        space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+    )
+
+    def _raise_sampling_error(self: _FakeOptunaTrial, name: str, choices: list) -> None:
         raise RuntimeError("sampling failed")
 
-    monkeypatch.setattr(
-        "dlkit.infrastructure.config.samplers.optuna_sampler.create_settings_sampler",
-        lambda config: SimpleNamespace(sample=_raise_sampling_error),
-    )
+    _FakeOptunaTrial.suggest_categorical = _raise_sampling_error  # type: ignore[attr-defined]
 
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
 
     with session, pytest.raises(RuntimeError, match="sampling failed"):
-        session.suggest_hyperparameters(study, trial, SimpleNamespace(OPTUNA=SimpleNamespace()))
+        session.suggest_hyperparameters(study, trial, SimpleNamespace(search=search_settings))
 
     backend_study = optuna.created_studies[0]
     assert session._trial_mapping == {}

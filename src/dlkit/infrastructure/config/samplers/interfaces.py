@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 
 
 @runtime_checkable
@@ -36,14 +36,12 @@ class ISettingsSampler(Protocol):
     ready for optimization workflows.
     """
 
-    def sample(
-        self, trial: OptunaTrialProtocol, base_settings: OptimizationWorkflowConfig
-    ) -> OptimizationWorkflowConfig:
+    def sample(self, trial: OptunaTrialProtocol, base_settings: SearchJobConfig) -> SearchJobConfig:
         """Sample hyperparameters and return complete settings.
 
         Args:
             trial: Optimization trial object (e.g., Optuna trial)
-            base_settings: Base optimization workflow configuration with concrete default values
+            base_settings: Base search job configuration with concrete default values
 
         Returns:
             Settings with sampled hyperparameters applied
@@ -58,9 +56,7 @@ class NullSettingsSampler(ISettingsSampler):
     Follows SOLID principles by providing same interface.
     """
 
-    def sample(
-        self, trial: OptunaTrialProtocol, base_settings: OptimizationWorkflowConfig
-    ) -> OptimizationWorkflowConfig:
+    def sample(self, trial: OptunaTrialProtocol, base_settings: SearchJobConfig) -> SearchJobConfig:
         """Return base settings unchanged.
 
         Args:

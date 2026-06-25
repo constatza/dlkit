@@ -27,8 +27,8 @@ from dlkit.engine.workflows.optimization.services import (
 from dlkit.engine.workflows.optimization.value_objects import (
     OptimizationDirection,
 )
-from dlkit.infrastructure.config.optuna_settings import OptunaSettings
 from dlkit.infrastructure.config.samplers.optuna_sampler import OptunaSettingsSampler
+from dlkit.infrastructure.config.search_settings import CategoricalParam, SearchSettings
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -73,37 +73,37 @@ class TestSamplerValidSpecs:
 
     def test_choices_dict_is_range_spec(self) -> None:
         sampler = OptunaSettingsSampler(
-            OptunaSettings(enabled=True, model={"x": {"choices": [2, 4]}})
+            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
         )
         assert sampler._is_range_specification({"choices": [2, 4]})
 
     def test_low_high_dict_is_range_spec(self) -> None:
         sampler = OptunaSettingsSampler(
-            OptunaSettings(enabled=True, model={"x": {"low": 1, "high": 10}})
+            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
         )
         assert sampler._is_range_specification({"low": 1, "high": 10})
 
     def test_bare_list_is_not_range_spec(self) -> None:
         sampler = OptunaSettingsSampler(
-            OptunaSettings(enabled=True, model={"x": {"choices": [2, 4]}})
+            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
         )
         assert not sampler._is_range_specification([2, 4])
 
     def test_choices_list_of_lists_raises_validation_error(self) -> None:
         """Structured categorical choices should be rejected at config validation time."""
-        from dlkit.infrastructure.config.search_settings import CategoricalParam
-
         with pytest.raises(ValidationError):
             CategoricalParam.model_validate({"type": "categorical", "choices": [[1, 2], [3, 4]]})
 
     def test_sampler_populates_trial_params_with_choices_spec(self) -> None:
         import optuna
 
-        optuna_settings = OptunaSettings(enabled=True, model={"hidden_size": {"choices": [2, 4]}})
-        sampler = OptunaSettingsSampler(optuna_settings)
+        search_settings = SearchSettings(
+            space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+        )
+        sampler = OptunaSettingsSampler(search_settings)
         study = optuna.create_study(direction="minimize")
         optuna_trial = study.ask()
-        sampler.sample(optuna_trial, SimpleNamespace(OPTUNA=optuna_settings))
+        sampler.sample(optuna_trial, SimpleNamespace(search=search_settings))
 
         assert "hidden_size" in optuna_trial.params
         assert optuna_trial.params["hidden_size"] in (2, 4)
@@ -139,7 +139,9 @@ class TestHyperparametersStoredOnTrial:
         orchestrator = self._make_orchestrator(minimal_training_result)
 
         base_settings = SimpleNamespace(
-            OPTUNA=OptunaSettings(enabled=True, model={"hidden_size": {"choices": [2, 4]}}),
+            search=SearchSettings(
+                space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+            ),
         )
 
         result = orchestrator.execute_optimization(
@@ -164,7 +166,9 @@ class TestHyperparametersStoredOnTrial:
         orchestrator = self._make_orchestrator(minimal_training_result)
 
         base_settings = SimpleNamespace(
-            OPTUNA=OptunaSettings(enabled=True, model={"hidden_size": {"choices": [2, 4]}}),
+            search=SearchSettings(
+                space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+            ),
         )
 
         result = orchestrator.execute_optimization(

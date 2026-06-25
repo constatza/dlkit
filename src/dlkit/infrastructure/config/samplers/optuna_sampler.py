@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import cast
 
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.optuna_settings import OptunaSettings
-from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+from dlkit.infrastructure.config.job_config import SearchJobConfig
+from dlkit.infrastructure.config.search_settings import SearchSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .interfaces import ISettingsSampler, NullSettingsSampler, OptunaTrialProtocol
@@ -17,45 +17,42 @@ logger = get_logger(__name__)
 class OptunaSettingsSampler:
     """Optuna implementation of settings sampling following SRP.
 
-    Single Responsibility: Sample hyperparameters from OPTUNA.model ranges
-    and produce complete GeneralSettings ready for workflows.
+    Single Responsibility: Sample hyperparameters from search.space ranges
+    and produce a complete SearchJobConfig ready for workflows.
 
-    This class obsoletes HyperParameterSettings.sample() method to maintain
-    strict separation of concerns - settings classes only hold configuration,
-    this class performs sampling operations.
+    This class maintains strict separation of concerns - settings classes only
+    hold configuration, this class performs sampling operations.
     """
 
-    def __init__(self, optuna_settings: OptunaSettings):
-        """Initialize with Optuna configuration.
+    def __init__(self, search_settings: SearchSettings):
+        """Initialize with search configuration.
 
         Args:
-            optuna_settings: OPTUNA configuration containing model ranges
+            search_settings: Search configuration containing the hyperparameter space
         """
-        self._optuna_settings = optuna_settings
-        self._validate_optuna_settings()
+        self._search_settings = search_settings
+        self._validate_search_settings()
 
-    def sample(
-        self, trial: OptunaTrialProtocol, base_settings: OptimizationWorkflowConfig
-    ) -> OptimizationWorkflowConfig:
-        """Sample hyperparameters from OPTUNA.model and merge into base settings.
+    def sample(self, trial: OptunaTrialProtocol, base_settings: SearchJobConfig) -> SearchJobConfig:
+        """Sample hyperparameters from search.space and merge into base settings.
 
         Args:
             trial: Optuna trial object for suggestions
-            base_settings: Base optimization workflow configuration with concrete default values
+            base_settings: Base search job configuration with concrete default values
 
         Returns:
-            Settings with sampled hyperparameters applied to MODEL section
+            Settings with sampled hyperparameters applied to model section
 
         Raises:
-            ValueError: If OPTUNA configuration is invalid
+            ValueError: If search configuration is invalid
         """
         try:
-            # Return unchanged if no model ranges defined
-            if not self._optuna_settings.has_model_ranges:
-                logger.debug("No OPTUNA.model ranges defined, returning base settings")
+            # Return unchanged if no search space defined
+            if not self._search_settings.space:
+                logger.debug("No search.space defined, returning base settings")
                 return base_settings
 
-            # Sample hyperparameters from OPTUNA.model ranges
+            # Sample hyperparameters from search.space
             sampled_params = self._sample_model_parameters(trial)
 
             if not sampled_params:
@@ -72,7 +69,7 @@ class OptunaSettingsSampler:
     def _sample_model_parameters(
         self, trial: OptunaTrialProtocol
     ) -> dict[str, str | int | float | bool]:
-        """Sample model parameters from OPTUNA.model ranges.
+        """Sample model parameters from search.space.
 
         Args:
             trial: Optuna trial object
@@ -82,7 +79,8 @@ class OptunaSettingsSampler:
         """
         sampled_params = {}
 
-        for param_path, range_spec in self._optuna_settings.model.items():
+        for param_path, space_param in self._search_settings.space.items():
+            range_spec = space_param.model_dump()
             if self._is_range_specification(range_spec):
                 try:
                     value = self._get_optuna_suggestion(trial, param_path, range_spec)
@@ -91,38 +89,38 @@ class OptunaSettingsSampler:
                 except Exception as e:
                     logger.warning("Failed to sample '{}': {}", param_path, e)
             else:
-                # Use concrete value if not a range specification
-                sampled_params[param_path] = range_spec
+                # Use constant value for non-range specs
+                sampled_params[param_path] = space_param.model_dump().get("value", range_spec)
                 logger.debug("Using concrete value for '{}'", param_path)
 
         return sampled_params
 
     def _apply_sampled_parameters(
         self,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
         sampled_params: dict[str, str | int | float | bool],
-    ) -> OptimizationWorkflowConfig:
-        """Apply sampled parameters to MODEL section of base settings.
+    ) -> SearchJobConfig:
+        """Apply sampled parameters to model section of base settings.
 
         Args:
-            base_settings: Base configuration settings
+            base_settings: Base search job configuration
             sampled_params: Dictionary of sampled parameter values
 
         Returns:
             Updated settings with sampled parameters
         """
-        if not base_settings.MODEL:
-            logger.debug("No MODEL in base settings, cannot apply sampled parameters")
+        if not getattr(base_settings, "model", None):
+            logger.debug("No model in base settings, cannot apply sampled parameters")
             return base_settings
 
         try:
-            # Patch MODEL with sampled parameters using compile_mixed_overrides semantics
-            updated_model = patch_model(base_settings.MODEL, sampled_params)
+            # Patch model with sampled parameters using compile_mixed_overrides semantics
+            updated_model = patch_model(base_settings.model, sampled_params)
 
-            # Return new settings with updated MODEL
-            result = base_settings.patch({"MODEL": updated_model})
+            # Return new settings with updated model
+            result = base_settings.model_copy(update={"model": updated_model})
 
-            logger.debug("Applied {} sampled parameters to MODEL", len(sampled_params))
+            logger.debug("Applied {} sampled parameters to model", len(sampled_params))
             return result
 
         except Exception as e:
@@ -166,36 +164,10 @@ class OptunaSettingsSampler:
         if not isinstance(range_spec, dict):
             raise ValueError(f"Invalid range specification for {param_name}: {range_spec}")
 
+        param_type = range_spec.get("type")
         low = range_spec.get("low")
         high = range_spec.get("high")
         choices = range_spec.get("choices")
-
-        if low and high and choices:
-            raise ValueError(
-                f"You have defined mutually exclusive hyperparameter choices for {param_name}: "
-                f"`low`, `high` are incompatible with `choices`"
-            )
-
-        # Handle integer/float ranges
-        if low is not None and high is not None:
-            step_val = range_spec.get("step", 1)
-            log_val = range_spec.get("log", False)
-            # Determine if this is an integer or float range
-            if all(isinstance(val, int) for val in [low, high, step_val]):
-                return trial.suggest_int(
-                    param_name,
-                    low=cast(int, low),
-                    high=cast(int, high),
-                    step=cast(int, step_val),
-                    log=cast(bool, log_val),
-                )
-            return trial.suggest_float(
-                param_name,
-                low=cast(float, low),
-                high=cast(float, high),
-                step=cast(float, step_val) if step_val else None,
-                log=cast(bool, log_val),
-            )
 
         # Handle categorical choices
         if choices is not None:
@@ -203,34 +175,54 @@ class OptunaSettingsSampler:
                 raise ValueError(f"Choices must be list or tuple for {param_name}: {choices}")
             return trial.suggest_categorical(param_name, choices=list(choices))
 
+        # Handle integer/float ranges
+        if low is not None and high is not None:
+            log_val = param_type in ("log_float", "log_int")
+            step_val = range_spec.get("step")
+            if param_type in ("int", "log_int"):
+                return trial.suggest_int(
+                    param_name,
+                    low=cast(int, low),
+                    high=cast(int, high),
+                    step=cast(int, step_val) if step_val is not None else 1,
+                    log=log_val,
+                )
+            return trial.suggest_float(
+                param_name,
+                low=cast(float, low),
+                high=cast(float, high),
+                step=cast(float, step_val) if step_val is not None else None,
+                log=log_val,
+            )
+
         raise ValueError(f"Invalid hyperparameter specification for {param_name}: {range_spec}")
 
-    def _validate_optuna_settings(self) -> None:
-        """Validate that OPTUNA settings are properly configured.
+    def _validate_search_settings(self) -> None:
+        """Validate that search settings are properly configured.
 
         Raises:
             ValueError: If settings are invalid
         """
-        if not self._optuna_settings:
-            raise ValueError("OptunaSettings cannot be None")
+        if not self._search_settings:
+            raise ValueError("SearchSettings cannot be None")
 
-        if not hasattr(self._optuna_settings, "model"):
-            raise ValueError("OPTUNA settings must have 'model' attribute")
+        if not hasattr(self._search_settings, "space"):
+            raise ValueError("SearchSettings must have 'space' attribute")
 
-        if not isinstance(self._optuna_settings.model, dict):
-            raise ValueError("OPTUNA.model must be a dictionary")
+        if not isinstance(self._search_settings.space, dict):
+            raise ValueError("search.space must be a dictionary")
 
 
-def create_settings_sampler(optuna_settings: OptunaSettings | None = None) -> ISettingsSampler:
+def create_settings_sampler(search_settings: SearchSettings | None = None) -> ISettingsSampler:
     """Factory function to create appropriate settings sampler.
 
     Args:
-        optuna_settings: OPTUNA configuration, if None uses NullSettingsSampler
+        search_settings: Search configuration; if None or empty space uses NullSettingsSampler.
 
     Returns:
         ISettingsSampler instance
     """
-    if optuna_settings is None or not optuna_settings.enabled:
+    if search_settings is None or not search_settings.space:
         return NullSettingsSampler()
 
-    return OptunaSettingsSampler(optuna_settings)
+    return OptunaSettingsSampler(search_settings)

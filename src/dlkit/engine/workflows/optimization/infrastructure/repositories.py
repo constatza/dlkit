@@ -35,36 +35,27 @@ def _has_backend_config(settings: Any) -> bool:
     """
     if isinstance(settings, SearchJobConfig):
         return True
-    return getattr(settings, "OPTUNA", None) is not None
+    return getattr(settings, "search", None) is not None
 
 
 def _sample_trial_params(optuna_trial: Any, base_settings: Any) -> None:
-    """Sample hyperparameters into ``optuna_trial.params`` from any supported settings type.
+    """Sample hyperparameters into ``optuna_trial.params`` from settings.search.space.
 
-    For ``SearchJobConfig`` (new-style), uses ``suggest_from_space`` with the typed
-    ``search.space``.  For duck-typed legacy settings (tests) that expose an ``OPTUNA``
-    attribute, delegates to the old-style ``create_settings_sampler`` path.
+    Works for both ``SearchJobConfig`` (`.search` is a ``SearchSettings``) and
+    duck-typed stubs used in tests (``SimpleNamespace(search=SearchSettings(...))``).
 
     Side effects: mutates ``optuna_trial.params`` via Optuna suggest_* calls.
 
     Args:
         optuna_trial: An Optuna trial object whose ``params`` will be populated.
-        base_settings: Settings object, either a ``SearchJobConfig`` or a duck-typed
-            alternative with an ``OPTUNA`` section.
+        base_settings: Settings object with a ``.search`` attribute whose ``.space``
+            is a mapping of parameter names to typed param specs.
     """
-    if isinstance(base_settings, SearchJobConfig):
-        from dlkit.engine.workflows.optimization.infrastructure.applicators import (
-            suggest_from_space,
-        )
+    from dlkit.engine.workflows.optimization.infrastructure.applicators import suggest_from_space
 
-        suggest_from_space(optuna_trial, base_settings.search.space)
-        return
-
-    from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
-
-    sampler_config = getattr(base_settings, "OPTUNA", None)
-    settings_sampler = create_settings_sampler(sampler_config)
-    settings_sampler.sample(optuna_trial, base_settings)
+    search = getattr(base_settings, "search", None)
+    if search and search.space:
+        suggest_from_space(optuna_trial, search.space)
 
 
 class _OptunaStudyRegistry:
