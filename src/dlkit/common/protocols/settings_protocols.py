@@ -12,25 +12,6 @@ from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
-class SessionSettingsProtocol(Protocol):
-    """Minimal session contract — exposes the fields accessed through the abstract type."""
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def workflow(self) -> str: ...
-
-
-@runtime_checkable
-class OptunaSettingsProtocol(Protocol):
-    """Minimal Optuna contract — exposes the fields accessed through the abstract type."""
-
-    @property
-    def enabled(self) -> bool: ...
-
-
-@runtime_checkable
 class ModelSettingsProtocol(Protocol):
     """Minimal model contract — exposes the fields accessed through the abstract type."""
 
@@ -48,19 +29,7 @@ class BaseSettingsProtocol(Protocol):
     """
 
     @property
-    def SESSION(self) -> SessionSettingsProtocol | None: ...
-
-    @property
     def MODEL(self) -> ModelSettingsProtocol | None: ...
-
-    @property
-    def DATAMODULE(self) -> object: ...
-
-    @property
-    def DATASET(self) -> object: ...
-
-    @property
-    def EXTRAS(self) -> object: ...
 
     @property
     def is_training(self) -> bool: ...
@@ -71,10 +40,6 @@ class BaseSettingsProtocol(Protocol):
     @property
     def has_data_config(self) -> bool: ...
 
-    def get_datamodule_config(self) -> object: ...
-
-    def get_dataset_config(self) -> object: ...
-
 
 @runtime_checkable
 class TrainingSettingsProtocol(BaseSettingsProtocol, Protocol):
@@ -84,16 +49,7 @@ class TrainingSettingsProtocol(BaseSettingsProtocol, Protocol):
     def TRAINING(self) -> object: ...
 
     @property
-    def MLFLOW(self) -> object: ...
-
-    @property
-    def OPTUNA(self) -> OptunaSettingsProtocol | None: ...
-
-    @property
     def mlflow_enabled(self) -> bool: ...
-
-    @property
-    def optuna_enabled(self) -> bool: ...
 
     @property
     def has_training_config(self) -> bool: ...

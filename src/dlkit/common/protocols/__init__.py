@@ -4,8 +4,6 @@ from .model_protocols import IDataModule, ITrainableModule
 from .settings_protocols import (
     BaseSettingsProtocol,
     ModelSettingsProtocol,
-    OptunaSettingsProtocol,
-    SessionSettingsProtocol,
     TrainingSettingsProtocol,
 )
 
@@ -14,7 +12,5 @@ __all__ = [
     "ITrainableModule",
     "BaseSettingsProtocol",
     "ModelSettingsProtocol",
-    "OptunaSettingsProtocol",
-    "SessionSettingsProtocol",
     "TrainingSettingsProtocol",
 ]
