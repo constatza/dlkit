@@ -9,7 +9,6 @@ instead of mixing internal module paths.
 
 from dlkit.infrastructure.config import *  # noqa: F403
 from dlkit.infrastructure.config import __all__ as _CONFIG_ALL
-from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.io.config_loader import (
     load_inference_config_eager as load_inference_config,
 )
@@ -22,7 +21,6 @@ from dlkit.infrastructure.io.config_loader import (
 
 __all__ = [
     *_CONFIG_ALL,
-    "load_job",
     "load_training_config",
     "load_inference_config",
     "load_optimization_config",
