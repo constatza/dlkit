@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from dlkit.common import ConfigurationError, InferenceResult, TrainingResult
-from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.interfaces.cli.adapters.config_adapter import (
     load_config,
     validate_config_path,
@@ -29,13 +28,14 @@ class TestConfigAdapter:
         sample_config_path: Path,
     ) -> None:
         """Test loading valid TOML configuration file."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
         settings = load_config(sample_config_path)
 
-        # New architecture returns protocol-compliant settings objects
-        assert isinstance(settings, BaseSettingsProtocol)
-        assert settings.SESSION is not None
-        assert settings.SESSION.name == "test_session"
+        # New architecture returns a TrainingJobConfig (JobConfig hierarchy)
+        assert isinstance(settings, TrainingJobConfig)
+        assert settings.experiment is not None
+        assert settings.experiment.name == "test_session"
 
     def test_load_config_with_nonexistent_file(
         self,
@@ -102,10 +102,8 @@ features = "not a list"  # Should be a list of dicts
         sample_config_path: Path,
     ) -> None:
         """Test load_config handles unexpected exceptions gracefully."""
-        with patch(
-            "dlkit.interfaces.cli.adapters.config_adapter.load_settings"
-        ) as mock_load_settings:
-            mock_load_settings.side_effect = RuntimeError("Unexpected error")
+        with patch("dlkit.interfaces.cli.adapters.config_adapter.load_job") as mock_load_job:
+            mock_load_job.side_effect = RuntimeError("Unexpected error")
 
             with pytest.raises(ConfigurationError) as exc_info:
                 load_config(sample_config_path)
@@ -376,9 +374,11 @@ class TestConfigAdapterIntegration:
 
         error = exc_info.value
         assert isinstance(error, ConfigurationError)
-        # The error will be about unknown sections since load_settings validates known sections
+        # The error will be about missing [run] section or invalid config structure
         assert (
-            "validation error" in error.message.lower() or "failed to load" in error.message.lower()
+            "invalid configuration" in error.message.lower()
+            or "failed to load" in error.message.lower()
+            or "run.type" in error.message.lower()
         )
 
     def test_load_config_with_minimal_configuration(
@@ -386,22 +386,33 @@ class TestConfigAdapterIntegration:
         tmp_path: Path,
     ) -> None:
         """Test loading minimal valid configuration."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
         config_path = tmp_path / "minimal_config.toml"
         config_path.write_text("""
-[SESSION]
-name = "minimal"
-workflow = "train"
+[run]
+type = "train"
 
-[TRAINING]
-epochs = 1
+[experiment]
+name = "minimal"
+
+[model]
+name = "Linear"
+module_path = "torch.nn"
+
+[data]
+root = "."
+
+[training]
+loss = "mse"
 """)
 
         settings = load_config(config_path)
 
-        # New architecture returns protocol-compliant settings objects
-        assert isinstance(settings, BaseSettingsProtocol)
-        assert settings.SESSION is not None
-        assert settings.SESSION.name == "minimal"
+        # New architecture returns a TrainingJobConfig (JobConfig hierarchy)
+        assert isinstance(settings, TrainingJobConfig)
+        assert settings.experiment is not None
+        assert settings.experiment.name == "minimal"
 
     def test_validate_config_path_with_real_files(
         self,

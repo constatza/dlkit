@@ -5,10 +5,15 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import TypeVar, cast
 
 from dlkit.common.errors import WorkflowError
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 
 from ._override_types import RuntimeOverrideModel
 from ._overrides import apply_runtime_overrides, build_runtime_overrides, validate_runtime_overrides
@@ -16,30 +21,32 @@ from ._settings import WorkflowSettings
 
 T = TypeVar("T")
 
+type _AnyOverrideValue = str | int | float | bool | None | dict[str, str]
+
 
 @dataclass(frozen=True, slots=True)
 class EntrypointContext:
     """Prepared runtime settings plus shared execution metadata."""
 
-    settings: WorkflowConfig
+    settings: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig
     start_time: float = field(default_factory=time.time)
 
     @classmethod
     def _normalize_overrides(
-        cls, overrides: Mapping[str, Any] | RuntimeOverrideModel | None
-    ) -> dict[str, Any]:
+        cls, overrides: Mapping[str, _AnyOverrideValue] | RuntimeOverrideModel | None
+    ) -> dict[str, _AnyOverrideValue]:
         """Normalize override payloads to a plain dict for runtime helpers."""
         if overrides is None:
             return {}
         if isinstance(overrides, RuntimeOverrideModel):
-            return overrides.to_runtime_kwargs()
+            return cast(dict[str, _AnyOverrideValue], overrides.to_runtime_kwargs())
         return dict(overrides)
 
     @classmethod
     def prepare(
         cls,
         raw_settings: WorkflowSettings,
-        overrides: Mapping[str, Any] | RuntimeOverrideModel | None,
+        overrides: Mapping[str, _AnyOverrideValue] | RuntimeOverrideModel | None,
         *,
         workflow_name: str,
     ) -> EntrypointContext:

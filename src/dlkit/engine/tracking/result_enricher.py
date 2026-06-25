@@ -6,16 +6,11 @@ Single Responsibility: Add MLflow metadata to training results.
 from __future__ import annotations
 
 from dlkit.common import TrainingResult
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .interfaces import IRunContext
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = object
 
 logger = get_logger(__name__)
 

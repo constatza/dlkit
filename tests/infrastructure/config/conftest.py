@@ -62,72 +62,53 @@ def sample_build_context() -> Any:
 
 @pytest.fixture
 def sample_general_settings_data() -> dict[str, Any]:
-    """Sample dataflow for GeneralSettings testing.
+    """Sample data for TrainingJobConfig testing.
 
     Returns:
-        Dict[str, Any]: Complete general settings configuration
+        Dict[str, Any]: Complete job configuration using new lowercase-section structure.
     """
     return {
-        "SESSION": {
-            "name": "test_general_session",
-            "workflow": "train",
-            "seed": 42,
-            "precision": "single",
+        "run": {"type": "train", "seed": 1, "precision": "32"},
+        "experiment": {"name": "test-experiment"},
+        "model": {
+            "class": "ConstantWidthFFNN",
+            "module_path": "dlkit.domain.nn",
+            "params": {"hidden_size": 64},
         },
-        "MODEL": {
-            "name": "TestModel",
-            "module_path": "dlkit.domain.nn.ffnn",
-            "heads": 4,
-            "num_layers": 3,
-            "latent_size": 128,
+        "data": {
+            "class": "FlexibleDataset",
+            "root": "/tmp/data",
+            "batch_size": 32,
+            "features": [{"name": "x", "path": "X.npy", "model_input": True}],
+            "targets": [{"name": "y", "path": "y.npy"}],
         },
-        "MLFLOW": {
-            "enabled": True,
-            "experiment_name": "test_general_experiment",
-        },
-        "OPTUNA": {"enabled": True, "n_trials": 50},
-        "DATAMODULE": {
-            "name": "TestDataModule",
-            "module_path": "dlkit.engine.adapters.lightning.datamodules",
-            "dataloader": {
-                "batch_size": 64,
-            },
-        },
-        "DATASET": {
-            "name": "TestDataset",
-            "module_path": "dlkit.engine.data.datasets",
-        },
-        "TRAINING": {
-            "epochs": 20,
-            "trainer": {"accelerator": "cpu", "devices": 1},
-            "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+        "training": {
+            "loss": "mse",
+            "stopping": {"monitor": "val/loss", "patience": 10, "direction": "min"},
+            "trainer": {"max_epochs": 100, "accelerator": "cpu"},
+            "optimizer": {"name": "AdamW", "lr": 1e-3},
         },
     }
 
 
 @pytest.fixture
 def inference_config_data(tmp_path) -> dict[str, Any]:
-    """Configuration dataflow for inference mode testing.
+    """Configuration data for inference mode testing.
 
     Args:
         tmp_path: Pytest temporary path fixture
 
     Returns:
-        Dict[str, Any]: Inference mode configuration
+        Dict[str, Any]: Inference mode configuration using new lowercase-section structure.
     """
     # Create a temporary checkpoint file for validation
     checkpoint_file = tmp_path / "model.ckpt"
     checkpoint_file.write_text("fake checkpoint")
 
     return {
-        "SESSION": {
-            "name": "inference_session",
-            "workflow": "inference",
-            "seed": 123,
-            "precision": "single",
-        },
-        "MODEL": {
-            "name": "InferenceModel",
+        "run": {"type": "predict", "seed": 123},
+        "model": {
+            "class": "InferenceModel",
             "module_path": "dlkit.domain.nn.ffnn",
             "checkpoint": str(checkpoint_file),
         },
@@ -136,20 +117,15 @@ def inference_config_data(tmp_path) -> dict[str, Any]:
 
 @pytest.fixture
 def invalid_inference_config_data() -> dict[str, Any]:
-    """Invalid configuration dataflow for inference mode (missing checkpoint).
+    """Invalid configuration data for inference mode (missing checkpoint).
 
     Returns:
-        Dict[str, Any]: Invalid inference configuration
+        Dict[str, Any]: Invalid inference configuration using new lowercase-section structure.
     """
     return {
-        "SESSION": {
-            "name": "invalid_inference",
-            "workflow": "inference",
-            "seed": 42,
-            "precision": "single",
-        },
-        "MODEL": {
-            "name": "InferenceModel",
+        "run": {"type": "predict", "seed": 42},
+        "model": {
+            "class": "InferenceModel",
             "module_path": "dlkit.domain.nn.ffnn",
             # Missing required checkpoint for inference
         },
@@ -161,80 +137,59 @@ def sample_toml_config_advanced() -> str:
     """Advanced TOML configuration for testing.
 
     Returns:
-        str: TOML configuration content with complex structure
+        str: TOML configuration content with complex structure using new lowercase-section format.
     """
     return """
-[SESSION]
-name = "advanced_session"
-workflow = "train"
+[run]
+type = "train"
 seed = 999
-precision = "single"
+precision = "32"
 
-[MODEL]
-name = "AdvancedModel"
+[experiment]
+name = "advanced_experiment"
+
+[model]
+class = "AdvancedModel"
 module_path = "dlkit.domain.nn.ffnn"
-heads = 8
-num_layers = 6
-latent_size = 256
-in_channels = 3
-out_channels = 10
+params = {heads = 8, num_layers = 6, latent_size = 256, in_channels = 3, out_channels = 10}
 
-[MLFLOW]
-enabled = true
-experiment_name = "advanced_experiment"
-run_name = "advanced_run_001"
-register_model = true
-
-[OPTUNA]
-enabled = true
-n_trials = 200
-direction = "minimize"
-
-[OPTUNA.sampler]
-name = "TPESampler"
-seed = 42
-
-[DATAMODULE]
-name = "AdvancedDataModule"
-module_path = "dlkit.engine.adapters.lightning.datamodules"
+[data]
+class = "AdvancedDataset"
+module_path = "dlkit.engine.data.datasets"
 batch_size = 128
 num_workers = 8
-
-[DATAMODULE.dataloader]
 shuffle = true
 pin_memory = true
-num_workers = 8
 
-[DATASET]
-name = "AdvancedDataset"
-module_path = "dlkit.engine.data.datasets"
-train_split = 0.7
-val_split = 0.2
-test_split = 0.1
+[data.splits]
+train = 0.7
+val = 0.2
+test = 0.1
 
-[TRAINING]
-epochs = 100
-# gradient_clip_val should be in trainer section
+[training]
+loss = "mse"
 
-[TRAINING.trainer]
+[training.trainer]
 accelerator = "gpu"
 devices = 2
 strategy = "ddp"
-precision = "16-mixed"
+max_epochs = 100
 
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer]
 name = "AdamW"
 lr = 0.0001
 weight_decay = 0.01
 
-[TRAINING.scheduler]
+[training.scheduler]
 name = "CosineAnnealingLR"
 T_max = 100
 
-[PATHS]
-output_dir = "output/advanced"
-checkpoints_dir = "checkpoints/advanced"
-figures_dir = "figures/advanced"
+[tracking]
+backend = "mlflow"
+
+[tracking.mlflow]
+experiment_name = "advanced_experiment"
+run_name = "advanced_run_001"
 """
 
 
@@ -260,24 +215,24 @@ module_path = "test"
 
 @pytest.fixture
 def optuna_model_config() -> str:
-    """TOML configuration with Optuna model settings.
+    """TOML configuration with Optuna/search job settings.
 
     Returns:
-        str: TOML with Optuna model configuration
+        str: TOML with search job configuration using new lowercase-section format.
     """
     return """
-[SESSION]
-name = "optuna_session"
-workflow = "train"
+[run]
+type = "search"
+seed = 42
 
-[MODEL]
-name = "OptunaModel"
+[experiment]
+name = "optuna_experiment"
+
+[model]
+class = "OptunaModel"
 module_path = "dlkit.domain.nn.ffnn"
 
-[OPTUNA]
-enabled = true
+[search]
 n_trials = 10
-
-# OPTUNA model_params would be configured differently in the new architecture
-# This test may need to be updated for the new hyperparameter handling
+direction = "minimize"
 """

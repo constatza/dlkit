@@ -23,16 +23,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .workflow_configs import (
-        InferenceWorkflowConfig,
-        OptimizationWorkflowConfig,
-        TrainingWorkflowConfig,
-    )
-
 from .data_entries import PathBasedEntry, ValueBasedEntry
 from .entry_base import DataEntry
 from .enums import DatasetFamily
+
+if TYPE_CHECKING:
+    from .job_config import InferenceJobConfig, JobConfig, SearchJobConfig, TrainingJobConfig
 
 
 def _validate_entry_paths(entries: Iterable[DataEntry], role_label: str) -> None:
@@ -135,25 +131,24 @@ def _check_required_sections(config: object, sections: list[str], workflow: str)
         )
 
 
-def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
+def validate_training_config_complete(config: TrainingJobConfig) -> None:
     """Validate that training config has all required sections for component building.
 
     This validator ensures the config is ready for BuildFactory.build_components().
     It checks:
-    1. Required sections are present (DATAMODULE, DATASET, MODEL)
-    2. DATASET has at least one feature or target (new config format only)
-    3. All feature/target paths exist (if provided)
+    1. data section is present with at least one feature or target
+    2. All feature/target paths exist (if provided)
+    3. model.checkpoint path exists if provided
 
     Args:
-        config: Training workflow configuration
+        config: Training job configuration
 
     Raises:
         ConfigValidationError: If config is incomplete or invalid
 
     Example:
         ```python
-        config = TrainingWorkflowConfig.model_validate(toml_dict)
-        config = config.patch({"DATASET": dataset_settings})
+        config = TrainingJobConfig.model_validate(toml_dict)
 
         # Validate before building
         validate_training_config_complete(config)  # Raises if incomplete
@@ -162,115 +157,53 @@ def validate_training_config_complete(config: TrainingWorkflowConfig) -> None:
         components = BuildFactory().build_components(config)
         ```
     """
-    _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "training")
-
-    # Only FlexibleDataset configs require features/targets; graph datasets use their own schema.
-    if config.DATASET is not None:
-        _validate_flexible_dataset_entries(config.DATASET)
-
-        # Validate feature paths exist and placeholders are resolved
-        for i, feature in enumerate(config.DATASET.features):
-            _validate_entry_has_data(feature, i, "Feature")
-
-        # Validate target paths exist and placeholders are resolved
-        for i, target in enumerate(config.DATASET.targets):
-            _validate_entry_has_data(target, i, "Target")
-
-    # Validate MODEL checkpoint path if provided
-    if config.MODEL is not None and config.MODEL.checkpoint is not None:
-        checkpoint_path = _coerce_path(config.MODEL.checkpoint)
-        if checkpoint_path is not None:
-            _assert_path_exists(checkpoint_path, "Model checkpoint")
+    _validate_job_config_data(config)
 
 
-def validate_inference_config_complete(config: InferenceWorkflowConfig) -> None:
+def validate_inference_config_complete(config: InferenceJobConfig) -> None:
     """Validate that inference config has all required sections.
 
     This validator ensures the config is ready for inference execution. It checks:
-    1. SESSION.workflow == "inference"
-    2. MODEL.checkpoint is provided and exists
-    3. For batch inference: DATAMODULE and DATASET present with valid paths
+    1. model.checkpoint is provided and exists
+    2. For batch inference: data present with valid paths
 
     Args:
-        config: Inference workflow configuration
+        config: Inference job configuration
 
     Raises:
         ConfigValidationError: If config is incomplete or invalid
 
     Example:
         ```python
-        config = InferenceWorkflowConfig.model_validate(toml_dict)
+        config = InferenceJobConfig.model_validate(toml_dict)
 
         # Validate before inference
         validate_inference_config_complete(config)
 
         # Safe to run inference
-        predictor = load_model(config.MODEL.checkpoint)
+        predictor = load_model(config.model.checkpoint)
         ```
     """
-    # Validate inference mode enabled
-    if config.SESSION.workflow != "inference":
-        raise ConfigValidationError(
-            "SESSION.workflow must be 'inference' for inference workflows. "
-            "Add 'workflow = \"inference\"' under [SESSION] section."
-        )
-
-    # Validate checkpoint provided and exists
-    if config.MODEL.checkpoint is None:
-        raise ConfigValidationError(
-            "MODEL.checkpoint is required for inference. "
-            "Add 'checkpoint = \"/path/to/model.ckpt\"' under [MODEL] section."
-        )
-
-    checkpoint_path = _coerce_path(config.MODEL.checkpoint)
-    if checkpoint_path is not None:
-        _assert_path_exists(checkpoint_path, "Model checkpoint")
-
-    # Validate batch inference config if provided
-    if config.DATAMODULE is not None or config.DATASET is not None:
-        # Both must be present for batch inference
-        if config.DATAMODULE is None:
-            raise ConfigValidationError(
-                "DATAMODULE is required when DATASET is provided for batch inference. "
-                "Add [DATAMODULE] section or remove [DATASET] section."
-            )
-        if config.DATASET is None:
-            raise ConfigValidationError(
-                "DATASET is required when DATAMODULE is provided for batch inference. "
-                "Add [DATASET] section or remove [DATAMODULE] section."
-            )
-
-        # Validate dataset has features
-        if not config.DATASET.features:
-            raise ConfigValidationError(
-                "DATASET must have at least one feature for batch inference. "
-                "Add [[DATASET.features]] sections to your config."
-            )
-
-        # Validate feature paths
-        for i, feature in enumerate(config.DATASET.features):
-            _validate_path_entry(feature, i, "Feature")
+    _validate_inference_job_config(config)
 
 
-def validate_optimization_config_complete(config: OptimizationWorkflowConfig) -> None:
+def validate_optimization_config_complete(config: SearchJobConfig) -> None:
     """Validate that optimization config has all required sections.
 
     This validator ensures the config is ready for hyperparameter optimization. It checks:
-    1. Required sections present (DATAMODULE, DATASET, MODEL)
-    2. OPTUNA.enabled is True
-    3. OPTUNA.model dict has parameter ranges
-    4. DATASET has valid data
-    5. All paths exist
+    1. data section is present with valid entries
+    2. All paths exist
+    3. SearchJobConfig.space is non-empty (validated by model validator)
 
     Args:
-        config: Optimization workflow configuration
+        config: Search job configuration
 
     Raises:
         ConfigValidationError: If config is incomplete or invalid
 
     Example:
         ```python
-        config = OptimizationWorkflowConfig.model_validate(toml_dict)
+        config = SearchJobConfig.model_validate(toml_dict)
 
         # Validate before optimization
         validate_optimization_config_complete(config)
@@ -279,66 +212,73 @@ def validate_optimization_config_complete(config: OptimizationWorkflowConfig) ->
         study = optimization_service.execute_optimization(config)
         ```
     """
-    # Validate Optuna enabled
-    if not config.OPTUNA.enabled:
-        raise ConfigValidationError(
-            "OPTUNA.enabled must be true for optimization workflows. "
-            "Add 'enabled = true' under [OPTUNA] section."
-        )
-
-    # Validate Optuna has parameter ranges
-    if not config.OPTUNA.model:
-        raise ConfigValidationError(
-            "OPTUNA.model must define hyperparameter search spaces. "
-            "Add [OPTUNA.model] section with parameter ranges. "
-            "Example: [OPTUNA.model]\nlr = [0.0001, 0.01]\nbatch_size = [16, 32, 64]"
-        )
-
-    _check_required_sections(config, ["DATAMODULE", "DATASET", "MODEL"], "optimization")
-
-    # DATASET must have at least one feature or target
-    if config.DATASET is not None:
-        if not config.DATASET.features and not config.DATASET.targets:
-            raise ConfigValidationError(
-                "DATASET must have at least one feature or target for optimization. "
-                "Add [[DATASET.features]] or [[DATASET.targets]] sections."
-            )
-
-        # Validate paths
-        for i, feature in enumerate(config.DATASET.features):
-            _validate_path_entry(feature, i, "Feature")
-
-        for i, target in enumerate(config.DATASET.targets):
-            _validate_path_entry(target, i, "Target")
+    _validate_job_config_data(config)
 
 
 # Convenience function for workflow auto-detection
 def validate_config_complete(
-    config: TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig,
+    config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
 ) -> None:
     """Validate config completeness based on workflow type.
 
-    Auto-detects workflow type and calls appropriate validator.
+    Auto-detects workflow type and calls the appropriate JobConfig validator.
 
     Args:
-        config: Workflow configuration (any type)
+        config: Job configuration
 
     Raises:
         ConfigValidationError: If config is incomplete or invalid
         TypeError: If config type is not recognized
     """
-    from .workflow_configs import InferenceWorkflowConfig, OptimizationWorkflowConfig
+    from .job_config import InferenceJobConfig, JobConfig, SearchJobConfig, TrainingJobConfig
 
-    if isinstance(config, OptimizationWorkflowConfig):
-        validate_optimization_config_complete(config)
-    elif isinstance(config, InferenceWorkflowConfig):
-        validate_inference_config_complete(config)
-    else:
-        validate_training_config_complete(config)
+    if isinstance(config, SearchJobConfig):
+        _validate_search_job_config(config)
+        return
+    if isinstance(config, InferenceJobConfig):
+        _validate_inference_job_config(config)
+        return
+    if isinstance(config, (TrainingJobConfig, JobConfig)):
+        _validate_job_config_data(config)
+        return
+
+    raise TypeError(f"Unsupported config type: {type(config).__name__}")
+
+
+def _validate_search_job_config(config: SearchJobConfig) -> None:
+    """Validate a new-style SearchJobConfig."""
+    _validate_job_config_data(config)
+
+
+def _validate_job_config_data(config: JobConfig) -> None:
+    """Validate data entries in a new-style JobConfig."""
+    if config.data is None:
+        return
+    ds = config.data
+    for i, feature in enumerate(ds.features):
+        _validate_entry_has_data(feature, i, "Feature")
+    for i, target in enumerate(ds.targets):
+        _validate_entry_has_data(target, i, "Target")
+    if config.model is not None and config.model.checkpoint is not None:
+        checkpoint_path = _coerce_path(config.model.checkpoint)
+        if checkpoint_path is not None:
+            _assert_path_exists(checkpoint_path, "Model checkpoint")
+
+
+def _validate_inference_job_config(config: InferenceJobConfig) -> None:
+    """Validate a new-style InferenceJobConfig."""
+    if config.model.checkpoint is None:
+        raise ConfigValidationError(
+            "model.checkpoint is required for inference. "
+            "Add 'checkpoint = \"/path/to/model.ckpt\"' under [model] section."
+        )
+    checkpoint_path = _coerce_path(config.model.checkpoint)
+    if checkpoint_path is not None:
+        _assert_path_exists(checkpoint_path, "Model checkpoint")
 
 
 def validate_runtime_preflight(
-    config: TrainingWorkflowConfig | InferenceWorkflowConfig | OptimizationWorkflowConfig,
+    config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
 ) -> list[str]:
     """Return a list of preflight error messages (empty list means OK).
 
@@ -346,27 +286,25 @@ def validate_runtime_preflight(
     that cannot be validated at parse time.
 
     Args:
-        config: Workflow configuration to check
+        config: Job configuration to check
 
     Returns:
         List of error message strings; empty if all checks pass
     """
-    from .workflow_configs import (
-        InferenceWorkflowConfig,
-        OptimizationWorkflowConfig,
-        TrainingWorkflowConfig,
-    )
+    from .job_config import InferenceJobConfig, SearchJobConfig, TrainingJobConfig
 
     errors: list[str] = []
 
     try:
         match config:
-            case InferenceWorkflowConfig():
-                validate_inference_config_complete(config)
-            case OptimizationWorkflowConfig():
-                validate_optimization_config_complete(config)
-            case TrainingWorkflowConfig():
-                validate_training_config_complete(config)
+            case SearchJobConfig():
+                _validate_search_job_config(config)
+            case InferenceJobConfig():
+                _validate_inference_job_config(config)
+            case TrainingJobConfig():
+                _validate_job_config_data(config)
+            case _:
+                _validate_job_config_data(config)
     except ConfigValidationError as e:
         errors.append(str(e))
 

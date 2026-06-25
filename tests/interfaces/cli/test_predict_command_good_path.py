@@ -251,7 +251,8 @@ class TestPredictHelperFunctions:
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
-        settings = SimpleNamespace(has_dataset_config=True)
+        # Use a namespace with .data attribute (new API uses job.data not has_dataset_config)
+        settings = SimpleNamespace(data=True)
         mock_load_config.return_value = settings
 
         predictor = _make_mock_predictor(feature_names=["x", "z"])

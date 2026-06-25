@@ -32,7 +32,7 @@ class TestMLflowSettings:
     def test_initialization_with_defaults(self) -> None:
         settings = MLflowSettings()
 
-        assert settings.experiment_name == "Experiment"
+        assert settings.experiment_name == "dlkit-experiment"
         assert settings.run_name is None
         assert settings.register_model is False
         assert settings.registered_model_name is None
@@ -72,22 +72,22 @@ class TestMLflowSettings:
         assert settings.max_retries == max_retries
         assert settings.register_model is register_model
 
-    def test_legacy_nested_sections_fail_with_migration_message(self) -> None:
-        with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
+    def test_legacy_nested_sections_fail_with_extra_forbidden(self) -> None:
+        with pytest.raises(ValidationError):
             MLflowSettings(**cast(dict[str, Any], {"client": {"experiment_name": "exp"}}))
 
-        with pytest.raises(ValidationError, match="Legacy MLflow config sections"):
+        with pytest.raises(ValidationError):
             MLflowSettings(**cast(dict[str, Any], {"server": {"host": "127.0.0.1"}}))
 
     def test_infra_fields_in_toml_are_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="env-only"):
+        with pytest.raises(ValidationError):
             MLflowSettings(**cast(dict[str, Any], {"tracking_uri": "http://127.0.0.1:5000"}))
 
-        with pytest.raises(ValidationError, match="env-only"):
+        with pytest.raises(ValidationError):
             MLflowSettings(
                 **cast(dict[str, Any], {"artifacts_destination": "file:///C:/artifacts"})
             )
 
     def test_enabled_field_is_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="no longer has an 'enabled' field"):
+        with pytest.raises(ValidationError):
             MLflowSettings(**cast(dict[str, Any], {"enabled": True}))

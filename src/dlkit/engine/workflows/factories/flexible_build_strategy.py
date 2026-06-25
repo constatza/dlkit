@@ -13,13 +13,14 @@ from dlkit.engine.artifacts import RuntimeArtifactManifest
 from dlkit.engine.data.shape_inference import infer_entry_shapes
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
 
 from .build_strategy import (
-    DATASET_TYPE_FLEXIBLE,
     IBuildStrategy,
     WorkflowSettings,
     _build_datamodule,
+    _get_training_settings,
     build_trainer,
 )
 from .component_builders import build_wrapper_components
@@ -40,30 +41,27 @@ class FlexibleBuildStrategy(IBuildStrategy):
         self._dataset_builder = dataset_builder or DatasetBuilder()
 
     def can_handle(self, settings: WorkflowSettings) -> bool:
-        try:
-            ds_type = getattr(settings.DATASET, "type", None)
-            return ds_type is None or str(ds_type).lower() == DATASET_TYPE_FLEXIBLE
-        except Exception:
+        if settings.data is None:
             return True
+        return settings.data.family in (None, DatasetFamily.FLEXIBLE)
 
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
         context = self._dataset_builder.build_context(settings)
-        ds_settings = with_runtime_module_defaults(settings.DATASET)
+        ds_settings = with_runtime_module_defaults(settings.data)
         if ds_settings is None:
             raise ValueError("DATASET settings are required but not configured")
 
-        configured_features: tuple[DataEntry, ...] = tuple(
-            getattr(ds_settings, "features", ()) or ()
-        )
-        configured_targets: tuple[DataEntry, ...] = tuple(getattr(ds_settings, "targets", ()) or ())
-        training_settings = settings.TRAINING
+        configured_features: tuple[DataEntry, ...] = tuple(ds_settings.features or ())
+        configured_targets: tuple[DataEntry, ...] = tuple(ds_settings.targets or ())
+        training_settings = _get_training_settings(settings)
         if training_settings is None:
             raise ValueError("TRAINING settings are required but not configured")
+        loss_for_selection = training_settings.loss
         selection = self._feature_pipeline.select(
             configured_features,
             configured_targets,
-            getattr(training_settings, "loss_function", None),
-            tuple(getattr(training_settings, "metrics", ()) or ()),
+            loss_for_selection,
+            tuple(training_settings.metrics or ()),
         )
 
         selected_feature_names = sorted(
@@ -100,7 +98,7 @@ class FlexibleBuildStrategy(IBuildStrategy):
                 {entry.name: entry for entry in entry_configs if entry.name is not None}
             )
 
-        model_settings = with_runtime_module_defaults(settings.MODEL)
+        model_settings = with_runtime_module_defaults(settings.model)
         if model_settings is None:
             raise ValueError("MODEL settings are required but not configured")
 
@@ -109,11 +107,10 @@ class FlexibleBuildStrategy(IBuildStrategy):
 
         wrapper_kwargs: dict[str, Any] = {
             "optimizer": training_settings.optimizer,
-            "loss_function": training_settings.loss_function,
             "metrics": training_settings.metrics,
         }
-        if training_settings.scheduler is not None:
-            wrapper_kwargs["scheduler"] = training_settings.scheduler
+        if loss_for_selection is not None:
+            wrapper_kwargs["loss_function"] = loss_for_selection
         wrapper_settings = with_runtime_module_defaults(WrapperComponentSettings(**wrapper_kwargs))
 
         components = build_wrapper_components(wrapper_settings, entry_configs)

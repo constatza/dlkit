@@ -29,6 +29,58 @@ from .. import templates as tmpl
 from ..adapters.config_adapter import load_config
 from ..middleware.error_handler import handle_api_error
 
+
+def _as_config_dict(obj: Any) -> dict[str, Any]:
+    """Serialize a settings object to a plain dict for display.
+
+    Tries ``to_dict()``, then ``model_dump()``, then ``dict()``.
+
+    Args:
+        obj: A settings object to serialize.
+
+    Returns:
+        Plain dict representation of the settings.
+    """
+    try:
+        fn = getattr(obj, "to_dict", None)
+        if callable(fn):
+            d = fn()
+            if isinstance(d, dict):
+                return d
+    except Exception:
+        pass
+    try:
+        md = getattr(obj, "model_dump", None)
+        if callable(md):
+            return cast(dict[str, Any], md(exclude_none=True))
+    except Exception:
+        pass
+    try:
+        return dict(obj)
+    except Exception:
+        return {}
+
+
+def _add_config_rows(table: Any, data: dict[str, Any], prefix: str = "") -> None:
+    """Recursively add configuration rows to a Rich table.
+
+    Args:
+        table: Rich Table instance to populate.
+        data: Configuration dict to render.
+        prefix: Dotted key prefix for nested sections.
+    """
+    for key, value in data.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            table.add_row(f"[bold]{full_key}[/bold]", "[dim]<section>[/dim]", "dict")
+            _add_config_rows(table, value, full_key)
+        else:
+            value_str = str(value)
+            if len(value_str) > 50:
+                value_str = value_str[:47] + "..."
+            table.add_row(full_key, value_str, type(value).__name__)
+
+
 # Create config command group
 app = typer.Typer(
     name="config",
@@ -68,10 +120,14 @@ def validate_configuration(
 
         # Auto-detect strategy if not provided
         if strategy is None:
-            if settings.SESSION and settings.SESSION.workflow == "inference":
-                strategy = "inference"
-            else:
-                strategy = "training"  # Default
+            run_type = getattr(getattr(settings, "run", None), "type", None)
+            match run_type:
+                case "predict":
+                    strategy = "inference"
+                case "search":
+                    strategy = "optimize"
+                case _:
+                    strategy = "training"
 
         console.print(f"🎯 Validating for strategy: [bold]{strategy}[/bold]")
 
@@ -80,15 +136,10 @@ def validate_configuration(
 
         # Strategy-specific completeness checks
         if strategy == "inference":
-            if not getattr(getattr(settings, "MODEL", None), "checkpoint", None):
-                console.print("[red]Inference config requires MODEL.checkpoint[/red]")
+            checkpoint = getattr(getattr(settings, "model", None), "checkpoint", None)
+            if not checkpoint:
+                console.print("[red]Inference config requires model.checkpoint[/red]")
                 raise typer.Exit(1)
-        elif strategy in ("training", "optimize", "optimization"):
-            from dlkit.infrastructure.config.validators import validate_training_config_complete
-            from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
-
-            if isinstance(settings, TrainingWorkflowConfig):
-                validate_training_config_complete(settings)
 
         console.print("✅ Configuration is valid!")
 
@@ -126,37 +177,16 @@ def show_configuration(
     try:
         # Load configuration
         settings = load_config(config_path)
-
-        # Get configuration dict with robust fallback for mocked settings
-        def _as_config_dict(obj: Any) -> dict[str, Any]:
-            # Preferred: use to_dict() if it returns a dict
-            try:
-                fn = getattr(obj, "to_dict", None)
-                if callable(fn):
-                    d = fn()
-                    if isinstance(d, dict):
-                        return d
-            except Exception:
-                pass
-            # Fallback: Pydantic's model_dump if available
-            try:
-                md = getattr(obj, "model_dump", None)
-                if callable(md):
-                    return cast(dict[str, Any], md(exclude_none=True))
-            except Exception:
-                pass
-            # Last resort
-            try:
-                return dict(obj)
-            except Exception:
-                return {}
-
         config_dict = _as_config_dict(settings)
 
-        # Filter by section if requested
+        # Filter by section if requested (case-insensitive: supports both "run" and "RUN")
         if section:
-            if section.upper() in config_dict:
-                config_dict = {section.upper(): config_dict[section.upper()]}
+            section_key = next(
+                (k for k in config_dict if k.lower() == section.lower()),
+                None,
+            )
+            if section_key is not None:
+                config_dict = {section_key: config_dict[section_key]}
             else:
                 console.print(f"[red]Section '{section}' not found in configuration[/red]")
                 available_sections = list(config_dict.keys())
@@ -287,27 +317,21 @@ def sync_templates(
         raise typer.Exit(1)
 
 
-def _display_config_table(config_dict: dict, console: Console, parent_key: str = "") -> None:
-    """Display configuration as a hierarchical table."""
+def _display_config_table(
+    config_dict: dict[str, Any], console: Console, parent_key: str = ""
+) -> None:
+    """Display configuration as a hierarchical table.
+
+    Args:
+        config_dict: Configuration dictionary to render.
+        console: Rich Console to print to.
+        parent_key: Optional section label for the table title.
+    """
     table = Table(title="Configuration" if not parent_key else f"Configuration: {parent_key}")
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="green")
     table.add_column("Type", style="yellow")
-
-    def _add_rows(data: dict, prefix: str = ""):
-        for key, value in data.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-
-            if isinstance(value, dict):
-                table.add_row(f"[bold]{full_key}[/bold]", "[dim]<section>[/dim]", "dict")
-                _add_rows(value, full_key)
-            else:
-                value_str = str(value)
-                if len(value_str) > 50:
-                    value_str = value_str[:47] + "..."
-                table.add_row(full_key, value_str, type(value).__name__)
-
-    _add_rows(config_dict)
+    _add_config_rows(table, config_dict)
     console.print(table)
 
 

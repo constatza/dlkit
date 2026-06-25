@@ -1,8 +1,8 @@
-"""Integration test fixtures using direct Settings objects (no TOML).
+"""Integration test fixtures using direct JobConfig objects (no TOML).
 
 These fixtures generate tiny synthetic datasets and construct
-typed workflow config instances programmatically to avoid relying on
-TOML parsing. This keeps integration tests fast and robust.
+typed workflow config instances programmatically via model_validate to avoid
+relying on TOML parsing. This keeps integration tests fast and robust.
 """
 
 from __future__ import annotations
@@ -15,23 +15,8 @@ import pytest
 import torch
 
 from dlkit.common import TrainingResult
-from dlkit.infrastructure.config import (
-    DataModuleSettings,
-    DatasetSettings,
-    SessionSettings,
-    TrainingSettings,
-)
-from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-from dlkit.infrastructure.config.dataset_settings import IndexSplitSettings
-from dlkit.infrastructure.config.entry_types import NpyEntry
-from dlkit.infrastructure.config.model_components import (
-    MetricComponentSettings,
-    ModelComponentSettings,
-)
-from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    TrainingWorkflowConfig,
+from dlkit.infrastructure.config.job_config import (
+    TrainingJobConfig,
 )
 
 # Test constants - optimized for speed
@@ -67,30 +52,19 @@ def minimal_dataset(tmp_path: Path) -> dict[str, Path]:
     X = np.random.randn(NUM_SAMPLES, FEATURE_SIZE).astype(np.float32)
     y = np.random.randint(0, TARGET_SIZE, size=(NUM_SAMPLES, 1)).astype(np.float32)
 
-    # Create train/val/test split in the format expected by dlkit
-    # Use simple text format with indices separated by newlines
-    train_indices = "0 1 2 3 4 5 6 7 8 9 10 11"  # 12 samples for training
-    val_indices = "12 13 14 15"  # 4 samples for validation
-    test_indices = "16 17 18 19"  # 4 samples for testing
-
-    split_content = f"{train_indices}\n{val_indices}\n{test_indices}\n"
-
     # Write dataflow files
     data_dir = tmp_path / "dataflow"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     X_path = data_dir / "features.npy"
     y_path = data_dir / "targets.npy"
-    split_path = data_dir / "split.txt"  # Use .txt format expected by dlkit
 
     np.save(X_path, X)
     np.save(y_path, y)
-    split_path.write_text(split_content)
 
     return {
         "features": X_path,
         "targets": y_path,
-        "split": split_path,
         "data_dir": data_dir,
     }
 
@@ -115,9 +89,7 @@ def minimal_graph_dataset(tmp_path: Path) -> dict[str, Path]:
     x = np.random.randn(NUM_GRAPHS, NUM_NODES, NODE_FEATURES).astype(np.float32)
 
     # Adjacency matrix: (NUM_NODES, NUM_NODES) - same for all graphs
-    # Create a simple connected graph
     adjacency = np.zeros((NUM_NODES, NUM_NODES), dtype=np.float32)
-    # Add edges: 0-1, 1-2, 2-3, 3-4, 4-0 (cycle)
     adjacency[0, 1] = 1.0
     adjacency[1, 2] = 1.0
     adjacency[2, 3] = 1.0
@@ -127,13 +99,6 @@ def minimal_graph_dataset(tmp_path: Path) -> dict[str, Path]:
     # Target: (NUM_GRAPHS, NUM_NODES, TARGET_SIZE)
     y = np.random.randn(NUM_GRAPHS, NUM_NODES, TARGET_SIZE).astype(np.float32)
 
-    # Create train/val/test split
-    train_indices = "0 1 2 3 4 5"  # 6 graphs for training
-    val_indices = "6 7"  # 2 graphs for validation
-    test_indices = "8 9"  # 2 graphs for testing
-
-    split_content = f"{train_indices}\n{val_indices}\n{test_indices}\n"
-
     # Write data files
     data_dir = tmp_path / "graph_data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -141,18 +106,15 @@ def minimal_graph_dataset(tmp_path: Path) -> dict[str, Path]:
     x_path = data_dir / "node_features.npy"
     adjacency_path = data_dir / "adjacency.npy"
     y_path = data_dir / "targets.npy"
-    split_path = data_dir / "split.txt"
 
     np.save(x_path, x)
     np.save(adjacency_path, adjacency)
     np.save(y_path, y)
-    split_path.write_text(split_content)
 
     return {
         "node_features": x_path,
         "adjacency": adjacency_path,
         "targets": y_path,
-        "split": split_path,
         "data_dir": data_dir,
     }
 
@@ -208,85 +170,105 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
     return checkpoint_path
 
 
-def _make_training_settings(
+def _make_training_job_config(
     *,
-    data_dir: Path,
-    output_dir: Path,
+    feature_path: Path,
+    target_path: Path,
     batch_size: int = BATCH_SIZE,
     epochs: int = EPOCHS,
     checkpoint: Path | None = None,
-) -> TrainingWorkflowConfig:
-    """Build a minimal TrainingWorkflowConfig.
+    extra_training: dict[str, Any] | None = None,
+    extra_run: dict[str, Any] | None = None,
+    extra_experiment: dict[str, Any] | None = None,
+    extra_tracking: dict[str, Any] | None = None,
+) -> TrainingJobConfig:
+    """Build a minimal TrainingJobConfig.
 
-    Uses FlexibleDataset with X/y entries and a small FFNN model.
+    Uses FlexibleDataset with x/y entries and a small FFNN model.
+
+    Args:
+        feature_path: Path to feature .npy file.
+        target_path: Path to target .npy file.
+        batch_size: Number of samples per batch.
+        epochs: Maximum number of training epochs.
+        checkpoint: Optional model checkpoint path.
+        extra_training: Additional overrides for the training section.
+        extra_run: Additional overrides for the run section.
+        extra_experiment: Additional overrides for the experiment section.
+        extra_tracking: Additional overrides for the tracking section.
+
+    Returns:
+        TrainingJobConfig with minimal settings for integration testing.
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
+    model_dict: dict[str, Any] = {
+        "class": "FFNN",
+        "module_path": "dlkit.domain.nn",
+        "params": {"hidden_size": FEATURE_SIZE, "num_layers": 0},
+    }
+    if checkpoint is not None:
+        model_dict["checkpoint"] = str(checkpoint)
 
-    dataset = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        root_dir=data_dir,
-        features=(NpyEntry(name="x", path=data_dir / "features.npy", data_role=DataRole.FEATURE),),
-        targets=(NpyEntry(name="y", path=data_dir / "targets.npy", data_role=DataRole.TARGET),),
-    )
+    training_dict: dict[str, Any] = {
+        "loss": "mse",
+        "trainer": {
+            "fast_dev_run": True,
+            "enable_checkpointing": False,
+            "accelerator": "cpu",
+            "enable_progress_bar": False,
+            "enable_model_summary": False,
+            "max_epochs": epochs,
+        },
+        "optimizer": {"name": "AdamW", "lr": 1e-3},
+        "metrics": [{"name": "MeanSquaredError", "module_path": "dlkit.domain.metrics"}],
+    }
+    if extra_training:
+        training_dict.update(extra_training)
 
-    datamodule = DataModuleSettings(
-        name="ArrayDataModule",
-        module_path="dlkit.engine.adapters.lightning.datamodules",
-        split=IndexSplitSettings(),
-        dataloader=DataloaderSettings(
-            num_workers=0,
-            batch_size=batch_size,
-            shuffle=True,
-            pin_memory=False,
-            persistent_workers=False,
-        ),
-    )
+    run_dict: dict[str, Any] = {"type": "train", "seed": 42}
+    if extra_run:
+        run_dict.update(extra_run)
 
-    model = ModelComponentSettings(
-        name="FFNN",
-        module_path="dlkit.domain.nn",
-        hidden_size=4,
-        num_layers=0,
-        checkpoint=checkpoint,
-    )
+    experiment_dict: dict[str, Any] = {"name": "integration_test"}
+    if extra_experiment:
+        experiment_dict.update(extra_experiment)
 
-    training = TrainingSettings(
-        epochs=epochs,
-        trainer=TrainerSettings.model_validate(
-            {
-                "fast_dev_run": True,
-                "enable_checkpointing": False,
-                "accelerator": "cpu",
-                "enable_progress_bar": False,
-                "enable_model_summary": False,
-            }
-        ),
-        metrics=(
-            MetricComponentSettings(
-                name="MeanSquaredError",
-                module_path="dlkit.domain.metrics",
-            ),
-        ),
-    )
+    payload: dict[str, Any] = {
+        "run": run_dict,
+        "experiment": experiment_dict,
+        "model": model_dict,
+        "data": {
+            "class": "FlexibleDataset",
+            "module_path": "dlkit.engine.data.datasets",
+            "batch_size": batch_size,
+            "num_workers": 0,
+            "shuffle": True,
+            "pin_memory": False,
+            "persistent_workers": False,
+            "features": [{"name": "x", "path": str(feature_path), "format": "npy"}],
+            "targets": [{"name": "y", "path": str(target_path), "format": "npy"}],
+        },
+        "training": training_dict,
+    }
+    if extra_tracking:
+        payload["tracking"] = extra_tracking
 
-    session = SessionSettings(name="integration_test", workflow="train", seed=42)
-
-    return TrainingWorkflowConfig(
-        SESSION=session,
-        DATAMODULE=datamodule,
-        DATASET=dataset,
-        TRAINING=training,
-        MODEL=model,
-    )
+    return TrainingJobConfig.model_validate(payload)
 
 
 @pytest.fixture
-def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> TrainingWorkflowConfig:
-    """Create TrainingWorkflowConfig for vanilla training integration tests (no TOML)."""
-    return _make_training_settings(
-        data_dir=minimal_dataset["data_dir"],
-        output_dir=tmp_path / "outputs",
+def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> TrainingJobConfig:
+    """Create TrainingJobConfig for vanilla training integration tests (no TOML).
+
+    Args:
+        minimal_dataset: Fixture providing dataset paths.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        TrainingJobConfig with minimal settings for training integration tests.
+    """
+    return _make_training_job_config(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
     )
@@ -295,11 +277,20 @@ def training_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> Train
 @pytest.fixture
 def inference_settings(
     minimal_dataset: dict[str, Path], minimal_model_checkpoint: Path, tmp_path: Path
-) -> TrainingWorkflowConfig:
-    """Create TrainingWorkflowConfig for inference integration tests (no TOML)."""
-    return _make_training_settings(
-        data_dir=minimal_dataset["data_dir"],
-        output_dir=tmp_path / "outputs",
+) -> TrainingJobConfig:
+    """Create TrainingJobConfig for inference integration tests (no TOML).
+
+    Args:
+        minimal_dataset: Fixture providing dataset paths.
+        minimal_model_checkpoint: Fixture providing a pre-trained checkpoint.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        TrainingJobConfig configured with a checkpoint for inference tests.
+    """
+    return _make_training_job_config(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
         checkpoint=minimal_model_checkpoint,
@@ -307,119 +298,113 @@ def inference_settings(
 
 
 @pytest.fixture
-def graph_settings(
-    minimal_graph_dataset: dict[str, Path], tmp_path: Path
-) -> TrainingWorkflowConfig:
-    """Create TrainingWorkflowConfig for graph model training integration tests.
+def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> TrainingJobConfig:
+    """Create TrainingJobConfig for graph model training integration tests.
 
     Uses GraphDataset with node features, adjacency matrix, and targets.
     Model is a small GProjection graph neural network.
 
     Args:
-        minimal_graph_dataset: Fixture providing graph dataset paths
-        tmp_path: Pytest temporary directory fixture
+        minimal_graph_dataset: Fixture providing graph dataset paths.
+        tmp_path: Pytest temporary directory fixture.
 
     Returns:
-        TrainingWorkflowConfig configured for graph workflow testing
+        TrainingJobConfig configured for graph workflow testing.
     """
-    output_dir = tmp_path / "graph_outputs"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    dataset = DatasetSettings.model_validate(
+    return TrainingJobConfig.model_validate(
         {
-            "name": "GraphDataset",
-            "module_path": "dlkit.engine.data.datasets.graph",
-            "root": minimal_graph_dataset["data_dir"],
-            "x": minimal_graph_dataset["node_features"],
-            "edge_index": minimal_graph_dataset["adjacency"],
-            "y": minimal_graph_dataset["targets"],
+            "run": {"type": "train", "seed": 42},
+            "experiment": {"name": "graph_integration_test"},
+            "model": {
+                "class": "GProjection",
+                "module_path": "dlkit.domain.nn.graph.projection_networks",
+                "params": {
+                    "hidden_size": 4,
+                    "in_channels": NODE_FEATURES,
+                    "out_channels": TARGET_SIZE,
+                },
+            },
+            "data": {
+                "class": "GraphDataset",
+                "module_path": "dlkit.engine.data.datasets.graph",
+                "batch_size": 2,
+                "num_workers": 0,
+                "shuffle": True,
+                "pin_memory": False,
+                "persistent_workers": False,
+                "root": str(minimal_graph_dataset["data_dir"]),
+                "features": [
+                    {
+                        "name": "x",
+                        "path": str(minimal_graph_dataset["node_features"]),
+                        "format": "npy",
+                    },
+                    {
+                        "name": "edge_index",
+                        "path": str(minimal_graph_dataset["adjacency"]),
+                        "format": "npy",
+                    },
+                ],
+                "targets": [
+                    {
+                        "name": "y",
+                        "path": str(minimal_graph_dataset["targets"]),
+                        "format": "npy",
+                    }
+                ],
+            },
+            "training": {
+                "loss": "mse",
+                "trainer": {
+                    "fast_dev_run": True,
+                    "enable_checkpointing": False,
+                    "accelerator": "cpu",
+                    "enable_progress_bar": False,
+                    "enable_model_summary": False,
+                    "max_epochs": 1,
+                },
+                "optimizer": {"name": "AdamW", "lr": 1e-3},
+                "metrics": [{"name": "MeanSquaredError", "module_path": "dlkit.domain.metrics"}],
+            },
         }
-    )
-
-    datamodule = DataModuleSettings(
-        name="GraphDataModule",
-        module_path="dlkit.engine.adapters.lightning.datamodules.graph",
-        dataloader=DataloaderSettings(
-            num_workers=0,
-            batch_size=2,  # Small batch for graph data
-            shuffle=True,
-            pin_memory=False,
-            persistent_workers=False,
-        ),
-    )
-
-    model = ModelComponentSettings.model_validate(
-        {
-            "name": "GProjection",
-            "module_path": "dlkit.domain.nn.graph.projection_networks",
-            "hidden_size": 4,  # Small hidden size for fast testing
-            "in_channels": NODE_FEATURES,
-            "out_channels": TARGET_SIZE,
-        }
-    )
-
-    training = TrainingSettings(
-        epochs=1,
-        trainer=TrainerSettings.model_validate(
-            {
-                "fast_dev_run": True,  # Use fast dev run for ultra-fast testing
-                "enable_checkpointing": False,
-                "accelerator": "cpu",
-                "enable_progress_bar": False,
-                "enable_model_summary": False,
-            }
-        ),
-        metrics=(
-            MetricComponentSettings(
-                name="MeanSquaredError",
-                module_path="dlkit.domain.metrics",
-            ),
-        ),
-    )
-
-    session = SessionSettings(name="graph_integration_test", workflow="train", seed=42)
-
-    return TrainingWorkflowConfig(
-        SESSION=session,
-        DATAMODULE=datamodule,
-        DATASET=dataset,
-        TRAINING=training,
-        MODEL=model,
     )
 
 
 @pytest.fixture
 def mlflow_settings(
     minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> TrainingWorkflowConfig:
-    """Create TrainingWorkflowConfig with MLflow enabled."""
+) -> TrainingJobConfig:
+    """Create TrainingJobConfig with MLflow enabled.
+
+    Args:
+        minimal_dataset: Fixture providing dataset paths.
+        tmp_path: Pytest temporary directory fixture.
+        monkeypatch: Pytest monkeypatch fixture for env var isolation.
+
+    Returns:
+        TrainingJobConfig with MLflow tracking configured.
+    """
     import dlkit.engine.tracking.uri_resolver as uri_resolver
 
-    base_settings = _make_training_settings(
-        data_dir=minimal_dataset["data_dir"],
-        output_dir=tmp_path / "outputs",
-        batch_size=BATCH_SIZE,
-        epochs=EPOCHS,
-    )
-
     # Route select_backend() to a per-test isolated SQLite DB and suppress the
-    # local-server probe. Setting MLFLOW_TRACKING_URI to a sqlite:/// URI is now
-    # honoured by select_backend(), so both the env var and the probe must be set.
+    # local-server probe.
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv(
-        "MLFLOW_TRACKING_URI",
-        f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}",
-    )
+    mlflow_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", mlflow_uri)
     mlartifacts_dir = tmp_path / "mlartifacts"
     mlartifacts_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
-    from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
-
-    mlflow_cfg = MLflowSettings(experiment_name="test_experiment")
-    return base_settings.model_copy(update={"MLFLOW": mlflow_cfg})
+    return _make_training_job_config(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        extra_experiment={"name": "test_experiment"},
+        extra_tracking={"backend": "mlflow", "uri": mlflow_uri},
+    )
 
 
 @pytest.fixture
@@ -448,75 +433,6 @@ def expected_inference_result() -> dict[str, Any]:
         "optional_keys": ["metrics"],
         "predictions_shape": (4, TARGET_SIZE),  # test split size, output dimension
     }
-
-
-@pytest.fixture
-def optuna_config_content(minimal_dataset: dict[str, Path], tmp_path: Path) -> str:
-    """Produce a minimal TOML config string enabling Optuna.
-
-    Uses the same tmp_path-backed dataset created by minimal_dataset so relative
-    resolution works when the test writes this content to a file in tmp_path.
-    """
-    data_dir = minimal_dataset["data_dir"]
-    # Keep paths relative to DATASET.root by specifying filenames only
-    return f"""
-[SESSION]
-name = "integration_test"
-workflow = "optimize"
-seed = 42
-
-[DATASET]
-name = "FlexibleDataset"
-module_path = "dlkit.engine.data.datasets"
-root_dir = "{data_dir.as_posix()}"
-
-[[DATASET.features]]
-name = "x"
-format = "npy"
-path = "features.npy"
-
-[[DATASET.targets]]
-name = "y"
-format = "npy"
-path = "targets.npy"
-
-[DATAMODULE]
-name = "ArrayDataModule"
-module_path = "dlkit.engine.adapters.lightning.datamodules"
-
-[DATAMODULE.split]
-filepath = "{data_dir.as_posix()}/split.txt"
-
-[DATAMODULE.dataloader]
-num_workers = 0
-batch_size = {BATCH_SIZE}
-shuffle = true
-pin_memory = false
-persistent_workers = false
-
-[MODEL]
-name = "FFNN"
-module_path = "dlkit.domain.nn"
-hidden_size = 4
-num_layers = 0
-
-[TRAINING]
-epochs = {EPOCHS}
-
-[TRAINING.trainer]
-max_steps = 1
-enable_checkpointing = false
-accelerator = "cpu"
-
-[OPTUNA]
-enabled = true
-n_trials = {OPTUNA_TRIALS}
-direction = "minimize"
-study_name = "test_study"
-
-[OPTUNA.model.hidden_size]
-choices = [2, 4]
-"""
 
 
 @pytest.fixture
@@ -554,9 +470,7 @@ def cleanup_mlflow_state():
     try:
         import mlflow
 
-        # Disable autologging
         mlflow.pytorch.autolog(disable=True)
-        # End any active runs
         if mlflow.active_run():
             mlflow.end_run()
     except Exception:
@@ -568,9 +482,7 @@ def cleanup_mlflow_state():
     try:
         import mlflow
 
-        # Disable autologging
         mlflow.pytorch.autolog(disable=True)
-        # End any active runs
         if mlflow.active_run():
             mlflow.end_run()
     except Exception:
@@ -579,22 +491,23 @@ def cleanup_mlflow_state():
 
 @pytest.fixture
 def double_precision_settings(
-    training_settings: TrainingWorkflowConfig,
-) -> TrainingWorkflowConfig:
-    """Create TrainingWorkflowConfig configured for double (float64) precision training.
+    training_settings: TrainingJobConfig,
+) -> TrainingJobConfig:
+    """Create TrainingJobConfig configured for double (float64) precision training.
 
     Args:
         training_settings: Base training settings fixture.
 
     Returns:
-        TrainingWorkflowConfig with SESSION.precision set to FULL_64.
+        TrainingJobConfig with run.precision set to FULL_64.
     """
-    from dlkit.infrastructure.precision import PrecisionStrategy
+    from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
-    new_session = training_settings.SESSION.model_copy(
-        update={"precision": PrecisionStrategy.FULL_64}
+    return training_settings.model_copy(
+        update={
+            "run": training_settings.run.model_copy(update={"precision": PrecisionStrategy.FULL_64})
+        }
     )
-    return training_settings.model_copy(update={"SESSION": new_session})
 
 
 @pytest.fixture

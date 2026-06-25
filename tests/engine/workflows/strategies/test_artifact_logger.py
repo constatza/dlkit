@@ -23,8 +23,10 @@ from dlkit.engine.tracking.artifact_logger import (
 )
 from dlkit.engine.tracking.interfaces import IRunContext
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.general_settings import GeneralSettings
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
+from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 # ---------------------------------------------------------------------------
 # Minimal test doubles for wrapper unwrapping tests
@@ -152,23 +154,46 @@ def _build_components(model: Any) -> RuntimeComponents:
     )
 
 
-def test_registers_model_with_class_name_without_default_aliases_or_tags() -> None:
+@pytest.fixture
+def job_with_registration() -> JobConfig:
+    """JobConfig with model registration enabled.
+
+    Returns:
+        JobConfig configured for model registration tests.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(register_model=True),
+        tracking=TrackingSettings(backend="mlflow"),
+    )
+
+
+@pytest.fixture
+def job_without_registration() -> JobConfig:
+    """JobConfig with model registration disabled.
+
+    Returns:
+        JobConfig configured without model registration.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(register_model=False),
+        tracking=TrackingSettings(backend="mlflow"),
+    )
+
+
+def test_registers_model_with_class_name_without_default_aliases_or_tags(
+    job_with_registration: JobConfig,
+) -> None:
     @dataclass(frozen=True, slots=True)
     class FancyNet:
         pass
-
-    settings = GeneralSettings(
-        MODEL=None,
-        MLFLOW=MLflowSettings(
-            register_model=True,
-        ),
-    )
 
     logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
     components = _build_components(FancyNet())
 
-    pending = logger.maybe_register_model(settings, components, run_context)
+    pending = logger.maybe_register_model(job_with_registration, components, run_context)
     logger.finalize_model_registration(pending, run_context)
 
     assert run_context.logged_model_calls[0]["registered_model_name"] == "FancyNet"
@@ -182,20 +207,19 @@ def test_registers_model_with_class_name_without_default_aliases_or_tags() -> No
     assert run_context.tags[TAG_MODEL_REGISTRATION_ENABLED] == "true"
 
 
-def test_logs_model_without_registration_when_disabled() -> None:
+def test_logs_model_without_registration_when_disabled(
+    job_without_registration: JobConfig,
+) -> None:
     @dataclass(frozen=True, slots=True)
     class FancyNet:
         pass
 
-    settings = GeneralSettings(
-        MLFLOW=MLflowSettings(
-            register_model=False,
-        ),
-    )
     logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    pending = logger.maybe_register_model(settings, _build_components(FancyNet()), run_context)
+    pending = logger.maybe_register_model(
+        job_without_registration, _build_components(FancyNet()), run_context
+    )
     logger.finalize_model_registration(pending, run_context)
 
     assert len(run_context.logged_model_calls) == 1
@@ -213,12 +237,14 @@ def test_merges_configured_aliases_and_model_version_tags() -> None:
     class FancyNet:
         pass
 
-    settings = GeneralSettings(
-        MLFLOW=MLflowSettings(
+    settings = JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(
             register_model=True,
             registered_model_aliases=("benchmark_high_precision", "dataset_A_latest"),
             registered_model_version_tags={"team": "platform"},
         ),
+        tracking=TrackingSettings(backend="mlflow"),
     )
     logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
@@ -251,15 +277,13 @@ def test_resolve_model_class_name_unwraps_processing_lightning_wrapper(
 
 def test_maybe_register_model_uses_inner_model_class_name_for_tag(
     wrapped_model: _ConcreteWrapper,
+    job_without_registration: JobConfig,
 ) -> None:
-    settings = GeneralSettings(
-        MLFLOW=MLflowSettings(
-            register_model=False,
-        ),
-    )
     artifact_logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    artifact_logger.maybe_register_model(settings, _build_components(wrapped_model), run_context)
+    artifact_logger.maybe_register_model(
+        job_without_registration, _build_components(wrapped_model), run_context
+    )
 
     assert run_context.tags[TAG_MODEL_CLASS] == "_InnerNet"

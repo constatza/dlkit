@@ -13,12 +13,18 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
-from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.generative_settings import (
     CNFSettings,
     FlowMatchingSettings,
     GenerativeSettings,
 )
+
+
+class _GenerativeContainer(BasicSettings):
+    """Minimal settings container for testing GENERATIVE field integration."""
+
+    GENERATIVE: GenerativeSettings | None = None
 
 
 class TestFlowMatchingSettings:
@@ -181,56 +187,56 @@ class TestGenerativeSettings:
 
 
 class TestGeneralSettingsIntegration:
-    """Test suite for GeneralSettings with GENERATIVE field."""
+    """Test suite for settings container with GENERATIVE field."""
 
     def test_general_settings_with_flow_matching(self) -> None:
-        """Test GeneralSettings can include FlowMatchingSettings."""
+        """Test settings container can include FlowMatchingSettings."""
         gen_settings = FlowMatchingSettings(
             path_type="noise_schedule",
             solver="heun",
         )
 
-        general = GeneralSettings(GENERATIVE=gen_settings)
+        container = _GenerativeContainer(GENERATIVE=gen_settings)
 
-        assert general.GENERATIVE is not None
-        assert isinstance(general.GENERATIVE, FlowMatchingSettings)
-        assert general.GENERATIVE.algorithm == "flow_matching"
-        assert general.GENERATIVE.path_type == "noise_schedule"
+        assert container.GENERATIVE is not None
+        assert isinstance(container.GENERATIVE, FlowMatchingSettings)
+        assert container.GENERATIVE.algorithm == "flow_matching"
+        assert container.GENERATIVE.path_type == "noise_schedule"
 
     def test_general_settings_with_cnf(self) -> None:
-        """Test GeneralSettings can include CNFSettings."""
+        """Test settings container can include CNFSettings."""
         gen_settings = CNFSettings(
             divergence="exact",
             n_inference_steps=150,
         )
 
-        general = GeneralSettings(GENERATIVE=gen_settings)
+        container = _GenerativeContainer(GENERATIVE=gen_settings)
 
-        assert general.GENERATIVE is not None
-        assert isinstance(general.GENERATIVE, CNFSettings)
-        assert general.GENERATIVE.algorithm == "cnf"
-        assert general.GENERATIVE.divergence == "exact"
+        assert container.GENERATIVE is not None
+        assert isinstance(container.GENERATIVE, CNFSettings)
+        assert container.GENERATIVE.algorithm == "cnf"
+        assert container.GENERATIVE.divergence == "exact"
 
     def test_general_settings_without_generative(self) -> None:
-        """Test GeneralSettings with no generative config (default)."""
-        general = GeneralSettings()
+        """Test settings container with no generative config (default)."""
+        container = _GenerativeContainer()
 
-        assert general.GENERATIVE is None
+        assert container.GENERATIVE is None
 
     def test_general_settings_generative_serialization(self) -> None:
-        """Test GeneralSettings serialization with generative config."""
+        """Test settings container serialization with generative config."""
         gen_settings = FlowMatchingSettings(x1_key="targets")
-        general = GeneralSettings(GENERATIVE=gen_settings)
+        container = _GenerativeContainer(GENERATIVE=gen_settings)
 
-        data = general.model_dump()
+        data = container.model_dump()
 
         assert data["GENERATIVE"] is not None
         assert data["GENERATIVE"]["algorithm"] == "flow_matching"
         assert data["GENERATIVE"]["x1_key"] == "targets"
 
     def test_general_settings_generative_roundtrip(self) -> None:
-        """Test GeneralSettings serialization roundtrip with GENERATIVE."""
-        original = GeneralSettings(
+        """Test settings container serialization roundtrip with GENERATIVE."""
+        original = _GenerativeContainer(
             GENERATIVE=FlowMatchingSettings(
                 path_type="noise_schedule",
                 solver="heun",
@@ -238,7 +244,7 @@ class TestGeneralSettingsIntegration:
         )
 
         data = original.model_dump()
-        restored = GeneralSettings(**data)
+        restored = _GenerativeContainer(**data)
 
         generative = restored.GENERATIVE
         assert isinstance(generative, FlowMatchingSettings)

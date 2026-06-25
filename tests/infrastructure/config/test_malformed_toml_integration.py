@@ -225,14 +225,14 @@ class TestSectionLevelOptionality:
 [SESSION]
 name = "section_only"
 
-[TRAINING]
-epochs = 1
+[TRAINING.trainer]
+max_epochs = 1
 
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)

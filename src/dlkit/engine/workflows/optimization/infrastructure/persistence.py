@@ -46,7 +46,6 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
             Path to saved configuration file if successful, None otherwise
         """
         try:
-            from dlkit.infrastructure.config import GeneralSettings  # type: ignore
             from dlkit.infrastructure.io.config import write_config
 
             if output_directory is None:
@@ -65,16 +64,15 @@ class TOMLConfigurationPersister(IConfigurationPersistence):
                 config_dir / f"best_config_study_{study.study_name}_trial_{trial_number}.toml"
             )
 
-            # Convert configuration dict to GeneralSettings for TOML writing
-            # This assumes the configuration is in the right format
-            if isinstance(configuration, GeneralSettings):
+            # Convert configuration dict to JobConfig for TOML writing
+            from dlkit.infrastructure.config.job_config import JobConfig
+
+            if isinstance(configuration, JobConfig):
                 settings_to_save = configuration
             elif isinstance(configuration, dict):
-                # Create settings from dict
-                settings_to_save = GeneralSettings(**configuration)
+                settings_to_save = JobConfig(**configuration)
             else:
-                # Convert to dict first
-                settings_to_save = GeneralSettings.model_validate(configuration)
+                settings_to_save = JobConfig.model_validate(configuration)
 
             # Write configuration to TOML
             write_config(

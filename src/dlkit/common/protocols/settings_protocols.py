@@ -42,8 +42,9 @@ class ModelSettingsProtocol(Protocol):
 class BaseSettingsProtocol(Protocol):
     """Minimal contract shared by all DLKit workflow configs.
 
-    Return types use concrete sub-protocols where callers access sub-fields through
-    this type; otherwise ``object`` is used since consumers only perform None checks.
+    Satisfied by BaseWorkflowSettings (UPPERCASE fields). JobConfig satisfies a
+    different structural shape — callers that need JobConfig should type-check
+    against JobConfig directly.
     """
 
     @property

@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from dlkit.common import TrainingResult
 from dlkit.common.hooks import LifecycleHooks
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig, SearchJobConfig
 from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -29,12 +26,12 @@ class WorkflowExecutionSelector:
 
     def select(
         self,
-        settings: TrainingWorkflowConfig,
+        settings: JobConfig,
         hooks: LifecycleHooks | None = None,
     ):
         """Create execution strategy using SOLID factory composition."""
         features = []
-        if settings.MLFLOW:
+        if settings.tracking.backend == "mlflow":
             features.append("MLflow tracking")
         if not features:
             features.append("vanilla training")
@@ -47,11 +44,11 @@ class WorkflowExecutionSelector:
 
     def select_optimization(
         self,
-        settings: OptimizationWorkflowConfig,
+        settings: SearchJobConfig,
     ):
         """Create optimization strategy from the runtime workflows layer."""
         features = ["Optuna optimization"]
-        if settings.MLFLOW:
+        if settings.tracking.backend == "mlflow":
             features.append("MLflow tracking")
         feature_str = " + ".join(features)
         logger.info("Creating optimization strategy with {}", feature_str)
@@ -72,7 +69,7 @@ class Orchestrator:
 
     def execute_training(
         self,
-        settings: TrainingWorkflowConfig,
+        settings: JobConfig,
         hooks: LifecycleHooks | None = None,
     ) -> TrainingResult:
         logger.info("Starting training workflow orchestration")

@@ -7,41 +7,45 @@ from importlib import import_module
 from typing import Any
 from uuid import uuid4
 
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
-
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+from dlkit.infrastructure.config.job_config import JobConfig
 
 
-def determine_experiment_name(settings: _WorkflowSettings, mlflow_config: Any = None) -> str:
-    """Determine experiment name using priority chain with guard clauses.
-
-    Priority: MLFLOW.experiment_name → SESSION.name (with default "dlkit-session")
-    (Explicit MLflow config overrides session name)
+def _session_name(settings: JobConfig) -> str:
+    """Extract session/experiment name from JobConfig.
 
     Args:
-        settings: Configuration settings
-        mlflow_config: Optional MLflow configuration
+        settings: A JobConfig instance.
 
     Returns:
-        Experiment name (always returns a value via SESSION.name default)
+        Experiment name string (always non-empty).
     """
-    if mlflow_config:
+    return settings.experiment.name if settings.experiment else "dlkit-experiment"
+
+
+def determine_experiment_name(settings: JobConfig, mlflow_config: Any = None) -> str:
+    """Determine experiment name using priority chain with guard clauses.
+
+    Priority: mlflow_config.experiment_name → job.experiment.name (with default).
+    Explicit MLflow config overrides session name.
+
+    Args:
+        settings: A JobConfig instance.
+        mlflow_config: Optional MLflow configuration with experiment_name field.
+
+    Returns:
+        Experiment name (always returns a non-empty value).
+    """
+    if mlflow_config is not None:
         experiment_name = getattr(mlflow_config, "experiment_name", None)
         if isinstance(experiment_name, str):
             normalized = experiment_name.strip()
             if normalized and normalized != "Experiment":
                 return normalized
 
-    # Use SESSION.name (which has default "dlkit-session" in SessionSettings)
-    # This always returns a value since SESSION.name has a default
-    return settings.SESSION.name
+    return _session_name(settings)
 
 
-def determine_study_name(settings: _WorkflowSettings, optuna_config: Any) -> str:
+def determine_study_name(settings: JobConfig, optuna_config: Any) -> str:
     """Determine study name using priority chain with guard clauses.
 
     The study name is used as the MLflow parent run name. Explicit configuration
@@ -49,21 +53,21 @@ def determine_study_name(settings: _WorkflowSettings, optuna_config: Any) -> str
     the experiment name.
 
     Args:
-        settings: Configuration settings
-        optuna_config: Optuna configuration
+        settings: A JobConfig instance.
+        optuna_config: Optional Optuna configuration with study_name field.
 
     Returns:
-        Study name for Optuna workflows
+        Study name for Optuna workflows.
     """
-    # Guard: Check MLFLOW.run_name for explicit tracking overrides
-    mlflow_config = getattr(settings, "MLFLOW", None)
-    if mlflow_config:
-        run_name = getattr(mlflow_config, "run_name", None)
-        if isinstance(run_name, str) and run_name.strip():
-            return run_name.strip()
+    run_name = settings.experiment.run_name if settings.experiment else None
+    if isinstance(run_name, str) and run_name.strip():
+        return run_name.strip()
 
-    # Guard: Check OPTUNA.study_name
-    study_name = getattr(optuna_config, "study_name", None)
+    if settings.search is not None:
+        study_name = settings.search.study_name
+    else:
+        study_name = getattr(optuna_config, "study_name", None)
+
     if study_name:
         return study_name
 

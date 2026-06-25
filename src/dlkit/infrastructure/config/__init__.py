@@ -42,6 +42,10 @@ from .factories import (
     load_settings,
 )
 
+# Compatibility alias — callers that import GeneralSettings from this package get JobConfig.
+# Added after all other imports to avoid circular init issues.
+from .general_settings import GeneralSettings
+
 # Generative algorithm settings
 from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSettings
 
@@ -102,6 +106,10 @@ from .search_settings import (
     SearchSettings,
     SpaceParam,
 )
+
+# Backward-compatible re-export: SessionSettings was removed in Task 1; tests still import it.
+# Will be removed in Task 5 when all callers are updated.
+from .session_settings import SessionSettings
 from .tracking_settings import TrackingSettings
 
 # External library settings (unchanged - kept compact as requested)
@@ -117,6 +125,10 @@ from .workflow_settings import (
 )
 
 __all__ = [
+    # Compatibility alias
+    "GeneralSettings",
+    # Backward-compat stub (removed in Task 5)
+    "SessionSettings",
     # Job config (new top-level API)
     "JobConfig",
     "TrainingJobConfig",

@@ -35,10 +35,8 @@ batch_size = 32
 name = "TestDataset"
 type = "flexible"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.trainer]
+max_epochs = 10
 accelerator = "cpu"
 
 [OPTUNA]
@@ -174,8 +172,8 @@ name = "TestDataModule"
 [DATASET]
 name = "TestDataset"
 
-[TRAINING]
-epochs = 10
+[TRAINING.trainer]
+max_epochs = 10
 """
 
         config_path = tmp_path / "minimal.toml"

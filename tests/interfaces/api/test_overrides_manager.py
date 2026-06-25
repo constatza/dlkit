@@ -9,49 +9,87 @@ from dlkit.engine.workflows.entrypoints._overrides import (
     apply_runtime_overrides,
     validate_runtime_overrides,
 )
-from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-from dlkit.infrastructure.config.general_settings import GeneralSettings
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.data_settings import DataSettings
+from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
+from dlkit.infrastructure.config.model_settings import ModelSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
     LBFGSSettings,
     MuonSettings,
 )
-from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
 from dlkit.interfaces.api.domain.override_types import TrainingOverrides
 
 
-def _base_settings() -> GeneralSettings:
-    return GeneralSettings(
-        SESSION=SessionSettings(workflow="train"),
-        TRAINING=TrainingSettings(),
-        DATAMODULE=DataModuleSettings(dataloader=DataloaderSettings()),
-        MLFLOW=MLflowSettings(),
+def _base_settings() -> TrainingJobConfig:
+    """Build a minimal TrainingJobConfig for override tests.
+
+    Returns:
+        TrainingJobConfig with all required sections populated with defaults.
+    """
+    return TrainingJobConfig(
+        run=RunSettings(type="train"),
+        model=ModelSettings(name="DummyModel"),
+        data=DataSettings(batch_size=64),
+        training=TrainingSettings(),
+        experiment=ExperimentSettings(name="test_experiment"),
     )
 
 
-def _require_training(settings: GeneralSettings) -> TrainingSettings:
-    training = settings.TRAINING
+def _require_training(settings: TrainingJobConfig) -> TrainingSettings:
+    """Extract required training settings.
+
+    Args:
+        settings: A training job config.
+
+    Returns:
+        TrainingSettings from the job config.
+    """
+    training = settings.training
     assert training is not None
     return training
 
 
-def _require_datamodule(settings: GeneralSettings) -> DataModuleSettings:
-    datamodule = settings.DATAMODULE
-    assert datamodule is not None
-    return datamodule
+def _require_data(settings: TrainingJobConfig) -> DataSettings:
+    """Extract required data settings.
+
+    Args:
+        settings: A training job config.
+
+    Returns:
+        DataSettings from the job config.
+    """
+    data = settings.data
+    assert data is not None
+    return data
 
 
-def _require_mlflow(settings: GeneralSettings) -> MLflowSettings:
-    mlflow = settings.MLFLOW
-    assert mlflow is not None
-    return mlflow
+def _require_experiment(settings: TrainingJobConfig) -> ExperimentSettings:
+    """Extract required experiment settings.
+
+    Args:
+        settings: A training job config.
+
+    Returns:
+        ExperimentSettings from the job config.
+    """
+    experiment = settings.experiment
+    assert experiment is not None
+    return experiment
 
 
 def _require_numeric_lr(settings: TrainingSettings) -> int | float:
+    """Extract learning rate from training settings.
+
+    Args:
+        settings: Training settings with optimizer configuration.
+
+    Returns:
+        Numeric learning rate value.
+    """
     optimizer = settings.optimizer.default_optimizer
     assert isinstance(optimizer, AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings)
     lr = optimizer.lr
@@ -69,16 +107,15 @@ def test_apply_training_overrides_epochs_batchsize_lr() -> None:
         learning_rate=0.005,
     )
     training = _require_training(new)
-    datamodule = _require_datamodule(new)
+    data = _require_data(new)
 
-    # epochs propagates to TRAINING.epochs and TRAINING.trainer.max_epochs
-    assert training.epochs == 5
+    # epochs propagates to training.trainer.max_epochs
     assert training.trainer.max_epochs == 5
 
-    # batch size to DATAMODULE.dataloader.batch_size
-    assert datamodule.dataloader.batch_size == 128
+    # batch size to data.batch_size
+    assert data.batch_size == 128
 
-    # learning rate to TRAINING.optimizer.lr
+    # learning rate to training.optimizer.lr
     assert float(_require_numeric_lr(training)) == pytest.approx(0.005)
 
 
@@ -86,9 +123,9 @@ def test_apply_mlflow_overrides_names() -> None:
     base = _base_settings()
 
     new = apply_runtime_overrides(base, experiment_name="expA", run_name="run1")
-    mlflow = _require_mlflow(new)
-    assert mlflow.experiment_name == "expA"
-    assert mlflow.run_name == "run1"
+    experiment = _require_experiment(new)
+    assert experiment.name == "expA"
+    assert experiment.run_name == "run1"
 
 
 @pytest.mark.parametrize(

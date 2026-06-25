@@ -411,17 +411,17 @@ class MLflowTrialRunContext(ITrialRunContext):
             logger.warning("Failed to log trial settings: {}", e)
 
     def log_model_hyperparameters(self, settings: Any) -> None:
-        """Log model hyperparameters from settings.MODEL.
+        """Log model hyperparameters from settings.model.
 
         Args:
-            settings: GeneralSettings object with MODEL configuration
+            settings: JobConfig object with model configuration.
         """
         try:
-            if not hasattr(settings, "MODEL") or settings.MODEL is None:
+            model_cfg = getattr(settings, "model", None)
+            if model_cfg is None:
                 return
 
-            # Use settings.MODEL and dump its hyperparameters
-            params = settings.MODEL.model_dump(exclude_none=True)
+            params = model_cfg.model_dump(exclude_none=True)
 
             # Remove component-specific fields that aren't hyperparameters
             component_fields = {"name", "module_path", "checkpoint", "shape"}
@@ -430,7 +430,6 @@ class MLflowTrialRunContext(ITrialRunContext):
             # Prefix with "model_" to distinguish from trial hyperparameters
             prefixed_hparams = {f"model_{k}": v for k, v in hparams.items()}
 
-            # Only log if we have hyperparameters to log
             if prefixed_hparams:
                 self._run_context.log_params(prefixed_hparams)
                 logger.debug(

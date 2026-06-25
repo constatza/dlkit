@@ -12,7 +12,6 @@ from dlkit.interfaces.api.domain import TrainingOverrides
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_training_result
-from ..guards import is_training_settings
 from ..middleware.error_handler import handle_cli_errors
 from ..params import (
     BATCH_SIZE_PARAM,
@@ -57,12 +56,11 @@ def _run_training_impl(
         dlkit train config.toml --validate-only
     """
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = load_config(config_path)
-
-    training_settings = settings if is_training_settings(settings) else None
+    job = load_config(config_path, run_type="train")
 
     # Show training mode
-    if mlflow or (training_settings and training_settings.MLFLOW):
+    tracking_enabled = mlflow or (job.tracking.backend not in ("none", None))
+    if tracking_enabled:
         console.print("🎯 Using [bold]training with MLflow tracking[/bold]")
     else:
         console.print("🎯 Using [bold]vanilla training[/bold]")
@@ -75,7 +73,7 @@ def _run_training_impl(
         transient=True,
     ) as progress:
         progress.add_task("Validating configuration...", total=None)
-        validate_config(settings)
+        validate_config(job)
 
     console.print("✅ Configuration validated successfully")
 
@@ -115,7 +113,7 @@ def _run_training_impl(
     ) as progress:
         task = progress.add_task("Training in progress...", total=None)
         training_result = api_train(
-            settings,
+            job,
             overrides=TrainingOverrides(
                 checkpoint_path=checkpoint,
                 epochs=epochs,

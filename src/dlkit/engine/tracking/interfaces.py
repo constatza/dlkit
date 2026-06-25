@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from dlkit.common.hooks import ParamValue
 from dlkit.engine.artifacts import IMetricSink as IMetricSink  # noqa: PLC0414
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 if TYPE_CHECKING:
     from mlflow.data.dataset import Dataset as MlflowDataset
@@ -394,7 +394,7 @@ class IExperimentTracker(ABC):
         """
         raise NotImplementedError
 
-    def configure(self, config: MLflowSettings) -> None:
+    def configure(self, config: TrackingSettings) -> None:
         """Configure the tracker with backend-specific settings (no-op by default).
 
         Concrete backends override this to apply configuration before any runs are created.
@@ -546,7 +546,7 @@ class NullTracker(IExperimentTracker):
     Example:
         ```python
         # Select tracker based on configuration
-        if settings.MLFLOW is not None:
+        if settings.tracking.backend == "mlflow":
             tracker: IExperimentTracker = MLflowTracker()
         else:
             tracker: IExperimentTracker = NullTracker()

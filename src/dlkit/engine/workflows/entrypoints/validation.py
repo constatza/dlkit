@@ -6,60 +6,56 @@ import importlib.util
 from typing import cast
 
 from dlkit.common.errors import WorkflowError
-from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config.workflow_configs import (
-    InferenceWorkflowConfig,
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
 )
 
 
-def validate_config(settings: BaseSettingsProtocol, dry_build: bool = False) -> bool:
+def validate_config(
+    settings: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
+    dry_build: bool = False,
+) -> bool:
     """Validate configuration structure and optional runtime readiness."""
 
-    def structurally_valid(config: BaseSettingsProtocol) -> tuple[bool, str | None]:
-        if not config.MODEL:
-            return False, "[MODEL] section is required"
-        if not config.DATASET:
-            return False, "[DATASET] section is required"
-        if not config.DATAMODULE:
-            return False, "[DATAMODULE] section is required"
+    def structurally_valid(
+        config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
+    ) -> tuple[bool, str | None]:
+        if config.model is None:
+            return False, "[model] section is required"
+        if config.data is None and not isinstance(config, InferenceJobConfig):
+            return False, "[data] section is required"
 
-        # Guard clause: inference-only validation
-        is_inference = isinstance(config, InferenceWorkflowConfig)
-        if is_inference:
-            if not (config.MODEL and config.MODEL.checkpoint):
-                return False, "[MODEL.checkpoint] is required for inference mode"
+        if isinstance(config, InferenceJobConfig):
+            if config.model.checkpoint is None:
+                return False, "[model.checkpoint] is required for inference mode"
             return True, None
 
-        # Guard clause: training/optimization validation
-        if not getattr(config, "TRAINING", None):
-            return False, "[TRAINING] section is required for training"
+        if isinstance(config, (TrainingJobConfig, SearchJobConfig)):
+            if config.training is None:
+                return False, "[training] section is required for training"
         return True, None
 
     try:
         valid, message = structurally_valid(settings)
-        if valid and getattr(settings, "MLFLOW", None) is not None:
+        if valid and settings.tracking.backend == "mlflow":
             if importlib.util.find_spec("mlflow") is None:
                 valid, message = False, "MLflow is not installed"
 
-        # Check Optuna availability for optimization workflows
-        if valid and isinstance(settings, OptimizationWorkflowConfig):
+        if valid and isinstance(settings, SearchJobConfig):
             if importlib.util.find_spec("optuna") is None:
                 valid, message = False, "Optuna is not installed"
 
-        if valid and dry_build:
-            # Only build components for training/optimization workflows, not inference
-            if not isinstance(settings, InferenceWorkflowConfig):
-                try:
-                    BuildFactory().build_components(
-                        cast(TrainingWorkflowConfig | OptimizationWorkflowConfig, settings)
-                    )
-                except WorkflowError:
-                    raise
-                except Exception as exc:
-                    valid, message = False, f"Dry build failed: {exc}"
+        if valid and dry_build and not isinstance(settings, InferenceJobConfig):
+            try:
+                BuildFactory().build_components(cast(TrainingJobConfig | SearchJobConfig, settings))
+            except WorkflowError:
+                raise
+            except Exception as exc:
+                valid, message = False, f"Dry build failed: {exc}"
 
         if not valid:
             raise WorkflowError(

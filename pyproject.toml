@@ -161,15 +161,7 @@ known-third-party = ["lightning", "torch", "numpy", "loguru", "pytest", "tensord
 
 [tool.ty.analysis]
 respect-type-ignore-comments = true
-# Modules deleted in config protocol redesign Task 1; engine/CLI wiring fixed in Tasks 3-5.
-allowed-unresolved-imports = [
-    "dlkit.infrastructure.config.general_settings",
-    "dlkit.infrastructure.config.mlflow_settings",
-    "dlkit.infrastructure.config.optuna_settings",
-    "dlkit.infrastructure.config.session_settings",
-    "dlkit.infrastructure.config.workflow_configs",
-    "dlkit.infrastructure.config.workflow_types",
-]
+allowed-unresolved-imports = []
 replace-imports-with-any = []
 
 [tool.ty.environment]

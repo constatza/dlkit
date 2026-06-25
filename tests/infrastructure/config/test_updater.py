@@ -87,14 +87,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -133,14 +130,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 
@@ -161,8 +155,7 @@ max_epochs = 100
         # Other trainer fields should be preserved
         assert new_training.trainer.name == training.trainer.name
 
-        # Other TRAINING fields should be preserved
-        assert new_training.epochs == training.epochs
+        # Other TRAINING fields should be preserved (optimizer unchanged)
         assert _expect_optimizer_with_lr(new_training).lr == _expect_optimizer_with_lr(training).lr
 
     def test_multiple_sections_at_once(self, tmp_path):
@@ -185,14 +178,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -205,7 +195,7 @@ module_path = "torch.nn"
             settings,
             {
                 "SESSION": {"name": "updated_session"},
-                "TRAINING": {"epochs": 100},
+                "TRAINING": {"trainer": {"max_epochs": 100}},
                 "DATAMODULE": {"dataloader": {"batch_size": 64}},
             },
         )
@@ -215,7 +205,7 @@ module_path = "torch.nn"
 
         # All updates should be applied
         assert session.name == "updated_session"
-        assert training_updated.epochs == 100
+        assert training_updated.trainer.max_epochs == 100
         assert datamodule.dataloader.batch_size == 64
 
         # Unspecified fields preserved
@@ -247,15 +237,12 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 weight_decay = 0.01
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -316,14 +303,11 @@ path = "{features_path.as_posix()}"
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -373,14 +357,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -411,23 +392,20 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
 
         settings = load_settings(config_path)
 
-        new_settings = update_settings(settings, {"TRAINING": {"epochs": 999}})
+        new_settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": 999}}})
 
-        assert _expect_training_settings(new_settings).epochs == 999
+        assert _expect_training_settings(new_settings).trainer.max_epochs == 999
 
     def test_path_overwrite(self, tmp_path):
         """Test that Path objects are overwritten."""
@@ -455,14 +433,11 @@ name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 checkpoint = "{ckpt1.as_posix()}"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -497,15 +472,12 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.005
 weight_decay = 0.1
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -516,7 +488,7 @@ module_path = "torch.nn"
         assert _expect_optimizer_with_lr(training).lr == 0.005
         assert _expect_optimizer_with_weight_decay(training).weight_decay == 0.1
 
-        updated = update_settings(settings, {"TRAINING": {"epochs": 50}})
+        updated = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": 50}}})
         updated_training = _expect_training_settings(updated)
 
         assert updated_training.optimizer.default_optimizer.name == "Adam"
@@ -545,15 +517,12 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "AdamW"
 lr = 0.01
 weight_decay = 0.2
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -599,14 +568,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 
@@ -660,14 +626,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 
@@ -717,14 +680,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -768,14 +728,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -812,14 +769,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 
@@ -866,14 +820,11 @@ batch_size = 32
 name = "LinearNetwork"
 module_path = "dlkit.domain.nn.ffnn"
 
-[TRAINING]
-epochs = 10
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
@@ -896,14 +847,11 @@ class TestInstanceHelper:
 [SESSION]
 name = "instance_helper"
 
-[TRAINING]
-epochs = 1
-
 [TRAINING.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss_function]
+[TRAINING.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)

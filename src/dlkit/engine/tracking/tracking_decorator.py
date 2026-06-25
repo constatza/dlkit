@@ -21,10 +21,7 @@ from dlkit.engine.tracking.result_enricher import ResultEnricher
 from dlkit.engine.tracking.settings_logger import SettingsLogger
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.interfaces import ITrainingExecutor
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -87,7 +84,7 @@ class TrackingDecorator(ITrainingExecutor):
     def execute(
         self,
         components: RuntimeComponents,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: object,
     ) -> TrainingResult:
         """Execute training with experiment tracking.
 
@@ -101,14 +98,19 @@ class TrackingDecorator(ITrainingExecutor):
 
         Args:
             components: Pre-built training components
-            settings: Global training settings
+            settings: Global training settings (must be a JobConfig instance)
 
         Returns:
             TrainingResult enriched with tracking metadata
 
         Raises:
             WorkflowError: If training or tracking fails
+            TypeError: If settings is not a JobConfig instance
         """
+        if not isinstance(settings, JobConfig):
+            raise TypeError(
+                f"TrackingDecorator.execute requires a JobConfig, got {type(settings).__name__}"
+            )
         # Configure the tracker before entering its context
         logger.debug("Setting up tracking")
         self._setup_tracking(settings)
@@ -147,7 +149,7 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         execution_components: RuntimeComponents,
         tracked_components: RuntimeComponents,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
         tracking_uri: str | None = None,
     ) -> TrainingResult:
         """Execute training with tracking - separated for SRP compliance.
@@ -238,23 +240,19 @@ class TrackingDecorator(ITrainingExecutor):
 
     def _setup_tracking(
         self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
     ) -> None:
         """Configure the tracker before entering its context.
 
-        Calls ``configure(mlflow_config)`` on the tracker if that method exists.
-        Uses duck typing so no optional-protocol isinstance check is needed.
+        Calls ``configure(tracking)`` on the tracker using the backend connection
+        settings from the job config.
 
         Args:
-            settings: Global settings
+            settings: Global settings (JobConfig instance)
         """
-        accessor = ConfigAccessor(settings)
-        mlflow_config = accessor.get_mlflow_config()
-        self._tracker.configure(mlflow_config)
+        self._tracker.configure(settings.tracking)
 
-    def _extract_run_config(
-        self, settings: TrainingWorkflowConfig | OptimizationWorkflowConfig
-    ) -> dict:
+    def _extract_run_config(self, settings: JobConfig) -> dict:
         """Extract run configuration from settings including merged tags.
 
         Uses ConfigAccessor for type-safe configuration access and
@@ -299,7 +297,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_configuration(
         self,
         components: RuntimeComponents,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
         run_context: IRunContext,
     ) -> None:
         """Log configuration, dataset lineage, and model parameters.
@@ -318,7 +316,7 @@ class TrackingDecorator(ITrainingExecutor):
     def _log_dataset_to_run(
         self,
         components: RuntimeComponents,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
         run_context: IRunContext,
     ) -> None:
         """Log dataset lineage via the injected DatasetLogger.
@@ -337,7 +335,7 @@ class TrackingDecorator(ITrainingExecutor):
         self,
         components: RuntimeComponents,
         run_context: IRunContext,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
     ) -> None:
         """Inject MLflow callbacks into trainer.
 

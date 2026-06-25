@@ -21,7 +21,7 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.api import build_inference_datamodule
 from dlkit.interfaces.inference import load_model_from_settings
 
@@ -65,7 +65,7 @@ def _run_inference_impl(
     - Override: `--batch-size`.
     """
     console.print(f"📖 Loading configuration from: {config_path}")
-    settings = cast(InferenceWorkflowConfig, load_config(config_path))
+    job = cast(InferenceJobConfig, load_config(config_path, run_type="predict"))
 
     # Show applied overrides
     override_messages = []
@@ -90,7 +90,7 @@ def _run_inference_impl(
         effective_batch_size = batch_size if batch_size is not None else 32
 
         predictor = load_model_from_settings(
-            settings,
+            job,
             checkpoint_path=checkpoint,
             device="auto",
             batch_size=effective_batch_size,
@@ -105,7 +105,7 @@ def _run_inference_impl(
         # Get ordered feature names for kwarg dispatch (from checkpoint metadata)
         feature_names = predictor.feature_names
 
-        datamodule = build_inference_datamodule(settings) if settings.has_dataset_config else None
+        datamodule = build_inference_datamodule(job) if job.data is not None else None
         if datamodule is not None:
             datamodule.setup("predict")
             loader = datamodule.predict_dataloader()

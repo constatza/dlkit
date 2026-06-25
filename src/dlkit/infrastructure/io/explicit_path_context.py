@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.infrastructure.config.environment import EnvironmentSettings
-from dlkit.infrastructure.config.general_settings import GeneralSettings
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -107,37 +106,19 @@ class PathContext:
         )
 
     @classmethod
-    def from_settings(cls, settings: GeneralSettings) -> PathContext:
-        """Create PathContext from settings (SESSION.root_dir).
+    def from_settings(cls, settings: object) -> PathContext:
+        """Create PathContext from settings.
 
-        Extracts the root_dir from settings.SESSION.root_dir if present,
-        otherwise returns an empty context. This is useful for defensive
-        context creation from loaded configuration.
+        JobConfig has no root_dir field; path resolution falls back to
+        environment settings and CWD. Returns an empty context.
 
         Args:
-            settings: GeneralSettings instance with optional SESSION.root_dir.
-                If SESSION section or root_dir field is missing, returns
-                empty context.
+            settings: Any config object (JobConfig or similar).
 
         Returns:
-            PathContext with root_dir from settings, or empty context if
-            SESSION.root_dir is not present.
-
-        Example:
-            >>> settings = GeneralSettings(SESSION=SessionSettings(root_dir="/project"))
-            >>> ctx = PathContext.from_settings(settings)
-            >>> ctx.root_dir
-            PosixPath('/project')
-
-            >>> # Settings without SESSION.root_dir
-            >>> settings = GeneralSettings()
-            >>> ctx = PathContext.from_settings(settings)
-            >>> ctx.root_dir is None
-            True
+            Empty PathContext — callers should use from_cli_args() for
+            explicit overrides or from_overrides() for dict-based overrides.
         """
-        root_dir = getattr(getattr(settings, "SESSION", None), "root_dir", None)
-        if root_dir:
-            return cls(root_dir=Path(root_dir))
         return cls()
 
     @classmethod

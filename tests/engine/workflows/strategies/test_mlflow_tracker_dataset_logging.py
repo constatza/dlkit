@@ -10,15 +10,17 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from dlkit.common.hooks import ParamValue
 from dlkit.engine.tracking.dataset_logger import DatasetLogger
 from dlkit.engine.tracking.interfaces import IRunContext
 from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.entry_types import NpyEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
-from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
 
 
 class _DatasetRunContext(IRunContext):
@@ -100,29 +102,80 @@ class _DatasetRunContext(IRunContext):
         pass
 
 
-def _make_settings(tmp_path: Path) -> GeneralSettings:
-    feature_path = tmp_path / "features.npy"
-    target_path = tmp_path / "targets.npy"
-    np.save(feature_path, np.array([[1.0], [2.0]], dtype=np.float32))
-    np.save(target_path, np.array([[0.0], [1.0]], dtype=np.float32))
+@pytest.fixture
+def feature_npy(tmp_path: Path) -> Path:
+    """Create a feature .npy file fixture.
 
-    dataset = DatasetSettings(
-        name="CustomDataset",
-        features=(NpyEntry(name="x", path=feature_path, data_role=DataRole.FEATURE),),
-        targets=(NpyEntry(name="y", path=target_path, data_role=DataRole.TARGET),),
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Path to the created .npy file.
+    """
+    path = tmp_path / "features.npy"
+    np.save(path, np.array([[1.0], [2.0]], dtype=np.float32))
+    return path
+
+
+@pytest.fixture
+def target_npy(tmp_path: Path) -> Path:
+    """Create a target .npy file fixture.
+
+    Args:
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Path to the created .npy file.
+    """
+    path = tmp_path / "targets.npy"
+    np.save(path, np.array([[0.0], [1.0]], dtype=np.float32))
+    return path
+
+
+@pytest.fixture
+def job_with_entries(feature_npy: Path, target_npy: Path) -> JobConfig:
+    """JobConfig with feature and target NpyEntries.
+
+    Args:
+        feature_npy: Feature numpy file path fixture.
+        target_npy: Target numpy file path fixture.
+
+    Returns:
+        JobConfig with data section containing feature and target entries.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings(
+            name="CustomDataset",
+            features=(NpyEntry(name="x", path=feature_npy, data_role=DataRole.FEATURE),),
+            targets=(NpyEntry(name="y", path=target_npy, data_role=DataRole.TARGET),),
+        ),
     )
-    return GeneralSettings(DATASET=dataset)
 
 
-def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(tmp_path: Path) -> None:
-    settings = _make_settings(tmp_path)
+@pytest.fixture
+def job_with_empty_data() -> JobConfig:
+    """JobConfig with an empty DataSettings (no features or targets).
+
+    Returns:
+        JobConfig with data section containing no entries.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings(name="CustomDataset"),
+    )
+
+
+def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(
+    job_with_entries: JobConfig,
+) -> None:
     run_context = _DatasetRunContext()
     tracker = DatasetLogger()
 
     unsupported_dataset = SimpleNamespace()
     datamodule = SimpleNamespace(dataset=unsupported_dataset)
 
-    tracker.log_dataset_to_run(datamodule, run_context, settings)
+    tracker.log_dataset_to_run(datamodule, run_context, job_with_entries)
 
     assert len(run_context.logged_datasets) == 1
     assert run_context.logged_datasets[0]["context"] == "training"
@@ -135,14 +188,15 @@ def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(tmp_path:
     assert "dataset_fingerprint" in run_context.tags
 
 
-def test_logs_manifest_only_for_empty_sources_and_unsupported_dataset(tmp_path: Path) -> None:
-    settings = GeneralSettings(DATASET=DatasetSettings(name="CustomDataset"))
+def test_logs_manifest_only_for_empty_sources_and_unsupported_dataset(
+    job_with_empty_data: JobConfig,
+) -> None:
     run_context = _DatasetRunContext()
     tracker = DatasetLogger()
 
     datamodule = SimpleNamespace(dataset=SimpleNamespace())
 
-    tracker.log_dataset_to_run(datamodule, run_context, settings)
+    tracker.log_dataset_to_run(datamodule, run_context, job_with_empty_data)
 
     assert run_context.logged_datasets == []
     assert len(run_context.manifests) == 1
@@ -153,29 +207,30 @@ def test_logs_manifest_only_for_empty_sources_and_unsupported_dataset(tmp_path: 
 
 
 def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> None:
-    x = tmp_path / "x.npy"
-    edge_index = tmp_path / "edge.npy"
-    y = tmp_path / "y.npy"
-    np.save(x, np.array([[1.0], [2.0]], dtype=np.float32))
-    np.save(edge_index, np.array([[0, 1], [1, 0]], dtype=np.int64))
-    np.save(y, np.array([[0.0], [1.0]], dtype=np.float32))
+    x_path = tmp_path / "x.npy"
+    edge_path = tmp_path / "edge.npy"
+    y_path = tmp_path / "y.npy"
+    np.save(x_path, np.array([[1.0], [2.0]], dtype=np.float32))
+    np.save(edge_path, np.array([[0, 1], [1, 0]], dtype=np.int64))
+    np.save(y_path, np.array([[0.0], [1.0]], dtype=np.float32))
 
-    settings = GeneralSettings(
-        DATASET=DatasetSettings.model_validate(
-            {
-                "name": "GraphDataset",
-                "type": DatasetFamily.GRAPH,
-                "x": x,
-                "edge_index": edge_index,
-                "y": y,
-            }
-        )
+    job = JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings(
+            name="GraphDataset",
+            family=DatasetFamily.GRAPH,
+            features=(
+                NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+                NpyEntry(name="edge_index", path=edge_path, data_role=DataRole.FEATURE),
+            ),
+            targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
+        ),
     )
     run_context = _DatasetRunContext()
     tracker = DatasetLogger()
 
     datamodule = SimpleNamespace(dataset=SimpleNamespace())
-    tracker.log_dataset_to_run(datamodule, run_context, settings)
+    tracker.log_dataset_to_run(datamodule, run_context, job)
 
     assert len(run_context.manifests) == 1
     manifest = run_context.manifests[0]
@@ -183,15 +238,16 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
     assert run_context.tags["dataset_source_count"] == "3"
 
 
-def test_logs_structured_tabular_dataset_when_dataframe_available(tmp_path: Path) -> None:
-    settings = GeneralSettings(DATASET=DatasetSettings(name="CustomDataset"))
+def test_logs_structured_tabular_dataset_when_dataframe_available(
+    job_with_empty_data: JobConfig,
+) -> None:
     run_context = _DatasetRunContext()
     tracker = DatasetLogger()
 
     tabular_dataset = SimpleNamespace(df=pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
     datamodule = SimpleNamespace(dataset=tabular_dataset)
 
-    tracker.log_dataset_to_run(datamodule, run_context, settings)
+    tracker.log_dataset_to_run(datamodule, run_context, job_with_empty_data)
 
     assert len(run_context.logged_datasets) == 1
     assert run_context.logged_datasets[0]["context"] == "training"

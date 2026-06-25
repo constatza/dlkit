@@ -15,16 +15,76 @@ from dlkit.common.protocols import IDataModule, ITrainableModule
 from dlkit.domain.metrics.collect import collect_metrics
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.tuning import ILRTunable, SupportedLRTuningPlan
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.precision.service import get_precision_service
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .interfaces import ITrainingExecutor
 
 logger = get_logger(__name__)
+
+
+def _get_seed(settings: JobConfig) -> int:
+    """Extract seed from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Random seed (default 42 when not configured).
+    """
+    return settings.run.seed or 42
+
+
+def _get_lr_tuner(settings: JobConfig) -> Any | None:
+    """Extract LR tuner settings from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        LR tuner settings, or None when not configured.
+    """
+    return settings.training.lr_tuner if settings.training else None
+
+
+def _get_optimizer(settings: JobConfig) -> Any | None:
+    """Extract optimizer settings from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Optimizer settings, or None when not configured.
+    """
+    return settings.training.optimizer if settings.training else None
+
+
+def _get_resume_checkpoint(settings: JobConfig) -> str | None:
+    """Extract resume checkpoint path from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Checkpoint path string, or None when not configured.
+    """
+    training = settings.training
+    if training is None or not training.resume_from_checkpoint:
+        return None
+    return str(training.resume_from_checkpoint)
+
+
+def _get_trainer_settings(settings: JobConfig) -> Any | None:
+    """Extract trainer settings from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Trainer settings object, or None when not configured.
+    """
+    return settings.training.trainer if settings.training else None
 
 
 @contextmanager
@@ -58,25 +118,30 @@ class VanillaExecutor(ITrainingExecutor):
     def execute(
         self,
         components: RuntimeComponents,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: object,
     ) -> TrainingResult:
         """Execute pure training workflow.
 
         Args:
-            components: Pre-built training components
-            settings: Global training settings
+            components: Pre-built training components.
+            settings: Global training settings (must be a JobConfig instance).
 
         Returns:
-            TrainingResult with metrics and artifacts
+            TrainingResult with metrics and artifacts.
 
         Raises:
-            WorkflowError: If training execution fails
+            WorkflowError: If training execution fails.
+            TypeError: If settings is not a JobConfig instance.
         """
+        if not isinstance(settings, JobConfig):
+            raise TypeError(
+                f"VanillaExecutor.execute requires a JobConfig, got {type(settings).__name__}"
+            )
         try:
             # Set reproducible seed from settings
             from pytorch_lightning import seed_everything
 
-            seed_everything(settings.SESSION.seed, workers=True)
+            seed_everything(_get_seed(settings), workers=True)
 
             trainer = components.trainer
             model = components.model
@@ -87,7 +152,7 @@ class VanillaExecutor(ITrainingExecutor):
 
             # Log precision information for debugging
             precision_service = get_precision_service()
-            precision_info = precision_service.get_precision_info(settings.SESSION)
+            precision_info = precision_service.get_precision_info(None)
             logger.debug(
                 "Training precision strategy='{}' torch_dtype='{}'",
                 precision_info.get("strategy"),
@@ -101,7 +166,6 @@ class VanillaExecutor(ITrainingExecutor):
             ckpt_path = self._get_resume_checkpoint_path(settings)
 
             # Core training execution
-            # Use weights_only=False for dlkit checkpoints which may contain custom classes
             with _suppress_training_runtime_warnings():
                 trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
@@ -138,7 +202,7 @@ class VanillaExecutor(ITrainingExecutor):
         self,
         model: LightningModule,
         datamodule: LightningDataModule | None,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: Any,
     ) -> None:
         """Apply automatic learning rate tuning if configured.
 
@@ -147,15 +211,17 @@ class VanillaExecutor(ITrainingExecutor):
             datamodule: Optional datamodule.
             settings: Global training settings.
         """
-        if not settings.TRAINING:
-            return
-        lr_tuner_settings = getattr(settings.TRAINING, "lr_tuner", None)
+        lr_tuner_settings = _get_lr_tuner(settings)
         if lr_tuner_settings is None:
             return
 
         from dlkit.engine.training.tuning import UnsupportedLRTuningPlan, get_lr_tuning_plan
 
-        tuning_plan = get_lr_tuning_plan(settings.TRAINING.optimizer)
+        optimizer = _get_optimizer(settings)
+        if optimizer is None:
+            logger.warning("No optimizer configured; skipping LR tuner.")
+            return
+        tuning_plan = get_lr_tuning_plan(optimizer)
         if isinstance(tuning_plan, UnsupportedLRTuningPlan):
             logger.warning("{} Skipping LR tuner.", tuning_plan.reason)
             return
@@ -192,16 +258,11 @@ class VanillaExecutor(ITrainingExecutor):
         self,
         model: LightningModule,
         datamodule: LightningDataModule | None,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: Any,
         tuning_plan: SupportedLRTuningPlan,
         lr_tuner_settings: Any,
     ) -> float:
         """Run Lightning LR finder with a projected single-stage optimizer.
-
-        Temporarily swaps ``model._optimization_controller`` with one built from
-        ``tuning_plan.projected_policy`` so Lightning's LR finder sees exactly one
-        optimizer. The original controller and ``automatic_optimization`` flag are
-        always restored in the ``finally`` block.
 
         Args:
             model: The training model wrapper.
@@ -216,7 +277,14 @@ class VanillaExecutor(ITrainingExecutor):
         from dlkit.engine.training.optimization.controllers import build_optimization_controller
         from dlkit.engine.training.tuning import LRTuner
 
-        tuning_trainer = settings.TRAINING.trainer.build(settings.SESSION)
+        trainer_settings = _get_trainer_settings(settings)
+        if trainer_settings is None:
+            raise WorkflowError(
+                "Trainer settings are required for LR tuning", {"stage": "lr_tuning"}
+            )
+
+        tuning_trainer = trainer_settings.build(session=None)
+
         tuning_controller = build_optimization_controller(
             cast(Any, model).model, tuning_plan.projected_policy
         )
@@ -240,9 +308,9 @@ class VanillaExecutor(ITrainingExecutor):
         """Run optional post-training steps (predict, test); return predictions.
 
         Args:
-            trainer: PyTorch Lightning trainer
-            model: Lightning module
-            datamodule: Optional datamodule
+            trainer: PyTorch Lightning trainer.
+            model: Lightning module.
+            datamodule: Optional datamodule.
 
         Returns:
             Prediction batches from trainer.predict(), or None if predict failed.
@@ -266,17 +334,16 @@ class VanillaExecutor(ITrainingExecutor):
         """Collect metrics from trainer after training.
 
         Args:
-            trainer: PyTorch Lightning trainer
+            trainer: PyTorch Lightning trainer.
 
         Returns:
-            Dictionary of collected metrics
+            Dictionary of collected metrics.
         """
         metrics: dict[str, Any] = {}
         callback_metrics = getattr(trainer, "callback_metrics", None)
         progress_metrics = getattr(trainer, "progress_bar_metrics", None)
         logged_metrics = getattr(trainer, "logged_metrics", None)
 
-        # callback_metrics is the most complete view of end-of-epoch values
         metrics.update(collect_metrics(callback_metrics))
         metrics.update(collect_metrics(progress_metrics))
         metrics.update(collect_metrics(logged_metrics))
@@ -287,10 +354,10 @@ class VanillaExecutor(ITrainingExecutor):
         """Collect checkpoint artifacts from trainer callbacks.
 
         Args:
-            trainer: PyTorch Lightning trainer
+            trainer: PyTorch Lightning trainer.
 
         Returns:
-            Dictionary mapping artifact names to paths
+            Dictionary mapping artifact names to paths.
         """
         artifacts: dict[str, Path] = {}
         from lightning.pytorch.callbacks import ModelCheckpoint
@@ -298,23 +365,19 @@ class VanillaExecutor(ITrainingExecutor):
         callbacks = getattr(trainer, "callbacks", None) or []
         for callback in callbacks:
             if isinstance(callback, ModelCheckpoint):
-                # Collect best and last checkpoints from callback
                 if hasattr(callback, "best_model_path") and callback.best_model_path:
                     artifacts["best_checkpoint"] = Path(callback.best_model_path)
                 if hasattr(callback, "last_model_path") and callback.last_model_path:
                     artifacts["last_checkpoint"] = Path(callback.last_model_path)
 
-                # Fallback: check filesystem directly if paths aren't set
                 if callback.dirpath and not artifacts.get("last_checkpoint"):
                     dirpath = Path(callback.dirpath)
                     if dirpath.exists():
-                        # Check for last.ckpt or *-last.ckpt pattern
                         last_checkpoints = list(dirpath.glob("last.ckpt")) + list(
                             dirpath.glob("*-last.ckpt")
                         )
                         if last_checkpoints:
                             artifacts["last_checkpoint"] = last_checkpoints[0]
-                        # Check for any .ckpt files as fallback for best checkpoint
                         elif not artifacts.get("best_checkpoint"):
                             ckpt_files = [f for f in dirpath.glob("*.ckpt") if "last" not in f.name]
                             if ckpt_files:
@@ -322,26 +385,16 @@ class VanillaExecutor(ITrainingExecutor):
 
         return artifacts
 
-    def _get_resume_checkpoint_path(
-        self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
-    ) -> str | None:
+    def _get_resume_checkpoint_path(self, settings: Any) -> str | None:
         """Get checkpoint path for resuming training if configured.
 
-        Checks TRAINING.resume_from_checkpoint for the checkpoint path.
-
         Args:
-            settings: Global training settings
+            settings: Global training settings.
 
         Returns:
-            Checkpoint path as string if resuming is configured, None otherwise
+            Checkpoint path as string if resuming is configured, None otherwise.
         """
-        # Check TRAINING.resume_from_checkpoint
-        training_checkpoint = (
-            getattr(settings.TRAINING, "resume_from_checkpoint", None)
-            if hasattr(settings, "TRAINING") and settings.TRAINING
-            else None
-        )
+        training_checkpoint = _get_resume_checkpoint(settings)
         if training_checkpoint is None:
             return None
 

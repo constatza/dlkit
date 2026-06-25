@@ -64,7 +64,8 @@ class TrainerSettings(ComponentSettings):
 
     max_epochs: int = Field(
         default=100,
-        description="Maximum number of epochs to train for.",
+        ge=1,
+        description="Maximum number of epochs to train for. Must be at least 1.",
     )
     gradient_clip_val: float | None = Field(
         default=None, description="Value for gradient clipping (if any)."

@@ -91,10 +91,10 @@ class TestSamplerValidSpecs:
 
     def test_choices_list_of_lists_raises_validation_error(self) -> None:
         """Structured categorical choices should be rejected at config validation time."""
-        with pytest.raises(
-            ValidationError, match="must contain only None, bool, int, float, or str"
-        ):
-            OptunaSettings(enabled=True, model={"layers": {"choices": [[1, 2], [2, 4]]}})
+        from dlkit.infrastructure.config.search_settings import CategoricalParam
+
+        with pytest.raises(ValidationError):
+            CategoricalParam.model_validate({"type": "categorical", "choices": [[1, 2], [3, 4]]})
 
     def test_sampler_populates_trial_params_with_choices_spec(self) -> None:
         import optuna

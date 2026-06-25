@@ -6,7 +6,7 @@ from typing import cast
 
 from dlkit.common import OptimizationResult
 from dlkit.common.errors import WorkflowError
-from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 
 from ..optimization.factory import OptimizationServiceFactory
 from ._entrypoint_context import EntrypointContext
@@ -14,7 +14,7 @@ from ._override_types import OptimizationOverrides, require_override_model
 
 
 def optimize(
-    settings: OptimizationWorkflowConfig,
+    settings: SearchJobConfig,
     overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""
@@ -26,7 +26,7 @@ def optimize(
     )
 
     try:
-        opt_settings = cast(OptimizationWorkflowConfig, context.settings)
+        opt_settings = cast(SearchJobConfig, context.settings)
         base_factory = OptimizationServiceFactory()
         experiment_tracker = base_factory.create_experiment_tracker(opt_settings)
         strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)

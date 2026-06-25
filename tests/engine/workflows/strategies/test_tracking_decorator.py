@@ -17,14 +17,12 @@ from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training import VanillaExecutor
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.general_settings import GeneralSettings
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
+from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = JobConfig
 
 
 class MockRunContext(IRunContext):
@@ -178,18 +176,16 @@ def mock_tracker():
 
 
 @pytest.fixture
-def mlflow_settings() -> TrainingWorkflowConfig:
-    """Create MLflow settings for testing."""
-    from dlkit.infrastructure.config.session_settings import SessionSettings
-    from dlkit.infrastructure.config.training_settings import TrainingSettings
+def mlflow_settings() -> JobConfig:
+    """Create JobConfig with experiment and tracking settings for testing.
 
-    return TrainingWorkflowConfig(
-        SESSION=SessionSettings(workflow="train"),
-        TRAINING=TrainingSettings(),
-        MLFLOW=MLflowSettings(
-            experiment_name="test_experiment",
-            run_name="test_run",
-        ),
+    Returns:
+        JobConfig configured with experiment name, run name, and mlflow tracking.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(name="test_experiment", run_name="test_run"),
+        tracking=TrackingSettings(backend="mlflow"),
     )
 
 
@@ -270,12 +266,8 @@ def test_tracking_decorator_composition_pattern(mock_tracker, mlflow_settings, b
 
 def test_tracking_decorator_mlflow_disabled_error(mock_executor, build_components):
     """Test that decorator works gracefully when MLflow is not configured."""
-    from dlkit.infrastructure.config.session_settings import SessionSettings
-    from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-    settings_no_mlflow = TrainingWorkflowConfig(
-        SESSION=SessionSettings(workflow="train"),
-        TRAINING=TrainingSettings(),
+    settings_no_mlflow = JobConfig(
+        run=RunSettings(type="train"),
     )
 
     # Use NullTracker for the proper "disabled MLflow" scenario

@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager, ExitStack
 from types import TracebackType
 
 from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .backend import LocalSqliteBackend, TrackingBackend, select_backend
@@ -31,7 +31,7 @@ class MLflowTracker(IExperimentTracker):
         from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 
         tracker = MLflowTracker()
-        tracker.configure(settings.MLFLOW)
+        tracker.configure(settings.tracking)
 
         with tracker:  # Initializes resources
             with tracker.create_run(experiment_name="training") as run:
@@ -60,7 +60,7 @@ class MLflowTracker(IExperimentTracker):
         self.disable_autostart = disable_autostart
         self._probe = probe
         self._resource_manager: MLflowResourceManager | None = None
-        self._mlflow_config: MLflowSettings | None = None
+        self._mlflow_config: TrackingSettings | None = None
         self._exit_stack: ExitStack | None = None
         self._backend: TrackingBackend | None = None
 
@@ -185,7 +185,7 @@ class MLflowTracker(IExperimentTracker):
             return False
         return self._resource_manager.has_active_parent_run()
 
-    def configure(self, config: MLflowSettings) -> None:
-        """Store MLflow config with no side effects."""
+    def configure(self, config: TrackingSettings) -> None:
+        """Store tracking config with no side effects."""
         self._mlflow_config = config
-        logger.debug("MLflow config stored - will initialize in context entry")
+        logger.debug("Tracking config stored - will initialize in context entry")

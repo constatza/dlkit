@@ -23,8 +23,8 @@ def validate_template(
     template_content: str,
     template_type: TemplateKind | None = None,
 ) -> dict[str, Any]:
-    """Validate TOML template content against GeneralSettings."""
-    from dlkit.infrastructure.config import GeneralSettings  # type: ignore
+    """Validate TOML template content against JobConfig."""
+    from dlkit.infrastructure.config.job_config import JobConfig
 
     errors: list[str] = []
     try:
@@ -32,7 +32,7 @@ def validate_template(
 
         parsed = tomlkit.loads(template_content)
         try:
-            GeneralSettings.model_validate(dict(parsed))
+            JobConfig.model_validate(dict(parsed))
         except Exception as exc:
             errors.append(f"Settings validation failed: {exc}")
     except Exception as exc:
@@ -47,14 +47,12 @@ def validate_template(
 
 def _build_template_dict(template_type: TemplateKind) -> dict[str, Any]:
     template_dict: dict[str, Any] = {}
-    template_dict["SESSION"] = {
-        "name": "my_session",
-        "workflow": "train",
+    template_dict["run"] = {
+        "type": "train",
         "seed": 42,
         "precision": "medium",
     }
-    template_dict["MODEL"] = {"name": "your.model.class"}
-    template_dict["EXTRAS"] = {"example_key": "user_defined_value"}
+    template_dict["model"] = {"name": "your.model.class"}
 
     match template_type:
         case "training":
@@ -124,26 +122,25 @@ def _generate_placeholder_value(field_info: FieldInfo) -> Any:
 
 def _customize_for_training(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = base_dict.copy()
-    if "SESSION" in result and isinstance(result["SESSION"], dict):
-        result["SESSION"]["workflow"] = "train"
-    result["TRAINING"] = {"trainer": {"max_epochs": 100, "accelerator": "auto"}}
-    result["DATAMODULE"] = {"name": "your.datamodule.class"}
-    result["DATASET"] = {"name": "your.dataset.class"}
+    if "run" in result and isinstance(result["run"], dict):
+        result["run"]["type"] = "train"
+    result["training"] = {"trainer": {"max_epochs": 100, "accelerator": "auto"}}
+    result["data"] = {"name": "your.dataset.class"}
     return result
 
 
 def _customize_for_inference(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = base_dict.copy()
-    if "SESSION" in result and isinstance(result["SESSION"], dict):
-        result["SESSION"]["workflow"] = "inference"
-    result["MODEL"]["checkpoint"] = "./model.ckpt"
+    if "run" in result and isinstance(result["run"], dict):
+        result["run"]["type"] = "predict"
+    result["model"]["checkpoint"] = "./model.ckpt"
     return result
 
 
 def _customize_for_mlflow(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = _customize_for_training(base_dict)
-    result["MLFLOW"] = {
-        "experiment_name": "my_experiment",
+    result["experiment"] = {
+        "name": "my_experiment",
         "run_name": "my_run",
         "register_model": True,
     }
@@ -152,8 +149,7 @@ def _customize_for_mlflow(base_dict: dict[str, Any]) -> dict[str, Any]:
 
 def _customize_for_optuna(base_dict: dict[str, Any]) -> dict[str, Any]:
     result = _customize_for_mlflow(base_dict)
-    result["OPTUNA"] = {
-        "enabled": True,
+    result["search"] = {
         "n_trials": 100,
         "study_name": "my_study",
         "storage": _get_default_optuna_storage(),
@@ -169,38 +165,34 @@ def _get_default_optuna_storage() -> str:
 
 def _get_field_comments(template_type: TemplateKind) -> dict[str, str]:
     base_comments = {
-        "SESSION.name": "Human-readable run/session name (for logs and tracking)",
-        "SESSION.workflow": "Workflow mode: 'train', 'optimize', or 'inference'",
-        "SESSION.seed": "Random seed for reproducibility",
-        "SESSION.precision": "Computation precision preset (e.g., medium, high)",
-        "MODEL.name": "Model class path or registry alias",
-        "TRAINING.trainer.max_epochs": "Maximum number of epochs (Lightning Trainer)",
-        "TRAINING.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
-        "DATAMODULE.name": "DataModule class path or alias (dataflow loading)",
-        "DATASET.name": "Dataset class path or alias",
-        "EXTRAS.example_key": "Free-form user settings for custom scripts; ignored by core",
+        "run.type": "Workflow mode: 'train', 'search', or 'predict'",
+        "run.seed": "Random seed for reproducibility",
+        "run.precision": "Computation precision preset (e.g., medium, high)",
+        "model.name": "Model class path or registry alias",
+        "training.trainer.max_epochs": "Maximum number of epochs (Lightning Trainer)",
+        "training.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
+        "data.name": "Dataset class path or alias",
     }
 
     if template_type == "inference":
         base_comments.update(
             {
-                "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
+                "model.checkpoint": "Path to trained model checkpoint (required for inference)",
             }
         )
     if template_type in ["mlflow", "optuna"]:
         base_comments.update(
             {
-                "MLFLOW.experiment_name": "MLflow experiment name",
-                "MLFLOW.run_name": "MLflow run name",
+                "experiment.name": "MLflow experiment name",
+                "experiment.run_name": "MLflow run name",
             }
         )
     if template_type == "optuna":
         base_comments.update(
             {
-                "OPTUNA.enabled": "Enable Optuna hyperparameter optimization",
-                "OPTUNA.n_trials": "Number of optimization trials to run",
-                "OPTUNA.study_name": "Name for the Optuna study",
-                "OPTUNA.storage": "Database URL for Optuna study storage",
+                "search.n_trials": "Number of optimization trials to run",
+                "search.study_name": "Name for the Optuna study",
+                "search.storage": "Database URL for Optuna study storage",
             }
         )
     return base_comments
@@ -208,15 +200,12 @@ def _get_field_comments(template_type: TemplateKind) -> dict[str, str]:
 
 def _render_toml(template: dict[str, Any], *, kind: TemplateKind) -> str:
     section_order = [
-        "SESSION",
-        "MODEL",
-        "MLFLOW",
-        "OPTUNA",
-        "TRAINING",
-        "DATAMODULE",
-        "DATASET",
-        "EXTRAS",
-        "SESSION.workflow",
+        "run",
+        "model",
+        "experiment",
+        "search",
+        "training",
+        "data",
     ]
 
     doc = document()

@@ -13,36 +13,32 @@ import torch
 
 import dlkit
 import dlkit.engine.tracking.uri_resolver as uri_resolver
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.interfaces.api import train as api_train
 
 
 class TestBasicIntegration:
     """Basic integration tests using conftest.py fixtures."""
 
-    def test_vanilla_training_end_to_end(self, training_settings: GeneralSettings) -> None:
+    def test_vanilla_training_end_to_end(self, training_settings: TrainingJobConfig) -> None:
         """Test basic vanilla training workflow end-to-end.
 
         Args:
             training_settings: Pre-configured settings with minimal dataset.
         """
-        # Act - Run training
         training_result = api_train(training_settings)
 
-        # Assert - Basic validation
         assert training_result.duration_seconds > 0
         assert training_result.metrics is not None
 
-    def test_mlflow_training_basic(self, mlflow_settings: GeneralSettings) -> None:
+    def test_mlflow_training_basic(self, mlflow_settings: TrainingJobConfig) -> None:
         """Test basic MLflow training workflow.
 
         Args:
             mlflow_settings: Pre-configured settings with MLflow enabled.
         """
-        # Act - Run MLflow training
         training_result = api_train(mlflow_settings)
 
-        # Assert - Validate results
         assert training_result.duration_seconds > 0
         if training_result.metrics:
             assert isinstance(training_result.metrics, dict)
@@ -53,7 +49,7 @@ class TestBasicIntegration:
 
         tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
         client = MlflowClient(tracking_uri=tracking_uri)
-        experiment_name = determine_experiment_name(mlflow_settings, mlflow_settings.MLFLOW)
+        experiment_name = determine_experiment_name(mlflow_settings)
         experiment = client.get_experiment_by_name(experiment_name)
         assert experiment is not None
 
@@ -64,7 +60,7 @@ class TestBasicIntegration:
         )
         assert runs
 
-    def test_double_precision_training(self, double_precision_settings: GeneralSettings) -> None:
+    def test_double_precision_training(self, double_precision_settings: TrainingJobConfig) -> None:
         """Regression test: double precision training must not crash on TensorDict batches.
 
         Lightning's DoublePrecisionPlugin.convert_input calls apply_to_collection which
@@ -79,7 +75,7 @@ class TestBasicIntegration:
 
     def test_vanilla_training_keeps_outputs_local_without_mlflow(
         self,
-        training_settings: GeneralSettings,
+        training_settings: TrainingJobConfig,
         tmp_path: Path,
         monkeypatch,
     ) -> None:
@@ -87,7 +83,7 @@ class TestBasicIntegration:
         monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
         monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
-        training_cfg = training_settings.TRAINING
+        training_cfg = training_settings.training
         assert training_cfg is not None
         trainer_cfg = training_cfg.trainer
         assert trainer_cfg is not None
@@ -95,7 +91,7 @@ class TestBasicIntegration:
         output_root = tmp_path / "local_training_output"
         settings = training_settings.model_copy(
             update={
-                "TRAINING": training_cfg.model_copy(
+                "training": training_cfg.model_copy(
                     update={
                         "trainer": trainer_cfg.model_copy(
                             update={
@@ -127,7 +123,7 @@ class TestBasicIntegration:
         assert not (tmp_path / "mlartifacts").exists()
 
     def test_inference_basic_workflow(
-        self, inference_settings: GeneralSettings, minimal_model_checkpoint: Path
+        self, inference_settings: TrainingJobConfig, minimal_model_checkpoint: Path
     ) -> None:
         """Test basic inference workflow.
 
@@ -135,8 +131,6 @@ class TestBasicIntegration:
             inference_settings: Pre-configured inference settings with dataset and checkpoint.
             minimal_model_checkpoint: Pre-created model checkpoint for inference.
         """
-        # Act - Run inference using the new stateful predictor API
-        # predict() mirrors model.forward() — pass tensors as positional/keyword args
         x_input = torch.randn(5, 4)
 
         predictor = dlkit.load_model(checkpoint_path=minimal_model_checkpoint, device="cpu")

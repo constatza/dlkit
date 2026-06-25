@@ -8,32 +8,57 @@ from dlkit.engine.workflows.entrypoints._overrides import (
     apply_runtime_overrides,
     build_runtime_overrides,
 )
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
+from dlkit.infrastructure.config.data_settings import DataSettings
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
+from dlkit.infrastructure.config.model_settings import ModelSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
     LBFGSSettings,
     MuonSettings,
 )
-from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
-def _require_training(settings: GeneralSettings) -> TrainingSettings:
-    training = settings.TRAINING
+def _require_training(job: TrainingJobConfig) -> TrainingSettings:
+    """Extract required training settings from a TrainingJobConfig.
+
+    Args:
+        job: A training job config.
+
+    Returns:
+        The training settings section.
+    """
+    training = job.training
     assert training is not None
     return training
 
 
-def _require_datamodule(settings: GeneralSettings) -> DataModuleSettings:
-    datamodule = settings.DATAMODULE
-    assert datamodule is not None
-    return datamodule
+def _require_data(job: TrainingJobConfig) -> DataSettings:
+    """Extract required data settings from a TrainingJobConfig.
+
+    Args:
+        job: A training job config.
+
+    Returns:
+        The data settings section.
+    """
+    data = job.data
+    assert data is not None
+    return data
 
 
 def _require_numeric_lr(settings: TrainingSettings) -> int | float:
+    """Extract learning rate from training settings.
+
+    Args:
+        settings: Training settings with optimizer configuration.
+
+    Returns:
+        The numeric learning rate value.
+    """
     optimizer = settings.optimizer.default_optimizer
     assert isinstance(optimizer, AdamWSettings | AdamSettings | LBFGSSettings | MuonSettings)
     lr = optimizer.lr
@@ -42,11 +67,17 @@ def _require_numeric_lr(settings: TrainingSettings) -> int | float:
 
 
 @pytest.fixture
-def sample_settings() -> GeneralSettings:
-    return GeneralSettings(
-        SESSION=SessionSettings(workflow="train"),
-        TRAINING=TrainingSettings(epochs=50),
-        DATAMODULE=DataModuleSettings(dataloader=DataloaderSettings(batch_size=16)),
+def sample_job() -> TrainingJobConfig:
+    """Minimal TrainingJobConfig with training and data sections for override testing.
+
+    Returns:
+        TrainingJobConfig with max_epochs=50 and batch_size=16.
+    """
+    return TrainingJobConfig(
+        run=RunSettings(type="train"),
+        model=ModelSettings(name="DummyModel"),
+        data=DataSettings(batch_size=16),
+        training=TrainingSettings(trainer=TrainerSettings(max_epochs=50)),
     )
 
 
@@ -64,21 +95,21 @@ class TestOverrideIntegration:
         assert overrides == {}
 
     def test_settings_values_preserved_when_no_overrides(
-        self, sample_settings: GeneralSettings
+        self, sample_job: TrainingJobConfig
     ) -> None:
         overrides = build_runtime_overrides(additional_overrides={})
         assert overrides == {}
 
-        result = apply_runtime_overrides(sample_settings, **overrides)
+        result = apply_runtime_overrides(sample_job, **overrides)
         result_training = _require_training(result)
-        sample_training = _require_training(sample_settings)
-        result_datamodule = _require_datamodule(result)
-        sample_datamodule = _require_datamodule(sample_settings)
+        sample_training = _require_training(sample_job)
+        result_data = _require_data(result)
+        sample_data = _require_data(sample_job)
 
-        assert result_training.epochs == sample_training.epochs
-        assert result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
+        assert result_training.trainer.max_epochs == sample_training.trainer.max_epochs
+        assert result_data.batch_size == sample_data.batch_size
 
-    def test_overrides_applied_when_values_provided(self, sample_settings: GeneralSettings) -> None:
+    def test_overrides_applied_when_values_provided(self, sample_job: TrainingJobConfig) -> None:
         overrides = build_runtime_overrides(
             epochs=100,
             batch_size=64,
@@ -91,29 +122,29 @@ class TestOverrideIntegration:
             "learning_rate": 0.01,
         }
 
-        result = apply_runtime_overrides(sample_settings, **overrides)
+        result = apply_runtime_overrides(sample_job, **overrides)
         result_training = _require_training(result)
-        result_datamodule = _require_datamodule(result)
+        result_data = _require_data(result)
 
-        assert result_training.epochs == 100
-        assert result_datamodule.dataloader.batch_size == 64
+        assert result_training.trainer.max_epochs == 100
+        assert result_data.batch_size == 64
         assert float(_require_numeric_lr(result_training)) == pytest.approx(0.01)
 
     def test_partial_overrides_preserve_non_overridden_values(
-        self, sample_settings: GeneralSettings
+        self, sample_job: TrainingJobConfig
     ) -> None:
         overrides = build_runtime_overrides(epochs=200, additional_overrides={})
         assert overrides == {"epochs": 200}
 
-        result = apply_runtime_overrides(sample_settings, **overrides)
+        result = apply_runtime_overrides(sample_job, **overrides)
         result_training = _require_training(result)
-        result_datamodule = _require_datamodule(result)
-        sample_datamodule = _require_datamodule(sample_settings)
+        result_data = _require_data(result)
+        sample_data = _require_data(sample_job)
 
-        assert result_training.epochs == 200
-        assert result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
+        assert result_training.trainer.max_epochs == 200
+        assert result_data.batch_size == sample_data.batch_size
 
-    def test_none_values_explicitly_ignored(self, sample_settings: GeneralSettings) -> None:
+    def test_none_values_explicitly_ignored(self, sample_job: TrainingJobConfig) -> None:
         overrides = build_runtime_overrides(
             epochs=None,
             batch_size=None,
@@ -122,14 +153,14 @@ class TestOverrideIntegration:
         )
         assert overrides == {"learning_rate": 50}
 
-        result = apply_runtime_overrides(sample_settings, **overrides)
+        result = apply_runtime_overrides(sample_job, **overrides)
         result_training = _require_training(result)
-        sample_training = _require_training(sample_settings)
-        result_datamodule = _require_datamodule(result)
-        sample_datamodule = _require_datamodule(sample_settings)
+        sample_training = _require_training(sample_job)
+        result_data = _require_data(result)
+        sample_data = _require_data(sample_job)
 
-        assert result_training.epochs == sample_training.epochs
-        assert result_datamodule.dataloader.batch_size == sample_datamodule.dataloader.batch_size
+        assert result_training.trainer.max_epochs == sample_training.trainer.max_epochs
+        assert result_data.batch_size == sample_data.batch_size
         assert float(_require_numeric_lr(result_training)) == pytest.approx(50)
 
 

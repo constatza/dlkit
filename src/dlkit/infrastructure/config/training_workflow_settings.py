@@ -31,14 +31,6 @@ class TrainingWorkflowSettings(BaseWorkflowSettings):
         default=None,
         description="Core training configuration with nested library settings",
     )
-    MLFLOW: None = Field(
-        default=None,
-        description="MLflow configuration (removed — use tracking_settings.TrackingSettings)",
-    )
-    OPTUNA: None = Field(
-        default=None,
-        description="Optuna configuration (removed — use search_settings.SearchSettings)",
-    )
 
     _workflow_type: ClassVar[str] = "training"
 

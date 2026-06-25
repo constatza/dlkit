@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.tracking import uri_resolver
@@ -10,10 +11,10 @@ from dlkit.engine.tracking.interfaces import NullTracker
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training import ITrainingExecutor, VanillaExecutor
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
+
+if TYPE_CHECKING:
+    from dlkit.engine.workflows.factories.build_strategy import WorkflowSettings
 
 
 def _default_probe() -> bool:
@@ -34,7 +35,7 @@ class ExecutionStrategyFactory:
 
     def create_executor(
         self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
         hooks: LifecycleHooks | None = None,
     ) -> ITrainingExecutor:
         """Create composed execution strategy from settings.
@@ -70,46 +71,37 @@ class ExecutionStrategyFactory:
         # This method returns TrackingDecorator -> VanillaExecutor.
         return executor
 
-    def _has_mlflow_config(
-        self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
-    ) -> bool:
-        """Check if MLflow configuration section is present in settings.
-
-        MLflow is enabled whenever the [MLFLOW] section exists — no separate
-        ``enabled`` flag is needed.
-        """
-        return bool(getattr(settings, "MLFLOW", None))
-
     def _has_mlflow_config_or_env(
         self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: JobConfig,
     ) -> bool:
         """Check if MLflow should be activated for training.
 
-        Activates when the ``[MLFLOW]`` config section exists, when the
-        standard ``MLFLOW_TRACKING_URI`` environment variable is set, or when
-        a local MLflow server is detected at the default address.  The local
-        probe only runs when neither config nor env var is present (short-circuit).
+        Activates when tracking.backend == "mlflow", when MLFLOW_TRACKING_URI
+        env var is an HTTP URI, or when a local MLflow server is detected.
         """
         import os
 
+        if settings.tracking.backend == "mlflow":
+            return True
         env_uri = os.getenv("MLFLOW_TRACKING_URI")
         has_user_http_uri = bool(
             env_uri and (env_uri.startswith("http://") or env_uri.startswith("https://"))
         )
-        return self._has_mlflow_config(settings) or has_user_http_uri or self._probe()
+        return has_user_http_uri or self._probe()
 
     def _is_optimization_workflow(
         self,
-        settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+        settings: WorkflowSettings,
     ) -> bool:
         """Check if this is an optimization workflow based on config type."""
-        return isinstance(settings, OptimizationWorkflowConfig)
+        from dlkit.infrastructure.config.job_config import SearchJobConfig
+
+        return isinstance(settings, SearchJobConfig)
 
 
 def create_execution_strategy(
-    settings: TrainingWorkflowConfig | OptimizationWorkflowConfig,
+    settings: WorkflowSettings,
     hooks: LifecycleHooks | None = None,
 ) -> ITrainingExecutor:
     """Convenience function to create a composed execution strategy.

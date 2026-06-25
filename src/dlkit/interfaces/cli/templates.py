@@ -27,179 +27,208 @@ def _get_default_optuna_storage() -> str:
 TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
 
 
-def _dataset_template(*, include_targets: bool) -> dict[str, Any]:
-    dataset: dict[str, Any] = {
-        "name": "FlexibleDataset",
-        "root_dir": "./data",
-        "features": [
-            {
-                "name": "x",
-                "path": "features.npy",
-                "data_role": "feature",
-            }
-        ],
-    }
-    if include_targets:
-        dataset["targets"] = [
-            {
-                "name": "y",
-                "path": "targets.npy",
-                "data_role": "target",
-            }
-        ]
-    return dataset
+def _data_features_template() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "x",
+            "path": "features.npy",
+            "data_role": "feature",
+        }
+    ]
 
 
-def build_training_template_dict() -> dict:
+def _data_targets_template() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "y",
+            "path": "targets.npy",
+            "data_role": "target",
+        }
+    ]
+
+
+def build_training_template_dict() -> dict[str, Any]:
+    """Build canonical training job config template dict.
+
+    Returns:
+        Template dictionary using new lowercase JobConfig section keys.
+    """
     return {
-        "SESSION": {
-            "name": "my_training_session",
-            "workflow": "train",
+        "run": {
+            "type": "train",
             "seed": 42,
             "precision": "32",
         },
-        "MODEL": {
-            "name": "your.model.class",
+        "experiment": {
+            "name": "my-experiment",
         },
-        "TRAINING": {
+        "model": {
+            "name": "your.model.class",
+            "params": {},
+        },
+        "data": {
+            "root": "./data",
+            "batch_size": 32,
+            "num_workers": 0,
+            "features": _data_features_template(),
+            "targets": _data_targets_template(),
+            "splits": {"train": 0.7, "val": 0.15, "test": 0.15},
+        },
+        "training": {
+            "loss": "mse",
+            "stopping": {
+                "monitor": "val/loss",
+                "patience": 10,
+                "direction": "min",
+            },
             "trainer": {
                 "max_epochs": 100,
                 "accelerator": "auto",
                 "default_root_dir": "./lightning",
             },
+            "optimizer": {
+                "name": "AdamW",
+                "lr": 1e-3,
+                "weight_decay": 1e-4,
+            },
         },
-        "DATAMODULE": {
-            "name": "your.datamodule.class",
-        },
-        "DATASET": _dataset_template(include_targets=True),
     }
 
 
-def build_inference_template_dict() -> dict:
+def build_inference_template_dict() -> dict[str, Any]:
+    """Build canonical inference job config template dict.
+
+    Returns:
+        Template dictionary using new lowercase JobConfig section keys.
+    """
     return {
-        "SESSION": {
-            "name": "my_inference_session",
-            "workflow": "inference",
+        "run": {
+            "type": "predict",
             "seed": 42,
             "precision": "32",
         },
-        "MODEL": {
+        "experiment": {
+            "name": "my-inference-experiment",
+        },
+        "model": {
             "name": "your.model.class",
             "checkpoint": "./model.ckpt",
         },
-        "DATASET": _dataset_template(include_targets=False),
+        "data": {
+            "root": "./data",
+            "batch_size": 32,
+            "num_workers": 0,
+            "features": _data_features_template(),
+        },
     }
 
 
-def build_mlflow_template_dict() -> dict:
-    return {
-        "SESSION": {
-            "name": "my_mlflow_session",
-            "workflow": "train",
-            "seed": 42,
-            "precision": "32",
-        },
-        "MODEL": {
-            "name": "your.model.class",
-        },
-        "MLFLOW": {
-            "experiment_name": "my_experiment",
-            "run_name": "my_run",
-            "register_model": True,
-        },
-        "TRAINING": {
-            "trainer": {
-                "max_epochs": 100,
-                "accelerator": "auto",
-            },
-        },
-        "DATAMODULE": {
-            "name": "your.datamodule.class",
-        },
-        "DATASET": _dataset_template(include_targets=True),
+def build_mlflow_template_dict() -> dict[str, Any]:
+    """Build training job config template dict with MLflow tracking.
+
+    Returns:
+        Template dictionary with tracking section populated.
+    """
+    base = build_training_template_dict()
+    base["tracking"] = {
+        "backend": "mlflow",
+        "uri": "http://localhost:5000",
     }
-
-
-def build_optuna_template_dict() -> dict:
-    return {
-        "SESSION": {
-            "name": "my_optuna_session",
-            "workflow": "optimize",
-            "seed": 42,
-            "precision": "32",
-        },
-        "MODEL": {
-            "name": "your.model.class",
-        },
-        "MLFLOW": {
-            "experiment_name": "my_experiment",
-        },
-        "OPTUNA": {
-            "enabled": True,
-            "n_trials": 100,
-            "study_name": "my_study",
-            "storage": _get_default_optuna_storage(),
-            "model": {
-                "hidden_size": [64, 128, 256],
-                "num_layers": [2, 4, 6],
-            },
-        },
-        "TRAINING": {
-            "trainer": {
-                "max_epochs": 100,
-                "accelerator": "auto",
-                "default_root_dir": "./lightning",
-            },
-        },
-        "DATAMODULE": {
-            "name": "your.datamodule.class",
-        },
-        "DATASET": _dataset_template(include_targets=True),
+    base["experiment"] = {
+        "name": "my-mlflow-experiment",
+        "run_name": "my-run",
+        "register_model": True,
     }
+    return base
 
 
-def get_template_dict(kind: TemplateKind) -> dict:
-    if kind == "training":
-        return build_training_template_dict()
-    if kind == "inference":
-        return build_inference_template_dict()
-    if kind == "mlflow":
-        return build_mlflow_template_dict()
-    if kind == "optuna":
-        return build_optuna_template_dict()
-    raise ValueError(f"Unknown template kind: {kind}")
+def build_search_template_dict() -> dict[str, Any]:
+    """Build canonical HPO search job config template dict.
+
+    Returns:
+        Template dictionary for hyperparameter search using new JobConfig keys.
+    """
+    base = build_training_template_dict()
+    base["run"]["type"] = "search"
+    base["search"] = {
+        "n_trials": 20,
+        "direction": "minimize",
+        "objective": "val/loss",
+        "space": {
+            "training.optimizer.lr": {
+                "type": "log_float",
+                "low": 1e-5,
+                "high": 1e-1,
+            },
+            "model.params.hidden_size": {
+                "type": "categorical",
+                "choices": [64, 128, 256],
+            },
+        },
+    }
+    return base
+
+
+# Legacy alias: "optuna" kind maps to new search template
+def _build_optuna_template_dict() -> dict[str, Any]:
+    return build_search_template_dict()
+
+
+def get_template_dict(kind: TemplateKind) -> dict[str, Any]:
+    """Return the template dict for the given kind.
+
+    Args:
+        kind: Template kind (``"training"``, ``"inference"``, ``"mlflow"``, ``"optuna"``).
+
+    Returns:
+        Template dictionary with lowercase JobConfig section keys.
+
+    Raises:
+        ValueError: If kind is unknown.
+    """
+    match kind:
+        case "training":
+            return build_training_template_dict()
+        case "inference":
+            return build_inference_template_dict()
+        case "mlflow":
+            return build_mlflow_template_dict()
+        case "optuna":
+            return _build_optuna_template_dict()
+        case _:
+            raise ValueError(f"Unknown template kind: {kind}")
 
 
 def _comments_for(kind: TemplateKind) -> dict[str, str]:
-    """Return a mapping of dotted keys to human-readable comments."""
-    base = {
-        "SESSION.name": "Human-readable run/session name (for logs and tracking)",
-        "SESSION.workflow": "Workflow mode: 'train', 'optimize', or 'inference'",
-        "SESSION.seed": "Random seed for reproducibility",
-        "SESSION.precision": "Computation precision preset (e.g., '32', '16-mixed')",
-        "MODEL.name": "Model class path or registry alias",
-        "TRAINING.trainer.max_epochs": "Maximum number of epochs (Lightning Trainer)",
-        "TRAINING.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
-        "TRAINING.trainer.default_root_dir": "Local Lightning work directory when MLflow is disabled",
-        "DATAMODULE.name": "DataModule class path or alias (dataflow loading)",
-        "DATASET.name": "Dataset class path or alias",
-        "DATASET.root_dir": "Root directory used to resolve relative dataset entry paths",
-        "DATASET.features": "Feature entries loaded into the batch TensorDict",
-        "DATASET.targets": "Target entries loaded into the batch TensorDict",
+    """Return a mapping of dotted keys to human-readable comments.
+
+    Args:
+        kind: Template kind used to include kind-specific comments.
+
+    Returns:
+        Mapping of dotted config key to comment string.
+    """
+    base: dict[str, str] = {
+        "run.type": "Workflow type: 'train', 'predict', or 'search'",
+        "run.seed": "Random seed for reproducibility",
+        "run.precision": "Computation precision preset (e.g., '32', '16-mixed')",
+        "experiment.name": "Human-readable experiment name (for logs and tracking)",
+        "model.name": "Model class path or registry alias",
+        "data.root": "Root directory used to resolve relative dataset entry paths",
+        "data.batch_size": "DataLoader batch size",
+        "data.features": "Feature entries loaded into the batch TensorDict",
+        "data.targets": "Target entries loaded into the batch TensorDict",
+        "training.trainer.max_epochs": "Maximum number of epochs (Lightning Trainer)",
+        "training.trainer.accelerator": "Hardware accelerator: cpu | gpu | auto | tpu",
+        "training.trainer.default_root_dir": "Local Lightning work directory when tracking is disabled",
+        "tracking.backend": "Tracking backend: 'mlflow' or 'none'",
+        "tracking.uri": "Tracking server URI (for MLflow)",
     }
     if kind == "inference":
-        base.update(
-            {
-                "MODEL.checkpoint": "Path to trained model checkpoint (required for inference)",
-            }
-        )
-    if kind == "optuna":
-        base.update(
-            {
-                "OPTUNA.model.hidden_size": "Example search space for MODEL.hidden_size",
-                "OPTUNA.model.num_layers": "Example search space for MODEL.num_layers",
-            }
-        )
+        base["model.checkpoint"] = "Path to trained model checkpoint (required for inference)"
+    if kind in ("optuna", "search"):
+        base["search.n_trials"] = "Number of hyperparameter optimization trials"
+        base["search.space"] = "Hyperparameter search space keyed by dotted config path"
     return base
 
 
@@ -253,16 +282,15 @@ def _build_aot(
 
 
 def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
-    # Deterministic section order
+    # Deterministic section order (lowercase JobConfig keys)
     order = (
-        "SESSION",
-        "MODEL",
-        "MLFLOW",
-        "OPTUNA",
-        "TRAINING",
-        "DATAMODULE",
-        "DATASET",
-        "SESSION.workflow",
+        "run",
+        "experiment",
+        "model",
+        "data",
+        "training",
+        "search",
+        "tracking",
     )
 
     doc: TOMLDocument = document()
@@ -298,10 +326,17 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
                     child_tbl, grand_nested = _build_table(
                         child_value, comments=comments, prefix=dotted
                     )
-                    if grand_nested:
-                        raise ValueError(
-                            f"Nested arrays of tables are not supported in templates: {dotted}"
-                        )
+                    for grand_key, grand_value in grand_nested:
+                        grand_dotted = f"{dotted}.{grand_key}"
+                        if isinstance(grand_value, dict):
+                            grand_tbl, _ = _build_table(
+                                grand_value, comments=comments, prefix=grand_dotted
+                            )
+                            child_tbl.add(grand_key, grand_tbl)
+                        elif _is_array_of_tables(grand_value):
+                            raise ValueError(
+                                f"Nested arrays of tables are not supported in templates: {grand_dotted}"
+                            )
                     section_tbl.add(child_key, child_tbl)
                     continue
                 if dotted in comments:
@@ -310,7 +345,7 @@ def render_toml(template: dict, *, kind: TemplateKind = "training") -> str:
                     child_key, _build_aot(child_value, comments=comments, prefix=dotted)
                 )
     rendered = dumps(doc)
-    # Ensure explicit parent headers for purely nested sections (e.g., [TRAINING])
+    # Ensure explicit parent headers for purely nested sections (e.g., [training])
     for sec in need_parent_headers:
         if f"[{sec}]\n" not in rendered and f"[{sec}." in rendered:
             # Insert header before the first nested occurrence

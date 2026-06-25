@@ -14,9 +14,9 @@ from dlkit.engine.workflows.entrypoints import (
     train as runtime_train,
 )
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
+from dlkit.infrastructure.config.job_config import (
+    SearchJobConfig,
+    TrainingJobConfig,
 )
 from dlkit.interfaces.api.domain.override_types import (
     ExecutionOverrides,
@@ -26,18 +26,25 @@ from dlkit.interfaces.api.domain.override_types import (
 
 
 def _apply_mlflow_flag(settings: WorkflowSettings, mlflow: bool) -> WorkflowSettings:
-    """Return settings with MLFLOW section ensured when mlflow=True.
+    """Return settings with tracking backend ensured when mlflow=True.
+
+    When ``mlflow=True`` and the config has no explicit tracking backend,
+    patches the tracking section to use MLflow so the engine enables it.
 
     Args:
         settings: Workflow configuration settings.
-        mlflow: Whether to ensure MLFLOW config exists.
+        mlflow: Whether to ensure MLflow tracking is configured.
 
     Returns:
-        Settings with MLFLOW section ensured, or original settings if mlflow=False.
+        Settings with tracking backend set to ``"mlflow"``, or original
+        settings if ``mlflow=False`` or tracking is already configured.
     """
-    if mlflow and not getattr(settings, "MLFLOW", None):
-        return settings.patch({"MLFLOW": {}})
-    return settings
+    if not mlflow:
+        return settings
+    tracking = getattr(settings, "tracking", None)
+    if tracking is not None and getattr(tracking, "backend", None) not in (None, "none"):
+        return settings
+    return settings.patch({"tracking": {"backend": "mlflow"}})
 
 
 class EngineWorkflowExecutor:
@@ -56,18 +63,21 @@ class EngineWorkflowExecutor:
         Args:
             settings: Training workflow configuration settings.
             overrides: Optional training overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, ensure MLflow tracking is configured.
             hooks: Optional lifecycle hooks for training events.
 
         Returns:
             TrainingResult containing trained model state and metrics.
+
+        Raises:
+            TypeError: If settings is not a TrainingJobConfig.
         """
-        settings_with_mlflow = _apply_mlflow_flag(settings, mlflow)
-        if not isinstance(settings_with_mlflow, TrainingWorkflowConfig):
+        settings_with_tracking = _apply_mlflow_flag(settings, mlflow)
+        if not isinstance(settings_with_tracking, TrainingJobConfig):
             raise TypeError(
-                f"train() requires TrainingWorkflowConfig, got {type(settings_with_mlflow).__name__}"
+                f"train() requires TrainingJobConfig, got {type(settings_with_tracking).__name__}"
             )
-        return runtime_train(settings_with_mlflow, overrides=overrides, hooks=hooks)
+        return runtime_train(settings_with_tracking, overrides=overrides, hooks=hooks)
 
     def optimize(
         self,
@@ -81,17 +91,20 @@ class EngineWorkflowExecutor:
         Args:
             settings: Optimization workflow configuration settings.
             overrides: Optional optimization overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, ensure MLflow tracking is configured.
 
         Returns:
             OptimizationResult containing best model and trial history.
+
+        Raises:
+            TypeError: If settings is not a SearchJobConfig.
         """
-        settings_with_mlflow = _apply_mlflow_flag(settings, mlflow)
-        if not isinstance(settings_with_mlflow, OptimizationWorkflowConfig):
+        settings_with_tracking = _apply_mlflow_flag(settings, mlflow)
+        if not isinstance(settings_with_tracking, SearchJobConfig):
             raise TypeError(
-                f"optimize() requires OptimizationWorkflowConfig, got {type(settings_with_mlflow).__name__}"
+                f"optimize() requires SearchJobConfig, got {type(settings_with_tracking).__name__}"
             )
-        return runtime_optimize(settings_with_mlflow, overrides=overrides)
+        return runtime_optimize(settings_with_tracking, overrides=overrides)
 
     def execute(
         self,
@@ -106,11 +119,11 @@ class EngineWorkflowExecutor:
         Args:
             settings: Workflow configuration settings.
             overrides: Optional execution overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, ensure MLflow tracking is configured.
             hooks: Optional lifecycle hooks for training events.
 
         Returns:
             TrainingResult or OptimizationResult depending on workflow type.
         """
-        settings_with_mlflow = _apply_mlflow_flag(settings, mlflow)
-        return runtime_execute(settings_with_mlflow, overrides=overrides, hooks=hooks)
+        settings_with_tracking = _apply_mlflow_flag(settings, mlflow)
+        return runtime_execute(settings_with_tracking, overrides=overrides, hooks=hooks)

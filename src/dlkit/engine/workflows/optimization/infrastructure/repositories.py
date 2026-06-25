@@ -18,6 +18,53 @@ from dlkit.engine.workflows.optimization.value_objects import (
     Trial,
     TrialState,
 )
+from dlkit.infrastructure.config.job_config import SearchJobConfig
+
+
+def _has_backend_config(settings: Any) -> bool:
+    """Return True when settings expose an HPO backend (Optuna or search section).
+
+    Used to gate trial registration — the trial handle must be stored whenever the
+    backend session is active, even when the search space is empty.
+
+    Args:
+        settings: Settings object, either a SearchJobConfig or a duck-typed alternative.
+
+    Returns:
+        True when a backend config is present.
+    """
+    if isinstance(settings, SearchJobConfig):
+        return True
+    return getattr(settings, "OPTUNA", None) is not None
+
+
+def _sample_trial_params(optuna_trial: Any, base_settings: Any) -> None:
+    """Sample hyperparameters into ``optuna_trial.params`` from any supported settings type.
+
+    For ``SearchJobConfig`` (new-style), uses ``suggest_from_space`` with the typed
+    ``search.space``.  For duck-typed legacy settings (tests) that expose an ``OPTUNA``
+    attribute, delegates to the old-style ``create_settings_sampler`` path.
+
+    Side effects: mutates ``optuna_trial.params`` via Optuna suggest_* calls.
+
+    Args:
+        optuna_trial: An Optuna trial object whose ``params`` will be populated.
+        base_settings: Settings object, either a ``SearchJobConfig`` or a duck-typed
+            alternative with an ``OPTUNA`` section.
+    """
+    if isinstance(base_settings, SearchJobConfig):
+        from dlkit.engine.workflows.optimization.infrastructure.applicators import (
+            suggest_from_space,
+        )
+
+        suggest_from_space(optuna_trial, base_settings.search.space)
+        return
+
+    from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
+
+    sampler_config = getattr(base_settings, "OPTUNA", None)
+    settings_sampler = create_settings_sampler(sampler_config)
+    settings_sampler.sample(optuna_trial, base_settings)
 
 
 class _OptunaStudyRegistry:
@@ -396,8 +443,8 @@ class OptunaOptimizationBackendSession(IOptimizationBackendSession):
         trial: Trial,
         base_settings: Any,
     ) -> dict[str, Any]:
-        optuna_config = getattr(base_settings, "OPTUNA", None)
-        if not optuna_config:
+        # Guard: only proceed if there is an active backend (OPTUNA or search section present).
+        if not _has_backend_config(base_settings):
             return {}
 
         if trial.trial_id in self._reported_trials:
@@ -414,12 +461,9 @@ class OptunaOptimizationBackendSession(IOptimizationBackendSession):
         backend_study = self._require_backend_study(study)
         optuna_trial = backend_study.ask()
 
-        from dlkit.infrastructure.config.samplers.optuna_sampler import create_settings_sampler
-
         try:
             self._trial_mapping[trial.trial_id] = optuna_trial
-            settings_sampler = create_settings_sampler(optuna_config)
-            settings_sampler.sample(optuna_trial, base_settings)
+            _sample_trial_params(optuna_trial, base_settings)
         except Exception:
             self._cleanup_failed_sampling(trial, backend_study, optuna_trial)
             raise

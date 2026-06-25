@@ -7,6 +7,7 @@ import warnings
 from dlkit.common import TrainingResult
 from dlkit.engine.training.optimization.controllers import ManualOptimizationController
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
@@ -17,23 +18,29 @@ from dlkit.infrastructure.config.optimizer_component import (
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.interfaces.api import train as api_train
 
 
 def _build_staged_graph_settings(
-    graph_settings: TrainingWorkflowConfig,
+    graph_settings: TrainingJobConfig,
     *,
     enable_lr_tuning: bool,
-) -> TrainingWorkflowConfig:
-    """Create a graph workflow with sequential staged optimizers."""
-    assert graph_settings.TRAINING is not None
+) -> TrainingJobConfig:
+    """Create a graph workflow with sequential staged optimizers.
+
+    Args:
+        graph_settings: Base graph training configuration.
+        enable_lr_tuning: Whether to include LR tuning configuration.
+
+    Returns:
+        Modified TrainingJobConfig with staged optimizer policy.
+    """
+    assert graph_settings.training is not None
     lr_tuner = (
         LRTunerSettings(min_lr=1e-6, max_lr=0.1, num_training=2) if enable_lr_tuning else None
     )
-    training = graph_settings.TRAINING.model_copy(
+    updated_training = graph_settings.training.model_copy(
         update={
-            "epochs": 1,
             "lr_tuner": lr_tuner,
             "trainer": TrainerSettings.model_validate(
                 {
@@ -61,17 +68,11 @@ def _build_staged_graph_settings(
             ),
         }
     )
-    return TrainingWorkflowConfig(
-        SESSION=graph_settings.SESSION,
-        DATASET=graph_settings.DATASET,
-        DATAMODULE=graph_settings.DATAMODULE,
-        MODEL=graph_settings.MODEL,
-        TRAINING=training,
-    )
+    return graph_settings.model_copy(update={"training": updated_training})
 
 
 def test_graph_staged_wrapper_uses_manual_controller(
-    graph_settings: TrainingWorkflowConfig,
+    graph_settings: TrainingJobConfig,
 ) -> None:
     """Graph staged policies should build a manual controller before training starts."""
     settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=False)
@@ -83,7 +84,7 @@ def test_graph_staged_wrapper_uses_manual_controller(
 
 
 def test_graph_staged_training_succeeds_without_lr_tuning(
-    graph_settings: TrainingWorkflowConfig,
+    graph_settings: TrainingJobConfig,
 ) -> None:
     """Sequential graph staged training should complete successfully."""
     settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=False)
@@ -100,7 +101,7 @@ def test_graph_staged_training_succeeds_without_lr_tuning(
 
 
 def test_graph_staged_training_succeeds_with_lr_tuning(
-    graph_settings: TrainingWorkflowConfig,
+    graph_settings: TrainingJobConfig,
 ) -> None:
     """Sequential graph staged training should complete even when LR tuning is enabled."""
     settings = _build_staged_graph_settings(graph_settings, enable_lr_tuning=True)

@@ -76,56 +76,56 @@ def validate_runtime_overrides(**overrides: Any) -> list[str]:
     return errors
 
 
-def _build_patch(settings: Any, overrides: dict[str, Any]) -> dict[str, Any]:
-    """Build a validated settings patch from request overrides."""
+def _build_patch(settings: BasicSettings, overrides: dict[str, Any]) -> dict[str, Any]:
+    """Build a settings patch from flat request overrides onto a JobConfig.
+
+    Args:
+        settings: A JobConfig instance to patch.
+        overrides: Flat mapping of override keys to values.
+
+    Returns:
+        Nested patch dict suitable for ``settings.patch()``.
+    """
     patch: dict[str, Any] = {}
 
-    if (cp := overrides.get("checkpoint_path")) and settings.MODEL:
-        patch["MODEL.checkpoint"] = cp
+    if cp := overrides.get("checkpoint_path"):
+        patch["model"] = {"checkpoint": cp}
 
-    if settings.TRAINING:
-        if (epochs := overrides.get("epochs")) is not None:
-            patch["TRAINING.epochs"] = epochs
-            patch["TRAINING.trainer.max_epochs"] = epochs
-        if (lr := overrides.get("learning_rate")) is not None:
-            patch["TRAINING.optimizer.default_optimizer.lr"] = float(lr)
-        if loss := overrides.get("loss_function"):
-            patch["TRAINING.loss_function"] = {
-                "name": loss,
-                "module_path": overrides.get("loss_module", "dlkit.domain.losses"),
-            }
+    training: dict[str, Any] = {}
+    if (epochs := overrides.get("epochs")) is not None:
+        training.setdefault("trainer", {})["max_epochs"] = epochs
+    if (lr := overrides.get("learning_rate")) is not None:
+        training.setdefault("optimizer", {}).setdefault("default_optimizer", {})["lr"] = float(lr)
+    if loss := overrides.get("loss_function"):
+        training["loss"] = {
+            "name": loss,
+            "module_path": overrides.get("loss_module", "dlkit.domain.losses"),
+        }
+    if training:
+        patch["training"] = training
 
-    if (bs := overrides.get("batch_size")) is not None and settings.DATAMODULE:
-        patch["DATAMODULE.dataloader.batch_size"] = bs
+    if (bs := overrides.get("batch_size")) is not None:
+        patch["data"] = {"batch_size": bs}
 
-    mlflow_fields = {
-        key: value
-        for key, value in overrides.items()
-        if key in ("experiment_name", "run_name", "register_model", "tags") and value is not None
-    }
-    if mlflow_fields:
-        patch["MLFLOW"] = mlflow_fields
+    experiment: dict[str, Any] = {}
+    if name := overrides.get("experiment_name"):
+        experiment["name"] = name
+    if run_name := overrides.get("run_name"):
+        experiment["run_name"] = run_name
+    if (register := overrides.get("register_model")) is not None:
+        experiment["register_model"] = register
+    if tags := overrides.get("tags"):
+        experiment["tags"] = tags
+    if experiment:
+        patch["experiment"] = experiment
 
-    optuna_fields = {
-        key: value
-        for key, value in {
-            "enabled": overrides.get("enable_optuna"),
-            "n_trials": overrides.get("trials"),
-            "study_name": overrides.get("study_name"),
-        }.items()
-        if value is not None
-    }
-    match (bool(optuna_fields), bool(settings.OPTUNA)):
-        case (False, _):
-            pass
-        case (True, True):
-            patch["OPTUNA"] = optuna_fields
-        case (True, False) if optuna_fields.get("enabled"):
-            patch["OPTUNA"] = {
-                "enabled": True,
-                "n_trials": optuna_fields.get("n_trials", 3),
-                "study_name": optuna_fields.get("study_name", "default_study"),
-            }
+    search: dict[str, Any] = {}
+    if trials := overrides.get("trials"):
+        search["n_trials"] = trials
+    if study_name := overrides.get("study_name"):
+        search["study_name"] = study_name
+    if search:
+        patch["search"] = search
 
     return patch
 

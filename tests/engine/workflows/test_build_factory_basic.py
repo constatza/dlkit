@@ -2,32 +2,22 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.engine.workflows.factories.build_factory import BuildFactory, WorkflowSettings
-from dlkit.engine.workflows.factories.model_detection import ModelType
-from dlkit.infrastructure.config.core.context import BuildContext
-from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.engine.workflows.factories.dataset_builder import DatasetBuilder
 from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.entry_types import AutoencoderTarget, NpyEntry
-from dlkit.infrastructure.config.enums import DatasetFamily
-from dlkit.infrastructure.config.general_settings import GeneralSettings
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     LossInputRef,
-    MetricComponentSettings,
-    MetricInputRef,
-    ModelComponentSettings,
 )
-from dlkit.infrastructure.config.session_settings import SessionSettings
-from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 class _FakeDataset:
@@ -47,10 +37,6 @@ class _FakeDataModule:
 
 class _FakeModel:
     pass
-
-
-def _as_workflow_settings(settings: GeneralSettings) -> WorkflowSettings:
-    return cast(WorkflowSettings, settings)
 
 
 @pytest.fixture
@@ -76,27 +62,76 @@ def tmp_checkpoint(tmp_path: Path) -> Path:
     return ckpt
 
 
-def _make_min_settings(sample: Any, *, inference: bool, ckpt: Path | None) -> GeneralSettings:
-    # Minimal flattened settings; we will patch factories to avoid importing real components
-    ds = DatasetSettings(name="FlexibleDataset", module_path="dlkit.engine.data.datasets")
-    dm = DataModuleSettings(
-        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
+def _make_inference_job(sample: Any, ckpt: Path) -> TrainingJobConfig:
+    """Build a TrainingJobConfig in predict mode for strategy tests.
+
+    Using ``run.type = "predict"`` causes ``build_trainer`` to return ``None``
+    (inference/predict mode), while still supplying the ``training`` section
+    required by ``FlexibleBuildStrategy``.
+
+    Args:
+        sample: A fake dataset sample (stored for monkeypatching use only).
+        ckpt: Path to the checkpoint file.
+
+    Returns:
+        Validated TrainingJobConfig with predict run type.
+    """
+    job = TrainingJobConfig.model_validate(
+        {
+            "run": {"type": "predict"},
+            "model": {"class": "Dummy", "module_path": "dlkit.domain.nn", "checkpoint": str(ckpt)},
+            "data": {"batch_size": 8, "num_workers": 0},
+            "training": {"loss": "mse"},
+        }
     )
-    mdl = ModelComponentSettings(name="Dummy", module_path="dlkit.domain.nn", checkpoint=ckpt)
-    tr = TrainingSettings()
-    workflow_mode = "inference" if inference else "train"
-    sess = SessionSettings(workflow=workflow_mode)
-    settings = GeneralSettings(SESSION=sess, MODEL=mdl, DATASET=ds, DATAMODULE=dm, TRAINING=tr)
-    # Attach a fake dataset sample we want to drive shape inference with
-    settings.__dict__["_test_sample"] = sample
-    return settings
+    # Attach a fake dataset sample for test-side monkeypatching
+    object.__setattr__(job, "_test_sample", sample)
+    return job
+
+
+def _make_training_job(
+    ckpt: Path,
+    features: list[dict[str, Any]] | None = None,
+    targets: list[dict[str, Any]] | None = None,
+    family: str | None = None,
+    module_path: str | None = None,
+) -> TrainingJobConfig:
+    """Build a minimal TrainingJobConfig for strategy tests.
+
+    Args:
+        ckpt: Path to the checkpoint file.
+        features: Feature entry dicts for the data section.
+        targets: Target entry dicts for the data section.
+        family: Optional dataset family (e.g. ``"graph"``).
+        module_path: Optional dataset module path.
+
+    Returns:
+        Validated TrainingJobConfig.
+    """
+    data_cfg: dict[str, Any] = {"batch_size": 8, "num_workers": 0}
+    if features is not None:
+        data_cfg["features"] = features
+    if targets is not None:
+        data_cfg["targets"] = targets
+    if family is not None:
+        data_cfg["family"] = family
+    if module_path is not None:
+        data_cfg["module_path"] = module_path
+
+    return TrainingJobConfig.model_validate(
+        {
+            "run": {"type": "train"},
+            "model": {"class": "Dummy", "module_path": "dlkit.domain.nn", "checkpoint": str(ckpt)},
+            "data": data_cfg,
+            "training": {"loss": "mse"},
+        }
+    )
 
 
 def test_build_factory_flexible_uses_contract_pipeline(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     # TensorDict-returning dataset so contract inference can sample from it.
-
     batch_sample = TensorDict(
         {
             "features": TensorDict({"x": torch.zeros(8, 3)}, batch_size=[8]),
@@ -104,17 +139,17 @@ def test_build_factory_flexible_uses_contract_pipeline(
         },
         batch_size=[],
     )
-    settings = _make_min_settings(batch_sample, inference=True, ckpt=tmp_checkpoint)
+    settings = _make_inference_job(batch_sample, tmp_checkpoint)
 
-    # Patch FactoryProvider.create_component to return our fakes
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            return _FakeDataset(settings.__dict__["_test_sample"])
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    # Intercept dataset and datamodule construction at the DatasetBuilder level.
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        return _FakeDataset(batch_sample)
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
+
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
 
     captured_wrapper_kwargs: dict[str, Any] = {}
 
@@ -122,14 +157,12 @@ def test_build_factory_flexible_uses_contract_pipeline(
         captured_wrapper_kwargs.update(kwargs)
         return _FakeModel()
 
-    # Patch WrapperFactory.create_standard_wrapper on the class object itself —
-    # shared by all importers, so the original path still works.
     monkeypatch.setattr(
         "dlkit.engine.adapters.lightning.factories.WrapperFactory.create_standard_wrapper",
         staticmethod(_capture_wrapper),
     )
 
-    comps = BuildFactory().build_components(_as_workflow_settings(settings))
+    comps = BuildFactory().build_components(settings)
 
     assert isinstance(comps.datamodule, _FakeDataModule)
     assert isinstance(comps.model, _FakeModel)
@@ -142,44 +175,19 @@ def test_build_factory_flexible_uses_contract_pipeline(
 def test_build_factory_selects_graph_strategy_and_passes_shape(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
-    # Graph-like dict sample; ensure model context receives shape override
-    graph_sample = {
-        "x": np.zeros((5, 4)),
-        "edge_index": np.zeros((2, 8), dtype=int),
-        "y": np.ones((5, 1)),
-    }
-    ds = DatasetSettings(
-        name="Any",
-        module_path="dlkit.engine.data.datasets",
-        type=DatasetFamily.GRAPH,
-    )
-    dm = DataModuleSettings()
-    mdl = ModelComponentSettings(
-        name="Dummy",
-        module_path="dlkit.domain.nn.ffnn",
-        checkpoint=tmp_checkpoint,
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=mdl,
-        DATASET=ds,
-        DATAMODULE=dm,
-        TRAINING=TrainingSettings(),
-    )
+    # Set family="graph" to route through GraphBuildStrategy.
+    settings = _make_training_job(tmp_checkpoint, family="graph")
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            return _FakeDataset(graph_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_dataset_with_tensor_entries(self, s, ctx):
+        return _FakeDataset({"x": np.zeros((5, 4)), "edge_index": np.zeros((2, 8), dtype=int)})
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
 
     monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.GRAPH,
+        DatasetBuilder, "build_dataset_with_tensor_entries", _fake_build_dataset_with_tensor_entries
     )
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
 
     def _capture_graph_wrapper(*_, **kwargs):
         return _FakeModel()
@@ -189,7 +197,7 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
         staticmethod(_capture_graph_wrapper),
     )
 
-    comps = BuildFactory().build_components(_as_workflow_settings(settings))
+    comps = BuildFactory().build_components(settings)
 
     assert comps.meta.get("dataset_type") == "graph"
 
@@ -226,24 +234,10 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
     np.save(x_path, np.zeros((8, 3), dtype=np.float32))
     np.save(y_path, np.zeros((8, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="SupervisedArrayDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-    )
-    dm = DataModuleSettings(
-        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-    )
-    mdl = ModelComponentSettings(
-        name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=mdl,
-        DATASET=ds,
-        DATAMODULE=dm,
-        TRAINING=TrainingSettings(),
+    settings = _make_training_job(
+        tmp_checkpoint,
+        features=[{"name": "x", "path": str(x_path)}],
+        targets=[{"name": "y", "path": str(y_path)}],
     )
 
     captured: dict[str, Any] = {}
@@ -258,7 +252,6 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
             return self._n
 
         def __getitem__(self, idx: int) -> TensorDict:
-
             return TensorDict(
                 {
                     "features": TensorDict({"x": torch.zeros(3)}, batch_size=[]),
@@ -267,25 +260,19 @@ def test_flexible_build_strategy_uses_raw_entries_for_flexible_dataset(
                 batch_size=[],
             )
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
 
     monkeypatch.setattr(
         "dlkit.engine.data.datasets.flexible.FlexibleDataset", _CapturedFlexibleDataset
     )
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    comps = BuildFactory().build_components(_as_workflow_settings(settings))
+    comps = BuildFactory().build_components(settings)
 
     assert isinstance(comps.datamodule, _FakeDataModule)
     assert captured["features"]
@@ -309,49 +296,30 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
     np.save(x_path, np.zeros((6, 2), dtype=np.float32))
     np.save(y_path, np.zeros((6, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-    )
-    dm = DataModuleSettings(
-        name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-    )
-    mdl = ModelComponentSettings(
-        name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=mdl,
-        DATASET=ds,
-        DATAMODULE=dm,
-        TRAINING=TrainingSettings(),
+    settings = _make_training_job(
+        tmp_checkpoint,
+        features=[{"name": "x", "path": str(x_path)}],
+        targets=[{"name": "y", "path": str(y_path)}],
     )
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            all_entries = list(ctx.overrides.get("entries", ()))
-            captured["features"] = [e for e in all_entries if e.data_role == DataRole.FEATURE]
-            captured["targets"] = [e for e in all_entries if e.data_role == DataRole.TARGET]
-            return _FakeDataset(nested_xy_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        captured["features"] = list(selected_features)
+        captured["targets"] = list(selected_targets)
+        return _FakeDataset(nested_xy_sample)
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
+
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(_as_workflow_settings(settings))
+    BuildFactory().build_components(settings)
 
     assert captured["features"]
     assert captured["targets"]
@@ -378,61 +346,38 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
     np.save(aux_path, np.ones((6, 2), dtype=np.float32))
     np.save(y_path, np.zeros((6, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(
-            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
-            NpyEntry(
-                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
-            ),
-            NpyEntry(name="aux", path=aux_path, data_role=DataRole.FEATURE, model_input=False),
-        ),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-        ),
-        DATASET=ds,
-        DATAMODULE=DataModuleSettings(
-            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-        ),
-        TRAINING=TrainingSettings(),
+    settings = _make_training_job(
+        tmp_checkpoint,
+        features=[
+            {"name": "x", "path": str(x_path)},
+            {"name": "matrix", "path": str(matrix_path), "model_input": False},
+            {"name": "aux", "path": str(aux_path), "model_input": False},
+        ],
+        targets=[{"name": "y", "path": str(y_path)}],
     )
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            all_entries = list(ctx.overrides.get("entries", ()))
-            captured["dataset_feature_names"] = [
-                e.name for e in all_entries if e.data_role == DataRole.FEATURE
-            ]
-            captured["dataset_target_names"] = [
-                e.name for e in all_entries if e.data_role == DataRole.TARGET
-            ]
-            return _FakeDataset(nested_xy_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        captured["dataset_feature_names"] = [e.name for e in selected_features]
+        captured["dataset_target_names"] = [e.name for e in selected_targets]
+        return _FakeDataset(nested_xy_sample)
+
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
 
     def _capture_wrapper(*_, **kwargs):
         captured["entry_config_names"] = [e.name for e in kwargs.get("entry_configs", ())]
         return _FakeModel()
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(_capture_wrapper),
     )
 
-    BuildFactory().build_components(_as_workflow_settings(settings))
+    BuildFactory().build_components(settings)
 
     assert captured["dataset_feature_names"] == ["x"]
     assert captured["dataset_target_names"] == ["y"]
@@ -452,58 +397,54 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
     np.save(matrix_path, np.zeros((5, 2, 2), dtype=np.float32))
     np.save(y_path, np.zeros((5, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(
-            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
-            NpyEntry(
-                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
-            ),
-        ),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-    )
-    training = TrainingSettings(
-        loss_function=LossComponentSettings(
+    from dlkit.infrastructure.config.training_settings import TrainingSettings
+
+    _training_settings = TrainingSettings(
+        loss=LossComponentSettings(
             extra_inputs=(LossInputRef(arg="matrix", key="features.matrix"),)
         )
     )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-        ),
-        DATASET=ds,
-        DATAMODULE=DataModuleSettings(
-            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-        ),
-        TRAINING=training,
+
+    job = TrainingJobConfig.model_validate(
+        {
+            "run": {"type": "train"},
+            "model": {
+                "class": "Dummy",
+                "module_path": "dlkit.domain.nn",
+                "checkpoint": str(tmp_checkpoint),
+            },
+            "data": {
+                "batch_size": 8,
+                "num_workers": 0,
+                "features": [
+                    {"name": "x", "path": str(x_path)},
+                    {"name": "matrix", "path": str(matrix_path), "model_input": False},
+                ],
+                "targets": [{"name": "y", "path": str(y_path)}],
+            },
+            "training": {
+                "loss": {"extra_inputs": [{"arg": "matrix", "key": "features.matrix"}]},
+            },
+        }
     )
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            all_entries = list(ctx.overrides.get("entries", ()))
-            captured["dataset_feature_names"] = [
-                e.name for e in all_entries if e.data_role == DataRole.FEATURE
-            ]
-            return _FakeDataset(nested_xy_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        captured["dataset_feature_names"] = [e.name for e in selected_features]
+        return _FakeDataset(nested_xy_sample)
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
+
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(_as_workflow_settings(settings))
+    BuildFactory().build_components(job)
 
     assert captured["dataset_feature_names"] == ["x", "matrix"]
 
@@ -521,60 +462,46 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
     np.save(matrix_path, np.zeros((5, 2, 2), dtype=np.float32))
     np.save(y_path, np.zeros((5, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(
-            NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
-            NpyEntry(
-                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
-            ),
-        ),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
-    )
-    training = TrainingSettings(
-        metrics=(
-            MetricComponentSettings(
-                extra_inputs=(MetricInputRef(arg="matrix", key="features.matrix"),)
-            ),
-        )
-    )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-        ),
-        DATASET=ds,
-        DATAMODULE=DataModuleSettings(
-            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-        ),
-        TRAINING=training,
+    job = TrainingJobConfig.model_validate(
+        {
+            "run": {"type": "train"},
+            "model": {
+                "class": "Dummy",
+                "module_path": "dlkit.domain.nn",
+                "checkpoint": str(tmp_checkpoint),
+            },
+            "data": {
+                "batch_size": 8,
+                "num_workers": 0,
+                "features": [
+                    {"name": "x", "path": str(x_path)},
+                    {"name": "matrix", "path": str(matrix_path), "model_input": False},
+                ],
+                "targets": [{"name": "y", "path": str(y_path)}],
+            },
+            "training": {
+                "metrics": [{"extra_inputs": [{"arg": "matrix", "key": "features.matrix"}]}],
+            },
+        }
     )
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            all_entries = list(ctx.overrides.get("entries", ()))
-            captured["dataset_feature_names"] = [
-                e.name for e in all_entries if e.data_role == DataRole.FEATURE
-            ]
-            return _FakeDataset(nested_xy_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        captured["dataset_feature_names"] = [e.name for e in selected_features]
+        return _FakeDataset(nested_xy_sample)
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
+
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(_as_workflow_settings(settings))
+    BuildFactory().build_components(job)
 
     assert captured["dataset_feature_names"] == ["x", "matrix"]
 
@@ -586,60 +513,43 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
     nested_xy_sample: TensorDict,
 ) -> None:
     matrix_path = tmp_path / "matrix.npy"
-    y_path = tmp_path / "y.npy"
     np.save(matrix_path, np.zeros((4, 2, 2), dtype=np.float32))
-    np.save(y_path, np.zeros((4, 1), dtype=np.float32))
 
-    ds = DatasetSettings(
-        name="FlexibleDataset",
-        module_path="dlkit.engine.data.datasets",
-        features=(
-            NpyEntry(
-                name="matrix", path=matrix_path, data_role=DataRole.FEATURE, model_input=False
-            ),
-        ),
-        targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
+    settings = _make_training_job(
+        tmp_checkpoint,
+        features=[{"name": "matrix", "path": str(matrix_path), "model_input": False}],
+        targets=[],
     )
-    settings = GeneralSettings(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=ModelComponentSettings(
-            name="Dummy", module_path="dlkit.domain.nn", checkpoint=tmp_checkpoint
-        ),
-        DATASET=ds,
-        DATAMODULE=DataModuleSettings(
-            name="ArrayDataModule", module_path="dlkit.engine.adapters.lightning.datamodules"
-        ),
-        TRAINING=TrainingSettings(),
+    # Inject AutoencoderTarget (not in AnyEntry union) bypassing Pydantic validation.
+    # validate_config_complete is also monkeypatched because AutoencoderTarget has no path
+    # and would fail the PathBasedEntry validation guard in the new validator.
+    recon_target = AutoencoderTarget(name="recon", feature_ref="matrix", data_role=DataRole.TARGET)
+    settings.data.__dict__["targets"] = [recon_target]
+
+    monkeypatch.setattr(
+        "dlkit.engine.workflows.factories.build_factory.validate_config_complete",
+        lambda _: None,
     )
-    # Bypass Pydantic validation to inject AutoencoderTarget (not in AnyEntry union)
-    settings.DATASET.__dict__["targets"] = [
-        AutoencoderTarget(name="recon", feature_ref="matrix", data_role=DataRole.TARGET)
-    ]
 
     captured: dict[str, Any] = {}
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            all_entries = list(ctx.overrides.get("entries", ()))
-            captured["dataset_feature_names"] = [
-                e.name for e in all_entries if getattr(e, "data_role", None) == DataRole.FEATURE
-            ]
-            return _FakeDataset(nested_xy_sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        captured["dataset_feature_names"] = [
+            e.name for e in selected_features if getattr(e, "data_role", None) == DataRole.FEATURE
+        ]
+        return _FakeDataset(nested_xy_sample)
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.build_factory.detect_model_type",
-        lambda *_: ModelType.SHAPE_AGNOSTIC_EXTERNAL,
-    )
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
+
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
         staticmethod(lambda *_, **__: _FakeModel()),
     )
 
-    BuildFactory().build_components(_as_workflow_settings(settings))
+    BuildFactory().build_components(settings)
 
     assert captured["dataset_feature_names"] == ["matrix"]
 
@@ -648,17 +558,25 @@ def test_build_factory_handles_none_scheduler_correctly(
     monkeypatch: pytest.MonkeyPatch, tmp_checkpoint: Path
 ) -> None:
     """Test that None scheduler is handled correctly without causing validation errors."""
+    from dlkit.infrastructure.config.model_components import WrapperComponentSettings
     from dlkit.infrastructure.config.optimizer_component import AdamSettings
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
-    # Create optimizer policy but leave scheduler as None
-    custom_optimizer = OptimizerPolicySettings(default_optimizer=AdamSettings(lr=0.001))
+    _custom_optimizer = OptimizerPolicySettings(default_optimizer=AdamSettings(lr=0.001))
 
-    # Create training settings with scheduler=None
-    training_settings = TrainingSettings(
-        optimizer=custom_optimizer,
-        scheduler=None,  # Explicitly None
-        epochs=10,
+    job = TrainingJobConfig.model_validate(
+        {
+            "run": {"type": "train"},
+            "model": {
+                "class": "Dummy",
+                "module_path": "dlkit.domain.nn",
+                "checkpoint": str(tmp_checkpoint),
+            },
+            "data": {"batch_size": 8, "num_workers": 0},
+            "training": {
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+            },
+        }
     )
 
     sample = TensorDict(
@@ -668,37 +586,30 @@ def test_build_factory_handles_none_scheduler_correctly(
         },
         batch_size=[],
     )
-    settings = _make_min_settings(sample, inference=False, ckpt=tmp_checkpoint)
-    settings = settings.model_copy(update={"TRAINING": training_settings})
 
-    created_wrapper_settings = []
-
-    # Capture the original __init__ method
-    from dlkit.infrastructure.config.model_components import WrapperComponentSettings
+    created_wrapper_settings: list[dict[str, Any]] = []
 
     original_init = WrapperComponentSettings.__init__
 
     def _capture_wrapper_init(self, **kwargs):
-        # Capture the kwargs before calling the original
         created_wrapper_settings.append(kwargs.copy())
-        # Call the original __init__ to properly initialize the object
         return original_init(self, **kwargs)
 
     monkeypatch.setattr(WrapperComponentSettings, "__init__", _capture_wrapper_init)
 
-    def _fake_create_component(s, ctx: BuildContext):
-        if s is settings.DATASET:
-            return _FakeDataset(sample)
-        if s is settings.DATAMODULE:
-            return _FakeDataModule()
-        return _FakeModel()
+    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+        return _FakeDataset(sample)
+
+    def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
+        return _FakeDataModule()
 
     def _fake_create_wrapper(*args, **kwargs):
         wrapper_mock = types.SimpleNamespace()
         wrapper_mock.settings = kwargs.get("settings")
         return wrapper_mock
 
-    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create_component))
+    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     from dlkit.engine.adapters.lightning.factories import WrapperFactory
 
     monkeypatch.setattr(
@@ -706,7 +617,7 @@ def test_build_factory_handles_none_scheduler_correctly(
     )
 
     # This should not raise any validation errors
-    comps = BuildFactory().build_components(_as_workflow_settings(settings))
+    comps = BuildFactory().build_components(job)
 
     assert hasattr(comps, "model")
 

@@ -15,13 +15,19 @@ from dlkit.engine.workflows.optimization.value_objects.models import (
     OptimizationDirection,
     Study,
 )
-from dlkit.infrastructure.config.general_settings import GeneralSettings
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 
 
-def _make_settings(run_name: str | None = None) -> GeneralSettings:
-    mlflow = MLflowSettings(run_name=run_name) if run_name is not None else None
-    return GeneralSettings(MLFLOW=mlflow)
+def _make_settings(run_name: str | None = None) -> SimpleNamespace:
+    """Build a minimal duck-typed settings object for study-name tests.
+
+    Args:
+        run_name: Optional MLflow run name to embed in experiment settings.
+
+    Returns:
+        SimpleNamespace mimicking the JobConfig interface.
+    """
+    experiment = SimpleNamespace(run_name=run_name)
+    return SimpleNamespace(experiment=experiment, search=None)
 
 
 def test_determine_study_name_prefers_explicit_run_name() -> None:

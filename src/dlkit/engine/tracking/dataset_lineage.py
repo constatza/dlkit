@@ -17,16 +17,12 @@ import numpy as np
 import torch
 
 from dlkit.engine.data.families import resolve_family
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
 from dlkit.infrastructure.config.data_entries import IPathBased, IValueBased
 from dlkit.infrastructure.config.enums import DatasetFamily
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = JobConfig
 
 logger = get_logger(__name__)
 
@@ -62,9 +58,9 @@ def _as_numpy(value: Any) -> np.ndarray:
 
 
 def _collect_entry_sources(settings: _WorkflowSettings) -> list[str]:
-    """Collect source paths from DATASET.features/targets DataEntry objects."""
+    """Collect source paths from data.features/targets DataEntry objects."""
     sources: list[str] = []
-    ds_settings = settings.DATASET
+    ds_settings = settings.data
     if ds_settings is None:
         return sources
 
@@ -93,7 +89,7 @@ class GraphConfigSourceStrategy:
 
     def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
-        ds_settings = settings.DATASET
+        ds_settings = settings.data
         if ds_settings is None:
             return sources
         for field_name in self._FIELDS:
@@ -106,7 +102,7 @@ class CustomConfigSourceStrategy:
 
     def collect(self, settings: _WorkflowSettings) -> list[str]:
         sources: list[str] = []
-        ds_settings = settings.DATASET
+        ds_settings = settings.data
         if ds_settings is None:
             return sources
 
@@ -161,7 +157,7 @@ class EntryNumpyPayloadBuilder:
     """
 
     def build(self, settings: _WorkflowSettings) -> EntryNumpyPayload | None:
-        ds_settings = settings.DATASET
+        ds_settings = settings.data
         if ds_settings is None:
             return None
 

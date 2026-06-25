@@ -14,29 +14,66 @@ from dlkit.engine.artifacts import ProducedArtifact, RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
 from .module_defaults import with_runtime_module_defaults
 
-type WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+type WorkflowSettings = JobConfig
 
 # Dataset type constants for can_handle() checks
 DATASET_TYPE_FLEXIBLE = "flexible"
 DATASET_TYPE_GRAPH = "graph"
 
 
-def build_trainer(settings: WorkflowSettings) -> Trainer | None:
-    """Build the trainer when the workflow is in training mode."""
-    if not settings.SESSION or settings.SESSION.is_inference_mode or not settings.TRAINING:
+def _is_inference_mode(settings: JobConfig) -> bool:
+    """Return True when the workflow is in inference mode.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        True if the run type is ``"predict"``.
+    """
+    return settings.run.type == "predict"
+
+
+def _get_training_settings(settings: JobConfig) -> TrainingSettings | None:
+    """Extract training settings from JobConfig.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Training settings, or None when not configured.
+    """
+    return settings.training
+
+
+def build_trainer(settings: JobConfig) -> Trainer | None:
+    """Build the trainer when the workflow is in training mode.
+
+    Args:
+        settings: A JobConfig instance.
+
+    Returns:
+        Configured Trainer, or None for inference workflows.
+
+    Raises:
+        WorkflowError: If local-output trainer components require a root dir that is not set.
+    """
+    if _is_inference_mode(settings):
         return None
 
-    trainer_settings = settings.TRAINING.trainer
+    training = settings.training
+    if training is None:
+        return None
+
+    trainer_settings = training.trainer
     if trainer_settings is None:
         return None
 
@@ -49,10 +86,10 @@ def build_trainer(settings: WorkflowSettings) -> Trainer | None:
                 {"stage": "trainer_build", "component": "trainer.default_root_dir"},
             )
         trainer_settings = _pin_lightning_local_outputs(trainer_settings)
-    return trainer_settings.build(session=settings.SESSION)
+    return trainer_settings.build(session=None)
 
 
-def _requires_explicit_local_root(trainer_settings: Any) -> bool:
+def _requires_explicit_local_root(trainer_settings: TrainerSettings) -> bool:
     """Return whether trainer components may emit local files that need pinning."""
     if getattr(trainer_settings, "enable_checkpointing", False):
         return True
@@ -67,7 +104,7 @@ def _requires_explicit_local_root(trainer_settings: Any) -> bool:
     return False
 
 
-def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:
+def _pin_lightning_local_outputs(trainer_settings: TrainerSettings) -> TrainerSettings:
     """Contain Lightning-owned local writes under one default root."""
     default_root_dir = trainer_settings.default_root_dir
     updates: dict[str, Any] = {}
@@ -82,7 +119,7 @@ def _pin_lightning_local_outputs(trainer_settings: Any) -> Any:
     for callback in trainer_settings.callbacks:
         callback_name = getattr(callback, "name", None)
         dirpath = getattr(callback, "dirpath", None)
-        if callback_name == "ModelCheckpoint" and dirpath is None:
+        if callback_name == "ModelCheckpoint" and dirpath is None and default_root_dir is not None:
             callback = callback.model_copy(
                 update={"dirpath": Path(default_root_dir) / "checkpoints"}
             )
@@ -168,21 +205,22 @@ class GraphBuildStrategy(IBuildStrategy):
         )
 
         entry_configs: tuple[DataEntry, ...] = ()
-        if settings.TRAINING is None:
-            raise ValueError("TRAINING settings are required but not configured")
+        training = _get_training_settings(settings)
+        if training is None:
+            raise ValueError("training settings are required but not configured")
+        loss_fn = training.loss
         wrapper_kwargs: dict[str, Any] = {
-            "optimizer": settings.TRAINING.optimizer,
-            "loss_function": settings.TRAINING.loss_function,
-            "metrics": settings.TRAINING.metrics,
+            "optimizer": training.optimizer,
+            "metrics": training.metrics,
         }
-        if settings.TRAINING.scheduler is not None:
-            wrapper_kwargs["scheduler"] = settings.TRAINING.scheduler
+        if loss_fn is not None:
+            wrapper_kwargs["loss_function"] = loss_fn
         wrapper_settings = with_runtime_module_defaults(WrapperComponentSettings(**wrapper_kwargs))
 
         components = build_wrapper_components(wrapper_settings, entry_configs)
-        model_settings = with_runtime_module_defaults(settings.MODEL)
+        model_settings = with_runtime_module_defaults(settings.model)
         if model_settings is None:
-            raise ValueError("MODEL settings are required but not configured")
+            raise ValueError("model settings are required but not configured")
         model: LightningModule = WrapperFactory.create_graph_wrapper(
             model_settings=model_settings,
             settings=wrapper_settings,

@@ -11,10 +11,7 @@ import torch
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.workflows.factories.build_factory import FlexibleBuildStrategy
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 
 from ._settings import WorkflowSettings
 
@@ -200,8 +197,8 @@ def _parse_or_infer_shapes(
         )
 
     strategy = FlexibleBuildStrategy()
-    # Cast is safe: convert workflows only accept training/optimization configs
-    components = strategy.build(cast(TrainingWorkflowConfig | OptimizationWorkflowConfig, settings))
+    # Cast is safe: convert workflows only accept training/search configs
+    components = strategy.build(cast(TrainingJobConfig | SearchJobConfig, settings))
     datamodule = components.datamodule
 
     loader = None

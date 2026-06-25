@@ -9,16 +9,12 @@ from __future__ import annotations
 
 from torch import nn
 
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .interfaces import IRunContext
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = JobConfig
 
 logger = get_logger(__name__)
 
@@ -70,9 +66,10 @@ class SettingsLogger:
             RuntimeError: If parameter extraction or logging fails.
         """
         try:
-            if settings.MODEL is None:
+            model_cfg = settings.model
+            if model_cfg is None:
                 return
-            params = settings.MODEL.model_dump(exclude_none=True)
+            params = model_cfg.model_dump(exclude_none=True)
             hparams = {k: v for k, v in params.items() if k not in _COMPONENT_FIELDS}
             if hparams:
                 run_context.log_params(hparams)

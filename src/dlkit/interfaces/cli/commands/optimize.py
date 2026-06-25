@@ -14,7 +14,6 @@ from dlkit.interfaces.api.domain import OptimizationOverrides
 
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_optimization_result
-from ..guards import is_training_settings
 from ..middleware.error_handler import handle_cli_errors
 from ..params import (
     CONFIG_PATH_ARG,
@@ -51,18 +50,12 @@ def _run_optimization_impl(
     """
     # Load configuration
     console.print(f"📖 Loading configuration from: {config_path}")
-    _settings = load_config(config_path)
-    settings = _settings if is_training_settings(_settings) else None
-
-    # Validate Optuna is configured (flattened)
-    if not settings or not settings.OPTUNA or not settings.OPTUNA.enabled:
-        console.print("[red]Optuna plugin must be enabled in configuration for optimization[/red]")
-        console.print("Enable [OPTUNA] with enabled = true in config")
-        raise typer.Exit(1)
+    job = load_config(config_path, run_type="search")
 
     # Show optimization parameters
     console.print("⚡ Starting hyperparameter optimization")
-    if mlflow or settings.MLFLOW:
+    tracking_enabled = mlflow or (job.tracking.backend not in ("none", None))
+    if tracking_enabled:
         console.print("  With MLflow tracking enabled")
     console.print(f"  Trials: {trials}")
     if study_name:
@@ -77,7 +70,7 @@ def _run_optimization_impl(
         task = progress.add_task(f"Running {trials} optimization trials...", total=None)
 
         optimization_result = api_optimize(
-            settings,
+            job,
             overrides=OptimizationOverrides(
                 trials=trials,
                 study_name=study_name,

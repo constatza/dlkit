@@ -9,7 +9,10 @@ import pytest
 
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
+from dlkit.infrastructure.config.data_settings import DataSettings
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
+from dlkit.infrastructure.config.model_settings import ModelSettings
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
@@ -19,7 +22,8 @@ from dlkit.infrastructure.config.optimizer_component import (
     StepLRSettings,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
-from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.training_settings import TrainingSettings
 
 
 @pytest.fixture
@@ -48,26 +52,24 @@ def mock_components() -> RuntimeComponents:
 
 
 @pytest.fixture
-def settings_without_lr_tuner() -> TrainingWorkflowConfig:
+def settings_without_lr_tuner() -> TrainingJobConfig:
     """Settings without LR tuner configured."""
-    from dlkit.infrastructure.config.session_settings import SessionSettings
-    from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-    return TrainingWorkflowConfig(
-        SESSION=SessionSettings(workflow="train", seed=42),
-        TRAINING=TrainingSettings(),
+    return TrainingJobConfig(
+        run=RunSettings(type="train", seed=42),
+        model=ModelSettings(name="DummyModel"),
+        data=DataSettings(),
+        training=TrainingSettings(),
     )
 
 
 @pytest.fixture
-def settings_with_lr_tuner() -> TrainingWorkflowConfig:
+def settings_with_lr_tuner() -> TrainingJobConfig:
     """Settings with LR tuner configured (enabled)."""
-    from dlkit.infrastructure.config.session_settings import SessionSettings
-    from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-    return TrainingWorkflowConfig(
-        SESSION=SessionSettings(workflow="train", seed=42),
-        TRAINING=TrainingSettings(
+    return TrainingJobConfig(
+        run=RunSettings(type="train", seed=42),
+        model=ModelSettings(name="DummyModel"),
+        data=DataSettings(),
+        training=TrainingSettings(
             lr_tuner=LRTunerSettings(
                 min_lr=1e-6,
                 max_lr=0.1,
@@ -83,7 +85,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_without_lr_tuner_configured(
         self,
         mock_components: RuntimeComponents,
-        settings_without_lr_tuner: TrainingWorkflowConfig,
+        settings_without_lr_tuner: TrainingJobConfig,
     ) -> None:
         """Training proceeds normally without LR tuner; lr is not changed."""
         executor = VanillaExecutor()
@@ -99,7 +101,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_with_lr_tuner_enabled(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """LR tuner is called and model.lr is updated to the suggested value."""
         executor = VanillaExecutor()
@@ -120,12 +122,11 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """Empty [TRAINING.lr_tuner] section creates LRTunerSettings with defaults."""
-        from dlkit.infrastructure.config.session_settings import SessionSettings
-        from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-        settings_with_empty_lr_tuner = TrainingWorkflowConfig(
-            SESSION=SessionSettings(workflow="train", seed=42),
-            TRAINING=TrainingSettings.model_validate({"lr_tuner": {}}),
+        settings_with_empty_lr_tuner = TrainingJobConfig(
+            run=RunSettings(type="train", seed=42),
+            model=ModelSettings(name="DummyModel"),
+            data=DataSettings(),
+            training=TrainingSettings.model_validate({"lr_tuner": {}}),
         )
 
         executor = VanillaExecutor()
@@ -140,7 +141,7 @@ class TestVanillaExecutorLRTuning:
     def test_execute_lr_tuner_failure_continues_training(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """Training continues if LR tuner raises; original lr is preserved."""
         executor = VanillaExecutor()
@@ -160,7 +161,7 @@ class TestVanillaExecutorLRTuning:
     def test_apply_lr_tuning_sets_model_lr(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """_apply_lr_tuning sets model.lr to the suggested value."""
         executor = VanillaExecutor()
@@ -179,13 +180,12 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """_apply_lr_tuning skips when TRAINING section has no lr_tuner."""
-        from dlkit.infrastructure.config.session_settings import SessionSettings
-        from dlkit.infrastructure.config.training_settings import TrainingSettings
-
         executor = VanillaExecutor()
-        settings = TrainingWorkflowConfig(
-            SESSION=SessionSettings(workflow="train", seed=42),
-            TRAINING=TrainingSettings(),
+        settings = TrainingJobConfig(
+            run=RunSettings(type="train", seed=42),
+            model=ModelSettings(name="DummyModel"),
+            data=DataSettings(),
+            training=TrainingSettings(),
         )
 
         with patch.object(executor, "_find_lr_with_projected_policy") as find_lr:
@@ -200,7 +200,7 @@ class TestVanillaExecutorLRTuning:
     def test_apply_lr_tuning_model_without_lr_skips_update(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """When model does not implement ILRTunable, LR tuning is skipped entirely."""
         executor = VanillaExecutor()
@@ -221,12 +221,11 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """LR tuner is not called when the configured optimizer requires a closure (LBFGS)."""
-        from dlkit.infrastructure.config.session_settings import SessionSettings
-        from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-        settings = TrainingWorkflowConfig(
-            SESSION=SessionSettings(workflow="train", seed=42),
-            TRAINING=TrainingSettings(
+        settings = TrainingJobConfig(
+            run=RunSettings(type="train", seed=42),
+            model=ModelSettings(name="DummyModel"),
+            data=DataSettings(),
+            training=TrainingSettings(
                 lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),
                 optimizer=OptimizerPolicySettings(default_optimizer=LBFGSSettings()),
             ),
@@ -251,12 +250,11 @@ class TestVanillaExecutorLRTuning:
         mock_components: RuntimeComponents,
     ) -> None:
         """Sequential staged policies should tune through a temporary stage-0 projection."""
-        from dlkit.infrastructure.config.session_settings import SessionSettings
-        from dlkit.infrastructure.config.training_settings import TrainingSettings
-
-        settings = TrainingWorkflowConfig(
-            SESSION=SessionSettings(workflow="train", seed=42),
-            TRAINING=TrainingSettings(
+        settings = TrainingJobConfig(
+            run=RunSettings(type="train", seed=42),
+            model=ModelSettings(name="DummyModel"),
+            data=DataSettings(),
+            training=TrainingSettings(
                 lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),
                 optimizer=OptimizerPolicySettings(
                     stages=(
@@ -290,7 +288,7 @@ class TestVanillaExecutorLRTuning:
     def test_apply_lr_tuning_noop_setter_leaves_lr_unchanged(
         self,
         mock_components: RuntimeComponents,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """When model.lr setter is a no-op, model.lr stays at original value after tuning."""
         executor = VanillaExecutor()
@@ -324,7 +322,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_find_lr_restores_controller_after_success(
         self,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """Original controller and automatic_optimization are restored after LR finding."""
         import torch.nn as nn
@@ -364,7 +362,7 @@ class TestVanillaExecutorLRTuning:
                         None,
                         settings_with_lr_tuner,
                         tuning_plan,
-                        settings_with_lr_tuner.TRAINING.lr_tuner,
+                        settings_with_lr_tuner.training.lr_tuner,
                     )
 
         assert result == 0.01
@@ -373,7 +371,7 @@ class TestVanillaExecutorLRTuning:
 
     def test_find_lr_restores_controller_after_failure(
         self,
-        settings_with_lr_tuner: TrainingWorkflowConfig,
+        settings_with_lr_tuner: TrainingJobConfig,
     ) -> None:
         """Original controller is restored even when LR finding raises."""
         import torch.nn as nn
@@ -410,7 +408,7 @@ class TestVanillaExecutorLRTuning:
                             None,
                             settings_with_lr_tuner,
                             tuning_plan,
-                            settings_with_lr_tuner.TRAINING.lr_tuner,
+                            settings_with_lr_tuner.training.lr_tuner,
                         )
 
         assert model._optimization_controller is original_controller

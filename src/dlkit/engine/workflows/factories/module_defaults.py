@@ -49,9 +49,11 @@ def with_runtime_module_defaults[T: Any](settings: T) -> T:
 
 
 def _default_module_path(settings: Any) -> str | None:
+    from dlkit.infrastructure.config.data_settings import DataSettings
+
     if isinstance(settings, ModelComponentSettings):
         return _MODEL_MODULE
-    if isinstance(settings, DatasetSettings):
+    if isinstance(settings, (DatasetSettings, DataSettings)):
         return _DATASET_MODULE
     if isinstance(settings, DataModuleSettings):
         return _DATAMODULE_MODULE

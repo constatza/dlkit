@@ -24,17 +24,13 @@ from dlkit.engine.artifacts import (
     ProducedArtifact,
 )
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .config_accessor import ConfigAccessor
 from .interfaces import IExperimentTracker, IRunContext
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = JobConfig
 
 logger = get_logger(__name__)
 

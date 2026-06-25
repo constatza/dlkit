@@ -17,7 +17,7 @@ from dlkit.engine.tracking.backend import (
     RemoteServerBackend,
     TrackingBackend,
 )
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.infrastructure.io import url_resolver
 from dlkit.infrastructure.utils.logging_config import (
     get_logger,
@@ -90,7 +90,7 @@ class MLflowResourceState:
 class MLflowResourceManager:
     """Centralized MLflow client/run resource manager."""
 
-    def __init__(self, mlflow_config: MLflowSettings | None, backend: TrackingBackend):
+    def __init__(self, mlflow_config: TrackingSettings | None, backend: TrackingBackend):
         """Initialize with MLflow config and pre-selected backend.
 
         Args:

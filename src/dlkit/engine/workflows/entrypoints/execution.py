@@ -5,12 +5,12 @@ from __future__ import annotations
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
-from dlkit.infrastructure.config.workflow_configs import (
-    InferenceWorkflowConfig,
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
 )
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 from ._override_types import (
     ExecutionOverrides,
@@ -23,7 +23,7 @@ from .training import train
 
 
 def execute(
-    settings: WorkflowConfig,
+    settings: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
@@ -35,7 +35,7 @@ def execute(
     )
 
     match settings:
-        case OptimizationWorkflowConfig():
+        case SearchJobConfig():
             optimization_overrides = OptimizationOverrides.model_validate(
                 {
                     key: value
@@ -55,13 +55,13 @@ def execute(
             )
             return optimize(settings, optimization_overrides if override_payload else None)
 
-        case InferenceWorkflowConfig():
+        case InferenceJobConfig():
             raise WorkflowError(
                 "execute() does not support inference workflows. Use dlkit.load_model() instead.",
                 {"workflow": "inference"},
             )
 
-        case TrainingWorkflowConfig():
+        case TrainingJobConfig():
             training_overrides = TrainingOverrides.model_validate(
                 {
                     key: value
@@ -82,3 +82,9 @@ def execute(
                 }
             )
             return train(settings, training_overrides if override_payload else None, hooks=hooks)
+
+        case _:
+            raise WorkflowError(
+                f"Unsupported workflow settings type: {type(settings).__name__}",
+                {"workflow": "unknown"},
+            )

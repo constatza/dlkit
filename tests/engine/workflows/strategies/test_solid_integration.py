@@ -15,19 +15,33 @@ from dlkit.engine.training import ITrainingExecutor, VanillaExecutor
 # OptimizationDecorator removed - use clean architecture tests instead
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.execution_strategy_factory import ExecutionStrategyFactory
-from dlkit.infrastructure.config.general_settings import GeneralSettings
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
-from dlkit.infrastructure.config.optuna_settings import OptunaSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
+from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
-type _ExecutionSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _ExecutionSettings = JobConfig
 
 
-def _as_execution_settings(settings: GeneralSettings) -> _ExecutionSettings:
-    return cast(_ExecutionSettings, settings)
+def _job(
+    *,
+    mlflow: bool = False,
+    experiment_name: str = "integration_test",
+) -> JobConfig:
+    """Create a minimal JobConfig for executor.execute() calls.
+
+    Args:
+        mlflow: Whether to enable mlflow tracking backend.
+        experiment_name: Name for the experiment section.
+
+    Returns:
+        Minimal JobConfig suitable for passing to executor.execute().
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(name=experiment_name) if mlflow else None,
+        tracking=TrackingSettings(backend="mlflow") if mlflow else TrackingSettings(),
+    )
 
 
 @pytest.fixture
@@ -75,14 +89,15 @@ def test_single_responsibility_principle_integration(build_components, monkeypat
     factory = ExecutionStrategyFactory()
 
     # Factory creates TrackingDecorator with NullTracker when no features enabled
-    vanilla_settings = GeneralSettings()
-    vanilla_executor = factory.create_executor(_as_execution_settings(vanilla_settings))
+    vanilla_job = _job()
+    vanilla_executor = factory.create_executor(vanilla_job)
 
     # Factory now always returns TrackingDecorator (null object pattern)
     assert isinstance(vanilla_executor, TrackingDecorator)
     assert isinstance(vanilla_executor._executor, VanillaExecutor)
 
-    result = vanilla_executor.execute(build_components, _as_execution_settings(vanilla_settings))
+    # Use JobConfig for execute() since VanillaExecutor requires JobConfig.run
+    result = vanilla_executor.execute(build_components, vanilla_job)
     assert isinstance(result, TrainingResult)
     assert result.metrics["val_loss"] == 0.45
 
@@ -92,11 +107,7 @@ def test_open_closed_principle_integration(build_components):
     factory = ExecutionStrategyFactory()
 
     # Can add MLflow tracking without modifying VanillaExecutor
-    mlflow_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(
-            experiment_name="integration_test",
-        )
-    )
+    mlflow_job = _job(mlflow=True, experiment_name="integration_test")
 
     with patch("dlkit.engine.tracking.mlflow_tracker.MLflowTracker") as mock_tracker_class:
         mock_tracker = Mock()
@@ -114,10 +125,11 @@ def test_open_closed_principle_integration(build_components):
         mock_tracker.get_tracking_uri = Mock(return_value=None)
         mock_tracker.is_local = Mock(return_value=False)
 
-        executor = factory.create_executor(_as_execution_settings(mlflow_settings))
+        executor = factory.create_executor(mlflow_job)
 
         assert isinstance(executor, TrackingDecorator)
-        result = executor.execute(build_components, _as_execution_settings(mlflow_settings))
+        # Use JobConfig for execute() since executor requires JobConfig.run
+        result = executor.execute(build_components, mlflow_job)
 
         # Core functionality preserved
         assert isinstance(result, TrainingResult)
@@ -129,19 +141,16 @@ def test_liskov_substitution_principle_integration(build_components):
     factory = ExecutionStrategyFactory()
 
     # Create different executor configurations
-    vanilla_settings = GeneralSettings()
-    mlflow_settings = GeneralSettings(MLFLOW=MLflowSettings())
-    optuna_settings = GeneralSettings(OPTUNA=OptunaSettings(enabled=True, n_trials=2))
-    both_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(),
-        OPTUNA=OptunaSettings(enabled=True, n_trials=2),
-    )
+    vanilla_job = _job()
+    mlflow_job = _job(mlflow=True)
+    search_job = _job()
+    both_job = _job(mlflow=True, experiment_name="both_test")
 
     executors = [
-        factory.create_executor(_as_execution_settings(vanilla_settings)),
-        factory.create_executor(_as_execution_settings(mlflow_settings)),
-        factory.create_executor(_as_execution_settings(optuna_settings)),
-        factory.create_executor(_as_execution_settings(both_settings)),
+        factory.create_executor(vanilla_job),
+        factory.create_executor(mlflow_job),
+        factory.create_executor(search_job),
+        factory.create_executor(both_job),
     ]
 
     # All should be substitutable for ITrainingExecutor
@@ -192,10 +201,10 @@ def test_dependency_inversion_principle_integration(build_components):
     vanilla_executor = VanillaExecutor()
     tracking_decorator = TrackingDecorator(vanilla_executor, mock_tracker)
 
-    # Should be able to inject any implementation
-    settings = GeneralSettings(MLFLOW=MLflowSettings())
+    # Use JobConfig for execute() since executor requires JobConfig.run
+    job = _job(mlflow=True)
 
-    result = tracking_decorator.execute(build_components, _as_execution_settings(settings))
+    result = tracking_decorator.execute(build_components, job)
     assert isinstance(result, TrainingResult)
 
     # Mock tracker should have been used
@@ -204,19 +213,20 @@ def test_dependency_inversion_principle_integration(build_components):
 
 def test_pure_solid_architecture_integration(build_components):
     """Test that pure SOLID architecture works without backward compatibility."""
-    settings = GeneralSettings()
+    # Use JobConfig for execute() since executors require JobConfig.run
+    job = _job()
 
     # Pure SOLID interface
     vanilla_executor = VanillaExecutor()
-    result = vanilla_executor.execute(build_components, _as_execution_settings(settings))
+    result = vanilla_executor.execute(build_components, job)
 
     assert isinstance(result, TrainingResult)
     assert build_components.trainer.called["fit"] == 1
 
     # Factory-created executor should also work
     factory = ExecutionStrategyFactory()
-    factory_executor = factory.create_executor(_as_execution_settings(settings))
-    result2 = factory_executor.execute(build_components, _as_execution_settings(settings))
+    factory_executor = factory.create_executor(job)
+    result2 = factory_executor.execute(build_components, job)
     assert isinstance(result2, TrainingResult)
 
 
@@ -237,11 +247,12 @@ def test_error_handling_integration(build_components):
     )
 
     factory = ExecutionStrategyFactory()
-    executor = factory.create_executor(_as_execution_settings(GeneralSettings()))
+    job = _job()
+    executor = factory.create_executor(job)
 
-    # Error should be properly wrapped
+    # Error should be properly wrapped — use JobConfig for execute()
     with pytest.raises(WorkflowError) as exc_info:
-        executor.execute(failing_components, _as_execution_settings(GeneralSettings()))
+        executor.execute(failing_components, job)
 
     assert "Vanilla execution failed" in str(exc_info.value.message)
     assert "Training failed" in str(exc_info.value.message)
@@ -252,17 +263,13 @@ def test_end_to_end_solid_workflow():
     # This test demonstrates how all principles work together
     factory = ExecutionStrategyFactory()
 
-    # Settings with all features enabled
-    full_settings = GeneralSettings(
-        MLFLOW=MLflowSettings(),
-        OPTUNA=OptunaSettings(enabled=True, n_trials=2),
-    )
+    # Settings with MLflow enabled
+    full_job = _job(mlflow=True, experiment_name="e2e_test")
 
     # Factory's create_executor only creates TrackingDecorator
-    executor = factory.create_executor(_as_execution_settings(full_settings))
+    executor = factory.create_executor(full_job)
 
-    # create_executor returns TrackingDecorator regardless of Optuna settings
-    # OptimizationDecorator is handled by create_optimization_strategy
+    # create_executor returns TrackingDecorator
     assert isinstance(executor, TrackingDecorator)  # Outer
     assert isinstance(executor._executor, VanillaExecutor)  # Core
 

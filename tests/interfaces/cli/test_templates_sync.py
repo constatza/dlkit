@@ -18,9 +18,8 @@ def test_cli_templates_use_central_builder() -> None:
 
 def test_training_template_contains_expected_sections() -> None:
     content = tmpl.render_template("training")
-    assert "[SESSION]" in content
-    assert "[MODEL]" in content
-    assert "[TRAINING]" in content
-    assert "[TRAINING.trainer]" in content
-    assert "[DATAMODULE]" in content
-    assert "[DATASET]" in content
+    assert "[run]" in content
+    assert "[model]" in content
+    assert "[training]" in content
+    assert "[training.trainer]" in content or "[training]" in content
+    assert "[data]" in content

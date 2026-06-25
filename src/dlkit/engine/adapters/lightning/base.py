@@ -290,8 +290,12 @@ def _build_model_from_settings(
             hyperparams = {**hyperparams, "activation": model_settings.activation}
     elif hasattr(model_settings, "model_dump"):
         all_fields = model_settings.model_dump()
-        excluded = {"name", "module_path", "checkpoint"}
+        excluded = {"name", "module_path", "checkpoint", "params"}
         hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
+        # Unpack nested params sub-table (ModelSettings.params) into top-level kwargs.
+        params_sub = all_fields.get("params")
+        if isinstance(params_sub, dict):
+            hyperparams.update({k: v for k, v in params_sub.items() if v is not None})
     else:
         hyperparams = {}
 

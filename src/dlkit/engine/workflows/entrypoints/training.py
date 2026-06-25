@@ -8,7 +8,7 @@ from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.orchestrator import Orchestrator
-from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 
 def train(
-    settings: TrainingWorkflowConfig,
+    settings: TrainingJobConfig,
     overrides: TrainingOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
@@ -29,7 +29,7 @@ def train(
 
     try:
         orchestrator = Orchestrator()
-        training_settings = cast(TrainingWorkflowConfig, context.settings)
+        training_settings = cast(TrainingJobConfig, context.settings)
         execution_result = context.run_with_path_context(
             lambda: orchestrator.execute_training(training_settings, hooks=hooks)
         )

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.training_settings import StoppingSettings, TrainingSettings
 
 
 class TestTrainingSettingsLRTuner:
@@ -99,14 +100,14 @@ class TestTrainingSettingsLRTuner:
     def test_model_copy_preserves_lr_tuner(self) -> None:
         """Test that model_copy preserves lr_tuner settings."""
         original = TrainingSettings(
-            epochs=50,
+            trainer=TrainerSettings(max_epochs=50),
             lr_tuner=LRTunerSettings(min_lr=1e-6, max_lr=0.1),
         )
 
-        # Create copy with updated epochs
-        copy = original.model_copy(update={"epochs": 100})
+        # Create copy with updated max_epochs
+        copy = original.model_copy(update={"trainer": TrainerSettings(max_epochs=100)})
 
-        assert copy.epochs == 100
+        assert copy.trainer.max_epochs == 100
         assert copy.lr_tuner is not None
         assert copy.lr_tuner.min_lr == 1e-6
         assert copy.lr_tuner.max_lr == 0.1
@@ -121,10 +122,12 @@ class TestTrainingSettingsLRTuner:
     def test_integration_with_other_training_settings(self) -> None:
         """Test that lr_tuner works alongside other training settings."""
         settings = TrainingSettings(
-            epochs=200,
-            patience=20,
-            monitor_metric="val_accuracy",
-            mode="max",
+            trainer=TrainerSettings(max_epochs=200),
+            stopping=StoppingSettings(
+                patience=20,
+                monitor="val_accuracy",
+                direction="max",
+            ),
             lr_tuner=LRTunerSettings(
                 min_lr=1e-5,
                 max_lr=0.01,
@@ -132,10 +135,10 @@ class TestTrainingSettingsLRTuner:
         )
 
         # Verify training settings
-        assert settings.epochs == 200
-        assert settings.patience == 20
-        assert settings.monitor_metric == "val_accuracy"
-        assert settings.mode == "max"
+        assert settings.trainer.max_epochs == 200
+        assert settings.stopping.patience == 20
+        assert settings.stopping.monitor == "val_accuracy"
+        assert settings.stopping.direction == "max"
 
         # Verify lr_tuner settings
         assert settings.lr_tuner is not None

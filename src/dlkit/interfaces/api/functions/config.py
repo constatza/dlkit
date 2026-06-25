@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from dlkit.common.protocols import BaseSettingsProtocol
 from dlkit.engine.workflows.entrypoints import (
     TemplateKind,
 )
@@ -17,22 +16,41 @@ from dlkit.engine.workflows.entrypoints import (
 from dlkit.engine.workflows.entrypoints import (
     validate_template as runtime_validate_template,
 )
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 
 
 def validate_config(
-    settings: BaseSettingsProtocol,
+    settings: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
     dry_build: bool = False,
 ) -> bool:
-    """Validate configuration structure and optional runtime readiness."""
+    """Validate configuration structure and optional runtime readiness.
+
+    Args:
+        settings: Typed job config to validate.
+        dry_build: If True, perform a dry build to validate runtime readiness.
+
+    Returns:
+        True if the configuration is valid.
+    """
     return runtime_validate_config(settings, dry_build=dry_build)
 
 
 def generate_template(
     template_type: TemplateKind = "training",
 ) -> str:
-    """Generate configuration template."""
-    _ = cast(BaseSettingsProtocol, GeneralSettings())
+    """Generate configuration template.
+
+    Args:
+        template_type: Template kind (``"training"``, ``"inference"``, ``"mlflow"``, ``"optuna"``).
+
+    Returns:
+        TOML string for the requested template.
+    """
     return runtime_generate_template(template_type=template_type)
 
 
@@ -40,9 +58,16 @@ def validate_template(
     template_content: str,
     template_type: str | None = None,
 ) -> dict[str, Any]:
-    """Validate configuration template."""
+    """Validate configuration template.
+
+    Args:
+        template_content: TOML string to validate.
+        template_type: Optional template kind for kind-specific validation.
+
+    Returns:
+        Validation result dictionary.
+    """
     template_kind: TemplateKind | None = (
         cast(TemplateKind, template_type) if template_type is not None else None
     )
-    _ = cast(BaseSettingsProtocol, GeneralSettings())
     return runtime_validate_template(template_content=template_content, template_type=template_kind)

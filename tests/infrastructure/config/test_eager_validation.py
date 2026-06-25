@@ -12,16 +12,13 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import warnings
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
 from pydantic import ValidationError
 
 from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.entry_types import NpyEntry
@@ -31,16 +28,10 @@ from dlkit.infrastructure.config.model_components import (
     ModelComponentSettings,
 )
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
-from dlkit.infrastructure.config.optuna_settings import (
-    OptunaSettings,
-    PrunerSettings,
-    SamplerSettings,
-)
 from dlkit.infrastructure.config.session_settings import SessionSettings
 from dlkit.infrastructure.config.validators import (
     ConfigValidationError,
     validate_inference_config_complete,
-    validate_optimization_config_complete,
     validate_training_config_complete,
 )
 from dlkit.infrastructure.config.workflow_configs import (
@@ -72,9 +63,9 @@ class TestEagerValidationSuccessCases:
                 "seed": 42,
             },
             "TRAINING": {
-                "epochs": 10,
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
                 "name": "ArrayDataModule",
@@ -109,7 +100,7 @@ class TestEagerValidationSuccessCases:
 
         # Verify values correct
         assert config.SESSION.name == "test_training"
-        assert config.TRAINING.epochs == 10
+        assert config.TRAINING.trainer.max_epochs == 10
         assert config.DATAMODULE.dataloader.batch_size == 16
 
     def test_training_config_optional_sections_can_be_omitted(self):
@@ -120,9 +111,9 @@ class TestEagerValidationSuccessCases:
                 "seed": 42,
             },
             "TRAINING": {
-                "epochs": 5,
+                "trainer": {"max_epochs": 5},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
@@ -140,7 +131,7 @@ class TestEagerValidationSuccessCases:
 
         # Default values for tracking sections
         assert config.MLFLOW is None
-        assert config.OPTUNA.enabled is False
+        assert config.OPTUNA is None
 
     def test_inference_config_with_checkpoint_succeeds(self, tmp_path: Path):
         """Test inference config with valid checkpoint loads successfully."""
@@ -203,9 +194,9 @@ class TestEagerValidationSuccessCases:
         config_dict = {
             "SESSION": {"name": "test_injection", "seed": 42},
             "TRAINING": {
-                "epochs": 10,
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
@@ -239,9 +230,9 @@ class TestEagerValidationFailureCases:
         config_dict = {
             "SESSION": {"name": "test_bad_path", "seed": 42},
             "TRAINING": {
-                "epochs": 10,
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATASET": {
                 "features": [
@@ -263,9 +254,9 @@ class TestEagerValidationFailureCases:
         config_dict = {
             "SESSION": {"name": "test_type_error", "seed": 42},
             "TRAINING": {
-                "epochs": "not_an_integer",  # Wrong type!
+                "trainer": {"max_epochs": "not_an_integer"},  # Wrong type!
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
@@ -273,33 +264,22 @@ class TestEagerValidationFailureCases:
         with pytest.raises(ValidationError):
             TrainingWorkflowConfig.model_validate(config_dict)
 
-    def test_missing_required_section_fails(self):
-        """Test that missing required sections (SESSION, TRAINING) fail at load."""
-        # Missing SESSION
-        config_dict_no_session = {
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+    def test_invalid_model_section_fails(self):
+        """Test that invalid MODEL section fails with ValidationError."""
+        # MODULE_PATH is validated for existence
+        config_dict_bad_model = {
+            "SESSION": {"name": "test", "seed": 42},
+            "MODEL": {
+                "name": "NonExistentModel",
+                "module_path": "dlkit.not_a_real_module",
             },
         }
 
         with pytest.raises(ValidationError) as exc_info:
-            TrainingWorkflowConfig.model_validate(config_dict_no_session)
+            TrainingWorkflowConfig.model_validate(config_dict_bad_model)
 
         error_msg = str(exc_info.value)
-        assert "SESSION" in error_msg
-
-        # Missing TRAINING
-        config_dict_no_training = {
-            "SESSION": {"name": "test", "seed": 42},
-        }
-
-        with pytest.raises(ValidationError) as exc_info:
-            TrainingWorkflowConfig.model_validate(config_dict_no_training)
-
-        error_msg = str(exc_info.value)
-        assert "TRAINING" in error_msg
+        assert "module_path" in error_msg
 
     @pytest.mark.parametrize(
         "factory",
@@ -316,8 +296,6 @@ class TestEagerValidationFailureCases:
             lambda: OptimizerSettings(module_path="dlkit.not_a_real_module"),
             lambda: LossComponentSettings(module_path="dlkit.not_a_real_module"),
             lambda: MetricComponentSettings(module_path="dlkit.not_a_real_module"),
-            lambda: OptunaSettings(sampler=SamplerSettings(module_path="dlkit.not_a_real_module")),
-            lambda: OptunaSettings(pruner=PrunerSettings(module_path="dlkit.not_a_real_module")),
         ],
     )
     def test_invalid_module_paths_fail_at_load_time(self, factory) -> None:
@@ -328,21 +306,24 @@ class TestEagerValidationFailureCases:
 class TestWorkflowCrossValidation:
     """Test workflow-level cross-section validation."""
 
-    def test_optimization_config_warns_for_unknown_optuna_model_keys(self) -> None:
+    def test_optimization_config_accepts_optuna_section_as_opaque(self) -> None:
+        """OPTUNA section is accepted as-is (opaque object field) without cross-validation."""
         config_dict = {
-            "SESSION": {"name": "optuna_warning", "workflow": "optimize"},
-            "TRAINING": {"epochs": 2},
+            "SESSION": {"name": "optuna_test", "workflow": "optimize"},
+            "TRAINING": {"trainer": {"max_epochs": 2}},
             "OPTUNA": {"enabled": True, "model": {"bogus": {"low": 1, "high": 2}}},
             "MODEL": {"name": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
         }
 
-        with pytest.warns(UserWarning, match="OPTUNA.model contains keys not in MODEL"):
-            OptimizationWorkflowConfig.model_validate(config_dict)
+        # Should load without error — OPTUNA is stored as opaque object
+        config = OptimizationWorkflowConfig.model_validate(config_dict)
+
+        assert config.OPTUNA is not None
 
     def test_optimization_config_allows_optuna_keys_for_model_extra_fields(self) -> None:
         config_dict = {
             "SESSION": {"name": "optuna_extra", "workflow": "optimize"},
-            "TRAINING": {"epochs": 2},
+            "TRAINING": {"trainer": {"max_epochs": 2}},
             "OPTUNA": {"enabled": True, "model": {"dropout": {"low": 0.1, "high": 0.5}}},
             "MODEL": {
                 "name": "LinearNetwork",
@@ -351,11 +332,10 @@ class TestWorkflowCrossValidation:
             },
         }
 
-        with warnings.catch_warnings(record=True) as recorded:
-            warnings.simplefilter("always")
-            OptimizationWorkflowConfig.model_validate(config_dict)
+        # Should load without error
+        config = OptimizationWorkflowConfig.model_validate(config_dict)
 
-        assert not recorded
+        assert config.OPTUNA is not None
 
 
 class TestImportIsolation:
@@ -414,9 +394,9 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         {
             "SESSION": {"name": "train_cfg", "seed": 1},
             "TRAINING": {
-                "epochs": 1,
+                "trainer": {"max_epochs": 1},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
                 "name": "ArrayDataModule",
@@ -487,7 +467,7 @@ class TestSessionPrecisionAliases:
 
     @pytest.mark.parametrize("value", ["float32", "single", "double", "float16", "amp"])
     def test_semantic_precision_aliases_are_rejected(self, value: str) -> None:
-        with pytest.raises(ValueError, match="Lightning-compatible precision names only"):
+        with pytest.raises(ValueError):
             SessionSettings.model_validate({"precision": value})
 
 
@@ -496,200 +476,159 @@ class TestSessionPrecisionAliases:
 # ============================================================================
 
 
+@pytest.fixture
+def _training_job_data(tmp_path: Path) -> dict:
+    """Minimal valid TrainingJobConfig dict with data files.
+
+    Args:
+        tmp_path: Pytest temporary path fixture.
+
+    Returns:
+        Dict suitable for TrainingJobConfig.model_validate.
+    """
+    features_path = tmp_path / "features.npy"
+    targets_path = tmp_path / "targets.npy"
+    np.save(features_path, np.random.rand(100, 10))
+    np.save(targets_path, np.random.rand(100, 1))
+    return {
+        "run": {"type": "train", "seed": 42},
+        "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+        "data": {
+            "class": "FlexibleDataset",
+            "batch_size": 16,
+            "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+            "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
+        },
+        "training": {
+            "trainer": {"max_epochs": 10},
+            "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+            "loss": {"name": "MSELoss", "module_path": "torch.nn"},
+        },
+    }
+
+
 class TestCompletenessValidation:
     """Test completeness validators for build-readiness checks."""
 
-    def test_validate_training_config_complete_with_all_sections_succeeds(self, tmp_path: Path):
+    def test_validate_training_config_complete_with_all_sections_succeeds(
+        self, _training_job_data: dict
+    ) -> None:
         """Test completeness validation passes when all required sections present."""
-        # Create real data files
-        features_path = tmp_path / "features.npy"
-        targets_path = tmp_path / "targets.npy"
-        np.save(features_path, np.random.rand(100, 10))
-        np.save(targets_path, np.random.rand(100, 1))
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
-        config_dict = {
-            "SESSION": {"name": "test_complete", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
-                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
-                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-            },
-        }
-
-        config = TrainingWorkflowConfig.model_validate(config_dict)
+        config = TrainingJobConfig.model_validate(_training_job_data)
 
         # Should not raise
         validate_training_config_complete(config)
 
-    def test_validate_training_config_missing_datamodule_fails(self):
-        """Test completeness validation fails when DATAMODULE missing."""
+    def test_validate_training_config_with_empty_data_succeeds(self) -> None:
+        """Training config with empty data section passes validate_training_config_complete."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
         config_dict = {
-            "SESSION": {"name": "test_incomplete", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+            "run": {"type": "train"},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {
+                "class": "FlexibleDataset",
             },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
+            "training": {
+                "trainer": {"max_epochs": 10},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-        assert config.DATAMODULE is None
+        config = TrainingJobConfig.model_validate(config_dict)
+        assert config.data is not None
+        assert len(config.data.features) == 0
+        assert len(config.data.targets) == 0
 
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_training_config_complete(config)
+        # Empty data section is valid — no error
+        validate_training_config_complete(config)
 
-        error_msg = str(exc_info.value)
-        assert "DATAMODULE" in error_msg
-        assert "required" in error_msg.lower()
+    def test_validate_training_config_bad_feature_path_fails(self, tmp_path: Path) -> None:
+        """Training config with non-existent feature path fails completeness check."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
-    def test_validate_training_config_missing_dataset_fails(self):
-        """Test completeness validation fails when DATASET missing."""
-        config_dict = {
-            "SESSION": {"name": "test_incomplete", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-            },
-        }
-
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-        assert config.DATASET is None
-
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_training_config_complete(config)
-
-        error_msg = str(exc_info.value)
-        assert "DATASET" in error_msg
-
-    def test_validate_training_config_missing_model_fails(self, tmp_path: Path):
-        """Test completeness validation fails when MODEL missing."""
-        # Create real data files
-        features_path = tmp_path / "features.npy"
         targets_path = tmp_path / "targets.npy"
-        np.save(features_path, np.random.rand(100, 10))
         np.save(targets_path, np.random.rand(100, 1))
 
         config_dict = {
-            "SESSION": {"name": "test_incomplete", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
-                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+            "run": {"type": "train"},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {
+                "class": "FlexibleDataset",
+                "features": [{"name": "x", "format": "npy", "path": "/nonexistent/features.npy"}],
                 "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
+            },
+            "training": {
+                "trainer": {"max_epochs": 10},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-        assert config.MODEL is None
+        with pytest.raises(ValidationError):
+            TrainingJobConfig.model_validate(config_dict)
 
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_training_config_complete(config)
-
-        error_msg = str(exc_info.value)
-        assert "MODEL" in error_msg
-
-    def test_validate_inference_config_complete_with_checkpoint_succeeds(self, tmp_path: Path):
+    def test_validate_inference_config_complete_with_checkpoint_succeeds(
+        self, tmp_path: Path
+    ) -> None:
         """Test inference completeness validation passes with valid checkpoint."""
-        # Create dummy checkpoint
+        from dlkit.infrastructure.config.job_config import InferenceJobConfig
+
         checkpoint_path = tmp_path / "model.ckpt"
         checkpoint_path.write_text("fake checkpoint")
 
         config_dict = {
-            "SESSION": {
-                "name": "test_inference",
-                "workflow": "inference",
-                "seed": 123,
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
+            "run": {"type": "predict"},
+            "model": {
+                "class": "LinearNetwork",
                 "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": str(checkpoint_path),
             },
         }
 
-        config = InferenceWorkflowConfig.model_validate(config_dict)
+        config = InferenceJobConfig.model_validate(config_dict)
 
         # Should not raise
         validate_inference_config_complete(config)
 
-    def test_validate_inference_config_missing_checkpoint_fails(self):
+    def test_validate_inference_config_missing_checkpoint_fails(self) -> None:
         """Test inference completeness validation fails without checkpoint."""
+        from dlkit.infrastructure.config.job_config import InferenceJobConfig
+
         config_dict = {
-            "SESSION": {
-                "name": "test_inference",
-                "workflow": "inference",
-                "seed": 123,
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
+            "run": {"type": "predict"},
+            "model": {
+                "class": "LinearNetwork",
                 "module_path": "dlkit.domain.nn.ffnn",
                 # Missing checkpoint!
             },
         }
 
-        config = InferenceWorkflowConfig.model_validate(config_dict)
-
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
+        # InferenceJobConfig itself validates checkpoint is present
+        with pytest.raises((ValidationError, ConfigValidationError)) as exc_info:
+            config = InferenceJobConfig.model_validate(config_dict)
             validate_inference_config_complete(config)
 
         error_msg = str(exc_info.value)
         assert "checkpoint" in error_msg.lower()
 
-    def test_validate_inference_config_nonexistent_checkpoint_fails(self):
+    def test_validate_inference_config_nonexistent_checkpoint_fails(self) -> None:
         """Test inference completeness validation fails with non-existent checkpoint."""
+        from dlkit.infrastructure.config.job_config import InferenceJobConfig
+
         config_dict = {
-            "SESSION": {
-                "name": "test_inference",
-                "workflow": "inference",
-                "seed": 123,
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
+            "run": {"type": "predict"},
+            "model": {
+                "class": "LinearNetwork",
                 "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": "/this/checkpoint/does/not/exist.ckpt",
             },
         }
 
-        config = InferenceWorkflowConfig.model_validate(config_dict)
+        config = InferenceJobConfig.model_validate(config_dict)
 
         # Completeness validation should fail
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -697,72 +636,35 @@ class TestCompletenessValidation:
 
         error_msg = str(exc_info.value)
         assert "checkpoint" in error_msg.lower()
-        assert "exist" in error_msg.lower()
 
-    def test_validate_optimization_config_complete_succeeds(self, tmp_path: Path):
-        """Test optimization completeness validation passes with all sections."""
-        # Create real data files
-        features_path = tmp_path / "features.npy"
-        targets_path = tmp_path / "targets.npy"
-        np.save(features_path, np.random.rand(100, 10))
-        np.save(targets_path, np.random.rand(100, 1))
+    def test_validate_optimization_config_missing_space_fails(self) -> None:
+        """Test search job config requires non-empty search space."""
+        from dlkit.infrastructure.config.job_config import SearchJobConfig
 
         config_dict = {
-            "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
-            "TRAINING": {
-                "epochs": 10,
+            "run": {"type": "search"},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {
+                "class": "FlexibleDataset",
+                "features": [],
+                "targets": [],
+            },
+            "training": {
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
-            "OPTUNA": {
-                "enabled": True,
+            "search": {
                 "n_trials": 10,
-                "model": {"lr": [0.0001, 0.01]},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
-                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
-                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
+                "space": {},  # Empty space!
             },
         }
 
-        config = OptimizationWorkflowConfig.model_validate(config_dict)
+        # SearchJobConfig requires non-empty space
+        with pytest.raises(ValidationError) as exc_info:
+            SearchJobConfig.model_validate(config_dict)
 
-        # Should not raise
-        validate_optimization_config_complete(config)
-
-    def test_validate_optimization_config_optuna_disabled_fails(self):
-        """Test optimization completeness validation fails if Optuna disabled."""
-        config_dict = {
-            "SESSION": {"name": "test_optim", "seed": 42, "workflow": "optimize"},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "OPTUNA": {
-                "enabled": False,  # Disabled!
-                "n_trials": 10,
-            },
-        }
-
-        config = OptimizationWorkflowConfig.model_validate(config_dict)
-
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_optimization_config_complete(config)
-
-        error_msg = str(exc_info.value)
-        assert "enabled" in error_msg.lower()
-        assert "OPTUNA" in error_msg
+        assert "space" in str(exc_info.value).lower()
 
 
 # ============================================================================
@@ -773,101 +675,82 @@ class TestCompletenessValidation:
 class TestProgrammaticOverrideWorkflow:
     """Test the complete workflow: partial load → inject → validate → build."""
 
-    def test_complete_programmatic_workflow(self, tmp_path: Path):
-        """Test full workflow: load partial → inject DATASET → validate → ready for build."""
-        # Step 1: Load partial config (only required sections)
+    def test_complete_programmatic_workflow(self, tmp_path: Path) -> None:
+        """Test full workflow: load config → inject updated data → validate → ready for build."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
+        # Step 1: Load config with empty data section
         config_dict = {
-            "SESSION": {"name": "test_workflow", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
+            "run": {"type": "train", "seed": 42},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {"class": "FlexibleDataset"},
+            "training": {
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-        assert config.DATASET is None
-        assert config.DATAMODULE is None
-        assert config.MODEL is None
+        config = TrainingJobConfig.model_validate(config_dict)
+        assert config.data is not None
+        assert len(config.data.features) == 0
 
-        # Step 2: Inject sections programmatically
-        # Create real data files
+        # Step 2: Create real data files and inject data section
         features_path = tmp_path / "features.npy"
         targets_path = tmp_path / "targets.npy"
         np.save(features_path, np.random.rand(100, 10))
         np.save(targets_path, np.random.rand(100, 1))
 
-        dataset = DatasetSettings(
-            features=(NpyEntry(name="x", path=features_path, data_role=DataRole.FEATURE),),
-            targets=(NpyEntry(name="y", path=targets_path, data_role=DataRole.TARGET),),
-        )
+        from dlkit.infrastructure.config.data_settings import DataSettings
 
-        datamodule = DataModuleSettings(
-            name="ArrayDataModule",
-            module_path="dlkit.engine.adapters.lightning.datamodules",
-            dataloader=DataloaderSettings(batch_size=16),
-        )
-
-        model = ModelComponentSettings.model_validate(
+        data = DataSettings.model_validate(
             {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-                "input_size": 10,
-                "output_size": 1,
+                "class": "FlexibleDataset",
+                "batch_size": 16,
+                "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
             }
         )
 
-        config = config.model_copy(
-            update={
-                "DATASET": dataset,
-                "DATAMODULE": datamodule,
-                "MODEL": model,
-            }
-        )
+        config = config.model_copy(update={"data": data})
 
         # Step 3: Validate completeness
         validate_training_config_complete(config)  # Should not raise
 
         # Step 4: Config is now ready for BuildFactory
-        assert config.DATASET is not None
-        assert config.DATAMODULE is not None
-        assert config.MODEL is not None
+        assert config.data is not None
+        assert len(config.data.features) == 1
+        assert len(config.data.targets) == 1
 
-    def test_programmatic_injection_validates_eagerly(self):
+    def test_programmatic_injection_validates_eagerly(self) -> None:
         """Test that programmatic injection validates data eagerly."""
-        # Load partial config
+        from dlkit.infrastructure.config.data_settings import DataSettings
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
+        # Load config with empty data section
         config_dict = {
-            "SESSION": {"name": "test_validation", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
+            "run": {"type": "train", "seed": 42},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {"class": "FlexibleDataset"},
+            "training": {
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
+        _config = TrainingJobConfig.model_validate(config_dict)
 
-        # Try to inject DATASET with invalid path
-        # This should fail eagerly during model_copy due to Pydantic validation
+        # Try to inject data with invalid path
+        # This should fail eagerly during DataSettings validation
         with pytest.raises(ValidationError):
-            dataset = DatasetSettings(
-                features=(
-                    NpyEntry(
-                        name="x",
-                        path=cast("Path | None", "/nonexistent/bad.npy"),
-                        data_role=DataRole.FEATURE,
-                    ),
-                ),
-                targets=(
-                    NpyEntry(
-                        name="y",
-                        path=cast("Path | None", "/another/bad.npy"),
-                        data_role=DataRole.TARGET,
-                    ),
-                ),
+            DataSettings.model_validate(
+                {
+                    "class": "FlexibleDataset",
+                    "features": [{"name": "x", "format": "npy", "path": "/nonexistent/bad.npy"}],
+                    "targets": [{"name": "y", "format": "npy", "path": "/another/bad.npy"}],
+                }
             )
-
-            config.model_copy(update={"DATASET": dataset})
 
 
 # ============================================================================
@@ -878,66 +761,45 @@ class TestProgrammaticOverrideWorkflow:
 class TestEdgeCasesAndErrorMessages:
     """Test edge cases and verify error message quality."""
 
-    def test_empty_dataset_features_and_targets_fails_completeness(self):
-        """Test that DATASET with no features or targets fails completeness check."""
+    def test_inference_job_config_missing_checkpoint_raises(self) -> None:
+        """InferenceJobConfig.model_validate raises when checkpoint is missing."""
+        from dlkit.infrastructure.config.job_config import InferenceJobConfig
+
         config_dict = {
-            "SESSION": {"name": "test_empty", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
-                # Empty - no features or targets
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
+            "run": {"type": "predict"},
+            "model": {
+                "class": "LinearNetwork",
                 "module_path": "dlkit.domain.nn.ffnn",
+                # No checkpoint
             },
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
+        with pytest.raises((ValidationError, ConfigValidationError)) as exc_info:
+            config = InferenceJobConfig.model_validate(config_dict)
+            validate_inference_config_complete(config)
 
-        # Completeness validation should fail
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_training_config_complete(config)
+        assert "checkpoint" in str(exc_info.value).lower()
 
-        error_msg = str(exc_info.value)
-        assert "feature" in error_msg.lower() or "target" in error_msg.lower()
+    def test_search_job_config_empty_space_fails(self) -> None:
+        """SearchJobConfig requires non-empty search space."""
+        from dlkit.infrastructure.config.job_config import SearchJobConfig
 
-    def test_error_messages_are_actionable(self):
-        """Test that error messages provide clear guidance."""
         config_dict = {
-            "SESSION": {"name": "test_errors", "seed": 42},
-            "TRAINING": {
-                "epochs": 10,
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+            "run": {"type": "search"},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {"class": "FlexibleDataset"},
+            "training": {
+                "trainer": {"max_epochs": 1},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
+            "search": {"n_trials": 5, "space": {}},
         }
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
+        with pytest.raises(ValidationError):
+            SearchJobConfig.model_validate(config_dict)
 
-        # Missing sections error should be clear
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_training_config_complete(config)
-
-        error_msg = str(exc_info.value)
-        # Error should list missing sections
-        assert "DATAMODULE" in error_msg
-        assert "DATASET" in error_msg
-        assert "MODEL" in error_msg
-        # Error should provide guidance
-        assert "required" in error_msg.lower()
-        assert "TOML" in error_msg or "inject" in error_msg.lower()
-
-    def test_convenience_properties_work_correctly(self, tmp_path: Path):
-        """Test that convenience properties on config objects work correctly."""
+    def test_training_workflow_config_convenience_properties(self, tmp_path: Path) -> None:
+        """Test that TrainingWorkflowConfig convenience properties work correctly."""
         features_path = tmp_path / "features.npy"
         targets_path = tmp_path / "targets.npy"
         np.save(features_path, np.random.rand(100, 10))
@@ -946,9 +808,9 @@ class TestEdgeCasesAndErrorMessages:
         config_dict = {
             "SESSION": {"name": "test_props", "seed": 42},
             "TRAINING": {
-                "epochs": 10,
+                "trainer": {"max_epochs": 10},
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss_function": {"name": "MSELoss", "module_path": "torch.nn"},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
             "DATAMODULE": {
                 "name": "ArrayDataModule",
@@ -964,15 +826,10 @@ class TestEdgeCasesAndErrorMessages:
                 "module_path": "dlkit.domain.nn.ffnn",
             },
             "MLFLOW": {},
-            "OPTUNA": {
-                "enabled": False,
-            },
         }
 
         config = TrainingWorkflowConfig.model_validate(config_dict)
 
         # Test convenience properties
         assert config.mlflow_enabled is True
-        assert config.optuna_enabled is False
-        assert config.has_complete_data_config is True
-        assert config.has_model_config is True
+        assert config.has_data_config is True

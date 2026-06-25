@@ -10,15 +10,13 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .value_objects import (
@@ -179,7 +177,7 @@ class TrialExecutor:
     def execute_trial(
         self,
         trial: Trial,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
         hyperparameters: dict[str, Any],
         trial_context: Any = None,
         enable_checkpointing: bool = False,
@@ -233,9 +231,9 @@ class TrialExecutor:
 
     def _apply_hyperparameters(
         self,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
         hyperparameters: dict[str, Any],
-    ) -> OptimizationWorkflowConfig:
+    ) -> SearchJobConfig:
         """Apply hyperparameters to base settings.
 
         Args:
@@ -250,7 +248,10 @@ class TrialExecutor:
         """
         # TODO: Add pruning callback injection here
         try:
-            return self._hyperparameter_applicator.apply(base_settings, hyperparameters)
+            return cast(
+                SearchJobConfig,
+                self._hyperparameter_applicator.apply(base_settings, hyperparameters),
+            )
         except Exception as e:
             raise WorkflowError(
                 f"Failed to apply hyperparameters: {e}",
@@ -260,7 +261,7 @@ class TrialExecutor:
     def _execute_training(
         self,
         components: RuntimeComponents,
-        settings: OptimizationWorkflowConfig,
+        settings: SearchJobConfig,
         trial_context: Any = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
@@ -414,7 +415,7 @@ class OptimizationOrchestrator:
     def execute_optimization(
         self,
         study_name: str,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
         n_trials: int,
         direction: OptimizationDirection,
         sampler_config: dict[str, Any] | None = None,
@@ -475,7 +476,7 @@ class OptimizationOrchestrator:
     def _execute_with_tracking(
         self,
         study: Study,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
     ) -> OptimizationResult:
         """Execute optimization with experiment tracking.
 
@@ -577,7 +578,7 @@ class OptimizationOrchestrator:
             # Retrain with best parameters
             best_trial = study.best_trial
             best_training_result = None
-            best_settings: OptimizationWorkflowConfig | None = None
+            best_settings: SearchJobConfig | None = None
 
             if best_trial:
                 with self._experiment_tracker.create_best_retrain_run(
@@ -631,7 +632,7 @@ class OptimizationOrchestrator:
     def _execute_without_tracking(
         self,
         study: Study,
-        base_settings: OptimizationWorkflowConfig,
+        base_settings: SearchJobConfig,
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
         # Similar logic but without tracking context managers

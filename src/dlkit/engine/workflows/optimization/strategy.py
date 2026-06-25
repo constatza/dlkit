@@ -13,9 +13,7 @@ from dlkit.common import OptimizationResult as APIOptimizationResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.results import TrialRecord
 from dlkit.engine.training.interfaces import IOptimizationStrategy
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -35,20 +33,20 @@ class OptimizationStrategy(IOptimizationStrategy):
     def __init__(
         self,
         factory: OptimizationServiceFactory,
-        settings: OptimizationWorkflowConfig,
+        settings: SearchJobConfig,
     ):
         """Initialize optimization strategy.
 
         Args:
             factory: Service factory for dependency injection
-            settings: Configuration settings
+            settings: Search job configuration
         """
         self._factory = factory
-        self._settings: OptimizationWorkflowConfig = settings
+        self._settings = settings
 
     def execute_optimization(
         self,
-        settings: OptimizationWorkflowConfig,
+        settings: object,
     ) -> APIOptimizationResult:
         """Execute optimization using clean architecture.
 
@@ -56,7 +54,7 @@ class OptimizationStrategy(IOptimizationStrategy):
         caller does not need to enter tracker contexts explicitly.
 
         Args:
-            settings: Configuration settings with optimization parameters
+            settings: Search job configuration with optimization parameters
 
         Returns:
             Optimization result compatible with existing API
@@ -66,6 +64,11 @@ class OptimizationStrategy(IOptimizationStrategy):
         """
         logger.debug("Executing optimization with clean architecture")
         start_time = time.time()
+        if not isinstance(settings, SearchJobConfig):
+            raise WorkflowError(
+                f"execute_optimization requires SearchJobConfig, got {type(settings).__name__}",
+                {"stage": "optimization"},
+            )
 
         try:
             # Create orchestrator with dependency injection

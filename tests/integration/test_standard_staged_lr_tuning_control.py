@@ -11,6 +11,7 @@ from dlkit.common import TrainingResult
 from dlkit.engine.training.optimization.controllers import ManualOptimizationController
 from dlkit.engine.training.tuning import LRTuner
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
@@ -21,18 +22,23 @@ from dlkit.infrastructure.config.optimizer_component import (
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
 from dlkit.interfaces.api import train as api_train
 
 
 def _build_standard_staged_settings(
-    training_settings: TrainingWorkflowConfig,
-) -> TrainingWorkflowConfig:
-    """Create the staged standard-wrapper control scenario."""
-    assert training_settings.TRAINING is not None
-    training = training_settings.TRAINING.model_copy(
+    training_settings: TrainingJobConfig,
+) -> TrainingJobConfig:
+    """Create the staged standard-wrapper control scenario.
+
+    Args:
+        training_settings: Base training configuration.
+
+    Returns:
+        Modified TrainingJobConfig with staged optimizer policy and LR tuner.
+    """
+    assert training_settings.training is not None
+    updated_training = training_settings.training.model_copy(
         update={
-            "epochs": 3,
             "lr_tuner": LRTunerSettings(min_lr=1e-6, max_lr=0.1, num_training=20),
             "trainer": TrainerSettings.model_validate(
                 {
@@ -61,17 +67,11 @@ def _build_standard_staged_settings(
             ),
         }
     )
-    return TrainingWorkflowConfig(
-        SESSION=training_settings.SESSION,
-        DATASET=training_settings.DATASET,
-        DATAMODULE=training_settings.DATAMODULE,
-        MODEL=training_settings.MODEL,
-        TRAINING=training,
-    )
+    return training_settings.model_copy(update={"training": updated_training})
 
 
 def test_standard_staged_wrapper_uses_manual_controller(
-    training_settings: TrainingWorkflowConfig,
+    training_settings: TrainingJobConfig,
 ) -> None:
     """The standard wrapper remains the manual-optimization control case."""
     settings = _build_standard_staged_settings(training_settings)
@@ -83,7 +83,7 @@ def test_standard_staged_wrapper_uses_manual_controller(
 
 
 def test_standard_staged_training_succeeds_with_lr_tuning(
-    training_settings: TrainingWorkflowConfig,
+    training_settings: TrainingJobConfig,
 ) -> None:
     """Executor-level staged LR tuning should update stage 0 and keep stage 1 unchanged."""
     settings = _build_standard_staged_settings(training_settings)
@@ -106,13 +106,16 @@ def test_standard_staged_training_succeeds_with_lr_tuning(
 
 
 def test_executor_restores_manual_controller_after_lr_tuning(
-    training_settings: TrainingWorkflowConfig,
+    training_settings: TrainingJobConfig,
 ) -> None:
     """VanillaExecutor must restore the staged manual controller after LR tuning.
 
     The executor projects the staged policy to a single-stage tuning policy,
     runs LR finding with a real controller swap, then restores the original
     controller before training.
+
+    Args:
+        training_settings: Base training configuration fixture.
     """
     from unittest.mock import patch
 

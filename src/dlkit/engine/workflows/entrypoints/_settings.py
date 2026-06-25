@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    JobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 
-# Type alias for consistency with old code
-type WorkflowSettings = WorkflowConfig
+# Type alias: union of all concrete job config types accepted by entrypoints
+type WorkflowSettings = TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig

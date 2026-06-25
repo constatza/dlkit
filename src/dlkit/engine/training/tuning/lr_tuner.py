@@ -151,34 +151,50 @@ class LRTuner:
             list[type]: List of classes that should be allowed in checkpoint loading
         """
         from dlkit.infrastructure.config.core.base_settings import BasicSettings
+        from dlkit.infrastructure.config.data_settings import DataModuleSelector, DataSettings
         from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
         from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
         from dlkit.infrastructure.config.dataset_settings import DatasetSettings, IndexSplitSettings
-        from dlkit.infrastructure.config.general_settings import GeneralSettings
+        from dlkit.infrastructure.config.job_config import (
+            InferenceJobConfig,
+            JobConfig,
+            SearchJobConfig,
+            TrainingJobConfig,
+        )
         from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-        from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
         from dlkit.infrastructure.config.model_components import (
             LossComponentSettings,
             MetricComponentSettings,
             ModelComponentSettings,
             WrapperComponentSettings,
         )
+        from dlkit.infrastructure.config.model_settings import ModelParams, ModelSettings
         from dlkit.infrastructure.config.optimizer_settings import (
             OptimizerSettings,
             SchedulerSettings,
         )
         from dlkit.infrastructure.config.paths_settings import PathsSettings
-        from dlkit.infrastructure.config.session_settings import SessionSettings
-        from dlkit.infrastructure.config.training_settings import TrainingSettings
+        from dlkit.infrastructure.config.run_settings import RunSettings
+        from dlkit.infrastructure.config.tracking_settings import TrackingSettings
+        from dlkit.infrastructure.config.training_settings import StoppingSettings, TrainingSettings
+        from dlkit.infrastructure.config.workflow_settings_base import SessionSettings
 
         return [
             # Base settings
             BasicSettings,
-            GeneralSettings,
             TrainingSettings,
+            StoppingSettings,
             SessionSettings,
             PathsSettings,
-            # Model component settings
+            RunSettings,
+            # New-style JobConfig classes
+            JobConfig,
+            TrainingJobConfig,
+            InferenceJobConfig,
+            SearchJobConfig,
+            # Model settings
+            ModelSettings,
+            ModelParams,
             WrapperComponentSettings,
             ModelComponentSettings,
             MetricComponentSettings,
@@ -186,12 +202,15 @@ class LRTuner:
             # Training settings
             OptimizerSettings,
             SchedulerSettings,
-            # Data settings
+            # Data settings (new + legacy)
+            DataSettings,
+            DataModuleSelector,
             DataModuleSettings,
             DatasetSettings,
             IndexSplitSettings,
             DataloaderSettings,
+            # Tracking
+            TrackingSettings,
             # Other settings
             LRTunerSettings,
-            MLflowSettings,
         ]

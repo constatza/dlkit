@@ -13,6 +13,7 @@ from dlkit.infrastructure.config import (
     WrapperComponentSettings,
 )
 from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.infrastructure.config.model_settings import ModelSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .base import CoreLightningWrapper
@@ -41,7 +42,7 @@ class WrapperFactory:
 
     @staticmethod
     def create_wrapper(
-        model_settings: ModelComponentSettings,
+        model_settings: ModelComponentSettings | ModelSettings,
         settings: WrapperComponentSettings,
         wrapper_type: str = "auto",
         entry_configs: tuple[DataEntry, ...] | None = None,
@@ -84,7 +85,7 @@ class WrapperFactory:
 
     @staticmethod
     def create_standard_wrapper(
-        model_settings: ModelComponentSettings,
+        model_settings: ModelComponentSettings | ModelSettings,
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents | None = None,
@@ -120,7 +121,7 @@ class WrapperFactory:
 
     @staticmethod
     def create_graph_wrapper(
-        model_settings: ModelComponentSettings,
+        model_settings: ModelComponentSettings | ModelSettings,
         settings: WrapperComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents | None = None,
@@ -155,7 +156,7 @@ class WrapperFactory:
         )
 
     @staticmethod
-    def _detect_wrapper_type(model_settings: ModelComponentSettings) -> str:
+    def _detect_wrapper_type(model_settings: ModelComponentSettings | ModelSettings) -> str:
         """Detect the appropriate wrapper type based on model characteristics.
 
         Uses string inspection (class name, module path) to infer model family

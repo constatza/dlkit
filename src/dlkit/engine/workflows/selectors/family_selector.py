@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, cast
 
 from dlkit.engine.data.families import resolve_family, resolve_family_from_dataset
 from dlkit.infrastructure.config.enums import DatasetFamily
+from dlkit.infrastructure.config.job_config import JobConfig
 
 if TYPE_CHECKING:
     from lightning import LightningDataModule
@@ -21,11 +23,11 @@ class DatasetFamilySelector:
     """
 
     @staticmethod
-    def is_graph(settings: Any) -> bool:
+    def is_graph(settings: JobConfig) -> bool:
         return resolve_family(settings) is DatasetFamily.GRAPH
 
     @staticmethod
-    def default_datamodule_class_for(settings: Any) -> type[LightningDataModule]:
+    def default_datamodule_class_for(settings: JobConfig) -> type[LightningDataModule]:
         """Get default datamodule class for the given settings.
 
         Args:
@@ -38,7 +40,7 @@ class DatasetFamilySelector:
         return DatasetFamilySelector.default_datamodule_class_for_family(family)
 
     @staticmethod
-    def default_wrapper_class_for(settings: Any) -> type[CoreLightningWrapper]:
+    def default_wrapper_class_for(settings: JobConfig) -> type[CoreLightningWrapper]:
         """Get default wrapper class for the given settings.
 
         Args:
@@ -56,10 +58,10 @@ class DatasetFamilySelector:
 
         Prefers instance-based detection over settings hints.
         """
-        return resolve_family_from_dataset(dataset)
+        return resolve_family_from_dataset(cast(Sequence[object], dataset))
 
     @staticmethod
-    def resolve_family(settings: Any) -> DatasetFamily:
+    def resolve_family(settings: JobConfig) -> DatasetFamily:
         """Resolve dataset family from settings.
 
         Args:

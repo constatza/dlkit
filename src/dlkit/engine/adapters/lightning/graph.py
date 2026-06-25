@@ -24,6 +24,7 @@ from dlkit.infrastructure.config import (
     WrapperComponentSettings,
 )
 from dlkit.infrastructure.config.data_entries import DataEntry, is_target
+from dlkit.infrastructure.config.model_settings import ModelSettings
 
 from .base import CoreLightningWrapper, _build_model_from_settings
 
@@ -54,7 +55,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
         self,
         *,
         settings: WrapperComponentSettings,
-        model_settings: ModelComponentSettings,
+        model_settings: ModelComponentSettings | ModelSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         components: WrapperComponents,
         **kwargs: Any,

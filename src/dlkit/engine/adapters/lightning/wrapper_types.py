@@ -15,12 +15,13 @@ if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeContext
     from dlkit.infrastructure.config import ModelComponentSettings, WrapperComponentSettings
     from dlkit.infrastructure.config.data_entries import DataEntry
+    from dlkit.infrastructure.config.model_settings import ModelSettings
     from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
 
 
 def build_checkpoint_metadata(
     *,
-    model_settings: ModelComponentSettings,
+    model_settings: ModelComponentSettings | ModelSettings,
     wrapper_settings: WrapperComponentSettings,
     entry_configs: tuple[DataEntry, ...],
     predict_target_key: str,
@@ -64,7 +65,7 @@ class WrapperCheckpointMetadata:
         context: Shape context used to build the model, or None when not applicable.
     """
 
-    model_settings: ModelComponentSettings
+    model_settings: ModelComponentSettings | ModelSettings
     wrapper_settings: WrapperComponentSettings
     entry_configs: tuple[DataEntry, ...]
     predict_target_key: str

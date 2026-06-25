@@ -48,41 +48,44 @@ def sample_config_content(tmp_path: Path) -> str:
     root_dir = to_toml_path(tmp_path)
     feature_path = to_toml_path(tmp_path / "X.npy")
     target_path = to_toml_path(tmp_path / "Y.npy")
-    split_path = to_toml_path(tmp_path / "indices.txt")
+    _split_path = to_toml_path(tmp_path / "indices.txt")
     checkpoint_path = to_toml_path(tmp_path / "model.ckpt")
     default_root = to_toml_path(tmp_path / "work")
 
-    return f"""[SESSION]
-name = "test_session"
-workflow = "train"
+    return f"""[run]
+type = "train"
 seed = 42
 
-[DATASET]
-name = "FlexibleDataset"
-root_dir = "{root_dir}"
+[experiment]
+name = "test_session"
 
-[[DATASET.features]]
-name = "X"
-format = "npy"
-path = "{feature_path}"
-
-[[DATASET.targets]]
-name = "Y"
-format = "npy"
-path = "{target_path}"
-
-[DATASET.split]
-filepath = "{split_path}"
-
-[MODEL]
+[model]
 name = "FFNN"
 module_path = "dlkit.domain.nn.ffnn.residual"
 checkpoint = "{checkpoint_path}"
 
-[MLFLOW]
-experiment_name = "test_experiment"
+[data]
+root = "{root_dir}"
+batch_size = 32
+num_workers = 0
 
-[TRAINING.trainer]
+[[data.features]]
+name = "x"
+path = "{feature_path}"
+format = "npy"
+data_role = "feature"
+
+[[data.targets]]
+name = "y"
+path = "{target_path}"
+format = "npy"
+data_role = "target"
+
+[training]
+loss = "mse"
+
+[training.trainer]
+max_epochs = 10
 default_root_dir = "{default_root}"
 """
 

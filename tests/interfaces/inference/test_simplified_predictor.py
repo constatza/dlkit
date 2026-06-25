@@ -24,9 +24,7 @@ from dlkit.engine.inference.loading import (
     load_checkpoint,
     validate_checkpoint,
 )
-from dlkit.infrastructure.config.model_components import ModelComponentSettings
-from dlkit.infrastructure.config.session_settings import SessionSettings
-from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from dlkit.interfaces.inference import (
     CheckpointPredictor,
@@ -37,16 +35,36 @@ from dlkit.interfaces.inference import (
 )
 
 
-def _make_inference_settings(checkpoint: Path | None) -> InferenceWorkflowConfig:
-    """Build minimal inference settings for load_model_from_settings tests."""
-    return InferenceWorkflowConfig(
-        SESSION=SessionSettings(workflow="inference"),
-        MODEL=ModelComponentSettings(
-            name="Linear",
-            module_path="torch.nn",
-            checkpoint=checkpoint,
-        ),
-    )
+def _make_inference_settings(checkpoint: Path | None) -> InferenceJobConfig:
+    """Build minimal inference settings for load_model_from_settings tests.
+
+    Note: InferenceJobConfig requires a checkpoint, so this helper bypasses the
+    validator by using model_construct() when checkpoint is None.
+
+    Args:
+        checkpoint: Optional checkpoint path.
+
+    Returns:
+        InferenceJobConfig instance (possibly with None checkpoint for error testing).
+    """
+    from dlkit.infrastructure.config.model_settings import ModelSettings
+    from dlkit.infrastructure.config.run_settings import RunSettings
+
+    if checkpoint is not None:
+        return InferenceJobConfig.model_validate(
+            {
+                "run": {"type": "predict"},
+                "model": {
+                    "class": "Linear",
+                    "module_path": "torch.nn",
+                    "checkpoint": str(checkpoint),
+                },
+            }
+        )
+    # For testing the "no checkpoint" error path, bypass validation
+    run = RunSettings(type="predict")
+    model = ModelSettings.model_construct(name="Linear", module_path="torch.nn", checkpoint=None)
+    return InferenceJobConfig.model_construct(run=run, model=model)
 
 
 class TestCheckpointLoading:

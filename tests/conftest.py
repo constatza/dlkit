@@ -20,7 +20,7 @@ import pytest
 from _pytest.tmpdir import TempPathFactory
 
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.io import load_config
+from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.registry.public import (
     _reset_for_tests as _reset_component_registry_for_tests,
 )
@@ -77,45 +77,47 @@ def env(tmp_path: Path):
 
 def _write_config(config_path: Path, *, with_root: bool, env_paths: dict) -> None:
     # All references are simple relative filenames; resolution chooses the base.
-    paths_block = (
-        f'[PATHS]\nroot = "{env_paths["root_override"].as_posix()}"\n' if with_root else "[PATHS]\n"
-    ) + (
-        'output_dir = "outputs"\n'
-        'checkpoints_dir = "checkpoints"\n'
-        'figures_dir = "figures"\n'
-        'predictions_dir = "preds"\n'
-    )
+    root_line = f'root = "{env_paths["root_override"].as_posix()}"\n' if with_root else ""
 
-    dataset_block = (
-        "[DATASET]\n"
-        'name = "FlexibleDataset"\n'
-        'root_dir = "."\n\n'
-        "[[DATASET.features]]\n"
-        'name = "X"\n'
-        'path = "X.npy"\n\n'
-        "[[DATASET.targets]]\n"
-        'name = "Y"\n'
+    data_block = (
+        "[data]\n"
+        f"{root_line}"
+        'class = "FlexibleDataset"\n'
+        "batch_size = 8\n"
+        "num_workers = 0\n\n"
+        "[[data.features]]\n"
+        'name = "x"\n'
+        'path = "X.npy"\n'
+        "model_input = true\n\n"
+        "[[data.targets]]\n"
+        'name = "y"\n'
         'path = "Y.npy"\n\n'
-        "[DATASET.split]\n"
-        'filepath = "indices.txt"\n'
+        "[data.splits]\n"
+        "train = 0.7\n"
+        "val = 0.15\n"
+        "test = 0.15\n"
     )
 
     model_block = (
-        "[MODEL]\n"
-        'name = "FFNN"\n'
-        'module_path = "dlkit.domain.nn.ffnn.residual"\n'
-        'checkpoint = "model.ckpt"\n'
+        '[model]\nclass = "FFNN"\nmodule_path = "dlkit.domain.nn"\ncheckpoint = "model.ckpt"\n'
     )
 
-    session_block = '[SESSION]\nname = "test_session"\nworkflow = "train"\nseed = 42\n'
+    run_block = '[run]\ntype = "train"\nseed = 42\n'
 
-    mlflow_block = '[MLFLOW]\nenabled = true\nexperiment_name = "test_experiment"\n'
+    experiment_block = '[experiment]\nname = "test_experiment"\n'
 
-    trainer_block = '[TRAINING.trainer]\ndefault_root_dir = "work"\n'
-
-    config_path.write_text(
-        paths_block + dataset_block + model_block + session_block + mlflow_block + trainer_block
+    training_block = (
+        "[training]\n"
+        'loss = "mse"\n\n'
+        "[training.trainer]\n"
+        'accelerator = "cpu"\n'
+        "max_epochs = 10\n\n"
+        "[training.optimizer]\n"
+        'name = "AdamW"\n'
+        "lr = 1e-3\n"
     )
+
+    config_path.write_text(run_block + experiment_block + model_block + data_block + training_block)
 
 
 @pytest.fixture
@@ -128,7 +130,7 @@ def config_file(env: dict, with_root: bool) -> Path:
 @pytest.fixture
 def settings(env: dict, config_file: Path, loader_kind: str):
     if loader_kind == "io":
-        return load_config(config_file)
+        return load_job(config_file)
     pytest.skip("GeneralSettings removed in config redesign (Task 1). Fix in Task 3.")
 
 

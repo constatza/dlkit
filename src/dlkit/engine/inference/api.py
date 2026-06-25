@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dlkit.common import ConfigurationError
-from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
 from .config import PredictionOutput, PredictorConfig
@@ -94,7 +94,7 @@ def load_model(
 
 
 def load_model_from_settings(
-    settings: InferenceWorkflowConfig,
+    settings: InferenceJobConfig,
     *,
     checkpoint_path: Path | str | None = None,
     device: str = "auto",
@@ -104,10 +104,7 @@ def load_model_from_settings(
     precision: PrecisionStrategy | None = None,
 ) -> CheckpointPredictor:
     """Resolve a checkpoint from inference settings or an explicit override."""
-    model_settings = settings.MODEL
-    resolved_checkpoint = checkpoint_path or (
-        model_settings.checkpoint if model_settings is not None else None
-    )
+    resolved_checkpoint = checkpoint_path or settings.model.checkpoint
     if resolved_checkpoint is None:
         raise ConfigurationError("No checkpoint path found in settings or override.")
     return load_model(

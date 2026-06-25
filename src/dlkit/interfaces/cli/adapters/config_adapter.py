@@ -5,39 +5,40 @@ from __future__ import annotations
 from pathlib import Path
 
 from dlkit.common import ConfigurationError
-from dlkit.common.protocols import BaseSettingsProtocol
-from dlkit.infrastructure.config import load_settings
+from dlkit.infrastructure.config.factories import load_job
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 
 
 def load_config(
     config_path: Path,
-) -> BaseSettingsProtocol:
+    run_type: str | None = None,
+) -> TrainingJobConfig | InferenceJobConfig | SearchJobConfig:
     """Load configuration from file with CLI-specific error handling.
 
-    Uses the new SOLID-compliant configuration system with protocol-based dependency inversion.
+    Uses the new JobConfig hierarchy with ``load_job()`` as the primary loader.
 
     Args:
-        config_path: Path to configuration file
+        config_path: Path to configuration file.
+        run_type: Optional run type override (``"train"``, ``"predict"``, ``"search"``).
+            Required when the TOML file does not include a ``[run] type`` key.
+
     Returns:
-        BaseSettingsProtocol: Loaded settings object appropriate for the workflow type
+        Typed job config matched to the resolved ``run.type``.
 
     Raises:
-        ConfigurationError: If configuration loading fails
+        ConfigurationError: If configuration loading fails.
     """
+    if not config_path.exists():
+        raise ConfigurationError(
+            f"Configuration file not found: {config_path}", {"config_path": str(config_path)}
+        )
+
     try:
-        # Validate config file exists
-        if not config_path.exists():
-            raise ConfigurationError(
-                f"Configuration file not found: {config_path}", {"config_path": str(config_path)}
-            )
-
-        # Load settings - all workflows use the same loading function
-        load_fn = load_settings
-
-        settings = load_fn(config_path)
-
-        return settings
-
+        return load_job(config_path, run_type=run_type)
     except ValueError as e:
         raise ConfigurationError(
             f"Invalid configuration file: {e!s}",

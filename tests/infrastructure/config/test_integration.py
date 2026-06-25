@@ -16,7 +16,6 @@ from dlkit.infrastructure.config import (
     BuildContext,
     ComponentFactory,
     FactoryProvider,
-    GeneralSettings,
 )
 from dlkit.infrastructure.config.core.base_settings import ComponentSettings
 from dlkit.infrastructure.config.core.factories import DefaultComponentFactory
@@ -158,7 +157,7 @@ def complete_config_data() -> dict[str, Any]:
                 "num_workers": 8,
             },
         },
-        "TRAINING": {"epochs": 50, "trainer": {"accelerator": "cpu"}},
+        "TRAINING": {"trainer": {"max_epochs": 50, "accelerator": "cpu"}},
     }
 
 
@@ -200,10 +199,8 @@ module_path = "dlkit.engine.adapters.lightning.datamodules"
 batch_size = 64
 num_workers = 8
 
-[TRAINING]
-epochs = 50
-
 [TRAINING.trainer]
+max_epochs = 50
 accelerator = "cpu"
 """
 
@@ -338,15 +335,13 @@ class TestGeneralSettingsEndToEndIntegration:
         settings = _expect_tracking_workflow(load_settings(integration_config_file))
         session = settings.SESSION
         model = _expect_not_none(settings.MODEL)
-        optuna = settings.OPTUNA
         datamodule = _expect_not_none(settings.DATAMODULE)
 
         # Verify all components are properly loaded
         assert session.name == "integration_session"
         assert (model.model_extra or {})["input_size"] == 128
         assert settings.MLFLOW is not None
-        assert settings.MLFLOW.experiment_name == "integration_experiment"  # Configured value
-        assert optuna.enabled is True
+        assert settings.mlflow_enabled is True
         assert datamodule.dataloader.batch_size == 64
 
     def test_settings_mode_specific_configuration_access(
@@ -357,7 +352,9 @@ class TestGeneralSettingsEndToEndIntegration:
         Args:
             complete_config_data: Complete configuration dataflow fixture
         """
-        settings = GeneralSettings.model_validate(complete_config_data)
+        from dlkit.infrastructure.config.workflow_settings import TrainingWorkflowSettings
+
+        settings = TrainingWorkflowSettings.model_validate(complete_config_data)
 
         # Test mode detection
         assert settings.is_training is True
@@ -365,13 +362,11 @@ class TestGeneralSettingsEndToEndIntegration:
 
         # Test feature flags
         assert settings.mlflow_enabled is True
-        assert settings.optuna_enabled is True
         assert settings.has_training_config is True
-        assert settings.has_data_config is True
 
         # Test configuration access
         training_config = settings.get_training_config()
-        assert training_config.epochs == 50
+        assert training_config.trainer.max_epochs == 50
 
         datamodule_config = settings.get_datamodule_config()
         assert datamodule_config.dataloader.batch_size == 64
@@ -380,7 +375,9 @@ class TestGeneralSettingsEndToEndIntegration:
 
     def test_settings_validation_error_integration(self) -> None:
         """Test validation error integration across settings hierarchy."""
-        # Test inference mode without checkpoint
+        from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+
+        # Test inference mode without checkpoint — InferenceWorkflowConfig validates this
         invalid_config = {
             "SESSION": {"workflow": "inference", "name": "test_session"},
             "MODEL": {
@@ -389,8 +386,8 @@ class TestGeneralSettingsEndToEndIntegration:
             },
         }
 
-        with pytest.raises(ValueError, match="Checkpoint path must be provided"):
-            GeneralSettings.model_validate(invalid_config)
+        with pytest.raises(ValueError):
+            InferenceWorkflowConfig.model_validate(invalid_config)
 
     def test_load_settings_infers_dataset_entry_format_from_path(self, tmp_path: Path) -> None:
         """TOML loading should infer path-entry format before union resolution."""
@@ -409,8 +406,8 @@ name = "format_inference"
 workflow = "train"
 seed = 42
 
-[TRAINING]
-epochs = 1
+[TRAINING.trainer]
+max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"

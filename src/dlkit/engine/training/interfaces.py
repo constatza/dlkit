@@ -6,25 +6,18 @@ from abc import ABC, abstractmethod
 
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.engine.training.components import RuntimeComponents
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
-
-# Settings union accepted by training and optimization strategies
-WorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 class ITrainingExecutor(ABC):
     """Core training execution interface - single responsibility."""
 
     @abstractmethod
-    def execute(self, components: RuntimeComponents, settings: WorkflowSettings) -> TrainingResult:
+    def execute(self, components: RuntimeComponents, settings: object) -> TrainingResult:
         """Execute training and return TrainingResult, or raise WorkflowError.
 
         Args:
             components: Pre-built training components (model, trainer, datamodule)
-            settings: Global training settings
+            settings: Global training settings (JobConfig or old-style WorkflowConfig)
 
         Returns:
             TrainingResult containing metrics, artifacts, and model state
@@ -44,11 +37,11 @@ class IOptimizationStrategy(ABC):
     """
 
     @abstractmethod
-    def execute_optimization(self, settings: OptimizationWorkflowConfig) -> OptimizationResult:
+    def execute_optimization(self, settings: object) -> OptimizationResult:
         """Execute optimization workflow.
 
         Args:
-            settings: Configuration settings with optimization parameters
+            settings: Configuration settings with optimization parameters.
 
         Returns:
             Optimization result with best trial and training result

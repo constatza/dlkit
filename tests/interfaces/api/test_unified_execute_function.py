@@ -8,10 +8,10 @@ import pytest
 
 from dlkit.common import OptimizationResult, TrainingResult, WorkflowError
 from dlkit.engine.workflows.entrypoints.execution import execute as runtime_execute_impl
-from dlkit.infrastructure.config.workflow_configs import (
-    InferenceWorkflowConfig,
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
+from dlkit.infrastructure.config.job_config import (
+    InferenceJobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
 )
 from dlkit.interfaces.api import execute
 from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
@@ -32,7 +32,7 @@ class TestUnifiedExecuteFunction:
             duration_seconds=10.0,
         )
 
-        training_config = Mock(spec=TrainingWorkflowConfig)
+        training_config = Mock(spec=TrainingJobConfig)
 
         result = execute(training_config, overrides=ExecutionOverrides(epochs=10))
 
@@ -54,7 +54,7 @@ class TestUnifiedExecuteFunction:
             duration_seconds=300.0,
         )
 
-        optimization_config = Mock(spec=OptimizationWorkflowConfig)
+        optimization_config = Mock(spec=SearchJobConfig)
 
         result = execute(optimization_config, overrides=ExecutionOverrides(trials=50))
 
@@ -62,7 +62,7 @@ class TestUnifiedExecuteFunction:
         mock_executor_execute.assert_called_once()
 
     def test_runtime_execution_rejects_inference_config(self) -> None:
-        inference_config = Mock(spec=InferenceWorkflowConfig)
+        inference_config = Mock(spec=InferenceJobConfig)
 
         with pytest.raises(WorkflowError, match="load_model"):
             runtime_execute_impl(inference_config)

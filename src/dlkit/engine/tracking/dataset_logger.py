@@ -10,17 +10,13 @@ import hashlib
 import json
 from typing import Any
 
-from dlkit.infrastructure.config import GeneralSettings  # type: ignore
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
 from .interfaces import IRunContext
 
-type _WorkflowSettings = GeneralSettings | TrainingWorkflowConfig | OptimizationWorkflowConfig
+type _WorkflowSettings = JobConfig
 
 logger = get_logger(__name__)
 
@@ -91,20 +87,21 @@ class DatasetLogger:
         return False
 
     def _resolve_dataset_name(self, settings: _WorkflowSettings) -> str:
-        configured_name = getattr(settings.DATASET, "name", None) if settings.DATASET else None
+        ds = settings.data
+        configured_name = getattr(ds, "name", None) if ds is not None else None
         return str(configured_name) if configured_name else "training_data"
 
     def _build_dataset_tags(self, settings: _WorkflowSettings, dataset: Any) -> dict[str, str]:
         tags: dict[str, str] = {}
-        if settings.DATAMODULE:
+        if settings.data is not None:
             try:
-                split_cfg = settings.DATAMODULE.split
-                tags["split_test_ratio"] = str(split_cfg.test_ratio)
-                tags["split_val_ratio"] = str(split_cfg.val_ratio)
+                split_cfg = settings.data.splits
+                if split_cfg is not None:
+                    tags["split_test_ratio"] = str(split_cfg.test_ratio)
+                    tags["split_val_ratio"] = str(split_cfg.val_ratio)
             except Exception:
                 pass
-        if settings.DATASET:
-            dataset_type = getattr(settings.DATASET, "type", None)
+            dataset_type = getattr(settings.data, "family", None)
             if dataset_type:
                 tags["dataset_type"] = str(dataset_type)
         tags["dataset_class"] = type(dataset).__name__ if dataset is not None else "None"

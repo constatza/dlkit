@@ -9,15 +9,12 @@ from __future__ import annotations
 
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-)
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .infrastructure import (
     InMemoryStudyRepository,
     MLflowTrackingAdapter,
-    NullConfigurationPersister,
     NullOptimizationBackendSession,
     NullTrackingAdapter,
     OptunaOptimizationBackendSession,
@@ -37,16 +34,29 @@ from .value_objects import (
     OptimizationDirection,
 )
 
-# Settings union accepted by optimization factory methods
-type _WorkflowSettings = OptimizationWorkflowConfig
-
 logger = get_logger(__name__)
 
 
-def _optuna_enabled(settings: _WorkflowSettings) -> bool:
-    """Return whether Optuna-backed optimization is explicitly enabled."""
-    optuna_config = getattr(settings, "OPTUNA", None)
-    return bool(optuna_config and getattr(optuna_config, "enabled", False))
+def _optuna_enabled(settings: SearchJobConfig) -> bool:
+    """Return whether Optuna-backed optimization is enabled.
+
+    For ``SearchJobConfig`` instances (new-style config), Optuna is always
+    enabled — the presence of a search section implies it.  For duck-typed
+    legacy settings that expose an ``OPTUNA`` attribute (used in tests),
+    the ``enabled`` flag controls the decision.
+
+    Args:
+        settings: A SearchJobConfig or duck-typed legacy settings object.
+
+    Returns:
+        True when Optuna should be used for this workflow.
+    """
+    if isinstance(settings, SearchJobConfig):
+        return True
+    optuna_cfg = getattr(settings, "OPTUNA", None)
+    if optuna_cfg is None:
+        return False
+    return bool(getattr(optuna_cfg, "enabled", False))
 
 
 class OptimizationServiceFactory:
@@ -86,7 +96,7 @@ class OptimizationServiceFactory:
         self._config_persister_override = config_persister
 
     def create_optimization_orchestrator(
-        self, settings: _WorkflowSettings
+        self, settings: SearchJobConfig
     ) -> OptimizationOrchestrator:
         """Create optimization orchestrator with proper dependency injection.
 
@@ -131,7 +141,7 @@ class OptimizationServiceFactory:
                 f"Orchestrator creation failed: {e}", {"stage": "orchestrator_creation"}
             ) from e
 
-    def create_optimization_strategy(self, settings: _WorkflowSettings):
+    def create_optimization_strategy(self, settings: SearchJobConfig):
         """Create optimization strategy that implements IOptimizationStrategy.
 
         Args:
@@ -144,7 +154,7 @@ class OptimizationServiceFactory:
 
         return OptimizationStrategy(self, settings)
 
-    def create_study_manager(self, settings: _WorkflowSettings) -> StudyManager:
+    def create_study_manager(self, settings: SearchJobConfig) -> StudyManager:
         """Create study manager service.
 
         Args:
@@ -164,7 +174,7 @@ class OptimizationServiceFactory:
         """
         return TrialExecutor(self._build_factory)
 
-    def create_study_repository(self, settings: _WorkflowSettings) -> IStudyRepository:
+    def create_study_repository(self, settings: SearchJobConfig) -> IStudyRepository:
         """Create study repository based on settings.
 
         Args:
@@ -188,7 +198,7 @@ class OptimizationServiceFactory:
 
     def create_optimization_backend_session(
         self,
-        settings: _WorkflowSettings,
+        settings: SearchJobConfig,
         repository: IStudyRepository,
     ) -> IOptimizationBackendSession:
         """Create runtime backend coordination session for optimization execution."""
@@ -200,7 +210,7 @@ class OptimizationServiceFactory:
 
         return NullOptimizationBackendSession()
 
-    def create_experiment_tracker(self, settings: _WorkflowSettings) -> IExperimentTracker | None:
+    def create_experiment_tracker(self, settings: SearchJobConfig) -> IExperimentTracker | None:
         """Create experiment tracker based on settings.
 
         Args:
@@ -212,22 +222,22 @@ class OptimizationServiceFactory:
         if self._experiment_tracker_override:
             return self._experiment_tracker_override
 
-        # Check if MLflow tracking is configured (presence of section enables it)
-        mlflow_config = getattr(settings, "MLFLOW", None)
-        logger.debug("MLflow config present: {}", mlflow_config is not None)
+        # MLflow tracking is enabled when tracking.backend == "mlflow"
+        is_mlflow = settings.tracking.backend == "mlflow"
+        logger.debug("MLflow tracking enabled: {}", is_mlflow)
 
-        if mlflow_config:
+        if is_mlflow:
             from dlkit.engine.tracking.naming import (
                 determine_experiment_name,
             )
 
-            experiment_name = determine_experiment_name(settings, mlflow_config)
+            experiment_name = determine_experiment_name(settings)
             logger.info(
                 "Creating MLflow tracking adapter for optimization experiment '{}'",
                 experiment_name,
             )
             return MLflowTrackingAdapter(
-                mlflow_settings=mlflow_config,
+                mlflow_settings=settings.tracking,
                 session_name=experiment_name,
             )
 
@@ -236,7 +246,7 @@ class OptimizationServiceFactory:
         return NullTrackingAdapter()
 
     def create_config_persister(
-        self, settings: _WorkflowSettings
+        self, settings: SearchJobConfig
     ) -> IConfigurationPersistence | None:
         """Create configuration persister based on settings.
 
@@ -249,78 +259,45 @@ class OptimizationServiceFactory:
         if self._config_persister_override:
             return self._config_persister_override
 
-        # Use TOML persistence for optimization workflows
-        # Check for explicit persistence configuration
-        optuna_config = getattr(settings, "OPTUNA", None)
-        if optuna_config:
-            persistence_config = getattr(optuna_config, "persistence", None)
-            if persistence_config and not getattr(persistence_config, "enabled", True):
-                return NullConfigurationPersister()
-
         return TOMLConfigurationPersister()
 
     @staticmethod
-    def extract_optimization_config(settings: _WorkflowSettings) -> dict:
+    def extract_optimization_config(settings: SearchJobConfig) -> dict:
         """Extract optimization configuration from settings.
 
         Args:
-            settings: Optimization workflow configuration
+            settings: SearchJobConfig instance with search section.
 
         Returns:
-            Optimization configuration dictionary
-
-        Raises:
-            WorkflowError: If OPTUNA configuration is not found or not enabled
+            Optimization configuration dictionary.
         """
-        optuna_config = getattr(settings, "OPTUNA", None)
-        if not optuna_config:
-            raise WorkflowError("OPTUNA configuration not found", {"stage": "config_extraction"})
-
-        if not getattr(optuna_config, "enabled", False):
-            raise WorkflowError(
-                "OPTUNA is not enabled in configuration", {"stage": "config_extraction"}
-            )
-
-        # Extract optimization parameters
-        config = {
-            "n_trials": getattr(optuna_config, "n_trials", 10),
-            "direction": OptimizationDirection.MINIMIZE
-            if getattr(optuna_config, "direction", "minimize") == "minimize"
-            else OptimizationDirection.MAXIMIZE,
-        }
-
-        # Determine study name (study gets run name)
         from dlkit.engine.tracking.naming import determine_study_name
 
-        config["study_name"] = determine_study_name(settings, optuna_config)
-
-        # Extract sampler configuration
-        if hasattr(optuna_config, "sampler") and optuna_config.sampler:
-            sampler_params = optuna_config.sampler.get_init_kwargs()
-
-            # Inject SESSION.seed if sampler seed is not specified
-            if "seed" not in sampler_params or sampler_params.get("seed") is None:
-                session_config = getattr(settings, "SESSION", None)
-                if session_config and hasattr(session_config, "seed"):
-                    sampler_params["seed"] = session_config.seed
-
+        search = settings.search
+        config: dict = {
+            "n_trials": search.n_trials,
+            "direction": OptimizationDirection.MINIMIZE
+            if search.direction == "minimize"
+            else OptimizationDirection.MAXIMIZE,
+            "study_name": determine_study_name(settings, None),
+        }
+        if search.sampler:
             config["sampler_config"] = {
-                "type": optuna_config.sampler.name,
-                "params": sampler_params,
+                "type": search.sampler.name,
+                "params": {
+                    "seed": search.sampler.seed
+                    if search.sampler.seed is not None
+                    else settings.run.seed,
+                },
             }
-
-        # Extract pruner configuration
-        if hasattr(optuna_config, "pruner") and optuna_config.pruner:
+        if search.pruner:
             config["pruner_config"] = {
-                "type": optuna_config.pruner.name,
-                "params": optuna_config.pruner.get_init_kwargs(),
+                "type": search.pruner.name,
+                "params": {},
             }
-
-        # Extract storage configuration
-        if hasattr(optuna_config, "storage") and optuna_config.storage:
+        if search.storage:
             config["storage_config"] = {
-                "url": str(optuna_config.storage),
-                "load_if_exists": getattr(optuna_config, "load_if_exists", True),
+                "url": str(search.storage),
+                "load_if_exists": True,
             }
-
         return config
