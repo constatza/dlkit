@@ -44,10 +44,10 @@ class TestNamespacedShims:
     """Verify namespaced shims expose the broader surfaces."""
 
     def test_config_shim_exposes_types_and_loaders(self) -> None:
-        from dlkit.config import GeneralSettings, load_training_config
+        from dlkit.config import TrainingJobConfig, load_job
 
-        assert GeneralSettings is not None
-        assert callable(load_training_config)
+        assert TrainingJobConfig is not None
+        assert callable(load_job)
 
     def test_registry_shim_exposes_introspection(self) -> None:
         from dlkit.registry import describe_model, list_registered_datasets, list_registered_models

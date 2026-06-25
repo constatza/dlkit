@@ -10,7 +10,7 @@ import torch
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry
-from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.run_settings import RunSettings as SessionSettings
 from dlkit.infrastructure.io.arrays import load_array
 from dlkit.infrastructure.precision import (
     PrecisionStrategy,

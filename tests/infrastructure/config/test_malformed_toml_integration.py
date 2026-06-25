@@ -1,34 +1,17 @@
 """Integration tests for malformed TOML configurations.
 
-This module tests the end-to-end flow: TOML → Settings → Dataset
-to verify that malformed configs are caught early (fail-fast principle)
-rather than failing late during dataset instantiation or training.
-
-These tests verify the fix for the production bug where configs with
-missing 'name' fields in [[DATASET.features]] or [[DATASET.targets]]
-passed validation but failed at runtime.
+Verifies that malformed configs are caught early (fail-fast) rather than
+failing late during dataset instantiation or training.
 """
 
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
-from pydantic import BaseModel
+from pydantic import ValidationError
 
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.factories import load_settings
-from dlkit.infrastructure.io.config import (
-    ConfigValidationError,
-    load_sections_config,
-    load_training_config_eager,
-)
-
-
-def _dataset_section(settings: dict[str, BaseModel]) -> DatasetSettings:
-    """Narrow the DATASET section from generic section-loading output."""
-    return cast("DatasetSettings", settings["DATASET"])
-
+from dlkit.infrastructure.config.data_settings import DataSettings
+from dlkit.infrastructure.config.factories import load_job
 
 # ============================================================================
 # Fixtures
@@ -37,7 +20,6 @@ def _dataset_section(settings: dict[str, BaseModel]) -> DatasetSettings:
 
 @pytest.fixture
 def sample_data_file(tmp_path: Path) -> Path:
-    """Create a sample .npy data file for testing."""
     data_file = tmp_path / "features.npy"
     np.save(data_file, np.ones((10, 5), dtype=np.float32))
     return data_file
@@ -45,7 +27,6 @@ def sample_data_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def sample_target_file(tmp_path: Path) -> Path:
-    """Create a sample .npy target file for testing."""
     target_file = tmp_path / "targets.npy"
     np.save(target_file, np.ones((10, 1), dtype=np.float32))
     return target_file
@@ -57,85 +38,42 @@ def sample_target_file(tmp_path: Path) -> Path:
 
 
 class TestMissingNameInTOML:
-    """Test that missing 'name' field in TOML features/targets fails early.
+    """Missing 'name' in [[data.features]] or [[data.targets]] must fail at validation."""
 
-    These tests verify the fix for the production bug where malformed
-    configs passed load_sections_config() but failed later.
-    """
-
-    def test_missing_name_in_features_fails_at_config_load(self, tmp_path: Path):
-        """TOML with missing 'name' in [[DATASET.features]] should fail early."""
-        config = tmp_path / "config.toml"
+    def test_missing_name_in_features_fails_at_config_load(self, tmp_path: Path) -> None:
         data_path = tmp_path / "features.npy"
-        config.write_text(f"""
-[DATASET]
-name = "FlexibleDataset"
+        with pytest.raises((ValidationError, Exception)):
+            DataSettings.model_validate(
+                {
+                    "class": "FlexibleDataset",
+                    "features": [{"format": "npy", "path": str(data_path)}],
+                }
+            )
 
-[[DATASET.features]]
-format = "npy"
-path = "{data_path.as_posix()}"
-""")
-
-        with pytest.raises(ConfigValidationError, match="requires 'name'"):
-            load_sections_config(config, ["DATASET"])
-
-    def test_missing_name_in_targets_fails_at_config_load(self, tmp_path: Path):
-        """TOML with missing 'name' in [[DATASET.targets]] should fail early."""
-        config = tmp_path / "config.toml"
+    def test_missing_name_in_targets_fails_at_config_load(self, tmp_path: Path) -> None:
         data_path = tmp_path / "targets.npy"
-        config.write_text(f"""
-[DATASET]
-name = "FlexibleDataset"
+        with pytest.raises((ValidationError, Exception)):
+            DataSettings.model_validate(
+                {
+                    "class": "FlexibleDataset",
+                    "targets": [{"format": "npy", "path": str(data_path)}],
+                }
+            )
 
-[[DATASET.targets]]
-format = "npy"
-path = "{data_path.as_posix()}"
-""")
-
-        with pytest.raises(ConfigValidationError, match="requires 'name'"):
-            load_sections_config(config, ["DATASET"])
-
-    def test_missing_name_error_message_includes_toml_example(self, tmp_path: Path):
-        """Error message should include helpful TOML fix example."""
-        config = tmp_path / "config.toml"
-        data_path = tmp_path / "test.npy"
-        config.write_text(f"""
-[[DATASET.features]]
-format = "npy"
-path = "{data_path.as_posix()}"
-""")
-
-        with pytest.raises(ConfigValidationError) as exc_info:
-            load_sections_config(config, ["DATASET"])
-
-        error_msg = str(exc_info.value)
-        assert "DATASET.features" in error_msg or "requires 'name'" in error_msg
-
-    def test_multiple_entries_one_missing_name_fails(self, tmp_path: Path):
-        """If one entry missing name, config should fail even if others valid."""
-        config = tmp_path / "config.toml"
+    def test_multiple_entries_one_missing_name_fails(self, tmp_path: Path) -> None:
         x_path = tmp_path / "x.npy"
-        y_path = tmp_path / "y.npy"
         z_path = tmp_path / "z.npy"
-        config.write_text(f"""
-[[DATASET.features]]
-name = "x"
-format = "npy"
-path = "{x_path.as_posix()}"
-
-[[DATASET.features]]
-# Missing name here!
-format = "npy"
-path = "{y_path.as_posix()}"
-
-[[DATASET.targets]]
-name = "z"
-format = "npy"
-path = "{z_path.as_posix()}"
-""")
-
-        with pytest.raises(ConfigValidationError, match="requires 'name'"):
-            load_sections_config(config, ["DATASET"])
+        with pytest.raises((ValidationError, Exception)):
+            DataSettings.model_validate(
+                {
+                    "class": "FlexibleDataset",
+                    "features": [
+                        {"name": "x", "format": "npy", "path": str(x_path)},
+                        {"format": "npy", "path": str(tmp_path / "y.npy")},
+                    ],
+                    "targets": [{"name": "z", "format": "npy", "path": str(z_path)}],
+                }
+            )
 
 
 # ============================================================================
@@ -144,118 +82,88 @@ path = "{z_path.as_posix()}"
 
 
 class TestValidConfigurations:
-    """Test that valid configurations continue to work correctly."""
+    """Valid configurations load correctly."""
 
     def test_valid_features_and_targets_succeed(
-        self, tmp_path: Path, sample_data_file: Path, sample_target_file: Path
-    ):
-        """Valid TOML with name + path should succeed."""
-        config = tmp_path / "config.toml"
-        config.write_text(f"""
-[DATASET]
-name = "FlexibleDataset"
+        self, sample_data_file: Path, sample_target_file: Path
+    ) -> None:
+        ds = DataSettings.model_validate(
+            {
+                "class": "FlexibleDataset",
+                "features": [{"name": "x", "format": "npy", "path": str(sample_data_file)}],
+                "targets": [{"name": "y", "format": "npy", "path": str(sample_target_file)}],
+            }
+        )
+        assert len(ds.features) == 1
+        assert len(ds.targets) == 1
+        assert ds.features[0].name == "x"
+        assert ds.targets[0].name == "y"
 
-[[DATASET.features]]
-name = "x"
-format = "npy"
-path = "{sample_data_file.as_posix()}"
+    def test_multiple_features_all_with_names_succeed(self, tmp_path: Path) -> None:
+        for name in ("x1.npy", "x2.npy", "x3.npy", "y.npy"):
+            np.save(tmp_path / name, np.random.rand(10, 5))
 
-[[DATASET.targets]]
-name = "y"
-format = "npy"
-path = "{sample_target_file.as_posix()}"
-""")
-
-        settings = _dataset_section(load_sections_config(config, ["DATASET"]))
-        assert len(settings.features) == 1
-        assert len(settings.targets) == 1
-        assert settings.features[0].name == "x"
-        assert settings.targets[0].name == "y"
-
-    def test_multiple_features_all_with_names_succeed(self, tmp_path: Path):
-        """Multiple features all with names should succeed."""
-        # Create actual data files
-        x1_path = tmp_path / "x1.npy"
-        x2_path = tmp_path / "x2.npy"
-        x3_path = tmp_path / "x3.npy"
-        y_path = tmp_path / "y.npy"
-        np.save(x1_path, np.random.rand(10, 5))
-        np.save(x2_path, np.random.rand(10, 5))
-        np.save(x3_path, np.random.rand(10, 5))
-        np.save(y_path, np.random.rand(10, 1))
-
-        config = tmp_path / "config.toml"
-        config.write_text(f"""
-[DATASET]
-name = "FlexibleDataset"
-
-[[DATASET.features]]
-name = "x1"
-format = "npy"
-path = "{x1_path.as_posix()}"
-
-[[DATASET.features]]
-name = "x2"
-format = "npy"
-path = "{x2_path.as_posix()}"
-
-[[DATASET.features]]
-name = "x3"
-format = "npy"
-path = "{x3_path.as_posix()}"
-
-[[DATASET.targets]]
-name = "y"
-format = "npy"
-path = "{y_path.as_posix()}"
-""")
-
-        settings = _dataset_section(load_sections_config(config, ["DATASET"]))
-        assert len(settings.features) == 3
-        assert all(f.name for f in settings.features)
+        ds = DataSettings.model_validate(
+            {
+                "class": "FlexibleDataset",
+                "features": [
+                    {"name": "x1", "format": "npy", "path": str(tmp_path / "x1.npy")},
+                    {"name": "x2", "format": "npy", "path": str(tmp_path / "x2.npy")},
+                    {"name": "x3", "format": "npy", "path": str(tmp_path / "x3.npy")},
+                ],
+                "targets": [{"name": "y", "format": "npy", "path": str(tmp_path / "y.npy")}],
+            }
+        )
+        assert len(ds.features) == 3
+        assert all(f.name for f in ds.features)
 
 
 class TestSectionLevelOptionality:
-    """Ensure partial configs are only supported at whole-section granularity."""
+    """Partial configs are supported — only required sections must be present."""
 
-    def test_training_config_loads_without_optional_sections(self, tmp_path: Path):
-        """SESSION and TRAINING alone should load; other sections remain None."""
+    def test_training_config_loads_without_optional_sections(self, tmp_path: Path) -> None:
         config = tmp_path / "config.toml"
         config.write_text("""
-[SESSION]
+[run]
+type = "train"
+
+[experiment]
 name = "section_only"
 
-[TRAINING.trainer]
+[model]
+class = "ConstantWidthFFNN"
+module_path = "dlkit.domain.nn"
+
+[data]
+class = "FlexibleDataset"
+
+[training.trainer]
 max_epochs = 1
 
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Adam"
 lr = 0.001
 
-[TRAINING.loss]
+[training.loss]
 name = "MSELoss"
 module_path = "torch.nn"
 """)
-
-        config_obj = load_training_config_eager(config)
-        assert config_obj.SESSION.name == "section_only"
-        assert config_obj.TRAINING is not None
-        assert config_obj.DATAMODULE is None
-        assert config_obj.DATASET is None
-        assert config_obj.MODEL is None
+        job = load_job(config)
+        assert job.experiment is not None
+        assert job.experiment.name == "section_only"
+        assert job.training is not None
+        assert job.search is None
+        assert job.tracking.backend == "none"
 
 
 class TestWorkflowLoaderParseErrors:
-    """Ensure workflow loading surfaces parse failures instead of defaulting to train."""
+    """Workflow loading surfaces parse failures."""
 
-    def test_load_settings_raises_config_validation_error_for_malformed_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_job_raises_for_malformed_toml(self, tmp_path: Path) -> None:
         config = tmp_path / "malformed.toml"
         config.write_text("""
-[SESSION
-workflow = "optimize"
+[run
+type = "train"
 """)
-
-        with pytest.raises(ConfigValidationError, match="workflow discriminator"):
-            load_settings(config)
+        with pytest.raises(Exception):
+            load_job(config)

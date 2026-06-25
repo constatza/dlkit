@@ -1,10 +1,10 @@
-"""Tests for eager validation architecture with workflow configs.
+"""Tests for eager validation with the new JobConfig hierarchy.
 
-This module tests the new eager validation system where:
-1. Configs validate eagerly at load time (fail-fast on typos/types)
-2. Optional sections can be None (programmatic injection supported)
-3. Completeness validators ensure configs are build-ready
-4. model_copy(update={...}) allows section injection with validation
+This module tests:
+1. JobConfig validation fails fast on bad values
+2. DataSettings validates paths eagerly
+3. Session precision aliases work via RunSettings
+4. Completeness validators ensure configs are build-ready
 """
 
 from __future__ import annotations
@@ -18,204 +18,20 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.entry_types import NpyEntry
+from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     MetricComponentSettings,
     ModelComponentSettings,
 )
 from dlkit.infrastructure.config.optimizer_settings import OptimizerSettings
-from dlkit.infrastructure.config.session_settings import SessionSettings
+from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.validators import (
     ConfigValidationError,
     validate_inference_config_complete,
     validate_training_config_complete,
 )
-from dlkit.infrastructure.config.workflow_configs import (
-    InferenceWorkflowConfig,
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
 from dlkit.infrastructure.precision import PrecisionStrategy
-
-# ============================================================================
-# Success Cases: Valid Configs Load Successfully
-# ============================================================================
-
-
-class TestEagerValidationSuccessCases:
-    """Test that valid configs load successfully with eager validation."""
-
-    def test_training_config_with_all_required_sections_succeeds(self, tmp_path: Path):
-        """Test training config with all required sections loads successfully."""
-        # Create real data files
-        features_path = tmp_path / "features.npy"
-        targets_path = tmp_path / "targets.npy"
-        np.save(features_path, np.random.rand(100, 10))
-        np.save(targets_path, np.random.rand(100, 1))
-
-        config_dict = {
-            "SESSION": {
-                "name": "test_training",
-                "seed": 42,
-            },
-            "TRAINING": {
-                "trainer": {"max_epochs": 10},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
-                "features": [
-                    {"name": "x", "format": "npy", "path": str(features_path)},
-                ],
-                "targets": [
-                    {"name": "y", "format": "npy", "path": str(targets_path)},
-                ],
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-                "input_size": 10,
-                "output_size": 1,
-            },
-        }
-
-        # Should load successfully with eager validation
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-
-        # Verify all sections present
-        assert config.SESSION is not None
-        assert config.TRAINING is not None
-        assert config.DATAMODULE is not None
-        assert config.DATASET is not None
-        assert config.MODEL is not None
-
-        # Verify values correct
-        assert config.SESSION.name == "test_training"
-        assert config.TRAINING.trainer.max_epochs == 10
-        assert config.DATAMODULE.dataloader.batch_size == 16
-
-    def test_training_config_optional_sections_can_be_omitted(self):
-        """Test that optional sections (MLFLOW, OPTUNA) can be omitted."""
-        config_dict = {
-            "SESSION": {
-                "name": "minimal_training",
-                "seed": 42,
-            },
-            "TRAINING": {
-                "trainer": {"max_epochs": 5},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-        }
-
-        # Should load successfully without DATAMODULE/DATASET/MODEL
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-
-        # Required sections present
-        assert config.SESSION is not None
-        assert config.TRAINING is not None
-
-        # Optional sections are None
-        assert config.DATAMODULE is None
-        assert config.DATASET is None
-        assert config.MODEL is None
-
-        # Default values for tracking sections
-        assert config.MLFLOW is None
-        assert config.OPTUNA is None
-
-    def test_inference_config_with_checkpoint_succeeds(self, tmp_path: Path):
-        """Test inference config with valid checkpoint loads successfully."""
-        # Create dummy checkpoint
-        checkpoint_path = tmp_path / "model.ckpt"
-        checkpoint_path.write_text("fake checkpoint")
-
-        config_dict = {
-            "SESSION": {
-                "name": "test_inference",
-                "workflow": "inference",
-                "seed": 123,
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-                "checkpoint": str(checkpoint_path),
-            },
-        }
-
-        # Should load successfully
-        config = InferenceWorkflowConfig.model_validate(config_dict)
-
-        assert config.SESSION.is_inference_mode is True
-        # Checkpoint can be str or Path - just verify it's set
-        assert config.MODEL.checkpoint is not None
-        assert str(config.MODEL.checkpoint) == str(checkpoint_path)
-
-    def test_inference_config_exposes_has_dataset_config(self, tmp_path: Path):
-        checkpoint_path = tmp_path / "model.ckpt"
-        checkpoint_path.write_text("fake checkpoint")
-
-        config = InferenceWorkflowConfig.model_validate(
-            {
-                "SESSION": {"name": "predict", "workflow": "inference"},
-                "MODEL": {
-                    "name": "LinearNetwork",
-                    "module_path": "dlkit.domain.nn.ffnn",
-                    "checkpoint": str(checkpoint_path),
-                },
-                "DATAMODULE": {
-                    "name": "ArrayDataModule",
-                    "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                },
-                "DATASET": {"name": "FlexibleDataset"},
-            }
-        )
-
-        assert config.has_dataset_config is True
-
-    def test_programmatic_section_injection_succeeds(self, tmp_path: Path):
-        """Test that sections can be injected programmatically after load."""
-        # Create real data files
-        features_path = tmp_path / "features.npy"
-        targets_path = tmp_path / "targets.npy"
-        np.save(features_path, np.random.rand(100, 10))
-        np.save(targets_path, np.random.rand(100, 1))
-
-        # Load partial config
-        config_dict = {
-            "SESSION": {"name": "test_injection", "seed": 42},
-            "TRAINING": {
-                "trainer": {"max_epochs": 10},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-        }
-
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-        assert config.DATASET is None
-
-        # Inject DATASET section programmatically (with eager validation)
-        dataset = DatasetSettings(
-            features=(NpyEntry(name="x", path=features_path, data_role=DataRole.FEATURE),),
-            targets=(NpyEntry(name="y", path=targets_path, data_role=DataRole.TARGET),),
-        )
-
-        config = config.model_copy(update={"DATASET": dataset})
-
-        # Verify injection succeeded
-        assert config.DATASET is not None
-        assert len(config.DATASET.features) == 1
-        assert len(config.DATASET.targets) == 1
-
 
 # ============================================================================
 # Failure Cases: Invalid Configs Fail at Load Time
@@ -227,68 +43,51 @@ class TestEagerValidationFailureCases:
 
     def test_invalid_path_fails_immediately_at_load_time(self):
         """Test that configs with invalid paths fail at load (not at build time)."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
         config_dict = {
-            "SESSION": {"name": "test_bad_path", "seed": 42},
-            "TRAINING": {
-                "trainer": {"max_epochs": 10},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATASET": {
+            "run": {"type": "train", "seed": 42},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {
+                "class": "FlexibleDataset",
                 "features": [
                     {"name": "x", "format": "npy", "path": "/this/path/does/not/exist.npy"},
                 ],
             },
+            "training": {
+                "trainer": {"max_epochs": 10},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
+            },
         }
 
-        # Should fail at load time with ValidationError
         with pytest.raises(ValidationError) as exc_info:
-            TrainingWorkflowConfig.model_validate(config_dict)
+            TrainingJobConfig.model_validate(config_dict)
 
-        # Error should mention the path issue
         error_msg = str(exc_info.value)
         assert "path" in error_msg.lower() or "exist" in error_msg.lower()
 
     def test_type_error_fails_immediately(self):
         """Test that type errors fail immediately at load time."""
+        from dlkit.infrastructure.config.job_config import TrainingJobConfig
+
         config_dict = {
-            "SESSION": {"name": "test_type_error", "seed": 42},
-            "TRAINING": {
+            "run": {"type": "train", "seed": 42},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {"class": "FlexibleDataset"},
+            "training": {
                 "trainer": {"max_epochs": "not_an_integer"},  # Wrong type!
                 "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
                 "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
 
-        # Should fail with validation error
         with pytest.raises(ValidationError):
-            TrainingWorkflowConfig.model_validate(config_dict)
-
-    def test_invalid_model_section_fails(self):
-        """Test that invalid MODEL section fails with ValidationError."""
-        # MODULE_PATH is validated for existence
-        config_dict_bad_model = {
-            "SESSION": {"name": "test", "seed": 42},
-            "MODEL": {
-                "name": "NonExistentModel",
-                "module_path": "dlkit.not_a_real_module",
-            },
-        }
-
-        with pytest.raises(ValidationError) as exc_info:
-            TrainingWorkflowConfig.model_validate(config_dict_bad_model)
-
-        error_msg = str(exc_info.value)
-        assert "module_path" in error_msg
+            TrainingJobConfig.model_validate(config_dict)
 
     @pytest.mark.parametrize(
         "factory",
         [
-            lambda: DataModuleSettings(module_path="dlkit.not_a_real_module"),
-            lambda: DatasetSettings(
-                name="BrokenDataset",
-                module_path="dlkit.not_a_real_module",
-            ),
             lambda: ModelComponentSettings(
                 name="BrokenModel",
                 module_path="dlkit.not_a_real_module",
@@ -301,41 +100,6 @@ class TestEagerValidationFailureCases:
     def test_invalid_module_paths_fail_at_load_time(self, factory) -> None:
         with pytest.raises(ValidationError, match="module_path"):
             factory()
-
-
-class TestWorkflowCrossValidation:
-    """Test workflow-level cross-section validation."""
-
-    def test_optimization_config_accepts_optuna_section_as_opaque(self) -> None:
-        """OPTUNA section is accepted as-is (opaque object field) without cross-validation."""
-        config_dict = {
-            "SESSION": {"name": "optuna_test", "workflow": "optimize"},
-            "TRAINING": {"trainer": {"max_epochs": 2}},
-            "OPTUNA": {"enabled": True, "model": {"bogus": {"low": 1, "high": 2}}},
-            "MODEL": {"name": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
-        }
-
-        # Should load without error — OPTUNA is stored as opaque object
-        config = OptimizationWorkflowConfig.model_validate(config_dict)
-
-        assert config.OPTUNA is not None
-
-    def test_optimization_config_allows_optuna_keys_for_model_extra_fields(self) -> None:
-        config_dict = {
-            "SESSION": {"name": "optuna_extra", "workflow": "optimize"},
-            "TRAINING": {"trainer": {"max_epochs": 2}},
-            "OPTUNA": {"enabled": True, "model": {"dropout": {"low": 0.1, "high": 0.5}}},
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-                "dropout": 0.2,
-            },
-        }
-
-        # Should load without error
-        config = OptimizationWorkflowConfig.model_validate(config_dict)
-
-        assert config.OPTUNA is not None
 
 
 class TestImportIsolation:
@@ -382,7 +146,7 @@ class TestImportIsolation:
 from pathlib import Path
 import tempfile
 import numpy as np
-from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     tmp = Path(tmp_dir)
@@ -390,28 +154,20 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     targets = tmp / "targets.npy"
     np.save(features, np.random.rand(8, 4))
     np.save(targets, np.random.rand(8, 1))
-    TrainingWorkflowConfig.model_validate(
+    TrainingJobConfig.model_validate(
         {
-            "SESSION": {"name": "train_cfg", "seed": 1},
-            "TRAINING": {
-                "trainer": {"max_epochs": 1},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 2},
-            },
-            "DATASET": {
+            "run": {"type": "train", "seed": 1},
+            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
+            "data": {
+                "class": "FlexibleDataset",
+                "batch_size": 2,
                 "features": [{"name": "x", "format": "npy", "path": str(features)}],
                 "targets": [{"name": "y", "format": "npy", "path": str(targets)}],
             },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-                "input_size": 4,
-                "output_size": 1,
+            "training": {
+                "trainer": {"max_epochs": 1, "accelerator": "cpu"},
+                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
+                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
             },
         }
     )
@@ -423,16 +179,16 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         code = """
 from pathlib import Path
 import tempfile
-from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     checkpoint = Path(tmp_dir) / "model.ckpt"
     checkpoint.write_text("fake checkpoint")
-    InferenceWorkflowConfig.model_validate(
+    InferenceJobConfig.model_validate(
         {
-            "SESSION": {"name": "infer_cfg", "workflow": "inference", "seed": 1},
-            "MODEL": {
-                "name": "LinearNetwork",
+            "run": {"type": "predict", "seed": 1},
+            "model": {
+                "class": "LinearNetwork",
                 "module_path": "dlkit.domain.nn.ffnn",
                 "checkpoint": str(checkpoint),
             },
@@ -443,8 +199,8 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         assert result.returncode == 0, result.stderr
 
 
-class TestSessionPrecisionAliases:
-    """Ensure session precision accepts Lightning-style aliases."""
+class TestRunSettingsPrecisionAliases:
+    """Ensure run.precision accepts Lightning-style aliases."""
 
     @pytest.mark.parametrize(
         ("value", "expected"),
@@ -461,14 +217,14 @@ class TestSessionPrecisionAliases:
         ],
     )
     def test_precision_aliases_are_normalized(self, value: object, expected: str) -> None:
-        settings = SessionSettings.model_validate({"precision": value})
+        settings = RunSettings.model_validate({"precision": value})
         assert isinstance(settings.precision, PrecisionStrategy)
         assert str(settings.precision) == expected
 
     @pytest.mark.parametrize("value", ["float32", "single", "double", "float16", "amp"])
     def test_semantic_precision_aliases_are_rejected(self, value: str) -> None:
         with pytest.raises(ValueError):
-            SessionSettings.model_validate({"precision": value})
+            RunSettings.model_validate({"precision": value})
 
 
 # ============================================================================
@@ -701,8 +457,6 @@ class TestProgrammaticOverrideWorkflow:
         np.save(features_path, np.random.rand(100, 10))
         np.save(targets_path, np.random.rand(100, 1))
 
-        from dlkit.infrastructure.config.data_settings import DataSettings
-
         data = DataSettings.model_validate(
             {
                 "class": "FlexibleDataset",
@@ -724,23 +478,6 @@ class TestProgrammaticOverrideWorkflow:
 
     def test_programmatic_injection_validates_eagerly(self) -> None:
         """Test that programmatic injection validates data eagerly."""
-        from dlkit.infrastructure.config.data_settings import DataSettings
-        from dlkit.infrastructure.config.job_config import TrainingJobConfig
-
-        # Load config with empty data section
-        config_dict = {
-            "run": {"type": "train", "seed": 42},
-            "model": {"class": "LinearNetwork", "module_path": "dlkit.domain.nn.ffnn"},
-            "data": {"class": "FlexibleDataset"},
-            "training": {
-                "trainer": {"max_epochs": 10},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-        }
-
-        _config = TrainingJobConfig.model_validate(config_dict)
-
         # Try to inject data with invalid path
         # This should fail eagerly during DataSettings validation
         with pytest.raises(ValidationError):
@@ -798,38 +535,29 @@ class TestEdgeCasesAndErrorMessages:
         with pytest.raises(ValidationError):
             SearchJobConfig.model_validate(config_dict)
 
-    def test_training_workflow_config_convenience_properties(self, tmp_path: Path) -> None:
-        """Test that TrainingWorkflowConfig convenience properties work correctly."""
+    def test_data_settings_validates_paths_eagerly(self, tmp_path: Path) -> None:
+        """DataSettings validates feature/target paths at construction time."""
         features_path = tmp_path / "features.npy"
         targets_path = tmp_path / "targets.npy"
         np.save(features_path, np.random.rand(100, 10))
         np.save(targets_path, np.random.rand(100, 1))
 
-        config_dict = {
-            "SESSION": {"name": "test_props", "seed": 42},
-            "TRAINING": {
-                "trainer": {"max_epochs": 10},
-                "optimizer": {"default_optimizer": {"name": "Adam", "lr": 0.001}},
-                "loss": {"name": "MSELoss", "module_path": "torch.nn"},
-            },
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                "dataloader": {"batch_size": 16},
-            },
-            "DATASET": {
+        # Valid config should succeed
+        data = DataSettings.model_validate(
+            {
+                "class": "FlexibleDataset",
                 "features": [{"name": "x", "format": "npy", "path": str(features_path)}],
                 "targets": [{"name": "y", "format": "npy", "path": str(targets_path)}],
-            },
-            "MODEL": {
-                "name": "LinearNetwork",
-                "module_path": "dlkit.domain.nn.ffnn",
-            },
-            "MLFLOW": {},
-        }
+            }
+        )
+        assert len(data.features) == 1
+        assert len(data.targets) == 1
 
-        config = TrainingWorkflowConfig.model_validate(config_dict)
-
-        # Test convenience properties
-        assert config.mlflow_enabled is True
-        assert config.has_data_config is True
+        # Invalid path should fail at construction
+        with pytest.raises(ValidationError):
+            DataSettings.model_validate(
+                {
+                    "class": "FlexibleDataset",
+                    "features": [{"name": "x", "format": "npy", "path": "/does/not/exist.npy"}],
+                }
+            )
