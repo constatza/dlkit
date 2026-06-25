@@ -16,11 +16,9 @@ from dlkit.engine.artifacts import (
 from dlkit.engine.workflows.selectors.family_selector import DatasetFamilySelector
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
-from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.io.split_provider import SplitResolution, get_or_create_split
-from dlkit.infrastructure.io.tensor_entries import convert_totensor_entries
 
 from .module_defaults import with_runtime_module_defaults
 
@@ -72,118 +70,49 @@ class DatasetBuilder:
             working_directory = Path.cwd()
         return BuildContext(mode=mode, working_directory=working_directory)
 
-    def build_flexible_dataset(
+    def build_dataset(
         self,
         settings: JobConfig,
         context: BuildContext,
-        selected_features: tuple[DataEntry, ...],
-        selected_targets: tuple[DataEntry, ...],
+        overrides: dict[str, Any],
     ) -> object:
-        """Build a flexible dataset from explicit feature and target entries.
+        """Build any dataset by applying caller-supplied overrides. No family branching.
 
         Args:
-            settings: A JobConfig instance.
-            context: Shared build context.
-            selected_features: Selected feature DataEntry objects.
-            selected_targets: Selected target DataEntry objects.
+            settings: Full job configuration.
+            context: Build context with resolved paths.
+            overrides: Dict produced by the calling strategy. If the key ``"entries"``
+                is present the overrides are for a FlexibleDataset; otherwise they
+                are keyword arguments to a PyG/custom dataset constructor.
 
         Returns:
             Constructed dataset object.
 
         Raises:
-            ValueError: If dataset settings are not configured.
-        """
-        from dlkit.engine.data.datasets.flexible import FlexibleDataset
-        from dlkit.infrastructure.config.data_settings import DataSettings
-
-        data = settings.data
-        if data is None:
-            raise ValueError("DATASET settings are required but not configured")
-
-        # DataSettings is not a ComponentSettings; build FlexibleDataset directly
-        # from resolved entries. Graph datasets route through a separate strategy.
-        if isinstance(data, DataSettings) and data.family is not DatasetFamily.GRAPH:
-            return FlexibleDataset(
-                entries=(*selected_features, *selected_targets),  # ty: ignore[invalid-argument-type]
-            )
-
-        ds_settings = with_runtime_module_defaults(data)
-        ds_name = str(getattr(ds_settings, "name", "")).lower()
-        if "supervisedarraydataset" in ds_name:
-            return FlexibleDataset(
-                entries=(*selected_features, *selected_targets),  # ty: ignore[invalid-argument-type]
-            )
-
-        ds_overrides = {
-            "entries": (*selected_features, *selected_targets),
-        }
-        return FactoryProvider.create_component(ds_settings, context.with_overrides(**ds_overrides))  # ty: ignore[invalid-argument-type]
-
-    def build_dataset_with_tensor_entries(
-        self,
-        settings: JobConfig,
-        context: BuildContext,
-    ) -> object:
-        """Build graph datasets after resolving entry tensors eagerly.
-
-        Args:
-            settings: A JobConfig instance.
-            context: Shared build context.
-
-        Returns:
-            Constructed dataset object.
-
-        Raises:
-            ValueError: If dataset settings are not configured.
+            ValueError: If dataset settings are not configured or ``data.name`` is missing.
         """
         from dlkit.infrastructure.config.data_settings import DataSettings
         from dlkit.infrastructure.utils.general import import_object
-
-        ds_overrides: dict[str, Any] = {}
-        ds_settings = settings.data
-        if ds_settings is not None:
-            family = DatasetFamilySelector.resolve_family(settings)
-            if family is DatasetFamily.GRAPH:
-                # GraphDataset takes named file paths (x, edge_index, y) not entry tuples.
-                from dlkit.infrastructure.config.entry_types import PathBasedEntry
-
-                for entry in ds_settings.features or ():
-                    if isinstance(entry, PathBasedEntry) and entry.name and entry.path:
-                        ds_overrides[entry.name] = entry.path
-                for entry in ds_settings.targets or ():
-                    if isinstance(entry, PathBasedEntry) and entry.name and entry.path:
-                        ds_overrides[entry.name] = entry.path
-                if ds_settings.root is not None:
-                    ds_overrides["root"] = ds_settings.root
-            else:
-                resolved_features = convert_totensor_entries(ds_settings.features or ())
-                resolved_targets = convert_totensor_entries(ds_settings.targets or ())
-                if resolved_features:
-                    ds_overrides["features"] = resolved_features
-                if resolved_targets:
-                    ds_overrides["targets"] = resolved_targets
 
         data = settings.data
         if data is None:
             raise ValueError("DATASET settings are required but not configured")
 
         if isinstance(data, DataSettings):
-            # DataSettings is not a ComponentSettings; import and instantiate directly.
             ds_with_defaults = with_runtime_module_defaults(data)
+            if "entries" in overrides:
+                from dlkit.engine.data.datasets.flexible import FlexibleDataset
+
+                return FlexibleDataset(entries=overrides["entries"])
             name = ds_with_defaults.name or data.name
             module_path = ds_with_defaults.module_path or data.module_path
             if name is None:
-                raise ValueError("data.name (class) is required for graph dataset construction")
+                raise ValueError("data.name (class) is required for dataset construction")
             dataset_cls = import_object(name, fallback_module=module_path or "")
-            return dataset_cls(**ds_overrides)
+            return dataset_cls(**overrides)
 
-        dataset_settings = with_runtime_module_defaults(data)
-        if dataset_settings is None:
-            raise ValueError("DATASET settings are required but not configured")
-        return FactoryProvider.create_component(
-            dataset_settings,
-            context.with_overrides(**ds_overrides),
-        )
+        ds_settings = with_runtime_module_defaults(data)
+        return FactoryProvider.create_component(ds_settings, context.with_overrides(**overrides))
 
     def build_split(self, settings: JobConfig, dataset: object) -> SplitResolution:
         """Get or create the dataset split.

@@ -195,8 +195,14 @@ class GraphBuildStrategy(IBuildStrategy):
         return resolve_family(settings) is DatasetFamily.GRAPH
 
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:
+        from dlkit.engine.workflows.factories._dataset_helpers import graph_dataset_overrides
+
+        data = settings.data
+        if data is None:
+            raise ValueError("DATASET settings are required but not configured")
         context = self._dataset_builder.build_context(settings)
-        dataset = self._dataset_builder.build_dataset_with_tensor_entries(settings, context)
+        overrides = graph_dataset_overrides(data)
+        dataset = self._dataset_builder.build_dataset(settings, context, overrides)
         datamodule, split_artifact = _build_datamodule(
             settings,
             self._dataset_builder,

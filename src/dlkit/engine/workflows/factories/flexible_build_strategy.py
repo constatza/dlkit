@@ -78,12 +78,10 @@ class FlexibleBuildStrategy(IBuildStrategy):
             selection.dependency_reasons,
         )
 
-        dataset = self._dataset_builder.build_flexible_dataset(
-            settings,
-            context,
-            selection.features,
-            selection.targets,
-        )
+        from dlkit.engine.workflows.factories._dataset_helpers import flexible_dataset_overrides
+
+        overrides = flexible_dataset_overrides(selection.features, selection.targets)
+        dataset = self._dataset_builder.build_dataset(settings, context, overrides)
         datamodule, split_artifact = _build_datamodule(
             settings,
             self._dataset_builder,

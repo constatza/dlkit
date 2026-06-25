@@ -142,13 +142,13 @@ def test_build_factory_flexible_uses_contract_pipeline(
     settings = _make_inference_job(batch_sample, tmp_checkpoint)
 
     # Intercept dataset and datamodule construction at the DatasetBuilder level.
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+    def _fake_build_dataset(self, s, ctx, overrides):
         return _FakeDataset(batch_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
 
     captured_wrapper_kwargs: dict[str, Any] = {}
@@ -178,15 +178,13 @@ def test_build_factory_selects_graph_strategy_and_passes_shape(
     # Set family="graph" to route through GraphBuildStrategy.
     settings = _make_training_job(tmp_checkpoint, family="graph")
 
-    def _fake_build_dataset_with_tensor_entries(self, s, ctx):
+    def _fake_build_dataset(self, s, ctx, overrides):
         return _FakeDataset({"x": np.zeros((5, 4)), "edge_index": np.zeros((2, 8), dtype=int)})
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(
-        DatasetBuilder, "build_dataset_with_tensor_entries", _fake_build_dataset_with_tensor_entries
-    )
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
 
     def _capture_graph_wrapper(*_, **kwargs):
@@ -304,15 +302,18 @@ def test_flexible_build_strategy_factory_path_uses_raw_entries(
 
     captured: dict[str, Any] = {}
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
-        captured["features"] = list(selected_features)
-        captured["targets"] = list(selected_targets)
+    def _fake_build_dataset(self, s, ctx, overrides):
+        entries = overrides.get("entries", ())
+        from dlkit.infrastructure.config.data_roles import DataRole
+
+        captured["features"] = [e for e in entries if e.data_role == DataRole.FEATURE]
+        captured["targets"] = [e for e in entries if e.data_role == DataRole.TARGET]
         return _FakeDataset(nested_xy_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
@@ -358,9 +359,16 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
 
     captured: dict[str, Any] = {}
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
-        captured["dataset_feature_names"] = [e.name for e in selected_features]
-        captured["dataset_target_names"] = [e.name for e in selected_targets]
+    def _fake_build_dataset(self, s, ctx, overrides):
+        entries = overrides.get("entries", ())
+        from dlkit.infrastructure.config.data_roles import DataRole
+
+        captured["dataset_feature_names"] = [
+            e.name for e in entries if e.data_role == DataRole.FEATURE
+        ]
+        captured["dataset_target_names"] = [
+            e.name for e in entries if e.data_role == DataRole.TARGET
+        ]
         return _FakeDataset(nested_xy_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
@@ -370,7 +378,7 @@ def test_flexible_build_strategy_prunes_unreferenced_features(
         captured["entry_config_names"] = [e.name for e in kwargs.get("entry_configs", ())]
         return _FakeModel()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
@@ -430,14 +438,19 @@ def test_flexible_build_strategy_keeps_loss_routed_feature(
 
     captured: dict[str, Any] = {}
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
-        captured["dataset_feature_names"] = [e.name for e in selected_features]
+    def _fake_build_dataset(self, s, ctx, overrides):
+        entries = overrides.get("entries", ())
+        from dlkit.infrastructure.config.data_roles import DataRole
+
+        captured["dataset_feature_names"] = [
+            e.name for e in entries if e.data_role == DataRole.FEATURE
+        ]
         return _FakeDataset(nested_xy_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
@@ -487,14 +500,19 @@ def test_flexible_build_strategy_keeps_metric_routed_feature(
 
     captured: dict[str, Any] = {}
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
-        captured["dataset_feature_names"] = [e.name for e in selected_features]
+    def _fake_build_dataset(self, s, ctx, overrides):
+        entries = overrides.get("entries", ())
+        from dlkit.infrastructure.config.data_roles import DataRole
+
+        captured["dataset_feature_names"] = [
+            e.name for e in entries if e.data_role == DataRole.FEATURE
+        ]
         return _FakeDataset(nested_xy_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
@@ -533,16 +551,17 @@ def test_flexible_build_strategy_keeps_target_feature_ref_dependency(
 
     captured: dict[str, Any] = {}
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+    def _fake_build_dataset(self, s, ctx, overrides):
+        entries = overrides.get("entries", ())
         captured["dataset_feature_names"] = [
-            e.name for e in selected_features if getattr(e, "data_role", None) == DataRole.FEATURE
+            e.name for e in entries if getattr(e, "data_role", None) == DataRole.FEATURE
         ]
         return _FakeDataset(nested_xy_sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
         return _FakeDataModule()
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     monkeypatch.setattr(
         "dlkit.engine.workflows.factories.build_factory.WrapperFactory.create_standard_wrapper",
@@ -597,7 +616,7 @@ def test_build_factory_handles_none_scheduler_correctly(
 
     monkeypatch.setattr(WrapperComponentSettings, "__init__", _capture_wrapper_init)
 
-    def _fake_build_flexible_dataset(self, s, ctx, selected_features, selected_targets):
+    def _fake_build_dataset(self, s, ctx, overrides):
         return _FakeDataset(sample)
 
     def _fake_build_datamodule(self, s, ctx, dataset, split_resolution, *, family=None):
@@ -608,7 +627,7 @@ def test_build_factory_handles_none_scheduler_correctly(
         wrapper_mock.settings = kwargs.get("settings")
         return wrapper_mock
 
-    monkeypatch.setattr(DatasetBuilder, "build_flexible_dataset", _fake_build_flexible_dataset)
+    monkeypatch.setattr(DatasetBuilder, "build_dataset", _fake_build_dataset)
     monkeypatch.setattr(DatasetBuilder, "build_datamodule", _fake_build_datamodule)
     from dlkit.engine.adapters.lightning.factories import WrapperFactory
 

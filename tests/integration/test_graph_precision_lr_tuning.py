@@ -171,7 +171,10 @@ class TestGraphPrecisionLRTuning:
 
         monkeypatch.setattr(LocalFileSystem, "makedirs", _windows_guard)
 
-        dataset = builder.build_dataset_with_tensor_entries(graph_settings, context)
+        from dlkit.engine.workflows.factories._dataset_helpers import graph_dataset_overrides
+
+        overrides = graph_dataset_overrides(graph_settings.data)
+        dataset = builder.build_dataset(graph_settings, context, overrides)
         data_cfg = graph_settings.data
         assert data_cfg is not None
         configured_root = data_cfg.root
