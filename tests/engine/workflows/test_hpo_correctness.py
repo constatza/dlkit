@@ -45,6 +45,23 @@ def minimal_training_result() -> TrainingResult:
     )
 
 
+@pytest.fixture
+def minimal_search_settings() -> SearchSettings:
+    return SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
+
+
+@pytest.fixture
+def hidden_size_search_settings() -> SearchSettings:
+    return SearchSettings(
+        space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
+    )
+
+
+@pytest.fixture
+def minimal_sampler(minimal_search_settings: SearchSettings) -> OptunaSettingsSampler:
+    return OptunaSettingsSampler(minimal_search_settings)
+
+
 class _StubTrialExecutor:
     """Lightweight stand-in — returns a fixed TrainingResult without any ML."""
 
@@ -71,39 +88,29 @@ class _StubTrialExecutor:
 class TestSamplerValidSpecs:
     """Only dict specs with 'low'/'high' or 'choices' are valid range specs."""
 
-    def test_choices_dict_is_range_spec(self) -> None:
-        sampler = OptunaSettingsSampler(
-            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
-        )
-        assert sampler._is_range_specification({"choices": [2, 4]})
+    def test_choices_dict_is_range_spec(self, minimal_sampler: OptunaSettingsSampler) -> None:
+        assert minimal_sampler._is_range_specification({"choices": [2, 4]})
 
-    def test_low_high_dict_is_range_spec(self) -> None:
-        sampler = OptunaSettingsSampler(
-            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
-        )
-        assert sampler._is_range_specification({"low": 1, "high": 10})
+    def test_low_high_dict_is_range_spec(self, minimal_sampler: OptunaSettingsSampler) -> None:
+        assert minimal_sampler._is_range_specification({"low": 1, "high": 10})
 
-    def test_bare_list_is_not_range_spec(self) -> None:
-        sampler = OptunaSettingsSampler(
-            SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
-        )
-        assert not sampler._is_range_specification([2, 4])
+    def test_bare_list_is_not_range_spec(self, minimal_sampler: OptunaSettingsSampler) -> None:
+        assert not minimal_sampler._is_range_specification([2, 4])
 
     def test_choices_list_of_lists_raises_validation_error(self) -> None:
         """Structured categorical choices should be rejected at config validation time."""
         with pytest.raises(ValidationError):
             CategoricalParam.model_validate({"type": "categorical", "choices": [[1, 2], [3, 4]]})
 
-    def test_sampler_populates_trial_params_with_choices_spec(self) -> None:
+    def test_sampler_populates_trial_params_with_choices_spec(
+        self, hidden_size_search_settings: SearchSettings
+    ) -> None:
         import optuna
 
-        search_settings = SearchSettings(
-            space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
-        )
-        sampler = OptunaSettingsSampler(search_settings)
+        sampler = OptunaSettingsSampler(hidden_size_search_settings)
         study = optuna.create_study(direction="minimize")
         optuna_trial = study.ask()
-        sampler.sample(optuna_trial, SimpleNamespace(search=search_settings))
+        sampler.sample(optuna_trial, SimpleNamespace(search=hidden_size_search_settings))
 
         assert "hidden_size" in optuna_trial.params
         assert optuna_trial.params["hidden_size"] in (2, 4)
@@ -135,15 +142,13 @@ class TestHyperparametersStoredOnTrial:
             optimization_backend_session=backend_session,
         )
 
-    def test_three_trials_each_record_params(self, minimal_training_result: TrainingResult) -> None:
+    def test_three_trials_each_record_params(
+        self,
+        minimal_training_result: TrainingResult,
+        hidden_size_search_settings: SearchSettings,
+    ) -> None:
         orchestrator = self._make_orchestrator(minimal_training_result)
-
-        base_settings = SimpleNamespace(
-            search=SearchSettings(
-                space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
-            ),
-        )
-
+        base_settings = SimpleNamespace(search=hidden_size_search_settings)
         result = orchestrator.execute_optimization(
             study_name="hpo-correctness-3trials",
             base_settings=base_settings,
@@ -161,16 +166,12 @@ class TestHyperparametersStoredOnTrial:
             assert trial.hyperparameters["hidden_size"] in (2, 4)
 
     def test_best_trial_hyperparameters_nonempty(
-        self, minimal_training_result: TrainingResult
+        self,
+        minimal_training_result: TrainingResult,
+        hidden_size_search_settings: SearchSettings,
     ) -> None:
         orchestrator = self._make_orchestrator(minimal_training_result)
-
-        base_settings = SimpleNamespace(
-            search=SearchSettings(
-                space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
-            ),
-        )
-
+        base_settings = SimpleNamespace(search=hidden_size_search_settings)
         result = orchestrator.execute_optimization(
             study_name="hpo-correctness-best",
             base_settings=base_settings,
