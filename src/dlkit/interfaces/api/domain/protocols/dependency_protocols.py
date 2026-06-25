@@ -10,7 +10,7 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.job_config import JobConfig
 
 if TYPE_CHECKING:
     from loguru._logger import Logger
@@ -23,7 +23,7 @@ class SettingsProvider(Protocol):
     """Protocol for components that need access to configuration settings."""
 
     @abstractmethod
-    def get_settings(self) -> GeneralSettings:
+    def get_settings(self) -> JobConfig:
         """Get the current configuration settings."""
 
     @abstractmethod

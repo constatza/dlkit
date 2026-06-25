@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from dlkit.infrastructure.config.session_settings import SessionSettings
+    from dlkit.infrastructure.config.run_settings import RunSettings
 
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import Callback
@@ -96,11 +96,11 @@ class TrainerSettings(ComponentSettings):
         description="Lightning precision parameter. If None, uses session precision strategy.",
     )
 
-    def build(self, session: SessionSettings | None = None) -> Trainer:
+    def build(self, session: RunSettings | None = None) -> Trainer:
         """Build PyTorch Lightning Trainer with precision resolution.
 
         Args:
-            session: Optional SessionSettings to use as precision provider.
+            session: Optional RunSettings to use as precision provider.
                      If not provided, will use global default precision.
 
         Returns:

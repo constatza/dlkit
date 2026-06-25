@@ -38,6 +38,19 @@ class RunSettings(BasicSettings):
     training: Path | None = None
     tracking: Path | None = None
 
+    def get_precision_strategy(self) -> PrecisionStrategy:
+        """Return the configured precision strategy (satisfies PrecisionProvider protocol).
+
+        Returns:
+            PrecisionStrategy resolved from the precision field.
+
+        Raises:
+            NotImplementedError: If precision is None (signals the service to use its default).
+        """
+        if self.precision is None:
+            raise NotImplementedError("No precision configured — use service default")
+        return self.precision
+
     @field_validator("precision", mode="before")
     @classmethod
     def _coerce_precision(cls, v: object) -> PrecisionStrategy | None:

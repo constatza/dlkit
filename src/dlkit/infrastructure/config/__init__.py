@@ -31,20 +31,15 @@ from .data_settings import DataModuleSelector, DataSettings
 # Component settings
 # Utility settings
 from .dataloader_settings import DataloaderSettings
-from .datamodule_settings import DataModuleSettings
-from .dataset_settings import DatasetSettings, IndexSplitSettings
 from .experiment_settings import ExperimentSettings
 from .extras_settings import ExtrasSettings
 from .factories import (
     WorkflowSettingsLoader,
     default_settings_loader,
+    load_job,
     load_sections,
     load_settings,
 )
-
-# Compatibility alias — callers that import GeneralSettings from this package get JobConfig.
-# Added after all other imports to avoid circular init issues.
-from .general_settings import GeneralSettings
 
 # Generative algorithm settings
 from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSettings
@@ -106,10 +101,6 @@ from .search_settings import (
     SearchSettings,
     SpaceParam,
 )
-
-# Backward-compatible re-export: SessionSettings was removed in Task 1; tests still import it.
-# Will be removed in Task 5 when all callers are updated.
-from .session_settings import SessionSettings
 from .tracking_settings import TrackingSettings
 
 # External library settings (unchanged - kept compact as requested)
@@ -117,18 +108,7 @@ from .trainer_settings import TrainerSettings
 from .training_settings import StoppingSettings, TrainingSettings
 from .transform_settings import TransformSettings
 
-# Workflow-specific settings (SOLID-compliant)
-from .workflow_settings import (
-    BaseWorkflowSettings,
-    InferenceWorkflowSettings,
-    TrainingWorkflowSettings,
-)
-
 __all__ = [
-    # Compatibility alias
-    "GeneralSettings",
-    # Backward-compat stub (removed in Task 5)
-    "SessionSettings",
     # Job config (new top-level API)
     "JobConfig",
     "TrainingJobConfig",
@@ -155,13 +135,10 @@ __all__ = [
     "SamplerSettings",
     "PrunerSettings",
     "TrackingSettings",
-    # Workflow-specific settings (SOLID-compliant)
-    "BaseWorkflowSettings",
-    "TrainingWorkflowSettings",
-    "InferenceWorkflowSettings",
     # Partial loading factories
     "WorkflowSettingsLoader",
     "default_settings_loader",
+    "load_job",
     "load_settings",
     "load_sections",
     # Core infrastructure
@@ -173,10 +150,6 @@ __all__ = [
     "FactoryProvider",
     "HyperParameterSettings",
     "update_settings",
-    # Flattened functional settings
-    "DataModuleSettings",
-    "DatasetSettings",
-    "IndexSplitSettings",
     # Component settings
     "ModelComponentSettings",
     "MetricComponentSettings",

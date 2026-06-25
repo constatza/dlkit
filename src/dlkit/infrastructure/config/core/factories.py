@@ -125,8 +125,6 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
         """
         try:
             # Import locally to avoid circular imports at module import time
-            from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-            from dlkit.infrastructure.config.dataset_settings import DatasetSettings
             from dlkit.infrastructure.config.model_components import (
                 LossComponentSettings,
                 MetricComponentSettings,
@@ -135,8 +133,6 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
 
             _SETTINGS_KIND: dict[type, str] = {
                 ModelComponentSettings: "model",
-                DatasetSettings: "dataset",
-                DataModuleSettings: "datamodule",
                 LossComponentSettings: "loss",
                 MetricComponentSettings: "metric",
             }
