@@ -434,7 +434,7 @@ class OptunaOptimizationBackendSession(IOptimizationBackendSession):
         trial: Trial,
         base_settings: Any,
     ) -> dict[str, Any]:
-        # Guard: only proceed if there is an active backend (OPTUNA or search section present).
+        # Guard: only proceed if there is an active backend (search section present).
         if not _has_backend_config(base_settings):
             return {}
 

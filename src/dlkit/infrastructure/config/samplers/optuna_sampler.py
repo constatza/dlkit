@@ -90,7 +90,7 @@ class OptunaSettingsSampler:
                     logger.warning("Failed to sample '{}': {}", param_path, e)
             else:
                 # Use constant value for non-range specs
-                sampled_params[param_path] = space_param.model_dump().get("value", range_spec)
+                sampled_params[param_path] = range_spec.get("value", range_spec)
                 logger.debug("Using concrete value for '{}'", param_path)
 
         return sampled_params
