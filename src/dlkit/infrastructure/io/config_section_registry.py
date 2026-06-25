@@ -129,21 +129,13 @@ def reset_section_mappings(section_name: str | None = None) -> None:
 def _initialize_default_mappings() -> None:
     """Initialize default section mappings for common settings classes."""
     try:
-        from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-        from dlkit.infrastructure.config.dataset_settings import DatasetSettings
         from dlkit.infrastructure.config.extras_settings import ExtrasSettings
         from dlkit.infrastructure.config.model_components import ModelComponentSettings
-        from dlkit.infrastructure.config.optuna_settings import OptunaSettings
-        from dlkit.infrastructure.config.session_settings import SessionSettings
         from dlkit.infrastructure.config.training_settings import TrainingSettings
 
         default_pairs: tuple[tuple[str, type[BaseModel]], ...] = (
-            ("SESSION", SessionSettings),
             ("MODEL", ModelComponentSettings),
-            ("DATAMODULE", DataModuleSettings),
-            ("DATASET", DatasetSettings),
             ("TRAINING", TrainingSettings),
-            ("OPTUNA", OptunaSettings),
             ("EXTRAS", ExtrasSettings),
         )
 

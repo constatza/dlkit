@@ -12,7 +12,7 @@ from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.engine.workflows.factories.inference_data_factory import (
     build_inference_datamodule as _build_inference_datamodule,
 )
-from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.api.adapters import EngineWorkflowExecutor
 from dlkit.interfaces.api.domain.override_types import (
     OptimizationOverrides,
@@ -45,20 +45,20 @@ def train(
     )
 
 
-def build_inference_datamodule(settings: InferenceWorkflowConfig) -> LightningDataModule:
+def build_inference_datamodule(settings: InferenceJobConfig) -> LightningDataModule:
     """Build a datamodule for inference batch iteration.
 
-    No training wrapper, no loss, no optimizer. Only SESSION, DATASET, DATAMODULE.
+    No training wrapper, no loss, no optimizer. Only run/experiment, data sections.
     Pure function: no class, no side effects beyond datamodule construction.
 
     Args:
-        settings: Inference workflow configuration with DATASET and DATAMODULE sections.
+        settings: Inference job configuration with data section.
 
     Returns:
         Configured LightningDataModule ready for predict_dataloader iteration.
 
     Raises:
-        ValueError: If DATASET or DATAMODULE sections are not configured.
+        ValueError: If data section is not configured.
     """
     return _build_inference_datamodule(settings)
 

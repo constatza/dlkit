@@ -17,10 +17,10 @@ from dlkit.infrastructure.io.config_section_registry import (
 )
 
 if TYPE_CHECKING:
-    from dlkit.infrastructure.config.workflow_configs import (
-        InferenceWorkflowConfig,
-        OptimizationWorkflowConfig,
-        TrainingWorkflowConfig,
+    from dlkit.infrastructure.config.job_config import (
+        InferenceJobConfig,
+        SearchJobConfig,
+        TrainingJobConfig,
     )
 
 
@@ -279,102 +279,73 @@ def get_available_sections(config_path: Path | str) -> list[str]:
         return list(tomllib.load(f).keys())
 
 
-def load_training_config_eager(config_path: Path | str) -> TrainingWorkflowConfig:
+def load_training_config_eager(config_path: Path | str) -> TrainingJobConfig:
     """Load training config with eager Pydantic validation.
 
-    This replaces the lazy loading pattern with eager validation while supporting
-    programmatic section injection. Config sections present in TOML are validated
-    immediately (fail-fast on typos/types). Missing optional sections can be
-    injected programmatically before build time.
+    Validates the TOML immediately (fail-fast on typos/types). Uses the new
+    ``TrainingJobConfig`` with lowercase section keys.
 
     Args:
-        config_path: Path to TOML configuration file
+        config_path: Path to TOML configuration file.
 
     Returns:
-        TrainingWorkflowConfig with eagerly validated sections
+        TrainingJobConfig with eagerly validated sections.
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValidationError: If config has type errors or invalid values
-        ConfigValidationError: If required sections missing from TOML
-
-    Example:
-        ```python
-        # Load partial config (eager validation of present fields)
-        config = load_training_config_eager("config.toml")
-
-        # Inject optional sections programmatically
-        config = config.patch({"DATASET": DatasetSettings(features=(...))})
-
-        # Validate completeness before build
-        from dlkit.infrastructure.config.validators import validate_training_config_complete
-
-        validate_training_config_complete(config)
-
-        # Build components
-        components = BuildFactory().build_components(config)
-        ```
+        FileNotFoundError: If config file doesn't exist.
+        ValidationError: If config has type errors or invalid values.
     """
-    from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+    from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    # Use the Dynaconf-backed loader to stay consistent with IO stack
     toml_data = load_config(config_path, raw=True)
-
-    # Eager validation - fails fast on typos/types
-    config = TrainingWorkflowConfig.model_validate(toml_data)
-
-    return config
+    return TrainingJobConfig.model_validate(toml_data)
 
 
-def load_inference_config_eager(config_path: Path | str) -> InferenceWorkflowConfig:
+def load_inference_config_eager(config_path: Path | str) -> InferenceJobConfig:
     """Load inference config with eager Pydantic validation.
 
     Args:
-        config_path: Path to TOML configuration file
+        config_path: Path to TOML configuration file.
 
     Returns:
-        InferenceWorkflowConfig with eagerly validated sections
+        InferenceJobConfig with eagerly validated sections.
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValidationError: If config has type errors or invalid values
+        FileNotFoundError: If config file doesn't exist.
+        ValidationError: If config has type errors or invalid values.
     """
-    from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+    from dlkit.infrastructure.config.job_config import InferenceJobConfig
 
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     toml_data = load_config(config_path, raw=True)
-    config = InferenceWorkflowConfig.model_validate(toml_data)
-
-    return config
+    return InferenceJobConfig.model_validate(toml_data)
 
 
-def load_optimization_config_eager(config_path: Path | str) -> OptimizationWorkflowConfig:
-    """Load optimization config with eager Pydantic validation.
+def load_optimization_config_eager(config_path: Path | str) -> SearchJobConfig:
+    """Load search/optimization config with eager Pydantic validation.
 
     Args:
-        config_path: Path to TOML configuration file
+        config_path: Path to TOML configuration file.
 
     Returns:
-        OptimizationWorkflowConfig with eagerly validated sections
+        SearchJobConfig with eagerly validated sections.
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValidationError: If config has type errors or invalid values
+        FileNotFoundError: If config file doesn't exist.
+        ValidationError: If config has type errors or invalid values.
     """
-    from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+    from dlkit.infrastructure.config.job_config import SearchJobConfig
 
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     toml_data = load_config(config_path, raw=True)
-    config = OptimizationWorkflowConfig.model_validate(toml_data)
-
-    return config
+    return SearchJobConfig.model_validate(toml_data)

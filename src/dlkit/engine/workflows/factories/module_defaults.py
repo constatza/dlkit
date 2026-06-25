@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.model_components import (
     LossComponentSettings,
     MetricComponentSettings,
@@ -53,10 +51,8 @@ def _default_module_path(settings: Any) -> str | None:
 
     if isinstance(settings, ModelComponentSettings):
         return _MODEL_MODULE
-    if isinstance(settings, (DatasetSettings, DataSettings)):
+    if isinstance(settings, DataSettings):
         return _DATASET_MODULE
-    if isinstance(settings, DataModuleSettings):
-        return _DATAMODULE_MODULE
     if isinstance(settings, WrapperComponentSettings):
         return _WRAPPER_MODULE
     if isinstance(settings, LossComponentSettings):

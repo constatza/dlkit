@@ -153,8 +153,6 @@ class LRTuner:
         from dlkit.infrastructure.config.core.base_settings import BasicSettings
         from dlkit.infrastructure.config.data_settings import DataModuleSelector, DataSettings
         from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-        from dlkit.infrastructure.config.datamodule_settings import DataModuleSettings
-        from dlkit.infrastructure.config.dataset_settings import DatasetSettings, IndexSplitSettings
         from dlkit.infrastructure.config.job_config import (
             InferenceJobConfig,
             JobConfig,
@@ -175,19 +173,18 @@ class LRTuner:
         )
         from dlkit.infrastructure.config.paths_settings import PathsSettings
         from dlkit.infrastructure.config.run_settings import RunSettings
+        from dlkit.infrastructure.config.split_settings import IndexSplitSettings
         from dlkit.infrastructure.config.tracking_settings import TrackingSettings
         from dlkit.infrastructure.config.training_settings import StoppingSettings, TrainingSettings
-        from dlkit.infrastructure.config.workflow_settings_base import SessionSettings
 
         return [
             # Base settings
             BasicSettings,
             TrainingSettings,
             StoppingSettings,
-            SessionSettings,
             PathsSettings,
             RunSettings,
-            # New-style JobConfig classes
+            # JobConfig classes
             JobConfig,
             TrainingJobConfig,
             InferenceJobConfig,
@@ -202,11 +199,9 @@ class LRTuner:
             # Training settings
             OptimizerSettings,
             SchedulerSettings,
-            # Data settings (new + legacy)
+            # Data settings
             DataSettings,
             DataModuleSelector,
-            DataModuleSettings,
-            DatasetSettings,
             IndexSplitSettings,
             DataloaderSettings,
             # Tracking
