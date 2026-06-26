@@ -70,19 +70,23 @@ weight matrix. In `FactorizedLinear`, the effective weight is
 `exp(log_scale).unsqueeze(1) * base_weight`, matching the paper-style random
 weight factorization `diag(exp(s)) @ V`. The public rectangular `Factorized*`
 family uses this exponential parameterization by default with literal RWF
-initialization semantics (`mean=mu`, `std=sigma`, default `mu=1.0`,
-`sigma=0.1`). A softplus-based alternative remains an advanced low-level
+initialization semantics (`mean=mu`, `std=sigma`, default `mu=0.0`,
+`sigma=0.1` (unit scale at init: `exp(0) = 1.0`)). A softplus-based alternative remains an advanced low-level
 primitive, not the public FFNN default.
 
 **Embedded**: `Linear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` with act → `Linear(h→out)`.
 
 **Non-embedded**: `FactorizedLinear(in→h)` (no skip) → `[FactorizedLinear(h→h) × (num_layers-1)]` with act → `Linear(h→out)`.
 
-| Variant | Plain (non-embedded) | Residual (non-embedded) | Plain (embedded) | Residual (embedded) |
-|---|---|---|---|---|
-| Factorized | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` |
+| Variant | Plain | Residual | Notes |
+|---|---|---|---|
+| Non-embedded (rectangular) | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `first_block(in→h)` + body + `Linear(h→out)` |
+| Embedded (rectangular) | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | `Linear(in→h)` + body + `Linear(h→out)` |
+| **Constant-width (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure body; `in==out` enforced; default activation **GELU** |
 
-Scale-equivariant wrappers: `ScaleEquivariant[Embedded]FactorizedFFNN`, `ScaleEquivariantSimple[Embedded]FactorizedFFNN`.
+Scale-equivariant wrappers:
+- Rectangular: `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
+- Square: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
 

@@ -258,7 +258,7 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -291,7 +291,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -336,7 +336,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -391,7 +391,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -427,7 +427,161 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         return self.regression_layer(x)
 
 
+# ── Constant-width Factorized variants (pure body, no projection) ───────────
+
+
+class ConstantWidthFactorizedFFNN(StandardEntryConsumer, nn.Module):
+    """Residual constant-width FFNN with factorized body layers.
+
+    1-1 replica of the pre-2026-05-19 ``ConstantWidthFactorizedFFNN``.
+    All ``num_layers`` blocks are ``FactorizedLinear`` wrapped in a
+    ``SkipConnection`` with identity skip (valid because in==out throughout).
+    No embedding or regression projection — ``in_features`` must equal
+    ``out_features``.
+
+    Default activation is GELU to match the original architecture.
+    ``log_scale`` initialises as ``N(0.0, 0.1)`` so ``exp(log_scale) ≈ 1``
+    at the start of training (unit scale).
+
+    Args:
+        in_features: Input and output dimension. Must equal ``out_features``.
+        out_features: Output dimension. Must equal ``in_features``.
+        num_layers: Number of residual factorized blocks.
+        bias: Whether body layers include a bias term.
+        mean: Gaussian mean for ``log_scale`` initialisation
+            (``0.0`` -> ``exp(0) = 1.0``, unit scale at init).
+        std: Standard deviation for ``log_scale`` initialisation.
+        activation: Element-wise activation applied before each linear layer.
+            ``None`` defaults to ``torch.nn.functional.gelu``.
+        normalize: Optional normalisation applied before activation
+            (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability applied after each linear layer.
+
+    Raises:
+        ValueError: If ``in_features != out_features``.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if in_features != out_features:
+            raise ValueError(
+                "ConstantWidthFactorizedFFNN requires in_features == out_features, "
+                f"got {in_features} != {out_features}"
+            )
+        resolved_activation = (
+            nn.functional.gelu if activation is None else resolve_activation(activation)
+        )
+        super().__init__()
+        self.body = _ConstantWidthParametricBody(
+            size=in_features,
+            num_layers=num_layers,
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
+            _residual=True,
+            activation=resolved_activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Pass input through all residual factorized blocks.
+
+        Args:
+            x: Input tensor of shape ``(*, in_features)``.
+
+        Returns:
+            Output tensor of shape ``(*, in_features)``.
+        """
+        return self.body(x)
+
+
+class ConstantWidthSimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
+    """Plain (non-residual) constant-width FFNN with factorized body layers.
+
+    Identical to :class:`ConstantWidthFactorizedFFNN` but all blocks are bare
+    ``ParametricDenseBlock`` instances with no skip connections.
+
+    Args:
+        in_features: Input and output dimension. Must equal ``out_features``.
+        out_features: Output dimension. Must equal ``in_features``.
+        num_layers: Number of factorized dense blocks.
+        bias: Whether body layers include a bias term.
+        mean: Gaussian mean for ``log_scale`` initialisation
+            (``0.0`` -> ``exp(0) = 1.0``, unit scale at init).
+        std: Standard deviation for ``log_scale`` initialisation.
+        activation: Element-wise activation applied before each linear layer.
+            ``None`` defaults to ``torch.nn.functional.gelu``.
+        normalize: Optional normalisation applied before activation
+            (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability applied after each linear layer.
+
+    Raises:
+        ValueError: If ``in_features != out_features``.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        if in_features != out_features:
+            raise ValueError(
+                "ConstantWidthSimpleFactorizedFFNN requires in_features == out_features, "
+                f"got {in_features} != {out_features}"
+            )
+        resolved_activation = (
+            nn.functional.gelu if activation is None else resolve_activation(activation)
+        )
+        super().__init__()
+        self.body = _ConstantWidthParametricBody(
+            size=in_features,
+            num_layers=num_layers,
+            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
+            _residual=False,
+            activation=resolved_activation,
+            normalize=normalize,
+            dropout=dropout,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Pass input through all factorized dense blocks.
+
+        Args:
+            x: Input tensor of shape ``(*, in_features)``.
+
+        Returns:
+            Output tensor of shape ``(*, in_features)``.
+        """
+        return self.body(x)
+
+
 __all__ = [
+    "ConstantWidthFactorizedFFNN",
+    "ConstantWidthSimpleFactorizedFFNN",
     "EmbeddedFactorizedFFNN",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleFactorizedFFNN",

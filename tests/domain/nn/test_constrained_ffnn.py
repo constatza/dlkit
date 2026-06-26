@@ -5,6 +5,7 @@ from typing import Any, cast
 
 import pytest
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from dlkit.common.shapes import ShapeContext
@@ -15,6 +16,8 @@ from dlkit.domain.nn import (
     SimpleFactorizedFFNN,
 )
 from dlkit.domain.nn.ffnn.constrained import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleParametricFFNN,
 )
@@ -206,3 +209,90 @@ def test_nonembedded_factorized_variants_default_to_exp_rwf(
     assert isinstance(first_layer, FactorizedLinear)
     assert first_layer._pos_fn is torch.exp
     assert body_layer._pos_fn is torch.exp
+
+
+def test_factorized_linear_default_mean_is_zero() -> None:
+    sig = inspect.signature(FactorizedLinear.__init__)
+    assert sig.parameters["mean"].default == 0.0
+
+
+def test_factorized_linear_unit_scale_at_default_init() -> None:
+    torch.manual_seed(42)
+    layer = FactorizedLinear(512, 512)
+    scale = torch.exp(layer.log_scale)
+    assert abs(float(scale.mean().detach()) - 1.0) < 0.3
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [EmbeddedFactorizedFFNN, EmbeddedSimpleFactorizedFFNN, FactorizedFFNN, SimpleFactorizedFFNN],
+)
+def test_factorized_class_default_mean_is_zero(cls: type) -> None:
+    sig = inspect.signature(cls.__init__)
+    assert sig.parameters["mean"].default == 0.0
+
+
+@pytest.fixture
+def square_shapes() -> tuple[ShapeMapping, ShapeMapping]:
+    """Square (in=4, out=4) feature/target shape mappings."""
+    return {"x": (4,)}, {"y": (4,)}
+
+
+CONSTANT_WIDTH_PAIRS = [
+    (ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN),
+]
+
+
+@pytest.mark.parametrize(("residual_cls", "plain_cls"), CONSTANT_WIDTH_PAIRS)
+def test_constant_width_factorized_output_shape(
+    residual_cls: type[nn.Module],
+    plain_cls: type[nn.Module],
+) -> None:
+    x = torch.randn(5, 4)
+    assert residual_cls(in_features=4, out_features=4, num_layers=3)(x).shape == (5, 4)
+    assert plain_cls(in_features=4, out_features=4, num_layers=3)(x).shape == (5, 4)
+
+
+@pytest.mark.parametrize(("residual_cls", "plain_cls"), CONSTANT_WIDTH_PAIRS)
+def test_constant_width_factorized_all_blocks_skip_iff_residual(
+    residual_cls: type[nn.Module],
+    plain_cls: type[nn.Module],
+) -> None:
+    residual = residual_cls(in_features=4, out_features=4, num_layers=3)
+    plain = plain_cls(in_features=4, out_features=4, num_layers=3)
+    for block in cast(Any, residual).body.blocks:
+        assert isinstance(block, SkipConnection)
+    for block in cast(Any, plain).body.blocks:
+        assert not isinstance(block, SkipConnection)
+
+
+@pytest.mark.parametrize("cls", [ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN])
+def test_constant_width_factorized_raises_when_not_square(cls: type[nn.Module]) -> None:
+    with pytest.raises(ValueError, match="in_features.*out_features"):
+        cls(in_features=3, out_features=4, num_layers=2)
+
+
+@pytest.mark.parametrize("cls", [ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN])
+def test_constant_width_factorized_default_activation_is_gelu(cls: type[nn.Module]) -> None:
+    model = cls(in_features=4, out_features=4, num_layers=2)
+    first_block = cast(Any, model).body.blocks[0]
+    if isinstance(first_block, SkipConnection):
+        first_block = cast(Any, first_block).module
+    assert cast(Any, first_block).activation is F.gelu
+
+
+@pytest.mark.parametrize("cls", [ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN])
+def test_constant_width_factorized_from_context(
+    cls: type[nn.Module],
+    square_shapes: tuple[ShapeMapping, ShapeMapping],
+) -> None:
+    in_shapes, out_shapes = square_shapes
+    model = cast(Any, cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=2)
+    x = torch.randn(4, in_shapes["x"][0])
+    assert model(x).shape == (4, out_shapes["y"][0])
+
+
+@pytest.mark.parametrize("cls", [ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN])
+def test_constant_width_factorized_body_uses_factorized_linear(cls: type[nn.Module]) -> None:
+    model = cls(in_features=4, out_features=4, num_layers=2)
+    _unwrap_factorized_layer(cast(Any, model).body.blocks[0])

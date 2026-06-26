@@ -66,7 +66,7 @@ class _FactorizedLinearBase(nn.Module):
 
     def reset_parameters(self) -> None:
         """Initialize parameters for the factorized linear layer."""
-        nn.init.kaiming_uniform_(self.base_weight, a=5**0.5)
+        nn.init.kaiming_uniform_(self.base_weight, a=0.0)
         nn.init.normal_(self.log_scale, mean=self._log_scale_mean, std=self._log_scale_std)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
@@ -102,11 +102,23 @@ class FactorizedLinear(_FactorizedLinearBase):
         out_features: int,
         bias: bool = True,
         *,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
+        """Initialize the public factorized linear layer.
+
+        Args:
+            in_features: Input feature size.
+            out_features: Output feature size.
+            bias: Whether to include a bias term.
+            mean: Gaussian mean for ``log_scale`` initialisation
+                (``0.0`` -> ``exp(0) = 1.0``, unit scale at init).
+            std: Standard deviation for log-scale initialisation.
+            device: Optional device for parameter initialisation.
+            dtype: Optional dtype for parameter initialisation.
+        """
         super().__init__(
             in_features=in_features,
             out_features=out_features,

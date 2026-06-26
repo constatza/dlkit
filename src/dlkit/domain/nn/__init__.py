@@ -4,6 +4,8 @@ from .contracts import (
     InputSpec,
 )
 from .ffnn.constrained import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
@@ -20,6 +22,8 @@ from .ffnn.linear import (
 )
 from .ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFactorizedFFNN,
@@ -100,6 +104,8 @@ __all__ = [
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
+    "ConstantWidthFactorizedFFNN",
+    "ConstantWidthSimpleFactorizedFFNN",
     # Embedded Factorized variants
     "EmbeddedFactorizedFFNN",
     "EmbeddedSimpleFactorizedFFNN",
@@ -111,6 +117,8 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
     "ScaleEquivariantFactorizedFFNN",
     "ScaleEquivariantSimpleFactorizedFFNN",
+    "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

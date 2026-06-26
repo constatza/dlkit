@@ -12,6 +12,8 @@ from dlkit.domain.nn.contracts import (
     StandardEntryConsumer,
 )
 from dlkit.domain.nn.ffnn.constrained import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedSimpleFactorizedFFNN,
     FactorizedFFNN,
@@ -90,7 +92,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivar
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -132,7 +134,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(StandardEntryConsumer, ScaleE
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -177,7 +179,7 @@ class ScaleEquivariantFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrap
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -219,7 +221,7 @@ class ScaleEquivariantSimpleFactorizedFFNN(StandardEntryConsumer, ScaleEquivaria
         hidden_size: int | None = None,
         num_layers: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
         norm: str = _DEFAULT_NORM,
         eps_gain: float = _DEFAULT_EPS_GAIN,
@@ -238,6 +240,137 @@ class ScaleEquivariantSimpleFactorizedFFNN(StandardEntryConsumer, ScaleEquivaria
                 mean=mean,
                 std=std,
                 activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+# ── Constant-width Factorized (pure body, no projection) ────────────────────
+
+
+class ScaleEquivariantConstantWidthFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+    """Scale-equivariant residual constant-width factorized FFNN.
+
+    Wraps :class:`~dlkit.domain.nn.ffnn.constrained.ConstantWidthFactorizedFFNN`
+    with norm-based input/output scaling so that ``f(αx) = α · f(x)`` for any
+    scalar ``α > 0``. Requires ``in_features == out_features``.
+
+    Args:
+        in_features: Input and output dimension. Must equal ``out_features``.
+        out_features: Output dimension. Must equal ``in_features``.
+        num_layers: Number of residual factorized blocks.
+        bias: Whether body layers include a bias term.
+        mean: Gaussian mean for ``log_scale`` initialisation
+            (``0.0`` -> unit scale at init).
+        std: Standard deviation for ``log_scale`` initialisation.
+        norm: Vector norm used for equivariance (``"l2"``, ``"l1"``, ``"linf"``).
+        eps_gain: Multiplier on machine epsilon for safe norm division.
+        keep_stats: If ``True``, ``forward`` returns ``(output, {"norm": ...})``.
+        activation: Element-wise activation. ``None`` defaults to GELU.
+        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability.
+
+    Raises:
+        ValueError: If ``in_features != out_features``.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=ConstantWidthFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain constant-width factorized FFNN (no skip connections).
+
+    Wraps :class:`~dlkit.domain.nn.ffnn.constrained.ConstantWidthSimpleFactorizedFFNN`
+    with norm-based input/output scaling so that ``f(αx) = α · f(x)`` for any
+    scalar ``α > 0``. Requires ``in_features == out_features``.
+
+    Args:
+        in_features: Input and output dimension. Must equal ``out_features``.
+        out_features: Output dimension. Must equal ``in_features``.
+        num_layers: Number of factorized dense blocks.
+        bias: Whether body layers include a bias term.
+        mean: Gaussian mean for ``log_scale`` initialisation
+            (``0.0`` -> unit scale at init).
+        std: Standard deviation for ``log_scale`` initialisation.
+        norm: Vector norm used for equivariance (``"l2"``, ``"l1"``, ``"linf"``).
+        eps_gain: Multiplier on machine epsilon for safe norm division.
+        keep_stats: If ``True``, ``forward`` returns ``(output, {"norm": ...})``.
+        activation: Element-wise activation. ``None`` defaults to GELU.
+        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability.
+
+    Raises:
+        ValueError: If ``in_features != out_features``.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=ConstantWidthSimpleFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=activation,
                 normalize=normalize,
                 dropout=dropout,
             ),

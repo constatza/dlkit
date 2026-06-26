@@ -7,6 +7,8 @@ import torch
 
 from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.ffnn import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFactorizedFFNN,
@@ -33,6 +35,12 @@ def _unwrap_factorized_layer(module: torch.nn.Module) -> FactorizedLinear:
 def rect_shapes() -> tuple[ShapeMapping, ShapeMapping]:
     """Rectangular (in=3, out=2) feature/target shape mappings."""
     return {"x": (3,)}, {"y": (2,)}
+
+
+@pytest.fixture
+def square_shapes() -> tuple[ShapeMapping, ShapeMapping]:
+    """Square (in=4, out=4) feature/target shape mappings."""
+    return {"x": (4,)}, {"y": (4,)}
 
 
 # ── Constant-width dense ──────────────────────────────────────────────────────
@@ -166,3 +174,71 @@ def test_se_nonembedded_factorized_variants_default_to_exp_rwf(
     assert isinstance(first_layer, FactorizedLinear)
     assert first_layer._pos_fn is torch.exp
     assert body_layer._pos_fn is torch.exp
+
+
+SE_CONSTANT_WIDTH_PAIRS = [
+    (
+        ScaleEquivariantConstantWidthFactorizedFFNN,
+        ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+    ),
+]
+
+
+@pytest.mark.parametrize(("residual_cls", "plain_cls"), SE_CONSTANT_WIDTH_PAIRS)
+def test_se_constant_width_factorized_output_shape(
+    residual_cls: type[torch.nn.Module],
+    plain_cls: type[torch.nn.Module],
+) -> None:
+    x = torch.randn(5, 4)
+    assert residual_cls(in_features=4, out_features=4, num_layers=3)(x).shape == (5, 4)
+    assert plain_cls(in_features=4, out_features=4, num_layers=3)(x).shape == (5, 4)
+
+
+def test_se_constant_width_factorized_is_scale_equivariant() -> None:
+    model = ScaleEquivariantConstantWidthFactorizedFFNN(in_features=6, out_features=6, num_layers=3)
+    model.eval()
+    torch.manual_seed(0)
+    x = torch.randn(5, 6)
+    scale = 3.0
+    assert torch.allclose(model(x * scale), model(x) * scale, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [
+        ScaleEquivariantConstantWidthFactorizedFFNN,
+        ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+    ],
+)
+def test_se_constant_width_factorized_raises_when_not_square(
+    cls: type[torch.nn.Module],
+) -> None:
+    with pytest.raises(ValueError, match="in_features.*out_features"):
+        cls(in_features=3, out_features=4, num_layers=2)
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [
+        ScaleEquivariantConstantWidthFactorizedFFNN,
+        ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
+    ],
+)
+def test_se_constant_width_factorized_from_context(
+    cls: type[torch.nn.Module],
+    square_shapes: tuple[ShapeMapping, ShapeMapping],
+) -> None:
+    in_shapes, out_shapes = square_shapes
+    model = cast(Any, cls).from_context(ShapeContext(in_shapes, out_shapes), num_layers=2)
+    x = torch.randn(4, in_shapes["x"][0])
+    assert model(x).shape == (4, out_shapes["y"][0])
+
+
+def test_se_constant_width_factorized_keep_stats() -> None:
+    model = ScaleEquivariantConstantWidthFactorizedFFNN(
+        in_features=4, out_features=4, num_layers=2, keep_stats=True
+    )
+    out, stats = model(torch.randn(3, 4))
+    assert isinstance(out, torch.Tensor)
+    assert "norm" in stats
+    assert stats["norm"].shape == (3, 1)

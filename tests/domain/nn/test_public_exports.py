@@ -78,7 +78,12 @@ def test_named_parametric_bases_exported():
 def test_public_namespaces_export_factorized_pairs():
     pairs = [
         ("FactorizedFFNN", "SimpleFactorizedFFNN"),
+        ("ConstantWidthFactorizedFFNN", "ConstantWidthSimpleFactorizedFFNN"),
         ("ScaleEquivariantFactorizedFFNN", "ScaleEquivariantSimpleFactorizedFFNN"),
+        (
+            "ScaleEquivariantConstantWidthFactorizedFFNN",
+            "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
+        ),
     ]
     for residual_name, plain_name in pairs:
         for ns in (domain_nn, public_nn):

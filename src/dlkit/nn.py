@@ -2,6 +2,8 @@
 
 from dlkit.domain.nn import (
     FFNN,
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     DeepONet,
     DualPathFFNN,
     EmbeddedDeepONet,
@@ -37,6 +39,8 @@ from dlkit.domain.nn import (
     LinearNetwork,
     ModifiedMLP,
     ParametricDenseBlock,
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFactorizedFFNN,
@@ -84,6 +88,8 @@ __all__ = [
     "ScaleEquivariantVarWidthFiLMFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
+    "ConstantWidthFactorizedFFNN",
+    "ConstantWidthSimpleFactorizedFFNN",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
     # Embedded Factorized variants
@@ -97,6 +103,8 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
     "ScaleEquivariantFactorizedFFNN",
     "ScaleEquivariantSimpleFactorizedFFNN",
+    "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

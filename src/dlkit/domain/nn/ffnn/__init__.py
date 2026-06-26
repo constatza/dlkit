@@ -1,4 +1,6 @@
 from .constrained import (
+    ConstantWidthFactorizedFFNN,
+    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedFactorizedFFNN,
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
@@ -15,6 +17,8 @@ from .linear import (
 )
 from .residual import FFNN, EmbeddedFFNN, VarWidthFFNN
 from .scale_equivariant import (
+    ScaleEquivariantConstantWidthFactorizedFFNN,
+    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
     ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFactorizedFFNN,
@@ -52,6 +56,8 @@ __all__ = [
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",
+    "ConstantWidthFactorizedFFNN",
+    "ConstantWidthSimpleFactorizedFFNN",
     # Embedded Factorized variants
     "EmbeddedFactorizedFFNN",
     "EmbeddedSimpleFactorizedFFNN",
@@ -63,4 +69,6 @@ __all__ = [
     "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
     "ScaleEquivariantFactorizedFFNN",
     "ScaleEquivariantSimpleFactorizedFFNN",
+    "ScaleEquivariantConstantWidthFactorizedFFNN",
+    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
 ]
