@@ -50,8 +50,8 @@ class MLflowTrackingAdapter(IExperimentTracker):
 
         Args:
             mlflow_tracker: Existing MLflowTracker instance
-            mlflow_settings: MLflow configuration settings for initialization
-            session_name: Session name to use as experiment name
+            mlflow_settings: Lowercase tracking/experiment config used for initialization
+            session_name: Fallback experiment name when the job config does not provide one
         """
         self._tracker = mlflow_tracker
         self._mlflow_settings = mlflow_settings
@@ -220,7 +220,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
         """Resolve parent MLflow run name for the study.
 
         Returns the explicit run name only when configured under
-        ``MLFLOW.run_name``. Otherwise ``None`` is returned so MLflow can
+        ``experiment.run_name``. Otherwise ``None`` is returned so MLflow can
         generate a random run name instead of mirroring the experiment name.
 
         Args:
@@ -332,7 +332,7 @@ class MLflowStudyRunContext(IStudyRunContext):
         """Log best trial settings as TOML artifact with special naming.
 
         Args:
-            settings: GeneralSettings object for the best trial
+            settings: `SearchJobConfig`-derived settings object for the best trial
         """
         try:
             from dlkit.infrastructure.io import serialize_config_to_string
@@ -392,7 +392,7 @@ class MLflowTrialRunContext(ITrialRunContext):
         """Log trial settings as TOML artifact.
 
         Args:
-            settings: GeneralSettings object for this trial
+            settings: `SearchJobConfig`-derived settings object for this trial
         """
         try:
             from dlkit.infrastructure.io import serialize_config_to_string

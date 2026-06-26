@@ -13,7 +13,7 @@ from dlkit.engine.tracking.mlflow_client_factory import MLflowClientFactory
 from dlkit.engine.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 
 @pytest.fixture(autouse=True)
@@ -83,12 +83,9 @@ def mock_mlflow_client():
 
 
 @pytest.fixture
-def mlflow_test_settings():
-    """Provide test MLflow settings."""
-    return MLflowSettings(
-        experiment_name="test_experiment",
-        run_name="test_run",
-    )
+def mlflow_test_settings() -> TrackingSettings:
+    """Provide test tracking settings."""
+    return TrackingSettings(backend="mlflow")
 
 
 @pytest.fixture

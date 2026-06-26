@@ -2,14 +2,14 @@
 
 Usage patterns:
 - Provide checkpoint via CLI: `dlkit predict CONFIG.toml CHECKPOINT [options]`
-- Or rely on config: set `[MODEL].checkpoint` in `CONFIG.toml`, then pass
+- Or rely on config: set `[model].checkpoint` in `CONFIG.toml`, then pass
   `CHECKPOINT` as the same value or omit the CLI argument in future versions.
 
 Notes:
 - This uses stateful predictor-based inference with training configurations and datasets
 - For direct inference without config files, use the Python API: dlkit.load_model()
 - Today the CLI requires a `CHECKPOINT` argument; if your config contains
-  `[MODEL].checkpoint`, the CLI argument will take precedence when provided.
+  `[model].checkpoint`, the CLI argument will take precedence when provided.
   This keeps behavior explicit while remaining compatible with common practice.
 """
 
@@ -40,7 +40,7 @@ app = typer.Typer(
     name="predict",
     help=(
         "🔮 Prediction — Run Lightning-based predictions with training configs. "
-        "Checkpoint can be supplied via CLI or config ([MODEL].checkpoint)."
+        "Checkpoint can be supplied via CLI or config ([model].checkpoint)."
     ),
 )
 
@@ -59,7 +59,7 @@ def _run_inference_impl(
     Arguments:
     - `config_path`: Path to TOML configuration file.
     - `checkpoint`: Path to model checkpoint. If the configuration contains
-      `[MODEL].checkpoint`, that value is used by the API when this argument
+      `[model].checkpoint`, that value is used by the API when this argument
       is not provided (future behavior). When both are present, this argument
       takes precedence.
     - Override: `--batch-size`.
@@ -168,7 +168,7 @@ def entry(
     - `dlkit infer CONFIG.toml MODEL.ckpt --batch-size 64`
 
     Note: Supplying `CHECKPOINT` via CLI is explicit and recommended. If
-    `[MODEL].checkpoint` is present in the configuration, it may be used by
+    `[model].checkpoint` is present in the configuration, it may be used by
     the underlying API; when both are specified, the CLI argument wins.
     """
     _run_inference_impl(

@@ -11,7 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import h5py
 import numpy as np
@@ -97,8 +97,12 @@ class TestFlexibleDatasetHdf5Lazy:
         assert isinstance(sample, TensorDict)
         assert sample["features", "x"].shape == torch.Size([4])
         assert sample["targets", "y"].shape == torch.Size([2])
-        np.testing.assert_allclose(sample["features", "x"].numpy(), hdf5_file["x"][3], rtol=1e-5)
-        np.testing.assert_allclose(sample["targets", "y"].numpy(), hdf5_file["y"][3], rtol=1e-5)
+        np.testing.assert_allclose(
+            cast(torch.Tensor, sample["features", "x"]).numpy(), hdf5_file["x"][3], rtol=1e-5
+        )
+        np.testing.assert_allclose(
+            cast(torch.Tensor, sample["targets", "y"]).numpy(), hdf5_file["y"][3], rtol=1e-5
+        )
 
     def test_getitems_returns_batched_tensordict(self, hdf5_file: dict) -> None:
         """__getitems__ returns pre-batched TensorDict from a single HDF5 read per source."""
@@ -127,7 +131,7 @@ class TestFlexibleDatasetHdf5Lazy:
         assert batch["features", "x"].shape == torch.Size([3, 4])
         assert batch["targets", "y"].shape == torch.Size([3, 2])
         np.testing.assert_allclose(
-            batch["features", "x"].numpy(), hdf5_file["x"][indices], rtol=1e-5
+            cast(torch.Tensor, batch["features", "x"]).numpy(), hdf5_file["x"][indices], rtol=1e-5
         )
 
     def test_getitems_unsorted_indices_correct_values(self, hdf5_file: dict) -> None:
@@ -174,7 +178,9 @@ class TestFlexibleDatasetHdf5Eager:
         )
 
         sample = dataset[7]
-        np.testing.assert_allclose(sample["features", "x"].numpy(), hdf5_file["x"][7], rtol=1e-5)
+        np.testing.assert_allclose(
+            cast(torch.Tensor, sample["features", "x"]).numpy(), hdf5_file["x"][7], rtol=1e-5
+        )
 
     def test_getitems_eager_returns_batched_values(self, hdf5_file: dict) -> None:
         """Eager __getitems__ returns the same values as lazy mode."""
@@ -194,7 +200,7 @@ class TestFlexibleDatasetHdf5Eager:
         indices = [2, 4, 6]
         batch = dataset.__getitems__(indices)
         np.testing.assert_allclose(
-            batch["features", "x"].numpy(), hdf5_file["x"][indices], rtol=1e-5
+            cast(torch.Tensor, batch["features", "x"]).numpy(), hdf5_file["x"][indices], rtol=1e-5
         )
 
 

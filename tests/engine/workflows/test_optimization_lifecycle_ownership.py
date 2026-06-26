@@ -5,8 +5,6 @@ from __future__ import annotations
 import ast
 import inspect
 from textwrap import dedent
-from types import SimpleNamespace
-from typing import cast
 
 from dlkit.engine.workflows.entrypoints.optimization import optimize
 from dlkit.engine.workflows.optimization.factory import OptimizationServiceFactory
@@ -17,7 +15,7 @@ from dlkit.engine.workflows.optimization.infrastructure import (
     OptunaStudyRepository,
 )
 from dlkit.engine.workflows.optimization.services import OptimizationOrchestrator
-from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+from dlkit.infrastructure.config.job_config import SearchJobConfig
 
 
 def _parse_source(source: str) -> ast.AST:
@@ -137,23 +135,38 @@ def test_runtime_entrypoint_owns_tracker_but_not_backend_session_context() -> No
 def test_factory_only_wires_optuna_infrastructure_when_enabled() -> None:
     factory = OptimizationServiceFactory()
 
-    disabled_settings = cast(
-        OptimizationWorkflowConfig,
-        SimpleNamespace(OPTUNA=SimpleNamespace(enabled=False)),
-    )
-    enabled_settings = cast(
-        OptimizationWorkflowConfig,
-        SimpleNamespace(OPTUNA=SimpleNamespace(enabled=True)),
+    enabled_settings = SearchJobConfig.model_validate(
+        {
+            "run": {"type": "search", "seed": 42},
+            "experiment": {"name": "test-search"},
+            "model": {"class": "DummyModel", "module_path": "dlkit.domain.nn"},
+            "data": {
+                "batch_size": 8,
+                "num_workers": 0,
+            },
+            "training": {
+                "loss": "mse",
+                "trainer": {"max_epochs": 1, "accelerator": "cpu"},
+                "optimizer": {"name": "AdamW", "lr": 1e-3},
+            },
+            "search": {
+                "space": {
+                    "model.params.hidden_size": {
+                        "type": "categorical",
+                        "choices": [2, 4],
+                    }
+                }
+            },
+        }
     )
 
-    disabled_repository = factory.create_study_repository(disabled_settings)
     enabled_repository = factory.create_study_repository(enabled_settings)
+    disabled_repository = InMemoryStudyRepository()
 
-    assert isinstance(disabled_repository, InMemoryStudyRepository)
     assert isinstance(enabled_repository, OptunaStudyRepository)
 
     disabled_session = factory.create_optimization_backend_session(
-        disabled_settings,
+        enabled_settings,
         disabled_repository,
     )
     enabled_session = factory.create_optimization_backend_session(

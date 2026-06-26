@@ -186,7 +186,7 @@ dlkit optimize plot my_study sqlite:///study.db --type param_importances
 ```
 
 **Implementation Notes**:
-- Requires `[OPTUNA].enabled = true` in config
+- Requires `run.type = "search"` in config
 - Validates Optuna configuration before execution
 - Supports study resumption via same `--study-name`
 - Integrates with MLflow for trial tracking
@@ -259,7 +259,7 @@ dlkit server info config.toml
 
 **Validate Parameters**:
 - `config_path: Path` - Configuration file to validate
-- `strategy: str | None = None` - Strategy type (training, mlflow, optuna, inference)
+- `strategy: str | None = None` - Validation target label (training, optimize, inference)
 
 **Show Parameters**:
 - `config_path: Path` - Configuration file to display
@@ -275,13 +275,13 @@ dlkit server info config.toml
 **Example**:
 ```bash
 # Validate configuration
-dlkit config validate config.toml --strategy mlflow
+dlkit config validate config.toml --strategy optimize
 
 # Show full config as table
 dlkit config show config.toml
 
 # Show specific section as JSON
-dlkit config show config.toml --section MODEL --format json
+dlkit config show config.toml --section model --format json
 
 # Create training template
 dlkit config create --output new_config.toml --type training
@@ -295,7 +295,7 @@ dlkit config sync-templates --write
 - Multiple output formats with Rich syntax highlighting
 - Hierarchical table display for nested configurations
 - Template generation via `generate_template()` API
-- Generated templates use the current entry-based dataset shape with `[[DATASET.features]]` and `[[DATASET.targets]]`
+- Generated templates use the current entry-based dataset shape with `data.features` and `data.targets`
 - Template sync for maintaining consistency across examples
 - Drift detection with `--check` flag
 
@@ -355,9 +355,11 @@ dlkit train config.toml --checkpoint outputs/model.ckpt --epochs 100
 
 ### Common Use Case 2: Optimization Workflow
 ```bash
-# 1. Configure Optuna in config.toml
-[OPTUNA]
-enabled = true
+# 1. Configure search in config.toml
+[run]
+type = "search"
+
+[search]
 n_trials = 100
 
 # 2. Run optimization
@@ -422,7 +424,7 @@ except Exception as e:
 
 **User-Friendly Error Display**:
 - Rich console formatting for error messages
-- Contextual help suggestions (e.g., "Enable [OPTUNA] in config")
+- Contextual help suggestions (e.g., "Set run.type = \"search\" in config")
 - Validation errors with specific field information
 - Server errors with troubleshooting steps
 

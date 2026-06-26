@@ -5,17 +5,14 @@ This directory covers the configuration layer, workflow loaders, patching utilit
 ## Layout
 
 ```text
-tests/tools/config/
+tests/infrastructure/config/
 ├── README.md
 ├── conftest.py
-├── test_mlflow_settings.py
-├── test_partial_config_loading.py
+├── test_job_config.py
+├── test_load_job.py
 ├── test_eager_validation.py
 ├── test_environment.py
 ├── test_updater.py
-├── test_dataset_settings.py
-├── test_data_entries.py
-├── test_sparse_feature.py
 ├── test_integration.py
 ├── precision/
 ├── core/
@@ -24,16 +21,15 @@ tests/tools/config/
 
 ## Main Coverage Areas
 
-- `test_mlflow_settings.py`
-  - Validates the flat `MLflowSettings` model
-  - Confirms legacy `server` / `client` blocks are rejected
-  - Confirms `tracking_uri` / `artifacts_destination` are env-only and invalid in TOML
-  - Covers `max_retries`, aliases, tags, and defaults
+- `test_job_config.py`
+  - Validates the `JobConfig` / `TrainingJobConfig` / `InferenceJobConfig` / `SearchJobConfig` models
+  - Confirms lowercase section names are accepted and legacy uppercase sections are rejected
+  - Covers required sections, aliases, and defaults
 
-- `test_partial_config_loading.py`
-  - Covers `load_settings()` returning `TrainingWorkflowSettings`
-  - Covers `load_sections()` partial workflow loading
-  - Verifies strict mode for missing sections
+- `test_load_job.py`
+  - Covers `load_job()` returning the appropriate job config subtype
+  - Covers profile merging and run-type detection
+  - Verifies validation errors for malformed or incomplete job payloads
 
 - `test_eager_validation.py` and `test_config_missing_path.py`
   - Verify fail-fast validation for malformed configs and missing paths
@@ -55,24 +51,29 @@ tests/tools/config/
 
 ## Configuration Behaviors Under Test
 
-### Flat MLflow configuration
+### Lowercase job configuration
 
-The test suite assumes the current MLflow contract:
+The test suite assumes the current lowercase `JobConfig` contract:
 
 ```toml
-[MLFLOW]
-experiment_name = "baseline"
+[experiment]
+name = "baseline"
 run_name = "trial-01"
-tags = { team = "platform" }
 register_model = true
-registered_model_name = "FFNN"
-registered_model_aliases = ["candidate"]
-registered_model_version_tags = { team = "platform" }
+
+[tracking]
+uri = "file:///tmp/mlruns"
+
+[tracking.registry]
+name = "FFNN"
+aliases = ["candidate"]
+tags = { team = "platform" }
 max_retries = 3
 ```
 
-The `[MLFLOW]` section itself enables tracking. The old `enabled` field is
-intentionally invalid and covered by tests.
+Tracking is modeled through lowercase `experiment` and `tracking` sections. The
+old `[MLFLOW]` section and nested legacy shapes are intentionally invalid and
+covered by tests.
 
 Infrastructure is env-driven:
 
@@ -81,6 +82,7 @@ Infrastructure is env-driven:
 
 These TOML shapes are intentionally invalid and covered by tests:
 
+- `[MLFLOW]`
 - `[MLFLOW.server]`
 - `[MLFLOW.client]`
 - `tracking_uri = "..."`
@@ -88,7 +90,8 @@ These TOML shapes are intentionally invalid and covered by tests:
 
 ### Protocol-oriented loading
 
-The low-level config I/O surface is based on the protocol contracts in `src/dlkit/tools/io/protocols.py`:
+The low-level config I/O surface is based on the protocol contracts in
+`src/dlkit/infrastructure/config/core/sources.py` and related loaders:
 
 - `ConfigParser`
 - `SectionExtractor`
@@ -97,22 +100,21 @@ The low-level config I/O surface is based on the protocol contracts in `src/dlki
 
 The tests exercise the concrete behavior through:
 
-- `load_settings()`
-- `load_sections()`
-- `load_sections_config()`
-- `load_section_config()`
-- section mapping registration / reset helpers
+- `load_job()`
+- run-type detection and profile merging
+- path preprocessing and lowercase section normalization
+- patch/update helpers
 
 ## Running the Suite
 
 ```bash
-uv run pytest tests/tools/config -v
+uv run pytest tests/infrastructure/config -v
 ```
 
 Focused runs:
 
 ```bash
-uv run pytest tests/tools/config/test_mlflow_settings.py -v
-uv run pytest tests/tools/config/test_partial_config_loading.py -v
-uv run pytest tests/tools/config/precision -v
+uv run pytest tests/infrastructure/config/test_job_config.py -v
+uv run pytest tests/infrastructure/config/test_load_job.py -v
+uv run pytest tests/infrastructure/config/precision -v
 ```

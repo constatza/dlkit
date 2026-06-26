@@ -75,7 +75,7 @@ def sample_job() -> TrainingJobConfig:
     """
     return TrainingJobConfig(
         run=RunSettings(type="train"),
-        model=ModelSettings(name="DummyModel"),
+        model=ModelSettings.model_validate({"class": "DummyModel"}),
         data=DataSettings(batch_size=16),
         training=TrainingSettings(trainer=TrainerSettings(max_epochs=50)),
     )

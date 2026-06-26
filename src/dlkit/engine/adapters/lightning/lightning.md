@@ -152,14 +152,14 @@ Minimal configuration for `model(x) → y`:
 
 **TOML**:
 ```toml
-[DATASET]
+[data]
 name = "FlexibleDataset"
 
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "data/features.npy"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "data/targets.npy"
 ```
@@ -177,18 +177,18 @@ For `model(x, z) → y` (two feature arrays):
 
 **TOML**:
 ```toml
-[DATASET]
+[data]
 name = "FlexibleDataset"
 
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "data/features_x.npy"
 
-[[DATASET.features]]
+[[data.features]]
 name = "z"
 path = "data/features_z.npy"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "data/targets.npy"
 ```
@@ -199,13 +199,13 @@ Config-list order does not affect which tensor binds to which parameter.
 
 For DeepONet-style branch/trunk inputs (model must declare `forward(branch, trunk)`):
 ```toml
-[[DATASET.features]]
+[[data.features]]
 name = "branch"
 path = "..."
 field_role = "feature"
 model_input = true
 
-[[DATASET.features]]
+[[data.features]]
 name = "trunk"
 path = "..."
 field_role = "target_coordinates"
@@ -222,19 +222,19 @@ keyword arguments via `extra_inputs` / `target_key`:
 
 **TOML**:
 ```toml
-[DATASET]
+[data]
 name = "FlexibleDataset"
 
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "data/features.npy"
 
-[[DATASET.features]]
+[[data.features]]
 name = "A"
 path = "data/stiffness.npy"
 model_input = false
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "data/targets.npy"
 
@@ -307,7 +307,7 @@ wrapper = ProcessingLightningWrapper(
 Each data entry can have a list of transforms that are composed into a `TransformChain`:
 
 ```toml
-[DATASET]
+[data]
 features = [
   { name = "x", path = "data/features.npy", transforms = [
     { name = "StandardScaler" },

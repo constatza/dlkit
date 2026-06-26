@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -170,9 +171,10 @@ def mock_api_functions() -> dict[str, Any]:
     mock_train = Mock(return_value=mock_training_result)
 
     # Mock successful config loading
-    mock_settings = Mock()
-    mock_settings.MLFLOW = Mock(is_active=False)
-    mock_settings.OPTUNA = Mock(is_active=False)
+    mock_settings = SimpleNamespace(
+        run=SimpleNamespace(type="train"),
+        tracking=SimpleNamespace(backend="none"),
+    )
 
     mock_load_config = Mock(return_value=mock_settings)
 
@@ -305,30 +307,18 @@ def sample_checkpoint_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def sample_settings() -> Mock:
-    """Create mock settings object for testing.
+def sample_settings() -> Any:
+    """Create minimal inference-style settings for CLI tests.
 
     Returns:
-        Mock GeneralSettings object configured for testing.
+        Object with the current lowercase JobConfig attribute shape.
     """
-    mock_settings = Mock()
-    mock_mlflow = Mock()
-    mock_mlflow.is_active = True
-    mock_optuna = Mock()
-    mock_optuna.is_active = False
-
-    mock_settings.MLFLOW = mock_mlflow
-    mock_settings.OPTUNA = mock_optuna
-    mock_settings._inner_value = mock_settings
-
-    # Mock model_dump to return a proper dict structure
-    mock_settings.model_dump.return_value = {
-        "SESSION": {"name": "test_session", "workflow": "train", "seed": 42},
-        "DATASET": {"name": "FlexibleDataset", "root_dir": "."},
-        "MODEL": {"name": "FFNN", "module_path": "dlkit.domain.nn.ffnn.residual"},
-        "MLFLOW": {"experiment_name": "test_experiment"},
-    }
-    return mock_settings
+    return SimpleNamespace(
+        run=SimpleNamespace(type="predict"),
+        model=SimpleNamespace(checkpoint=Path("model.ckpt")),
+        data=True,
+        tracking=SimpleNamespace(backend="mlflow"),
+    )
 
 
 # Note: A single inference-result fixture is provided below that returns an
@@ -473,73 +463,69 @@ def train_config_templates() -> dict[str, str]:
         Dictionary of configuration templates for different scenarios.
     """
     return {
-        "vanilla": """[SESSION]
+        "vanilla": """[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "vanilla_train"
-workflow = "train"
+
+[training.trainer]
+max_epochs = 10
+default_root_dir = "{output_dir}"
+""",
+        "mlflow": """[run]
+type = "train"
 seed = 42
 
-[PATHS]
-output_dir = "{output_dir}"
-
-[TRAINING.trainer]
-max_epochs = 10
-""",
-        "mlflow": """[SESSION]
+[experiment]
 name = "mlflow_train"
-workflow = "train"
-seed = 42
-
-[PATHS]
-output_dir = "{output_dir}"
-
-[MLFLOW]
-enabled = true
-is_active = true
-experiment_name = "test_experiment"
 run_name = "test_run"
 
-[TRAINING.trainer]
+[tracking]
+backend = "mlflow"
+uri = "sqlite:///test.db"
+
+[training.trainer]
 max_epochs = 10
+default_root_dir = "{output_dir}"
 """,
-        "optuna": """[SESSION]
+        "optuna": """[run]
+type = "search"
+seed = 42
+
+[experiment]
 name = "optuna_train"
-workflow = "train"
-seed = 42
 
-[PATHS]
-output_dir = "{output_dir}"
-
-[OPTUNA]
-enabled = true
-is_active = true
+[search]
 n_trials = 20
-study_name = "test_study"
+direction = "minimize"
+objective = "val/loss"
 
-[TRAINING.trainer]
+[training.trainer]
 max_epochs = 5
+default_root_dir = "{output_dir}"
 """,
-        "both": """[SESSION]
-name = "both_train"
-workflow = "train"
+        "both": """[run]
+type = "search"
 seed = 42
 
-[PATHS]
-output_dir = "{output_dir}"
-
-[MLFLOW]
-enabled = true
-is_active = true
-experiment_name = "test_experiment"
+[experiment]
+name = "both_train"
 run_name = "test_run"
 
-[OPTUNA]
-enabled = true
-is_active = true
-n_trials = 10
-study_name = "test_study"
+[tracking]
+backend = "mlflow"
+uri = "sqlite:///test.db"
 
-[TRAINING.trainer]
+[search]
+n_trials = 10
+direction = "minimize"
+objective = "val/loss"
+
+[training.trainer]
 max_epochs = 5
+default_root_dir = "{output_dir}"
 """,
     }
 
@@ -581,7 +567,7 @@ def train_override_scenarios() -> dict[str, dict[str, Any]]:
 
 @pytest.fixture
 def mock_settings_factory():
-    """Factory function to create mock settings for different scenarios.
+    """Factory function to create minimal lowercase-config-shaped settings.
 
     Returns:
         Function that creates mock settings based on scenario.
@@ -589,22 +575,14 @@ def mock_settings_factory():
 
     def _create_mock_settings(
         scenario: str = "vanilla", *, mlflow_active: bool = False, optuna_active: bool = False
-    ) -> Mock:
-        mock_settings = Mock()
-
-        # Create MLFLOW mock
-        mock_mlflow = Mock()
-        mock_mlflow.is_active = mlflow_active
-        mock_mlflow.enabled = mlflow_active
-        mock_settings.MLFLOW = mock_mlflow
-
-        # Create OPTUNA mock
-        mock_optuna = Mock()
-        mock_optuna.is_active = optuna_active
-        mock_optuna.enabled = optuna_active
-        mock_settings.OPTUNA = mock_optuna
-
-        return mock_settings
+    ) -> SimpleNamespace:
+        backend = "mlflow" if mlflow_active else "none"
+        run_type = "search" if optuna_active else "train"
+        return SimpleNamespace(
+            run=SimpleNamespace(type=run_type),
+            tracking=SimpleNamespace(backend=backend),
+            search=SimpleNamespace() if optuna_active else None,
+        )
 
     return _create_mock_settings
 

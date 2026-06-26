@@ -5,7 +5,7 @@ via ``FlowMatchingSupervisionBuilder`` injected as ``batch_transforms``.
 
 Loss computation is delegated to the ``RoutedLossComputer`` configured in the
 build factory (default: MSE against ``batch["targets"]["ut"]``), allowing the
-loss function to be configured via ``TRAINING.loss_function`` in TOML just like
+loss function to be configured via ``training.loss`` in TOML just like
 any other workflow.
 
 Inference (ODE integration from Gaussian noise) is inherited from
@@ -24,7 +24,7 @@ class FlowMatchingWrapper(ContinuousFlowWrapper):
 
     Adds stochastic supervision ``(xt, t, ut)`` via ``FlowMatchingSupervisionBuilder``
     injected as ``batch_transforms``.  Loss is routed through the injected
-    ``RoutedLossComputer`` — configurable via ``TRAINING.loss_function``.
+    ``RoutedLossComputer`` — configurable via ``training.loss``.
 
     Inference (ODE integration from x0 ~ N(0, I)) is inherited from
     ``ContinuousFlowWrapper`` via ``ODEPredictionStrategy``.

@@ -17,7 +17,7 @@ the codebase.
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
 - Hook param scalars: `ParamValue = str | int | float | bool`
-- Protocols: `BaseSettingsProtocol`, `TrainingSettingsProtocol`, `SessionSettingsProtocol`, `ModelSettingsProtocol`, `OptunaSettingsProtocol`
+- Protocols: `IDataModule`, `ITrainableModule`
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`

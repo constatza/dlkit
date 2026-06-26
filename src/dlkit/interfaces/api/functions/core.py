@@ -33,7 +33,7 @@ def train(
     Args:
         settings: Training workflow configuration settings.
         overrides: Optional training overrides (paths coerced to Path objects).
-        mlflow: If True, ensure MLFLOW section exists in settings.
+        mlflow: If True, force MLflow tracking behavior for this execution.
 
     Returns:
         TrainingResult containing trained model state and metrics.
@@ -84,7 +84,7 @@ def optimize(
     Args:
         settings: Optimization workflow configuration settings.
         overrides: Optional optimization overrides (paths coerced to Path objects).
-        mlflow: If True, ensure MLFLOW section exists in settings.
+        mlflow: If True, force MLflow tracking behavior for this execution.
 
     Returns:
         OptimizationResult containing best model and trial history.

@@ -88,19 +88,19 @@ sample = dataset[0]
 #### TOML Configuration
 
 ```toml
-[DATASET]
+[data]
 name = "dlkit.engine.data.datasets.flexible.FlexibleDataset"
 
 # Load features and targets from same NPZ file
-[[DATASET.features]]
+[[data.features]]
 name = "features"  # Used as array key
 path = "data.npz"
 
-[[DATASET.features]]
+[[data.features]]
 name = "latent"    # Loads different array from same file
 path = "data.npz"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "targets"
 path = "data.npz"
 ```
@@ -142,7 +142,7 @@ dataset = FlexibleDataset(features=features, targets=targets)
 #### TOML Configuration
 
 ```toml
-[[DATASET.features]]
+[[data.features]]
 name = "K"
 path = "/data/stiffness_matrices"   # zarr pack directory
 model_input = false
@@ -180,25 +180,25 @@ with precision_override(PrecisionStrategy.FULL_64):
 ### TOML Configuration
 
 ```toml
-[DATASET]
+[data]
 name = "dlkit.engine.data.datasets.flexible.FlexibleDataset"
 
 # Single-file features
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "features.npy"
 
 # NPZ multi-array features
-[[DATASET.features]]
+[[data.features]]
 name = "embeddings"
 path = "data.npz"  # Loads array "embeddings" from data.npz
 
-[[DATASET.features]]
+[[data.features]]
 name = "latent"
 path = "data.npz"  # Loads array "latent" from same file
 
 # Targets
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "labels.npy"
 ```
@@ -213,18 +213,18 @@ Using NPZ files with the complete DLKit training workflow:
 
 ```python
 from dlkit.interfaces.api import train
-from dlkit.infrastructure.config import load_settings, DatasetSettings
+from dlkit.infrastructure.config import DataSettings, load_job
 from dlkit.infrastructure.config.data_entries import Feature, Target
 from dlkit.infrastructure.config.core.updater import update_settings
 
 # Load base configuration from TOML
-config = load_settings("config.toml", inference=False)
+config = load_job("config.toml")
 
 # Inject dataset with NPZ files programmatically
 update_settings(
     config,
     {
-        "DATASET": DatasetSettings(
+        "data": DataSettings(
             name="dlkit.engine.data.datasets.flexible.FlexibleDataset",
             features=(
                 Feature(name="features", path="data.npz"),
@@ -355,7 +355,7 @@ DLKit follows the **specialized dataset pattern** (like PyTorch/torchvision):
 
 To add new array formats (HDF5, Zarr, Parquet):
 
-1. Add loader function to `tools/io/arrays.py`:
+1. Add loader function to `infrastructure/io/arrays.py`:
    ```python
    def _load_hdf5(path: Path, dataset_path: str, **kwargs) -> np.ndarray:
        import h5py
@@ -389,7 +389,7 @@ See `LOADER_INTERFACE_ANALYSIS.md` in project root for detailed architectural re
 
 ## See Also
 
-- **Array I/O**: `src/dlkit/tools/io/arrays.py` - Low-level array loading functions
-- **Data Entries**: `src/dlkit/tools/config/data_entries.py` - Feature/Target configuration
-- **Precision System**: `src/dlkit/interfaces/api/services/precision_service.py` - Dtype management
-- **Architecture Guide**: `CLAUDE.md` in project root - Full system architecture
+- **Array I/O**: `src/dlkit/infrastructure/io/arrays.py` - Low-level array loading functions
+- **Data Entries**: `src/dlkit/infrastructure/config/data_entries.py` - Feature/Target configuration
+- **Precision System**: `src/dlkit/infrastructure/precision/precision.md` - Dtype management
+- **Architecture Guide**: `AGENTS.md` in project root - Full system architecture

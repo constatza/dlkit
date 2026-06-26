@@ -7,7 +7,6 @@ factory pattern usage, and end-to-end workflows following SOLID principles.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -20,12 +19,8 @@ from dlkit.infrastructure.config import (
 from dlkit.infrastructure.config.core.base_settings import ComponentSettings
 from dlkit.infrastructure.config.core.factories import DefaultComponentFactory
 from dlkit.infrastructure.config.data_entries import NpyEntry
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
 def _expect_not_none[T](value: T | None) -> T:
@@ -33,10 +28,8 @@ def _expect_not_none[T](value: T | None) -> T:
     return value
 
 
-def _expect_tracking_workflow(
-    settings: WorkflowConfig,
-) -> TrainingWorkflowConfig | OptimizationWorkflowConfig:
-    assert isinstance(settings, TrainingWorkflowConfig | OptimizationWorkflowConfig)
+def _expect_training_job(settings: object) -> TrainingJobConfig:
+    assert isinstance(settings, TrainingJobConfig)
     return settings
 
 
@@ -129,77 +122,42 @@ class CustomModelFactory(ComponentFactory[MockModel]):
 
 
 @pytest.fixture
-def complete_config_data() -> dict[str, Any]:
-    """Complete configuration for integration testing.
-
-    Returns:
-        Dict[str, Any]: Complete configuration dataflow
-    """
-    return {
-        "SESSION": {
-            "name": "integration_session",
-            "workflow": "train",
-            "seed": 42,
-        },
-        "MODEL": {
-            "name": "IntegrationModel",
-            "module_path": "dlkit.domain.nn.ffnn",
-            "input_size": 128,
-            "output_size": 10,
-        },
-        "MLFLOW": {"experiment_name": "integration_experiment"},
-        "OPTUNA": {"enabled": True, "n_trials": 10},
-        "DATAMODULE": {
-            "name": "IntegrationDataModule",
-            "module_path": "dlkit.engine.adapters.lightning.datamodules",
-            "dataloader": {
-                "batch_size": 64,
-                "num_workers": 8,
-            },
-        },
-        "TRAINING": {"trainer": {"max_epochs": 50, "accelerator": "cpu"}},
-    }
-
-
-@pytest.fixture
-def integration_config_file(tmp_path: Path, complete_config_data: dict[str, Any]) -> Path:
+def integration_config_file(tmp_path: Path) -> Path:
     """Create integration test configuration file.
 
     Args:
         tmp_path: Pytest temporary path fixture
-        complete_config_data: Complete configuration dataflow
 
     Returns:
         Path: Path to integration config file
     """
     config_content = """
-[SESSION]
-name = "integration_session"
-workflow = "train"
+[run]
+type = "train"
 seed = 42
 
-[MODEL]
-name = "IntegrationModel"
+[experiment]
+name = "integration_session"
+
+[model]
+class = "IntegrationModel"
 module_path = "dlkit.domain.nn.ffnn"
+
+[model.params]
 input_size = 128
 output_size = 10
 
-[MLFLOW]
-experiment_name = "integration_experiment"
-
-[OPTUNA]
-enabled = true
-n_trials = 10
-
-[DATAMODULE]
-name = "IntegrationDataModule"
-module_path = "dlkit.engine.adapters.lightning.datamodules"
-
-[DATAMODULE.dataloader]
+[data]
 batch_size = 64
 num_workers = 8
 
-[TRAINING.trainer]
+[tracking]
+backend = "mlflow"
+
+[training]
+loss = "mse"
+
+[training.trainer]
 max_epochs = 50
 accelerator = "cpu"
 """
@@ -320,7 +278,7 @@ class TestSettingsFactoryIntegration:
 
 
 class TestGeneralSettingsEndToEndIntegration:
-    """Test end-to-end integration through GeneralSettings."""
+    """Test end-to-end integration through JobConfig."""
 
     def test_settings_loading_and_validation_integration(
         self, integration_config_file: Path
@@ -330,68 +288,33 @@ class TestGeneralSettingsEndToEndIntegration:
         Args:
             integration_config_file: Integration config file fixture
         """
-        from dlkit.infrastructure.config import load_settings
+        from dlkit.infrastructure.config.factories import load_job
 
-        settings = _expect_tracking_workflow(load_settings(integration_config_file))
-        session = settings.SESSION
-        model = _expect_not_none(settings.MODEL)
-        datamodule = _expect_not_none(settings.DATAMODULE)
+        settings = _expect_training_job(load_job(integration_config_file))
+        experiment = _expect_not_none(settings.experiment)
+        model = _expect_not_none(settings.model)
 
-        # Verify all components are properly loaded
-        assert session.name == "integration_session"
-        assert (model.model_extra or {})["input_size"] == 128
-        assert settings.MLFLOW is not None
-        assert settings.mlflow_enabled is True
-        assert datamodule.dataloader.batch_size == 64
-
-    def test_settings_mode_specific_configuration_access(
-        self, complete_config_data: dict[str, Any]
-    ) -> None:
-        """Test mode-specific configuration access integration.
-
-        Args:
-            complete_config_data: Complete configuration dataflow fixture
-        """
-        from dlkit.infrastructure.config.workflow_settings import TrainingWorkflowSettings
-
-        settings = TrainingWorkflowSettings.model_validate(complete_config_data)
-
-        # Test mode detection
-        assert settings.is_training is True
-        assert settings.is_inference is False
-
-        # Test feature flags
-        assert settings.mlflow_enabled is True
-        assert settings.has_training_config is True
-
-        # Test configuration access
-        training_config = settings.get_training_config()
-        assert training_config.trainer.max_epochs == 50
-
-        datamodule_config = settings.get_datamodule_config()
-        assert datamodule_config.dataloader.batch_size == 64
-
-    # Legacy hyperparameter sampling test removed (sampling moved to samplers).
+        assert experiment.name == "integration_session"
+        assert (model.params.model_extra or {}).get("input_size") == 128
+        assert settings.tracking.backend == "mlflow"
+        assert settings.data.batch_size == 64
 
     def test_settings_validation_error_integration(self) -> None:
         """Test validation error integration across settings hierarchy."""
-        from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
+        from dlkit.infrastructure.config.job_config import InferenceJobConfig
 
-        # Test inference mode without checkpoint — InferenceWorkflowConfig validates this
+        # InferenceJobConfig requires model.checkpoint
         invalid_config = {
-            "SESSION": {"workflow": "inference", "name": "test_session"},
-            "MODEL": {
-                "name": "TestModel"
-                # Missing checkpoint for inference mode
-            },
+            "run": {"type": "predict"},
+            "model": {"class": "TestModel"},
         }
 
         with pytest.raises(ValueError):
-            InferenceWorkflowConfig.model_validate(invalid_config)
+            InferenceJobConfig.model_validate(invalid_config)
 
-    def test_load_settings_infers_dataset_entry_format_from_path(self, tmp_path: Path) -> None:
+    def test_load_job_infers_dataset_entry_format_from_path(self, tmp_path: Path) -> None:
         """TOML loading should infer path-entry format before union resolution."""
-        from dlkit.infrastructure.config import load_settings
+        from dlkit.infrastructure.config.factories import load_job
 
         feature_path = tmp_path / "features.npy"
         target_path = tmp_path / "targets.npy"
@@ -401,33 +324,41 @@ class TestGeneralSettingsEndToEndIntegration:
         config_file = tmp_path / "format_inference.toml"
         config_file.write_text(
             f"""
-[SESSION]
-name = "format_inference"
-workflow = "train"
+[run]
+type = "train"
 seed = 42
 
-[TRAINING.trainer]
-max_epochs = 1
+[experiment]
+name = "format_inference"
 
-[DATASET]
-name = "FlexibleDataset"
+[model]
+class = "FlexibleDataset"
 
-[[DATASET.features]]
+[data]
+batch_size = 1
+
+[[data.features]]
 name = "x"
 path = "{feature_path.as_posix()}"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "{target_path.as_posix()}"
+
+[training]
+loss = "mse"
+
+[training.trainer]
+max_epochs = 1
 """
         )
 
-        settings = load_settings(config_file)
-        workflow = _expect_tracking_workflow(settings)
-        dataset = _expect_not_none(workflow.DATASET)
+        settings = load_job(config_file)
+        job = _expect_training_job(settings)
+        data = _expect_not_none(job.data)
 
-        assert isinstance(dataset.features[0], NpyEntry)
-        assert isinstance(dataset.targets[0], NpyEntry)
+        assert isinstance(data.features[0], NpyEntry)
+        assert isinstance(data.targets[0], NpyEntry)
 
 
 class TestFactoryProviderSingletonIntegration:

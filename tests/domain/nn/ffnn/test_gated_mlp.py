@@ -7,12 +7,14 @@ test functions.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 import torch
 from torch import nn
 
 from dlkit.common.shapes import ShapeContext
+from dlkit.domain.nn.contracts import HyperParam
 from dlkit.domain.nn.ffnn.gated import GatedMLP
 
 ShapeMapping = dict[str, tuple[int, ...]]
@@ -175,7 +177,7 @@ class TestGatedMLP:
             ShapeContext(in_shapes, out_shapes),
             hidden_size=_HIDDEN,
             num_layers=_LAYERS,
-            gate_factory=glu_factory,
+            gate_factory=cast(HyperParam, glu_factory),
         )
         out = model(network_input)
         assert out.shape == (network_input.shape[0], _OUT)

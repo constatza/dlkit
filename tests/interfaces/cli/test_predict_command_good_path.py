@@ -50,9 +50,8 @@ class TestPredictCommand:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: Mock,
+        sample_settings: object,
     ) -> None:
-        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
@@ -85,9 +84,8 @@ class TestPredictCommand:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: Mock,
+        sample_settings: object,
     ) -> None:
-        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor(["u", "query_coords"])
@@ -186,11 +184,10 @@ class TestPredictHelperFunctions:
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: Mock,
+        sample_settings: object,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
-        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()
@@ -215,11 +212,10 @@ class TestPredictHelperFunctions:
         mock_load_config: Mock,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: Mock,
+        sample_settings: object,
     ) -> None:
         from dlkit.interfaces.cli.commands.predict import _run_inference_impl
 
-        sample_settings.has_dataset_config = True
         mock_load_config.return_value = sample_settings
 
         mock_predictor = _make_mock_predictor()

@@ -35,7 +35,7 @@ def test_sync_templates_write_creates_files(cli_runner: CliRunner, tmp_path: Pat
 def test_sync_templates_check_detects_drift(cli_runner: CliRunner, tmp_path: Path) -> None:
     # Create files with wrong content
     (tmp_path / "example_config.toml").parent.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "example_config.toml").write_text("[SESSION]\nname = 'wrong'\n")
+    (tmp_path / "example_config.toml").write_text('[run]\ntype = "train"\n')
 
     result = cli_runner.invoke(
         config_app,

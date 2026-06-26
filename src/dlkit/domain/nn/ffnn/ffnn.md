@@ -170,7 +170,7 @@ All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwa
 ## Configuration guidance
 
 ```toml
-[MODEL]
+[model]
 name = "SPDFFNN"
 module_path = "dlkit.domain.nn"
 in_features = 8
@@ -178,7 +178,7 @@ num_layers = 3
 ```
 
 ```toml
-[MODEL]
+[model]
 name = "EmbeddedSPDFFNN"
 module_path = "dlkit.domain.nn"
 in_features = 8
@@ -186,7 +186,7 @@ num_layers = 2
 ```
 
 ```toml
-[MODEL]
+[model]
 name = "FactorizedFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
@@ -194,7 +194,7 @@ num_layers = 3
 ```
 
 ```toml
-[MODEL]
+[model]
 name = "EmbeddedFactorizedFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
@@ -321,7 +321,7 @@ model = FiLMFFNN.from_entries(
 ### Configuration guidance
 
 ```toml
-[MODEL]
+[model]
 name = "FiLMFFNN"
 module_path = "dlkit.domain.nn.ffnn"
 condition_dim = 8
@@ -330,7 +330,7 @@ num_layers = 3
 ```
 
 ```toml
-[MODEL]
+[model]
 name = "VarWidthFiLMFFNN"
 module_path = "dlkit.domain.nn.ffnn"
 condition_dim = 8
@@ -338,7 +338,7 @@ layers = [128, 64, 64]
 ```
 
 ```toml
-[MODEL]
+[model]
 name = "FiLMEmbeddedFFNN"
 module_path = "dlkit.domain.nn.ffnn"
 condition_dim = 8

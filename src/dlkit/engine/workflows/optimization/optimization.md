@@ -60,7 +60,7 @@ The runtime entrypoint is responsible for:
 
 The factory is responsible for:
 - creating `IStudyRepository`, `IOptimizationBackendSession`, trackers, and persisters
-- wiring the shared backend-study registry only when `OPTUNA.enabled` is true
+- wiring the shared backend-study registry only when search tracking/storage is configured
 - returning unentered context-manager dependencies
 
 ## Import Rules

@@ -407,7 +407,7 @@ class TestRoleSourceMap:
         src = TensorSource(feature_tensor)
         rsm = RoleSourceMap(features=(("x", src),), targets=())
         with pytest.raises(FrozenInstanceError):
-            rsm.features = ()  # type: ignore[misc]
+            rsm.features = ()  # type: ignore  # intentional frozen assignment test
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -579,6 +579,8 @@ class TestBuildRoleSourceMap:
             [value_feature_entry, single_sample_value_entry, value_target_entry]
         )
         sources_dict = rsm.features_dict()
+        assert single_sample_value_entry.name is not None
+        assert value_feature_entry.name is not None
         assert isinstance(sources_dict[single_sample_value_entry.name], BroadcastSource)
         assert not isinstance(sources_dict[value_feature_entry.name], BroadcastSource)
 
@@ -627,7 +629,7 @@ class TestBuildRoleSourceMap:
 
         rsm = build_role_source_map([value_feature_entry])
         with pytest.raises(FrozenInstanceError):
-            rsm.features = ()  # type: ignore[misc]
+            rsm.features = ()  # type: ignore  # intentional frozen assignment test
 
     def test_empty_entries_produces_empty_map(self) -> None:
         """An empty entry list produces a RoleSourceMap with no sources."""

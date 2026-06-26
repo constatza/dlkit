@@ -21,7 +21,7 @@ from dlkit.engine.tracking.mlflow_client_factory import (
 from dlkit.engine.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.infrastructure.io import url_resolver
 
 
@@ -89,7 +89,7 @@ def test_create_run_preserves_nested_parent_child_structure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    settings = MLflowSettings(experiment_name="exp")
+    settings = TrackingSettings(backend="mlflow")
     db_path = tmp_path / "mlruns" / "mlflow.db"
     backend = LocalSqliteBackend(db_path=db_path)
     manager = MLflowResourceManager(settings, backend)
@@ -167,7 +167,7 @@ def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    settings = MLflowSettings(experiment_name="exp")
+    settings = TrackingSettings(backend="mlflow")
     db_path = tmp_path / "mlruns" / "mlflow.db"
     backend = LocalSqliteBackend(db_path=db_path)
     manager = MLflowResourceManager(settings, backend)
@@ -199,7 +199,7 @@ def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
 def test_initialize_resources_skips_bootstrap_suppression_for_http(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = MLflowSettings(experiment_name="exp")
+    settings = TrackingSettings(backend="mlflow")
     backend = LocalServerBackend()
     manager = MLflowResourceManager(settings, backend)
 

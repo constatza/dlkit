@@ -11,6 +11,8 @@ from typer.testing import CliRunner
 from dlkit.common.errors import ConfigurationError, WorkflowError
 from dlkit.interfaces.cli.app import app as cli_app
 
+from .._helpers import create_minimal_valid_config
+
 
 class TestTrainCommandErrorHandling:
     """Test error handling scenarios for train command."""
@@ -52,7 +54,7 @@ class TestTrainCommandErrorHandling:
         tmp_path: Path,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
 
         with (
             patch(
@@ -75,7 +77,7 @@ class TestTrainCommandErrorHandling:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -100,7 +102,7 @@ class TestTrainCommandErrorHandling:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -126,7 +128,7 @@ class TestTrainCommandErrorHandling:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -148,7 +150,7 @@ class TestTrainCommandErrorHandling:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (

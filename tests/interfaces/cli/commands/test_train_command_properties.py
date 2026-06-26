@@ -10,12 +10,16 @@ from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.app import app as cli_app
 
+from .._helpers import create_minimal_valid_config
 
-def _mock_train_settings() -> Mock:
-    settings = Mock()
-    settings.MLFLOW = Mock(is_active=False)
-    settings.OPTUNA = Mock(is_active=False)
-    return settings
+
+def _mock_train_settings() -> object:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        run=SimpleNamespace(type="train"),
+        tracking=SimpleNamespace(backend="none"),
+    )
 
 
 @pytest.mark.parametrize("epochs", [1, 2, 1000])
@@ -25,7 +29,7 @@ def test_train_numeric_parameter_ranges(
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "config.toml"
-    config_path.write_text("[SESSION]\nname = 'test'")
+    create_minimal_valid_config(config_path)
 
     with (
         patch(
@@ -56,7 +60,7 @@ def test_train_mlflow_parameters(
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "config.toml"
-    config_path.write_text("[SESSION]\nname = 'test'")
+    create_minimal_valid_config(config_path)
 
     with (
         patch(

@@ -46,8 +46,8 @@ with load_model("model.ckpt", device="auto") as predictor:
 ## Notes
 - Unified workflow execution no longer handles inference.
 - `execute()` rejects inference settings and points callers to `load_model()`.
-- `load_model_from_settings()` resolves `MODEL.checkpoint` from an
-  `InferenceWorkflowConfig` unless an explicit `checkpoint_path=` override is provided.
+- `load_model_from_settings()` resolves `model.checkpoint` from an
+  `InferenceJobConfig` unless an explicit `checkpoint_path=` override is provided.
 - `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public
   metadata properties.
 - Checkpoints produced by the standard Lightning wrapper also persist

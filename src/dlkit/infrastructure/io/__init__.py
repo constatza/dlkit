@@ -3,16 +3,11 @@ from dlkit.infrastructure.zarr import ILazyReader, ZarrLazyReader
 from . import locations  # centralized path policy
 from .arrays import load_array
 from .config import (
-    ConfigSectionError,
     ConfigValidationError,
     check_section_exists,
     get_available_sections,
     load_config,
     load_raw_config,
-    load_section_config,  # low-level, not in __all__
-    load_sections_config,  # low-level, not in __all__
-    register_section_mapping,
-    reset_section_mappings,
     serialize_config_to_string,
     write_config,
 )
@@ -40,11 +35,8 @@ __all__ = [
     "load_raw_config",
     "check_section_exists",
     "get_available_sections",
-    "reset_section_mappings",
     "write_config",
     "serialize_config_to_string",
-    "register_section_mapping",
-    "ConfigSectionError",
     "ConfigValidationError",
     # Path resolution
     "PathResolver",
@@ -58,6 +50,4 @@ __all__ = [
     "JsonWriter",
     "YamlWriter",
     "WriterFactory",
-    "load_section_config",
-    "load_sections_config",
 ]

@@ -31,7 +31,7 @@ class PathsSettings(BasicSettings):
     """Optional paths configuration with automatic resolution and extras support.
 
     Provides standardized path fields with DLKit's automatic path resolution.
-    All relative paths are resolved against SESSION.root_dir following DLKit's
+    All relative paths are resolved against the run-scoped root directory following DLKit's
     standard path resolution hierarchy.
 
     Features:

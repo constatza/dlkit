@@ -32,7 +32,7 @@ class TrainingSettings(BasicSettings):
     """Top-level Training configuration with library-specific nested settings.
 
     Flattened from mode architecture to top-level for easier access.
-    Replaces: settings.SESSION.training (minus plugins and data_pipeline).
+    Replaces the old session-scoped training subtree (minus plugins and data_pipeline).
 
     Contains core training settings with nested library-specific configurations.
     Plugins (MLflow, Optuna) are moved to top-level settings.

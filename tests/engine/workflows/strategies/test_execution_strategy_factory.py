@@ -161,7 +161,7 @@ def test_factory_optimization_workflow_detection(factory):
 
     # SearchJobConfig with missing required fields raises ValidationError at construction
     with pytest.raises(Exception):
-        SearchJobConfig(run=RunSettings(type="search"))
+        SearchJobConfig.model_validate({"run": {"type": "search"}})
 
 
 def test_factory_direct_usage():

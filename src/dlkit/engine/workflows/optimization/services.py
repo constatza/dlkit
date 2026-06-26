@@ -8,7 +8,6 @@ and depends on abstractions rather than concrete implementations.
 from __future__ import annotations
 
 import time
-from dataclasses import replace
 from datetime import datetime
 from typing import Any, cast
 
@@ -19,19 +18,20 @@ from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
+from ._trial_helpers import complete_trial, fail_trial, prune_trial
 from .value_objects import (
     IConfigurationPersistence,
     IExperimentTracker,
     IHyperparameterApplicator,
     IOptimizationBackendSession,
     IStudyRepository,
+    ITrialRunContext,
     OptimizationDirection,
     OptimizationResult,
     Study,
     Trial,
     TrialFailedException,
     TrialPrunedException,
-    TrialState,
 )
 
 logger = get_logger(__name__)
@@ -179,7 +179,7 @@ class TrialExecutor:
         trial: Trial,
         base_settings: SearchJobConfig,
         hyperparameters: dict[str, Any],
-        trial_context: Any = None,
+        trial_context: ITrialRunContext | None = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
         """Execute a single optimization trial.
@@ -202,13 +202,13 @@ class TrialExecutor:
 
         try:
             # Apply hyperparameters to base settings
-            trial_settings = self._apply_hyperparameters(base_settings, hyperparameters)
+            trial_settings = self.apply_hyperparameters(base_settings, hyperparameters)
 
             # Build components for this trial
             components = self._build_factory.build_components(trial_settings)
 
             # Execute training with optional metric logging and checkpoint control
-            # TODO: Add pruning callback injection here
+            # Pruning integrates through the optimization backend/trial context path.
             training_result = self._execute_training(
                 components, trial_settings, trial_context, enable_checkpointing
             )
@@ -216,7 +216,7 @@ class TrialExecutor:
             logger.info(
                 "Completed optimization trial {} with objective {}",
                 trial.trial_number,
-                self._extract_objective_value(training_result),
+                self.extract_objective_value(training_result),
             )
 
             return training_result
@@ -229,7 +229,7 @@ class TrialExecutor:
             logger.error("Optimization trial {} failed: {}", trial.trial_number, e)
             raise TrialFailedException(f"Trial execution failed: {e}") from e
 
-    def _apply_hyperparameters(
+    def apply_hyperparameters(
         self,
         base_settings: SearchJobConfig,
         hyperparameters: dict[str, Any],
@@ -246,7 +246,6 @@ class TrialExecutor:
         Raises:
             WorkflowError: If hyperparameter application fails
         """
-        # TODO: Add pruning callback injection here
         try:
             return cast(
                 SearchJobConfig,
@@ -262,7 +261,7 @@ class TrialExecutor:
         self,
         components: RuntimeComponents,
         settings: SearchJobConfig,
-        trial_context: Any = None,
+        trial_context: ITrialRunContext | None = None,
         enable_checkpointing: bool = False,
     ) -> TrainingResult:
         """Execute training with given components and optional checkpoint control.
@@ -353,7 +352,7 @@ class TrialExecutor:
         except Exception as e:
             logger.warning("Failed to inject MLflow epoch logger for trial: {}", e)
 
-    def _extract_objective_value(self, training_result: TrainingResult) -> float:
+    def extract_objective_value(self, training_result: TrainingResult) -> float:
         """Extract objective value from training result.
 
         Args:
@@ -473,6 +472,90 @@ class OptimizationOrchestrator:
                 {"stage": "optimization_orchestration", "study_name": study_name},
             ) from e
 
+    def _run_trial_iteration(
+        self,
+        study: Study,
+        trial: Trial,
+        base_settings: SearchJobConfig,
+        trial_context: ITrialRunContext | None,
+        enable_checkpointing: bool,
+        pre_sampled_hyperparameters: dict[str, Any] | None = None,
+    ) -> tuple[Study, Trial, SearchJobConfig, TrainingResult | None]:
+        """Execute one trial iteration through the shared tracked/untracked path.
+
+        The caller owns study/trial tracking context managers; this method owns
+        hyperparameter resolution, trial execution, trial-state updates, backend
+        reporting, study mutation, and success-path logging.
+
+        Args:
+            study: Current study state
+            trial: Trial to execute
+            base_settings: Base configuration settings
+            trial_context: Optional tracking context for metric logging (None if untracked)
+            enable_checkpointing: Whether checkpointing is enabled for this trial
+            pre_sampled_hyperparameters: Optional hyperparameters sampled by the caller
+                for log-before-training workflows.
+
+        Returns:
+            Updated study and trial, plus resolved trial settings and the training
+            result when the trial completed successfully.
+        """
+        hyperparameters = (
+            pre_sampled_hyperparameters
+            if pre_sampled_hyperparameters is not None
+            else self._optimization_backend_session.suggest_hyperparameters(
+                study, trial, base_settings
+            )
+        )
+        trial_settings = self._trial_executor.apply_hyperparameters(base_settings, hyperparameters)
+
+        if trial_context is not None:
+            trial_context.log_trial_settings(trial_settings)
+            trial_context.log_trial_hyperparameters(hyperparameters)
+
+        try:
+            training_result = self._trial_executor.execute_trial(
+                trial,
+                base_settings,
+                hyperparameters,
+                trial_context,
+                enable_checkpointing=enable_checkpointing,
+            )
+            objective_value = self._trial_executor.extract_objective_value(training_result)
+            trial = complete_trial(
+                trial,
+                hyperparameters=hyperparameters,
+                objective_value=objective_value,
+                training_result=training_result,
+            )
+            self._optimization_backend_session.report_trial_result(study, trial)
+            study = study.add_trial(trial)
+
+            if trial_context is not None:
+                trial_context.log_trial_metrics(training_result.metrics or {})
+                trial_context.log_trial_artifacts(training_result.artifacts or {})
+
+            return study, trial, trial_settings, training_result
+
+        except TrialPrunedException as e:
+            trial = prune_trial(
+                trial,
+                hyperparameters=hyperparameters,
+                pruned_at_step=e.pruned_at_step,
+            )
+            self._optimization_backend_session.report_trial_result(study, trial)
+            study = study.add_trial(trial)
+            return study, trial, trial_settings, None
+
+        except TrialFailedException:
+            trial = fail_trial(
+                trial,
+                hyperparameters=hyperparameters,
+            )
+            self._optimization_backend_session.report_trial_result(study, trial)
+            study = study.add_trial(trial)
+            return study, trial, trial_settings, None
+
     def _execute_with_tracking(
         self,
         study: Study,
@@ -501,79 +584,17 @@ class OptimizationOrchestrator:
                 with self._experiment_tracker.create_trial_run(
                     trial, study_context
                 ) as trial_context:
-                    try:
-                        # Sample hyperparameters BEFORE training
-                        hyperparameters = (
-                            self._optimization_backend_session.suggest_hyperparameters(
-                                study,
-                                trial,
-                                base_settings,
-                            )
-                        )
-                        trial_settings = self._trial_executor._apply_hyperparameters(
-                            base_settings, hyperparameters
-                        )
-
-                        # Log trial configuration BEFORE training (hyperparameters must be logged at start!)
-                        trial_context.log_trial_settings(trial_settings)
-                        # Only log sampled hyperparameters (not model_ prefixed duplicates)
-                        trial_context.log_trial_hyperparameters(hyperparameters)
-
-                        # Execute trial with trial context for metric logging
-                        # Disable checkpointing for exploratory trials (enable_checkpointing=False)
-                        training_result = self._trial_executor.execute_trial(
-                            trial,
-                            base_settings,
-                            hyperparameters,
-                            trial_context,
-                            enable_checkpointing=False,
-                        )
-
-                        # Update trial with results
-                        objective_value = self._trial_executor._extract_objective_value(
-                            training_result
-                        )
-                        trial = replace(
-                            trial,
-                            hyperparameters=hyperparameters,
-                            objective_value=objective_value,
-                            training_result=training_result,
-                            state=TrialState.COMPLETE,
-                            completed_at=datetime.now(),
-                        )
-
-                        # Report result back to Optuna study using study.tell()
-                        self._optimization_backend_session.report_trial_result(study, trial)
-
-                        # Log trial results AFTER training
-                        trial_context.log_trial_metrics(training_result.metrics or {})
-                        trial_context.log_trial_artifacts(training_result.artifacts or {})
-
-                        # Add trial to study
-                        study = study.add_trial(trial)
-
-                    except TrialPrunedException as e:
-                        # Handle pruned trial
-                        trial = replace(
-                            trial,
-                            state=TrialState.PRUNED,
-                            pruned_at_step=e.pruned_at_step,
-                            completed_at=datetime.now(),
-                        )
-                        # Report pruned trial to Optuna
-                        self._optimization_backend_session.report_trial_result(study, trial)
-                        study = study.add_trial(trial)
-
-                    except TrialFailedException:
-                        # Handle failed trial
-                        trial = replace(
-                            trial,
-                            state=TrialState.FAILED,
-                            completed_at=datetime.now(),
-                        )
-                        # Report failed trial to Optuna
-                        self._optimization_backend_session.report_trial_result(study, trial)
-                        study = study.add_trial(trial)
+                    hyperparameters = self._optimization_backend_session.suggest_hyperparameters(
+                        study, trial, base_settings
+                    )
+                    study, trial, _trial_settings, _training_result = self._run_trial_iteration(
+                        study,
+                        trial,
+                        base_settings,
+                        trial_context,
+                        enable_checkpointing=False,
+                        pre_sampled_hyperparameters=hyperparameters,
+                    )
 
             # Retrain with best parameters
             best_trial = study.best_trial
@@ -590,7 +611,7 @@ class OptimizationOrchestrator:
                     )
 
                     # Execute best retrain with retrain context for metric logging
-                    best_settings = self._trial_executor._apply_hyperparameters(
+                    best_settings = self._trial_executor.apply_hyperparameters(
                         base_settings, best_trial.hyperparameters
                     )
                     # Enable checkpointing for best model retraining
@@ -635,53 +656,11 @@ class OptimizationOrchestrator:
         base_settings: SearchJobConfig,
     ) -> OptimizationResult:
         """Execute optimization without experiment tracking."""
-        # Similar logic but without tracking context managers
-        # This is a simplified version for when tracking is disabled
-
         for trial_number in range(study.target_trials):
             trial = self._create_trial(study, trial_number)
-
-            try:
-                hyperparameters = self._optimization_backend_session.suggest_hyperparameters(
-                    study,
-                    trial,
-                    base_settings,
-                )
-                training_result = self._trial_executor.execute_trial(
-                    trial, base_settings, hyperparameters
-                )
-
-                # Update trial with results
-                trial = replace(
-                    trial,
-                    hyperparameters=hyperparameters,
-                    objective_value=self._trial_executor._extract_objective_value(training_result),
-                    training_result=training_result,
-                    state=TrialState.COMPLETE,
-                    completed_at=datetime.now(),
-                )
-                self._optimization_backend_session.report_trial_result(study, trial)
-
-                study = study.add_trial(trial)
-
-            except TrialPrunedException as e:
-                trial = replace(
-                    trial,
-                    state=TrialState.PRUNED,
-                    pruned_at_step=e.pruned_at_step,
-                    completed_at=datetime.now(),
-                )
-                self._optimization_backend_session.report_trial_result(study, trial)
-                study = study.add_trial(trial)
-
-            except TrialFailedException:
-                trial = replace(
-                    trial,
-                    state=TrialState.FAILED,
-                    completed_at=datetime.now(),
-                )
-                self._optimization_backend_session.report_trial_result(study, trial)
-                study = study.add_trial(trial)
+            study, trial, _trial_settings, _training_result = self._run_trial_iteration(
+                study, trial, base_settings, trial_context=None, enable_checkpointing=False
+            )
 
         # Retrain with best parameters
         best_trial = study.best_trial

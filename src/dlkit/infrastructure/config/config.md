@@ -5,8 +5,9 @@ workflow-specific config views, and component-setting models.
 
 ## Responsibilities
 
-- immutable Pydantic settings models
-- workflow settings and workflow-specific config views
+- immutable Pydantic settings models (`frozen=True`)
+- `JobConfig` top-level discriminated union (training / inference / search)
+- TOML loading via `load_job()` with deep-merge and profile references
 - patch application and runtime override support
 - component settings and factory support
 - security-oriented URI and path config types
@@ -16,23 +17,35 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 
 ## Current Structure
 
-- `core/`: base settings, patching, factories, build context
-- `model_components.py`: model, loss, metric, and wrapper component settings
-- `workflow_settings_base.py`, `training_workflow_settings.py`, `inference_workflow_settings.py`: workflow-specific settings
-- `workflow_settings.py`: re-export shim for workflow settings
-- `dataset_settings.py`: dataset config, including explicit `family`
-- `optimization_trigger.py`: `TriggerSettings`
-- `optimization_selector.py`: `ParameterSelectorSettings`
-- `optimization_stage.py`: `OptimizationStageSettings`
+- `core/`: base settings, patching, factories, build context, TOML source
+- `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
+- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`
+- `run_settings.py`: `RunSettings` (type, seed, precision)
+- `experiment_settings.py`: `ExperimentSettings` (name, run_name, register_model)
+- `model_settings.py`: `ModelSettings`, `ModelParams`
+- `data_settings.py`: `DataSettings` plus entry types
+- `training_settings.py`: `TrainingSettings`, `StoppingSettings`
+- `search_settings.py`: `SearchSettings`, param types
+- `tracking_settings.py`: `TrackingSettings`
 - `optimizer_policy.py`: `OptimizerPolicySettings`
 - `optimizer_component.py`: concrete optimizer and scheduler component settings
-- `security/uri_types.py`: secure URI and path config types
+
+## Loading a Config
+
+```python
+from dlkit.infrastructure.config.factories import load_job
+
+job = load_job("config.toml")                # type inferred from run.type
+job = load_job(["base.toml", "local.toml"]) # merged left-to-right
+job = load_job("config.toml", run_type="train")  # override type
+```
 
 ## Optimization Settings
 
-`TRAINING.optimizer` holds an `OptimizerPolicySettings` object.
+`training.optimizer` holds an `OptimizerPolicySettings` object.
 
-`OPTUNA.model.<param>.choices` must contain only scalar persistable values:
+`search.space` defines hyperparameter search ranges.
+Each entry's `choices` must contain only scalar persistable values:
 `None`, `bool`, `int`, `float`, or `str`. Structured categorical choices such
 as lists are rejected during config validation instead of being forwarded to
 Optuna with persistence warnings.
@@ -55,20 +68,20 @@ Optuna with persistence warnings.
 - `"Concurrent"`
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "AdamW"
 lr = 1e-3
 weight_decay = 0.01
 ```
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [{name = "Muon", lr = 0.02}, {name = "AdamW", lr = 3e-4}]
 ```
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "BatchedMuon"
 lr = 0.02
 ```
@@ -83,11 +96,11 @@ settings:
 - `"CosineAnnealingWarmRestarts"`
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "AdamW"
 lr = 1e-3
 
-[TRAINING.optimizer.default_scheduler]
+[training.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"
 mode = "min"
 factor = 0.5
@@ -96,12 +109,12 @@ min_lr = 1e-6
 ```
 
 ```toml
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-3}
 scheduler = {name = "StepLR", step_size = 10, gamma = 0.5}
 trigger = {at_epoch = 10}
 
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-4}
 ```
 
@@ -134,14 +147,14 @@ RMS-matching adjustment internally; the companion AdamW side uses the configured
 - For all other concurrent splits, provide one selector per optimizer.
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [{name = "Adam", lr = 1e-3}, {name = "Adam", lr = 5e-4}]
 selectors  = [{prefix = "encoder"}, {prefix = "decoder"}]
 ```
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [
   {name = "Muon", lr = 0.02, adjust_lr_fn = "match_rms_adamw"},
@@ -189,17 +202,6 @@ settings = TrainingSettings(
 )
 ```
 
-Patching an existing config programmatically:
-
-```python
-from dlkit.infrastructure.config import update_settings
-
-new_settings = update_settings(
-    settings,
-    {"TRAINING": {"optimizer": {"default_optimizer": {"lr": 5e-4}}}},
-)
-```
-
 ## Ownership Boundary
 
 - `infrastructure.io` reads TOML files and resolves sections.
@@ -209,24 +211,19 @@ new_settings = update_settings(
 ## Path Ownership
 
 - Relative config paths resolve from the config file location during TOML
-  preprocessing.
-- `DATASET.root_dir` is the only root-like path anchor kept in core config; it
-  rebases dataset entry paths and explicit split file paths for that dataset.
+  preprocessing (`core/_path_helpers.py`).
+- `data.root` is the root-like path anchor for dataset entry paths and split
+  file paths.
 - Output ownership stays with the producing subsystem:
-  `TRAINING.trainer.default_root_dir` for Lightning-local work when MLflow is
+  `training.trainer.default_root_dir` for Lightning-local work when MLflow is
   disabled, and MLflow artifact/storage URIs when tracking is enabled.
-- `PATHS` and `SESSION.root_dir` are not part of the workflow config contract.
 
 ## Notes
 
-- `DATASET.family` is the explicit dataset-family override. Runtime heuristics
-  only apply when it is unset.
-- `DATASET.features[*].name` is the routing key for both dataset loading and,
-  when `model_input = true`, model dispatch. Named features bind to
-  `model.forward()` by keyword, so the entry name must match the forward
-  parameter name. Unnamed model-input features use positional dispatch, and
-  mixing named with unnamed model inputs is rejected.
-- `DATASET.features[*]` and `DATASET.targets[*]` may omit `format` for
+- `data.features[*].name` is the routing key for both dataset loading and model
+  dispatch. Named features bind to `model.forward()` by keyword, so the entry
+  name must match the forward parameter name.
+- `data.features[*]` and `data.targets[*]` may omit `format` for
   loadable path-based entries when the path suffix is informative. The config
   layer infers `.npy`, `.npz`, `.csv`, `.txt`, `.parquet`, `.h5`, `.hdf5`,
   and `.zarr` before discriminated-union validation. Ambiguous paths should
@@ -235,5 +232,5 @@ new_settings = update_settings(
   validated at config load time via module discovery without executing the
   target module body, and runtime builders still apply default module
   namespaces when omitted.
-- `InferenceWorkflowConfig.has_dataset_config` is the explicit predicate for
-  dataset-backed batch prediction.
+- `ModelSettings.name` uses `alias="class"` so TOML uses `class = "MyModel"`;
+  providing both `name` and `class` raises `ValueError` at validation time.

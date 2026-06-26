@@ -49,8 +49,8 @@ isolated controller tests working without a Trainer.
 
 Schedulers are attached to optimizer-policy stages.
 
-- Use `default_scheduler` only when `TRAINING.optimizer.stages` is empty.
-- Use `TRAINING.optimizer.stages[*].scheduler` for staged programs.
+- Use `default_scheduler` only when `training.optimizer.stages` is empty.
+- Use `training.optimizer.stages[*].scheduler` for staged programs.
 - A concurrent stage still has exactly one stage scheduler, attached to the
   `ConcurrentOptimizer` wrapper that owns all sub-optimizers.
 - LBFGS stages can use schedulers; closure-based stepping affects optimizer
@@ -117,11 +117,11 @@ with `lr=1e-3`.
 ### Default optimizer with scheduler
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "AdamW"
 lr = 1e-3
 
-[TRAINING.optimizer.default_scheduler]
+[training.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"
 mode = "min"
 factor = 0.5
@@ -144,13 +144,13 @@ This is the convenience path: it optimizes for user-friendliness, not maximum
 companion-optimizer configurability.
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Muon"
 lr = 0.02
 ```
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "BatchedMuon"
 lr = 0.02
 ```
@@ -158,11 +158,11 @@ lr = 0.02
 ### Sequential stages
 
 ```toml
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 0.01}
 trigger = {at_epoch = 10}
 
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-4}
 ```
 
@@ -174,12 +174,12 @@ optimizer is needed.
 ### Sequential with plateau trigger and per-stage scheduler
 
 ```toml
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-3}
 scheduler = {name = "StepLR", step_size = 10, gamma = 0.5, frequency = 1}
 trigger = {patience = 5, monitor = "val_loss", min_delta = 1e-4, mode = "min"}
 
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-4}
 scheduler = {name = "ReduceLROnPlateau", factor = 0.5, patience = 3, monitor = "val_loss"}
 ```
@@ -199,13 +199,13 @@ Muon-family optimizer and the companion AdamW settings such as raw `lr`,
 `weight_decay`, or future companion choices.
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [{name = "Muon", lr = 0.02}, {name = "AdamW", lr = 3e-4}]
 ```
 
 ```toml
-[TRAINING.optimizer.default_optimizer]
+[training.optimizer.default_optimizer]
 name = "Concurrent"
 optimizers = [
   {name = "Muon", lr = 0.02, adjust_lr_fn = "match_rms_adamw"},
@@ -216,12 +216,12 @@ optimizers = [
 ### Concurrent as one stage of a sequential program
 
 ```toml
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "Concurrent", optimizers = [{name = "Muon", lr = 0.02}, {name = "AdamW", lr = 3e-4}]}
 scheduler = {name = "StepLR", step_size = 20, gamma = 0.1}
 trigger = {at_epoch = 50}
 
-[[TRAINING.optimizer.stages]]
+[[training.optimizer.stages]]
 optimizer = {name = "AdamW", lr = 1e-4}
 ```
 

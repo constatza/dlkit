@@ -31,7 +31,7 @@ class IWorkflowExecutor(Protocol):
         Args:
             settings: Workflow configuration settings.
             overrides: Optional training overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, force MLflow tracking behavior for this execution.
             hooks: Optional lifecycle hooks for training events.
 
         Returns:
@@ -51,7 +51,7 @@ class IWorkflowExecutor(Protocol):
         Args:
             settings: Workflow configuration settings.
             overrides: Optional optimization overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, force MLflow tracking behavior for this execution.
 
         Returns:
             OptimizationResult containing best model and trial history.
@@ -71,7 +71,7 @@ class IWorkflowExecutor(Protocol):
         Args:
             settings: Workflow configuration settings.
             overrides: Optional execution overrides.
-            mlflow: If True, ensure MLFLOW section exists in settings.
+            mlflow: If True, force MLflow tracking behavior for this execution.
             hooks: Optional lifecycle hooks for training events.
 
         Returns:

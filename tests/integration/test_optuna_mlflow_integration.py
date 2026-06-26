@@ -229,6 +229,7 @@ class TestOptunaMLflowOptimization:
         assert storage_path.exists()
 
         client = MlflowClient(tracking_uri=os.environ["MLFLOW_TRACKING_URI"])
+        assert combined_settings.experiment is not None
         experiment = client.get_experiment_by_name(combined_settings.experiment.name)
         assert experiment is not None
 

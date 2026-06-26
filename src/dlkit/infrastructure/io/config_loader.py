@@ -1,20 +1,12 @@
-"""TOML config loading functions."""
+"""TOML config loading functions for lowercase JobConfig workflows."""
 
-import sys
 import tomllib
-from importlib import import_module
-from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from dlkit.infrastructure.io.config_errors import ConfigSectionError, ConfigValidationError
-from dlkit.infrastructure.io.config_section_registry import (
-    _resolve_section_models,
-    get_model_class_for_section,
-    get_section_name,
-)
+from dlkit.infrastructure.io.config_errors import ConfigValidationError
 
 if TYPE_CHECKING:
     from dlkit.infrastructure.config.job_config import (
@@ -24,28 +16,12 @@ if TYPE_CHECKING:
     )
 
 
-def _resolve_default_settings_class() -> type[BaseModel] | None:
-    """Lazily import GeneralSettings without top-level coupling."""
-    module_name = "dlkit.infrastructure.config.general_settings"
-    module = sys.modules.get(module_name)
-
-    if module is None:
-        if find_spec(module_name) is None:
-            return None
-        module = import_module(module_name)
-
-    general = getattr(module, "GeneralSettings", None)
-    if isinstance(general, type) and issubclass(general, BaseModel):
-        return general
-    return None
-
-
 def load_config[T: BaseModel](
     config_path: Path | str,
     model_class: type[T] | None = None,
     raw: bool = False,
 ) -> T | dict[str, Any]:
-    """Load TOML config file using dynaconf.
+    """Load a TOML config file.
 
     By default, loads the config as raw dict. Use model_class to specify validation.
 
@@ -71,11 +47,10 @@ def load_config[T: BaseModel](
         return config_data
 
     # Return raw dict if no model class specified
-    resolved_model_class: type[BaseModel] | None = model_class or _resolve_default_settings_class()
-    if resolved_model_class is None:
+    if model_class is None:
         return config_data
+    resolved_model_class: type[BaseModel] = model_class
 
-    # Validate with the model class
     try:
         validated = resolved_model_class.model_validate(config_data)
     except Exception as e:
@@ -85,7 +60,7 @@ def load_config[T: BaseModel](
             config_data,
         ) from e
 
-    return cast(T, validated)
+    return validated
 
 
 def load_raw_config(config_path: Path | str) -> dict[str, Any]:
@@ -98,140 +73,6 @@ def load_raw_config(config_path: Path | str) -> dict[str, Any]:
         Raw config dictionary
     """
     return load_config(config_path, raw=True)
-
-
-def load_sections_config(
-    config_path: Path | str,
-    section_configs: dict[str, type[BaseModel] | None] | list[str],
-) -> dict[str, BaseModel]:
-    """Load multiple sections from a TOML config file with eager validation.
-
-    When ``section_configs`` is a mapping, the behaviour matches the previous
-    implementation. A convenient shorthand now permits passing an iterable of
-    section names, leveraging the predefined registry to resolve the
-    corresponding ``BaseModel`` classes automatically.
-
-    Args:
-        config_path: Path to the TOML config file
-        section_configs: Mapping of section names to their model classes *or*
-            iterable of section names that use registered defaults.
-
-    Returns:
-        Dictionary mapping **uppercased** section names to model instances
-        validated eagerly with defaults populated.
-
-    Raises:
-        FileNotFoundError: If config file doesn't exist
-        ConfigSectionError: If any required section is missing or lacks a registered model
-        ConfigValidationError: If validation=True and validation fails for any section
-
-    Example:
-        >>> configs = load_sections_config("config.toml", ["SESSION", "TRAINING"])
-    """
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    resolved_models = _resolve_section_models(section_configs)
-    if not resolved_models:
-        return {}
-
-    from dlkit.infrastructure.config.core.sources import DLKitTomlSource
-
-    section_names = list(resolved_models.keys())
-    source = DLKitTomlSource(config_path, sections=section_names)
-    sections_data = source()
-    sections_data = {name.upper(): content for name, content in sections_data.items()}
-
-    # Check for missing sections
-    available_sections = get_available_sections(config_path)
-    missing_sections = [name for name in section_names if name not in sections_data]
-
-    if missing_sections:
-        raise ConfigSectionError(
-            f"Sections {missing_sections} not found in config file. "
-            f"Available sections: {available_sections}",
-            section_name=missing_sections[0] if missing_sections else None,
-            available_sections=available_sections,
-        )
-
-    # Construct or validate each section based on validate parameter
-    constructed_sections = {}
-    for section_name, model_class in resolved_models.items():
-        section_data = sections_data[section_name]
-        try:
-            constructed_sections[section_name] = model_class.model_validate(
-                section_data, context={"strict": True}
-            )
-        except Exception as e:
-            raise ConfigValidationError(
-                f"Failed to validate section '{section_name}' with {model_class.__name__}: {e}",
-                model_class.__name__,
-                section_data,
-            ) from e
-
-    return constructed_sections
-
-
-@overload
-def load_section_config[T: BaseModel](
-    config_path: Path | str,
-    model_class: type[T],
-    section_name: str | None = None,
-) -> T: ...
-
-
-@overload
-def load_section_config(
-    config_path: Path | str,
-    model_class: None = None,
-    section_name: str | None = None,
-) -> BaseModel: ...
-
-
-def load_section_config[T: BaseModel](
-    config_path: Path | str,
-    model_class: type[T] | None = None,
-    section_name: str | None = None,
-) -> BaseModel | T:
-    """Load a single config section with eager validation.
-
-    Args:
-        config_path: Path to the TOML config file
-        model_class: Optional Pydantic model class to validate the section with
-        section_name: Explicit section name (auto-detected from class name or
-            registry when omitted)
-
-    Returns:
-        Model instance from the requested section
-        validated eagerly
-
-    Raises:
-        FileNotFoundError: If the config file doesn't exist
-        ConfigSectionError: If the section is missing or lacks a registered model
-        ConfigValidationError: If validation=True and validation fails for that section
-        ValueError: If neither ``model_class`` nor ``section_name`` are provided
-    """
-    resolved_section = section_name
-    resolved_model: type[BaseModel] | None = model_class
-
-    if resolved_section is None and resolved_model is None:
-        raise ValueError("Either model_class or section_name must be provided")
-
-    if resolved_section is None and resolved_model is not None:
-        resolved_section = get_section_name(resolved_model)
-
-    if resolved_model is None and resolved_section is not None:
-        resolved_model = get_model_class_for_section(resolved_section)
-
-    if resolved_section is None:
-        raise ValueError("Could not resolve section name from provided model_class")
-
-    if resolved_model is None:
-        raise ValueError(f"Could not find registered model for section: {resolved_section}")
-
-    sections = load_sections_config(config_path, {resolved_section: resolved_model})
-    return sections[resolved_section.upper()]
 
 
 def check_section_exists(config_path: Path | str, section_name: str) -> bool:
@@ -247,9 +88,6 @@ def check_section_exists(config_path: Path | str, section_name: str) -> bool:
     Raises:
         FileNotFoundError: If config file doesn't exist
 
-    Example:
-        >>> if check_section_exists("config.toml", "PATHS"):
-        ...     paths_config = load_section_config("config.toml", PathsSettings)
     """
     return section_name in get_available_sections(config_path)
 

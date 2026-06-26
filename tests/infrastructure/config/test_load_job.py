@@ -70,7 +70,7 @@ def test_load_simple_train(simple_train_path: Path) -> None:
     assert cfg.run.type == "train"
     assert cfg.run.seed == 42
     assert cfg.model.name == "ConstantWidthFFNN"
-    assert cfg.model.params.model_extra.get("hidden_size") == 64
+    assert (cfg.model.params.model_extra or {}).get("hidden_size") == 64
     assert cfg.data.batch_size == 8
     assert cfg.training.loss.name == "mse"
     assert cfg.training.stopping.patience == 5
@@ -80,6 +80,7 @@ def test_load_composed_train(composed_train_path: Path) -> None:
     """load_job() resolves profile references and returns TrainingJobConfig."""
     cfg = load_job(composed_train_path)
     assert isinstance(cfg, TrainingJobConfig)
+    assert cfg.experiment is not None
     assert cfg.experiment.name == "test-composed"
     assert cfg.model.name == "ConstantWidthFFNN"
 
@@ -143,9 +144,12 @@ def test_deep_merge_job_wins_over_profile() -> None:
     base = {"training": {"optimizer": {"lr": 1e-3, "name": "Adam"}}}
     override = {"training": {"optimizer": {"lr": 5e-4}}}
     merged = _deep_merge(base, override)
-    optimizer = merged["training"]["optimizer"]  # type: ignore[index]
-    assert optimizer["lr"] == 5e-4  # type: ignore[index]
-    assert optimizer["name"] == "Adam"  # type: ignore[index]
+    training = merged.get("training")
+    assert isinstance(training, dict)
+    optimizer = training.get("optimizer")
+    assert isinstance(optimizer, dict)
+    assert optimizer.get("lr") == 5e-4
+    assert optimizer.get("name") == "Adam"
 
 
 def test_deep_merge_does_not_mutate_inputs() -> None:

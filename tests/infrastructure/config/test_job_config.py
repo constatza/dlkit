@@ -64,8 +64,9 @@ def test_model_params_extra_allow() -> None:
     m = ModelSettings.model_validate(
         {"class": "SomeModel", "params": {"hidden_size": 128, "custom_kwarg": 99}}
     )
-    assert m.params.hidden_size == 128
-    assert m.params.model_extra["custom_kwarg"] == 99
+    extra = m.params.model_extra or {}
+    assert extra["hidden_size"] == 128
+    assert extra["custom_kwarg"] == 99
 
 
 def test_data_settings_default_batch_size() -> None:
@@ -162,3 +163,15 @@ def test_search_job_config_requires_search_section(
                 # missing search section
             }
         )
+
+
+def test_model_settings_rejects_both_name_and_class() -> None:
+    """Providing both 'name' and 'class' must raise ValidationError."""
+    with pytest.raises(ValidationError):
+        ModelSettings.model_validate({"name": "FooModel", "class": "BarModel"})
+
+
+def test_model_settings_class_alias_is_canonical() -> None:
+    """'class' key should work as the TOML alias."""
+    m = ModelSettings.model_validate({"class": "MyModel"})
+    assert m.name == "MyModel"

@@ -71,7 +71,7 @@ def validate_config_path(config_path: Path) -> bool:
         )
 
     # Check file extension
-    valid_extensions = {".toml", ".json", ".yaml", ".yml"}
+    valid_extensions = {".toml"}
     if config_path.suffix.lower() not in valid_extensions:
         raise ConfigurationError(
             f"Unsupported configuration file format: {config_path.suffix}. "

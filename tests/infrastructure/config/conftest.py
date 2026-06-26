@@ -201,12 +201,11 @@ def malformed_toml_config() -> str:
         str: Invalid TOML content
     """
     return """
-[SESSION
-name = "malformed"
-workflow = "train"
+[run
+type = "train"
 # Missing closing bracket above
 
-[MODEL]
+[model]
 name = 
 module_path = "test"
 # Missing value for name

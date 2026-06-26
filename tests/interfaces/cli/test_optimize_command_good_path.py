@@ -13,6 +13,8 @@ from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.commands.optimize import app as optimize_app
 
+from ._helpers import create_toml_config
+
 
 class TestOptimizeCommand:
     """Test the optimize command CLI structure and functionality."""
@@ -62,13 +64,12 @@ class TestOptimizeCommand:
     ) -> None:
         """Test that optimize command accepts --trials parameter."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
+        create_toml_config(config_file, enable_optuna=True)
 
-        # This will fail at runtime but should parse the CLI arguments correctly
         result = cli_runner.invoke(optimize_app, ["--trials", "50", str(config_file)])
 
-        # Should parse arguments correctly and attempt execution (non-parsing failures allowed)
-        assert result.exit_code != 2
+        assert result.exit_code == 1
+        assert "loading configuration" in result.stdout.lower()
 
     def test_optimize_command_accepts_study_name_parameter(
         self,
@@ -77,14 +78,12 @@ class TestOptimizeCommand:
     ) -> None:
         """Test that optimize command accepts --study-name parameter."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
+        create_toml_config(config_file, enable_optuna=True)
 
-        # This will fail at runtime but should parse the CLI arguments correctly
         result = cli_runner.invoke(optimize_app, ["--study-name", "test_study", str(config_file)])
 
-        # Should parse arguments correctly (even if execution fails)
-        assert "--study-name" not in result.stdout  # No "unknown option" error
-        assert result.exit_code != 2  # Not a CLI parsing error
+        assert "--study-name" not in result.stdout
+        assert result.exit_code == 1
 
 
 class TestOptimizeCommandStructure:
@@ -130,15 +129,13 @@ class TestOptimizeMainCallback:
     ) -> None:
         """Test that optimize supports the main callback pattern for direct invocation."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
+        create_toml_config(config_file, enable_optuna=True)
 
         # Test direct invocation (main callback)
         result = cli_runner.invoke(optimize_app, [str(config_file)])
 
-        # Should not show help (which would indicate callback not working)
         assert "usage:" not in result.stdout.lower()
-        # Should attempt to execute (even if it fails)
-        assert result.exit_code != 2  # Not a CLI structure error
+        assert result.exit_code == 1
 
     def test_optimize_callback_handles_missing_config_gracefully(
         self,
@@ -173,23 +170,32 @@ class TestOptimizeIntegration:
         assert "trials" in help_content
         assert "optuna" in help_content
 
-    def test_optimize_command_recognizes_config_file_extensions(
+    def test_optimize_command_rejects_non_toml_config_extensions(
         self,
         cli_runner: CliRunner,
         tmp_path: Path,
     ) -> None:
-        """Test optimize command accepts different config file extensions."""
+        """Test optimize command rejects unsupported config file extensions."""
         extensions = [".toml", ".json", ".yaml", ".yml"]
 
         for ext in extensions:
             config_file = tmp_path / f"config{ext}"
-            config_file.write_text(
-                '{"SESSION": {"name": "test"}}' if ext == ".json" else '[SESSION]\nname = "test"'
-            )
+            if ext == ".toml":
+                create_toml_config(config_file, enable_optuna=True)
+            elif ext == ".json":
+                config_file.write_text('{"run": {"type": "search"}}')
+            else:
+                config_file.write_text("run:\n  type: search\n")
 
             result = cli_runner.invoke(optimize_app, [str(config_file)])
 
-            # Should not fail with file extension error
-            assert result.exit_code != 2  # Not a CLI parsing error
-            # Should attempt to process the file
-            assert "unsupported" not in result.stdout.lower()
+            if ext == ".toml":
+                assert result.exit_code == 1
+                assert "loading configuration" in result.stdout.lower()
+            else:
+                assert result.exit_code == 1
+                output = result.stdout.lower()
+                assert (
+                    "invalid configuration file" in output
+                    or "unsupported configuration file format" in output
+                )

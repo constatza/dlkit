@@ -145,10 +145,11 @@ def job_with_entries(feature_npy: Path, target_npy: Path) -> JobConfig:
     """
     return JobConfig(
         run=RunSettings(type="train"),
-        data=DataSettings(
-            name="CustomDataset",
-            features=(NpyEntry(name="x", path=feature_npy, data_role=DataRole.FEATURE),),
-            targets=(NpyEntry(name="y", path=target_npy, data_role=DataRole.TARGET),),
+        data=DataSettings.model_validate({"class": "CustomDataset"}).model_copy(
+            update={
+                "features": (NpyEntry(name="x", path=feature_npy, data_role=DataRole.FEATURE),),
+                "targets": (NpyEntry(name="y", path=target_npy, data_role=DataRole.TARGET),),
+            }
         ),
     )
 
@@ -162,7 +163,7 @@ def job_with_empty_data() -> JobConfig:
     """
     return JobConfig(
         run=RunSettings(type="train"),
-        data=DataSettings(name="CustomDataset"),
+        data=DataSettings.model_validate({"class": "CustomDataset"}),
     )
 
 
@@ -216,14 +217,16 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
 
     job = JobConfig(
         run=RunSettings(type="train"),
-        data=DataSettings(
-            name="GraphDataset",
-            family=DatasetFamily.GRAPH,
-            features=(
-                NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
-                NpyEntry(name="edge_index", path=edge_path, data_role=DataRole.FEATURE),
-            ),
-            targets=(NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
+        data=DataSettings.model_validate(
+            {"class": "GraphDataset", "family": DatasetFamily.GRAPH}
+        ).model_copy(
+            update={
+                "features": (
+                    NpyEntry(name="x", path=x_path, data_role=DataRole.FEATURE),
+                    NpyEntry(name="edge_index", path=edge_path, data_role=DataRole.FEATURE),
+                ),
+                "targets": (NpyEntry(name="y", path=y_path, data_role=DataRole.TARGET),),
+            }
         ),
     )
     run_context = _DatasetRunContext()

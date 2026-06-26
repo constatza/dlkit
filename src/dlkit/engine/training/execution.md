@@ -42,7 +42,7 @@ Key architectural decisions:
 
 ### Internal Dependencies
 - `dlkit.interfaces.api.domain`: Result objects (`TrainingResult`, `OptimizationResult`) and exceptions (`WorkflowError`)
-- `dlkit.infrastructure.config`: Configuration management (`GeneralSettings`)
+- `dlkit.infrastructure.config`: Configuration management (`JobConfig`, `TrainingJobConfig`, `SearchJobConfig`)
 - `dlkit.engine.workflows.factories.build_factory`: Component construction (`RuntimeComponents`)
 - `dlkit.interfaces.api.services.precision_service`: Precision configuration service
 
@@ -57,7 +57,7 @@ Key architectural decisions:
 **Purpose**: Abstract protocol defining the contract for training execution strategies. Enables dependency inversion - workflow orchestrators depend on this abstraction, not concrete executors.
 
 **Methods**:
-- `execute(components: RuntimeComponents, settings: GeneralSettings) -> TrainingResult` - Execute training workflow
+- `execute(components: RuntimeComponents, settings: TrainingJobConfig) -> TrainingResult` - Execute training workflow
 
 **Returns**: `TrainingResult` - Training outcome with metrics, artifacts, and model state
 
@@ -68,12 +68,12 @@ Key architectural decisions:
 ```python
 from dlkit.engine.execution import ITrainingExecutor, VanillaExecutor
 from dlkit.engine.execution.components import RuntimeComponents
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import TrainingJobConfig
 
 
 # Type-safe executor usage
 def train_model(
-    executor: ITrainingExecutor, components: RuntimeComponents, settings: GeneralSettings
+    executor: ITrainingExecutor, components: RuntimeComponents, settings: TrainingJobConfig
 ):
     result = executor.execute(components, settings)
     print(f"Training completed: {result.metrics}")
@@ -99,7 +99,7 @@ result = train_model(executor, components, settings)
 **Constructor Parameters**: None - stateless executor
 
 **Key Methods**:
-- `execute(components: RuntimeComponents, settings: GeneralSettings) -> TrainingResult` - Execute pure training workflow
+- `execute(components: RuntimeComponents, settings: TrainingJobConfig) -> TrainingResult` - Execute pure training workflow
 
 **Returns**: `TrainingResult` with:
 - `model_state: None` - State not collected (use checkpoints)
@@ -114,10 +114,10 @@ result = train_model(executor, components, settings)
 ```python
 from dlkit.engine.execution import VanillaExecutor
 from dlkit.infrastructure.config import BuildFactory
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import load_job
 
 # Load configuration
-settings = GeneralSettings.from_toml("config.toml")
+settings = load_job("config.toml")
 
 # Build components
 factory = BuildFactory()
@@ -133,7 +133,7 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 ```
 
 **Implementation Notes**:
-- Sets reproducible seed from `settings.SESSION.seed` before training
+- Sets reproducible seed from `settings.run.seed` before training
 - Applies model precision via `ensure_precision_applied()` if available
 - Logs precision configuration for debugging
 - Builds a temporary first-stage-only tuning wrapper when LR finder is enabled for a staged optimizer policy
@@ -163,7 +163,7 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 **Purpose**: Abstract protocol for optimization workflows that produce `OptimizationResult`. Bridges the gap between training executors (which return `TrainingResult`) and optimization workflows (which return `OptimizationResult` with trial information).
 
 **Methods**:
-- `execute_optimization(settings: GeneralSettings) -> OptimizationResult` - Execute optimization workflow
+- `execute_optimization(settings: SearchJobConfig) -> OptimizationResult` - Execute optimization workflow
 
 **Returns**: `OptimizationResult` - Optimization outcome with best trial and training result
 
@@ -173,10 +173,10 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 **Example**:
 ```python
 from dlkit.engine.execution import IOptimizationStrategy
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import SearchJobConfig
 
 
-def run_optimization(optimizer: IOptimizationStrategy, settings: GeneralSettings):
+def run_optimization(optimizer: IOptimizationStrategy, settings: SearchJobConfig):
     result = optimizer.execute_optimization(settings)
     print(f"Best trial: {result.best_trial}")
     print(f"Best training metrics: {result.training_result.metrics}")
@@ -197,10 +197,10 @@ def run_optimization(optimizer: IOptimizationStrategy, settings: GeneralSettings
 ```python
 from dlkit.engine.execution import VanillaExecutor
 from dlkit.infrastructure.config import BuildFactory
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import load_job
 
 # Load configuration
-settings = GeneralSettings.from_toml("training_config.toml")
+settings = load_job("training_config.toml")
 
 # Build all required components
 factory = BuildFactory()

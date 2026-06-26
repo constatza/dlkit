@@ -37,15 +37,18 @@ class TestTrainCommandIntegration:
         config_file.write_text(
             "\n".join(
                 [
-                    "[SESSION]",
+                    "[run]",
+                    'type = "train"',
+                    "",
+                    "[experiment]",
                     'name = "test_training"',
-                    'workflow = "train"',
                     "",
-                    "[PATHS]",
-                    'output_dir = "./outputs"',
+                    "[training]",
+                    'loss = "mse"',
                     "",
-                    "[TRAINING.trainer]",
+                    "[training.trainer]",
                     "max_epochs = 1",
+                    'default_root_dir = "./outputs"',
                 ]
             )
         )

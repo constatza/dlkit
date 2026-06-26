@@ -33,7 +33,7 @@ _TEST_HOME_DIR: Path | None = None
 _TEST_ARTIFACTS_DIR: Path | None = None
 
 
-@pytest.fixture(params=["io", "general_from_file"])
+@pytest.fixture(params=["io"])
 def loader_kind(request) -> str:
     return request.param
 
@@ -129,9 +129,8 @@ def config_file(env: dict, with_root: bool) -> Path:
 
 @pytest.fixture
 def settings(env: dict, config_file: Path, loader_kind: str):
-    if loader_kind == "io":
-        return load_job(config_file)
-    pytest.skip("GeneralSettings removed in config redesign (Task 1). Fix in Task 3.")
+    del env, loader_kind
+    return load_job(config_file)
 
 
 @pytest.fixture

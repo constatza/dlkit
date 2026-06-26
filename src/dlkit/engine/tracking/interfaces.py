@@ -137,7 +137,7 @@ class IRunContext(IMetricSink, ABC):
             ```python
             run_context.log_artifact_content('{"key": "value"}', "lineage/manifest.json")
             run_context.log_artifact_content(
-                '[MLFLOW]\\nexperiment_name = "demo"', "config/settings.toml"
+                '[tracking]\\nbackend = "mlflow"', "config/settings.toml"
             )
             ```
         """
@@ -310,7 +310,7 @@ class IExperimentTracker(ABC):
     Example:
         ```python
         # Code works with any IExperimentTracker implementation
-        def train_with_tracking(tracker: IExperimentTracker, settings: GeneralSettings):
+        def train_with_tracking(tracker: IExperimentTracker, settings: JobConfig):
             with tracker:
                 with tracker.create_run(experiment_name="training") as run:
                     tracker.log_settings(settings, run)

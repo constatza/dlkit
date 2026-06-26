@@ -32,14 +32,14 @@ class PathResolver:
     Priority (root_dir resolution):
         1. thread_local_context.root_dir (API/CLI override)
         2. DLKIT_ROOT_DIR env var (via environment settings)
-        3. config_root_dir from SESSION.root_dir
+        3. config_root_dir from run.root_dir
         4. Path.cwd() (current working directory fallback)
 
     Attributes:
         _thread_local_context: Thread-local path override context
             (may be None when not set)
         _environment: Global environment settings
-        _config_root: Optional root_dir from loaded config (SESSION.root_dir)
+        _config_root: Optional root_dir from loaded config (run.root_dir)
     """
 
     __slots__ = ("_thread_local_context", "_environment", "_config_root")
@@ -57,7 +57,7 @@ class PathResolver:
                 Typically from get_current_path_context(). May be None.
             environment: Global environment settings. Typically the global
                 EnvironmentSettings instance. May be None.
-            config_root: Optional root_dir from loaded config (SESSION.root_dir).
+            config_root: Optional root_dir from loaded config (run.root_dir).
                 May be None or a str/Path.
         """
         self._thread_local_context = thread_local_context
@@ -174,7 +174,7 @@ class PathResolver:
         Priority:
             1. thread_local_context.root_dir
             2. environment.root_dir (from DLKIT_ROOT_DIR env var)
-            3. config_root (from SESSION.root_dir)
+            3. config_root (from run.root_dir)
             4. Path.cwd()
 
         Returns:
@@ -184,14 +184,14 @@ class PathResolver:
         if self._thread_local_context and self._thread_local_context.root_dir:
             return self._thread_local_context.root_dir.resolve()
 
-        # Priority 2: Environment (from DLKIT_ROOT_DIR env var or loaded SESSION.root_dir)
+        # Priority 2: Environment (from DLKIT_ROOT_DIR env var or loaded run.root_dir)
         if self._environment:
             env_root = self._environment.get_root_path()
             # Only use environment if it's not just the CWD (indicates it was explicitly set)
             if env_root != Path.cwd():
                 return env_root.resolve()
 
-        # Priority 3: Config-based root (from SESSION.root_dir)
+        # Priority 3: Config-based root (from run.root_dir)
         if self._config_root:
             if self._config_root.is_absolute():
                 return self._config_root.resolve()

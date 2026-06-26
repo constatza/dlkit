@@ -9,6 +9,8 @@ from typer.testing import CliRunner
 
 from dlkit.interfaces.cli.app import app as cli_app
 
+from .._helpers import create_minimal_valid_config
+
 
 class TestTrainCommandGoodPath:
     """Test successful training command scenarios."""
@@ -21,7 +23,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -48,7 +50,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("mlflow", mlflow_active=True)
 
         with (
@@ -74,7 +76,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -100,7 +102,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("mlflow", mlflow_active=True)
 
         with (
@@ -126,7 +128,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (
@@ -151,7 +153,7 @@ class TestTrainCommandGoodPath:
         mock_settings_factory,
     ) -> None:
         config_path = tmp_path / "config.toml"
-        config_path.write_text("[SESSION]\nname = 'test'")
+        create_minimal_valid_config(config_path)
         mock_settings = mock_settings_factory("vanilla")
 
         with (

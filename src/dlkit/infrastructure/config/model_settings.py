@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, ModelWrapValidatorHandler, model_validator
 
 from dlkit.common.types import ActivationName, NormalizerName
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
@@ -43,3 +43,30 @@ class ModelSettings(BasicSettings):
     module_path: str | None = None
     checkpoint: Path | None = None
     params: ModelParams = Field(default_factory=ModelParams)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _reject_duplicate_alias(
+        cls, data: object, handler: ModelWrapValidatorHandler[ModelSettings]
+    ) -> ModelSettings:
+        """Reject input that specifies both alias and field name simultaneously.
+
+        Pydantic 2 pre-processes alias resolution before ``mode="before"``
+        validators receive the dict, so ``mode="wrap"`` is required to inspect
+        the raw input before that normalisation occurs.
+
+        Args:
+            data: Raw input data before field validation.
+            handler: Pydantic's continuation handler for normal validation.
+
+        Returns:
+            A validated ``ModelSettings`` instance.
+
+        Raises:
+            ValueError: If both 'name' and 'class' keys are present in the input.
+        """
+        if isinstance(data, dict) and "name" in data and "class" in data:
+            raise ValueError(
+                "Provide either 'class' (TOML alias) or 'name' (Python kwarg), not both."
+            )
+        return handler(data)

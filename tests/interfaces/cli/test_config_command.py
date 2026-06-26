@@ -18,12 +18,11 @@ def cli_runner() -> CliRunner:
 def valid_config_content() -> str:
     """Valid minimal config content for testing."""
     return """
-[SESSION]
-name = "test"
-workflow = "train"
+[run]
+type = "train"
 
-[PATHS]
-output_dir = "./outputs"
+[experiment]
+name = "test"
 """
 
 
@@ -31,7 +30,10 @@ output_dir = "./outputs"
 def invalid_config_content() -> str:
     """Invalid config content for testing validation."""
     return """
-[SESSION]
+[run]
+type = "train"
+
+[experiment]
 name = "test"
 invalid_field = "this should cause validation error"
 """
@@ -101,5 +103,5 @@ def test_config_show_displays_valid_config(
     if result.exit_code == 0:
         # If successful, should show some config content
         output = result.output.lower()
-        assert "session" in output or "paths" in output, "Should display config sections"
+        assert "run" in output or "experiment" in output, "Should display config sections"
     # If it fails, that's also acceptable as long as it doesn't crash

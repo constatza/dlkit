@@ -55,50 +55,48 @@ tests/integration/
 All tests use TOML configurations that follow this pattern:
 
 ```toml
-[SESSION]
-name = "test_name"
-workflow = "train"  # use "inference" for inference workflows
+[run]
+type = "train"
 seed = 42
-precision = "32"
-root_dir = "<tmp_path>"
 
-[DATASET]
-name = "FlexibleDataset"
-root_dir = "<tmp_path>/test_data"
+[experiment]
+name = "test_name"
 
-[[DATASET.features]]
-name = "X"
+[data]
+root = "<tmp_path>/test_data"
+
+[[data.features]]
+name = "x"
 path = "<tmp_path>/test_data/features.npy"
 data_role = "feature"
-field_role = "feature"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "<tmp_path>/test_data/targets.npy"
 data_role = "target"
-field_role = "target"
 
-[DATASET.split]
+[data.splits]
 filepath = "<tmp_path>/test_data/split.txt"
 
-[MODEL]
+[model]
 name = "ConstantWidthFFNN"
 module_path = "dlkit.domain.nn.ffnn.residual"
 # checkpoint = "/path/to/model.ckpt"  # for inference
 
-[MODEL.params]
+[model.params]
 input_dim = 4
 output_dim = 2
 hidden_dims = [8]
 
-[TRAINING.trainer]
+[training.trainer]
 fast_dev_run = true
 enable_progress_bar = false
 enable_model_summary = false
 
 # Strategy-specific sections:
-[MLFLOW]      # for MLflow tests
-[OPTUNA]      # for optimization tests
+[experiment]  # for MLflow experiment name / tracking metadata
+[tracking]    # for MLflow tracking URI and artifact config
+[search]      # for Optuna hyperparameter search settings
 ```
 
 ## Test Files
@@ -169,16 +167,13 @@ Precision and learning-rate tuning tests for graph models.
 - `minimal_dataset(tmp_path)` - Creates small synthetic dataset (100 samples, 4 features, 2 targets)
 - `minimal_model_checkpoint(tmp_path)` - Creates simple model checkpoint for inference
 
-#### Configuration Generation  
-- `base_config_content(minimal_dataset, tmp_path)` - Base TOML configuration
-- `mlflow_config_content(base_config_content, tmp_path)` - Adds MLflow configuration
-- `optuna_config_content(base_config_content, tmp_path)` - Adds Optuna configuration
-- `inference_config_content(base_config_content, checkpoint)` - Inference configuration
+#### Configuration Generation
+- `optuna_config_content(minimal_dataset, tmp_path)` - Minimal TOML string for Optuna optimization
 
 #### Settings Objects
-- `training_settings(...)` - Loaded GeneralSettings for training
-- `mlflow_settings(...)` - GeneralSettings with MLflow configured
-- `inference_settings(...)` - GeneralSettings for inference mode
+- `training_settings(...)` - `TrainingJobConfig` for vanilla training
+- `mlflow_settings(...)` - `TrainingJobConfig` with MLflow enabled
+- `inference_settings(...)` - `InferenceJobConfig` for inference mode
 
 #### Test Helpers
 - `expected_training_metrics()` - Expected result structure validation

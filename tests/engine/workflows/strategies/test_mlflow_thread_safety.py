@@ -16,24 +16,24 @@ from dlkit.engine.tracking.backend import LocalSqliteBackend
 from dlkit.engine.tracking.mlflow_resource_manager import (
     MLflowResourceManager,
 )
-from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 
 @pytest.fixture
-def mlflow_config_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MLflowSettings:
+def mlflow_config_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TrackingSettings:
     """Provide an enabled MLflow settings instance with an isolated tracking URI."""
     monkeypatch.setenv(
         "MLFLOW_TRACKING_URI",
         f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
     )
-    return MLflowSettings()
+    return TrackingSettings(backend="mlflow")
 
 
 class TestMLflowResourceManagerThreadSafety:
     """Test thread safety of MLflow resource manager."""
 
     def test_stack_is_safe_under_concurrent_mutations(
-        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
+        self, mlflow_config_enabled: TrackingSettings, tmp_path: Path
     ) -> None:
         """Concurrent push/pop must not corrupt the active run stack.
 
@@ -69,7 +69,7 @@ class TestMLflowResourceManagerThreadSafety:
         assert len(errors) == 0
 
     def test_concurrent_state_snapshot_access(
-        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
+        self, mlflow_config_enabled: TrackingSettings, tmp_path: Path
     ) -> None:
         """State snapshots must be readable from multiple concurrent threads.
 
@@ -99,7 +99,7 @@ class TestMLflowResourceManagerThreadSafety:
             assert len(snapshots) == 10
 
     def test_cleanup_clears_stack(
-        self, mlflow_config_enabled: MLflowSettings, tmp_path: Path
+        self, mlflow_config_enabled: TrackingSettings, tmp_path: Path
     ) -> None:
         """Stack must be empty after context manager exit.
 
@@ -126,7 +126,7 @@ class TestConflictDetection:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings()
+        mlflow_config = TrackingSettings(backend="mlflow")
         db_path = tmp_path / "mlruns" / "mlflow.db"
         backend = LocalSqliteBackend(db_path=db_path)
 
@@ -149,7 +149,7 @@ class TestStackConsistencyValidation:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings()
+        mlflow_config = TrackingSettings(backend="mlflow")
         db_path = tmp_path / "mlruns" / "mlflow.db"
         backend = LocalSqliteBackend(db_path=db_path)
 
@@ -174,7 +174,7 @@ class TestStateSnapshot:
         Args:
             tmp_path: Temporary directory fixture
         """
-        mlflow_config = MLflowSettings()
+        mlflow_config = TrackingSettings(backend="mlflow")
         db_path = tmp_path / "mlruns" / "mlflow.db"
         backend = LocalSqliteBackend(db_path=db_path)
 

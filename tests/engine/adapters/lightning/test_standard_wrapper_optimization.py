@@ -501,8 +501,8 @@ def _passthrough_collate(batch: TensorDict | list[TensorDict]) -> TensorDict:
             raise AssertionError(f"Unexpected collate payload: {type(batch).__name__}")
 
 
-def _optimizer_lr(settings: object) -> float:
-    return cast("float", settings.lr)
+def _optimizer_lr(settings: Any) -> float:
+    return settings.lr
 
 
 def _fit_single_batch_wrapper(

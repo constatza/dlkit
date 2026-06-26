@@ -28,16 +28,16 @@ Mixed modes keep weights in `float32`; forward pass runs under `torch.autocast` 
 `PrecisionService.resolve_precision()` picks the first of:
 
 1. Thread-local context override (`precision_override(...)` context manager)
-2. `PrecisionProvider` passed by the caller (e.g. `SessionSettings`)
+2. `PrecisionProvider` passed by the caller (e.g. `RunSettings`)
 3. Explicit `default` argument
 4. `PrecisionStrategy.FULL_32`
 
 ## Configuration
 
-Set precision in TOML under `[SESSION]`:
+Set precision in TOML under `[run]`:
 
 ```toml
-[SESSION]
+[run]
 precision = "32"           # or "64", "16", "bf16", "16-mixed", "bf16-mixed"
 ```
 

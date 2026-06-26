@@ -94,7 +94,7 @@ class DatasetSettings(StringNamedComponentSettings):
     """Top-level Dataset configuration.
 
     Flattened from component architecture to top-level for easier access.
-    Replaces: settings.SESSION.training.data_pipeline.dataset
+    Replaces the old session-scoped dataset configuration.
     New usage: settings.DATASET
 
     Pure configuration without build methods - uses factory pattern.

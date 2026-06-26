@@ -247,21 +247,9 @@ class TestImportRules:
                         return cycle
             return []
 
-        # Known exceptions for function-level imports that break circular dependencies
-        known_exceptions = {
-            (
-                "dlkit.infrastructure.io.config",
-                "dlkit.infrastructure.config.general_settings",
-                "dlkit.infrastructure.io.config",
-            )
-        }
-
         cycle = has_cycle(dependencies)
         if cycle:
-            cycle_tuple = tuple(cycle)
-            if cycle_tuple not in known_exceptions:
-                assert False, f"Circular dependency detected: {' -> '.join(cycle)}"
-            # If it's a known exception, continue (the circular dependency is broken by function-level imports)
+            assert False, f"Circular dependency detected: {' -> '.join(cycle)}"
 
     def test_domain_layer_isolation(self, src_files: list[Path]) -> None:
         """Ensure domain layer doesn't depend on infrastructure concerns.

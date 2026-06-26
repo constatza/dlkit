@@ -277,7 +277,7 @@ class IStudyRunContext(ABC):
         """Log best trial settings as TOML artifact.
 
         Args:
-            settings: GeneralSettings object for the best trial
+            settings: `SearchJobConfig`-derived settings object for the best trial
         """
         raise NotImplementedError
 
@@ -317,16 +317,16 @@ class ITrialRunContext(ABC):
         """Log complete trial settings as TOML artifact.
 
         Args:
-            settings: GeneralSettings object for this trial
+            settings: `SearchJobConfig`-derived settings object for this trial
         """
         raise NotImplementedError
 
     @abstractmethod
     def log_model_hyperparameters(self, settings: Any) -> None:
-        """Log model hyperparameters from settings.MODEL.
+        """Log model hyperparameters from `settings.model`.
 
         Args:
-            settings: GeneralSettings object with MODEL configuration
+            settings: `SearchJobConfig`-derived settings object with `model` configuration
         """
         raise NotImplementedError
 

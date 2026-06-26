@@ -40,7 +40,7 @@ class PathContext:
 
     Precedence (when resolving paths):
         1. Explicit context fields (root_dir, output_dir, etc.)
-        2. EnvironmentSettings (from DLKIT_ROOT_DIR env or SESSION.root_dir)
+        2. EnvironmentSettings (from DLKIT_ROOT_DIR env or run-scoped root_dir)
         3. Current working directory
 
     Attributes:
@@ -56,7 +56,7 @@ class PathContext:
         PosixPath('/project')
 
         >>> # From settings
-        >>> settings = GeneralSettings(...)
+        >>> settings = JobConfig(...)
         >>> ctx = PathContext.from_settings(settings)
 
         >>> # Merging contexts (other takes precedence)
@@ -243,7 +243,7 @@ def resolve_root_dir(
 
     Precedence Rules:
         1. path_context.root_dir (explicit API/CLI override) - HIGHEST
-        2. env.get_root_path() (from DLKIT_ROOT_DIR or SESSION.root_dir)
+        2. env.get_root_path() (from DLKIT_ROOT_DIR or run-scoped root_dir)
         3. Path.cwd() (current working directory) - LOWEST (fallback)
 
     Args:

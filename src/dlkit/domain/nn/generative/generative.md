@@ -88,7 +88,7 @@ x_generated = integrate(model_fn, x0, t_span=(0.0, 1.0), solver=euler_step, n_st
 ## TOML configuration
 
 The `[GENERATIVE]` block controls the flow matching wrapper; the loss function is set
-independently under `[TRAINING]`.
+independently under `[training]`.
 
 ```toml
 [GENERATIVE]
@@ -99,7 +99,7 @@ solver         = "euler"       # ODE solver used at inference: "euler" | "heun"
 n_inference_steps = 100        # number of fixed steps during generation
 val_seed       = 42            # RNG seed for reproducible validation samples
 
-[TRAINING.loss_function]
+[training.loss]
 name = "mse"                   # any registered loss name; MSE is standard for flow matching
 ```
 

@@ -40,23 +40,16 @@ logger = get_logger(__name__)
 def _optuna_enabled(settings: SearchJobConfig) -> bool:
     """Return whether Optuna-backed optimization is enabled.
 
-    For ``SearchJobConfig`` instances (new-style config), Optuna is always
-    enabled — the presence of a search section implies it.  For duck-typed
-    legacy settings that expose an ``OPTUNA`` attribute (used in tests),
-    the ``enabled`` flag controls the decision.
+    For ``SearchJobConfig`` instances, Optuna is always enabled because the
+    presence of a validated search section implies an optimization workflow.
 
     Args:
-        settings: A SearchJobConfig or duck-typed legacy settings object.
+        settings: Search job configuration.
 
     Returns:
         True when Optuna should be used for this workflow.
     """
-    if isinstance(settings, SearchJobConfig):
-        return True
-    optuna_cfg = getattr(settings, "OPTUNA", None)
-    if optuna_cfg is None:
-        return False
-    return bool(getattr(optuna_cfg, "enabled", False))
+    return True
 
 
 class OptimizationServiceFactory:

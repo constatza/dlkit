@@ -17,8 +17,8 @@ class LRTunerSettings(BasicSettings):
     using the lr_find algorithm. This performs a learning rate range test by training
     with exponentially or linearly increasing learning rates and analyzing the loss curve.
 
-    To enable: Include the [TRAINING.lr_tuner] section (empty section uses all defaults).
-    To disable: Omit the [TRAINING.lr_tuner] section entirely.
+    To enable: Include the [training.lr_tuner] section (empty section uses all defaults).
+    To disable: Omit the [training.lr_tuner] section entirely.
 
     Args:
         min_lr: Minimum learning rate to test during range search.
@@ -33,12 +33,12 @@ class LRTunerSettings(BasicSettings):
     Example:
         Enable with all defaults (recommended starting point):
         ```toml
-        [TRAINING.lr_tuner]
+        [training.lr_tuner]
         ```
 
         Enable with custom parameters:
         ```toml
-        [TRAINING.lr_tuner]
+        [training.lr_tuner]
         min_lr = 1e-6
         max_lr = 0.1
         num_training = 100
@@ -48,7 +48,7 @@ class LRTunerSettings(BasicSettings):
 
         Disable (omit section entirely):
         ```toml
-        # No [TRAINING.lr_tuner] section
+        # No [training.lr_tuner] section
         ```
     """
 

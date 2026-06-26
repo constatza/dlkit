@@ -5,7 +5,7 @@ The CLI adapters module provides abstraction layers between the command-line int
 
 ## Architecture & Design Patterns
 - **Adapter Pattern**: Translates between CLI needs and API/config system interfaces
-- **Dependency Inversion Principle**: Depends on protocol abstractions (`BaseSettingsProtocol`)
+- **Dependency Inversion Principle**: Depends on typed job-config abstractions (`JobConfig`)
 - **Separation of Concerns**: Configuration loading separate from result presentation
 - **Error Translation**: Converts low-level errors to user-friendly `ConfigurationError`
 - **Presentation Layer**: Rich library for terminal output formatting
@@ -21,7 +21,7 @@ Key architectural decisions:
 ### Public API
 | Name | Type | Purpose | Returns |
 |------|------|---------|---------|
-| `load_config` | Function | Load configuration with CLI error handling | `BaseSettingsProtocol` |
+| `load_config` | Function | Load configuration with CLI error handling | `JobConfig` |
 | `validate_config_path` | Function | Validate config file path and accessibility | `bool` |
 | `present_training_result` | Function | Display training results with Rich formatting | `None` |
 | `present_inference_result` | Function | Display inference results with Rich formatting | `None` |
@@ -41,8 +41,8 @@ Key architectural decisions:
 ### Internal Dependencies
 - `dlkit.interfaces.api.domain`: Domain models (`TrainingResult`, `InferenceResult`, `OptimizationResult`)
 - `dlkit.interfaces.api.domain.errors`: Error types (`ConfigurationError`)
-- `dlkit.infrastructure.config`: Configuration loading (`load_settings`, `load_sections`)
-- `dlkit.infrastructure.config.protocols`: Protocol interfaces (`BaseSettingsProtocol`)
+- `dlkit.infrastructure.config`: Configuration loading (`load_job`)
+- `dlkit.infrastructure.config.job_config`: Job config models (`JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`)
 - `dlkit.interfaces.api.overrides.path_context`: Path override context manager
 - `dlkit.interfaces.cli.presenters`: Prediction summarization utilities
 
@@ -55,13 +55,13 @@ Key architectural decisions:
 
 ### Component 1: `load_config`
 
-**Purpose**: Load configuration from TOML file with CLI-specific error handling and partial loading optimization.
+**Purpose**: Load configuration from TOML file with CLI-specific error handling.
 
 **Parameters**:
 - `config_path: Path` - Path to configuration file (must exist)
-- `workflow_type: str | None = None` - Workflow type for partial loading ('training', 'inference', or None)
+- `run_type: str | None = None` - Optional workflow override (`train`, `predict`, `search`)
 
-**Returns**: `BaseSettingsProtocol` - Loaded settings object appropriate for workflow type
+**Returns**: `JobConfig` - Loaded settings object appropriate for workflow type
 
 **Raises**:
 - `ConfigurationError`: If file not found, invalid format, or loading fails
@@ -74,14 +74,14 @@ from dlkit.interfaces.cli.adapters.config_adapter import load_config
 # Basic loading
 settings = load_config(Path("config.toml"))
 
-# With workflow-specific partial loading
-training_settings = load_config(Path("config.toml"), workflow_type="training")
+# With workflow override
+training_settings = load_config(Path("config.toml"), run_type="train")
 
 ```
 
 **Implementation Notes**:
 - Validates file existence before attempting load
-- Uses partial loading for performance (only loads required sections)
+- Uses the canonical `load_job()` TOML loader
 - Translates all exceptions to `ConfigurationError` with context
 - Supports training/inference workflow types or defaults to training
 
@@ -114,7 +114,7 @@ except ConfigurationError as e:
 **Implementation Notes**:
 - Checks file existence
 - Validates is a file (not directory)
-- Verifies supported extension (.toml, .json, .yaml, .yml)
+- Verifies supported extension (`.toml`)
 - Tests read permissions by reading 1 character
 - Provides detailed error context for debugging
 - Used for early validation before expensive operations

@@ -14,72 +14,20 @@ different options, so they are split into subcommands for clarity and ergonomics
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 import typer
 import yaml
 from rich.console import Console
 from rich.syntax import Syntax
-from rich.table import Table
 
 from dlkit.interfaces.api import generate_template, validate_config
 from dlkit.interfaces.cli.templates import TemplateKind
 
-from .. import templates as tmpl
 from ..adapters.config_adapter import load_config
 from ..middleware.error_handler import handle_api_error
-
-
-def _as_config_dict(obj: Any) -> dict[str, Any]:
-    """Serialize a settings object to a plain dict for display.
-
-    Tries ``to_dict()``, then ``model_dump()``, then ``dict()``.
-
-    Args:
-        obj: A settings object to serialize.
-
-    Returns:
-        Plain dict representation of the settings.
-    """
-    try:
-        fn = getattr(obj, "to_dict", None)
-        if callable(fn):
-            d = fn()
-            if isinstance(d, dict):
-                return d
-    except Exception:
-        pass
-    try:
-        md = getattr(obj, "model_dump", None)
-        if callable(md):
-            return cast(dict[str, Any], md(exclude_none=True))
-    except Exception:
-        pass
-    try:
-        return dict(obj)
-    except Exception:
-        return {}
-
-
-def _add_config_rows(table: Any, data: dict[str, Any], prefix: str = "") -> None:
-    """Recursively add configuration rows to a Rich table.
-
-    Args:
-        table: Rich Table instance to populate.
-        data: Configuration dict to render.
-        prefix: Dotted key prefix for nested sections.
-    """
-    for key, value in data.items():
-        full_key = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
-            table.add_row(f"[bold]{full_key}[/bold]", "[dim]<section>[/dim]", "dict")
-            _add_config_rows(table, value, full_key)
-        else:
-            value_str = str(value)
-            if len(value_str) > 50:
-                value_str = value_str[:47] + "..."
-            table.add_row(full_key, value_str, type(value).__name__)
-
+from ._config_display_helpers import as_config_dict, display_config_table
+from ._config_fs_helpers import find_project_root
 
 # Create config command group
 app = typer.Typer(
@@ -161,7 +109,7 @@ def show_configuration(
     config_path: Annotated[Path, typer.Argument(help="Path to configuration file")],
     section: Annotated[
         str | None,
-        typer.Option("--section", "-s", help="Show specific section (SESSION, MODEL, etc.)"),
+        typer.Option("--section", "-s", help="Show specific section (run, model, training, etc.)"),
     ] = None,
     format: Annotated[
         str, typer.Option("--format", "-f", help="Output format (json, yaml, table)")
@@ -171,13 +119,13 @@ def show_configuration(
 
     Examples:
         dlkit config show config.toml
-        dlkit config show config.toml --section SESSION
+        dlkit config show config.toml --section run
         dlkit config show config.toml --format json
     """
     try:
         # Load configuration
         settings = load_config(config_path)
-        config_dict = _as_config_dict(settings)
+        config_dict = as_config_dict(settings)
 
         # Filter by section if requested (case-insensitive: supports both "run" and "RUN")
         if section:
@@ -207,7 +155,7 @@ def show_configuration(
             console.print(syntax)
 
         elif format == "table":
-            _display_config_table(config_dict, console)
+            display_config_table(config_dict, console)
 
         else:
             console.print(f"[red]Unknown format: {format}[/red]")
@@ -263,15 +211,6 @@ def create_template(
         raise typer.Exit(1)
 
 
-def _find_project_root(start: Path | None = None) -> Path:
-    start = start or Path.cwd()
-    cur = start.resolve()
-    for parent in [cur] + list(cur.parents):
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return cur
-
-
 @app.command("sync-templates")
 def sync_templates(
     root: Annotated[Path | None, typer.Option("--root", help="Project root directory")] = None,
@@ -285,7 +224,7 @@ def sync_templates(
     Without options, performs a check; use --write to update files.
     """
     try:
-        root_dir = _find_project_root(root)
+        root_dir = find_project_root(root)
 
         # Use API to generate templates instead of static ones
         targets: list[tuple[str, Path]] = [
@@ -315,41 +254,3 @@ def sync_templates(
     except Exception as e:
         console.print(f"[red]Error syncing templates: {e}[/red]")
         raise typer.Exit(1)
-
-
-def _display_config_table(
-    config_dict: dict[str, Any], console: Console, parent_key: str = ""
-) -> None:
-    """Display configuration as a hierarchical table.
-
-    Args:
-        config_dict: Configuration dictionary to render.
-        console: Rich Console to print to.
-        parent_key: Optional section label for the table title.
-    """
-    table = Table(title="Configuration" if not parent_key else f"Configuration: {parent_key}")
-    table.add_column("Setting", style="cyan")
-    table.add_column("Value", style="green")
-    table.add_column("Type", style="yellow")
-    _add_config_rows(table, config_dict)
-    console.print(table)
-
-
-def _create_training_template() -> str:
-    """Create a basic training configuration template."""
-    return tmpl.render_template("training")
-
-
-def _create_inference_template() -> str:
-    """Create an inference configuration template."""
-    return tmpl.render_template("inference")
-
-
-def _create_mlflow_template() -> str:
-    """Create an MLflow training configuration template."""
-    return tmpl.render_template("mlflow")
-
-
-def _create_optuna_template() -> str:
-    """Create an Optuna optimization configuration template."""
-    return tmpl.render_template("optuna")

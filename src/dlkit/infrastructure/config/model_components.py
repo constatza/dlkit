@@ -344,12 +344,12 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
     All model construction logic is moved to factories.
 
     Checkpoint Usage (Workflow-Specific):
-    - Training resume: Use TRAINING.resume_from_checkpoint (full training state)
+    - Training resume: Use `training.resume_from_checkpoint` (full training state)
     - Inference: Use checkpoint field below (model weights only)
-    - Standalone inference: Use InferenceConfig.model_checkpoint_path
+    - Standalone inference: Use `InferenceJobConfig.model.checkpoint`
 
     The checkpoint field in this class is for inference workflows only.
-    For resuming training, use TRAINING.resume_from_checkpoint instead.
+    For resuming training, use `training.resume_from_checkpoint` instead.
 
     Args:
         component_name: Model class name or type
@@ -380,7 +380,7 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
         exclude=True,
         description=(
             "Checkpoint path for inference workflows (model weights only). "
-            "For resuming training, use TRAINING.resume_from_checkpoint instead."
+            "For resuming training, use training.resume_from_checkpoint instead."
         ),
         json_schema_extra={"dlkit_init_kwarg": False},
     )

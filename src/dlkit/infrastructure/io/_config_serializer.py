@@ -65,16 +65,16 @@ def _to_toml_compatible(value: Any) -> Any:
 
 
 def _exclude_value_entries(data: dict[str, Any]) -> dict[str, Any]:
-    """Strip in-memory ValueBasedEntry payloads from dataset sections.
+    """Strip in-memory ValueBasedEntry payloads from serialized data sections.
 
     This keeps configs lightweight for logging while preserving structural
     information (names, dtype, transforms, write flags).
     """
-    dataset = data.get("DATASET")
-    if not isinstance(dataset, dict):
+    data_section = data.get("data")
+    if not isinstance(data_section, dict):
         return data
 
-    sanitized_dataset = dict(dataset)
+    sanitized_data = dict(data_section)
 
     def _strip_value_field(entries: Any) -> Any:
         if not isinstance(entries, (list, tuple)):
@@ -87,13 +87,13 @@ def _exclude_value_entries(data: dict[str, Any]) -> dict[str, Any]:
                 cleaned.append(entry)
         return cleaned
 
-    if "features" in sanitized_dataset:
-        sanitized_dataset["features"] = _strip_value_field(sanitized_dataset.get("features"))
-    if "targets" in sanitized_dataset:
-        sanitized_dataset["targets"] = _strip_value_field(sanitized_dataset.get("targets"))
+    if "features" in sanitized_data:
+        sanitized_data["features"] = _strip_value_field(sanitized_data.get("features"))
+    if "targets" in sanitized_data:
+        sanitized_data["targets"] = _strip_value_field(sanitized_data.get("targets"))
 
     sanitized = dict(data)
-    sanitized["DATASET"] = sanitized_dataset
+    sanitized["data"] = sanitized_data
     return sanitized
 
 
@@ -108,12 +108,12 @@ def serialize_config_to_string(
 ) -> str:
     """Serialize a DLKit configuration to a TOML string without writing to disk.
 
-    Accepts a Pydantic model (e.g., GeneralSettings) or a raw dict mapping
+    Accepts a Pydantic model (e.g., JobConfig) or a raw dict mapping
     top-level section names to their contents.
 
     Args:
         config: Pydantic settings model or raw dict to serialize.
-        by_alias: Dump using field aliases.
+        by_alias: Dump using field aliases where defined by the model.
         exclude_none: Exclude fields that are None.
         exclude_unset: Exclude fields that were not explicitly set.
         exclude_value_entries: When True, strip in-memory DataEntry values from Dataset sections.
@@ -163,13 +163,13 @@ def write_config(
 ) -> Path:
     """Write a DLKit configuration to a TOML file.
 
-    Accepts a Pydantic model (e.g., GeneralSettings) or a raw dict mapping
-    top-level section names (e.g., SESSION, MODEL, PATHS) to their contents.
+    Accepts a Pydantic model (e.g., JobConfig) or a raw dict mapping
+    top-level section names (e.g., run, model, data) to their contents.
 
     Args:
         config: Pydantic settings model or raw dict to write
         output_path: Destination TOML file path
-        by_alias: Dump using field aliases (e.g., PATHS.root instead of root_dir)
+        by_alias: Dump using field aliases where defined by the model
         exclude_none: Exclude fields that are None
         exclude_unset: Exclude fields that were not explicitly set (for Pydantic models only)
         exclude_value_entries: When True, strip in-memory DataEntry values from Dataset sections

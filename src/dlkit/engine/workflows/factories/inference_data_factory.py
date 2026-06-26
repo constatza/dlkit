@@ -27,7 +27,7 @@ def build_inference_datamodule(
 
     Args:
         settings: Inference job configuration (InferenceJobConfig or legacy
-            InferenceWorkflowConfig) with data sections.
+            InferenceJobConfig) with data sections.
 
     Returns:
         Configured LightningDataModule ready for predict_dataloader iteration.

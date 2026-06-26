@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +9,7 @@ from typing import Any
 def create_toml_config(
     output_path: Path,
     *,
-    session_name: str = "test_session",
+    experiment_name: str = "test_session",
     model_name: str = "TestModel",
     data_dir: str = "./test_data",
     enable_mlflow: bool = False,
@@ -22,7 +21,7 @@ def create_toml_config(
 
     Args:
         output_path: Path where to write the config file
-        session_name: Name for the session
+        experiment_name: Name for the experiment
         model_name: Name for the model
         data_dir: Data directory path
         enable_mlflow: Whether to enable MLflow
@@ -31,41 +30,44 @@ def create_toml_config(
         additional_sections: Additional TOML sections to include
     """
     config_content = f"""
-[SESSION]
-name = "{session_name}"
-workflow = "train"
+[run]
+type = "{"search" if enable_optuna else "train"}"
 seed = 42
 precision = "medium"
 
-[MODEL]
+[experiment]
+name = "{experiment_name}"
+
+[model]
 name = "{model_name}"
 module_path = "test.module"
 
-[TRAINING.trainer]
+[data]
+root = "{data_dir}"
+
+[training]
+loss = "mse"
+
+[training.trainer]
 max_epochs = {max_epochs}
 accelerator = "auto"
-
-[DATAMODULE]
-name = "TestDataModule"
-
-[DATASET]
-name = "TestDataset"
+default_root_dir = "./outputs"
 """
 
     if enable_mlflow:
         config_content += """
-[MLFLOW]
-experiment_name = "test_experiment"
-run_name = "test_run"
+[tracking]
+backend = "mlflow"
+uri = "sqlite:///test.db"
 """
 
     if enable_optuna:
         config_content += """
-[OPTUNA]
-enabled = true
+[search]
 n_trials = 50
-study_name = "test_study"
-storage = "sqlite:///test.db"
+direction = "minimize"
+objective = "val/loss"
+space = { "training.optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-3 } }
 """
 
     if additional_sections:
@@ -80,52 +82,6 @@ storage = "sqlite:///test.db"
                     config_content += f"{key} = {value}\n"
 
     output_path.write_text(config_content.strip())
-
-
-def create_json_config(
-    output_path: Path,
-    *,
-    session_name: str = "test_session",
-    model_name: str = "TestModel",
-    data_dir: str = "./test_data",
-    output_dir: str = "./test_outputs",
-    enable_mlflow: bool = False,
-    enable_optuna: bool = False,
-) -> None:
-    """Create a JSON configuration file with specified parameters.
-
-    Args:
-        output_path: Path where to write the config file
-        session_name: Name for the session
-        model_name: Name for the model
-        data_dir: Data directory path
-        output_dir: Output directory path
-        enable_mlflow: Whether to enable MLflow
-        enable_optuna: Whether to enable Optuna
-    """
-    config_data = {
-        "SESSION": {"name": session_name, "workflow": "train", "seed": 42, "precision": "medium"},
-        "MODEL": {"name": model_name, "module_path": "test.module"},
-        "TRAINING": {"trainer": {"max_epochs": 10, "accelerator": "auto"}},
-        "DATAMODULE": {"name": "TestDataModule"},
-        "DATASET": {"name": "TestDataset"},
-    }
-
-    if enable_mlflow:
-        config_data["MLFLOW"] = {
-            "experiment_name": "test_experiment",
-            "run_name": "test_run",
-        }
-
-    if enable_optuna:
-        config_data["OPTUNA"] = {
-            "enabled": True,
-            "n_trials": 50,
-            "study_name": "test_study",
-            "storage": "sqlite:///test.db",
-        }
-
-    output_path.write_text(json.dumps(config_data, indent=2))
 
 
 def create_invalid_toml_config(output_path: Path) -> None:
@@ -150,12 +106,11 @@ def create_minimal_valid_config(output_path: Path) -> None:
         output_path: Path where to write the config file
     """
     minimal_content = """
-[SESSION]
-name = "minimal_test"
-workflow = "train"
+[run]
+type = "train"
 
-[PATHS]
-output_dir = "./outputs"
+[experiment]
+name = "minimal_test"
 """
     output_path.write_text(minimal_content)
 

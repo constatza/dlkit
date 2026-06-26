@@ -46,21 +46,21 @@ class SettingsLogger:
                 exclude_unset=True,
                 exclude_value_entries=True,
             )
-            run_context.log_artifact_content(toml_content, "GeneralSettings.toml")
+            run_context.log_artifact_content(toml_content, "job_config.toml")
         except Exception as e:
             raise RuntimeError("Couldn't log settings") from e
 
     def log_model_parameters(
         self, model: nn.Module, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
-        """Log model hyperparameters extracted from settings.MODEL.
+        """Log model hyperparameters extracted from `settings.model`.
 
         Excludes structural fields (name, module_path, checkpoint, shape).
 
         Args:
             model: Model instance (currently unused; reserved for future introspection).
             run_context: Active run context to log parameters to.
-            settings: Settings object containing MODEL configuration.
+            settings: JobConfig object containing model configuration.
 
         Raises:
             RuntimeError: If parameter extraction or logging fails.

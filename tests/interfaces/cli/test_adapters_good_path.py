@@ -15,7 +15,6 @@ from dlkit.interfaces.cli.adapters.config_adapter import (
 
 from ._helpers import (
     create_invalid_toml_config,
-    create_json_config,
     create_toml_config,
 )
 
@@ -78,15 +77,15 @@ class TestConfigAdapter:
         This test ensures the error handling path works when a ValueError is raised.
         """
         config_path = tmp_path / "config.toml"
-        # Create TOML with a type mismatch that can't be coerced
-        # Using a list where a string is expected will cause issues
         config_path.write_text("""
-[SESSION]
+[run]
+type = "train"
+
+[experiment]
 name = "test"
 
-[DATASET]
-# This will cause a ValueError when trying to construct nested models
-features = "not a list"  # Should be a list of dicts
+[data]
+features = "not a list"
 """)
 
         with pytest.raises(ConfigurationError) as exc_info:
@@ -125,29 +124,31 @@ class TestValidateConfigPath:
 
         assert result is True
 
-    def test_validate_config_path_with_valid_json_file(
+    def test_validate_config_path_rejects_json_file(
         self,
         tmp_path: Path,
     ) -> None:
-        """Test validating valid JSON configuration file path."""
+        """Test validating JSON configuration file path fails."""
         json_config = tmp_path / "config.json"
-        create_json_config(json_config)
+        json_config.write_text('{"run": {"type": "train"}}')
 
-        result = validate_config_path(json_config)
+        with pytest.raises(ConfigurationError) as exc_info:
+            validate_config_path(json_config)
 
-        assert result is True
+        assert "unsupported configuration file format" in exc_info.value.message.lower()
 
-    def test_validate_config_path_with_valid_yaml_file(
+    def test_validate_config_path_rejects_yaml_file(
         self,
         tmp_path: Path,
     ) -> None:
-        """Test validating valid YAML configuration file path."""
+        """Test validating YAML configuration file path fails."""
         yaml_config = tmp_path / "config.yaml"
-        yaml_config.write_text("# Valid YAML config content")
+        yaml_config.write_text("run:\n  type: train\n")
 
-        result = validate_config_path(yaml_config)
+        with pytest.raises(ConfigurationError) as exc_info:
+            validate_config_path(yaml_config)
 
-        assert result is True
+        assert "unsupported configuration file format" in exc_info.value.message.lower()
 
     def test_validate_config_path_with_nonexistent_file(
         self,
@@ -200,7 +201,7 @@ class TestValidateConfigPath:
     ) -> None:
         """Test validating file with permission issues fails gracefully."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("[SESSION]\nname = 'test'")
+        config_file.write_text('[run]\ntype = "train"\n')
 
         with patch("builtins.open", side_effect=PermissionError("Permission denied")):
             with pytest.raises(ConfigurationError) as exc_info:
@@ -223,19 +224,20 @@ class TestValidateConfigPath:
             assert isinstance(error, ConfigurationError)
             assert "cannot access configuration file" in error.message.lower()
 
-    @pytest.mark.parametrize("extension", [".toml", ".json", ".yaml", ".yml"])
-    def test_validate_config_path_supports_all_extensions(
+    @pytest.mark.parametrize("extension", [".json", ".yaml", ".yml"])
+    def test_validate_config_path_rejects_non_toml_extensions(
         self,
         tmp_path: Path,
         extension: str,
     ) -> None:
-        """Test that all supported file extensions are accepted."""
+        """Test that non-TOML config extensions are rejected."""
         config_file = tmp_path / f"config{extension}"
-        config_file.write_text("# Valid config content")
+        config_file.write_text("# Placeholder config content")
 
-        result = validate_config_path(config_file)
+        with pytest.raises(ConfigurationError) as exc_info:
+            validate_config_path(config_file)
 
-        assert result is True
+        assert "unsupported configuration file format" in exc_info.value.message.lower()
 
     def test_validate_config_path_case_insensitive_extensions(
         self,
@@ -243,7 +245,7 @@ class TestValidateConfigPath:
     ) -> None:
         """Test that file extension validation is case-insensitive."""
         config_file = tmp_path / "config.TOML"
-        config_file.write_text("[SESSION]\nname = 'test'")
+        config_file.write_text('[run]\ntype = "train"\n')
 
         result = validate_config_path(config_file)
 
@@ -360,7 +362,7 @@ class TestConfigAdapterIntegration:
         config_path = tmp_path / "complex_config.toml"
         create_toml_config(
             config_path,
-            session_name="complex_test",
+            experiment_name="complex_test",
             model_name="ComplexModel",
             enable_mlflow=True,
             enable_optuna=True,
@@ -419,13 +421,16 @@ loss = "mse"
         tmp_path: Path,
     ) -> None:
         """Test config path validation with real file operations."""
-        # Test valid files
         for ext in [".toml", ".json", ".yaml", ".yml"]:
             config_file = tmp_path / f"config{ext}"
             config_file.write_text("# Valid content")
 
-            result = validate_config_path(config_file)
-            assert result is True, f"Failed for extension {ext}"
+            if ext == ".toml":
+                result = validate_config_path(config_file)
+                assert result is True, f"Failed for extension {ext}"
+            else:
+                with pytest.raises(ConfigurationError):
+                    validate_config_path(config_file)
 
         # Test invalid file
         txt_file = tmp_path / "config.txt"

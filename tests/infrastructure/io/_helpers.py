@@ -140,15 +140,13 @@ def create_config_content_with_urls(
     """
     config_lines = []
 
-    # PATHS section - deprecated and removed
-
-    # MLFLOW section
+    # tracking section
     if any(key.startswith("mlflow") for key in urls):
         config_lines.extend(
             [
-                "[MLFLOW]",
-                "enabled = true",
-                'experiment_name = "test_experiment"',
+                "[tracking]",
+                'backend = "mlflow"',
+                'uri = "sqlite:///test.db"',
             ]
         )
 
@@ -166,11 +164,11 @@ def create_config_content_with_urls(
             config_lines.append(f'{key} = "{url}"')
         config_lines.append("")
 
-    # SESSION section
+    # experiment section
     if include_regular_paths:
         config_lines.extend(
             [
-                "[SESSION]",
+                "[experiment]",
                 'name = "test_session"',
             ]
         )

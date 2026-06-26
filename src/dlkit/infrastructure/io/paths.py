@@ -86,7 +86,7 @@ def normalize_user_path(value: str | Path | None, *, require_absolute: bool = Fa
 
 
 def coerce_root_dir_to_absolute(value: str | Path | None) -> Path | None:
-    """Convert SESSION.root_dir style values into absolute Paths when possible.
+    """Convert run-scoped root directory values into absolute Paths when possible.
 
     Args:
         value: Path as string, Path object, or None.

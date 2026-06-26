@@ -18,7 +18,7 @@ class DataModuleSettings(ComponentSettings, HyperParameterSettings):
     """Top-level DataModule configuration for dataflow loading and processing.
 
     Flattened from component architecture to top-level for easier access.
-    Replaces: settings.SESSION.training.data_pipeline
+    Replaces the old session-scoped data-pipeline configuration.
     New usage: settings.DATAMODULE
 
     Contains all dataflow loading and splitting configuration without nested build methods.

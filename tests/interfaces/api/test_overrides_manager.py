@@ -32,7 +32,7 @@ def _base_settings() -> TrainingJobConfig:
     """
     return TrainingJobConfig(
         run=RunSettings(type="train"),
-        model=ModelSettings(name="DummyModel"),
+        model=ModelSettings.model_validate({"class": "DummyModel"}),
         data=DataSettings(batch_size=64),
         training=TrainingSettings(),
         experiment=ExperimentSettings(name="test_experiment"),

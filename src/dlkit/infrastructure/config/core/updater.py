@@ -9,10 +9,10 @@ Common Use Cases
 ----------------
 1. Updating optimizer learning rate::
 
-       from dlkit.infrastructure.config import load_settings, update_settings
+       from dlkit.infrastructure.config import load_job, update_settings
 
-       config = load_settings("config.toml")
-       config = update_settings(config, {"TRAINING": {"optimizer": {"lr": 0.001}}})
+       config = load_job("config.toml")
+       config = update_settings(config, {"training": {"optimizer": {"lr": 0.001}}})
 
 2. Injecting in-memory data::
 
@@ -20,14 +20,14 @@ Common Use Cases
        from dlkit.infrastructure.config.data_entries import Feature
 
        config = update_settings(
-           config.DATASET,
+           config,
            {"features": (Feature(name="x", value=np.random.randn(1000, 20)),)},
        )
 
 Technical Details
 -----------------
 - Returns a **new** object (the original is unchanged).
-- Supports dotted keys: ``{"TRAINING.optimizer.lr": 0.001}`` expands correctly.
+- Supports dotted keys: ``{"training.optimizer.lr": 0.001}`` expands correctly.
 - Strict merge semantics: key collisions raise ``ValueError`` (no silent overwrites).
 - Type-validated: each patch value is validated against the field annotation.
 """
@@ -74,12 +74,12 @@ def update_settings[T: "BasicSettings"](
     Examples:
         Update a nested field::
 
-            new_cfg = update_settings(cfg, {"TRAINING": {"epochs": 100}})
-            assert new_cfg.TRAINING.epochs == 100
-            assert cfg.TRAINING.epochs != 100  # original unchanged
+            new_cfg = update_settings(cfg, {"training": {"trainer": {"max_epochs": 100}}})
+            assert new_cfg.training.trainer.max_epochs == 100
+            assert cfg.training.trainer.max_epochs != 100  # original unchanged
 
         Dotted-key shorthand::
 
-            new_cfg = update_settings(cfg, {"TRAINING.optimizer.lr": 0.001})
+            new_cfg = update_settings(cfg, {"training.optimizer.lr": 0.001})
     """
     return patch_model(settings, updates, revalidate=validate)
