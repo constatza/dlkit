@@ -208,6 +208,20 @@ class TestDeepONetContractAndProtocols:
         assert branch_linear.in_features == 100
         assert trunk_linear.in_features == 2
 
+    def test_from_entries_uses_last_axis_for_out_features_on_query_shaped_targets(
+        self,
+        non_flat_branch_input_shapes: dict[str, tuple[int, ...]],
+    ) -> None:
+        """Query-shaped targets ``(n_queries, out_features)`` must resolve
+        ``out_features`` from the last axis, not the query count."""
+        model = VarWidthDeepONet.from_context(
+            ShapeContext(non_flat_branch_input_shapes, {"y": (500, 3)}),
+            trunk_width=8,
+            branch_layers=[16, 16],
+            trunk_layers=[12, 12],
+        )
+        assert model.out_features == 3
+
     def test_composable_deeponet_supports_any_branch_and_trunk_modules(
         self,
         batch_size: int,

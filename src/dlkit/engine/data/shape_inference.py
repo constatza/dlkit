@@ -103,7 +103,7 @@ def infer_entry_shapes(
     input_shapes = _infer_shapes_for_entries(
         feature_entries,
         cast("TensorDictBase", sample_td["features"]),
-        leading_axes=(),
+        leading_axes=_PLACEHOLDER_BATCH_AXIS,  # ponytail: sentinel batch-axis so transforms see the same rank as forward()
         precision_service=precision_service,
     )
     target_shapes: dict[str, Shape] = {}

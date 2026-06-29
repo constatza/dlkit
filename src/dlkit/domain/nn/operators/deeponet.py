@@ -147,7 +147,7 @@ class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
         return {
             "branch_in_features": prod(branch_shape),
             "trunk_dim": trunk_shape[-1],
-            "out_features": next(iter(context.output_shapes.values()))[0],
+            "out_features": next(iter(context.output_shapes.values()))[-1],
         }
 
     def forward(self, branch: Tensor, trunk: Tensor) -> Tensor:
