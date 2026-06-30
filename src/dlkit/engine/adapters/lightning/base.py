@@ -454,6 +454,21 @@ class CoreLightningWrapper(LightningModule, ABC):
         """
         self.lr = value
 
+    @property
+    def batch_transformer(self) -> IBatchTransformer:
+        """The model's batch transformer (implements ``IHasBatchTransformer``).
+
+        Exposed publicly so callers outside the Lightning callback lifecycle
+        (e.g. the LR tuner) can ensure transforms are fitted before invoking
+        Lightning APIs that may not run dlkit's callbacks.
+
+        Returns:
+            The configured batch transformer.
+        """
+        # _batch_transformer is an nn.Module (registered as a submodule), so
+        # nn.Module.__getattr__'s stub widens its static type; cast to satisfy ty.
+        return cast(IBatchTransformer, self._batch_transformer)
+
     def configure_optimizers(self):
         """Configure optimizers and schedulers from the optimization controller.
 

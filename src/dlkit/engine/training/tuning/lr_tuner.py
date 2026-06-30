@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING, Any, cast
 from lightning.fabric.utilities.exceptions import MisconfigurationException
 from lightning.pytorch.tuner.tuning import Tuner
 
+from dlkit.engine.training.tuning.transform_fitting import (
+    IFittableTransformer,
+    IHasBatchTransformer,
+    fit_if_needed,
+)
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +73,19 @@ class LRTuner:
         if datamodule is not None:
             # Trainer.datamodule is a mutable attribute; cast to Any to satisfy ty stubs
             cast(Any, trainer).datamodule = datamodule
+
+            if isinstance(model, IHasBatchTransformer):
+                # Lightning's lr_find() strips trainer.callbacks down to its own
+                # internal callback before running the scan loop, so dlkit's
+                # TransformFittingCallback.on_fit_start never runs here — fit
+                # explicitly instead of relying on Lightning's callback lifecycle.
+                # nn.Module.__getattr__'s stub widens batch_transformer's static
+                # type; cast to satisfy ty.
+                fit_if_needed(
+                    cast(IFittableTransformer, model.batch_transformer),
+                    datamodule.train_dataloader(),
+                    device=model.device,
+                )
 
         tuner = Tuner(trainer)
         original_callbacks = self._snapshot_callbacks(trainer)

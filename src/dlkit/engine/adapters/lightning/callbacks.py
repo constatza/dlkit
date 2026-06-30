@@ -12,20 +12,21 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
 from lightning import Callback
 from loguru import logger
 
-from dlkit.engine.adapters.lightning.protocols import IBatchTransformer, IFittableBatchTransformer
+from dlkit.engine.adapters.lightning.protocols import IBatchTransformer
 from dlkit.engine.artifacts import (
     ArtifactCollector,
     FileArtifactPayload,
     IMetricSink,
     ProducedArtifact,
 )
+from dlkit.engine.training.tuning import IFittableTransformer, fit_if_needed
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -83,10 +84,6 @@ class TransformFittingCallback(Callback):
             trainer: The Lightning Trainer driving the fit.
             pl_module: The LightningModule being trained (unused).
         """
-        if not isinstance(self._batch_transformer, IFittableBatchTransformer):
-            return
-        if self._batch_transformer.is_fitted():
-            return
         dm = getattr(trainer, "datamodule", None)
         if dm is None or not hasattr(dm, "train_dataloader"):
             return
@@ -94,7 +91,9 @@ class TransformFittingCallback(Callback):
         logger.debug("Starting transform fitting from training dataloader.")
         # Pass pl_module.device to ensure transforms are moved to the correct device
         # (e.g. GPU) after being fitted with CPU data.
-        self._batch_transformer.fit(loader, device=pl_module.device)
+        fit_if_needed(
+            cast(IFittableTransformer, self._batch_transformer), loader, device=pl_module.device
+        )
         logger.debug("Finished transform fitting.")
 
 

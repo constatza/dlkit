@@ -76,6 +76,16 @@ Callback policy:
 - prediction writers only persist files to an explicit local directory and may
   record typed produced-artifact descriptors for later publication
 
+`TransformFittingCallback` (`callbacks.py`) fits the wrapper's batch transformer
+via `on_fit_start`, but Lightning's `Tuner.lr_find()` strips `trainer.callbacks`
+down to its own internal callback before running the LR-range-test scan loop,
+so this callback never executes during LR tuning. `LRTuner.tune()`
+(`engine/training/tuning/lr_tuner.py`) therefore fits the transformer
+explicitly before invoking Lightning's Tuner, via the same idempotent
+`fit_if_needed` precondition check (`engine/training/tuning/transform_fitting.py`,
+defined training-side because `engine.training` must not depend on
+`engine.adapters`).
+
 ---
 
 ## TensorDict Batch Format
