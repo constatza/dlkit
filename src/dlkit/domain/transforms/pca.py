@@ -22,6 +22,8 @@ class PCA(Transform):
     or determined dynamically during fit().
     """
 
+    requires_materialized_fit = True
+
     def __init__(self, *, n_components: int, n_power_iterations: int = 2) -> None:
         """Initialize the PCA transformer.
 

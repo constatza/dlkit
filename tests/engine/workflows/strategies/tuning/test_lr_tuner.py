@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 from lightning.fabric.utilities.exceptions import MisconfigurationException
 
-from dlkit.engine.training.tuning import IFittableTransformer, LRTuner
+from dlkit.engine.training.tuning import LRTuner
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
 
 
@@ -259,8 +259,9 @@ class TestLRTuner:
         mock_datamodule: Mock,
         lr_tuner_settings: LRTunerSettings,
     ) -> None:
-        """trainer.datamodule is set before lr_find so TransformFittingCallback
-        can access the datamodule during on_fit_start to fit stateful transforms."""
+        """trainer.datamodule is set before lr_find so Lightning's internal
+        machinery (e.g. trainer.datamodule.train_dataloader()) can resolve it
+        during the scan, independent of dlkit's own build-time transform fitting."""
         datamodule_at_lr_find: list[object] = []
 
         def capture_and_return(*args: object, **kwargs: object) -> Mock:
@@ -300,57 +301,3 @@ class TestLRTuner:
             LRTuner().tune(mock_trainer, mock_model, lr_tuner_settings, None)
 
         assert mock_trainer.datamodule is sentinel
-
-    def test_tune_fits_unfitted_batch_transformer_before_lr_find(
-        self,
-        mock_trainer: Mock,
-        mock_datamodule: Mock,
-        lr_tuner_settings: LRTunerSettings,
-    ) -> None:
-        """An unfitted batch transformer is fitted before Lightning's LR scan.
-
-        Lightning's lr_find() strips trainer.callbacks down to its own internal
-        callback before running the scan loop, so TransformFittingCallback never
-        runs during tuning. LRTuner.tune() must fit explicitly instead.
-        """
-        batch_transformer = Mock(spec=IFittableTransformer)
-        batch_transformer.is_fitted.return_value = False
-        model = Mock()
-        model.batch_transformer = batch_transformer
-        mock_datamodule.train_dataloader.return_value = "the-train-loader"
-
-        mock_lr_finder = Mock()
-        mock_lr_finder.suggestion.return_value = 0.001
-
-        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
-            mock_tuner_instance = Mock()
-            mock_tuner_instance.lr_find.return_value = mock_lr_finder
-            MockTuner.return_value = mock_tuner_instance
-
-            LRTuner().tune(mock_trainer, model, lr_tuner_settings, mock_datamodule)
-
-        batch_transformer.fit.assert_called_once_with("the-train-loader", device=model.device)
-
-    def test_tune_does_not_refit_an_already_fitted_batch_transformer(
-        self,
-        mock_trainer: Mock,
-        mock_model: Mock,
-        mock_datamodule: Mock,
-        lr_tuner_settings: LRTunerSettings,
-    ) -> None:
-        """An already-fitted batch transformer is left untouched (idempotent)."""
-        batch_transformer = Mock(spec=IFittableTransformer)
-        batch_transformer.is_fitted.return_value = True
-        mock_model.batch_transformer = batch_transformer
-
-        mock_lr_finder = Mock()
-        mock_lr_finder.suggestion.return_value = 0.001
-
-        with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
-            mock_tuner_instance = Mock()
-            mock_tuner_instance.lr_find.return_value = mock_lr_finder
-            MockTuner.return_value = mock_tuner_instance
-
-            LRTuner().tune(mock_trainer, mock_model, lr_tuner_settings, mock_datamodule)
-
-        batch_transformer.fit.assert_not_called()

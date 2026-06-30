@@ -6,7 +6,10 @@ ProcessingLightningWrapper architecture:
 - IMetricsUpdater: accumulate and expose metric state
 - IModelInvoker: extract tensors from TensorDict and call model
 - IBatchTransformer: forward-only transform applied every step
-- IFittableBatchTransformer: extends IBatchTransformer with fit lifecycle
+
+Fit lifecycle for batch transformers lives in
+``engine.training.transform_fitting`` (``IFittableTransformer``), used by the
+build phase before any Trainer exists — not here.
 """
 
 from typing import Any, Protocol, runtime_checkable
@@ -138,33 +141,6 @@ class IBatchTransformer(Protocol):
 
         Returns:
             Predictions in original (untransformed) space, same type as input.
-        """
-        ...
-
-
-@runtime_checkable
-class IFittableBatchTransformer(IBatchTransformer, Protocol):
-    """Extends IBatchTransformer with fit lifecycle.
-
-    Used only during on_fit_start. Transforms that require fitting
-    (e.g. MinMaxScaler, StandardScaler, PCA) should be wrapped in
-    an IFittableBatchTransformer.
-    """
-
-    def fit(self, dataloader: Any, device: torch.device | None = None) -> None:
-        """Fit all fittable transforms using training data.
-
-        Args:
-            dataloader: Training DataLoader to iterate for fitting.
-            device: Optional target device for the fitted buffers.
-        """
-        ...
-
-    def is_fitted(self) -> bool:
-        """Check if all fittable transforms are fitted.
-
-        Returns:
-            True if all transforms are fitted or there are no fittable transforms.
         """
         ...
 

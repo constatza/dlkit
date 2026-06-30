@@ -6,10 +6,7 @@ Direct functions for loading fitted transforms from checkpoints.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, cast
-
-import torch
+from typing import Any
 
 from dlkit.domain.transforms.chain import TransformChain
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -111,43 +108,6 @@ def _load_named_transforms(
     return transforms
 
 
-def _register_transform_buffer(chain: TransformChain, key: str, state: dict[str, Any]) -> None:
-    """Register a buffer in the transform chain.
-
-    Args:
-        chain: The transform chain
-        key: Dot-separated key path (e.g., 'transforms.0.min')
-        state: State dict containing the buffer value
-    """
-    from torch.nn import ModuleList
-
-    parts = key.split(".")
-    module = chain
-
-    # Navigate to the target module
-    for part in parts[:-1]:
-        if not part.isdigit():
-            module = getattr(module, part)
-            continue
-
-        # Handle numeric indices for ModuleList or TransformChain
-        idx = int(part)
-        if isinstance(module, ModuleList):
-            module = module[idx]
-        elif hasattr(module, "transforms"):
-            module = cast("Sequence[Any]", module.transforms)[idx]
-        else:
-            raise ValueError(f"Cannot index into {type(module)} at {part}")
-
-    # Register the buffer
-    buffer_name = parts[-1]
-    buffer_value = state[key]
-    if not hasattr(module, "register_buffer"):
-        raise ValueError(f"Module {type(module)} does not have register_buffer method")
-    cast(torch.nn.Module, module).register_buffer(buffer_name, buffer_value)
-    logger.debug("Registered buffer: %s", key)
-
-
 def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> list[Any]:
     """Extract raw transform specifications from one entry config.
 
@@ -174,7 +134,14 @@ def _get_transform_settings(entry_name: str, entry_configs: dict[str, Any]) -> l
 def _reconstruct_transform_chain(
     entry_name: str, transform_state: dict[str, Any], entry_configs: dict[str, Any]
 ) -> TransformChain | None:
-    """Reconstruct a TransformChain from state dict.
+    """Reconstruct a fitted TransformChain from a checkpoint state dict.
+
+    Builds a fresh chain from the entry's transform config, then loads the
+    checkpoint's buffers with ``strict=True``. Every concrete Transform
+    pre-allocates its buffers to the checkpoint's shape in its own
+    ``_load_from_state_dict`` override (see e.g. MinMaxScaler, StandardScaler),
+    so this is a plain, structurally-guaranteed round trip — no manual
+    dict-key parsing or buffer registration needed.
 
     Args:
         entry_name: Name of the data entry
@@ -182,38 +149,30 @@ def _reconstruct_transform_chain(
         entry_configs: Entry configurations
 
     Returns:
-        Reconstructed TransformChain or None if reconstruction fails
+        Reconstructed TransformChain, or None if this entry has no transform
+        config (nothing to reconstruct).
+
+    Raises:
+        RuntimeError: If the checkpoint's buffers don't match the chain built
+            from the entry's transform config (genuine corruption or a config
+            drift between training and inference).
     """
-    try:
-        # Get transform settings
-        transform_settings = _get_transform_settings(entry_name, entry_configs)
-        if not transform_settings:
-            logger.warning("No transform settings found for '%s'", entry_name)
-            return None
-
-        # Create and load chain using transform_builder to instantiate transforms
-        from torch.nn import ModuleList
-
-        from dlkit.engine.adapters.lightning.transform_builder import build_transform_list
-
-        raw_list, _ = build_transform_list(transform_settings, entry_name=entry_name)
-        chain = TransformChain(ModuleList(raw_list), entry_name=entry_name)
-        result = chain.load_state_dict(transform_state, strict=False)
-
-        # Register unexpected keys as buffers (fitted parameters like min/max)
-        for key in result.unexpected_keys:
-            try:
-                _register_transform_buffer(chain, key, transform_state)
-            except Exception as e:
-                logger.warning("Could not register buffer %s: %s", key, e)
-
-        logger.debug(
-            "Loaded transform chain for '{}' with {} transforms",
-            entry_name,
-            len(chain.transforms),
-        )
-        return chain
-
-    except Exception as e:
-        logger.error("Failed to load transform chain for '%s': %s", entry_name, e)
+    transform_settings = _get_transform_settings(entry_name, entry_configs)
+    if not transform_settings:
+        logger.warning("No transform settings found for '%s'", entry_name)
         return None
+
+    from torch.nn import ModuleList
+
+    from dlkit.engine.adapters.lightning.transform_builder import build_transform_list
+
+    raw_list, _ = build_transform_list(transform_settings, entry_name=entry_name)
+    chain = TransformChain(ModuleList(raw_list), entry_name=entry_name)
+    chain.load_state_dict(transform_state, strict=True)
+
+    logger.debug(
+        "Loaded transform chain for '{}' with {} transforms",
+        entry_name,
+        len(chain.transforms),
+    )
+    return chain

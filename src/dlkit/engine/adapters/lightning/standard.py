@@ -23,7 +23,6 @@ from dlkit.engine.adapters.lightning.model_invoker import (
     ModelOutputSpec,
     _build_invoker_from_entries,
 )
-from dlkit.engine.adapters.lightning.protocols import IFittableBatchTransformer
 from dlkit.engine.adapters.lightning.transform_pipeline import build_batch_transformer
 from dlkit.engine.adapters.lightning.wrapper_types import (
     WrapperComponents,
@@ -233,22 +232,6 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     # =========================================================================
     # Standard-Specific Hooks and Methods
     # =========================================================================
-
-    def configure_callbacks(self) -> list[Any]:
-        """Register lifecycle callbacks for this wrapper.
-
-        Returns a ``TransformFittingCallback`` when the batch transformer
-        implements ``IFittableBatchTransformer``, so Lightning automatically
-        fits transforms before the first training epoch.
-
-        Returns:
-            List of Lightning Callbacks to attach to the Trainer.
-        """
-        from dlkit.engine.adapters.lightning.callbacks import TransformFittingCallback
-
-        if isinstance(self._batch_transformer, IFittableBatchTransformer):
-            return [TransformFittingCallback(self._batch_transformer)]
-        return []
 
     def _apply_batch_transforms(
         self,

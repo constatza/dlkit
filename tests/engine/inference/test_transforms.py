@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from dlkit.domain.transforms.chain import TransformChain
@@ -66,3 +67,30 @@ def test_load_transforms_from_checkpoint_accepts_serialized_transform_dicts(
 
     assert transformed.shape == (3, 2)
     assert transformed_twice.shape == (3, 2)
+
+
+def test_load_transforms_from_checkpoint_raises_on_genuine_mismatch(tmp_path: Path) -> None:
+    """A checkpoint whose buffers don't match the entry's transform config must
+    raise immediately, not silently warn and produce a predictor missing a
+    transform it actually needs (fail loudly, no silent fallbacks)."""
+    feature_path = tmp_path / "features.npy"
+    np.save(feature_path, np.zeros((4, 5), dtype=np.float32))
+    # Config says MinMaxScaler, but the checkpoint state holds PCA's buffers —
+    # genuinely incompatible, not just a shape variant.
+    entry = NpyEntry(
+        name="x",
+        path=feature_path,
+        transforms=[
+            TransformSettings.model_validate(
+                {"name": "MinMaxScaler", "module_path": "dlkit.domain.transforms.minmax"}
+            )
+        ],
+        data_role=DataRole.FEATURE,
+    )
+    checkpoint = {
+        "state_dict": _make_named_chain_state(),
+        "dlkit_metadata": {"entry_configs": [entry.model_dump()]},
+    }
+
+    with pytest.raises(RuntimeError):
+        load_transforms_from_checkpoint(checkpoint)

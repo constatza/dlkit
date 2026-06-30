@@ -39,6 +39,18 @@ built on `torch.nn.Module`. All transforms are checkpointable (fitted state pers
 All protocols are `runtime_checkable`; use `isinstance(t, FittableTransform)` to inspect
 capabilities at runtime.
 
+`Transform.requires_materialized_fit` (`ClassVar[bool]`, default `False`) marks transforms
+that don't implement `IncrementalFittableTransform` and therefore need the full dataset
+materialized in memory for a single `fit(data)` call — `True` on `PCA`, `TruncatedSVD`,
+`ICA` (the same constraint sklearn has for everything except `IncrementalPCA`).
+`TransformChain.fit_from_dataloader` concatenates every batch it reads for these
+transforms; a smaller `batch_size` does not help, since it only changes how many
+pieces get concatenated, not the total materialized size.
+
+Ceiling: the dataset must fit in memory for these three transforms. No cap exists —
+adding one (e.g. fitting on a leading subsample) is a reasonable future change if a
+real dataset stops fitting in memory, but isn't worth the complexity speculatively.
+
 ## Optional graph-adjacent transforms
 
 `dlkit.domain.transforms` intentionally keeps its broad package surface free of

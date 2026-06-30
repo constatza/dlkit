@@ -20,6 +20,8 @@ class TruncatedSVD(Transform):
         n_iter: Number of power iterations for randomised SVD.
     """
 
+    requires_materialized_fit = True
+
     def __init__(self, *, n_components: int, n_iter: int = 4) -> None:
         """Initialize the TruncatedSVD transformer.
 

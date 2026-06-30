@@ -456,11 +456,14 @@ class CoreLightningWrapper(LightningModule, ABC):
 
     @property
     def batch_transformer(self) -> IBatchTransformer:
-        """The model's batch transformer (implements ``IHasBatchTransformer``).
+        """The model's batch transformer.
 
-        Exposed publicly so callers outside the Lightning callback lifecycle
-        (e.g. the LR tuner) can ensure transforms are fitted before invoking
-        Lightning APIs that may not run dlkit's callbacks.
+        Exposed publicly so the build phase
+        (``engine.training.transform_fitting.fit_transforms_if_needed``) can
+        fit transforms before any Trainer/Tuner exists. Not every wrapper sets
+        ``_batch_transformer`` (e.g. ``GraphLightningWrapper`` doesn't), so
+        callers should check via ``hasattr`` rather than assuming this
+        property is safe to access on any ``CoreLightningWrapper`` subclass.
 
         Returns:
             The configured batch transformer.

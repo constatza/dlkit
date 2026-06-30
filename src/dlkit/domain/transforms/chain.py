@@ -14,6 +14,23 @@ from .base import (
 from .errors import TransformChainError, TransformNotFittedError
 
 
+def _materialize(dataloader: Iterable, tensor_selector: Callable, prior: list) -> Tensor:
+    """Collect every row from a dataloader (through prior transforms) for a batch-only fit.
+
+    # ponytail: full dataset in memory, ceiling = whatever fits in RAM.
+    # Upgrade path if this becomes a real problem: cap rows collected here,
+    # relying on the dataloader's shuffle=True (the standard training config)
+    # for a leading prefix to be representative.
+    """
+    chunks = []
+    for batch in dataloader:
+        x = tensor_selector(batch)
+        for prev in prior:
+            x = prev(x)
+        chunks.append(x.detach().cpu())
+    return torch.cat(chunks, dim=0)
+
+
 class TransformChain[BatchT](Transform):
     """Pipeline for chaining multiple transformations for one tensor stream.
 
@@ -130,16 +147,9 @@ class TransformChain[BatchT](Transform):
 
             if not isinstance(transform, IncrementalFittableTransform):
                 if not transform.fitted:
-                    # Collect all batches through prior transforms, then fit once.
-                    # Memory-intensive but necessary for batch-only algorithms (PCA, ICA, etc.).
                     prior = list(self.transforms)[:i]
-                    chunks = []
-                    for batch in dataloader:
-                        x = tensor_selector(batch)
-                        for prev in prior:
-                            x = prev(x)
-                        chunks.append(x.detach().cpu())
-                    transform.fit(torch.cat(chunks, dim=0))
+                    fit_data = _materialize(dataloader, tensor_selector, prior)
+                    transform.fit(fit_data)
                 continue
 
             try:
@@ -155,6 +165,10 @@ class TransformChain[BatchT](Transform):
                     for prev in list(self.transforms)[:i]:
                         x = prev(x)
                     transform.update_fit(x)
+                # ponytail: per-rank local fit; DDP all-reduce of accumulated
+                # stats would insert here (between update_fit and finalize_fit,
+                # mirroring torchmetrics.Metric.compute()'s sync step) if/when
+                # distributed training is added.
                 transform.finalize_fit()
             except Exception as e:
                 raise TransformChainError(

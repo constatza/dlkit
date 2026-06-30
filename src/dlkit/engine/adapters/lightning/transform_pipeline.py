@@ -189,12 +189,18 @@ class NamedBatchTransformer(nn.Module):
                             result[k] = cast(Tensor | TensorDictBase, v)
                 return TensorDict(result, batch_size=predictions.batch_size)  # type: ignore
 
-    def fit(self, dataloader: Iterable[TensorDictBase], device: torch.device | None = None) -> None:
+    def fit(self, dataloader: Iterable[TensorDictBase]) -> None:
         """Fit all fittable transforms using training data.
+
+        Runs pre-``Trainer`` (see ``engine.training.transform_fitting``), on
+        whatever device the dataset tensors are naturally on — typically CPU.
+        Lightning's normal ``model.to(device)`` submodule traversal moves the
+        fitted buffers to the accelerator afterward, since this transformer is
+        a registered ``nn.Module`` submodule — the same idiom as BatchNorm
+        running stats.
 
         Args:
             dataloader: Training DataLoader to iterate for fitting.
-            device: Optional target device for the fitted buffers.
         """
         for namespace, chains in (
             ("features", self._feature_chains),
@@ -211,9 +217,7 @@ class NamedBatchTransformer(nn.Module):
                 if isinstance(chain, _FittableFromDataloader):
                     cast(_FittableFromDataloader, chain).fit_from_dataloader(
                         dataloader,
-                        lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]).to(
-                            device
-                        ),
+                        lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]),
                     )
                     continue
 
@@ -225,6 +229,9 @@ class NamedBatchTransformer(nn.Module):
                         seen = True
                     if not seen:
                         raise ValueError("Cannot fit transforms on an empty dataloader.")
+                    # ponytail: per-rank local fit; DDP all-reduce of accumulated
+                    # stats would insert here (between update_fit and finalize_fit)
+                    # if/when distributed training is added — see finalize_fit().
                     chain.finalize_fit()
                     continue
 
@@ -234,9 +241,6 @@ class NamedBatchTransformer(nn.Module):
                 raise TypeError(
                     f"Transform '{chain.__class__.__name__}' is not fittable in this path."
                 )
-
-        if device is not None:
-            self.to(device)
 
     def is_fitted(self) -> bool:
         """Check if all fittable transforms are fitted.

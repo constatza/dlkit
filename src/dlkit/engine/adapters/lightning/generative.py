@@ -32,29 +32,11 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
 
     Use ``isinstance(wrapper, GenerativeLightningWrapper)`` to branch on
     generative vs. discriminative behaviour in factory code.
+
+    Transform fitting is not handled here — it runs once, deterministically,
+    during the build phase (``engine.training.transform_fitting``), before any
+    Trainer exists.
     """
-
-    def on_fit_start(self) -> None:
-        """Fit the batch transformer if it implements IFittableBatchTransformer."""
-        from dlkit.engine.adapters.lightning.protocols import IFittableBatchTransformer
-        from dlkit.infrastructure.utils.logging_config import get_logger
-
-        if not isinstance(self._batch_transformer, IFittableBatchTransformer):
-            return
-        if self._batch_transformer.is_fitted():
-            return
-        trainer = getattr(self, "trainer", None)
-        if trainer is None or not hasattr(trainer, "datamodule"):
-            return
-        dm = trainer.datamodule
-        if dm is None or not hasattr(dm, "train_dataloader"):
-            return
-
-        loader = dm.train_dataloader()
-        logger = get_logger(__name__)
-        logger.debug("Starting transform fitting from training dataloader.")
-        self._batch_transformer.fit(loader, device=self.device)
-        logger.debug("Finished transform fitting.")
 
     def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
         """Execute one forward+loss step for generative models.

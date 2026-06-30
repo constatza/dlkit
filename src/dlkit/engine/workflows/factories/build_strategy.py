@@ -12,6 +12,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.artifacts import ProducedArtifact, RuntimeArtifactManifest
 from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.training.transform_fitting import fit_transforms_if_needed
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
@@ -172,8 +173,15 @@ class IBuildStrategy(ABC):
         """Return True if this strategy can build components for the given settings."""
 
     def build(self, settings: WorkflowSettings) -> RuntimeComponents:
-        """Build runtime components. Infrastructure context is applied by BuildFactory."""
-        return self._build_core(settings)
+        """Build runtime components. Infrastructure context is applied by BuildFactory.
+
+        Fits the model's batch transformer from the datamodule's train split
+        immediately after construction — before any Trainer/Tuner exists. See
+        ``engine.training.transform_fitting.fit_transforms_if_needed``.
+        """
+        components = self._build_core(settings)
+        fit_transforms_if_needed(components.model, components.datamodule)
+        return components
 
     @abstractmethod
     def _build_core(self, settings: WorkflowSettings) -> RuntimeComponents:

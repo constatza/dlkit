@@ -24,6 +24,8 @@ class ICA(Transform):
         random_state: Random seed for reproducibility.
     """
 
+    requires_materialized_fit = True
+
     def __init__(
         self,
         *,

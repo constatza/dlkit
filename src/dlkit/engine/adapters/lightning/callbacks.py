@@ -2,31 +2,33 @@
 
 Provides reusable Lightning Callbacks that replace lifecycle methods
 previously embedded in the wrapper classes:
-- TransformFittingCallback: Fits NamedBatchTransformer before training starts.
 - MLflowEpochLogger: Logs epoch-based metrics into the active run context.
 - CheckpointDirRouter: Redirects checkpoint output into an explicit local directory.
 - NumpyWriter: Persists predict-step outputs to NumPy arrays and records produced artifacts.
+
+Transform fitting is not handled here — it runs once, deterministically,
+during the build phase (``engine.training.transform_fitting.fit_transforms_if_needed``,
+called from ``IBuildStrategy.build()``), before any Trainer/Tuner exists. See
+that module's docstring for why a Lightning Callback was the wrong mechanism.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 from lightning import Callback
 from loguru import logger
 
-from dlkit.engine.adapters.lightning.protocols import IBatchTransformer
 from dlkit.engine.artifacts import (
     ArtifactCollector,
     FileArtifactPayload,
     IMetricSink,
     ProducedArtifact,
 )
-from dlkit.engine.training.tuning import IFittableTransformer, fit_if_needed
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -43,58 +45,6 @@ def _call_zero_arg_method(value: object, method_name: str) -> object | None:
         return method()
     except Exception:  # pragma: no cover - defensive branch
         return None
-
-
-class TransformFittingCallback(Callback):
-    """Fits a batch transformer on the training dataloader before training starts.
-
-    Replaces ``StandardLightningWrapper.on_fit_start()`` with a proper
-    Lightning Callback, separating the transform-fitting concern from the
-    training loop wrapper.
-
-    The callback is a no-op when the transformer is already fitted or does
-    not implement ``IFittableBatchTransformer``.
-
-    Args:
-        batch_transformer: The batch transformer to fit. Fitting is skipped
-            unless it implements ``IFittableBatchTransformer``.
-
-    Example:
-        ```python
-        callback = TransformFittingCallback(batch_transformer)
-        trainer = Trainer(callbacks=[callback])
-        ```
-    """
-
-    def __init__(self, batch_transformer: IBatchTransformer) -> None:
-        """Initialize with the batch transformer to manage.
-
-        Args:
-            batch_transformer: Transformer to fit; may or may not be fittable.
-        """
-        super().__init__()
-        self._batch_transformer = batch_transformer
-
-    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        """Fit the batch transformer if it is fittable and not yet fitted.
-
-        Called automatically by Lightning before the first training epoch.
-
-        Args:
-            trainer: The Lightning Trainer driving the fit.
-            pl_module: The LightningModule being trained (unused).
-        """
-        dm = getattr(trainer, "datamodule", None)
-        if dm is None or not hasattr(dm, "train_dataloader"):
-            return
-        loader = dm.train_dataloader()
-        logger.debug("Starting transform fitting from training dataloader.")
-        # Pass pl_module.device to ensure transforms are moved to the correct device
-        # (e.g. GPU) after being fitted with CPU data.
-        fit_if_needed(
-            cast(IFittableTransformer, self._batch_transformer), loader, device=pl_module.device
-        )
-        logger.debug("Finished transform fitting.")
 
 
 class MLflowEpochLogger(Callback):

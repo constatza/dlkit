@@ -136,3 +136,36 @@ def test_fit_from_dataloader_applies_prior_transforms_before_fitting_pca() -> No
     assert pca.fitted
     out = chain(data)
     assert out.shape == (60, 2)
+
+
+def test_fit_from_dataloader_respects_declared_order_when_materializing_transform_is_first() -> (
+    None
+):
+    """Reverse of the above: [PCA (non-incremental), StandardScaler (incremental)].
+
+    StandardScaler must be fitted on PCA's *output* (2 features), not the raw
+    6-feature input — proves prior-transform application is symmetric: it
+    doesn't matter whether the earlier transform is incremental or
+    materializing, only its position in the declared order.
+    """
+    pca = PCA(n_components=2)
+    scaler = StandardScaler(dim=0)
+    chain = TransformChain(ModuleList([pca, scaler]), entry_name="x")
+
+    torch.manual_seed(0)
+    data = torch.randn(60, 6) * 100
+    batches = [data[i : i + 20] for i in range(0, 60, 20)]
+
+    chain.fit_from_dataloader(batches, tensor_selector=lambda b: b)
+
+    assert chain.fitted
+    assert pca.fitted
+    assert scaler.fitted
+    # Proves scaler fitted on PCA's 2-feature output, not the raw 6-feature input.
+    assert scaler.mean.shape[-1] == 2
+    expected_mean = pca(data).mean(dim=0, keepdim=True)
+    assert torch.allclose(scaler.mean, expected_mean, atol=1e-4)
+
+    out = chain(data)
+    assert out.shape == (60, 2)
+    assert torch.allclose(out.mean(dim=0), torch.zeros(2), atol=1e-4)

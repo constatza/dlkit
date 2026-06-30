@@ -15,6 +15,7 @@ from dlkit.engine.adapters.lightning.datamodules.array import ArrayDataModule
 from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.data.datasets.flexible import FlexibleDataset
+from dlkit.engine.training.transform_fitting import fit_transforms_if_needed
 from dlkit.engine.workflows.factories.component_builders import build_wrapper_components
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.entry_types import NpyEntry
@@ -174,6 +175,11 @@ def predictor_transform_setup(tmp_path_factory: pytest.TempPathFactory) -> dict[
     wrapper = _build_wrapper(entries)
     trainer = _basic_trainer()
 
+    # Transform fitting is now an explicit build-phase step (see
+    # engine.training.transform_fitting), not a side effect of trainer.fit() —
+    # this fixture constructs the wrapper directly, bypassing BuildFactory, so
+    # it must trigger fitting itself.
+    fit_transforms_if_needed(wrapper, dm)
     trainer.fit(wrapper, datamodule=dm)
     ckpt_path = tmp_dir / "predictor_space.ckpt"
     trainer.save_checkpoint(ckpt_path)
@@ -200,7 +206,10 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     wrapper = _build_wrapper(entries)
     trainer = _basic_trainer()
 
-    # Act: fit just to trigger on_fit_start transform fitting and persistence
+    # Act: fit transforms explicitly (build-phase concern, not a trainer.fit()
+    # side effect — see engine.training.transform_fitting), then train to
+    # exercise checkpoint persistence of the fitted state.
+    fit_transforms_if_needed(wrapper, dm)
     trainer.fit(wrapper, datamodule=dm)
     # Save and reload via Lightning checkpoint
     ckpt_path = tmp_path / "model_with_transforms.ckpt"
@@ -270,6 +279,7 @@ def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     trainer = _basic_trainer()
 
     # Train and save checkpoint
+    fit_transforms_if_needed(wrapper, dm)
     trainer.fit(wrapper, datamodule=dm)
     ckpt_path = tmp_path / "model_for_direct_inference.ckpt"
     trainer.save_checkpoint(ckpt_path)
@@ -387,6 +397,7 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     wrapper = _build_wrapper(entries)
     trainer = _basic_trainer()
     # Fit once so transforms are fitted and stored in ModuleDict
+    fit_transforms_if_needed(wrapper, dm)
     trainer.fit(wrapper, datamodule=dm)
 
     # Save state_dict via torch.save and reload into a fresh wrapper instance

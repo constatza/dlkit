@@ -22,7 +22,7 @@ Example:
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Protocol, final, runtime_checkable
+from typing import ClassVar, Protocol, final, runtime_checkable
 
 import torch
 from torch import Tensor, nn
@@ -237,6 +237,18 @@ class Transform(nn.Module):
 
     _fitted: bool
 
+    requires_materialized_fit: ClassVar[bool] = False
+    """Whether fit() needs the full dataset materialized in memory.
+
+    False (default) for transforms implementing IncrementalFittableTransform,
+    which TransformChain.fit_from_dataloader() streams batch-by-batch in
+    bounded memory. True for batch-only algorithms (PCA, ICA, TruncatedSVD)
+    that mathematically require the full data matrix — the same constraint
+    sklearn has for everything except IncrementalPCA. Set True on a subclass
+    to document this tradeoff explicitly rather than leaving it implicit in
+    an isinstance check.
+    """
+
     def __init__(self) -> None:
         """Initialize the transform.
 
@@ -362,16 +374,22 @@ class Transform(nn.Module):
         """Override state_dict to include _fitted bool in the checkpoint.
 
         Args:
-            destination: Dictionary to accumulate state dict entries.
+            destination: Dictionary to accumulate state dict entries. nn.Module's
+                recursive traversal relies on mutating this exact object in
+                place (it discards each child's return value), so an empty-but-
+                non-None dict must be reused as-is, not replaced — `destination
+                or {}` would silently swap in a different dict whenever the
+                accumulator happens to still be empty, orphaning this subtree's
+                entries with no error raised.
             prefix: Prefix for parameter names.
             keep_vars: Whether to keep variables (for nn.Module compatibility).
 
         Returns:
             State dictionary including _fitted bool.
         """
-        state = super().state_dict(
-            destination=destination or {}, prefix=prefix, keep_vars=keep_vars
-        )
+        if destination is None:
+            destination = {}
+        state = super().state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)
         # Add _fitted as a plain Python bool (not a tensor)
         state[f"{prefix}_fitted"] = self._fitted
         return state

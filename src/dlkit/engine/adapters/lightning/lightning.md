@@ -21,7 +21,8 @@ StandardLightningWrapper.__init__
   ├─► IMetricsUpdater─ RoutedMetricsUpdater    (per-metric routing, no MetricCollection.update)
   └─► IBatchTransformer NamedBatchTransformer  (named ModuleDict chains)
         │
-        └─► IFittableBatchTransformer (fit() wired via configure_callbacks())
+        └─► fit() triggered by the build phase (engine.training.transform_fitting),
+            not by the wrapper or any Lightning callback
 
 ProcessingLightningWrapper (base)
   _run_step():      abstract template hook implemented by each wrapper family
@@ -76,15 +77,20 @@ Callback policy:
 - prediction writers only persist files to an explicit local directory and may
   record typed produced-artifact descriptors for later publication
 
-`TransformFittingCallback` (`callbacks.py`) fits the wrapper's batch transformer
-via `on_fit_start`, but Lightning's `Tuner.lr_find()` strips `trainer.callbacks`
-down to its own internal callback before running the LR-range-test scan loop,
-so this callback never executes during LR tuning. `LRTuner.tune()`
-(`engine/training/tuning/lr_tuner.py`) therefore fits the transformer
-explicitly before invoking Lightning's Tuner, via the same idempotent
-`fit_if_needed` precondition check (`engine/training/tuning/transform_fitting.py`,
-defined training-side because `engine.training` must not depend on
-`engine.adapters`).
+Transform fitting is not a Lightning callback. It used to be
+(`TransformFittingCallback.on_fit_start`), but Lightning's `Tuner.lr_find()`
+strips `trainer.callbacks` down to its own internal callback before running
+the LR-range-test scan loop, so that callback never executed during LR
+tuning. Fitting now happens once, deterministically, in the build phase —
+`IBuildStrategy.build()` (`engine/workflows/factories/build_strategy.py`)
+calls `fit_transforms_if_needed(model, datamodule)`
+(`engine/training/transform_fitting.py`, defined training-side because
+`engine.training` must not depend on `engine.adapters`) immediately after
+`RuntimeComponents` is assembled, before any `Trainer`/`Tuner` object exists.
+Wrapper code that constructs a `ProcessingLightningWrapper` directly without
+going through `BuildFactory` (e.g. low-level tests) must call
+`fit_transforms_if_needed` itself before `trainer.fit()` — the wrapper no
+longer self-fits as a side effect of training.
 
 ---
 
@@ -334,16 +340,20 @@ _batch_transformer._feature_chains.x.transforms.0._fitted   # StandardScaler
 _batch_transformer._feature_chains.x.transforms.1._fitted   # PCA
 ```
 
-Fittable transforms are fitted automatically through
-`StandardLightningWrapper.configure_callbacks()`. `NamedBatchTransformer.fit()`
-handles three cases:
+Fittable transforms are fitted by the build phase
+(`engine.training.transform_fitting.fit_transforms_if_needed`, called from
+`IBuildStrategy.build()` before any Trainer exists — see "Architecture
+Overview" above). `NamedBatchTransformer.fit()` handles three cases:
 
 - Transforms implementing `IncrementalFittableTransform` (e.g. `IncrementalPCA`,
   `StandardScaler`, `MinMaxScaler`) are fitted batch-by-batch via
   `reset_fit_state → update_fit → finalize_fit`.
 - Transforms implementing `_FittableFromDataloader` (i.e. `TransformChain`) use
-  `fit_from_dataloader`, which materialises the full dataset for non-incremental
-  algorithms like `PCA`, `ICA`, and `TruncatedSVD` in a single `fit(full_data)` call.
+  `fit_from_dataloader`, which materialises the dataset for non-incremental
+  algorithms like `PCA`, `ICA`, and `TruncatedSVD` (`Transform.requires_materialized_fit
+  = True` — the same constraint sklearn has for everything except `IncrementalPCA`)
+  in a single `fit(data)` call — see `domain/transforms/transforms.md` for why
+  `batch_size` alone cannot bound this.
 - Transforms that are already fitted are skipped.
 
 ---
@@ -396,7 +406,7 @@ find the right transform and then calls `model(x=transformed_tensor)`. An empty
 | Loss computation | `ILossComputer` | `RoutedLossComputer` | Implement `compute(preds, batch)` |
 | Metric tracking | `IMetricsUpdater` | `RoutedMetricsUpdater` | Implement `update/compute/reset` |
 | Batch transforms | `IBatchTransformer` | `NamedBatchTransformer` | Implement `transform/inverse_transform_predictions` |
-| Fittable transforms | `IFittableBatchTransformer` | `NamedBatchTransformer` | Add `fit/is_fitted` on top of above |
+| Fittable transforms | `engine.training.transform_fitting.IFittableTransformer` | `NamedBatchTransformer` | Add `fit/is_fitted` on top of above |
 
 Graph models bypass these protocols entirely — `GraphLightningWrapper` overrides
 all step methods and uses null sentinels (`_NullModelInvoker`, etc.) as base-class

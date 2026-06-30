@@ -139,7 +139,7 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 - Builds a temporary first-stage-only tuning wrapper when LR finder is enabled for a staged optimizer policy
 - Applies the suggested learning rate back to stage 0 of the real training policy
 - Restores trainer callbacks if Lightning's LR finder aborts before training starts
-- `LRTuner.tune()` fits any unfitted batch transformer explicitly (via `engine.training.tuning.transform_fitting.fit_if_needed`) before invoking Lightning's `Tuner.lr_find()`, because Lightning's LR-range-test strips `trainer.callbacks` down to its own internal callback before running the scan loop — `TransformFittingCallback.on_fit_start` never executes during tuning, so fitting cannot depend on Lightning's callback lifecycle
+- Transform fitting happens once, in the build phase (`IBuildStrategy.build()` calls `engine.training.transform_fitting.fit_transforms_if_needed`), before any `Trainer`/`Tuner` object exists — `LRTuner.tune()` no longer fits transforms itself. This replaced an earlier callback-based design (`TransformFittingCallback.on_fit_start`) that broke under LR tuning specifically because Lightning's `Tuner.lr_find()` strips `trainer.callbacks` down to its own internal callback before running the scan loop
 - Executes `trainer.fit()` as core training step
 - Post-training `predict()` and `test()` are best-effort (silent failure)
 - Metrics collected from multiple trainer sources (callback_metrics, progress_bar_metrics, logged_metrics)

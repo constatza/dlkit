@@ -1,26 +1,25 @@
-"""Regression tests: LR tuning must fit transform chains before Lightning's LR scan.
+"""Regression tests: transform chains are fitted at build time, not via Lightning hooks.
 
-Lightning's ``Tuner.lr_find()`` strips ``trainer.callbacks`` down to its own
-internal callback before running the LR-range-test scan loop, so dlkit's
-``TransformFittingCallback.on_fit_start`` never executes during tuning. Any
-feature/target entry with a fittable transform (e.g. ``MinMaxScaler``) was
-therefore left unfitted, causing ``TransformNotFittedError`` on the first scan
-batch and silently disabling LR tuning every time.
+Transform fitting used to be triggered by ``TransformFittingCallback.on_fit_start``,
+a Lightning ``Callback``. Lightning's ``Tuner.lr_find()`` strips ``trainer.callbacks``
+down to its own internal callback before running the LR-range-test scan loop, so the
+callback never executed during tuning, leaving any feature/target entry with a
+fittable transform (e.g. ``MinMaxScaler``) unfitted — causing
+``TransformNotFittedError`` on the first scan batch and silently disabling LR tuning
+every time.
 
-``num_training=2`` and ``max_lr=1e-3`` keep the scan minimal and fast: this
-test only needs to prove the transform gets fitted before the scan touches it,
-not that Lightning's own ``suggestion()`` heuristic (which needs more points
-than that to compute a gradient) succeeds.
+Fitting now happens once, deterministically, in ``IBuildStrategy.build()`` — before
+any ``Trainer``/``Tuner`` object exists at all. This removes the dependency on which
+Lightning hooks survive ``Tuner``'s callback manipulation entirely: by the time
+``BuildFactory().build_components(settings)`` returns, transforms are already fitted.
 """
 
 from __future__ import annotations
 
-from contextlib import suppress
 from typing import Any, cast
 
 import pytest
 
-from dlkit.engine.training.tuning import LRTuner
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
@@ -74,33 +73,37 @@ def lr_tuning_settings_with_transform(training_settings: TrainingJobConfig) -> T
     return _with_fittable_feature_transform(training_settings)
 
 
-def test_lr_tuner_fits_transform_chain_before_scanning(
+def test_build_components_fits_transform_chain_before_any_trainer_exists(
     lr_tuning_settings_with_transform: TrainingJobConfig,
 ) -> None:
-    """LRTuner.tune() must fit unfitted transform chains before Lightning's LR scan.
+    """BuildFactory.build_components() fits transforms with no Trainer/Tuner involved.
 
-    Calls LRTuner directly (bypassing VanillaExecutor._apply_lr_tuning's broad
-    except-Exception swallow) so the regression surfaces as a real failure.
-    A RuntimeError("...failed to suggest a learning rate...") is an accepted,
-    unrelated outcome here: num_training=2 is too small for Lightning's own
-    suggestion() heuristic (it discards the first 10 and last 1 points) to
-    compute a gradient. Only TransformNotFittedError indicates this bug.
+    This is the root fix: fitting no longer depends on a Lightning Callback or
+    LightningModule hook firing at the right time relative to Tuner.lr_find()'s
+    internal callback stripping — it happens deterministically during the build
+    phase, before any Trainer object is even constructed.
     """
     settings = lr_tuning_settings_with_transform
     components = BuildFactory().build_components(settings)
     model = components.model
-    datamodule = components.datamodule
-    lr_tuner_settings = settings.training.lr_tuner
-    assert lr_tuner_settings is not None
 
     batch_transformer = cast(Any, model)._batch_transformer
-    assert not batch_transformer.is_fitted()
-
-    tuning_trainer = settings.training.trainer.build(session=None)
-    with suppress(RuntimeError):
-        LRTuner().tune(tuning_trainer, model, lr_tuner_settings, datamodule)
-
     assert batch_transformer.is_fitted()
+
+
+def test_build_components_is_a_noop_for_graph_strategy_with_no_transforms(
+    graph_settings: TrainingJobConfig,
+) -> None:
+    """fit_transforms_if_needed() is a harmless no-op for GraphBuildStrategy.
+
+    GraphLightningWrapper has no batch transformer at all (graph models work
+    with raw PyG Data/Batch objects, not dlkit's TensorDict transform
+    pipeline) — the build-phase fit hook in IBuildStrategy.build() must not
+    raise when the model has no fittable batch transformer to find.
+    """
+    components = BuildFactory().build_components(graph_settings)
+
+    assert not hasattr(components.model, "_batch_transformer")
 
 
 def test_apply_lr_tuning_does_not_silently_swallow_transform_fitting_failure(
