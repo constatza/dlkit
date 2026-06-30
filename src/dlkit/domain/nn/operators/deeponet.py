@@ -28,11 +28,11 @@ class DeepONet(nn.Module):
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
-        branch_net output: ``(batch, trunk_width * out_features)``
-        trunk_net output: ``(batch * n_queries, trunk_width * out_features)``
+        branch_net output: ``(batch, basis_dim * out_features)``
+        trunk_net output: ``(batch * n_queries, basis_dim * out_features)``
 
     Constructor dimensions:
-        ``trunk_width``, ``out_features``
+        ``basis_dim``, ``out_features``
     """
 
     def __init__(
@@ -40,16 +40,16 @@ class DeepONet(nn.Module):
         *,
         branch_net: nn.Module,
         trunk_net: nn.Module,
-        trunk_width: int,
+        basis_dim: int,
         out_features: int,
     ) -> None:
         super().__init__()
         self.branch_net = branch_net
         self.trunk_net = trunk_net
-        self._trunk_width = trunk_width
+        self._basis_dim = basis_dim
         self._out_features = out_features
         self.bias = nn.Parameter(torch.zeros(out_features))
-        self.register_buffer("_trunk_scale", torch.sqrt(torch.tensor(float(trunk_width))))
+        self.register_buffer("_basis_scale", torch.sqrt(torch.tensor(float(basis_dim))))
 
     @property
     def out_features(self) -> int:
@@ -76,7 +76,7 @@ class DeepONet(nn.Module):
                 f"got branch.shape[0]={batch} and trunk.shape[0]={trunk.shape[0]}"
             )
 
-        expected_width = self._out_features * self._trunk_width
+        expected_width = self._out_features * self._basis_dim
 
         branch_values = self.branch_net(branch)
         if branch_values.shape != (batch, expected_width):
@@ -84,7 +84,7 @@ class DeepONet(nn.Module):
                 "branch_net must return shape "
                 f"{(batch, expected_width)} for DeepONet; got {tuple(branch_values.shape)}"
             )
-        branch_values = branch_values.reshape(batch, self._out_features, self._trunk_width)
+        branch_values = branch_values.reshape(batch, self._out_features, self._basis_dim)
 
         trunk_flat = trunk.reshape(batch * trunk.shape[1], -1)
         trunk_values = self.trunk_net(trunk_flat)
@@ -94,8 +94,8 @@ class DeepONet(nn.Module):
                 "trunk_net must return shape "
                 f"{(batch * n_queries, expected_width)} for DeepONet; got {tuple(trunk_values.shape)}"
             )
-        trunk_values = trunk_values.reshape(batch, n_queries, self._out_features, self._trunk_width)
-        trunk_scale = cast(Tensor, self._trunk_scale)
+        trunk_values = trunk_values.reshape(batch, n_queries, self._out_features, self._basis_dim)
+        trunk_scale = cast(Tensor, self._basis_scale)
         values: Tensor = (
             torch.einsum("bop,bqop->bqo", branch_values, trunk_values) / trunk_scale
         ) + self.bias.view(1, 1, -1)
@@ -164,8 +164,8 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
-        branch FFNN output: ``(batch, trunk_width * out_features)``
-        trunk FFNN output: ``(batch * n_queries, trunk_width * out_features)``
+        branch FFNN output: ``(batch, basis_dim * out_features)``
+        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
@@ -173,7 +173,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
         ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
-        ``trunk_width``, ``out_features``, ``branch_layers``, ``trunk_layers``
+        ``basis_dim``, ``out_features``, ``branch_layers``, ``trunk_layers``
     """
 
     def __init__(
@@ -182,7 +182,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         branch_in_features: int,
         out_features: int,
         trunk_dim: int,
-        trunk_width: int = 64,
+        basis_dim: int,
         branch_layers: Sequence[int],
         trunk_layers: Sequence[int],
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
@@ -195,7 +195,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         if not trunk_layers:
             raise ValueError("trunk_layers must contain at least one hidden width")
         resolved = resolve_activation(activation)
-        latent_dim = trunk_width * out_features
+        latent_dim = basis_dim * out_features
         branch_net = VarWidthFFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
@@ -217,7 +217,7 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
         super().__init__(
             branch_net=branch_net,
             trunk_net=trunk_net,
-            trunk_width=trunk_width,
+            basis_dim=basis_dim,
             out_features=out_features,
         )
 
@@ -231,8 +231,8 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
-        branch FFNN output: ``(batch, trunk_width * out_features)``
-        trunk FFNN output: ``(batch * n_queries, trunk_width * out_features)``
+        branch FFNN output: ``(batch, basis_dim * out_features)``
+        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
@@ -240,7 +240,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
         ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
-        ``trunk_width``, ``out_features``, ``branch_hidden_size``,
+        ``basis_dim``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
 
@@ -250,10 +250,10 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         branch_in_features: int,
         out_features: int,
         trunk_dim: int,
-        trunk_width: int = 64,
-        branch_hidden_size: int | None = None,
+        basis_dim: int,
+        branch_hidden_size: int,
         branch_num_layers: int = 4,
-        trunk_hidden_size: int | None = None,
+        trunk_hidden_size: int,
         trunk_num_layers: int = 4,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -261,7 +261,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         bias: bool = True,
     ) -> None:
         resolved = resolve_activation(activation)
-        latent_dim = trunk_width * out_features
+        latent_dim = basis_dim * out_features
         branch_net = FFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
@@ -285,7 +285,7 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         super().__init__(
             branch_net=branch_net,
             trunk_net=trunk_net,
-            trunk_width=trunk_width,
+            basis_dim=basis_dim,
             out_features=out_features,
         )
 
@@ -299,8 +299,8 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         output: ``(batch, n_queries, out_features)``
 
     Architecture dimensions:
-        branch FFNN output: ``(batch, trunk_width * out_features)``
-        trunk FFNN output: ``(batch * n_queries, trunk_width * out_features)``
+        branch FFNN output: ``(batch, basis_dim * out_features)``
+        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
 
     Constructor dimensions:
         ``branch_in_features``: flattened branch width
@@ -308,7 +308,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
         ``branch_in_features = n_sensors``
         ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
-        ``trunk_width``, ``out_features``, ``branch_hidden_size``,
+        ``basis_dim``, ``out_features``, ``branch_hidden_size``,
         ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
     """
 
@@ -318,10 +318,10 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         branch_in_features: int,
         out_features: int,
         trunk_dim: int,
-        trunk_width: int = 64,
-        branch_hidden_size: int | None = None,
+        basis_dim: int,
+        branch_hidden_size: int,
         branch_num_layers: int = 4,
-        trunk_hidden_size: int | None = None,
+        trunk_hidden_size: int,
         trunk_num_layers: int = 4,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -329,7 +329,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         bias: bool = True,
     ) -> None:
         resolved = resolve_activation(activation)
-        latent_dim = trunk_width * out_features
+        latent_dim = basis_dim * out_features
         branch_net = EmbeddedFFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
@@ -353,6 +353,6 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
         super().__init__(
             branch_net=branch_net,
             trunk_net=trunk_net,
-            trunk_width=trunk_width,
+            basis_dim=basis_dim,
             out_features=out_features,
         )

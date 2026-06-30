@@ -31,7 +31,13 @@ def test_dense_block_accepts_string_activation(name: str, batch: torch.Tensor) -
 
 @pytest.mark.parametrize("name", ["relu", "gelu", "silu"])
 def test_ffnn_accepts_string_activation(name: str, batch: torch.Tensor) -> None:
-    model = FFNN(in_features=8, out_features=4, num_layers=2, activation=cast(ActivationName, name))
+    model = FFNN(
+        in_features=8,
+        out_features=4,
+        hidden_size=8,
+        num_layers=2,
+        activation=cast(ActivationName, name),
+    )
     out = model(batch)
     assert out.shape == (3, 4)
 

@@ -50,40 +50,18 @@ class TestResolveHiddenSize:
             _resolve_hidden_size(None, 4, 6)
 
 
-class TestFFNNOptionalHiddenSize:
-    def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
-        m = FFNN(in_features=2, out_features=2, num_layers=2)
-        assert m(dense_input).shape == (dense_input.shape[0], 2)
+class TestFFNNHiddenSize:
+    def test_hidden_size_is_required(self) -> None:
+        with pytest.raises(TypeError, match="hidden_size"):
+            FFNN(in_features=2, out_features=2, num_layers=2)  # type: ignore[call-arg]
 
-    def test_hidden_size_defaults_to_in_features(self) -> None:
-        m = FFNN(in_features=2, out_features=2, num_layers=2)
-        assert m.embedding_layer.out_features == 2
-
-    def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
+    def test_explicit_hidden_size_works(self, dense_input: torch.Tensor) -> None:
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
-    def test_defaults_to_max_when_not_square_and_no_hidden_size(self) -> None:
-        m = FFNN(in_features=2, out_features=4, num_layers=2)
-        assert m.embedding_layer.out_features == 4
-
-
-class TestFFNNSkipFalse:
-    def test_omit_hidden_size_when_square(self, dense_input: torch.Tensor) -> None:
-        m = FFNN(in_features=2, out_features=2, num_layers=2, skip=False)
-        assert m(dense_input).shape == (dense_input.shape[0], 2)
-
-    def test_hidden_size_defaults_to_in_features(self) -> None:
-        m = FFNN(in_features=2, out_features=2, num_layers=2, skip=False)
-        assert m.embedding_layer.out_features == 2
-
-    def test_explicit_hidden_size_still_works(self, dense_input: torch.Tensor) -> None:
+    def test_explicit_hidden_size_works_skip_false(self, dense_input: torch.Tensor) -> None:
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2, skip=False)
         assert m(dense_input).shape == (dense_input.shape[0], 2)
-
-    def test_defaults_to_max_when_not_square_and_no_hidden_size(self) -> None:
-        m = FFNN(in_features=2, out_features=4, num_layers=2, skip=False)
-        assert m.embedding_layer.out_features == 4
 
 
 class TestVarWidthFFNN:

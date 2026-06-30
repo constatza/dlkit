@@ -12,12 +12,32 @@ If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the 
 
 ## Naming conventions
 
-- `branch_shape`: branch sample shape excluding batch
-- `trunk_shape`: trunk sample shape excluding batch
-- `out_features`: output feature count per query location
-- `n_queries`: number of query locations in one batch item
-- `trunk_dim`: width of one trunk-coordinate vector
-- `trunk_width`: shared latent width on the DeepONet branch/trunk side
+- `branch_shape`: branch sample shape excluding batch.
+- `branch_in_features`: flattened branch width — `prod(branch_shape)`.
+- `trunk_shape`: trunk sample shape excluding batch.
+- `trunk_dim`: width of one trunk-coordinate vector — `trunk_shape[-1]`.
+- `out_features`: output feature count per query location. Fixed by the
+  target entry's shape (`resolve_shape_kwargs`); not a free hyperparameter.
+- `n_queries`: number of query locations in one batch item.
+- `basis_dim`: number of basis functions combined per output channel
+  (the DeepONet paper's `p`). Required, no default — it directly sizes
+  `latent_dim` below.
+- `latent_dim` (called `expected_width` inside `forward()`):
+  `basis_dim * out_features`. The output width that **both** `branch_net`
+  and `trunk_net` must produce, since their outputs are combined with an
+  inner product over the `basis_dim` axis (`torch.einsum("bop,bqop->bqo", ...)`
+  in `DeepONet.forward`). It is derived, not an independent constructor kwarg.
+- `branch_hidden_size` / `trunk_hidden_size`: the internal hidden-layer width
+  of each constant-width network (`FFNNDeepONet`/`EmbeddedDeepONet` only).
+  Independent of `basis_dim` — controls how each network processes data
+  internally, not the width it must output. Required, no default: `latent_dim`
+  can be orders of magnitude larger than `branch_in_features`/`trunk_dim`, and
+  defaulting this to anything derived from those shapes is what previously
+  caused multi-GB layers and CUDA OOM during training. Prefer
+  `VarWidthDeepONet` (explicit per-layer `branch_layers`/`trunk_layers`)
+  over the constant-width variants when `latent_dim` is far above
+  `branch_in_features`/`trunk_dim` — a flat body is a poor fit for a network
+  that must change size by orders of magnitude.
 
 Use `branch` and `trunk` consistently for DeepONet data tensors, forward
 parameters, and constructor kwargs. Use `spatial_shape` for generic grid
@@ -69,11 +89,11 @@ Input/output dimensions:
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
-- `branch_net` output: `(B, trunk_width * out_features)`
-- `trunk_net` output: `(B * n_queries, trunk_width * out_features)`
+- `branch_net` output: `(B, basis_dim * out_features)`
+- `trunk_net` output: `(B * n_queries, basis_dim * out_features)`
 
 Constructor dimensions:
-- `trunk_width`
+- `basis_dim`
 - `out_features`
 
 ## `VarWidthDeepONet`
@@ -84,15 +104,15 @@ Input/output dimensions:
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
-- branch FFNN output: `(B, trunk_width * out_features)`
-- trunk FFNN output: `(B * n_queries, trunk_width * out_features)`
+- branch FFNN output: `(B, basis_dim * out_features)`
+- trunk FFNN output: `(B * n_queries, basis_dim * out_features)`
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
 - `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
-- `trunk_width`
+- `basis_dim`
 - `out_features`
 - `branch_layers`
 - `trunk_layers`
@@ -105,15 +125,15 @@ Input/output dimensions:
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
-- branch FFNN output: `(B, trunk_width * out_features)`
-- trunk FFNN output: `(B * n_queries, trunk_width * out_features)`
+- branch FFNN output: `(B, basis_dim * out_features)`
+- trunk FFNN output: `(B * n_queries, basis_dim * out_features)`
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
 - `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
-- `trunk_width`
+- `basis_dim`
 - `out_features`
 - `branch_hidden_size`
 - `branch_num_layers`
@@ -128,15 +148,15 @@ Input/output dimensions:
 - output: `(B, n_queries, out_features)`
 
 Architecture dimensions:
-- branch FFNN output: `(B, trunk_width * out_features)`
-- trunk FFNN output: `(B * n_queries, trunk_width * out_features)`
+- branch FFNN output: `(B, basis_dim * out_features)`
+- trunk FFNN output: `(B * n_queries, basis_dim * out_features)`
 
 Constructor dimensions:
 - `branch_in_features`: flattened branch width
 - `branch_in_features = prod(branch_shape)` derived from the first input shape
 - common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
 - `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
-- `trunk_width`
+- `basis_dim`
 - `out_features`
 - `branch_hidden_size`
 - `branch_num_layers`

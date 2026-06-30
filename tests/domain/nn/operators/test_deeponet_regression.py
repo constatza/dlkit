@@ -25,7 +25,7 @@ def deeponet_output_shapes() -> OutputShapes:
 @pytest.fixture
 def deeponet_kwargs() -> dict[str, HyperParam]:
     """Branch/trunk layer widths for VarWidthDeepONet."""
-    return {"branch_layers": [64], "trunk_layers": [64]}
+    return {"branch_layers": [64], "trunk_layers": [64], "basis_dim": 8}
 
 
 def test_deeponet_exposes_from_entries() -> None:

@@ -32,7 +32,7 @@ class TestDeepONetShapes:
             branch_in_features=20,
             out_features=1,
             trunk_dim=1,
-            trunk_width=32,
+            basis_dim=32,
             branch_layers=[32, 24, 32],
             trunk_layers=[16, 32],
         )
@@ -49,7 +49,7 @@ class TestDeepONetShapes:
             branch_in_features=20,
             out_features=1,
             trunk_dim=2,
-            trunk_width=32,
+            basis_dim=32,
             branch_layers=[32, 24, 32],
             trunk_layers=[16, 32],
         )
@@ -67,7 +67,7 @@ class TestDeepONetShapes:
             branch_in_features=20,
             out_features=out_features,
             trunk_dim=2,
-            trunk_width=32,
+            basis_dim=32,
             branch_layers=[32, 48],
             trunk_layers=[24, 24, 32],
         )
@@ -79,7 +79,7 @@ class TestDeepONetShapes:
             branch_in_features=20,
             out_features=1,
             trunk_dim=1,
-            trunk_width=16,
+            basis_dim=16,
             branch_layers=[16, 24],
             trunk_layers=[16, 16],
         )
@@ -98,7 +98,7 @@ class TestDeepONetVariants:
             branch_in_features=20,
             out_features=5,
             trunk_dim=1,
-            trunk_width=12,
+            basis_dim=12,
             branch_hidden_size=24,
             branch_num_layers=3,
             trunk_hidden_size=18,
@@ -116,7 +116,7 @@ class TestDeepONetVariants:
             branch_in_features=20,
             out_features=4,
             trunk_dim=2,
-            trunk_width=10,
+            basis_dim=10,
             branch_hidden_size=32,
             branch_num_layers=2,
             trunk_hidden_size=28,
@@ -136,7 +136,7 @@ class TestDeepONetVariants:
                 branch_in_features=20,
                 out_features=2,
                 trunk_dim=2,
-                trunk_width=8,
+                basis_dim=8,
                 branch_hidden_size=16,
                 branch_num_layers=2,
                 trunk_hidden_size=12,
@@ -146,7 +146,7 @@ class TestDeepONetVariants:
                 branch_in_features=20,
                 out_features=2,
                 trunk_dim=2,
-                trunk_width=8,
+                basis_dim=8,
                 branch_hidden_size=16,
                 branch_num_layers=2,
                 trunk_hidden_size=12,
@@ -168,7 +168,7 @@ class TestDeepONetVariants:
             branch_in_features=20,
             out_features=2,
             trunk_dim=2,
-            trunk_width=8,
+            basis_dim=8,
             branch_hidden_size=16,
             branch_num_layers=2,
             trunk_hidden_size=12,
@@ -199,7 +199,7 @@ class TestDeepONetContractAndProtocols:
     ) -> None:
         model = VarWidthDeepONet.from_context(
             ShapeContext(non_flat_branch_input_shapes, deeponet_output_shapes),
-            trunk_width=8,
+            basis_dim=8,
             branch_layers=[16, 16],
             trunk_layers=[12, 12],
         )
@@ -216,7 +216,7 @@ class TestDeepONetContractAndProtocols:
         ``out_features`` from the last axis, not the query count."""
         model = VarWidthDeepONet.from_context(
             ShapeContext(non_flat_branch_input_shapes, {"y": (500, 3)}),
-            trunk_width=8,
+            basis_dim=8,
             branch_layers=[16, 16],
             trunk_layers=[12, 12],
         )
@@ -227,8 +227,8 @@ class TestDeepONetContractAndProtocols:
         batch_size: int,
         n_queries: int,
     ) -> None:
-        trunk_width, out_features = 16, 1
-        latent_dim = trunk_width * out_features
+        basis_dim, out_features = 16, 1
+        latent_dim = basis_dim * out_features
         branch = nn.Sequential(
             nn.Flatten(1), nn.Linear(20, 32), nn.ReLU(), nn.Linear(32, latent_dim)
         )
@@ -238,7 +238,7 @@ class TestDeepONetContractAndProtocols:
         model = DeepONet(
             branch_net=branch,
             trunk_net=trunk_net,
-            trunk_width=trunk_width,
+            basis_dim=basis_dim,
             out_features=out_features,
         )
         assert model(branch_input, trunk).shape == (batch_size, n_queries, 1)
@@ -253,7 +253,7 @@ class TestDeepONetContractAndProtocols:
         model = DeepONet(
             branch_net=branch,
             trunk_net=trunk_net,
-            trunk_width=16,
+            basis_dim=16,
             out_features=1,
         )
         branch_input = torch.randn(batch_size, 20)
@@ -267,7 +267,7 @@ class TestDeepONetContractAndProtocols:
             branch_in_features=10,
             out_features=1,
             trunk_dim=1,
-            trunk_width=16,
+            basis_dim=16,
             branch_hidden_size=16,
             branch_num_layers=2,
             trunk_hidden_size=16,

@@ -121,8 +121,7 @@ class FFNN(VarWidthFFNN):
     Args:
         in_features: Input dimension.
         out_features: Output dimension.
-        hidden_size: Width of all hidden layers; defaults to
-            ``max(in_features, out_features)`` when omitted.
+        hidden_size: Width of all hidden layers. Always required — no default.
         num_layers: Number of hidden ``DenseBlock`` transitions.
         activation: Element-wise activation between layers.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
@@ -141,7 +140,7 @@ class FFNN(VarWidthFFNN):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int | None = None,
+        hidden_size: int,
         num_layers: int,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -151,7 +150,6 @@ class FFNN(VarWidthFFNN):
     ) -> None:
         if num_layers < 0:
             raise ValueError("num_layers must be a non-negative integer")
-        hidden_size = hidden_size if hidden_size is not None else max(in_features, out_features)
         super().__init__(
             in_features=in_features,
             out_features=out_features,
@@ -186,8 +184,7 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
     Args:
         in_features: Input dimension.
         out_features: Output dimension.
-        hidden_size: Width of the hidden body. Defaults to
-            ``max(in_features, out_features)`` when omitted.
+        hidden_size: Width of the hidden body. Always required — no default.
         num_layers: Number of constant-width hidden stages.
         activation: Element-wise activation between hidden layers.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
@@ -203,7 +200,7 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         *,
         in_features: int,
         out_features: int,
-        hidden_size: int | None = None,
+        hidden_size: int,
         num_layers: int,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: Literal["batch", "layer"] | None = None,
@@ -215,7 +212,7 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
             raise ValueError("num_layers must be a positive integer")
 
         resolved_activation = resolve_activation(activation)
-        hidden = hidden_size if hidden_size is not None else max(in_features, out_features)
+        hidden = hidden_size
         self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
         self.layers = nn.ModuleList()
 
