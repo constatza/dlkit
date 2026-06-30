@@ -23,20 +23,22 @@ def _identity(x: torch.Tensor) -> torch.Tensor:
 
 def resolve_activation(
     name: ActivationName | str | Callable | None,
+    default: ActivationName = "relu",
 ) -> Callable[[torch.Tensor], torch.Tensor]:
     """Resolve an activation function from a name, callable, or None.
 
     Args:
-        name: Activation name, callable, or None. Defaults to "relu".
+        name: Activation name, callable, or None.
+        default: Activation name used when ``name`` is None.
 
     Returns:
         The resolved activation callable.
     """
     if callable(name):
         return cast(Callable[[torch.Tensor], torch.Tensor], name)
+    if name is None:
+        name = default
     match name:
-        case None:
-            return F.relu
         case "none" | "identity":
             return _identity
         case "relu":

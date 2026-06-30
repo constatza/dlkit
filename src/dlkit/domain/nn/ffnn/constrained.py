@@ -274,7 +274,7 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
                 mean=mean,
                 std=std,
             ),
-            activation=activation,
+            activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
         )
@@ -307,7 +307,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
                 mean=mean,
                 std=std,
             ),
-            activation=activation,
+            activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
         )
@@ -345,7 +345,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}")
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
-        resolved_activation = resolve_activation(activation)
+        resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
@@ -400,7 +400,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}")
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
-        resolved_activation = resolve_activation(activation)
+        resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.first_block = ParametricDenseBlock(
             size=hidden_size,
@@ -482,9 +482,7 @@ class ConstantWidthFactorizedFFNN(StandardEntryConsumer, nn.Module):
                 "ConstantWidthFactorizedFFNN requires in_features == out_features, "
                 f"got {in_features} != {out_features}"
             )
-        resolved_activation = (
-            nn.functional.gelu if activation is None else resolve_activation(activation)
-        )
+        resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.body = _ConstantWidthParametricBody(
             size=in_features,
@@ -553,9 +551,7 @@ class ConstantWidthSimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
                 "ConstantWidthSimpleFactorizedFFNN requires in_features == out_features, "
                 f"got {in_features} != {out_features}"
             )
-        resolved_activation = (
-            nn.functional.gelu if activation is None else resolve_activation(activation)
-        )
+        resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.body = _ConstantWidthParametricBody(
             size=in_features,

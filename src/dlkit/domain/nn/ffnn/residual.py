@@ -123,7 +123,8 @@ class FFNN(VarWidthFFNN):
         out_features: Output dimension.
         hidden_size: Width of all hidden layers. Always required — no default.
         num_layers: Number of hidden ``DenseBlock`` transitions.
-        activation: Element-wise activation between layers.
+        activation: Element-wise activation between layers. Defaults to GELU
+            when omitted.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
         dropout: Dropout probability between layers.
         bias: Whether linear layers include a bias term.
@@ -154,7 +155,7 @@ class FFNN(VarWidthFFNN):
             in_features=in_features,
             out_features=out_features,
             layers=[hidden_size] * (num_layers + 1),
-            activation=resolve_activation(activation),
+            activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
             bias=bias,
@@ -186,7 +187,8 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         out_features: Output dimension.
         hidden_size: Width of the hidden body. Always required — no default.
         num_layers: Number of constant-width hidden stages.
-        activation: Element-wise activation between hidden layers.
+        activation: Element-wise activation between hidden layers. Defaults
+            to GELU when omitted.
         normalize: Optional normalisation (``"batch"`` or ``"layer"``).
         dropout: Dropout probability between hidden layers.
         bias: Whether linear layers include a bias term.
@@ -211,7 +213,7 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         if num_layers <= 0:
             raise ValueError("num_layers must be a positive integer")
 
-        resolved_activation = resolve_activation(activation)
+        resolved_activation = resolve_activation(activation, default="gelu")
         hidden = hidden_size
         self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
         self.layers = nn.ModuleList()
