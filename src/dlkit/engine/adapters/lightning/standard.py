@@ -36,7 +36,6 @@ from dlkit.infrastructure.config import (
 )
 from dlkit.infrastructure.config.data_entries import DataEntry, is_feature, is_target
 from dlkit.infrastructure.config.model_components import LossInputRef
-from dlkit.infrastructure.config.model_settings import ModelSettings
 
 from .base import ProcessingLightningWrapper, _build_model_from_settings
 from .prediction_strategies import DiscriminativePredictionStrategy
@@ -115,7 +114,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         self,
         *,
         settings: WrapperComponentSettings,
-        model_settings: ModelComponentSettings | ModelSettings,
+        model_settings: ModelComponentSettings,
         entry_configs: tuple[DataEntry, ...] | None = None,
         context: Any = None,
         components: WrapperComponents,

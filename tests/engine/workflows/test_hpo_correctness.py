@@ -364,7 +364,7 @@ def _make_search_job() -> SearchJobConfig:
             },
             "search": {
                 "space": {
-                    "model.params.hidden_size": {
+                    "model.hidden_size": {
                         "type": "categorical",
                         "choices": [2, 4],
                     }
@@ -378,7 +378,7 @@ def test_tracked_execution_samples_and_reports_once(
     minimal_training_result: TrainingResult,
 ) -> None:
     trial_executor = _RecordingTrialExecutor(minimal_training_result)
-    backend_session = _RecordingBackendSession(sampled={"model.params.hidden_size": 2})
+    backend_session = _RecordingBackendSession(sampled={"model.hidden_size": 2})
     tracker = _TrackingAdapter()
     orchestrator = OptimizationOrchestrator(
         study_manager=_make_study_manager(),
@@ -404,7 +404,7 @@ def test_tracked_execution_samples_and_reports_once(
 
     trial_context = tracker.trial_contexts[0]
     assert trial_context.pre_logs[0]["settings"] is not None
-    assert trial_context.pre_logs[1]["hyperparameters"] == {"model.params.hidden_size": 2}
+    assert trial_context.pre_logs[1]["hyperparameters"] == {"model.hidden_size": 2}
     assert trial_context.metric_logs == [{"loss": 0.1}]
 
 
@@ -423,7 +423,7 @@ def test_tracked_and_untracked_paths_share_terminal_state_handling(
     base_settings = _make_search_job()
 
     untracked_executor = _RecordingTrialExecutor(minimal_training_result, exception=exception)
-    untracked_backend = _RecordingBackendSession(sampled={"model.params.hidden_size": 2})
+    untracked_backend = _RecordingBackendSession(sampled={"model.hidden_size": 2})
     untracked = OptimizationOrchestrator(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, untracked_executor),
@@ -431,7 +431,7 @@ def test_tracked_and_untracked_paths_share_terminal_state_handling(
     )
 
     tracked_executor = _RecordingTrialExecutor(minimal_training_result, exception=exception)
-    tracked_backend = _RecordingBackendSession(sampled={"model.params.hidden_size": 2})
+    tracked_backend = _RecordingBackendSession(sampled={"model.hidden_size": 2})
     tracked = OptimizationOrchestrator(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, tracked_executor),

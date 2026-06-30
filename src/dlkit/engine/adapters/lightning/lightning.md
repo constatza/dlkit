@@ -349,8 +349,7 @@ checkpoint["dlkit_metadata"] = {
     "model_settings": {
         "name": "LinearNet",
         "module_path": "...",
-        "resolved_init_kwargs": {...},
-        "all_hyperparams": {...},
+        "hyper_kwargs": {...},
     },
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
@@ -363,7 +362,7 @@ checkpoint["dlkit_metadata"] = {
 ```
 
 `dlkit_metadata` no longer carries a checkpoint `version` field. Loaders require
-the metadata block itself and normalize older `model_settings` payloads into the
+the metadata block itself and expect `model_settings` to match the canonical
 flat DTO shape above before reconstruction.
 
 Serialized transform specs inside `entry_configs[*].transforms` are treated as

@@ -9,7 +9,6 @@ name = "test-ffnn"
 [model]
 class = "ConstantWidthFFNN"
 module_path = "dlkit.domain.nn"
-[model.params]
 hidden_size = 64
 num_layers = 2
 

@@ -151,7 +151,7 @@ def test_factory_only_wires_optuna_infrastructure_when_enabled() -> None:
             },
             "search": {
                 "space": {
-                    "model.params.hidden_size": {
+                    "model.hidden_size": {
                         "type": "categorical",
                         "choices": [2, 4],
                     }

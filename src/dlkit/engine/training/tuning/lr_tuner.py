@@ -166,7 +166,6 @@ class LRTuner:
             ModelComponentSettings,
             WrapperComponentSettings,
         )
-        from dlkit.infrastructure.config.model_settings import ModelParams, ModelSettings
         from dlkit.infrastructure.config.optimizer_settings import (
             OptimizerSettings,
             SchedulerSettings,
@@ -190,10 +189,8 @@ class LRTuner:
             InferenceJobConfig,
             SearchJobConfig,
             # Model settings
-            ModelSettings,
-            ModelParams,
-            WrapperComponentSettings,
             ModelComponentSettings,
+            WrapperComponentSettings,
             MetricComponentSettings,
             LossComponentSettings,
             # Training settings

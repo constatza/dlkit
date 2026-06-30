@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, ModelWrapValidatorHandler, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.common.types import ActivationName, NormalizerName
@@ -340,7 +340,7 @@ LossSpec = Annotated[
 class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettings):
     """Model architecture configuration - pure configuration only.
 
-    This replaces ModelSettings.build() with factory pattern.
+    This is the canonical public and runtime model configuration type.
     All model construction logic is moved to factories.
 
     Checkpoint Usage (Workflow-Specific):
@@ -359,10 +359,15 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
         Various model architecture parameters as hyperparameters
     """
 
-    model_config = SettingsConfigDict(extra="allow", arbitrary_types_allowed=True)
+    model_config = SettingsConfigDict(
+        extra="allow",
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+    )
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
         default=None,
+        validation_alias="class",
         exclude=True,
         description="Model namespace path",
         json_schema_extra={"dlkit_init_kwarg": False},
@@ -425,6 +430,27 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
         default=None, description="Number of output channels"
     )
     num_heads: IntHyperparameter | None = Field(default=None, description="Number of heads")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _validate_public_model_shape(
+        cls,
+        data: object,
+        handler: ModelWrapValidatorHandler[ModelComponentSettings],
+    ) -> ModelComponentSettings:
+        """Reject ambiguous or legacy public model config shapes."""
+        if isinstance(data, dict):
+            if "name" in data and "class" in data:
+                raise ValueError(
+                    "Provide either 'class' (TOML alias) or 'name' (Python kwarg), not both."
+                )
+            if "params" in data:
+                raise ValueError(
+                    "Nested 'model.params' is no longer supported. Move model hyperparameters "
+                    "directly under [model], for example use 'hidden_size = 64' instead of "
+                    "'[model.params]\\nhidden_size = 64'."
+                )
+        return handler(data)
 
     @field_validator("module_path", mode="after")
     @classmethod

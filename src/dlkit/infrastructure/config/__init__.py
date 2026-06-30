@@ -60,7 +60,6 @@ from .model_components import (
     R2ScoreSettings,
     WrapperComponentSettings,
 )
-from .model_settings import ModelParams, ModelSettings
 from .optimization_selector import ParameterSelectorSettings
 from .optimization_stage import OptimizationStageSettings
 from .optimization_trigger import TriggerSettings
@@ -112,8 +111,6 @@ __all__ = [
     "RunSettings",
     "RunType",
     "ExperimentSettings",
-    "ModelSettings",
-    "ModelParams",
     "DataSettings",
     "DataModuleSelector",
     "TrainingSettings",

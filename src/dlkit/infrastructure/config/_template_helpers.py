@@ -29,7 +29,7 @@ def build_training_template_dict() -> dict[str, Any]:
     return {
         "run": {"type": "train", "seed": 42, "precision": "32"},
         "experiment": {"name": "my-experiment"},
-        "model": {"name": "your.model.class", "params": {}},
+        "model": {"name": "your.model.class"},
         "data": {
             "root": "./data",
             "batch_size": 32,
@@ -88,7 +88,7 @@ def build_search_template_dict() -> dict[str, Any]:
         "objective": "val/loss",
         "space": {
             "training.optimizer.lr": {"type": "log_float", "low": 1e-5, "high": 1e-1},
-            "model.params.hidden_size": {"type": "categorical", "choices": [64, 128, 256]},
+            "model.hidden_size": {"type": "categorical", "choices": [64, 128, 256]},
         },
     }
     return base

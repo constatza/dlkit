@@ -9,6 +9,7 @@ from typing import Any
 import torch
 
 from dlkit.common.errors import WorkflowError
+from dlkit.engine.adapters.lightning.checkpoint_dto import ModelCheckpointDTO
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -67,20 +68,30 @@ def extract_model_settings(checkpoint: dict[str, Any]) -> ModelComponentSettings
 
     try:
         settings_data = checkpoint["dlkit_metadata"]["model_settings"]
-        if not isinstance(settings_data, dict) or "hyper_kwargs" not in settings_data:
+        if not isinstance(settings_data, dict):
             raise WorkflowError(
-                "Checkpoint model_settings is missing 'hyper_kwargs'. "
-                "This checkpoint was saved with a legacy format that is no longer supported. "
-                "Re-train your model to generate a compatible checkpoint."
+                "Checkpoint model_settings must be a mapping with the canonical "
+                "ModelCheckpointDTO fields: 'name', 'module_path', and 'hyper_kwargs'."
+            )
+        dto = ModelCheckpointDTO.model_validate(settings_data)
+        if "params" in dto.hyper_kwargs:
+            raise WorkflowError(
+                "Checkpoint model_settings.hyper_kwargs contains unsupported nested 'params'. "
+                "This checkpoint uses an obsolete model-settings shape and is not supported."
             )
         reconstructed = {
-            "name": settings_data.get("name") or "",
-            "module_path": settings_data.get("module_path") or "dlkit.domain.nn",
-            **settings_data["hyper_kwargs"],
+            "name": dto.name,
+            "module_path": dto.module_path or "dlkit.domain.nn",
+            **dto.hyper_kwargs,
         }
         return ModelComponentSettings.model_validate(reconstructed)
     except WorkflowError:
         raise
+    except ValueError as exc:
+        raise WorkflowError(
+            "Checkpoint model_settings must match the canonical ModelCheckpointDTO "
+            "shape with only 'name', 'module_path', and 'hyper_kwargs'."
+        ) from exc
     except Exception as exc:
         raise WorkflowError(f"Failed to deserialize model settings: {exc}") from exc
 

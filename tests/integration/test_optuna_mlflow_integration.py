@@ -83,7 +83,8 @@ def _make_search_job_config(
         "model": {
             "class": "FFNN",
             "module_path": "dlkit.domain.nn",
-            "params": {"hidden_size": 4, "num_layers": 0},
+            "hidden_size": 4,
+            "num_layers": 0,
         },
         "data": {
             "class": "FlexibleDataset",
@@ -102,7 +103,7 @@ def _make_search_job_config(
             "study_name": study_name,
             "storage": storage,
             "space": {
-                "model.params.hidden_size": {"type": "categorical", "choices": [2, 4]},
+                "model.hidden_size": {"type": "categorical", "choices": [2, 4]},
             },
         },
     }
@@ -278,7 +279,8 @@ class TestOptunaMLflowOptimization:
                 "model": {
                     "class": "FFNN",
                     "module_path": "dlkit.domain.nn",
-                    "params": {"hidden_size": 4, "num_layers": 0},
+                    "hidden_size": 4,
+                    "num_layers": 0,
                 },
                 "data": {
                     "class": "FlexibleDataset",

@@ -73,7 +73,7 @@ def sample_general_settings_data() -> dict[str, Any]:
         "model": {
             "class": "ConstantWidthFFNN",
             "module_path": "dlkit.domain.nn",
-            "params": {"hidden_size": 64},
+            "hidden_size": 64,
         },
         "data": {
             "class": "FlexibleDataset",
@@ -151,7 +151,11 @@ name = "advanced_experiment"
 [model]
 class = "AdvancedModel"
 module_path = "dlkit.domain.nn.ffnn"
-params = {heads = 8, num_layers = 6, latent_size = 256, in_channels = 3, out_channels = 10}
+heads = 8
+num_layers = 6
+latent_size = 256
+in_channels = 3
+out_channels = 10
 
 [data]
 class = "AdvancedDataset"

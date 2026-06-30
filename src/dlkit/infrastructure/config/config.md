@@ -22,7 +22,7 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 - `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`
 - `run_settings.py`: `RunSettings` (type, seed, precision)
 - `experiment_settings.py`: `ExperimentSettings` (name, run_name, register_model)
-- `model_settings.py`: `ModelSettings`, `ModelParams`
+- `model_components.py`: canonical `ModelComponentSettings`, plus loss/metric component settings
 - `data_settings.py`: `DataSettings` plus entry types
 - `training_settings.py`: `TrainingSettings`, `StoppingSettings`
 - `search_settings.py`: `SearchSettings`, param types
@@ -232,5 +232,10 @@ settings = TrainingSettings(
   validated at config load time via module discovery without executing the
   target module body, and runtime builders still apply default module
   namespaces when omitted.
-- `ModelSettings.name` uses `alias="class"` so TOML uses `class = "MyModel"`;
-  providing both `name` and `class` raises `ValueError` at validation time.
+- `ModelComponentSettings.name` uses `validation_alias="class"` (with
+  `populate_by_name=True`) so TOML uses `class = "MyModel"` while `name=` still
+  works as a Python kwarg; providing both `name` and `class` raises `ValueError`
+  at validation time.
+- Nested `[model.params]` is not supported. Model hyperparameters live directly
+  under `[model]`, and HPO paths target `model.<field>` rather than
+  `model.params.<field>`.

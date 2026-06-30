@@ -15,4 +15,4 @@ objective = "val/loss"
 
 [search.space]
 "training.optimizer.lr" = { type = "log_float", low = 1e-4, high = 1e-2 }
-"model.params.hidden_size" = { type = "categorical", choices = [32, 64, 128] }
+"model.hidden_size" = { type = "categorical", choices = [32, 64, 128] }

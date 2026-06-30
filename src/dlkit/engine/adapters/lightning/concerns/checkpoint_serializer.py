@@ -152,19 +152,12 @@ class DLKitCheckpointSerializer:
         if name is None:
             return {}
 
-        if isinstance(model_settings, ModelComponentSettings):
-            init_kwargs = extract_init_kwargs(model_settings)
-            all_hyperparams = model_settings.model_dump()
-        elif hasattr(model_settings, "model_dump"):
-            all_fields = model_settings.model_dump()
-            excluded = {"name", "module_path", "checkpoint"}
-            init_kwargs = {
-                k: v for k, v in all_fields.items() if k not in excluded and v is not None
-            }
-            all_hyperparams = all_fields
-        else:
-            init_kwargs = {}
-            all_hyperparams = {}
+        if not isinstance(model_settings, ModelComponentSettings):
+            raise TypeError(
+                "Checkpoint serialization requires ModelComponentSettings; "
+                f"got {type(model_settings)!r}"
+            )
+        init_kwargs = extract_init_kwargs(model_settings)
 
         # When name is a type, extract the proper string name and module path
         if isinstance(name, type):
@@ -199,7 +192,6 @@ class DLKitCheckpointSerializer:
             name=serialized_name,
             module_path=serialized_module,
             hyper_kwargs=hyper_kwargs,
-            all_hyperparams=all_hyperparams,
         )
         return dto.model_dump()
 

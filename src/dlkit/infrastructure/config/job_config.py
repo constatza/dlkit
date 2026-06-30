@@ -7,7 +7,7 @@ from pydantic import Field, model_validator
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
-from dlkit.infrastructure.config.model_settings import ModelSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.search_settings import SearchSettings
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
@@ -29,7 +29,7 @@ class JobConfig(BasicSettings):
 
     run: RunSettings
     experiment: ExperimentSettings | None = None
-    model: ModelSettings | None = None
+    model: ModelComponentSettings | None = None
     data: DataSettings | None = None
     training: TrainingSettings | None = None
     search: SearchSettings | None = None
@@ -45,7 +45,7 @@ class TrainingJobConfig(JobConfig):
         training: Training pipeline configuration (required).
     """
 
-    model: ModelSettings
+    model: ModelComponentSettings
     data: DataSettings
     training: TrainingSettings
 
@@ -57,7 +57,7 @@ class InferenceJobConfig(JobConfig):
         model: Model class selector and hyperparameters (required).
     """
 
-    model: ModelSettings
+    model: ModelComponentSettings
 
     @model_validator(mode="after")
     def _checkpoint_required(self) -> InferenceJobConfig:
@@ -84,7 +84,7 @@ class SearchJobConfig(JobConfig):
         search: HPO search configuration (required, must have non-empty space).
     """
 
-    model: ModelSettings
+    model: ModelComponentSettings
     data: DataSettings
     training: TrainingSettings
     search: SearchSettings

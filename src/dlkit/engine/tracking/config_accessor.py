@@ -18,7 +18,10 @@ class ConfigAccessor:
 
     def get_model_name(self) -> str:
         """Get model name or default."""
-        return self._settings.model.name if self._settings.model else "Model"
+        name = self._settings.model.name if self._settings.model else None
+        if name is None:
+            return "Model"
+        return name.__qualname__ if isinstance(name, type) else str(name)
 
     def get_mlflow_config(self) -> ExperimentSettings | None:
         """Return the experiment settings section (MLflow identity fields)."""

@@ -10,7 +10,7 @@ from dlkit.engine.workflows.entrypoints._overrides import (
 )
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
-from dlkit.infrastructure.config.model_settings import ModelSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.optimizer_component import (
     AdamSettings,
     AdamWSettings,
@@ -75,7 +75,7 @@ def sample_job() -> TrainingJobConfig:
     """
     return TrainingJobConfig(
         run=RunSettings(type="train"),
-        model=ModelSettings.model_validate({"class": "DummyModel"}),
+        model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
         data=DataSettings(batch_size=16),
         training=TrainingSettings(trainer=TrainerSettings(max_epochs=50)),
     )

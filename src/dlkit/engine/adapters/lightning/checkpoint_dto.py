@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModelCheckpointDTO(BaseModel):
@@ -17,10 +17,10 @@ class ModelCheckpointDTO(BaseModel):
             user config. Shape kwargs (e.g. ``in_features``) are excluded here
             because they are re-derived from stored ``input_shapes``/``output_shapes``
             at inference time via ``from_context``.
-        all_hyperparams: Full settings snapshot for reference / debugging.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     module_path: str
     hyper_kwargs: dict[str, Any] = Field(default_factory=dict)
-    all_hyperparams: dict[str, Any] = Field(default_factory=dict)

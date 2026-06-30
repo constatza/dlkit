@@ -83,7 +83,7 @@ name = "ConstantWidthFFNN"
 module_path = "dlkit.domain.nn.ffnn.residual"
 # checkpoint = "/path/to/model.ckpt"  # for inference
 
-[model.params]
+# model hyperparameters live directly under [model]
 input_dim = 4
 output_dim = 2
 hidden_dims = [8]

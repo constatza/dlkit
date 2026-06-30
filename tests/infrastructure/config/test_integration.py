@@ -142,8 +142,6 @@ name = "integration_session"
 [model]
 class = "IntegrationModel"
 module_path = "dlkit.domain.nn.ffnn"
-
-[model.params]
 input_size = 128
 output_size = 10
 
@@ -295,7 +293,7 @@ class TestGeneralSettingsEndToEndIntegration:
         model = _expect_not_none(settings.model)
 
         assert experiment.name == "integration_session"
-        assert (model.params.model_extra or {}).get("input_size") == 128
+        assert (model.model_extra or {}).get("input_size") == 128
         assert settings.tracking.backend == "mlflow"
         assert settings.data.batch_size == 64
 

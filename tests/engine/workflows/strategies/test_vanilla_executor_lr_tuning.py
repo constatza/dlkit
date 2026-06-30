@@ -12,7 +12,7 @@ from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-from dlkit.infrastructure.config.model_settings import ModelSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
 from dlkit.infrastructure.config.optimizer_component import (
@@ -56,7 +56,7 @@ def settings_without_lr_tuner() -> TrainingJobConfig:
     """Settings without LR tuner configured."""
     return TrainingJobConfig(
         run=RunSettings(type="train", seed=42),
-        model=ModelSettings.model_validate({"class": "DummyModel"}),
+        model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
         data=DataSettings(),
         training=TrainingSettings(),
     )
@@ -67,7 +67,7 @@ def settings_with_lr_tuner() -> TrainingJobConfig:
     """Settings with LR tuner configured (enabled)."""
     return TrainingJobConfig(
         run=RunSettings(type="train", seed=42),
-        model=ModelSettings.model_validate({"class": "DummyModel"}),
+        model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
         data=DataSettings(),
         training=TrainingSettings(
             lr_tuner=LRTunerSettings(
@@ -124,7 +124,7 @@ class TestVanillaExecutorLRTuning:
         """Empty [TRAINING.lr_tuner] section creates LRTunerSettings with defaults."""
         settings_with_empty_lr_tuner = TrainingJobConfig(
             run=RunSettings(type="train", seed=42),
-            model=ModelSettings.model_validate({"class": "DummyModel"}),
+            model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
             data=DataSettings(),
             training=TrainingSettings.model_validate({"lr_tuner": {}}),
         )
@@ -183,7 +183,7 @@ class TestVanillaExecutorLRTuning:
         executor = VanillaExecutor()
         settings = TrainingJobConfig(
             run=RunSettings(type="train", seed=42),
-            model=ModelSettings.model_validate({"class": "DummyModel"}),
+            model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
             data=DataSettings(),
             training=TrainingSettings(),
         )
@@ -223,7 +223,7 @@ class TestVanillaExecutorLRTuning:
         """LR tuner is not called when the configured optimizer requires a closure (LBFGS)."""
         settings = TrainingJobConfig(
             run=RunSettings(type="train", seed=42),
-            model=ModelSettings.model_validate({"class": "DummyModel"}),
+            model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
             data=DataSettings(),
             training=TrainingSettings(
                 lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),
@@ -252,7 +252,7 @@ class TestVanillaExecutorLRTuning:
         """Sequential staged policies should tune through a temporary stage-0 projection."""
         settings = TrainingJobConfig(
             run=RunSettings(type="train", seed=42),
-            model=ModelSettings.model_validate({"class": "DummyModel"}),
+            model=ModelComponentSettings.model_validate({"class": "DummyModel"}),
             data=DataSettings(),
             training=TrainingSettings(
                 lr_tuner=LRTunerSettings(min_lr=1e-5, max_lr=0.1, num_training=100),

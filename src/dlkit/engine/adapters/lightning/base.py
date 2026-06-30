@@ -280,24 +280,17 @@ def _build_model_from_settings(
         module = importlib.import_module(module_path)
         model_cls = getattr(module, model_settings.name)
 
-    if isinstance(model_settings, ModelComponentSettings):
-        hyperparams = extract_init_kwargs(model_settings)
-        if (
-            model_settings.activation is not None
-            and "activation" not in hyperparams
-            and model_accepts_kwarg(model_cls, "activation")
-        ):
-            hyperparams = {**hyperparams, "activation": model_settings.activation}
-    elif hasattr(model_settings, "model_dump"):
-        all_fields = model_settings.model_dump()
-        excluded = {"name", "module_path", "checkpoint", "params"}
-        hyperparams = {k: v for k, v in all_fields.items() if k not in excluded and v is not None}
-        # Unpack nested params sub-table (ModelSettings.params) into top-level kwargs.
-        params_sub = all_fields.get("params")
-        if isinstance(params_sub, dict):
-            hyperparams.update({k: v for k, v in params_sub.items() if v is not None})
-    else:
-        hyperparams = {}
+    if not isinstance(model_settings, ModelComponentSettings):
+        raise TypeError(
+            f"Model construction requires ModelComponentSettings; got {type(model_settings)!r}"
+        )
+    hyperparams = extract_init_kwargs(model_settings)
+    if (
+        model_settings.activation is not None
+        and "activation" not in hyperparams
+        and model_accepts_kwarg(model_cls, "activation")
+    ):
+        hyperparams = {**hyperparams, "activation": model_settings.activation}
 
     return build_model(model_cls, hyperparams, context=context)
 

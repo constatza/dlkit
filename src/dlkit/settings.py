@@ -36,8 +36,6 @@ from dlkit.infrastructure.config import (
     LossComponentSettings,
     MetricComponentSettings,
     ModelComponentSettings,
-    ModelParams,
-    ModelSettings,
     OptimizerSettings,
     PrunerSettings,
     RunSettings,
@@ -75,8 +73,6 @@ __all__ = [
     # New settings classes
     "RunSettings",
     "ExperimentSettings",
-    "ModelSettings",
-    "ModelParams",
     "DataSettings",
     "DataModuleSelector",
     "TrackingSettings",

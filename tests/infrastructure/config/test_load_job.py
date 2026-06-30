@@ -70,7 +70,7 @@ def test_load_simple_train(simple_train_path: Path) -> None:
     assert cfg.run.type == "train"
     assert cfg.run.seed == 42
     assert cfg.model.name == "ConstantWidthFFNN"
-    assert (cfg.model.params.model_extra or {}).get("hidden_size") == 64
+    assert cfg.model.hidden_size == 64
     assert cfg.data.batch_size == 8
     assert cfg.training.loss.name == "mse"
     assert cfg.training.stopping.patience == 5
@@ -92,7 +92,7 @@ def test_load_search(search_path: Path) -> None:
     cfg = load_job(search_path)
     assert isinstance(cfg, SearchJobConfig)
     assert isinstance(cfg.search.space["training.optimizer.lr"], LogFloatParam)
-    assert isinstance(cfg.search.space["model.params.hidden_size"], CategoricalParam)
+    assert isinstance(cfg.search.space["model.hidden_size"], CategoricalParam)
 
 
 # ---------------------------------------------------------------------------

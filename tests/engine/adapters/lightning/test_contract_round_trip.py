@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.nn import ModuleList
 
+from dlkit.common.errors import WorkflowError
 from dlkit.common.shapes import ShapeContext
 from dlkit.engine.adapters.lightning.concerns._checkpoint_serializer_helpers import (
     deserialize_shapes,
@@ -81,6 +82,55 @@ def components(entry_configs) -> WrapperComponents:
     )
 
 
+@pytest.fixture
+def flat_model_settings() -> ModelComponentSettings:
+    """ModelComponentSettings with canonical flat hyperparameters (no nested params)."""
+    return ModelComponentSettings.model_validate(
+        {
+            "class": "Linear",
+            "module_path": "torch.nn",
+            "in_features": 4,
+            "out_features": 2,
+        }
+    )
+
+
+@pytest.fixture
+def flat_entry_configs():
+    """Feature/target entries for the flat-settings round-trip test."""
+    return (
+        ValueEntry(name="input", value=torch.zeros(_BATCH_SIZE, 4), data_role=DataRole.FEATURE),
+        ValueEntry(name="y", value=torch.zeros(_BATCH_SIZE, 2), data_role=DataRole.TARGET),
+    )
+
+
+@pytest.fixture
+def flat_components(flat_entry_configs) -> WrapperComponents:
+    """Pre-built WrapperComponents for the flat-settings round-trip test."""
+    return WrapperComponents(
+        loss_fn=nn.MSELoss(),
+        val_metric_routes=[],
+        test_metric_routes=[],
+        optimizer_policy_settings=OptimizerPolicySettings(),
+        feature_transforms={e.name: ModuleList() for e in flat_entry_configs if e.name == "input"},
+        target_transforms={},
+    )
+
+
+@pytest.fixture
+def malformed_nested_params_checkpoint() -> dict:
+    """Obsolete checkpoint payload with hyper_kwargs.params nesting."""
+    return {
+        "dlkit_metadata": {
+            "model_settings": {
+                "name": "Linear",
+                "module_path": "torch.nn",
+                "hyper_kwargs": {"params": {"in_features": 4, "out_features": 2}},
+            }
+        }
+    }
+
+
 # ---------------------------------------------------------------------------
 # Test
 # ---------------------------------------------------------------------------
@@ -121,3 +171,30 @@ def test_shapes_checkpoint_round_trip(
     x = torch.zeros(_BATCH_SIZE, _IN_SHAPE[0])
     output = model(x)
     assert output.shape == torch.Size([_BATCH_SIZE, _OUT_SHAPE[0]])
+
+
+def test_flat_model_settings_checkpoint_round_trip_reconstructs_model(
+    flat_model_settings, flat_entry_configs, flat_components
+):
+    """Canonical flat model kwargs should survive checkpoint round-trip."""
+    wrapper = StandardLightningWrapper(
+        settings=WrapperComponentSettings(),
+        model_settings=flat_model_settings,
+        components=flat_components,
+        entry_configs=flat_entry_configs,
+    )
+
+    checkpoint = {"state_dict": {"model." + k: v for k, v in wrapper.model.state_dict().items()}}
+    wrapper.on_save_checkpoint(checkpoint)
+
+    rebuilt = build_model_from_checkpoint(checkpoint, None, None)
+
+    assert isinstance(rebuilt, nn.Linear)
+    assert rebuilt.in_features == 4
+    assert rebuilt.out_features == 2
+
+
+def test_malformed_nested_params_checkpoint_fails_fast(malformed_nested_params_checkpoint):
+    """Obsolete checkpoint payloads with nested params must fail with a targeted error."""
+    with pytest.raises(WorkflowError, match="unsupported nested 'params'"):
+        build_model_from_checkpoint(malformed_nested_params_checkpoint, None, None)

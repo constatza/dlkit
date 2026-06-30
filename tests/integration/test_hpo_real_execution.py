@@ -61,7 +61,8 @@ def real_hpo_config(hpo_dataset: dict[str, Path]) -> SearchJobConfig:
             "model": {
                 "class": "FFNN",
                 "module_path": "dlkit.domain.nn",
-                "params": {"hidden_size": 4, "num_layers": 0},
+                "hidden_size": 4,
+                "num_layers": 0,
             },
             "data": {
                 "class": "FlexibleDataset",
@@ -91,7 +92,7 @@ def real_hpo_config(hpo_dataset: dict[str, Path]) -> SearchJobConfig:
                 "study_name": "real_hpo_test",
                 "storage": None,
                 "space": {
-                    "model.params.hidden_size": {"type": "categorical", "choices": [2, 4]},
+                    "model.hidden_size": {"type": "categorical", "choices": [2, 4]},
                 },
             },
         }

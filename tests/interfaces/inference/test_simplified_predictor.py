@@ -47,7 +47,7 @@ def _make_inference_settings(checkpoint: Path | None) -> InferenceJobConfig:
     Returns:
         InferenceJobConfig instance (possibly with None checkpoint for error testing).
     """
-    from dlkit.infrastructure.config.model_settings import ModelSettings
+    from dlkit.infrastructure.config.model_components import ModelComponentSettings
     from dlkit.infrastructure.config.run_settings import RunSettings
 
     if checkpoint is not None:
@@ -63,7 +63,9 @@ def _make_inference_settings(checkpoint: Path | None) -> InferenceJobConfig:
         )
     # For testing the "no checkpoint" error path, bypass validation
     run = RunSettings(type="predict")
-    model = ModelSettings.model_construct(name="Linear", module_path="torch.nn", checkpoint=None)
+    model = ModelComponentSettings.model_construct(
+        name="Linear", module_path="torch.nn", checkpoint=None
+    )
     return InferenceJobConfig.model_construct(run=run, model=model)
 
 
@@ -133,7 +135,6 @@ class TestCheckpointLoading:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "hyper_kwargs": {"in_features": 10, "out_features": 5},
-                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -179,7 +180,6 @@ class TestBuildModelFromCheckpoint:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "hyper_kwargs": {"in_features": 10, "out_features": 5},
-                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -207,7 +207,6 @@ class TestBuildModelFromCheckpoint:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "hyper_kwargs": {"in_features": 10, "out_features": 5},
-                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -238,7 +237,6 @@ class TestCheckpointPredictor:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "hyper_kwargs": {"in_features": 10, "out_features": 5},
-                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }
@@ -352,7 +350,6 @@ class TestLoadPredictorAPI:
                     "name": "Linear",
                     "module_path": "torch.nn",
                     "hyper_kwargs": {"in_features": 10, "out_features": 5},
-                    "all_hyperparams": {"in_features": 10, "out_features": 5},
                 },
             },
         }

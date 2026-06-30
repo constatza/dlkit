@@ -11,7 +11,7 @@ from dlkit.infrastructure.config.job_config import (
     SearchJobConfig,
     TrainingJobConfig,
 )
-from dlkit.infrastructure.config.model_settings import ModelSettings
+from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.search_settings import (
     CategoricalParam,
@@ -56,16 +56,16 @@ def test_run_settings_seed_default_none() -> None:
 
 
 def test_model_settings_alias(minimal_model: dict) -> None:
-    m = ModelSettings.model_validate(minimal_model)
+    m = ModelComponentSettings.model_validate(minimal_model)
     assert m.name == "ConstantWidthFFNN"
 
 
-def test_model_params_extra_allow() -> None:
-    m = ModelSettings.model_validate(
-        {"class": "SomeModel", "params": {"hidden_size": 128, "custom_kwarg": 99}}
+def test_model_hyperparams_live_directly_under_model() -> None:
+    m = ModelComponentSettings.model_validate(
+        {"class": "SomeModel", "hidden_size": 128, "custom_kwarg": 99}
     )
-    extra = m.params.model_extra or {}
-    assert extra["hidden_size"] == 128
+    extra = m.model_extra or {}
+    assert m.hidden_size == 128
     assert extra["custom_kwarg"] == 99
 
 
@@ -112,17 +112,17 @@ def test_search_space_discriminated_union() -> None:
         {
             "space": {
                 "training.optimizer.lr": {"type": "log_float", "low": 1e-5, "high": 1e-1},
-                "model.params.n_layers": {"type": "int", "low": 1, "high": 6},
-                "model.params.act": {"type": "categorical", "choices": ["relu", "gelu"]},
+                "model.num_layers": {"type": "int", "low": 1, "high": 6},
+                "model.act": {"type": "categorical", "choices": ["relu", "gelu"]},
             }
         }
     )
     from dlkit.infrastructure.config.search_settings import LogFloatParam
 
     assert isinstance(s.space["training.optimizer.lr"], LogFloatParam)
-    assert isinstance(s.space["model.params.n_layers"], IntParam)
-    assert isinstance(s.space["model.params.act"], CategoricalParam)
-    assert s.space["model.params.act"].choices == ["relu", "gelu"]
+    assert isinstance(s.space["model.num_layers"], IntParam)
+    assert isinstance(s.space["model.act"], CategoricalParam)
+    assert s.space["model.act"].choices == ["relu", "gelu"]
 
 
 def test_categorical_has_no_low_high() -> None:
@@ -168,10 +168,15 @@ def test_search_job_config_requires_search_section(
 def test_model_settings_rejects_both_name_and_class() -> None:
     """Providing both 'name' and 'class' must raise ValidationError."""
     with pytest.raises(ValidationError):
-        ModelSettings.model_validate({"name": "FooModel", "class": "BarModel"})
+        ModelComponentSettings.model_validate({"name": "FooModel", "class": "BarModel"})
 
 
 def test_model_settings_class_alias_is_canonical() -> None:
     """'class' key should work as the TOML alias."""
-    m = ModelSettings.model_validate({"class": "MyModel"})
+    m = ModelComponentSettings.model_validate({"class": "MyModel"})
     assert m.name == "MyModel"
+
+
+def test_model_settings_rejects_nested_params_table() -> None:
+    with pytest.raises(ValidationError, match="Nested 'model.params' is no longer supported"):
+        ModelComponentSettings.model_validate({"class": "MyModel", "params": {"hidden_size": 64}})

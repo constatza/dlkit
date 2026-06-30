@@ -154,10 +154,6 @@ def minimal_model_checkpoint(tmp_path: Path) -> Path:
                     "hidden_size": FEATURE_SIZE,
                     "num_layers": 0,
                 },
-                "all_hyperparams": {
-                    "hidden_size": FEATURE_SIZE,
-                    "num_layers": 0,
-                },
             },
             "entry_configs": [
                 {"name": "x", "class_name": "Feature"},
@@ -203,7 +199,8 @@ def _make_training_job_config(
     model_dict: dict[str, Any] = {
         "class": "FFNN",
         "module_path": "dlkit.domain.nn",
-        "params": {"hidden_size": FEATURE_SIZE, "num_layers": 0},
+        "hidden_size": FEATURE_SIZE,
+        "num_layers": 0,
     }
     if checkpoint is not None:
         model_dict["checkpoint"] = str(checkpoint)
@@ -318,11 +315,9 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Tr
             "model": {
                 "class": "GProjection",
                 "module_path": "dlkit.domain.nn.graph.projection_networks",
-                "params": {
-                    "hidden_size": 4,
-                    "in_channels": NODE_FEATURES,
-                    "out_channels": TARGET_SIZE,
-                },
+                "hidden_size": 4,
+                "in_channels": NODE_FEATURES,
+                "out_channels": TARGET_SIZE,
             },
             "data": {
                 "class": "GraphDataset",
