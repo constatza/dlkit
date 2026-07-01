@@ -85,7 +85,10 @@ class MLflowTracker(IExperimentTracker):
                 self._exit_stack.__enter__()
 
                 logger.debug("Selecting tracking backend")
-                self._backend = select_backend(probe=self._probe)
+                self._backend = select_backend(
+                    uri=self._mlflow_config.uri,
+                    probe=self._probe,
+                )
 
                 logger.debug("Creating resource manager")
                 resource_manager = MLflowResourceManager(self._mlflow_config, self._backend)

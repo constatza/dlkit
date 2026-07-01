@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
@@ -25,47 +24,51 @@ from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.infrastructure.io import url_resolver
 
 
-def test_resolve_tracking_uri_prefers_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "https://mlflow.company.local")
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: True, raising=True)
+def test_select_backend_uses_explicit_http_uri(tmp_path: Path) -> None:
+    from dlkit.engine.tracking.backend import RemoteServerBackend, select_backend
 
-    resolved = uri_resolver.resolve_tracking_uri()
-    assert resolved == "https://mlflow.company.local"
+    backend = select_backend(uri="https://mlflow.company.local")
+    assert isinstance(backend, RemoteServerBackend)
+    assert backend.tracking_uri() == "https://mlflow.company.local"
 
 
-def test_resolve_tracking_uri_uses_mocked_localhost_probe(
+def test_select_backend_uses_explicit_sqlite_uri(tmp_path: Path) -> None:
+    from dlkit.engine.tracking.backend import LocalSqliteBackend, select_backend
+
+    sqlite_uri = f"sqlite:///{(tmp_path / 'explicit.db').as_posix()}"
+    backend = select_backend(uri=sqlite_uri)
+    assert isinstance(backend, LocalSqliteBackend)
+    assert backend.tracking_uri() == sqlite_uri
+
+
+def test_select_backend_uses_probe_when_no_uri(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dlkit.engine.tracking.backend import LocalServerBackend, select_backend
+
+    backend = select_backend(uri=None, probe=lambda: True)
+    assert isinstance(backend, LocalServerBackend)
+    assert backend.tracking_uri() == "http://127.0.0.1:5000"
+
+
+def test_select_backend_falls_back_to_sqlite_when_no_uri_and_no_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: True, raising=True)
+    from dlkit.engine.tracking.backend import LocalSqliteBackend, select_backend
 
-    resolved = uri_resolver.resolve_tracking_uri()
-    assert resolved == "http://127.0.0.1:5000"
-
-
-def test_resolve_tracking_uri_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False, raising=True)
     monkeypatch.setattr(
-        "dlkit.engine.tracking.uri_resolver.locations.mlruns_backend_uri",
+        "dlkit.engine.tracking.discovery.locations.mlruns_backend_uri",
         lambda: "sqlite:///tests/artifacts/mlruns/mlflow.db",
     )
+    backend = select_backend(uri=None, probe=lambda: False)
+    assert isinstance(backend, LocalSqliteBackend)
+    assert backend.tracking_uri().startswith("sqlite:///")
+    assert backend.tracking_uri().endswith("mlflow.db")
 
-    resolved = uri_resolver.resolve_tracking_uri()
-    assert resolved.startswith("sqlite:///")
-    assert resolved.endswith("mlflow.db")
 
+def test_select_backend_raises_on_unsupported_scheme() -> None:
+    from dlkit.engine.tracking.backend import select_backend
 
-def test_resolve_tracking_uri_honours_sqlite_env_var(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """select_backend() now respects sqlite:/// MLFLOW_TRACKING_URI env vars."""
-    sqlite_uri = f"sqlite:///{(tmp_path / 'explicit.db').as_posix()}"
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", sqlite_uri)
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False, raising=True)
-
-    resolved = uri_resolver.resolve_tracking_uri()
-    assert resolved == sqlite_uri
+    with pytest.raises(ValueError, match="Unsupported MLflow tracking URI scheme"):
+        select_backend(uri="ftp://example.com/mlflow")
 
 
 def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
@@ -73,16 +76,20 @@ def test_parse_mlflow_scheme_rejects_invalid_scheme() -> None:
         uri_resolver.parse_mlflow_scheme("ftp://example.com/mlflow")
 
 
-def test_resolve_artifact_uri_derives_from_sqlite(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
-    db_path = tmp_path / "mlruns" / "mlflow.db"
-    tracking_uri = url_resolver.build_uri(db_path, scheme="sqlite")
+def test_local_sqlite_backend_derives_artifact_uri_from_db_path(tmp_path: Path) -> None:
+    from dlkit.engine.tracking.backend import LocalSqliteBackend
 
-    artifact_uri = uri_resolver.resolve_artifact_uri(tracking_uri)
-    expected_artifact_uri = url_resolver.build_uri(db_path.parent / "artifacts", scheme="file")
-    assert artifact_uri == expected_artifact_uri
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    backend = LocalSqliteBackend(db_path=db_path)
+    expected = url_resolver.build_uri(db_path.parent / "artifacts", scheme="file")
+    assert backend.artifact_uri() == expected
+
+
+def test_remote_backend_artifact_uri_is_none() -> None:
+    from dlkit.engine.tracking.backend import RemoteServerBackend
+
+    backend = RemoteServerBackend(uri="https://mlflow.example.com")
+    assert backend.artifact_uri() is None
 
 
 def test_create_run_preserves_nested_parent_child_structure(
@@ -135,32 +142,26 @@ def test_create_run_preserves_nested_parent_child_structure(
     assert child_call["parent_run_id"] == "parent-run"
 
 
-def test_reset_global_state_preserves_sqlite_tracking_uri(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """SQLite URIs in env are now preserved by reset_global_state to avoid CWD leak."""
-    tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "env-preserve.db", scheme="sqlite")
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+def test_reset_global_state_applies_explicit_tracking_uri(tmp_path: Path) -> None:
+    """reset_global_state re-applies the explicit URI to prevent CWD-leak in MLflow 3.x."""
+    tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "isolated.db", scheme="sqlite")
+    mlflow.set_tracking_uri("sqlite:///some/other.db")
+
+    MLflowResourceManager.reset_global_state(tracking_uri=tracking_uri)
+
+    assert mlflow.get_tracking_uri() == tracking_uri
+
+
+def test_reset_global_state_without_uri_leaves_mlflow_state_unchanged(tmp_path: Path) -> None:
+    """When no URI is passed reset_global_state does not touch mlflow.set_tracking_uri."""
+    tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "keep.db", scheme="sqlite")
     mlflow.set_tracking_uri(tracking_uri)
 
-    MLflowResourceManager.reset_global_state()
+    MLflowResourceManager.reset_global_state()  # no tracking_uri arg
 
-    # SQLite URI must be preserved so the isolation URI set by fixtures is never lost.
-    assert os.environ.get("MLFLOW_TRACKING_URI") == tracking_uri
-
-
-def test_reset_global_state_preserves_http_tracking_uri(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """HTTP URIs should be preserved by reset_global_state (user-configured)."""
-    http_uri = "http://mlflow.example.com:5000"
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", http_uri)
-    mlflow.set_tracking_uri(http_uri)
-
-    MLflowResourceManager.reset_global_state()
-
-    assert os.environ.get("MLFLOW_TRACKING_URI") == http_uri
+    # State is not changed — reset_global_state doesn't re-apply anything
+    # (caller is responsible for passing the correct URI when needed)
+    assert mlflow.get_tracking_uri() == tracking_uri
 
 
 def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(

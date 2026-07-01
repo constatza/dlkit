@@ -35,4 +35,5 @@
 - In NoOp mode, when checkpointing is disabled and no local-output-producing
   trainer components are configured, `default_root_dir` is not required and
   trainer construction should not create local output directories.
+- MLflow tracking is enabled only by explicit `tracking.backend = "mlflow"` configuration.
 - When MLflow is enabled, durable artifacts belong to MLflow.

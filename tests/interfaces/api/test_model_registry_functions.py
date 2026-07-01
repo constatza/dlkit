@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from dlkit.engine.tracking.artifact_logger import TAG_LOGGED_MODEL_URI
 from dlkit.interfaces.api.functions._mlflow_context import StubTrackingContext
 from dlkit.interfaces.api.functions.model_registry import (
     build_registered_model_uri,
@@ -73,36 +74,44 @@ def test_get_model_version_delegates_to_client(mock_client_cls: Mock) -> None:
     mock_client.get_model_version.assert_called_once_with(name="ModelA", version="2")
 
 
+@patch("mlflow.register_model")
 @patch("mlflow.tracking.MlflowClient")
-def test_register_logged_model_creates_version(mock_client_cls: Mock) -> None:
+def test_register_logged_model_creates_version(
+    mock_client_cls: Mock,
+    mock_register_model: Mock,
+) -> None:
     mock_client = Mock()
     expected_version = Mock(version="1")
-    mock_client.create_model_version.return_value = expected_version
+    mock_client.get_run.return_value = Mock(data=Mock(tags={TAG_LOGGED_MODEL_URI: "models:/m-123"}))
     mock_client_cls.return_value = mock_client
+    mock_register_model.return_value = expected_version
 
     result = register_logged_model("ModelA", run_id="run-123", artifact_path="model")
 
     assert result is expected_version
-    mock_client.create_registered_model.assert_called_once_with("ModelA")
-    mock_client.create_model_version.assert_called_once_with(
-        name="ModelA",
-        source="runs:/run-123/model",
-        run_id="run-123",
-    )
+    mock_client.get_run.assert_called_once_with("run-123")
+    mock_register_model.assert_called_once_with(model_uri="models:/m-123", name="ModelA")
 
 
+@patch("mlflow.register_model")
 @patch("mlflow.tracking.MlflowClient")
-def test_register_logged_model_ignores_existing_registered_model(mock_client_cls: Mock) -> None:
+def test_register_logged_model_falls_back_to_run_artifact_uri(
+    mock_client_cls: Mock,
+    mock_register_model: Mock,
+) -> None:
     mock_client = Mock()
-    mock_client.create_registered_model.side_effect = Exception(
-        "RESOURCE_ALREADY_EXISTS: already exists"
-    )
-    mock_client.create_model_version.return_value = Mock(version="4")
+    mock_client.get_run.return_value = Mock(data=Mock(tags={}))
+    expected_version = Mock(version="4")
     mock_client_cls.return_value = mock_client
+    mock_register_model.return_value = expected_version
 
-    register_logged_model("ModelA", run_id="run-123")
+    result = register_logged_model("ModelA", run_id="run-123")
 
-    mock_client.create_model_version.assert_called_once()
+    assert result is expected_version
+    mock_register_model.assert_called_once_with(
+        model_uri="runs:/run-123/model",
+        name="ModelA",
+    )
 
 
 @patch("mlflow.tracking.MlflowClient")

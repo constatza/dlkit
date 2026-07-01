@@ -366,31 +366,18 @@ def graph_settings(minimal_graph_dataset: dict[str, Path], tmp_path: Path) -> Tr
 
 
 @pytest.fixture
-def mlflow_settings(
-    minimal_dataset: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> TrainingJobConfig:
+def mlflow_settings(minimal_dataset: dict[str, Path], tmp_path: Path) -> TrainingJobConfig:
     """Create TrainingJobConfig with MLflow enabled.
 
     Args:
         minimal_dataset: Fixture providing dataset paths.
         tmp_path: Pytest temporary directory fixture.
-        monkeypatch: Pytest monkeypatch fixture for env var isolation.
-
     Returns:
         TrainingJobConfig with MLflow tracking configured.
     """
-    import dlkit.engine.tracking.uri_resolver as uri_resolver
-
-    # Route select_backend() to a per-test isolated SQLite DB and suppress the
-    # local-server probe.
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
     mlflow_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", mlflow_uri)
-    mlartifacts_dir = tmp_path / "mlartifacts"
-    mlartifacts_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", mlartifacts_dir.as_uri())
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
     return _make_training_job_config(
         feature_path=minimal_dataset["features"],

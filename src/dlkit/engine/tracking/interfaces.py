@@ -247,48 +247,6 @@ class IRunContext(IMetricSink, ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def get_latest_model_version(
-        self,
-        model_name: str,
-        *,
-        run_id: str | None = None,
-        artifact_path: str | None = None,
-    ) -> int | None:
-        """Get the latest numeric version for a registered model.
-
-        Args:
-            model_name: Registered model name.
-            run_id: Optional run identifier to constrain the version lookup.
-            artifact_path: Optional artifact path hint for additional filtering.
-
-        Returns:
-            Latest version number, or None when unavailable.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
-        """Set a registered model alias.
-
-        Args:
-            model_name: Registered model name.
-            alias: Alias value (e.g. "latest", "candidate").
-            version: Target version.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def set_model_version_tag(
-        self,
-        model_name: str,
-        version: int,
-        key: str,
-        value: str,
-    ) -> None:
-        """Set a tag on a registered model version."""
-        raise NotImplementedError
-
     def is_active(self) -> bool:
         """Return True when this is a real (non-null) tracking run.
 
@@ -505,28 +463,6 @@ class NullRunContext(IRunContext):
     ) -> str | None:
         """No-op model logging."""
         return None
-
-    def get_latest_model_version(
-        self,
-        model_name: str,
-        *,
-        run_id: str | None = None,
-        artifact_path: str | None = None,
-    ) -> int | None:
-        """No-op latest model version lookup."""
-        return None
-
-    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
-        """No-op model alias update."""
-
-    def set_model_version_tag(
-        self,
-        model_name: str,
-        version: int,
-        key: str,
-        value: str,
-    ) -> None:
-        """No-op model version tag update."""
 
     def is_active(self) -> bool:
         """Return False — null context is not a real tracking run."""

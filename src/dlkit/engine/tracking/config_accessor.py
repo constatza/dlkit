@@ -32,33 +32,6 @@ class ConfigAccessor:
         exp = self._settings.experiment
         return exp.run_name if exp else None
 
-    def get_registered_model_name(self) -> str | None:
-        """Return optional registered model name."""
-        exp = self._settings.experiment
-        return exp.registered_model_name if exp else None
-
-    def get_registered_model_aliases(self) -> tuple[str, ...] | None:
-        """Return normalised model aliases, or None if absent."""
-        exp = self._settings.experiment
-        aliases = exp.registered_model_aliases if exp else None
-        if not aliases:
-            return None
-        normalised = tuple(str(a).strip() for a in aliases if str(a).strip())
-        return normalised or None
-
-    def get_registered_model_version_tags(self) -> dict[str, str]:
-        """Return model version tags, empty dict if absent."""
-        exp = self._settings.experiment
-        tags = exp.registered_model_version_tags if exp else None
-        if not tags:
-            return {}
-        return {str(k).strip(): str(v) for k, v in tags.items() if str(k).strip()}
-
-    def should_register_model(self) -> bool:
-        """Return True if model registration is enabled."""
-        exp = self._settings.experiment
-        return bool(exp and exp.register_model)
-
     def get_run_tags(self) -> dict[str, str] | None:
         """Return run tags from experiment settings."""
         exp = self._settings.experiment

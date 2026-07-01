@@ -109,7 +109,9 @@ def test_open_closed_principle_integration(build_components):
     # Can add MLflow tracking without modifying VanillaExecutor
     mlflow_job = _job(mlflow=True, experiment_name="integration_test")
 
-    with patch("dlkit.engine.tracking.mlflow_tracker.MLflowTracker") as mock_tracker_class:
+    with patch(
+        "dlkit.engine.workflows.factories.execution_strategy_factory.MLflowTracker"
+    ) as mock_tracker_class:
         mock_tracker = Mock()
         mock_tracker_class.return_value = mock_tracker
 

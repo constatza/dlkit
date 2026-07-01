@@ -6,7 +6,6 @@ maintainable test dataflow management.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import torch
@@ -47,7 +46,8 @@ class TestBasicIntegration:
 
         from dlkit.engine.tracking.naming import determine_experiment_name
 
-        tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
+        tracking_uri = training_result.mlflow_tracking_uri
+        assert tracking_uri is not None
         client = MlflowClient(tracking_uri=tracking_uri)
         experiment_name = determine_experiment_name(mlflow_settings)
         experiment = client.get_experiment_by_name(experiment_name)

@@ -20,13 +20,12 @@ from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 
 @pytest.fixture
-def mlflow_config_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TrackingSettings:
+def mlflow_config_enabled(tmp_path: Path) -> TrackingSettings:
     """Provide an enabled MLflow settings instance with an isolated tracking URI."""
-    monkeypatch.setenv(
-        "MLFLOW_TRACKING_URI",
-        f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+    return TrackingSettings(
+        backend="mlflow",
+        uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
     )
-    return TrackingSettings(backend="mlflow")
 
 
 class TestMLflowResourceManagerThreadSafety:

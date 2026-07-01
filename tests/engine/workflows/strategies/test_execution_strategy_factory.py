@@ -40,21 +40,14 @@ def factory():
     return ExecutionStrategyFactory()
 
 
-def test_factory_creates_vanilla_executor_by_default(factory, monkeypatch):
-    """Test that factory creates tracking decorator with null tracker when no features are enabled."""
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
-    monkeypatch.setattr(
-        "dlkit.engine.workflows.factories.execution_strategy_factory.ExecutionStrategyFactory._has_mlflow_config_or_env",
-        lambda self, s: False,
-    )
-    settings = _training_job()  # No mlflow backend, no env var
+def test_factory_creates_null_tracker_when_backend_not_mlflow(factory):
+    """NullTracker is used when tracking.backend is not 'mlflow' in config."""
+    settings = _training_job()  # tracking.backend defaults to "none"
 
     executor = factory.create_executor(settings)
 
-    # Factory now always returns TrackingDecorator (null object pattern)
     assert isinstance(executor, TrackingDecorator)
     assert isinstance(executor._executor, VanillaExecutor)
-    # Verify it uses NullTracker when MLflow is disabled (no section AND no env var)
     from dlkit.engine.tracking.interfaces import NullTracker
 
     assert isinstance(executor._tracker, NullTracker)
@@ -71,13 +64,8 @@ def test_factory_creates_tracking_decorator_for_mlflow(factory):
     assert isinstance(executor._executor, VanillaExecutor)
 
 
-def test_factory_creates_optimization_decorator_for_optuna(factory, monkeypatch):
+def test_factory_creates_optimization_decorator_for_optuna(factory):
     """Test that factory creates tracking decorator even when only a plain job is given."""
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
-    monkeypatch.setattr(
-        "dlkit.engine.tracking.uri_resolver.local_host_alive",
-        lambda: False,
-    )
     settings = _training_job()  # No mlflow backend
 
     executor = factory.create_executor(settings)
@@ -126,31 +114,21 @@ def test_factory_follows_open_closed_principle(factory):
 
 
 def test_factory_mlflow_detection_logic(factory):
-    """Test MLflow feature detection logic."""
-    # MLflow disabled case: no backend set
-    no_mlflow = _training_job()
-    assert not factory._has_mlflow_config_or_env(no_mlflow)
-
-    # MLflow enabled case: backend == "mlflow"
-    with_mlflow = _training_job(mlflow=True)
-    assert factory._has_mlflow_config_or_env(with_mlflow)
+    """MLflow activates only when tracking.backend == 'mlflow' in config."""
+    assert not factory._mlflow_explicitly_enabled(_training_job())
+    assert factory._mlflow_explicitly_enabled(_training_job(mlflow=True))
 
 
-def test_factory_activates_mlflow_when_local_probe_is_mocked_true(factory, monkeypatch):
-    """Test MLflow activation from a mocked localhost probe without real server I/O."""
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
-    monkeypatch.setattr(
-        "dlkit.engine.tracking.uri_resolver.local_host_alive",
-        lambda: True,
-    )
-    settings = _training_job()  # No mlflow section, no env var
+def test_factory_probe_alone_does_not_activate_mlflow(factory, monkeypatch):
+    """A live local server probe does NOT auto-activate MLflow; config is required."""
+    monkeypatch.setattr("dlkit.engine.tracking.uri_resolver.local_host_alive", lambda: True)
+    settings = _training_job()  # backend="none" in config
 
     executor = factory.create_executor(settings)
 
-    assert isinstance(executor, TrackingDecorator)
-    from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
+    from dlkit.engine.tracking.interfaces import NullTracker
 
-    assert isinstance(executor._tracker, MLflowTracker)
+    assert isinstance(executor._tracker, NullTracker)
 
 
 def test_factory_optimization_workflow_detection(factory):

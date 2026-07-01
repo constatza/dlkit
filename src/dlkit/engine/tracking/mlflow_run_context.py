@@ -161,107 +161,34 @@ class ClientBasedRunContext(IRunContext):
         # Intentionally opaque foreign backend payload forwarded to MLflow.
         input_example: object | None = None,
     ) -> str | None:
-        """Log model artifact with automatic MLflow flavor dispatch."""
-        try:
-            import mlflow
+        """Log model artifact with automatic MLflow flavor dispatch.
 
-            kwargs = {
-                "name": artifact_path,
-                "registered_model_name": registered_model_name,
-                "signature": signature,
-                "input_example": input_example,
-            }
-
-            logged_model = None
-            match _resolve_model_flavor(model):
-                case "sklearn":
-                    logged_model = mlflow.sklearn.log_model(
-                        sk_model=model,
-                        **kwargs,
-                    )
-                case "pytorch":
-                    logged_model = mlflow.pytorch.log_model(
-                        pytorch_model=model,
-                        **kwargs,
-                    )
-                case _:
-                    raise TypeError(
-                        f"Unsupported model type for MLflow logging: {type(model).__name__}"
-                    )
-
-            return _resolve_logged_model_uri(
-                logged_model=logged_model,
-                fallback_uri=f"runs:/{self._run_id}/{artifact_path}",
-            )
-        except Exception as e:
-            logger.warning("Failed to log model: %s", e)
-            return None
-
-    def get_latest_model_version(
-        self,
-        model_name: str,
-        *,
-        run_id: str | None = None,
-        artifact_path: str | None = None,
-    ) -> int | None:
-        """Get latest registered model version by numeric max.
-
-        When ``run_id`` is provided, only versions produced by that run are
-        considered. This prevents cross-run races when multiple runs register
-        new versions around the same time.
+        Raises on failure — callers must not silently proceed without the artifact.
         """
-        try:
-            versions = self._client.search_model_versions(f"name='{model_name}'")
-            numeric_versions = [
-                int(version.version)
-                for version in versions
-                if _is_matching_version(
-                    version=version,
-                    run_id=run_id,
-                    artifact_path=artifact_path,
+        import mlflow
+
+        kwargs = {
+            "name": artifact_path,
+            "registered_model_name": registered_model_name,
+            "signature": signature,
+            "input_example": input_example,
+        }
+
+        logged_model = None
+        match _resolve_model_flavor(model):
+            case "sklearn":
+                logged_model = mlflow.sklearn.log_model(sk_model=model, **kwargs)
+            case "pytorch":
+                logged_model = mlflow.pytorch.log_model(pytorch_model=model, **kwargs)
+            case _:
+                raise TypeError(
+                    f"Unsupported model type for MLflow logging: {type(model).__name__}"
                 )
-            ]
-            return max(numeric_versions) if numeric_versions else None
-        except Exception as e:
-            logger.warning("Failed to get latest model version for %s: %s", model_name, e)
-            return None
 
-    def set_model_alias(self, model_name: str, alias: str, version: int) -> None:
-        """Set alias for a registered model version."""
-        try:
-            self._client.set_registered_model_alias(
-                name=model_name,
-                alias=alias,
-                version=str(version),
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to set alias '%s' for model '%s' v%s: %s", alias, model_name, version, e
-            )
-
-    def set_model_version_tag(
-        self,
-        model_name: str,
-        version: int,
-        key: str,
-        value: str,
-    ) -> None:
-        """Set a registered model version tag."""
-        try:
-            self._client.set_model_version_tag(
-                name=model_name,
-                version=str(version),
-                key=key,
-                value=value,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to set model version tag '%s' for model '%s' v%s: %s",
-                key,
-                model_name,
-                version,
-                e,
-            )
+        return _resolve_logged_model_uri(
+            logged_model=logged_model,
+            fallback_uri=f"runs:/{self._run_id}/{artifact_path}",
+        )
 
     def log_batch(
         self,
@@ -346,28 +273,3 @@ def _resolve_logged_model_uri(logged_model: object, fallback_uri: str) -> str:
         return logged_model
 
     return fallback_uri
-
-
-def _is_matching_version(
-    *,
-    # Intentionally opaque MLflow client record; we only probe stable attributes.
-    version: object,
-    run_id: str | None,
-    artifact_path: str | None,
-) -> bool:
-    version_value = getattr(version, "version", None)
-    if version_value is None:
-        return False
-
-    if run_id is not None:
-        version_run_id = getattr(version, "run_id", None)
-        if version_run_id not in (None, "", run_id):
-            return False
-
-    if artifact_path:
-        source = str(getattr(version, "source", "") or "")
-        normalized_path = f"/{artifact_path.strip('/')}"
-        if normalized_path not in source:
-            return False
-
-    return True

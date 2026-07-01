@@ -6,7 +6,6 @@ to MLflow strategy execution to final results logging.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -29,11 +28,14 @@ from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.interfaces.api import train as api_train
 from dlkit.mlflow import (
     get_model_version,
+    has_checkpoint_artifact,
     list_model_versions,
     load_logged_model,
     load_registered_model,
+    register_logged_model,
     search_logged_models,
     search_registered_models,
+    set_registered_model_alias,
 )
 
 
@@ -66,7 +68,7 @@ def _resolve_effective_model_name(model: Any) -> str:
 
 
 def _expected_tracking_uri(result: Any | None = None) -> str:
-    """Resolve tracking URI used by tests (result-first, then env, then current MLflow URI).
+    """Resolve tracking URI used by tests (result-first, then current MLflow URI).
 
     Args:
         result: Optional training result with mlflow_tracking_uri attribute.
@@ -76,9 +78,6 @@ def _expected_tracking_uri(result: Any | None = None) -> str:
     """
     if result is not None and getattr(result, "mlflow_tracking_uri", None):
         return result.mlflow_tracking_uri
-    from_env = os.getenv("MLFLOW_TRACKING_URI")
-    if from_env:
-        return from_env
     return mlflow.get_tracking_uri()
 
 
@@ -124,16 +123,14 @@ class TestMLflowTrainingIntegration:
         mlflow_settings: TrainingJobConfig,
         tmp_path: Path,
     ) -> None:
-        """Real E2E check: register model, resolve aliases, and load by name/version."""
+        """Real E2E check: explicitly register logged model and resolve aliases."""
         unique_suffix = uuid4().hex[:8]
 
         experiment_cfg = _require_experiment_settings(mlflow_settings)
         updated_experiment = experiment_cfg.model_copy(
             update={
-                "register_model": True,
                 "name": f"registry_e2e_{unique_suffix}",
                 "run_name": f"registry_run_{unique_suffix}",
-                "registered_model_aliases": ("dataset_A_latest", "benchmark_high_precision"),
             },
         )
         settings_with_registration = mlflow_settings.model_copy(
@@ -146,12 +143,36 @@ class TestMLflowTrainingIntegration:
         model_name = _resolve_effective_model_name(result.model_state.model)
 
         client = MlflowClient(tracking_uri=tracking_uri)
+        experiment = client.get_experiment_by_name(updated_experiment.name)
+        assert experiment is not None
+        runs = client.search_runs(
+            [experiment.experiment_id],
+            order_by=["attributes.start_time DESC"],
+            max_results=1,
+        )
+        assert runs, "Expected a run in the registration experiment"
+        run_info = runs[0].info
+        registered_version = register_logged_model(
+            model_name,
+            run_id=run_info.run_id,
+            tracking_uri=tracking_uri,
+        )
+        latest_version = int(registered_version.version)
+        set_registered_model_alias(
+            model_name,
+            alias="dataset_A_latest",
+            version=latest_version,
+            tracking_uri=tracking_uri,
+        )
+        set_registered_model_alias(
+            model_name,
+            alias="benchmark_high_precision",
+            version=latest_version,
+            tracking_uri=tracking_uri,
+        )
+
         versions = client.search_model_versions(f"name = '{model_name}'")
         assert versions, f"Expected registered versions for model '{model_name}'"
-        latest_version = max(int(v.version) for v in versions)
-
-        builtin_latest_version = client.get_model_version_by_alias(model_name, "latest")
-        assert int(builtin_latest_version.version) == latest_version
         dataset_alias_version = client.get_model_version_by_alias(model_name, "dataset_A_latest")
         assert int(dataset_alias_version.version) == latest_version
         benchmark_alias_version = client.get_model_version_by_alias(
@@ -172,16 +193,6 @@ class TestMLflowTrainingIntegration:
         )
         assert int(version_entity.version) == latest_version
 
-        experiment = client.get_experiment_by_name(updated_experiment.name)
-        assert experiment is not None
-        runs = client.search_runs(
-            [experiment.experiment_id],
-            order_by=["attributes.start_time DESC"],
-            max_results=1,
-        )
-        assert runs, "Expected a run in the registration experiment"
-        run_info = runs[0].info
-
         artifact_uri = run_info.artifact_uri
         artifact_path = _artifact_path_from_uri(artifact_uri)
         assert artifact_path.exists(), f"Expected artifact path to exist: {artifact_path}"
@@ -193,7 +204,7 @@ class TestMLflowTrainingIntegration:
 
         loaded_latest = load_registered_model(
             model_name,
-            alias="latest",
+            version=latest_version,
             tracking_uri=tracking_uri,
         )
         loaded_by_version = load_registered_model(
@@ -229,7 +240,6 @@ class TestMLflowTrainingIntegration:
         experiment_cfg = _require_experiment_settings(mlflow_settings)
         updated_experiment = experiment_cfg.model_copy(
             update={
-                "register_model": False,
                 "name": f"logged_e2e_{unique_suffix}",
                 "run_name": f"logged_run_{unique_suffix}",
             },
@@ -288,7 +298,6 @@ class TestMLflowTrainingIntegration:
         experiment_cfg = _require_experiment_settings(mlflow_settings)
         updated_experiment = experiment_cfg.model_copy(
             update={
-                "register_model": False,
                 "name": f"artifact_e2e_{unique_suffix}",
                 "run_name": f"artifact_run_{unique_suffix}",
             }
@@ -316,6 +325,7 @@ class TestMLflowTrainingIntegration:
         artifact_paths = _list_artifact_paths(client, run_info.run_id)
         assert "lineage" in artifact_paths
         assert any(path.startswith("splits/") for path in artifact_paths)
+        assert not has_checkpoint_artifact(run_info.run_id, tracking_uri=tracking_uri)
         assert run_info.run_id == result.mlflow_run_id
         assert runs[0].data.tags[TAG_LOGGED_MODEL_ARTIFACT_PATH] == "model"
         assert runs[0].data.tags[TAG_LOGGED_MODEL_URI].startswith("models:/")

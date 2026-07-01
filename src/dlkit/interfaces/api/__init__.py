@@ -21,6 +21,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "build_registered_model_uri",
     ),
     "execute": ("dlkit.interfaces.api.functions", "execute"),
+    "has_checkpoint_artifact": ("dlkit.interfaces.api.functions", "has_checkpoint_artifact"),
     "generate_template": ("dlkit.interfaces.api.functions", "generate_template"),
     "get_checkpoint_info": ("dlkit.interfaces.inference", "get_checkpoint_info"),
     "get_model_version": ("dlkit.interfaces.api.functions", "get_model_version"),

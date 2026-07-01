@@ -6,7 +6,6 @@ All scheme-specific logic lives on backend instances.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +27,7 @@ class ITrackingBackend(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RemoteServerBackend:
-    """Explicit HTTP/HTTPS server configured by the user via env var.
+    """Explicit HTTP/HTTPS server.
 
     Attributes:
         uri: Normalized HTTP/HTTPS tracking URI.
@@ -41,8 +40,8 @@ class RemoteServerBackend:
         return self.uri
 
     def artifact_uri(self) -> str | None:
-        """Return artifact URI from env or None."""
-        return os.getenv("MLFLOW_ARTIFACT_URI")
+        """Return None — remote server manages artifact storage."""
+        return None
 
     def scheme(self) -> str:
         """Return 'https' or 'http' based on URI prefix."""
@@ -81,10 +80,7 @@ class LocalSqliteBackend:
         return url_resolver.build_uri(self.db_path, scheme="sqlite")
 
     def artifact_uri(self) -> str | None:
-        """Return artifact URI from env var or derive from db_path parent."""
-        env = os.getenv("MLFLOW_ARTIFACT_URI")
-        if env:
-            return env
+        """Return artifact URI derived from db_path parent."""
         return url_resolver.build_uri(self.db_path.parent / "artifacts", scheme="file")
 
     def scheme(self) -> str:
@@ -97,41 +93,42 @@ TrackingBackend = RemoteServerBackend | LocalServerBackend | LocalSqliteBackend
 
 def select_backend(
     *,
+    uri: str | None = None,
     probe: Callable[[], bool] | None = None,
 ) -> TrackingBackend:
     """Select the appropriate tracking backend.
 
     Selection logic:
-    1. ``MLFLOW_TRACKING_URI`` env var (HTTP/HTTPS or ``sqlite:///``) → typed backend
+    1. Explicit ``uri`` from config → typed backend (http/https or sqlite)
     2. Local server probe succeeds → ``LocalServerBackend``
     3. Fallback → ``LocalSqliteBackend`` derived from locations
 
-    Note:
-        SQLite URIs in ``MLFLOW_TRACKING_URI`` are honoured explicitly here
-        because ``mlflow.set_tracking_uri(None)`` in MLflow 3.x resets the
-        internal state to the CWD-relative default (``sqlite:///mlflow.db``)
-        rather than re-reading the env var.  Without this branch, the env-var
-        isolation set up by test fixtures would be silently ignored and every
-        ``reset_global_state()`` call could leak a ``mlflow.db`` into the
-        project root.
-
     Args:
+        uri: Tracking URI from ``TrackingSettings.uri``. When set, takes
+            precedence over probe and fallback; env vars are never consulted.
         probe: Callable returning True if a local MLflow server is reachable.
             Defaults to :func:`~dlkit.engine.tracking.discovery.local_host_alive`.
 
     Returns:
         The selected ``TrackingBackend`` instance.
+
+    Raises:
+        ValueError: If ``uri`` is set but uses an unsupported scheme.
     """
     if probe is None:
         probe = local_host_alive
 
-    env_uri = os.getenv("MLFLOW_TRACKING_URI")
-    if env_uri:
-        if env_uri.startswith("http://") or env_uri.startswith("https://"):
-            return RemoteServerBackend(uri=env_uri.strip().rstrip("/"))
-        if env_uri.startswith("sqlite:///"):
-            db_path = url_resolver.resolve_local_uri(env_uri, Path.cwd())
+    if uri:
+        cleaned = uri.strip()
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            return RemoteServerBackend(uri=cleaned.rstrip("/"))
+        if cleaned.startswith("sqlite:///"):
+            db_path = url_resolver.resolve_local_uri(cleaned, Path.cwd())
             return LocalSqliteBackend(db_path=db_path)
+        raise ValueError(
+            f"Unsupported MLflow tracking URI scheme in '{uri}'. "
+            "Supported: http://, https://, sqlite:///"
+        )
 
     if probe():
         return LocalServerBackend()

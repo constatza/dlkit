@@ -21,7 +21,7 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
 - `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`
 - `run_settings.py`: `RunSettings` (type, seed, precision)
-- `experiment_settings.py`: `ExperimentSettings` (name, run_name, register_model)
+- `experiment_settings.py`: `ExperimentSettings` (name, run_name, tags)
 - `model_components.py`: canonical `ModelComponentSettings`, plus loss/metric component settings
 - `data_settings.py`: `DataSettings` plus entry types
 - `training_settings.py`: `TrainingSettings`, `StoppingSettings`

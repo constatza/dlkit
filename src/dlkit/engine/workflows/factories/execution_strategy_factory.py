@@ -56,8 +56,8 @@ class ExecutionStrategyFactory:
         # Start with core vanilla executor
         executor: ITrainingExecutor = VanillaExecutor()
 
-        # Use real tracker when MLFLOW section is present or MLFLOW_TRACKING_URI env var is set
-        if self._has_mlflow_config_or_env(settings):
+        # Use real tracker only when tracking.backend is explicitly set to "mlflow"
+        if self._mlflow_explicitly_enabled(settings):
             tracker = MLflowTracker(
                 disable_autostart=False,
                 probe=self._probe,
@@ -71,24 +71,12 @@ class ExecutionStrategyFactory:
         # This method returns TrackingDecorator -> VanillaExecutor.
         return executor
 
-    def _has_mlflow_config_or_env(
+    def _mlflow_explicitly_enabled(
         self,
         settings: JobConfig,
     ) -> bool:
-        """Check if MLflow should be activated for training.
-
-        Activates when tracking.backend == "mlflow", when MLFLOW_TRACKING_URI
-        env var is an HTTP URI, or when a local MLflow server is detected.
-        """
-        import os
-
-        if settings.tracking.backend == "mlflow":
-            return True
-        env_uri = os.getenv("MLFLOW_TRACKING_URI")
-        has_user_http_uri = bool(
-            env_uri and (env_uri.startswith("http://") or env_uri.startswith("https://"))
-        )
-        return has_user_http_uri or self._probe()
+        """Return True only when tracking.backend is explicitly "mlflow" in config."""
+        return settings.tracking.backend == "mlflow"
 
     def _is_optimization_workflow(
         self,

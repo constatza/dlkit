@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from dlkit.engine.tracking.artifact_logger import (
+    CHECKPOINT_ARTIFACT_DIR,
+    DEFAULT_MODEL_ARTIFACT_PATH,
+    TAG_LOGGED_MODEL_URI,
+)
+
 from ._mlflow_context import create_mlflow_client, tracking_uri_context
 
 
@@ -41,11 +47,33 @@ def get_model_version(
     return client.get_model_version(name=model_name, version=str(version))
 
 
+def has_checkpoint_artifact(
+    run_id: str,
+    *,
+    tracking_uri: str | None = None,
+) -> bool:
+    """Return True if the run has at least one checkpoint artifact logged.
+
+    Args:
+        run_id: MLflow run identifier.
+        tracking_uri: Optional tracking URI (uses active MLflow config when omitted).
+
+    Returns:
+        True when the run's ``checkpoints/`` artifact directory is non-empty.
+    """
+    client = create_mlflow_client(tracking_uri)
+    try:
+        artifacts = client.list_artifacts(run_id, path=CHECKPOINT_ARTIFACT_DIR)
+        return bool(artifacts)
+    except Exception:
+        return False
+
+
 def register_logged_model(
     model_name: str,
     *,
     run_id: str,
-    artifact_path: str = "model",
+    artifact_path: str = DEFAULT_MODEL_ARTIFACT_PATH,
     tracking_uri: str | None = None,
 ) -> Any:
     """Register a run-logged model artifact as a model version.
@@ -53,13 +81,15 @@ def register_logged_model(
     Creates the registered model if it does not exist.
     """
     client = create_mlflow_client(tracking_uri)
-    _ensure_registered_model_exists(client, model_name)
-    model_uri = f"runs:/{run_id}/{artifact_path}"
-    return client.create_model_version(
-        name=model_name,
-        source=model_uri,
-        run_id=run_id,
-    )
+    run = client.get_run(run_id)
+    tags = getattr(getattr(run, "data", None), "tags", {})
+    tagged_uri = tags.get(TAG_LOGGED_MODEL_URI) if isinstance(tags, dict) else None
+    model_uri = tagged_uri or f"runs:/{run_id}/{artifact_path}"
+
+    import mlflow
+
+    with tracking_uri_context(tracking_uri):
+        return mlflow.register_model(model_uri=model_uri, name=model_name)
 
 
 def set_registered_model_alias(
@@ -170,13 +200,3 @@ def load_registered_model(
                 )
             case _:
                 raise ValueError(f"Unsupported flavor strategy '{flavor}'")
-
-
-def _ensure_registered_model_exists(client: Any, model_name: str) -> None:
-    try:
-        client.create_registered_model(model_name)
-    except Exception as exc:
-        message = str(exc).lower()
-        if "already exists" in message:
-            return
-        raise

@@ -56,7 +56,6 @@ class ArtifactPolicy:
     checkpoint_persistence: CheckpointPersistence = "framework_local"
     config_persistence: ConfigPersistence = "none"
     local_root_dir: Path | None = None
-    artifact_store_dir: Path | None = None
     remove_uploaded_files: bool = False
 
 

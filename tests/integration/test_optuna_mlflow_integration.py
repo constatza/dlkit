@@ -153,26 +153,18 @@ def stub_trial_execution(monkeypatch: pytest.MonkeyPatch, stub_training_result: 
 def combined_settings(
     minimal_dataset: dict[str, Path],
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> SearchJobConfig:
     """Create SearchJobConfig with both Optuna and MLflow enabled.
 
     Args:
         minimal_dataset: Fixture providing dataset paths.
         tmp_path: Pytest temporary directory fixture.
-        monkeypatch: Pytest monkeypatch fixture for env var isolation.
-
     Returns:
         SearchJobConfig with Optuna and MLflow tracking configured.
     """
-    import dlkit.engine.tracking.uri_resolver as uri_resolver
-
     mlruns_dir = tmp_path / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
     mlflow_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", mlflow_uri)
-    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
-    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
     experiment_name = f"test_optuna_mlflow_{tmp_path.name}"
     unique_storage = f"sqlite:///{(tmp_path / 'optuna.db').as_posix()}"
@@ -229,7 +221,10 @@ class TestOptunaMLflowOptimization:
         storage_path = Path(storage_uri.removeprefix("sqlite:///"))
         assert storage_path.exists()
 
-        client = MlflowClient(tracking_uri=os.environ["MLFLOW_TRACKING_URI"])
+        tracking = combined_settings.tracking
+        assert tracking is not None
+        assert tracking.uri is not None
+        client = MlflowClient(tracking_uri=tracking.uri)
         assert combined_settings.experiment is not None
         experiment = client.get_experiment_by_name(combined_settings.experiment.name)
         assert experiment is not None
