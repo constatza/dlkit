@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
+import torch
+import torch.nn as nn
 from torch import Tensor
 
 from dlkit.common.hooks import ParamValue
@@ -19,6 +22,7 @@ from dlkit.engine.tracking.artifact_logger import (
     TAG_LOGGED_MODEL_URI,
     TAG_MODEL_CLASS,
     ArtifactLogger,
+    _build_input_example,
     _resolve_model_class_name,
 )
 from dlkit.engine.tracking.interfaces import IRunContext
@@ -107,6 +111,7 @@ class _RecordingRunContext(IRunContext):
             {
                 "artifact_path": artifact_path,
                 "registered_model_name": registered_model_name,
+                "input_example": input_example,
             }
         )
         return f"runs:/{self._run_id}/{artifact_path}"
@@ -158,6 +163,120 @@ def test_logs_model_uses_inner_class_name_for_wrapper(
     artifact_logger._log_model_artifact(run_context=run_context, model=wrapped_model)
 
     assert run_context.tags[TAG_MODEL_CLASS] == "_InnerNet"
+
+
+# ---------------------------------------------------------------------------
+# _build_input_example / input_example threading
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _ShapeContext:
+    input_shapes: Mapping[str, tuple[int, ...]]
+
+
+@dataclass(frozen=True)
+class _FakeCheckpointMetadata:
+    context: _ShapeContext
+
+
+@pytest.fixture
+def model_with_shapes() -> nn.Module:
+    model = nn.Linear(4, 2)
+    object.__setattr__(
+        model,
+        "_checkpoint_metadata",
+        _FakeCheckpointMetadata(context=_ShapeContext(input_shapes={"x": (4,)})),
+    )
+    return model
+
+
+@pytest.fixture
+def model_without_metadata() -> nn.Module:
+    return nn.Linear(4, 2)
+
+
+@pytest.fixture
+def model_with_multi_shapes() -> nn.Module:
+    model = nn.Linear(4, 2)
+    object.__setattr__(
+        model,
+        "_checkpoint_metadata",
+        _FakeCheckpointMetadata(context=_ShapeContext(input_shapes={"x": (4,), "y": (8,)})),
+    )
+    return model
+
+
+def test_build_input_example_is_valid_for_pt2_format(model_with_shapes: nn.Module) -> None:
+    """Regression: _build_input_example output must pass MLflow pt2 iteration check."""
+    result = _build_input_example(model_with_shapes)
+    assert result is not None
+    # reproduce exact MLflow pt2 validation (mlflow.pytorch.save_model lines 178-188)
+    if isinstance(result, (np.ndarray, torch.Tensor)):
+        result = (result,)
+    assert all(isinstance(v, (np.ndarray, torch.Tensor)) for v in result), (
+        "MLflow pt2 validation rejects this format — must be ndarray/Tensor, not dict"
+    )
+
+
+def test_mlflow_log_model_pt2_does_not_raise(model_with_shapes: nn.Module, tmp_path: Path) -> None:
+    """Reproduction: mlflow.pytorch.log_model with serialization_format='pt2' must not raise."""
+    import mlflow
+
+    from dlkit.engine.tracking.artifact_logger import _build_pt2_signature
+
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow.db'}")
+    experiment_id = mlflow.create_experiment("pt2-test")
+    with mlflow.start_run(experiment_id=experiment_id):
+        mlflow.pytorch.log_model(
+            pytorch_model=model_with_shapes,
+            name="model",
+            serialization_format="pt2",
+            input_example=_build_input_example(model_with_shapes),
+            signature=_build_pt2_signature(model_with_shapes),
+        )
+
+
+def test_log_model_artifact_passes_input_example(model_with_shapes: nn.Module) -> None:
+    """Reproduction: _log_model_artifact must pass a non-None input_example when shapes exist."""
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+
+    artifact_logger._log_model_artifact(run_context=run_context, model=model_with_shapes)
+
+    call = run_context.logged_model_calls[0]
+    assert call["input_example"] is not None
+    assert isinstance(call["input_example"], np.ndarray)
+    assert call["input_example"].shape == (1, 4)
+
+
+def test_log_model_artifact_multi_input_returns_tuple(
+    model_with_multi_shapes: nn.Module,
+) -> None:
+    """Multi-input models produce a tuple of arrays, one per input shape."""
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+
+    artifact_logger._log_model_artifact(run_context=run_context, model=model_with_multi_shapes)
+
+    call = run_context.logged_model_calls[0]
+    result = call["input_example"]
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    assert result[0].shape == (1, 4)
+    assert result[1].shape == (1, 8)
+
+
+def test_log_model_artifact_none_example_when_no_metadata(
+    model_without_metadata: nn.Module,
+) -> None:
+    """Regression: gracefully pass input_example=None when the model has no shape metadata."""
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+
+    artifact_logger._log_model_artifact(run_context=run_context, model=model_without_metadata)
+
+    assert run_context.logged_model_calls[0]["input_example"] is None
 
 
 # ---------------------------------------------------------------------------

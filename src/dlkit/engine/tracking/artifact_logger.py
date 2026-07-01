@@ -7,8 +7,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
+if TYPE_CHECKING:
+    from mlflow.models import ModelSignature
+
+import numpy as np
 from lightning.pytorch import Trainer
 from torch import nn
 
@@ -29,6 +33,8 @@ from .config_accessor import ConfigAccessor
 from .interfaces import IExperimentTracker, IRunContext
 
 type _WorkflowSettings = JobConfig
+# MLflow pt2 requires ndarray/Tensor or a tuple of them — NOT a dict.
+type _InputExample = np.ndarray | tuple[np.ndarray, ...]
 
 logger = get_logger(__name__)
 
@@ -42,6 +48,63 @@ TAG_MODEL_CLASS = "mlflow_model_class"
 class CheckpointCallbackLike(Protocol):
     best_model_path: str | Path | None
     last_model_path: str | Path | None
+
+
+def _build_input_example(model: nn.Module) -> _InputExample | None:
+    """Build zero numpy arrays from checkpoint metadata input shapes.
+
+    Returns a single ndarray for single-input models, or a tuple of ndarrays for
+    multi-input models. MLflow pt2 validation iterates over the value and checks
+    isinstance(v, (np.ndarray, Tensor)) — a dict fails this check because iteration
+    yields string keys, not arrays.
+
+    Args:
+        model: Trained model, possibly carrying ``_checkpoint_metadata``.
+
+    Returns:
+        Single ndarray ``(1, *shape)`` or tuple thereof, or None when shape info
+        is unavailable.
+    """
+    metadata = getattr(model, "_checkpoint_metadata", None)
+    context = getattr(metadata, "context", None) if metadata is not None else None
+    if context is None or not context.input_shapes:
+        return None
+    param = next(model.parameters(), None)
+    np_dtype = np.float32 if param is None else param.detach().cpu().numpy().dtype
+    arrays = [np.zeros((1, *shape), dtype=np_dtype) for shape in context.input_shapes.values()]
+    return arrays[0] if len(arrays) == 1 else tuple(arrays)
+
+
+def _build_pt2_signature(model: nn.Module) -> ModelSignature | None:
+    """Build an MLflow ModelSignature with TensorSpec inputs for pt2 compatibility.
+
+    pt2 serialization requires a TensorSpec-based signature in addition to
+    input_example. Returns None when shape info is unavailable.
+
+    Args:
+        model: Trained model, possibly carrying ``_checkpoint_metadata``.
+
+    Returns:
+        ``ModelSignature`` with TensorSpec inputs, or None.
+    """
+    from mlflow.models import ModelSignature
+    from mlflow.types.schema import Schema, TensorSpec
+
+    metadata = getattr(model, "_checkpoint_metadata", None)
+    context = getattr(metadata, "context", None) if metadata is not None else None
+    if context is None or not context.input_shapes:
+        return None
+    param = next(model.parameters(), None)
+    np_dtype = np.dtype("float32") if param is None else param.detach().cpu().numpy().dtype
+    # Use static batch=1 — pt2 maps -1 to ExportDim("dynamic_dim") which fails
+    # when the example is also batch=1 (torch.export specializes the constant).
+    inputs = Schema(
+        [
+            TensorSpec(type=np_dtype, shape=(1, *shape), name=name)
+            for name, shape in context.input_shapes.items()
+        ]
+    )
+    return ModelSignature(inputs=inputs)
 
 
 def _resolve_model_class_name(model: object) -> str:
@@ -212,6 +275,8 @@ class ArtifactLogger:
         model_uri = run_context.log_model(
             model=model,
             artifact_path=DEFAULT_MODEL_ARTIFACT_PATH,
+            input_example=_build_input_example(model),
+            signature=_build_pt2_signature(model),
         )
         if model_uri:
             run_context.set_tag(TAG_MODEL_CLASS, _resolve_model_class_name(model))
