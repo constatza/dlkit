@@ -14,8 +14,19 @@ from dlkit.domain.nn.contracts import (
 from dlkit.domain.nn.ffnn.constrained import (
     ConstantWidthFactorizedFFNN,
     ConstantWidthSimpleFactorizedFFNN,
+    ConstantWidthSoftplusFactorizedFFNN,
+    EmbeddedFactorizedEndFFNN,
     EmbeddedFactorizedFFNN,
+    EmbeddedFullyFactorizedFFNN,
+    EmbeddedFullySoftplusFactorizedFFNN,
+    EmbeddedSimpleFactorizedEndFFNN,
     EmbeddedSimpleFactorizedFFNN,
+    EmbeddedSimpleFullyFactorizedFFNN,
+    EmbeddedSimpleFullySoftplusFactorizedFFNN,
+    EmbeddedSimpleSoftplusFactorizedEndFFNN,
+    EmbeddedSimpleSoftplusFactorizedFFNN,
+    EmbeddedSoftplusFactorizedEndFFNN,
+    EmbeddedSoftplusFactorizedFFNN,
     FactorizedFFNN,
     SimpleFactorizedFFNN,
     _resolve_hidden_size,
@@ -162,6 +173,451 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(StandardEntryConsumer, ScaleE
         )
 
 
+# ── Embedded Softplus-Factorized (plain Linear projections) ─────────────────
+
+
+class ScaleEquivariantEmbeddedSoftplusFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant residual embedded softplus-factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSoftplusFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSimpleSoftplusFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain embedded softplus-factorized FFNN."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSimpleSoftplusFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+# ── FactorizedEnd (plain Linear embedding, FactorizedLinear regression) ──────
+
+
+class ScaleEquivariantEmbeddedFactorizedEndFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+    """Scale-equivariant residual embedded FFNN with factorized body and regression layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedFactorizedEndFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSimpleFactorizedEndFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain embedded FFNN with factorized body and regression layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSimpleFactorizedEndFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSoftplusFactorizedEndFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant residual embedded FFNN with softplus-factorized body and regression."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSoftplusFactorizedEndFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSimpleSoftplusFactorizedEndFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain embedded FFNN with softplus-factorized body and regression."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSimpleSoftplusFactorizedEndFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+# ── FullyFactorized (FactorizedLinear embedding, body, and regression) ────────
+
+
+class ScaleEquivariantEmbeddedFullyFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+    """Scale-equivariant residual embedded FFNN with fully factorized layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedFullyFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSimpleFullyFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain embedded FFNN with fully factorized layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSimpleFullyFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant residual embedded FFNN with fully softplus-factorized layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedFullySoftplusFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedSimpleFullySoftplusFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant plain embedded FFNN with fully softplus-factorized layers."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedSimpleFullySoftplusFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=resolve_activation(activation),
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
 # ── Non-embedded Factorized ──────────────────────────────────────────────────
 
 
@@ -258,6 +714,14 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(StandardEntryConsumer, ScaleEq
     Wraps :class:`~dlkit.domain.nn.ffnn.constrained.ConstantWidthFactorizedFFNN`
     with norm-based input/output scaling so that ``f(αx) = α · f(x)`` for any
     scalar ``α > 0``. Requires ``in_features == out_features``.
+
+    **No projection layers.** Every one of the ``num_layers`` body layers is a
+    ``FactorizedLinear``, including the last. There is no ``nn.Linear`` embedding
+    at the input or regression at the output. This distinguishes this class from
+    :class:`~dlkit.domain.nn.ffnn.constrained.EmbeddedFactorizedFFNN` (which adds
+    two plain ``nn.Linear`` projections) and
+    :class:`~dlkit.domain.nn.ffnn.constrained.FactorizedFFNN` (whose last layer is
+    a plain ``nn.Linear``). For asymmetric inputs use those classes instead.
 
     Args:
         in_features: Input and output dimension. Must equal ``out_features``.
@@ -364,6 +828,75 @@ class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(
     ) -> None:
         super().__init__(
             base_model=ConstantWidthSimpleFactorizedFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                num_layers=num_layers,
+                bias=bias,
+                mean=mean,
+                std=std,
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantConstantWidthSoftplusFactorizedFFNN(
+    StandardEntryConsumer, ScaleEquivariantWrapper
+):
+    """Scale-equivariant residual constant-width softplus-factorized FFNN.
+
+    Wraps :class:`~dlkit.domain.nn.ffnn.constrained.ConstantWidthSoftplusFactorizedFFNN`
+    with L2 norm-based input/output scaling so that ``f(αx) = α · f(x)`` for any
+    scalar ``α > 0``. Requires ``in_features == out_features``.
+
+    This is the closest match to the May 2026 winning architecture
+    (``constant-width-factorized`` in dl-experiments), which used softplus as the
+    per-row scale nonlinearity with a unit-scale correction at initialisation.
+
+    Args:
+        in_features: Input and output dimension. Must equal ``out_features``.
+        out_features: Output dimension. Must equal ``in_features``.
+        num_layers: Number of residual softplus-factorized blocks.
+        bias: Whether body layers include a bias term.
+        mean: Offset from the softplus unit-scale point
+            (``0.0`` → scale ≈ 1 at init).
+        std: Standard deviation for log-scale initialisation.
+        norm: Vector norm used for equivariance (``"l2"``, ``"l1"``, ``"linf"``).
+        eps_gain: Multiplier on machine epsilon for safe norm division.
+        keep_stats: If ``True``, ``forward`` returns ``(output, {"norm": ...})``.
+        activation: Element-wise activation. ``None`` defaults to GELU.
+        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
+        dropout: Dropout probability.
+
+    Raises:
+        ValueError: If ``in_features != out_features``.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+        bias: bool = True,
+        mean: float = 0.0,
+        std: float = 0.1,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = None,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__(
+            base_model=ConstantWidthSoftplusFactorizedFFNN(
                 in_features=in_features,
                 out_features=out_features,
                 num_layers=num_layers,

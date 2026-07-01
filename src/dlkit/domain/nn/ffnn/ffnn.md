@@ -27,12 +27,6 @@ All classes are keyword-only, expose `in_features` and `out_features`, and imple
 |---|---|---|---|
 | `LinearNetwork` | `nn.Linear` | none | rectangular |
 | `FactorizedLinearNetwork` | `FactorizedLinear` | row-wise scale factorization | rectangular |
-| `SymmetricLinearNetwork` | `SymmetricLinear` | W = Wᵀ | **square only** |
-| `SPDLinearNetwork` | `SPDLinear` | W symmetric positive-definite | **square only** |
-| `SymmetricFactorizedLinearNetwork` | `SymmetricFactorizedLinear` | W = D·Sym(A)·D | **square only** |
-| `SPDFactorizedLinearNetwork` | `SPDFactorizedLinear` | W = D·SPD(A)·D | **square only** |
-
-Square-only classes raise `ValueError` at construction if `in_features != out_features`.
 
 ## Variant matrix
 
@@ -44,24 +38,7 @@ Square-only classes raise `ValueError` at construction if `in_features != out_fe
 | Constant-width | `FFNN(skip=False)` | `FFNN` | `ScaleEquivariantFFNN` |
 | Embedded constant-width | — | `EmbeddedFFNN` | — |
 
-### Constrained — square layer types (SPD, SPDFactorized)
-
-Square layer types (SPD, SPDFactorized) are always square. These networks expose **only `in_features`** — `hidden_size` and `out_features` are always equal to `in_features`.
-
-All layers in these networks belong to the same constrained type; no plain `nn.Linear` appears inside the model.
-
-**Embedded**: `StructuredLayer(n)` no-act → `[StructuredLayer(n) × num_layers]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 0`.
-
-**Non-embedded**: `[StructuredLayer(n) × num_layers]` with act → `StructuredLayer(n)` no-act. Requires `num_layers >= 0`.
-
-| Layer family | Plain (non-embedded) | Residual (non-embedded) | Plain (embedded) | Residual (embedded) |
-|---|---|---|---|---|
-| SPD | `SimpleSPDFFNN` | `SPDFFNN` | `EmbeddedSimpleSPDFFNN` | `EmbeddedSPDFFNN` |
-| SPD-factorized | `SimpleSPDFactorizedFFNN` | `SPDFactorizedFFNN` | `EmbeddedSimpleSPDFactorizedFFNN` | `EmbeddedSPDFactorizedFFNN` |
-
-Scale-equivariant wrappers follow the same naming: `ScaleEquivariant[Embedded]SPDFFNN` etc.
-
-### Constrained — rectangular layer types (Factorized)
+### Constrained — Factorized layer types
 
 Factorized layers can be rectangular. These networks expose `in_features`, `hidden_size`, and `out_features` as independent parameters.
 
@@ -78,15 +55,29 @@ primitive, not the public FFNN default.
 
 **Non-embedded**: `FactorizedLinear(in→h)` (no skip) → `[FactorizedLinear(h→h) × (num_layers-1)]` with act → `Linear(h→out)`.
 
+**Constant-width (square)**: `[FactorizedLinear(n→n) × num_layers]` all-residual — **no** embedding or regression `nn.Linear`. Every layer including the last is `FactorizedLinear`. Requires `in==out`. For asymmetric inputs use the Embedded variants instead.
+
 | Variant | Plain | Residual | Notes |
 |---|---|---|---|
-| Non-embedded (rectangular) | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `first_block(in→h)` + body + `Linear(h→out)` |
+| Non-embedded (rectangular) | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `first_block(in→h, no skip)` + body + `Linear(h→out)` |
 | Embedded (rectangular) | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | `Linear(in→h)` + body + `Linear(h→out)` |
-| **Constant-width (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure body; `in==out` enforced; default activation **GELU** |
+| Embedded softplus (rectangular) | `EmbeddedSimpleSoftplusFactorizedFFNN` | `EmbeddedSoftplusFactorizedFFNN` | same as Embedded but body uses `SoftplusFactorizedLinear` |
+| **FactorizedEnd exp (rectangular)** | `EmbeddedSimpleFactorizedEndFFNN` | `EmbeddedFactorizedEndFFNN` | `Linear(in→h)` + body + `FactorizedLinear(h→out)` |
+| **FactorizedEnd softplus (rectangular)** | `EmbeddedSimpleSoftplusFactorizedEndFFNN` | `EmbeddedSoftplusFactorizedEndFFNN` | `Linear(in→h)` + softplus body + `SoftplusFactorizedLinear(h→out)` |
+| **FullyFactorized exp (rectangular)** | `EmbeddedSimpleFullyFactorizedFFNN` | `EmbeddedFullyFactorizedFFNN` | `FactorizedLinear(in→h)` + body + `FactorizedLinear(h→out)`; no plain `nn.Linear` |
+| **FullyFactorized softplus (rectangular)** | `EmbeddedSimpleFullySoftplusFactorizedFFNN` | `EmbeddedFullySoftplusFactorizedFFNN` | `SoftplusFactorizedLinear(in→h)` + softplus body + `SoftplusFactorizedLinear(h→out)`; no plain `nn.Linear` |
+| **Constant-width exp (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure body; `in==out`; `exp` scale fn; GELU default |
+| **Constant-width softplus (square)** | — | `ConstantWidthSoftplusFactorizedFFNN` | pure body; `in==out`; `softplus` scale fn; unit-scale correction at init |
 
 Scale-equivariant wrappers:
-- Rectangular: `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
-- Square: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+- Rectangular exp: `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
+- Rectangular softplus: `ScaleEquivariantEmbeddedSoftplusFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSoftplusFactorizedFFNN`
+- FactorizedEnd exp: `ScaleEquivariantEmbeddedFactorizedEndFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedEndFFNN`
+- FactorizedEnd softplus: `ScaleEquivariantEmbeddedSoftplusFactorizedEndFFNN`, `ScaleEquivariantEmbeddedSimpleSoftplusFactorizedEndFFNN`
+- FullyFactorized exp: `ScaleEquivariantEmbeddedFullyFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFullyFactorizedFFNN`
+- FullyFactorized softplus: `ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFullySoftplusFactorizedFFNN`
+- Square exp: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+- Square softplus: `ScaleEquivariantConstantWidthSoftplusFactorizedFFNN`
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
 
@@ -153,7 +144,7 @@ It exposes the same dense-network knobs as `FFNN`:
 | no `Embedded` prefix | structured layers act directly from the input |
 | `ScaleEquivariant...` | wraps a base model with norm-based input/output scaling |
 
-For square layer types, "Embedded" means the initial projection is also a structured (SPD/Symmetric) layer without activation — not a plain `nn.Linear`.
+For constrained layer types, "Embedded" means the network has a dedicated initial projection layer before the body (and a regression layer after it).
 
 Unless stated otherwise, `num_layers` counts learned hidden blocks on the model's main path. Dedicated embedding/setup layers and terminal readout layers are excluded from that count.
 

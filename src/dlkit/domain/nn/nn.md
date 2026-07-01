@@ -47,11 +47,16 @@ The FFNN family is organized symmetrically around architecture and naming:
 Representative exports from `dlkit.domain.nn` include:
 - dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`
 - FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
-- constrained SPD (square): `SPDFFNN`, `SimpleSPDFFNN`, `EmbeddedSPDFFNN`, `EmbeddedSimpleSPDFFNN`
-- constrained Factorized (rectangular): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
-- constrained Factorized (square constant-width): `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+- constrained Factorized (rectangular, exp): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
+- constrained Factorized (rectangular, softplus): `EmbeddedSoftplusFactorizedFFNN`, `EmbeddedSimpleSoftplusFactorizedFFNN`
+- constrained FactorizedEnd (plain Linear embedding, FactorizedLinear regression, exp): `EmbeddedFactorizedEndFFNN`, `EmbeddedSimpleFactorizedEndFFNN`
+- constrained FactorizedEnd (plain Linear embedding, SoftplusFactorizedLinear regression): `EmbeddedSoftplusFactorizedEndFFNN`, `EmbeddedSimpleSoftplusFactorizedEndFFNN`
+- constrained FullyFactorized (FactorizedLinear embedding, body, and regression, exp): `EmbeddedFullyFactorizedFFNN`, `EmbeddedSimpleFullyFactorizedFFNN`
+- constrained FullyFactorized (SoftplusFactorizedLinear embedding, body, and regression): `EmbeddedFullySoftplusFactorizedFFNN`, `EmbeddedSimpleFullySoftplusFactorizedFFNN`
+- constrained Factorized (square constant-width, exp): `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+- constrained Factorized (square constant-width, softplus): `ConstantWidthSoftplusFactorizedFFNN`, `ScaleEquivariantConstantWidthSoftplusFactorizedFFNN`
 - coordinate spectral-bias: `FourierFeatureNetwork`, `FactorizedFourierFeatureNetwork`, `Siren`, `ModifiedMLP`, `ScaleEquivariantFourierFeatureNetwork`, `ScaleEquivariantFactorizedFourierFeatureNetwork`
-- scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantSPDFFNN`, `ScaleEquivariantEmbeddedSPDFactorizedFFNN`, `ScaleEquivariantFactorizedFFNN`
+- scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`
 - gated: `GatedMLP`
 
 `dlkit.nn` is the user-facing shim for this non-graph NN surface and re-exports the same

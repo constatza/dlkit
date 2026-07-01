@@ -76,7 +76,7 @@ class FactorizedLinearNetwork(StandardEntryConsumer, nn.Module):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        mean: float = 1.0,
+        mean: float = 0.0,
         std: float = 0.1,
     ) -> None:
         super().__init__()
