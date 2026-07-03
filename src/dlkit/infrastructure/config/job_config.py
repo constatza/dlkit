@@ -9,6 +9,7 @@ from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
+from dlkit.infrastructure.config.plot_settings import PlotSettings
 from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.search_settings import SearchSettings
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
@@ -26,6 +27,7 @@ class JobConfig(BasicSettings):
         training: Training pipeline configuration.
         search: HPO search configuration.
         tracking: Tracking backend connection.
+        plots: Plot artifact generation settings (opt-in, disabled by default).
     """
 
     run: RunSettings
@@ -35,6 +37,7 @@ class JobConfig(BasicSettings):
     training: TrainingSettings | None = None
     search: SearchSettings | None = None
     tracking: TrackingSettings = Field(default_factory=TrackingSettings)
+    plots: PlotSettings = Field(default_factory=PlotSettings)
 
 
 class TrainingJobConfig(JobConfig):
