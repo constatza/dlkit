@@ -22,6 +22,7 @@ ArtifactKind = Literal[
     "config",
     "dataset_manifest",
     "user_artifact",
+    "plot",
 ]
 TrackingBackendKind = Literal["none", "mlflow"]
 PredictionPersistence = Literal["disabled", "local_only", "tracked"]

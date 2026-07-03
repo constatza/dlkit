@@ -71,7 +71,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 
@@ -108,7 +108,7 @@ class MetricLogger:
                 if math.isnan(numeric_value) or math.isinf(numeric_value):
                     raise ValueError("non-finite metric")
                 numeric[key] = numeric_value
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 if value is not None:
                     fallback[f"metric_{key}"] = str(value)
 

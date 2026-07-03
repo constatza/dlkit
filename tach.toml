@@ -23,6 +23,12 @@ depends_on = [
 ]
 
 [[modules]]
+path = "dlkit.domain.analysis"
+depends_on = [
+    { path = "dlkit.common" },
+]
+
+[[modules]]
 path = "dlkit.engine"
 depends_on = [
     { path = "dlkit.common" },
