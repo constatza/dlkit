@@ -157,6 +157,18 @@ class IMetricSink(Protocol):
     def set_tag(self, key: str, value: str) -> None: ...
 
 
+@runtime_checkable
+class IArtifactLogger(Protocol):
+    """Narrow protocol for consumers that only need to upload file artifacts.
+
+    Components such as ``LossCurvePlotCallback`` and ``PredictionPlotCallback``
+    depend on this interface rather than the full ``IRunContext``, satisfying ISP.
+    ``IRunContext`` implementations satisfy this structurally.
+    """
+
+    def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None: ...
+
+
 @dataclass(slots=True)
 class InMemoryArtifactCollector:
     _artifacts: list[ProducedArtifact] = field(default_factory=list)
