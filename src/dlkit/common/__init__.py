@@ -12,7 +12,13 @@ from .errors import (
 )
 from .hooks import LifecycleHooks
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
-from .results import InferenceResult, OptimizationResult, TrainingResult
+from .results import (
+    ConvergencePoint,
+    ConvergenceResult,
+    InferenceResult,
+    OptimizationResult,
+    TrainingResult,
+)
 from .shapes import InputShapes, OutputShapes, Shape, ShapeContext, ShapeProvider
 from .sources import ArraySource
 from .state import ModelState
@@ -21,6 +27,8 @@ __all__ = [
     "ArraySource",
     "BatchComplianceError",
     "ConfigurationError",
+    "ConvergencePoint",
+    "ConvergenceResult",
     "DLKitError",
     "ExecutionOverrides",
     "InferenceResult",

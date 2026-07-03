@@ -59,12 +59,26 @@ class OptimizationOverrides(RuntimeOverrideModel):
     tags: dict[str, str] | None = None
 
 
+class ConvergenceOverrides(RuntimeOverrideModel):
+    """Supported runtime overrides for convergence entrypoints."""
+
+    experiment_name: str | None = None
+    run_name: str | None = None
+    tags: dict[str, str] | None = None
+    sizes: tuple[int, ...] | None = None
+    repeats: int | None = None
+    target: float | None = None
+
+
 class ExecutionOverrides(TrainingOverrides):
     """Superset of supported overrides for the unified execution entrypoint."""
 
     trials: int | None = None
     study_name: str | None = None
     enable_optuna: bool | None = None
+    sizes: tuple[int, ...] | None = None
+    repeats: int | None = None
+    target: float | None = None
 
     def to_training_overrides(self) -> TrainingOverrides:
         """Project the unified payload onto training-only fields."""
@@ -77,5 +91,12 @@ class ExecutionOverrides(TrainingOverrides):
         """Project the unified payload onto optimization-only fields."""
         keys = set(OptimizationOverrides.model_fields)
         return OptimizationOverrides.model_validate(
+            {key: value for key, value in self.to_runtime_kwargs().items() if key in keys}
+        )
+
+    def to_convergence_overrides(self) -> ConvergenceOverrides:
+        """Project the unified payload onto convergence-only fields."""
+        keys = set(ConvergenceOverrides.model_fields)
+        return ConvergenceOverrides.model_validate(
             {key: value for key, value in self.to_runtime_kwargs().items() if key in keys}
         )

@@ -8,6 +8,7 @@ from dlkit.common import (
     OptimizationResult,
     TrainingResult,
 )
+from dlkit.common.results import ConvergenceResult
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.engine.workflows.factories.inference_data_factory import (
     build_inference_datamodule as _build_inference_datamodule,
@@ -15,6 +16,7 @@ from dlkit.engine.workflows.factories.inference_data_factory import (
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.api.adapters import EngineWorkflowExecutor
 from dlkit.interfaces.api.domain.override_types import (
+    ConvergenceOverrides,
     OptimizationOverrides,
     TrainingOverrides,
 )
@@ -71,6 +73,29 @@ def build_inference_datamodule(settings: InferenceJobConfig) -> LightningDataMod
 #   result = predictor.predict(inputs)
 #
 # See documentation for migration guide.
+
+
+def converge(
+    settings: WorkflowSettings,
+    overrides: ConvergenceOverrides | None = None,
+    *,
+    mlflow: bool = False,
+) -> ConvergenceResult:
+    """Run a sample-size convergence study with optional overrides.
+
+    Args:
+        settings: Convergence workflow configuration settings.
+        overrides: Optional convergence overrides (sizes, repeats, target).
+        mlflow: If True, force MLflow tracking behavior for this execution.
+
+    Returns:
+        ConvergenceResult with convergence points, n_star, and tracking metadata.
+    """
+    return _executor.converge(
+        settings,
+        overrides=overrides,
+        mlflow=mlflow,
+    )
 
 
 def optimize(

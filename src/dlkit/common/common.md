@@ -13,7 +13,7 @@ the codebase.
 
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
-- Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`
+- Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
 - Hook param scalars: `ParamValue = str | int | float | bool`

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.results import ConvergenceResult
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.interfaces.api.adapters import EngineWorkflowExecutor
 from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
@@ -16,7 +17,7 @@ def execute(
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
-) -> TrainingResult | OptimizationResult:
+) -> TrainingResult | OptimizationResult | ConvergenceResult:
     """Execute DLKit workflow with intelligent routing based on settings."""
     return _executor.execute(
         settings=settings,

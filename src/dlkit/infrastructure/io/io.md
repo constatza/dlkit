@@ -48,3 +48,6 @@ DLKit no longer uses a global project root setting.
 - `arrays.py` owns NumPy buffer mutability handling. Callers should not need to
   special-case read-only `.npy`, `.npz`, or in-memory `ndarray` inputs before
   converting them to tensors.
+- `split_provider.py` applies configured training-split caps after split
+  generation or loading so convergence sweeps can evaluate bounded sample sizes
+  without changing durable split definitions.

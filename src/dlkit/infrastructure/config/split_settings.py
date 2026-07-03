@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field, FilePath, NonNegativeFloat
+from pydantic import Field, FilePath, NonNegativeFloat, PositiveInt
 
 from .core.base_settings import BasicSettings
 
@@ -22,6 +22,14 @@ class IndexSplitSettings(BasicSettings):
     )
     val_ratio: NonNegativeFloat = Field(
         default=0.15, description="Fraction of dataflow used for validation", alias="val"
+    )
+    max_train_samples: PositiveInt | None = Field(
+        default=None,
+        description="Cap train split to this many samples (used by convergence studies)",
+    )
+    train_subset_seed: int | None = Field(
+        default=None,
+        description="Seed for re-permuting train indices before capping",
     )
 
     @property

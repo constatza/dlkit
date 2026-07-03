@@ -6,7 +6,7 @@ workflow-specific config views, and component-setting models.
 ## Responsibilities
 
 - immutable Pydantic settings models (`frozen=True`)
-- `JobConfig` top-level discriminated union (training / inference / search)
+- `JobConfig` top-level discriminated union (training / inference / search / convergence)
 - TOML loading via `load_job()` with deep-merge and profile references
 - patch application and runtime override support
 - component settings and factory support
@@ -19,13 +19,14 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 
 - `core/`: base settings, patching, factories, build context, TOML source
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
-- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`
+- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`
 - `run_settings.py`: `RunSettings` (type, seed, precision)
 - `experiment_settings.py`: `ExperimentSettings` (name, run_name, tags)
 - `model_components.py`: canonical `ModelComponentSettings`, plus loss/metric component settings
 - `data_settings.py`: `DataSettings` plus entry types
 - `training_settings.py`: `TrainingSettings`, `StoppingSettings`
 - `search_settings.py`: `SearchSettings`, param types
+- `convergence_settings.py`: sample-size convergence settings
 - `tracking_settings.py`: `TrackingSettings`
 - `optimizer_policy.py`: `OptimizerPolicySettings`
 - `optimizer_component.py`: concrete optimizer and scheduler component settings
@@ -39,6 +40,14 @@ job = load_job("config.toml")                # type inferred from run.type
 job = load_job(["base.toml", "local.toml"]) # merged left-to-right
 job = load_job("config.toml", run_type="train")  # override type
 ```
+
+## Convergence Settings
+
+`run.type = "converge"` selects `ConvergenceJobConfig`. The `convergence`
+section accepts either explicit `sizes` or `min_samples` / `max_samples` /
+`steps` for log-spaced sample-size generation. `repeats` controls independent
+runs per size, and optional `target`, `target_metric`, and `c` fields control
+threshold-based `n_star` detection.
 
 ## Optimization Settings
 

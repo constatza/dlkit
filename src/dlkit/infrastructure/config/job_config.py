@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field, model_validator
 
+from dlkit.infrastructure.config.convergence_settings import ConvergenceSettings
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
@@ -102,3 +103,19 @@ class SearchJobConfig(JobConfig):
         if not self.search.space:
             raise ValueError("SearchJobConfig requires at least one entry in search.space.")
         return self
+
+
+class ConvergenceJobConfig(JobConfig):
+    """Validated convergence job: model, data, training, and convergence sections required.
+
+    Args:
+        model: Model class selector and hyperparameters (required).
+        data: Dataset, dataloader, and DataModule configuration (required).
+        training: Training pipeline configuration (required).
+        convergence: Sample-size convergence study configuration (required).
+    """
+
+    model: ModelComponentSettings
+    data: DataSettings
+    training: TrainingSettings
+    convergence: ConvergenceSettings

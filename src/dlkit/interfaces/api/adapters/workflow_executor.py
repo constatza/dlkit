@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.results import ConvergenceResult
+from dlkit.engine.workflows.entrypoints import (
+    converge as runtime_converge,
+)
 from dlkit.engine.workflows.entrypoints import (
     execute as runtime_execute,
 )
@@ -15,10 +19,12 @@ from dlkit.engine.workflows.entrypoints import (
 )
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.infrastructure.config.job_config import (
+    ConvergenceJobConfig,
     SearchJobConfig,
     TrainingJobConfig,
 )
 from dlkit.interfaces.api.domain.override_types import (
+    ConvergenceOverrides,
     ExecutionOverrides,
     OptimizationOverrides,
     TrainingOverrides,
@@ -49,6 +55,33 @@ def _apply_mlflow_flag(settings: WorkflowSettings, mlflow: bool) -> WorkflowSett
 
 class EngineWorkflowExecutor:
     """Concrete executor adapter for engine workflow entrypoints."""
+
+    def converge(
+        self,
+        settings: WorkflowSettings,
+        overrides: ConvergenceOverrides | None = None,
+        *,
+        mlflow: bool = False,
+    ) -> ConvergenceResult:
+        """Execute a convergence study via engine entrypoint.
+
+        Args:
+            settings: Convergence workflow configuration settings.
+            overrides: Optional convergence overrides.
+            mlflow: If True, ensure MLflow tracking is configured.
+
+        Returns:
+            ConvergenceResult with convergence points and tracking metadata.
+
+        Raises:
+            TypeError: If settings is not a ConvergenceJobConfig.
+        """
+        settings_with_tracking = _apply_mlflow_flag(settings, mlflow)
+        if not isinstance(settings_with_tracking, ConvergenceJobConfig):
+            raise TypeError(
+                f"converge() requires ConvergenceJobConfig, got {type(settings_with_tracking).__name__}"
+            )
+        return runtime_converge(settings_with_tracking, overrides=overrides)
 
     def train(
         self,
@@ -113,7 +146,7 @@ class EngineWorkflowExecutor:
         *,
         mlflow: bool = False,
         hooks: LifecycleHooks | None = None,
-    ) -> TrainingResult | OptimizationResult:
+    ) -> TrainingResult | OptimizationResult | ConvergenceResult:
         """Execute a workflow with intelligent routing via engine entrypoint.
 
         Args:

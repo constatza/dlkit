@@ -1,7 +1,7 @@
 # CLI Commands Module
 
 ## Overview
-The CLI commands module provides the primary command-line interface for DLKit operations through Typer-based commands. It implements training, inference, optimization, server management, configuration utilities, and checkpoint conversion workflows with rich console output and comprehensive parameter overrides.
+The CLI commands module provides the primary command-line interface for DLKit operations through Typer-based commands. It implements training, inference, optimization, convergence studies, server management, configuration utilities, and checkpoint conversion workflows with rich console output and comprehensive parameter overrides.
 
 ## Architecture & Design Patterns
 - **Command Pattern**: Each command module encapsulates a workflow (train, predict, optimize, etc.)
@@ -26,6 +26,7 @@ Key architectural decisions:
 | `train.app` | Typer | Training workflow commands | N/A |
 | `predict.app` | Typer | Inference/prediction commands | N/A |
 | `optimize.app` | Typer | Hyperparameter optimization commands | N/A |
+| `converge.app` | Typer | Sample-size convergence study commands | N/A |
 | `server.app` | Typer | MLflow server management commands | N/A |
 | `config.app` | Typer | Configuration utilities | N/A |
 | `convert.app` | Typer | Checkpoint conversion to ONNX | N/A |

@@ -139,6 +139,8 @@ class DatasetBuilder:
             val_ratio=split_cfg.val_ratio,
             session_name=_get_session_name(settings) or "",
             explicit_filepath=split_cfg.filepath,
+            max_train_samples=split_cfg.max_train_samples,
+            train_subset_seed=split_cfg.train_subset_seed,
         )
 
     def build_datamodule(

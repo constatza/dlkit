@@ -4,13 +4,14 @@
 
 ## Responsibilities
 - expose the public workflow functions
-- accept strict Pydantic override payloads (`TrainingOverrides`, `OptimizationOverrides`, `ExecutionOverrides`)
+- accept strict Pydantic override payloads (`TrainingOverrides`, `OptimizationOverrides`, `ConvergenceOverrides`, `ExecutionOverrides`)
 - coerce known string paths to `Path`
 - forward normalized requests to runtime entrypoints
 
 ## Public Functions
 - `train()`
 - `optimize()`
+- `converge()`
 - `execute()`
 - `validate_config()`
 - `generate_template()`
@@ -21,9 +22,10 @@
 
 ## Example
 ```python
-from dlkit.interfaces.api import execute, train
-from dlkit.interfaces.api.domain import TrainingOverrides, ExecutionOverrides
+from dlkit.interfaces.api import converge, execute, train
+from dlkit.interfaces.api.domain import ConvergenceOverrides, ExecutionOverrides, TrainingOverrides
 
 result = train(settings, overrides=TrainingOverrides(epochs=25, learning_rate=1e-3))
+result = converge(settings, overrides=ConvergenceOverrides(sizes=(100, 500, 1000)))
 result = execute(settings, overrides=ExecutionOverrides(trials=10))
 ```

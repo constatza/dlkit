@@ -1,5 +1,6 @@
 """Runtime-owned workflow entrypoints."""
 
+from .convergence import converge
 from .convert import ConvertResult, convert_checkpoint_to_onnx
 from .execution import execute
 from .optimization import optimize
@@ -10,6 +11,7 @@ from .validation import validate_config
 __all__ = [
     "ConvertResult",
     "TemplateKind",
+    "converge",
     "convert_checkpoint_to_onnx",
     "execute",
     "generate_template",

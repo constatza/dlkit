@@ -7,6 +7,8 @@ from typing import Any
 
 _EXPORTS: dict[str, tuple[str, str]] = {
     "ConfigurationError": ("dlkit.common", "ConfigurationError"),
+    "ConvergenceResult": ("dlkit.common", "ConvergenceResult"),
+    "converge": ("dlkit.interfaces.api.functions", "converge"),
     "InferenceResult": ("dlkit.common", "InferenceResult"),
     "LoggedModelRecord": ("dlkit.interfaces.api.functions", "LoggedModelRecord"),
     "OptimizationResult": ("dlkit.common", "OptimizationResult"),

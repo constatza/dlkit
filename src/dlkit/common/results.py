@@ -88,3 +88,47 @@ class OptimizationResult:
     training_result: TrainingResult
     study_summary: dict[str, Any]
     duration_seconds: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConvergencePoint:
+    """Stats for a single sample-size step in a convergence study.
+
+    Args:
+        n: Number of training samples for this step.
+        train_mean: Mean training metric across repeats.
+        train_std: Standard deviation of training metric; 0.0 when repeats=1.
+        val_mean: Mean validation metric across repeats.
+        val_std: Standard deviation of validation metric; 0.0 when repeats=1.
+        gap: Generalisation gap (val_mean - train_mean).
+        marginal_gain: Improvement in val_mean vs previous step; None for first point.
+        converged: Whether convergence threshold is met; None if no target is set.
+    """
+
+    n: int
+    train_mean: float
+    train_std: float
+    val_mean: float
+    val_std: float
+    gap: float
+    marginal_gain: float | None
+    converged: bool | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConvergenceResult:
+    """Result of a sample-size convergence workflow.
+
+    Args:
+        points: Ordered sequence of convergence points, one per evaluated size.
+        n_star: Smallest n where converged=True; None if not found or no target set.
+        duration_seconds: Total wall-clock time for the convergence study.
+        mlflow_run_id: MLflow run ID for the parent convergence run, if tracked.
+        mlflow_tracking_uri: MLflow tracking URI used during the run, if tracked.
+    """
+
+    points: tuple[ConvergencePoint, ...]
+    n_star: int | None
+    duration_seconds: float
+    mlflow_run_id: str | None = field(default=None)
+    mlflow_tracking_uri: str | None = field(default=None)

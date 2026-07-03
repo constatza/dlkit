@@ -5,7 +5,9 @@ from __future__ import annotations
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.results import ConvergenceResult
 from dlkit.infrastructure.config.job_config import (
+    ConvergenceJobConfig,
     InferenceJobConfig,
     JobConfig,
     SearchJobConfig,
@@ -13,21 +15,27 @@ from dlkit.infrastructure.config.job_config import (
 )
 
 from ._override_types import (
+    ConvergenceOverrides,
     ExecutionOverrides,
     OptimizationOverrides,
     TrainingOverrides,
     require_override_model,
 )
+from .convergence import converge
 from .optimization import optimize
 from .training import train
 
 
 def execute(
-    settings: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
+    settings: TrainingJobConfig
+    | SearchJobConfig
+    | InferenceJobConfig
+    | ConvergenceJobConfig
+    | JobConfig,
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
-) -> TrainingResult | OptimizationResult:
+) -> TrainingResult | OptimizationResult | ConvergenceResult:
     """Dispatch between runtime training and optimization entrypoints."""
     validated_overrides = require_override_model(overrides, ExecutionOverrides)
     override_payload = (
@@ -82,6 +90,24 @@ def execute(
                 }
             )
             return train(settings, training_overrides if override_payload else None, hooks=hooks)
+
+        case ConvergenceJobConfig():
+            convergence_overrides = ConvergenceOverrides.model_validate(
+                {
+                    key: value
+                    for key, value in override_payload.items()
+                    if key
+                    in {
+                        "experiment_name",
+                        "run_name",
+                        "tags",
+                        "sizes",
+                        "repeats",
+                        "target",
+                    }
+                }
+            )
+            return converge(settings, convergence_overrides if override_payload else None)
 
         case _:
             raise WorkflowError(

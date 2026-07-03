@@ -17,6 +17,7 @@ from dlkit.infrastructure.utils.logging_config import (
 )
 
 from .commands import config, convert, optimize
+from .commands import converge as converge
 from .commands import predict as predict
 from .commands import train as train
 
@@ -45,6 +46,7 @@ app.add_typer(
 )
 app.add_typer(optimize.app, name="optimize", help="⚡ Hyperparameter optimization commands")
 app.add_typer(config.app, name="config", help="⚙️ Configuration validation and utilities")
+app.add_typer(converge.app, name="converge", help="📈 Sample-size convergence study")
 
 console = Console()
 

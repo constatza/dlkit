@@ -17,6 +17,7 @@
 - `_entrypoint_context.py`: shared setup for override application, path context, and timing
 - `training.py`: training entrypoint
 - `optimization.py`: optimization entrypoint
+- `convergence.py`: sample-size convergence study entrypoint
 - `execution.py`: training-vs-optimization routing
 - `validation.py`, `templates.py`, `convert.py`: validation/template/export helpers
 
@@ -25,5 +26,9 @@ Entrypoints stay procedural. They normalize request-level concerns and then hand
 control to runtime orchestration and optimization services. They may enter
 top-level tracker contexts when a workflow needs runtime-owned tracking setup,
 but they do not enter optimization backend-session contexts themselves.
+
+Convergence entrypoints validate convergence-specific overrides, build
+sample-size training sweeps, and delegate repeat execution to engine
+orchestrators before returning aggregated convergence points.
 
 Unknown override keys are rejected at the entrypoint boundary instead of being silently dropped.

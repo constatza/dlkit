@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dlkit.engine.workflows.entrypoints._override_types import (
+    ConvergenceOverrides,
     ExecutionOverrides,
     OptimizationOverrides,
     RuntimeOverrideModel,
@@ -10,6 +11,7 @@ from dlkit.engine.workflows.entrypoints._override_types import (
 )
 
 __all__ = [
+    "ConvergenceOverrides",
     "ExecutionOverrides",
     "OptimizationOverrides",
     "RuntimeOverrideModel",
