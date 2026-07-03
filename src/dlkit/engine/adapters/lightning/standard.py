@@ -66,7 +66,7 @@ def _validate_extra_inputs_against_signature(
 
     try:
         sig = inspect.signature(loss_fn)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return  # Uninspectable — skip validation
     params = sig.parameters
     accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())

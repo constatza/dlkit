@@ -161,7 +161,7 @@ class MLflowEpochLogger(Callback):
         if isinstance(candidate, str):
             try:
                 return float(candidate)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
         return None
 
