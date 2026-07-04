@@ -23,6 +23,12 @@ depends_on = [
 ]
 
 [[modules]]
+path = "dlkit.domain.analysis"
+depends_on = [
+    { path = "dlkit.common" },
+]
+
+[[modules]]
 path = "dlkit.engine"
 depends_on = [
     { path = "dlkit.common" },
@@ -70,6 +76,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.domain" },
+    { path = "dlkit.domain.analysis" },
     { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.data" },
     { path = "dlkit.engine.training" },

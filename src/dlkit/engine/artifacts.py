@@ -22,6 +22,7 @@ ArtifactKind = Literal[
     "config",
     "dataset_manifest",
     "user_artifact",
+    "plot",
 ]
 TrackingBackendKind = Literal["none", "mlflow"]
 PredictionPersistence = Literal["disabled", "local_only", "tracked"]
@@ -154,6 +155,20 @@ class IMetricSink(Protocol):
     def log_params(self, params: Mapping[str, ParamValue]) -> None: ...
 
     def set_tag(self, key: str, value: str) -> None: ...
+
+
+@runtime_checkable
+class IArtifactLogger(Protocol):
+    """Narrow protocol for consumers that only need to upload artifacts.
+
+    Components such as ``LossCurvePlotCallback`` and ``PredictionPlotCallback``
+    depend on this interface rather than the full ``IRunContext``, satisfying ISP.
+    ``IRunContext`` implementations satisfy this structurally.
+    """
+
+    def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None: ...
+
+    def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None: ...
 
 
 @dataclass(slots=True)

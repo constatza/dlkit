@@ -81,6 +81,7 @@ from .optimizer_component import (
 )
 from .optimizer_policy import OptimizerPolicySettings
 from .optimizer_settings import OptimizerSettings, SchedulerSettings
+from .plot_settings import PlotSettings
 from .run_settings import RunSettings, RunType
 from .search_settings import (
     CategoricalParam,
@@ -181,6 +182,7 @@ __all__ = [
     "SchedulerSettings",
     # Utility settings
     "DataloaderSettings",
+    "PlotSettings",
     "TransformSettings",
     "ExtrasSettings",
     # Generative algorithm settings

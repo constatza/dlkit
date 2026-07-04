@@ -365,8 +365,39 @@ class TrackingDecorator(ITrainingExecutor):
                 trainer.callbacks.append(CheckpointDirRouter(checkpoint_dir))
                 logger.debug("Injected checkpoint dir router for '{}'", checkpoint_dir)
 
+            self._inject_plot_callbacks(components, run_context, settings)
+
         except Exception as e:
             logger.warning("Failed to inject MLflow epoch logger: {}", e)
+
+    def _inject_plot_callbacks(
+        self,
+        components: RuntimeComponents,
+        run_context: IRunContext,
+        settings: JobConfig,
+    ) -> None:
+        """Build and inject plot callbacks when plots are enabled.
+
+        Reads ``settings.plots``, constructs the appropriate ``IFigureGenerator``
+        list, and appends ``LossCurvePlotCallback`` and/or ``PredictionPlotCallback``
+        to the trainer. No-ops when ``plots.enabled`` is False or trainer is absent.
+
+        Args:
+            components: Runtime components (must have .trainer for injection).
+            run_context: Active MLflow run context.
+            settings: Job config with .plots field.
+        """
+        plot_cfg = settings.plots
+        if not plot_cfg.enabled:
+            return
+        trainer = getattr(components, "trainer", None)
+        if trainer is None:
+            return
+
+        from dlkit.engine.adapters.lightning.plot_callbacks import build_plot_callbacks
+
+        for cb in build_plot_callbacks(run_context, plot_cfg):
+            trainer.callbacks.append(cb)
 
     def _should_use_nested_runs(self) -> bool:
         """Determine if nested runs should be used based on existing MLflow run context.
