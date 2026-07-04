@@ -365,8 +365,62 @@ class TrackingDecorator(ITrainingExecutor):
                 trainer.callbacks.append(CheckpointDirRouter(checkpoint_dir))
                 logger.debug("Injected checkpoint dir router for '{}'", checkpoint_dir)
 
+            self._inject_plot_callbacks(components, run_context, settings)
+
         except Exception as e:
             logger.warning("Failed to inject MLflow epoch logger: {}", e)
+
+    def _inject_plot_callbacks(
+        self,
+        components: RuntimeComponents,
+        run_context: IRunContext,
+        settings: JobConfig,
+    ) -> None:
+        """Build and inject plot callbacks when plots are enabled.
+
+        Reads ``settings.plots``, constructs the appropriate ``IFigureGenerator``
+        list, and appends ``LossCurvePlotCallback`` and/or ``PredictionPlotCallback``
+        to the trainer. No-ops when ``plots.enabled`` is False or trainer is absent.
+
+        Args:
+            components: Runtime components (must have .trainer for injection).
+            run_context: Active MLflow run context.
+            settings: Job config with .plots field.
+        """
+        plot_cfg = getattr(settings, "plots", None)
+        if plot_cfg is None or not plot_cfg.enabled:
+            return
+        trainer = getattr(components, "trainer", None)
+        if trainer is None:
+            return
+
+        from dlkit.domain.analysis.generators import (
+            ErrorHistogramGenerator,
+            ParityGenerator,
+            ResidualGenerator,
+            ResidualVsIndexGenerator,
+        )
+        from dlkit.domain.analysis.protocols import IFigureGenerator
+        from dlkit.engine.adapters.lightning.plot_callbacks import (
+            LossCurvePlotCallback,
+            PredictionPlotCallback,
+        )
+
+        if plot_cfg.loss_curve:
+            trainer.callbacks.append(LossCurvePlotCallback(run_context, plot_cfg))
+
+        generators: list[IFigureGenerator] = []
+        if plot_cfg.parity:
+            generators.append(ParityGenerator(max_points=plot_cfg.max_scatter_points))
+        if plot_cfg.residual:
+            generators.append(ResidualGenerator(max_points=plot_cfg.max_scatter_points))
+        if plot_cfg.error_histogram:
+            generators.append(ErrorHistogramGenerator())
+        if plot_cfg.residual_vs_index:
+            generators.append(ResidualVsIndexGenerator(max_points=plot_cfg.max_scatter_points))
+
+        if generators:
+            trainer.callbacks.append(PredictionPlotCallback(run_context, generators, plot_cfg))
 
     def _should_use_nested_runs(self) -> bool:
         """Determine if nested runs should be used based on existing MLflow run context.
