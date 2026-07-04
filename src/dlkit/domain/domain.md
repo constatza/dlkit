@@ -8,6 +8,7 @@
 - `transforms`
 - `metrics`
 - `losses`
+- `analysis` — pure figure generation for artifact visualization (see `analysis/README.md`)
 
 Energy-norm metrics and the corresponding loss helpers are dense-only at the
 domain boundary: callers must provide batched dense `(B, D, D)` matrices rather
