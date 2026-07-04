@@ -247,6 +247,30 @@ class TestLossCurveFigure:
         finally:
             plt.close("all")
 
+    def test_log_y_scale_default(self, train_losses_only: list[float]) -> None:
+        """Y-axis is log scale by default.
+
+        Args:
+            train_losses_only: Per-epoch train loss list fixture.
+        """
+        fig = loss_curve_figure(train_losses_only)
+        try:
+            assert fig.axes[0].get_yscale() == "log"
+        finally:
+            plt.close("all")
+
+    def test_log_y_false_gives_linear_scale(self, train_losses_only: list[float]) -> None:
+        """log_y=False produces a linear y-axis.
+
+        Args:
+            train_losses_only: Per-epoch train loss list fixture.
+        """
+        fig = loss_curve_figure(train_losses_only, log_y=False)
+        try:
+            assert fig.axes[0].get_yscale() == "linear"
+        finally:
+            plt.close("all")
+
 
 # ---------------------------------------------------------------------------
 # parity_figure

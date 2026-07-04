@@ -387,40 +387,17 @@ class TrackingDecorator(ITrainingExecutor):
             run_context: Active MLflow run context.
             settings: Job config with .plots field.
         """
-        plot_cfg = getattr(settings, "plots", None)
-        if plot_cfg is None or not plot_cfg.enabled:
+        plot_cfg = settings.plots
+        if not plot_cfg.enabled:
             return
         trainer = getattr(components, "trainer", None)
         if trainer is None:
             return
 
-        from dlkit.domain.analysis.generators import (
-            ErrorHistogramGenerator,
-            ParityGenerator,
-            ResidualGenerator,
-            ResidualVsIndexGenerator,
-        )
-        from dlkit.domain.analysis.protocols import IFigureGenerator
-        from dlkit.engine.adapters.lightning.plot_callbacks import (
-            LossCurvePlotCallback,
-            PredictionPlotCallback,
-        )
+        from dlkit.engine.adapters.lightning.plot_callbacks import build_plot_callbacks
 
-        if plot_cfg.loss_curve:
-            trainer.callbacks.append(LossCurvePlotCallback(run_context, plot_cfg))
-
-        generators: list[IFigureGenerator] = []
-        if plot_cfg.parity:
-            generators.append(ParityGenerator(max_points=plot_cfg.max_scatter_points))
-        if plot_cfg.residual:
-            generators.append(ResidualGenerator(max_points=plot_cfg.max_scatter_points))
-        if plot_cfg.error_histogram:
-            generators.append(ErrorHistogramGenerator())
-        if plot_cfg.residual_vs_index:
-            generators.append(ResidualVsIndexGenerator(max_points=plot_cfg.max_scatter_points))
-
-        if generators:
-            trainer.callbacks.append(PredictionPlotCallback(run_context, generators, plot_cfg))
+        for cb in build_plot_callbacks(run_context, plot_cfg):
+            trainer.callbacks.append(cb)
 
     def _should_use_nested_runs(self) -> bool:
         """Determine if nested runs should be used based on existing MLflow run context.

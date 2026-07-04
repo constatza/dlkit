@@ -159,7 +159,7 @@ class IMetricSink(Protocol):
 
 @runtime_checkable
 class IArtifactLogger(Protocol):
-    """Narrow protocol for consumers that only need to upload file artifacts.
+    """Narrow protocol for consumers that only need to upload artifacts.
 
     Components such as ``LossCurvePlotCallback`` and ``PredictionPlotCallback``
     depend on this interface rather than the full ``IRunContext``, satisfying ISP.
@@ -167,6 +167,8 @@ class IArtifactLogger(Protocol):
     """
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None: ...
+
+    def log_artifact_content(self, content: str | bytes, artifact_file: str) -> None: ...
 
 
 @dataclass(slots=True)

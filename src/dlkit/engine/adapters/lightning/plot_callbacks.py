@@ -11,9 +11,8 @@ raise on plot failure.
 
 from __future__ import annotations
 
-import tempfile
+import io
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import torch
@@ -39,7 +38,7 @@ def _plot_and_log(
     run_context: IArtifactLogger,
     settings: PlotSettings,
 ) -> None:
-    """Save fig to a temp PNG, log it via run_context, then close it.
+    """Encode fig to PNG bytes in-memory, log via run_context, then close it.
 
     Args:
         fig: matplotlib Figure to save.
@@ -47,20 +46,14 @@ def _plot_and_log(
         run_context: Active MLflow run context.
         settings: Plot configuration for dpi and artifact_dir.
     """
-    tmp_dir: Path | None = None
-    tmp_path: Path | None = None
     try:
-        tmp_dir = Path(tempfile.mkdtemp())
-        tmp_path = tmp_dir / f"{name}.png"
-        fig.savefig(tmp_path, dpi=settings.dpi, bbox_inches="tight")
-        run_context.log_artifact(tmp_path, artifact_dir=settings.artifact_dir)
+        buf = io.BytesIO()
+        fig.savefig(buf, format=settings.format, dpi=settings.dpi, bbox_inches="tight")
+        artifact_file = f"{settings.artifact_dir}/{name}.{settings.format}"
+        run_context.log_artifact_content(buf.getvalue(), artifact_file)
     except Exception as exc:
         _log.warning("_plot_and_log: failed to save/upload '{}' — {}", name, exc)
     finally:
-        if tmp_path is not None:
-            tmp_path.unlink(missing_ok=True)
-        if tmp_dir is not None:
-            tmp_dir.rmdir()
         plt.close(fig)
 
 
@@ -81,6 +74,7 @@ class LossCurvePlotCallback(Callback):
         self._settings = settings
         self._train_losses: list[float] = []
         self._val_losses: list[float] = []
+        self._lr_values: list[float] = []
 
     @staticmethod
     def _extract_scalar(
@@ -112,8 +106,25 @@ class LossCurvePlotCallback(Callback):
                 continue
         return None
 
+    @staticmethod
+    def _extract_lr(trainer: Trainer) -> float | None:
+        """Read the current LR from the first optimizer's first param group.
+
+        Args:
+            trainer: Lightning Trainer instance.
+
+        Returns:
+            Learning rate as float, or None if not available.
+        """
+        try:
+            optimizers = trainer.optimizers
+            opt = optimizers[0] if isinstance(optimizers, list) else optimizers
+            return float(opt.param_groups[0]["lr"])
+        except Exception:
+            return None
+
     def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        """Accumulate training loss for the completed epoch.
+        """Accumulate training loss and learning rate for the completed epoch.
 
         Skips during sanity check runs.
 
@@ -129,6 +140,9 @@ class LossCurvePlotCallback(Callback):
         )
         if scalar is not None:
             self._train_losses.append(scalar)
+        lr = self._extract_lr(trainer)
+        if lr is not None:
+            self._lr_values.append(lr)
 
     def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Accumulate validation loss for the completed epoch.
@@ -163,6 +177,7 @@ class LossCurvePlotCallback(Callback):
         fig = loss_curve_figure(
             self._train_losses,
             self._val_losses or None,
+            lr_values=self._lr_values or None,
         )
         _plot_and_log(fig, "loss_curve", self._run_context, self._settings)
 
@@ -254,3 +269,48 @@ class PredictionPlotCallback(Callback):
                 self._run_context,
                 self._settings,
             )
+
+
+def build_plot_callbacks(
+    run_context: IArtifactLogger,
+    settings: PlotSettings,
+) -> list[Callback]:
+    """Construct plot callbacks based on PlotSettings flags.
+
+    Instantiates domain generators inside this function so that
+    ``engine.tracking`` (which cannot import ``domain``) can delegate
+    callback construction here via a single import.
+
+    Args:
+        run_context: Active tracking run context for artifact upload.
+        settings: Plot configuration controlling which callbacks are built.
+
+    Returns:
+        List of Lightning Callbacks to append to the trainer. May be empty.
+    """
+    from dlkit.domain.analysis.generators import (
+        ErrorHistogramGenerator,
+        ParityGenerator,
+        ResidualGenerator,
+        ResidualVsIndexGenerator,
+    )
+
+    callbacks: list[Callback] = []
+
+    if settings.loss_curve:
+        callbacks.append(LossCurvePlotCallback(run_context, settings))
+
+    generators: list[IFigureGenerator] = []
+    if settings.parity:
+        generators.append(ParityGenerator(max_points=settings.max_scatter_points))
+    if settings.residual:
+        generators.append(ResidualGenerator(max_points=settings.max_scatter_points))
+    if settings.error_histogram:
+        generators.append(ErrorHistogramGenerator())
+    if settings.residual_vs_index:
+        generators.append(ResidualVsIndexGenerator(max_points=settings.max_scatter_points))
+
+    if generators:
+        callbacks.append(PredictionPlotCallback(run_context, generators, settings))
+
+    return callbacks

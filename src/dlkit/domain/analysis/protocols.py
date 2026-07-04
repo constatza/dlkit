@@ -25,12 +25,12 @@ class IFigureGenerator(Protocol):
     def generate(self, predictions: np.ndarray, targets: np.ndarray) -> Figure:
         """Generate a visualization figure.
 
-        Both ``predictions`` and ``targets`` will be 1-D numpy arrays
-        (already flattened by the caller).
+        Implementations are responsible for handling any input shape —
+        flatten to 1-D internally as needed.
 
         Args:
-            predictions: Model predictions, shape ``(N,)``.
-            targets: Ground-truth targets, shape ``(N,)``.
+            predictions: Model predictions, any shape.
+            targets: Ground-truth targets, any shape; must have same total elements.
 
         Returns:
             matplotlib Figure ready for saving. Caller is responsible for closing it.

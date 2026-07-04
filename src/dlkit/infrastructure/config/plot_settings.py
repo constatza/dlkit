@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
+
+ImageFormat = Literal["png", "svg", "pdf"]
 
 
 class PlotSettings(BasicSettings):
@@ -14,13 +18,15 @@ class PlotSettings(BasicSettings):
 
     Args:
         enabled: Master switch. All other flags are ignored when False.
-        loss_curve: Log a loss-vs-epoch curve PNG at fit_end.
-        parity: Log a parity (predicted vs actual) PNG after predict.
-        residual: Log a residuals-vs-predicted PNG after predict.
-        error_histogram: Log an error distribution histogram PNG after predict.
-        residual_vs_index: Log a residuals-vs-index PNG after predict.
-        dpi: Resolution of generated PNG files.
-        artifact_dir: MLflow artifact subdirectory for all plot PNGs.
+        loss_curve: Log a loss-vs-epoch curve at fit_end.
+        parity: Log a parity (predicted vs actual) plot after predict.
+        residual: Log a residuals-vs-predicted plot after predict.
+        error_histogram: Log an error distribution histogram after predict.
+        residual_vs_index: Log a residuals-vs-index plot after predict.
+        format: Image format for all plots. ``"svg"`` gives vector graphics;
+            ``"png"`` rasters at ``dpi``; ``"pdf"`` embeds as vector PDF.
+        dpi: Resolution for raster formats (png). Ignored for svg/pdf.
+        artifact_dir: MLflow artifact subdirectory for all plots.
         max_scatter_points: Random subsample cap for scatter-based plots.
             Prevents large datasets from stalling plot rendering.
     """
@@ -31,6 +37,7 @@ class PlotSettings(BasicSettings):
     residual: bool = False
     error_histogram: bool = False
     residual_vs_index: bool = False
-    dpi: int = 150
+    format: ImageFormat = "png"
+    dpi: int = 300
     artifact_dir: str = "plots"
     max_scatter_points: int = 5_000
