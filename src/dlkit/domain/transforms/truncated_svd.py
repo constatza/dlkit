@@ -1,7 +1,6 @@
 from typing import cast
 
 import torch
-from loguru import logger
 
 from .base import Transform, reshaper2d
 from .errors import InvalidTransformConfigurationError, TransformNotFittedError
@@ -59,10 +58,6 @@ class TruncatedSVD(Transform):
         self.register_buffer("singular_values", S.clone())
         self.register_buffer("explained_energy_ratio", explained_energy_ratio.clone())
         self.fitted = True
-        logger.info(
-            "TruncatedSVD explained energy ratio: {:.4e}",
-            explained_energy_ratio.item(),
-        )
 
     def _load_from_state_dict(
         self,

@@ -12,8 +12,11 @@ from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
 from dlkit.engine.workflows.factories.build_factory import FlexibleBuildStrategy
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
+from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._settings import WorkflowSettings
+
+logger = get_logger(__name__)
 
 
 def _tensor_from_batch(batch: Any) -> torch.Tensor:
@@ -71,6 +74,12 @@ def convert_checkpoint_to_onnx(
     batch_size: int | None = None,
 ) -> ConvertResult:
     """Export a checkpointed wrapper to ONNX."""
+    logger.info(
+        "Convert | checkpoint={} opset={} output={}",
+        checkpoint_path,
+        opset,
+        output_path,
+    )
     checkpoint = Path(checkpoint_path)
     output = Path(output_path)
     _validate_convert_inputs(checkpoint, output, shape=shape, opset=opset, batch_size=batch_size)

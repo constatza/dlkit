@@ -13,6 +13,9 @@ from dlkit.infrastructure.config.job_config import (
     SearchJobConfig,
     TrainingJobConfig,
 )
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def validate_config(
@@ -20,6 +23,11 @@ def validate_config(
     dry_build: bool = False,
 ) -> bool:
     """Validate configuration structure and optional runtime readiness."""
+    logger.info(
+        "Validation | config_type={} dry_build={}",
+        type(settings).__name__,
+        dry_build,
+    )
 
     def structurally_valid(
         config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,

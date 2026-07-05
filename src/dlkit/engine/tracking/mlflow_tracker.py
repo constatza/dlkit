@@ -96,8 +96,7 @@ class MLflowTracker(IExperimentTracker):
 
                 logger.debug("MLflow resources initialized")
 
-            except Exception as e:
-                logger.error("Failed to initialize MLflow resources: {}", e)
+            except Exception:
                 if self._exit_stack:
                     self._exit_stack.__exit__(None, None, None)
                     self._exit_stack = None

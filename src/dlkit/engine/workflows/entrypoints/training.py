@@ -9,6 +9,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.orchestrator import Orchestrator
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
+from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
@@ -24,6 +25,13 @@ def train(
     hooks: LifecycleHooks | None = None,
 ) -> TrainingResult:
     """Run a training workflow through runtime orchestration."""
+    logger.info(
+        "Training | experiment={} run={} model={} max_epochs={}",
+        getattr(getattr(settings, "experiment", None), "name", None) or "dlkit-experiment",
+        getattr(getattr(settings, "experiment", None), "run_name", None) or "<auto>",
+        getattr(getattr(settings, "model", None), "name", None) or "<unknown>",
+        getattr(getattr(settings, "training", None), "max_epochs", "?"),
+    )
     validated_overrides = require_override_model(overrides, TrainingOverrides)
     context = EntrypointContext.prepare(settings, validated_overrides, workflow_name="training")
 
@@ -48,8 +56,4 @@ def train(
     except Exception as exc:
         if isinstance(exc, WorkflowError):
             raise
-        logger.error("Training execution failed: {}", exc)
-        raise WorkflowError(
-            f"Training execution failed: {exc!s}",
-            {"workflow": "training", "error": str(exc)},
-        ) from exc
+        raise_error("Training execution failed", exc)

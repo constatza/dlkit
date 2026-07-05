@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
 import torch.nn as nn
 import torch.optim
-
-_logger = logging.getLogger(__name__)
 
 from dlkit.common.errors import ParameterPartitionError
 from dlkit.domain.nn.parameter_roles import ParameterRole
@@ -25,6 +22,9 @@ from dlkit.infrastructure.config.optimizer_component import (
     SchedulerSpec,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+_logger = get_logger(__name__)
 
 from .batched_muon import BatchedMuon
 from .concurrent_optimizer import ConcurrentOptimizer, MuonMixedOptimizer
@@ -360,8 +360,8 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             return muon_opt
 
         _logger.warning(
-            "Muon auto-split: %d eligible params → %s, %d non-eligible params → AdamW "
-            "(lr=%s). Use ConcurrentOptimizerSettings to configure the companion optimizer.",
+            "Muon auto-split: {} eligible params → {}, {} non-eligible params → AdamW "
+            "(lr={}). Use ConcurrentOptimizerSettings to configure the companion optimizer.",
             len(muon_params),
             type(settings).__name__.removesuffix("Settings"),
             len(fallback_params),

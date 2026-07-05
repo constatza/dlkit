@@ -1,7 +1,6 @@
 from typing import cast
 
 import torch
-from loguru import logger
 
 from .base import Transform, reshaper2d
 from .errors import InvalidTransformConfigurationError, TransformNotFittedError
@@ -110,9 +109,6 @@ class PCA(Transform):
         self.register_buffer("total_explained_variance", torch.tensor(total_explained_variance))
 
         self.fitted = True
-        logger.info(
-            f"PCA total explained variance ratio: {cast(torch.Tensor, self.total_explained_variance).item():.4e}"
-        )
 
     def _load_from_state_dict(
         self,

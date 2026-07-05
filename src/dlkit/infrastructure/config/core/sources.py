@@ -7,7 +7,9 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from dlkit.infrastructure.config.core._path_helpers import (
     _process_data_paths,

@@ -1,7 +1,6 @@
 from typing import cast
 
 import torch
-from loguru import logger
 
 from .base import Transform, reshaper2d
 from .errors import InvalidTransformConfigurationError, TransformNotFittedError
@@ -77,7 +76,7 @@ class ICA(Transform):
             random_state=self.random_state,
         )
         estimator.fit(np_data)
-        logger.info("ICA FastICA converged in {} iterations", estimator.n_iter_)
+        self.n_iter_: int = int(estimator.n_iter_)
 
         self.register_buffer("mean", torch.from_numpy(estimator.mean_.copy()).float())
         self.register_buffer("components", torch.from_numpy(estimator.components_.copy()).float())

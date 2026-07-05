@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from loguru import logger
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from tensordict import TensorDictBase
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory

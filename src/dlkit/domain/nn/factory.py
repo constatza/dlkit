@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
@@ -16,8 +15,6 @@ if TYPE_CHECKING:
     from dlkit.domain.nn.contracts import EntryConsumer
 
 type ModelFactory = type[nn.Module] | Callable[..., nn.Module]
-
-_log = logging.getLogger(__name__)
 
 
 def _filter_to_accepted_kwargs(
@@ -49,13 +46,6 @@ def _filter_to_accepted_kwargs(
         if has_var_keyword and (not is_type or has_own_init):
             return kwargs
         accepted = {k: v for k, v in kwargs.items() if k in params}
-        dropped = set(kwargs) - set(accepted)
-        if dropped:
-            cls_name = getattr(model_cls, "__name__", repr(model_cls))
-            _log.warning(
-                f"build_model: {cls_name} does not accept {sorted(dropped)} — "
-                "dropping from constructor call"
-            )
         return accepted
     except ValueError, TypeError:
         return kwargs

@@ -129,7 +129,6 @@ class OptimizationServiceFactory:
             return orchestrator
 
         except Exception as e:
-            logger.error("Failed to create optimization orchestrator: {}", e)
             raise WorkflowError(
                 f"Orchestrator creation failed: {e}", {"stage": "orchestrator_creation"}
             ) from e

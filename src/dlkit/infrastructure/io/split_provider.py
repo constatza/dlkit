@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from loguru import logger
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from dlkit.infrastructure.io.index import load_split_indices
 from dlkit.infrastructure.types.split import IndexSplit, Splitter
@@ -55,14 +57,14 @@ def get_or_create_split(
         SplitResolution containing the split and optional source file metadata.
     """
     if explicit_filepath is not None:
-        logger.info(f"Loading split indices from {explicit_filepath}")
+        logger.info("Loading split indices from {}", explicit_filepath)
         resolution = SplitResolution(
             index_split=load_split_indices(explicit_filepath),
             source_path=explicit_filepath,
             artifact_filename=explicit_filepath.name,
         )
     else:
-        logger.info(f"Generating new split for session '{session_name}' ({num_samples} samples)")
+        logger.info("Generating new split for session '{}' ({} samples)", session_name, num_samples)
         splitter = Splitter(
             num_samples=num_samples,
             test_ratio=test_ratio,

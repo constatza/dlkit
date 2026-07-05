@@ -2,7 +2,10 @@ import time
 from typing import Final
 
 import psutil
-from loguru import logger
+
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # -------------------------------------------------------------------
 # Constants
@@ -66,7 +69,7 @@ def terminate_procs(procs: list[psutil.Process]) -> list[psutil.Process]:
             continue
     gone, alive = psutil.wait_procs(procs, timeout=0.1)
     if alive:
-        logger.warning(f"Failed to terminate processes: {alive}")
+        logger.warning("Failed to terminate processes: {}", alive)
     return alive
 
 
@@ -83,7 +86,7 @@ def kill_procs(procs: list[psutil.Process]) -> list[psutil.Process]:
             continue
     gone, alive = psutil.wait_procs(procs, timeout=0.1)
     if alive:
-        logger.error(f"Failed to kill processes: {alive}")
+        logger.error("Failed to kill processes: {}", alive)
     return alive
 
 
@@ -116,7 +119,7 @@ def stop_process_tree(
         procs = gather_process_tree(pid)
         alive = get_alive_procs(procs)
         if not alive:
-            logger.info(f"All processes in tree {pid} have exited gracefully.")
+            logger.info("All processes in tree {} have exited gracefully.", pid)
             return
 
         terminate_procs(alive)
@@ -128,8 +131,9 @@ def stop_process_tree(
     alive = get_alive_procs(procs)
     if alive:
         logger.warning(
-            f"Timeout reached ({timeout}s). "
-            f"Attempting hard kill on remaining PIDs: {[p.pid for p in alive]}"
+            "Timeout reached ({}s). Attempting hard kill on remaining PIDs: {}",
+            timeout,
+            [p.pid for p in alive],
         )
         kill_procs(alive)
         time.sleep(0.1)
@@ -138,6 +142,6 @@ def stop_process_tree(
     procs = gather_process_tree(pid)
     alive = get_alive_procs(procs)
     if alive:
-        logger.error(f"Could not terminate the following processes: {[p.pid for p in alive]}")
+        logger.error("Could not terminate the following processes: {}", [p.pid for p in alive])
     else:
-        logger.info(f"Process tree {pid} stopped.")
+        logger.info("Process tree {} stopped.", pid)

@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from sklearn.decomposition import IncrementalPCA as _SKLearnIPCA
 
 import torch
-from loguru import logger
 
 from .base import Transform, reshaper2d
 from .errors import InvalidTransformConfigurationError, TransformNotFittedError
@@ -101,12 +100,9 @@ class IncrementalPCA(Transform):
             cast("np.ndarray", estimator.explained_variance_ratio_).copy()
         ).float()
         self.register_buffer("explained_variance_ratio", explained_variance_ratio)
+        self._total_explained_variance_ratio = float(explained_variance_ratio.sum().item())
         self._estimator = None
         self.fitted = True
-        logger.info(
-            "IncrementalPCA total explained variance ratio: {:.4e}",
-            explained_variance_ratio.sum().item(),
-        )
 
     # --- FittableTransform protocol (full-data path via TransformChain.fit) ---
 

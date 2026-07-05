@@ -7,10 +7,13 @@ from typing import cast
 from dlkit.common import OptimizationResult
 from dlkit.common.errors import WorkflowError
 from dlkit.infrastructure.config.job_config import SearchJobConfig
+from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ..optimization.factory import OptimizationServiceFactory
 from ._entrypoint_context import EntrypointContext
 from ._override_types import OptimizationOverrides, require_override_model
+
+logger = get_logger(__name__)
 
 
 def optimize(
@@ -18,6 +21,12 @@ def optimize(
     overrides: OptimizationOverrides | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""
+    logger.info(
+        "Optimization | study={} n_trials={} direction={}",
+        getattr(getattr(settings, "search", None), "study_name", None) or "<auto>",
+        getattr(getattr(settings, "search", None), "n_trials", "?"),
+        getattr(getattr(settings, "search", None), "direction", "?"),
+    )
     validated_overrides = require_override_model(overrides, OptimizationOverrides)
     context = EntrypointContext.prepare(
         settings,

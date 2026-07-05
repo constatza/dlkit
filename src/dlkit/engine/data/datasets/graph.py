@@ -1,7 +1,10 @@
 from typing import Any
 
 import torch
-from loguru import logger
+
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from pydantic import FilePath
 from torch import Tensor
 from torch_geometric.data import Data, InMemoryDataset

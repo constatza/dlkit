@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from lightning import Callback
-from loguru import logger
 
 from dlkit.engine.artifacts import (
     ArtifactCollector,
@@ -34,7 +33,8 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 if TYPE_CHECKING:
     from lightning.pytorch import LightningModule, Trainer
 
-prediction_logger = get_logger(__name__)
+logger = get_logger(__name__)
+prediction_logger = logger
 
 
 def _call_zero_arg_method(value: object, method_name: str) -> object | None:
@@ -82,7 +82,7 @@ class MLflowEpochLogger(Callback):
                 step,
             )
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(f"Failed to log metrics with epoch logger: {exc}")
+            logger.warning("Failed to log metrics with epoch logger: {}", exc)
 
     def _collect_stage_metrics(self, metrics: Mapping[str, object], stage: str) -> dict[str, float]:
         stage_aliases = {
@@ -111,7 +111,7 @@ class MLflowEpochLogger(Callback):
 
             numeric = self._to_numeric(raw_value)
             if numeric is None:
-                logger.debug(f"Skipping non-numeric metric: {key}")
+                logger.debug("Skipping non-numeric metric: {}", key)
                 continue
             collected[metric_key] = numeric
 
@@ -182,7 +182,7 @@ def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> bo
         if isinstance(cb, ModelCheckpoint) and cb.dirpath is None:
             cb.dirpath = str(checkpoint_dir)
             redirected = True
-            logger.debug(f"CheckpointDirRouter: redirected ModelCheckpoint -> {checkpoint_dir}")
+            logger.debug("CheckpointDirRouter: redirected ModelCheckpoint -> {}", checkpoint_dir)
     return redirected
 
 

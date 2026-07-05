@@ -6,7 +6,10 @@ from collections.abc import Callable, Iterable
 from typing import Protocol, cast, runtime_checkable
 
 import torch
-from loguru import logger
+
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from tensordict import TensorDict, TensorDictBase
 from torch import Tensor, nn
 
@@ -29,6 +32,28 @@ class _FittableFromDataloader(Protocol):
         dataloader: Iterable[TensorDictBase],
         extractor: Callable[[TensorDictBase], Tensor],
     ) -> None: ...
+
+
+def _log_fit_summary(chain: nn.Module) -> None:
+    """Log fit quality metrics exposed by dimensionality-reduction transforms."""
+    for transform in chain.modules():
+        cls = transform.__class__.__name__
+        if hasattr(transform, "total_explained_variance"):
+            val = transform.total_explained_variance
+            if isinstance(val, torch.Tensor) and val.numel() == 1:
+                logger.info("  {} explained variance ratio: {:.4e}", cls, val.item())
+        if hasattr(transform, "_total_explained_variance_ratio"):
+            logger.info(
+                "  {} explained variance ratio: {:.4e}",
+                cls,
+                transform._total_explained_variance_ratio,
+            )
+        if hasattr(transform, "explained_energy_ratio"):
+            val = transform.explained_energy_ratio
+            if isinstance(val, torch.Tensor) and val.numel() > 0:
+                logger.info("  {} explained energy ratio: {:.4e}", cls, val.sum().item())
+        if hasattr(transform, "n_iter_"):
+            logger.info("  {} converged in {} iterations", cls, transform.n_iter_)
 
 
 def build_batch_transformer(
@@ -211,7 +236,10 @@ class NamedBatchTransformer(nn.Module):
                     continue
 
                 logger.info(
-                    f"Fitting transform chain for {namespace}.{entry_name} ({chain.__class__.__name__})"
+                    "Fitting transform chain for {}.{} ({})",
+                    namespace,
+                    entry_name,
+                    chain.__class__.__name__,
                 )
 
                 if isinstance(chain, _FittableFromDataloader):
@@ -219,6 +247,7 @@ class NamedBatchTransformer(nn.Module):
                         dataloader,
                         lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]),
                     )
+                    _log_fit_summary(chain)
                     continue
 
                 if isinstance(chain, IncrementalFittableTransform):
@@ -233,6 +262,7 @@ class NamedBatchTransformer(nn.Module):
                     # stats would insert here (between update_fit and finalize_fit)
                     # if/when distributed training is added — see finalize_fit().
                     chain.finalize_fit()
+                    _log_fit_summary(chain)
                     continue
 
                 if getattr(chain, "fitted", False):

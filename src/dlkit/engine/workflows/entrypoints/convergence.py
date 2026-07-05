@@ -11,6 +11,7 @@ from dlkit.engine.workflows.convergence.orchestrator import ConvergenceOrchestra
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.engine.workflows.multi_run import MultiRunOrchestrator
 from dlkit.infrastructure.config.job_config import ConvergenceJobConfig
+from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
@@ -81,6 +82,11 @@ def converge(
     Raises:
         WorkflowError: If the convergence study fails for any reason.
     """
+    logger.info(
+        "Convergence | repeats={} target={}",
+        getattr(getattr(settings, "convergence", None), "repeats", "?"),
+        getattr(getattr(settings, "convergence", None), "target", "?"),
+    )
     validated_overrides = require_override_model(overrides, ConvergenceOverrides)
     context = EntrypointContext.prepare(
         settings,
@@ -114,8 +120,4 @@ def converge(
     except Exception as exc:
         if isinstance(exc, WorkflowError):
             raise
-        logger.error("Convergence study failed: {}", exc)
-        raise WorkflowError(
-            f"Convergence study failed: {exc!s}",
-            {"workflow": "convergence", "error": str(exc)},
-        ) from exc
+        raise_error("Convergence study failed", exc)

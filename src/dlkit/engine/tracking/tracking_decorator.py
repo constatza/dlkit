@@ -112,7 +112,6 @@ class TrackingDecorator(ITrainingExecutor):
                 f"TrackingDecorator.execute requires a JobConfig, got {type(settings).__name__}"
             )
         # Configure the tracker before entering its context
-        logger.debug("Setting up tracking")
         self._setup_tracking(settings)
 
         # Use tracker as context manager for proper resource management
@@ -170,10 +169,14 @@ class TrackingDecorator(ITrainingExecutor):
             # Get run configuration (includes merged tags)
             logger.debug("Extracting run config")
             run_config = self._extract_run_config(settings)
+            model_class: str = str(
+                getattr(getattr(settings, "model", None), "name", None) or "<unknown>"
+            )
             logger.info(
-                "Creating MLflow run '{}' in experiment '{}'",
-                run_config.get("run_name") or "<auto>",
+                "MLflow run | experiment={} run={} model={}",
                 run_config.get("experiment_name") or "DLKit",
+                run_config.get("run_name") or "<auto>",
+                model_class,
             )
 
             # Execute training within tracking context
@@ -232,7 +235,6 @@ class TrackingDecorator(ITrainingExecutor):
             return enriched_result
 
         except Exception as e:
-            logger.error("Tracking failed: {}", e)
             raise_error("Training with tracking failed", e, stage="tracking")
 
     def _setup_tracking(

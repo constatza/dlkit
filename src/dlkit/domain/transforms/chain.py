@@ -1,7 +1,6 @@
 from collections.abc import Callable, Iterable
 
 import torch
-from loguru import logger
 from torch import Tensor
 from torch.nn import ModuleList
 
@@ -153,12 +152,6 @@ class TransformChain[BatchT](Transform):
                 continue
 
             try:
-                logger.info(
-                    "Incremental fit pass for transform '{}' (entry='{}', index={})",
-                    transform.__class__.__name__,
-                    self._entry_name or "unknown",
-                    i,
-                )
                 transform.reset_fit_state()
                 for batch in dataloader:
                     x = tensor_selector(batch)
