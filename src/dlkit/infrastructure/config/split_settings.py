@@ -11,12 +11,14 @@ class IndexSplitSettings(BasicSettings):
     """Index split configuration for train/val/test dataflow splitting.
 
     Args:
-        filepath: Path to existing index split file.
+        filepath: Path to existing index split file (JSON or TOML).
         test_ratio: Fraction of dataflow used for testing.
         val_ratio: Fraction of dataflow used for validation.
     """
 
-    filepath: FilePath | None = Field(default=None, description="Path to index split file")
+    filepath: FilePath | None = Field(
+        default=None, description="Path to index split file (JSON or TOML)"
+    )
     test_ratio: NonNegativeFloat = Field(
         default=0.15, description="Fraction of dataflow used for testing", alias="test"
     )

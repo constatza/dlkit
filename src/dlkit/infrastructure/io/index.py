@@ -1,17 +1,32 @@
 """Routines for loading and saving index splits."""
 
 import json
+import tomllib
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 from pydantic import FilePath
 
 from dlkit.infrastructure.types.split import IndexSplit
 
+_SPLIT_READERS: Mapping[str, Callable[[Path], dict]] = MappingProxyType(
+    {
+        ".json": lambda p: json.loads(p.read_text()),
+        ".toml": lambda p: tomllib.loads(p.read_text()),
+    }
+)
+
 
 def load_split_indices(path: FilePath) -> IndexSplit:
-    """Load train/val/test indices from a JSON file."""
-    with path.open("r") as f:
-        raw = json.load(f)
+    """Load train/val/test indices from a JSON or TOML file."""
+    suffix = Path(path).suffix.lower()
+    reader = _SPLIT_READERS.get(suffix)
+    if reader is None:
+        raise ValueError(
+            f"Unsupported split file format: {suffix!r}. Supported: {sorted(_SPLIT_READERS)}"
+        )
+    raw = reader(path)
     try:
         return IndexSplit(
             train=raw["train"],

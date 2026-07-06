@@ -48,6 +48,45 @@ Each referenced file must contain a top-level section matching the key name;
 its content is merged as the base for that section, with the job file's own
 section taking precedence.
 
+## Data Splits
+
+`data.splits` (`IndexSplitSettings` in `split_settings.py`) controls how a
+dataset is partitioned into train/validation/test/predict index sets. Two
+mutually exclusive modes:
+
+- **Ratio mode** (default): give `test` and `val` fractions and a random split
+  is generated at runtime.
+
+  ```toml
+  [data.splits]
+  val = 0.15
+  test = 0.15
+  ```
+
+- **External file mode**: give `filepath` pointing at a pre-computed split
+  file (JSON or TOML, dispatched by extension). When set, `filepath` takes
+  precedence over `test`/`val` entirely — no random split is generated.
+
+  ```toml
+  [data.splits]
+  filepath = "splits/my_split.toml"
+  ```
+
+  The file holds flat index lists; `predict` is optional:
+
+  ```toml
+  train = [0, 1, 2, 3]
+  validation = [4, 5]
+  test = [6, 7]
+  ```
+
+  Relative `filepath` values resolve against the config file's own directory,
+  same as other dataset-owned paths (see Path Ownership below).
+
+`max_train_samples` and `train_subset_seed` optionally cap/re-permute the
+resolved train split afterward (both modes), for convergence studies that
+need nested training subsets — see `engine/data/data.md`.
+
 ## Convergence Settings
 
 `run.type = "converge"` selects `ConvergenceJobConfig`. The `convergence`

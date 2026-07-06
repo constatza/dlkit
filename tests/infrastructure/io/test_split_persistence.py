@@ -30,6 +30,15 @@ def explicit_split_file(tmp_path: Path, sample_split_data: dict) -> Path:
     return split_file
 
 
+@pytest.fixture
+def explicit_split_file_toml(tmp_path: Path, sample_split_data: dict) -> Path:
+    """Create an explicit TOML split file for testing."""
+    split_file = tmp_path / "custom_split.toml"
+    lines = [f"{key} = {value!r}" for key, value in sample_split_data.items()]
+    split_file.write_text("\n".join(lines))
+    return split_file
+
+
 def test_get_or_create_split_generates_new_split(tmp_path: Path):
     """Generated splits stay in memory and expose deterministic artifact names."""
     resolution = get_or_create_split(
@@ -69,6 +78,41 @@ def test_get_or_create_split_uses_explicit_filepath(
     assert list(split.predict) == sample_split_data["predict"]
     assert resolution.source_path == explicit_split_file
     assert resolution.artifact_filename == explicit_split_file.name
+
+
+def test_get_or_create_split_uses_explicit_toml_filepath(
+    explicit_split_file_toml: Path, sample_split_data: dict
+):
+    """Explicit TOML split files load identically to JSON ones."""
+    resolution = get_or_create_split(
+        num_samples=100,
+        test_ratio=0.2,
+        val_ratio=0.2,
+        session_name="ignored",
+        explicit_filepath=explicit_split_file_toml,
+    )
+
+    split = resolution.index_split
+    assert list(split.train) == sample_split_data["train"]
+    assert list(split.validation) == sample_split_data["validation"]
+    assert list(split.test) == sample_split_data["test"]
+    assert split.predict is not None
+    assert list(split.predict) == sample_split_data["predict"]
+
+
+def test_get_or_create_split_rejects_unsupported_extension(tmp_path: Path):
+    """Split files with an unsupported extension fail fast with a clear error."""
+    split_file = tmp_path / "custom_split.yaml"
+    split_file.write_text("train: [0, 1]")
+
+    with pytest.raises(ValueError, match="Unsupported split file format"):
+        get_or_create_split(
+            num_samples=50,
+            test_ratio=0.2,
+            val_ratio=0.2,
+            session_name="unsupported_test",
+            explicit_filepath=split_file,
+        )
 
 
 def test_get_or_create_split_different_sessions_create_different_splits():

@@ -1,3 +1,5 @@
+from typing import Protocol, runtime_checkable
+
 from pydantic import BaseModel
 from torch import randperm
 
@@ -9,7 +11,14 @@ class IndexSplit(BaseModel):
     predict: tuple[int, ...] | None
 
 
-class Splitter:
+@runtime_checkable
+class SplitStrategy(Protocol):
+    """Produces an IndexSplit. Implementations decide how indices are derived."""
+
+    def split(self) -> IndexSplit: ...
+
+
+class RatioSplitStrategy:
     """Create immutable train/val/test index splits for a dataset of size num_samples."""
 
     def __init__(self, *, num_samples: int, test_ratio: float, val_ratio: float) -> None:

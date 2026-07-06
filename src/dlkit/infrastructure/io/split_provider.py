@@ -10,7 +10,17 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 from dlkit.infrastructure.io.index import load_split_indices
-from dlkit.infrastructure.types.split import IndexSplit, Splitter
+from dlkit.infrastructure.types.split import IndexSplit, RatioSplitStrategy, SplitStrategy
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalFileSplitStrategy:
+    """Loads a pre-computed IndexSplit from a JSON or TOML file."""
+
+    filepath: Path
+
+    def split(self) -> IndexSplit:
+        return load_split_indices(self.filepath)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -58,20 +68,21 @@ def get_or_create_split(
     """
     if explicit_filepath is not None:
         logger.info("Loading split indices from {}", explicit_filepath)
+        strategy: SplitStrategy = ExternalFileSplitStrategy(explicit_filepath)
         resolution = SplitResolution(
-            index_split=load_split_indices(explicit_filepath),
+            index_split=strategy.split(),
             source_path=explicit_filepath,
             artifact_filename=explicit_filepath.name,
         )
     else:
         logger.info("Generating new split for session '{}' ({} samples)", session_name, num_samples)
-        splitter = Splitter(
+        strategy = RatioSplitStrategy(
             num_samples=num_samples,
             test_ratio=test_ratio,
             val_ratio=val_ratio,
         )
         resolution = SplitResolution(
-            index_split=splitter.split(),
+            index_split=strategy.split(),
             source_path=None,
             artifact_filename=f"{session_name}_{num_samples}_split.json",
         )

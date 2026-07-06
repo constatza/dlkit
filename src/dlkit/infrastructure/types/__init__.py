@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, Field
 
-from .split import IndexSplit, Splitter
+from .split import IndexSplit, RatioSplitStrategy, SplitStrategy
 from .tilde_expansion import expand_tilde_in_value
 from .urls import (
     ArtifactDestination,
@@ -50,10 +50,11 @@ __all__ = [
     "MLflowBackendUrl",
     "MLflowServerUri",
     "MLflowTrackingUrl",
+    "RatioSplitStrategy",
     "SimpleMLflowURI",
     "SimpleTildePath",
+    "SplitStrategy",
     "SQLiteUrl",
-    "Splitter",
     "expand_tilde_in_value",
     "local_path_security_check",
     "tilde_expand_strict",

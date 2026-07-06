@@ -18,6 +18,7 @@
 - `explicit_path_context.py`: explicit path-context structures used during migration
 - `paths.py`, `locations.py`: user-path normalization and DLKit-internal locations
 - `arrays.py`, `tables.py`, `index.py`, `tensor_entries.py`, `packs/`: data-loading helpers
+  (`index.py` reads external split files as JSON or TOML, dispatched by suffix)
 - `system.py`: module/class loading from modules or filesystem paths
 
 ## Path Resolution Architecture
