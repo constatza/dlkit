@@ -9,6 +9,7 @@ training and optimization flows.
 - `tracking_decorator.py`: training executor decorator
 - `mlflow_tracker.py`: MLflow-backed tracker
 - `mlflow_run_context.py`: concrete run-context implementation
+- `binary_artifact.py`: binary-safe temp-file staging for bytes artifacts (e.g. plot PNGs)
 - `backend.py`, `discovery.py`, `uri_resolver.py`: explicit backend selection and URI helpers
 - `naming.py`: experiment/study naming helpers
 
@@ -23,6 +24,9 @@ training and optimization flows.
 - `IRunContext` exposes `run_id`, `experiment_id`, and `tracking_uri` so result
   enrichment and artifact publication do not depend on ambient MLflow state.
 - `IRunContext` uses `log_artifact_content(content, artifact_file)` for small text/bytes artifacts.
+  `str` content is uploaded via MLflow's `log_text` (UTF-8 text); `bytes` content is routed through
+  `binary_artifact.log_binary_artifact`, which stages it to a temp file in binary mode and uploads via
+  `log_artifact` — `log_text` writes through a UTF-8 text handle and corrupts non-text bytes.
 - Training tracking is applied through `TrackingDecorator`.
 - MLflow backend selection uses `TrackingSettings.uri` when provided. Environment variables are not consulted for DLKit URI resolution.
 - `TrackingDecorator` is installed only when `tracking.backend == "mlflow"` is configured.

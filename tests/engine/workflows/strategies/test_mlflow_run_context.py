@@ -55,6 +55,30 @@ def test_log_model_prefers_mlflow_returned_model_uri() -> None:
     assert uri == "models:/m-12345"
 
 
+def test_log_artifact_content_routes_bytes_through_log_binary_artifact() -> None:
+    context = ClientBasedRunContext(client=Mock(), run_id="run-9", tracking_uri="sqlite:///test.db")
+
+    with patch(
+        "dlkit.engine.tracking.mlflow_run_context.log_binary_artifact"
+    ) as mocked_log_binary_artifact:
+        context.log_artifact_content(b"\x89PNG\r\n", "plots/loss_curve.png")
+
+    mocked_log_binary_artifact.assert_called_once_with(
+        context._client, "run-9", b"\x89PNG\r\n", "plots/loss_curve.png"
+    )
+
+
+def test_log_artifact_content_routes_str_through_log_text() -> None:
+    client = Mock()
+    context = ClientBasedRunContext(
+        client=client, run_id="run-10", tracking_uri="sqlite:///test.db"
+    )
+
+    context.log_artifact_content("hello", "config/notes.txt")
+
+    client.log_text.assert_called_once_with("run-10", "hello", "config/notes.txt")
+
+
 def test_log_dataset_converts_to_mlflow_entity_and_adds_context_tag() -> None:
     client = Mock()
     context = ClientBasedRunContext(client=client, run_id="run-7", tracking_uri="sqlite:///test.db")

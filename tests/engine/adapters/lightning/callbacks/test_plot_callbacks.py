@@ -4,7 +4,8 @@ Covers:
 - _extract_scalar: plain float, torch.Tensor, absent key
 - LossCurvePlotCallback.on_fit_end: no-op when empty; calls log_artifact when populated
 - LossCurvePlotCallback: sanity_checking guard (epochs excluded)
-- PredictionPlotCallback.on_predict_batch_end: silent skip on missing keys
+- PredictionPlotCallback.on_predict_batch_end: warns and skips on missing/unresolvable keys,
+  accumulates TensorDict-wrapped predictions/targets (real predict_step contract)
 - PredictionPlotCallback.on_predict_epoch_end: no-op when empty; calls log_artifact
   once per generator when populated
 """
@@ -204,6 +205,45 @@ def missing_keys_output() -> dict[str, torch.Tensor]:
         Dict with an unrelated key only.
     """
     return {"latents": torch.randn(BATCH_SIZE, 4)}
+
+
+@pytest.fixture
+def tensordict_targets_output() -> dict[str, object]:
+    """predict_step-shaped output with 'targets' as a single-key TensorDict.
+
+    Mirrors DiscriminativePredictionStrategy's real output shape (targets are
+    always a nested TensorDict keyed by target name, even for one target).
+
+    Returns:
+        Dict with 'predictions' as a bare Tensor and 'targets' as a single-key TensorDict.
+    """
+    from tensordict import TensorDict
+
+    return {
+        "predictions": torch.randn(BATCH_SIZE, NUM_OUTPUTS),
+        "targets": TensorDict({"y": torch.randn(BATCH_SIZE, NUM_OUTPUTS)}, batch_size=[BATCH_SIZE]),
+    }
+
+
+@pytest.fixture
+def multi_target_tensordict_output() -> dict[str, object]:
+    """predict_step-shaped output with a multi-key 'targets' TensorDict.
+
+    Returns:
+        Dict with 'predictions' as a bare Tensor and 'targets' as a two-key TensorDict.
+    """
+    from tensordict import TensorDict
+
+    return {
+        "predictions": torch.randn(BATCH_SIZE, NUM_OUTPUTS),
+        "targets": TensorDict(
+            {
+                "y1": torch.randn(BATCH_SIZE, NUM_OUTPUTS),
+                "y2": torch.randn(BATCH_SIZE, NUM_OUTPUTS),
+            },
+            batch_size=[BATCH_SIZE],
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -473,6 +513,52 @@ class TestPredictionBatchEnd:
         """
         prediction_callback.on_predict_batch_end(
             mock_trainer, pl_module, torch.randn(4, 3), batch=None, batch_idx=0
+        )
+        # pylint: disable=protected-access
+        assert prediction_callback._pred_batches == []
+
+    def test_tensordict_wrapped_targets_accumulated(
+        self,
+        prediction_callback: PredictionPlotCallback,
+        mock_trainer: SimpleNamespace,
+        pl_module: MagicMock,
+        tensordict_targets_output: dict[str, object],
+    ) -> None:
+        """A batch whose 'targets' is a single-key TensorDict (the real predict_step
+        contract) is accumulated, not silently dropped.
+
+        Args:
+            prediction_callback: Callback with one generator and empty history.
+            mock_trainer: Minimal trainer stand-in.
+            pl_module: Bare MagicMock module.
+            tensordict_targets_output: Output with 'targets' as a single-key TensorDict.
+        """
+        prediction_callback.on_predict_batch_end(
+            mock_trainer, pl_module, tensordict_targets_output, batch=None, batch_idx=0
+        )
+        # pylint: disable=protected-access
+        assert len(prediction_callback._pred_batches) == 1
+        assert len(prediction_callback._target_batches) == 1
+
+    def test_multi_key_tensordict_targets_skipped_with_warning(
+        self,
+        prediction_callback: PredictionPlotCallback,
+        mock_trainer: SimpleNamespace,
+        pl_module: MagicMock,
+        multi_target_tensordict_output: dict[str, object],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A multi-target TensorDict has no unambiguous scalar; it is skipped and warned.
+
+        Args:
+            prediction_callback: Callback with one generator and empty history.
+            mock_trainer: Minimal trainer stand-in.
+            pl_module: Bare MagicMock module.
+            multi_target_tensordict_output: Output with a two-key 'targets' TensorDict.
+            caplog: Pytest log capture fixture.
+        """
+        prediction_callback.on_predict_batch_end(
+            mock_trainer, pl_module, multi_target_tensordict_output, batch=None, batch_idx=0
         )
         # pylint: disable=protected-access
         assert prediction_callback._pred_batches == []

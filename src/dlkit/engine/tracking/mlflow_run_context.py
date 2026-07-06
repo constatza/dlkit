@@ -11,6 +11,7 @@ from mlflow import MlflowClient
 from dlkit.common.hooks import ParamValue
 from dlkit.infrastructure.utils.logging_config import get_logger
 
+from .binary_artifact import log_binary_artifact
 from .interfaces import IRunContext, LoggedDataset, LoggedModel
 
 if TYPE_CHECKING:
@@ -94,11 +95,14 @@ class ClientBasedRunContext(IRunContext):
             content: Artifact content to log.
             artifact_file: Destination path within the run artifact store.
         """
+        if isinstance(content, bytes):
+            try:
+                log_binary_artifact(self._client, self._run_id, content, artifact_file)
+            except Exception as e:
+                logger.warning("Failed to log binary artifact '%s': %s", artifact_file, e)
+            return
         try:
-            text = (
-                content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content
-            )
-            self._client.log_text(self._run_id, text, artifact_file)
+            self._client.log_text(self._run_id, content, artifact_file)
         except Exception as e:
             logger.warning("Failed to log text artifact '%s': %s", artifact_file, e)
 

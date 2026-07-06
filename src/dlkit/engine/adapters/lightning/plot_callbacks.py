@@ -22,6 +22,7 @@ from matplotlib.figure import Figure
 from dlkit.domain.analysis.figures import loss_curve_figure
 from dlkit.domain.analysis.figures._backend import plt
 from dlkit.domain.analysis.protocols import IFigureGenerator
+from dlkit.engine.adapters.lightning.tensor_extraction import as_flat_tensor
 from dlkit.engine.artifacts import IArtifactLogger
 from dlkit.infrastructure.config.plot_settings import PlotSettings
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -221,8 +222,10 @@ class PredictionPlotCallback(Callback):
         """Accumulate per-batch prediction and target tensors.
 
         Expects ``outputs`` to be a TensorDict (or Mapping) with
-        ``"predictions"`` and ``"targets"`` keys. Silently skips
-        batches where these keys are absent.
+        ``"predictions"`` and ``"targets"`` keys. Each value may be a bare
+        tensor or a single-key TensorDict (the real predict_step contract for
+        single-target models — see ``tensor_extraction.as_flat_tensor``).
+        Skips, with a warning, batches where these can't be resolved.
 
         Args:
             trainer: Lightning Trainer instance.
@@ -236,14 +239,14 @@ class PredictionPlotCallback(Callback):
             if not isinstance(outputs, Mapping):
                 raise TypeError(f"expected Mapping, got {type(outputs).__name__}")
             outputs_map = cast("Mapping[str, object]", outputs)
-            pred = outputs_map["predictions"]
-            tgt = outputs_map["targets"]
-            if not isinstance(pred, torch.Tensor) or not isinstance(tgt, torch.Tensor):
-                raise TypeError("predictions/targets must be torch.Tensor")
+            pred = as_flat_tensor(outputs_map["predictions"])
+            tgt = as_flat_tensor(outputs_map["targets"])
+            if pred is None or tgt is None:
+                raise TypeError("predictions/targets must resolve to a single tensor")
             self._pred_batches.append(pred.detach().cpu())
             self._target_batches.append(tgt.detach().cpu())
         except (KeyError, AttributeError, TypeError) as exc:
-            _log.debug("PredictionPlotCallback: skipping batch — {}", exc)
+            _log.warning("PredictionPlotCallback: skipping batch — {}", exc)
 
     def on_predict_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Concatenate batches, flatten to 1-D, and generate all configured plots.
