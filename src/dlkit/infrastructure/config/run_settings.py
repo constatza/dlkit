@@ -27,6 +27,7 @@ class RunSettings(BasicSettings):
         data: Optional path to a data profile TOML file.
         training: Optional path to a training profile TOML file.
         tracking: Optional path to a tracking profile TOML file.
+        plots: Optional path to a plots profile TOML file.
     """
 
     type: RunType | None = None
@@ -37,6 +38,7 @@ class RunSettings(BasicSettings):
     data: Path | None = None
     training: Path | None = None
     tracking: Path | None = None
+    plots: Path | None = None
 
     def get_precision_strategy(self) -> PrecisionStrategy:
         """Return the configured precision strategy (satisfies PrecisionProvider protocol).

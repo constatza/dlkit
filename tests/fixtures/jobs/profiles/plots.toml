@@ -1,0 +1,3 @@
+[plots]
+enabled = true
+loss_curve = true

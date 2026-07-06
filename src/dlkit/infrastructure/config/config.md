@@ -20,7 +20,8 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 - `core/`: base settings, patching, factories, build context, TOML source
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
 - `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`
-- `run_settings.py`: `RunSettings` (type, seed, precision)
+- `run_settings.py`: `RunSettings` (type, seed, precision, profile references)
+- `plot_settings.py`: `PlotSettings` (opt-in plot artifact generation)
 - `experiment_settings.py`: `ExperimentSettings` (name, run_name, tags)
 - `model_components.py`: canonical `ModelComponentSettings`, plus loss/metric component settings
 - `data_settings.py`: `DataSettings` plus entry types
@@ -40,6 +41,12 @@ job = load_job("config.toml")                # type inferred from run.type
 job = load_job(["base.toml", "local.toml"]) # merged left-to-right
 job = load_job("config.toml", run_type="train")  # override type
 ```
+
+`[run]` may reference a separate profile TOML file for `model`, `data`,
+`training`, `tracking`, or `plots` (e.g. `run.plots = "../profiles/plots.toml"`).
+Each referenced file must contain a top-level section matching the key name;
+its content is merged as the base for that section, with the job file's own
+section taking precedence.
 
 ## Convergence Settings
 

@@ -83,6 +83,8 @@ def test_load_composed_train(composed_train_path: Path) -> None:
     assert cfg.experiment is not None
     assert cfg.experiment.name == "test-composed"
     assert cfg.model.name == "ConstantWidthFFNN"
+    assert cfg.plots.enabled is True
+    assert cfg.plots.loss_curve is True
 
 
 def test_load_search(search_path: Path) -> None:
@@ -123,6 +125,21 @@ def test_profile_wrong_section_raises(tmp_path: Path, data_profile_path: Path) -
         encoding="utf-8",
     )
     with pytest.raises(ConfigValidationError, match=r"must contain a \[model\] section"):
+        load_job(job_toml)
+
+
+def test_plots_profile_wrong_section_raises(tmp_path: Path, data_profile_path: Path) -> None:
+    """Profile referenced as run.plots must have a [plots] section.
+
+    Creates a job TOML that references the data profile as the plots profile.
+    Expects ConfigValidationError mentioning the wrong section.
+    """
+    job_toml = tmp_path / "bad_job.toml"
+    job_toml.write_text(
+        f'[run]\ntype = "train"\nplots = "{data_profile_path.as_posix()}"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match=r"must contain a \[plots\] section"):
         load_job(job_toml)
 
 

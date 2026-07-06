@@ -4,6 +4,7 @@ seed = 42
 model = "./profiles/model.toml"
 data = "./profiles/data.toml"
 training = "./profiles/training.toml"
+plots = "./profiles/plots.toml"
 
 [experiment]
 name = "test-composed"

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # JobConfig loader
 # ---------------------------------------------------------------------------
 
-_PROFILE_KEYS: tuple[str, ...] = ("model", "data", "training", "tracking")
+_PROFILE_KEYS: tuple[str, ...] = ("model", "data", "training", "tracking", "plots")
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -49,9 +49,9 @@ def load_job(
     """Load and validate a job config from one or more TOML files.
 
     Multiple paths are merged left-to-right (later files win). Profile references
-    in ``[run]`` (keys ``model``, ``data``, ``training``, ``tracking``) are resolved
-    before Pydantic validation: the referenced TOML file is loaded and its section
-    content is merged as the base for the corresponding top-level section.
+    in ``[run]`` (keys ``model``, ``data``, ``training``, ``tracking``, ``plots``) are
+    resolved before Pydantic validation: the referenced TOML file is loaded and its
+    section content is merged as the base for the corresponding top-level section.
 
     Args:
         config_paths: One or more TOML paths merged left-to-right (later wins).
