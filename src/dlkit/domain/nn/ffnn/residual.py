@@ -5,11 +5,11 @@ from typing import Literal
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 from dlkit.domain.nn.types import ActivationName
-from dlkit.domain.nn.utils import resolve_activation
+from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
 
 
 class VarWidthFFNN(StandardEntryConsumer, nn.Module):
@@ -69,6 +69,14 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         widths = list(layers)
         self.num_layers = len(widths) - 1
         self.activation = resolve_activation(activation)
+        self.hyperparameters: dict[str, HyperParam] = {
+            "num_layers": self.num_layers,
+            "activation": resolved_activation_name(activation),
+            "normalize": normalize,
+            "dropout": dropout,
+            "bias": bias,
+            "skip": skip,
+        }
 
         self.layers = nn.ModuleList()
         self.embedding_layer = nn.Linear(in_features, widths[0], bias=bias)
@@ -214,6 +222,13 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
             raise ValueError("num_layers must be a positive integer")
 
         resolved_activation = resolve_activation(activation, default="gelu")
+        self.hyperparameters: dict[str, HyperParam] = {
+            "num_layers": num_layers,
+            "activation": resolved_activation_name(activation, default="gelu"),
+            "normalize": normalize,
+            "dropout": dropout,
+            "bias": bias,
+        }
         hidden = hidden_size
         self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
         self.layers = nn.ModuleList()

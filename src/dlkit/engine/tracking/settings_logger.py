@@ -7,7 +7,7 @@ do not carry application-level serialization concerns.
 
 from __future__ import annotations
 
-from torch import nn
+from lightning.pytorch import LightningModule
 
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -17,8 +17,6 @@ from .interfaces import IRunContext
 type _WorkflowSettings = JobConfig
 
 logger = get_logger(__name__)
-
-_COMPONENT_FIELDS = frozenset({"name", "module_path", "checkpoint", "shape"})
 
 
 class SettingsLogger:
@@ -51,14 +49,18 @@ class SettingsLogger:
             raise RuntimeError("Couldn't log settings") from e
 
     def log_model_parameters(
-        self, model: nn.Module, run_context: IRunContext, settings: _WorkflowSettings
+        self, model: LightningModule, run_context: IRunContext, settings: _WorkflowSettings
     ) -> None:
-        """Log model hyperparameters extracted from `settings.model`.
+        """Log the model's effective (post-default-resolution) hyperparameters.
 
-        Excludes structural fields (name, module_path, checkpoint, shape).
+        Reads ``model.hparams``, populated at construction time via
+        ``save_hyperparameters()`` in ``CoreLightningWrapper`` (see
+        ``_build_model_from_settings`` in ``engine.adapters.lightning.base``),
+        so hyperparameters left unset in settings — and resolved to a
+        network-internal default — are logged accurately rather than dropped.
 
         Args:
-            model: Model instance (currently unused; reserved for future introspection).
+            model: Constructed Lightning wrapper exposing ``.hparams``.
             run_context: Active run context to log parameters to.
             settings: JobConfig object containing model configuration.
 
@@ -66,11 +68,9 @@ class SettingsLogger:
             RuntimeError: If parameter extraction or logging fails.
         """
         try:
-            model_cfg = settings.model
-            if model_cfg is None:
+            if settings.model is None:
                 return
-            params = model_cfg.model_dump(exclude_none=True)
-            hparams = {k: v for k, v in params.items() if k not in _COMPONENT_FIELDS}
+            hparams = dict(model.hparams)
             if hparams:
                 run_context.log_params(hparams)
         except Exception as e:

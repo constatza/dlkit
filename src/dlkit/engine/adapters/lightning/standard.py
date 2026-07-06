@@ -133,7 +133,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         entry_configs = entry_configs or ()
 
         # --- Build model ---
-        model = _build_model_from_settings(model_settings, context=context)
+        model, hyperparameters = _build_model_from_settings(model_settings, context=context)
 
         # --- Partition entries ---
         feature_entries = [e for e in entry_configs if is_feature(e)]
@@ -216,6 +216,7 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
             predict_target_key=predict_target_key,
             checkpoint_metadata=checkpoint_metadata,
             prediction_strategy=prediction_strategy,
+            hyperparameters=hyperparameters,
         )
 
     def forward(self, x: Tensor) -> Tensor:

@@ -264,3 +264,22 @@ The default classifier is graph-based and model-agnostic:
 - Optimizer construction or stepping
 
 Those concerns belong to `dlkit.engine.training.optimization`.
+
+## Declaring effective hyperparameters for logging
+
+`ModelComponentSettings` leaves most architecture fields (`activation`, `normalize`,
+`hidden_size`, ...) `None` by default; the model's own `__init__` resolves the real
+default (e.g. `resolve_activation(None, default="gelu")` via `utils.py`). That
+resolved value is invisible to settings and to `inspect.signature` alike, so models
+that want it captured for experiment tracking assign a plain, explicit
+`self.hyperparameters: dict[str, HyperParam]` in `__init__`, after resolving.
+
+This satisfies the structural `HyperparameterAware` protocol (`contracts.py`) — no
+inheritance required. `dlkit.domain.nn.introspection.effective_hyperparameters()`
+merges this dict (declared values win) with whatever settings actually forwarded to
+the constructor; the engine layer feeds the result into Lightning's
+`save_hyperparameters()` so `model.hparams` and MLflow logging both reflect what was
+actually built. See `ffnn/residual.py` (`VarWidthFFNN`, `EmbeddedFFNN`) and
+`operators/fno.py` (`FourierNeuralOperator1d`) for the pattern; `utils.py` provides
+`resolved_activation_name()` to recover the resolved activation name from either a
+`None`/string input or the callable `resolve_activation()` already produced.

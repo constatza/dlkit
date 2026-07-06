@@ -8,13 +8,16 @@ from torch import Tensor, nn
 
 from dlkit.common.shapes import ShapeContext
 from dlkit.domain.nn.contracts import (
+    HyperParam,
+    StandardEntryConsumer,
+)
+from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.operators.base import GridOperatorBase
 from dlkit.domain.nn.spectral.layers import FourierLayer
 from dlkit.domain.nn.types import ActivationName
-from dlkit.domain.nn.utils import resolve_activation
+from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
 
 
 class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
@@ -93,3 +96,9 @@ class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
             out_channels=out_channels,
             width=width,
         )
+        self.hyperparameters: dict[str, HyperParam] = {
+            "width": width,
+            "n_modes": n_modes,
+            "n_layers": n_layers,
+            "activation": resolved_activation_name(activation),
+        }

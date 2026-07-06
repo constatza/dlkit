@@ -14,7 +14,9 @@ delegated to injected SOLID protocol objects.
 ```
 StandardLightningWrapper.__init__
   │
-  ├─► _build_model_from_settings()    →  nn.Module
+  ├─► _build_model_from_settings()    →  (nn.Module, effective_hyperparameters)
+  │                                       hyperparameters flow into
+  │                                       CoreLightningWrapper.save_hyperparameters()
   │
   ├─► IModelInvoker ── TensorDictModelInvoker  (default positional dispatch via TensorDictModule)
   ├─► ILossComputer ── RoutedLossComputer      (named key → loss fn kwargs)
@@ -355,6 +357,31 @@ Overview" above). `NamedBatchTransformer.fit()` handles three cases:
   in a single `fit(data)` call — see `domain/transforms/transforms.md` for why
   `batch_size` alone cannot bound this.
 - Transforms that are already fitted are skipped.
+
+---
+
+## Effective Hyperparameter Logging
+
+`ModelComponentSettings` leaves most architecture fields (`hidden_size`, `activation`,
+`normalize`, ...) `None` by default, relying on each domain model's own `__init__` to
+resolve a concrete default (e.g. `resolve_activation(None, default="gelu")`). Settings
+alone can't reflect that resolved value, so `_build_model_from_settings()` (`base.py`)
+returns both the constructed model and its *effective* hyperparameters — computed by
+`dlkit.domain.nn.introspection.effective_hyperparameters()`, which merges the raw
+settings-forwarded kwargs with any `model.hyperparameters` dict a domain model class
+declares (models implementing the `HyperparameterAware` protocol, see
+`domain/nn/contracts.py`).
+
+`CoreLightningWrapper.__init__` saves this dict via Lightning's own
+`save_hyperparameters()`, so `self.hparams` — and the model's checkpoint
+(`hyper_parameters` key, separate from `dlkit_metadata` below) — always reflect what
+was actually built. `SettingsLogger.log_model_parameters()` (`engine/tracking`) simply
+reads `model.hparams` at logging time; it does not re-derive anything.
+
+Model authors: to have a resolved default (not just a literal signature default)
+show up in `model.hparams`, assign `self.hyperparameters: dict[str, HyperParam]`
+inside `__init__` after resolving it — see `VarWidthFFNN`/`FourierNeuralOperator1d`
+for the pattern.
 
 ---
 

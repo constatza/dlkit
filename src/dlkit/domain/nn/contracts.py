@@ -12,6 +12,15 @@ if TYPE_CHECKING:
 type HyperParam = int | float | str | bool | list[int] | list[float] | list[str] | None
 
 
+@runtime_checkable
+class HyperparameterAware(Protocol):
+    """Structural contract for a model that declares its own effective
+    (post-default-resolution) hyperparameters as a plain public dict.
+    """
+
+    hyperparameters: dict[str, HyperParam]
+
+
 class InputSpec(BaseModel):
     """Base for per-model input entry-name declaration.
 
@@ -198,6 +207,7 @@ class StandardEntryConsumer:
 __all__ = [
     "EntryConsumer",
     "HyperParam",
+    "HyperparameterAware",
     "InputSpec",
     "OutputSpec",
     "StandardEntryConsumer",

@@ -57,6 +57,24 @@ def resolve_activation(
             raise ValueError(f"Unsupported activation: {name!r}")
 
 
+def resolved_activation_name(
+    name: ActivationName | str | Callable | None,
+    default: ActivationName = "relu",
+) -> str:
+    """Return the human-readable name resolve_activation() resolved to.
+
+    Args:
+        name: Activation name, callable, or None (mirrors resolve_activation's input).
+        default: Activation name used when ``name`` is None.
+
+    Returns:
+        The resolved activation name, for logging/introspection purposes.
+    """
+    if callable(name):
+        return getattr(name, "__name__", repr(name))
+    return name if name is not None else default
+
+
 def make_norm_layer(
     normalize: NormalizerName | None,
     features: int,

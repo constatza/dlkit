@@ -22,7 +22,9 @@ from lightning import LightningModule
 from tensordict import TensorDict
 from torch import Tensor, nn
 
+from dlkit.domain.nn.contracts import HyperParam
 from dlkit.domain.nn.factory import model_accepts_kwarg
+from dlkit.domain.nn.introspection import effective_hyperparameters
 from dlkit.engine.adapters.lightning.concerns import (
     DLKitCheckpointSerializer,
     LightningStepLogger,
@@ -255,7 +257,7 @@ def _build_model_from_settings(
     model_settings: Any,
     *,
     context: ShapeContext | None = None,
-) -> nn.Module:
+) -> tuple[nn.Module, dict[str, HyperParam]]:
     """Build a PyTorch model from configuration settings.
 
     Args:
@@ -263,7 +265,9 @@ def _build_model_from_settings(
         context: Optional ``ShapeContext`` for entry-consumer models.
 
     Returns:
-        Instantiated and precision-cast nn.Module.
+        Tuple of the instantiated, precision-cast nn.Module and its effective
+        (post-default-resolution) hyperparameters, for logging via
+        ``LightningModule.save_hyperparameters()``.
     """
     import importlib
 
@@ -291,8 +295,15 @@ def _build_model_from_settings(
         and model_accepts_kwarg(model_cls, "activation")
     ):
         hyperparams = {**hyperparams, "activation": model_settings.activation}
+    if (
+        model_settings.normalize is not None
+        and "normalize" not in hyperparams
+        and model_accepts_kwarg(model_cls, "normalize")
+    ):
+        hyperparams = {**hyperparams, "normalize": model_settings.normalize}
 
-    return build_model(model_cls, hyperparams, context=context)
+    model = build_model(model_cls, hyperparams, context=context)
+    return model, effective_hyperparameters(model, hyperparams)
 
 
 class CoreLightningWrapper(LightningModule, ABC):
@@ -312,6 +323,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         model: nn.Module,
         optimization_controller: IOptimizationController,
         checkpoint_metadata: WrapperCheckpointMetadata | None = None,
+        hyperparameters: dict[str, HyperParam] | None = None,
     ) -> None:
         """Initialize the core wrapper.
 
@@ -319,8 +331,12 @@ class CoreLightningWrapper(LightningModule, ABC):
             model: Pre-built PyTorch nn.Module.
             optimization_controller: Controller managing optimizers and schedulers (IOptimizationController).
             checkpoint_metadata: Serialisation-only metadata for checkpoint persistence.
+            hyperparameters: Effective (post-default-resolution) model hyperparameters,
+                saved via ``save_hyperparameters()`` so ``self.hparams`` and MLflow
+                logging reflect what was actually built, not just user-supplied settings.
         """
         super().__init__()
+        self.save_hyperparameters(hyperparameters or {})
 
         self.model = model
         self._optimization_controller = optimization_controller
@@ -573,6 +589,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         batch_transforms: Sequence[IBatchTransform] = (),
         train_generator_factory: IGeneratorFactory | None = None,
         val_generator_factory: IGeneratorFactory | None = None,
+        hyperparameters: dict[str, HyperParam] | None = None,
     ) -> None:
         """Initialize the wrapper with injected protocol objects.
 
@@ -594,11 +611,14 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
                 reproducible stochastic transforms. Defaults to NullGeneratorFactory (global RNG).
             val_generator_factory: Produces a generator per val/test batch. Defaults to
                 NullGeneratorFactory (global RNG).
+            hyperparameters: Effective (post-default-resolution) model hyperparameters,
+                forwarded to ``CoreLightningWrapper`` for ``save_hyperparameters()``.
         """
         super().__init__(
             model=model,
             optimization_controller=optimization_controller,
             checkpoint_metadata=checkpoint_metadata,
+            hyperparameters=hyperparameters,
         )
 
         self._model_invoker = model_invoker

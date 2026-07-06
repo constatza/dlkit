@@ -75,7 +75,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
         entry_configs = entry_configs or ()
 
         # Build model and value objects before calling super().__init__()
-        model = _build_model_from_settings(model_settings)
+        model, hyperparameters = _build_model_from_settings(model_settings)
 
         # Use injected components
         _loss_function = components.loss_fn
@@ -102,6 +102,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
             model=model,
             optimization_controller=optimization_controller,
             checkpoint_metadata=checkpoint_metadata,
+            hyperparameters=hyperparameters,
         )
 
         # Assign nn.Module attributes AFTER super().__init__()
