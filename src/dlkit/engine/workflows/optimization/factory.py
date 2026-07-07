@@ -8,6 +8,7 @@ with proper separation of concerns.
 from __future__ import annotations
 
 from dlkit.common.errors import WorkflowError
+from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -202,11 +203,16 @@ class OptimizationServiceFactory:
 
         return NullOptimizationBackendSession()
 
-    def create_experiment_tracker(self, settings: SearchJobConfig) -> IExperimentTracker | None:
+    def create_experiment_tracker(
+        self,
+        settings: SearchJobConfig,
+        hooks: LifecycleHooks | None = None,
+    ) -> IExperimentTracker | None:
         """Create experiment tracker based on settings.
 
         Args:
             settings: Configuration settings
+            hooks: Optional lifecycle hooks fired around created runs
 
         Returns:
             Experiment tracker implementation
@@ -231,6 +237,7 @@ class OptimizationServiceFactory:
             return MLflowTrackingAdapter(
                 mlflow_settings=settings.tracking,
                 session_name=experiment_name,
+                hooks=hooks,
             )
 
         # Use null tracker by default when MLflow is not enabled

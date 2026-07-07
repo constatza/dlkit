@@ -6,6 +6,7 @@ from typing import cast
 
 from dlkit.common import OptimizationResult
 from dlkit.common.errors import WorkflowError
+from dlkit.common.hooks import LifecycleHooks
 from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -19,6 +20,8 @@ logger = get_logger(__name__)
 def optimize(
     settings: SearchJobConfig,
     overrides: OptimizationOverrides | None = None,
+    *,
+    hooks: LifecycleHooks | None = None,
 ) -> OptimizationResult:
     """Run hyperparameter optimization through runtime orchestration."""
     logger.info(
@@ -37,7 +40,7 @@ def optimize(
     try:
         opt_settings = cast(SearchJobConfig, context.settings)
         base_factory = OptimizationServiceFactory()
-        experiment_tracker = base_factory.create_experiment_tracker(opt_settings)
+        experiment_tracker = base_factory.create_experiment_tracker(opt_settings, hooks=hooks)
         strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
         optimization_strategy = strategy_factory.create_optimization_strategy(opt_settings)
 

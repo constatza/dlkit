@@ -36,6 +36,11 @@ Adapters for external systems:
 - MLflow tracking
 - configuration serialization
 
+`optimize()` accepts the same `dlkit.common.hooks.LifecycleHooks` used by `train()`.
+`MLflowTrackingAdapter` fires `on_run_created(run_id, tracking_uri)` for the study
+run, each trial run, and the best-retrain run, so external callers can link any of
+them to a parent run the same way they already do for training.
+
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
 tracking boundary instead of creating implicit durable files on disk.

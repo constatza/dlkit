@@ -61,7 +61,9 @@ def execute(
                     }
                 }
             )
-            return optimize(settings, optimization_overrides if override_payload else None)
+            return optimize(
+                settings, optimization_overrides if override_payload else None, hooks=hooks
+            )
 
         case InferenceJobConfig():
             raise WorkflowError(

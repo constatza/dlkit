@@ -118,6 +118,7 @@ class EngineWorkflowExecutor:
         overrides: OptimizationOverrides | None = None,
         *,
         mlflow: bool = False,
+        hooks: LifecycleHooks | None = None,
     ) -> OptimizationResult:
         """Execute optimization via engine entrypoint.
 
@@ -125,6 +126,7 @@ class EngineWorkflowExecutor:
             settings: Optimization workflow configuration settings.
             overrides: Optional optimization overrides.
             mlflow: If True, ensure MLflow tracking is configured.
+            hooks: Optional lifecycle hooks for training events.
 
         Returns:
             OptimizationResult containing best model and trial history.
@@ -137,7 +139,7 @@ class EngineWorkflowExecutor:
             raise TypeError(
                 f"optimize() requires SearchJobConfig, got {type(settings_with_tracking).__name__}"
             )
-        return runtime_optimize(settings_with_tracking, overrides=overrides)
+        return runtime_optimize(settings_with_tracking, overrides=overrides, hooks=hooks)
 
     def execute(
         self,

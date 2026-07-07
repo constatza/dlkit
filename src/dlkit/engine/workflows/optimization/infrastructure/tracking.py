@@ -15,6 +15,7 @@ from typing import Any
 import mlflow
 
 from dlkit.common.errors import WorkflowError
+from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.optimization.value_objects import (
     IExperimentTracker,
     IStudyRunContext,
@@ -45,6 +46,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
         mlflow_tracker: Any = None,
         mlflow_settings: Any = None,
         session_name: str | None = None,
+        hooks: LifecycleHooks | None = None,
     ):
         """Initialize MLflow tracking adapter.
 
@@ -52,10 +54,12 @@ class MLflowTrackingAdapter(IExperimentTracker):
             mlflow_tracker: Existing MLflowTracker instance
             mlflow_settings: Lowercase tracking/experiment config used for initialization
             session_name: Fallback experiment name when the job config does not provide one
+            hooks: Optional lifecycle hooks fired around created runs
         """
         self._tracker = mlflow_tracker
         self._mlflow_settings = mlflow_settings
         self._session_name = session_name
+        self._hooks = hooks
         self._exit_stack: ExitStack | None = None
         self._explicit_run_name: str | None = None
 
@@ -128,6 +132,15 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 self._exit_stack = None
         return False
 
+    def _notify_run_created(self, run_context: Any) -> None:
+        """Fire ``on_run_created`` hook for a newly created run, if configured."""
+        if not self._hooks or not self._hooks.on_run_created:
+            return
+        tracking_uri = (
+            self._tracker.get_tracking_uri() if hasattr(self._tracker, "get_tracking_uri") else None
+        )
+        self._hooks.on_run_created(run_context.run_id, tracking_uri)
+
     @contextmanager
     def create_study_run(self, study: Study):
         """Create parent run for optimization study using existing MLflowTracker."""
@@ -143,6 +156,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=run_name,
                 nested=False,  # Parent run
             ) as run_context:
+                self._notify_run_created(run_context)
                 study_context = MLflowStudyRunContext(mlflow, run_context, study)
                 yield study_context
 
@@ -167,6 +181,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=f"trial_{trial.trial_number}",
                 nested=True,  # Nested under study run
             ) as run_context:
+                self._notify_run_created(run_context)
                 trial_context = MLflowTrialRunContext(mlflow, run_context, trial)
                 yield trial_context
 
@@ -198,6 +213,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=f"best_retrain_trial_{best_trial.trial_number}",
                 nested=True,  # Nested under study run
             ) as run_context:
+                self._notify_run_created(run_context)
                 retrain_context = MLflowTrialRunContext(mlflow, run_context, best_trial)
                 yield retrain_context
 

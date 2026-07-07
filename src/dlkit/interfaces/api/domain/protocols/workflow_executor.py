@@ -45,6 +45,7 @@ class IWorkflowExecutor(Protocol):
         overrides: OptimizationOverrides | None = None,
         *,
         mlflow: bool = False,
+        hooks: LifecycleHooks | None = None,
     ) -> OptimizationResult:
         """Execute a hyperparameter optimization workflow.
 
@@ -52,6 +53,7 @@ class IWorkflowExecutor(Protocol):
             settings: Workflow configuration settings.
             overrides: Optional optimization overrides.
             mlflow: If True, force MLflow tracking behavior for this execution.
+            hooks: Optional lifecycle hooks for training events.
 
         Returns:
             OptimizationResult containing best model and trial history.
