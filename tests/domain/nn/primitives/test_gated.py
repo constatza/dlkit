@@ -76,6 +76,12 @@ class TestSwiGLUGate:
         gate = SwiGLUGate(8)
         assert isinstance(gate, IGatingMechanism)
 
+    def test_bias_false_matches_shazeer_convention(self) -> None:
+        """bias=False must drop bias on both projections (Shazeer 2020 convention)."""
+        gate = SwiGLUGate(8, bias=False)
+        assert gate.content_proj.bias is None
+        assert gate.gate_proj.bias is None
+
 
 class TestGRNGate:
     """Tests for GRNGate."""
@@ -113,6 +119,26 @@ class TestGRNGate:
         """GRNGate must satisfy the IGatingMechanism protocol."""
         gate = GRNGate(8)
         assert isinstance(gate, IGatingMechanism)
+
+    def test_content_and_gate_read_from_bottleneck_output(
+        self, hidden_input: Tensor, original_input: Tensor
+    ) -> None:
+        """content_proj/gate_proj must read from bottleneck(eta2), not eta2 directly.
+
+        Regression for the missing intermediate linear vs. Lim et al. 2020's
+        published GRN (eta2 = ELU(...), eta1 = bottleneck(eta2), then both the
+        content and gate branches read eta1, not eta2).
+        """
+        gate = GRNGate(8, context_size=6)
+        with torch.no_grad():
+            eta2 = torch.nn.functional.elu(
+                gate.w2(hidden_input) + gate.context_proj(original_input)
+            )
+            eta1 = gate.bottleneck(eta2)
+            expected_glu = gate.content_proj(eta1) * torch.sigmoid(gate.gate_proj(eta1))
+            expected = gate.norm(hidden_input + expected_glu)
+            actual = gate(hidden_input, original_input)
+        torch.testing.assert_close(actual, expected)
 
 
 class TestUVGate:
@@ -206,3 +232,22 @@ class TestGatedDeconvolutionBlock1d:
         out = block(conv_gate_input)
         out.sum().backward()
         assert conv_gate_input.grad is not None
+
+    @pytest.mark.parametrize("kernel_size", [3, 5, 7])
+    def test_same_padding_preserves_length_for_odd_kernels(
+        self, conv_gate_input: Tensor, kernel_size: int
+    ) -> None:
+        """Regression: odd kernel_size + stride=1 + padding='same' must preserve length."""
+        block = GatedDeconvolutionBlock1d(
+            in_channels=8, out_channels=4, in_timesteps=16, kernel_size=kernel_size
+        )
+        out = block(conv_gate_input)
+        assert out.shape[2] == conv_gate_input.shape[2]
+
+    @pytest.mark.parametrize("kernel_size", [2, 4, 6])
+    def test_same_padding_even_kernel_raises(self, kernel_size: int) -> None:
+        """Regression: even kernel_size + padding='same' silently broke length preservation."""
+        with pytest.raises(ValueError, match='"same" padding'):
+            GatedDeconvolutionBlock1d(
+                in_channels=8, out_channels=4, in_timesteps=16, kernel_size=kernel_size
+            )

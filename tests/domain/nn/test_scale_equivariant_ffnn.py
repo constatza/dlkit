@@ -245,22 +245,10 @@ def test_se_constant_width_factorized_output_shape(
     assert plain_cls(in_features=4, out_features=4, num_layers=3)(x).shape == (5, 4)
 
 
-def test_se_constant_width_factorized_body_signal_does_not_diverge() -> None:
-    """Body signal std stays within 20x of input std across 8 layers.
-
-    With correct mean=0.0 init (exp(0)=1), factorized layers behave like Kaiming Linear.
-    If mean were 1.0 (the Jun-23 regression), exp(1)≈2.72 per layer — 2.72^8 ≈ 3700x
-    amplification — and this test would fail.
-    """
-    torch.manual_seed(0)
-    model = ScaleEquivariantConstantWidthFactorizedFFNN(in_features=8, out_features=8, num_layers=8)
-    model.eval()
-    body = cast(Any, model.base_model).body
-    with torch.no_grad():
-        x = torch.randn(64, 8)
-        y = body(x)
-    ratio = y.std().item() / x.std().item()
-    assert 0.01 < ratio < 20.0, f"Body statistics diverged: std ratio = {ratio:.2f}"
+# Depth-vs-variance stability for the factorized body is tested directly against
+# ConstantWidthFactorizedFFNN/ConstantWidthSoftplusFactorizedFFNN in
+# test_constrained_ffnn.py — ScaleEquivariantWrapper doesn't touch body internals,
+# so retesting it per SE-wrapped variant here would be redundant.
 
 
 @pytest.mark.parametrize(
@@ -373,24 +361,8 @@ def test_se_constant_width_softplus_factorized_unit_scale_at_init() -> None:
         assert abs(mean_scale - 1.0) < 0.3
 
 
-def test_se_constant_width_softplus_body_signal_does_not_diverge() -> None:
-    """Softplus body std stays within 20x of input std across 8 layers.
-
-    Without the _SOFTPLUS_UNIT_MEAN correction, softplus(0) = log(2) ≈ 0.69 < 1.
-    A plain 8-layer net would suppress signals by 0.69^8 ≈ 0.06x.
-    Residuals limit collapse but this test still catches bad initialization.
-    """
-    torch.manual_seed(0)
-    model = ScaleEquivariantConstantWidthSoftplusFactorizedFFNN(
-        in_features=8, out_features=8, num_layers=8
-    )
-    model.eval()
-    body = cast(Any, model.base_model).body
-    with torch.no_grad():
-        x = torch.randn(64, 8)
-        y = body(x)
-    ratio = y.std().item() / x.std().item()
-    assert 0.01 < ratio < 20.0, f"Softplus body statistics diverged: std ratio = {ratio:.2f}"
+# Covered directly against ConstantWidthSoftplusFactorizedFFNN in
+# test_constrained_ffnn.py — see note above.
 
 
 # ── ScaleEquivariantEmbeddedSoftplusFactorizedFFNN ───────────────────────────
@@ -429,21 +401,8 @@ def test_se_embedded_softplus_factorized_from_context(
     assert model(torch.randn(4, in_shapes["x"][0])).shape == (4, out_shapes["y"][0])
 
 
-def test_se_embedded_softplus_factorized_body_signal_does_not_diverge() -> None:
-    """Embedded softplus body std stays within 20x of input std across 8 layers."""
-    torch.manual_seed(0)
-    model = ScaleEquivariantEmbeddedSoftplusFactorizedFFNN(
-        in_features=8, out_features=8, hidden_size=8, num_layers=8
-    )
-    model.eval()
-    body = cast(Any, model.base_model).body
-    with torch.no_grad():
-        x = torch.randn(64, 8)
-        y = body(x)
-    ratio = y.std().item() / x.std().item()
-    assert 0.01 < ratio < 20.0, (
-        f"Embedded softplus body statistics diverged: std ratio = {ratio:.2f}"
-    )
+# The embedded variant wraps the same _ConstantWidthParametricBody covered above —
+# no separate depth-stability test needed.
 
 
 def test_se_embedded_softplus_factorized_keep_stats() -> None:

@@ -66,7 +66,7 @@ class ScaleEquivariantFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
@@ -109,7 +109,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivar
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -151,7 +151,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedFFNN(StandardEntryConsumer, ScaleE
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -198,7 +198,7 @@ class ScaleEquivariantEmbeddedSoftplusFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -242,7 +242,7 @@ class ScaleEquivariantEmbeddedSimpleSoftplusFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -287,7 +287,7 @@ class ScaleEquivariantEmbeddedFactorizedEndFFNN(StandardEntryConsumer, ScaleEqui
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -331,7 +331,7 @@ class ScaleEquivariantEmbeddedSimpleFactorizedEndFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -375,7 +375,7 @@ class ScaleEquivariantEmbeddedSoftplusFactorizedEndFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -419,7 +419,7 @@ class ScaleEquivariantEmbeddedSimpleSoftplusFactorizedEndFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -464,7 +464,7 @@ class ScaleEquivariantEmbeddedFullyFactorizedFFNN(StandardEntryConsumer, ScaleEq
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -508,7 +508,7 @@ class ScaleEquivariantEmbeddedSimpleFullyFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -552,7 +552,7 @@ class ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -596,7 +596,7 @@ class ScaleEquivariantEmbeddedSimpleFullySoftplusFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -641,7 +641,7 @@ class ScaleEquivariantFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrap
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -683,7 +683,7 @@ class ScaleEquivariantSimpleFactorizedFFNN(StandardEntryConsumer, ScaleEquivaria
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -758,7 +758,7 @@ class ScaleEquivariantConstantWidthFactorizedFFNN(StandardEntryConsumer, ScaleEq
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -823,7 +823,7 @@ class ScaleEquivariantConstantWidthSimpleFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -892,7 +892,7 @@ class ScaleEquivariantConstantWidthSoftplusFactorizedFFNN(
         eps_gain: float = _DEFAULT_EPS_GAIN,
         keep_stats: bool = False,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(

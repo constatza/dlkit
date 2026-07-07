@@ -46,18 +46,32 @@ class TransformerEncoderBlock(nn.Module):
     permutation for (batch, channels, time) input format.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1) -> None:
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int = 1,
+        num_layers: int = 1,
+        dropout: float = 0.1,
+        dim_feedforward: int = 2048,
+    ) -> None:
         """Initialize TransformerEncoderBlock.
 
         Args:
             embed_dim: Embedding dimension (must be divisible by num_heads).
             num_heads: Number of attention heads. Defaults to 1.
             num_layers: Number of transformer encoder layers. Defaults to 1.
+            dropout: Dropout probability (attention weights and each
+                sublayer's output). Defaults to 0.1, matching
+                ``nn.TransformerEncoderLayer``'s own default.
+            dim_feedforward: Width of the feedforward sublayer. Defaults to
+                2048, matching ``nn.TransformerEncoderLayer``'s own default.
         """
         super().__init__()
         self.transformer_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
             nhead=num_heads,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
             batch_first=True,
             norm_first=True,
         )
@@ -86,18 +100,37 @@ class TransformerDecoderBlock(nn.Module):
     handling dimension permutation for (batch, channels, time) input format.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int = 1, num_layers: int = 1) -> None:
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int = 1,
+        num_layers: int = 1,
+        causal: bool = True,
+        dropout: float = 0.1,
+        dim_feedforward: int = 2048,
+    ) -> None:
         """Initialize TransformerDecoderBlock.
 
         Args:
             embed_dim: Embedding dimension (must be divisible by num_heads).
             num_heads: Number of attention heads. Defaults to 1.
             num_layers: Number of transformer decoder layers. Defaults to 1.
+            causal: Whether to mask future target positions (autoregressive
+                decoding). Defaults to ``True``; set ``False`` for bidirectional
+                (non-autoregressive) target self-attention.
+            dropout: Dropout probability (attention weights and each
+                sublayer's output). Defaults to 0.1, matching
+                ``nn.TransformerDecoderLayer``'s own default.
+            dim_feedforward: Width of the feedforward sublayer. Defaults to
+                2048, matching ``nn.TransformerDecoderLayer``'s own default.
         """
         super().__init__()
+        self.causal = causal
         self.transformer_layer = nn.TransformerDecoderLayer(
             d_model=embed_dim,
             nhead=num_heads,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
             batch_first=True,
             norm_first=True,
         )
@@ -116,10 +149,23 @@ class TransformerDecoderBlock(nn.Module):
         Returns:
             Decoded tensor of shape (batch, channels, time).
         """
-        mem = x if memory is None else memory
+        is_self_attention = memory is None
+        mem = x if is_self_attention else memory
+        tgt = switch_channels_with_time(x)
+        causal_mask = (
+            nn.Transformer.generate_square_subsequent_mask(tgt.shape[1], device=tgt.device)
+            if self.causal
+            else None
+        )
+        # In self-attention mode (memory=x), cross-attention would otherwise see the
+        # full (unmasked) sequence and leak future positions around the tgt_mask.
+        memory_mask = causal_mask if (self.causal and is_self_attention) else None
         return switch_channels_with_time(
             self.transformer_decoder(
-                switch_channels_with_time(x),
+                tgt,
                 switch_channels_with_time(mem),
+                tgt_mask=causal_mask,
+                memory_mask=memory_mask,
+                tgt_is_causal=self.causal,
             )
         )

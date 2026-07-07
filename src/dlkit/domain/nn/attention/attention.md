@@ -158,7 +158,10 @@ decoded = decoder(target_sequence, memory=encoder_output)  # Shape: (16, 128, 30
 - Automatically permutes input: (batch, channels, timesteps) → (batch, timesteps, channels)
 - Uses PyTorch's `nn.TransformerDecoderLayer(batch_first=True, norm_first=True)` — **Pre-LN** (layer norm applied before each sub-layer, not after)
 - If memory is None, uses input sequence for both (pure self-attention)
-- Includes causal masking for autoregressive generation (via PyTorch defaults)
+- `causal: bool = True` builds a square-subsequent mask via
+  `nn.Transformer.generate_square_subsequent_mask` and passes it as `tgt_mask`
+  (torch does not auto-generate one); set `causal=False` for bidirectional
+  target self-attention
 - Each layer: self-attention + cross-attention + feedforward + layer norm
 - Permutes output back to (batch, channels, timesteps)
 
@@ -317,7 +320,6 @@ except RuntimeError as e:
 - [ ] Implement Flash Attention for better memory efficiency
 - [ ] Add positional encoding utilities
 - [ ] Support for relative position encodings
-- [ ] Causal attention mask option for autoregressive models
 - [ ] Key/value caching for efficient inference
 - [ ] Cross-attention only variant (no self-attention)
 - [ ] Windowed attention for very long sequences

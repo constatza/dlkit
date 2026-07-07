@@ -99,6 +99,29 @@ def test_effective_out_channels_concat(linear_skip_concat: SkipConnection) -> No
     assert linear_skip_concat.effective_out_channels == 16
 
 
+def test_branch_scale_multiplies_module_output_before_sum() -> None:
+    """branch_scale must scale module(x), not the skip path or the final sum.
+
+    Regression coverage for the depth-variance fix: SkipConnection's contribution
+    to residual-stacking blow-up is module(x); branch_scale is the mechanism that
+    counteracts it (GPT-2 appendix, 1/sqrt(2*num_layers)), so it must apply exactly
+    there, not anywhere else in the aggregation.
+    """
+    module = nn.Linear(4, 8)
+    skip_layer = build_linear_skip_layer(module)
+    x = torch.randn(3, 4)
+
+    unscaled = SkipConnection(module, skip_layer, branch_scale=1.0)
+    scaled = SkipConnection(module, skip_layer, branch_scale=0.5)
+
+    with torch.no_grad():
+        skip = skip_layer(x)
+        out_unscaled = unscaled(x)
+        out_scaled = scaled(x)
+
+    torch.testing.assert_close(out_scaled - skip, 0.5 * (out_unscaled - skip))
+
+
 def test_build_conv1d_same_channels_stride1_returns_identity() -> None:
     """build_conv1d_skip_layer with same channels and stride=1 returns Identity."""
     module = nn.Conv1d(8, 8, 3)
@@ -246,3 +269,17 @@ def test_residual_sequential_multi_module_chain_output_shape(
     with torch.no_grad():
         out = rs_no_shortcut(rs_input)
     assert out.shape == rs_input.shape
+
+
+def test_residual_sequential_branch_scale_multiplies_chain_before_sum(
+    rs_linear_chain: list[nn.Linear], rs_input: Tensor
+) -> None:
+    """branch_scale must scale chain(x), not the shortcut path or the final sum."""
+    unscaled = ResidualSequential(*rs_linear_chain, branch_scale=1.0)
+    scaled = ResidualSequential(*rs_linear_chain, branch_scale=0.5)
+
+    with torch.no_grad():
+        out_unscaled = unscaled(rs_input)
+        out_scaled = scaled(rs_input)
+
+    torch.testing.assert_close(out_scaled - rs_input, 0.5 * (out_unscaled - rs_input))

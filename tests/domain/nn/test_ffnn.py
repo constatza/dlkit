@@ -207,6 +207,24 @@ class TestFFNN:
         """FFNN should have trainable parameters."""
         assert len(list(constant_ffnn.parameters())) > 0
 
+    @pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+    def test_deep_output_std_stays_bounded(self, num_layers: int) -> None:
+        """Output std stays within a bounded band of input std at every depth.
+
+        FFNN's DenseBlock+SkipConnection body is a separate residual-stacking
+        primitive from constrained.py's _ConstantWidthParametricBody, and gets
+        its own branch_scale=1/sqrt(2*num_layers) (GPT-2 appendix) wiring —
+        this regression-tests that wiring directly, independent of that body.
+        """
+        torch.manual_seed(0)
+        model = FFNN(in_features=8, out_features=8, hidden_size=8, num_layers=num_layers)
+        model.eval()
+        with torch.no_grad():
+            x = torch.randn(64, 8)
+            y = model(x)
+        ratio = y.std().item() / x.std().item()
+        assert 0.2 < ratio < 3.0, f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
+
 
 class TestLinearNetwork:
     """Tests for LinearNetwork."""

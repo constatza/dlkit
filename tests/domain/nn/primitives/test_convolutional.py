@@ -42,3 +42,21 @@ def test_deconv_block_same_padding_stride_gt1_raises():
     """'same' padding with stride > 1 must raise ValueError."""
     with pytest.raises(ValueError, match='"same" padding'):
         DeconvolutionBlock1d(in_channels=4, out_channels=4, in_timesteps=16, stride=2)
+
+
+@pytest.mark.parametrize("kernel_size", [3, 5, 7])
+def test_deconv_block_same_padding_preserves_length_for_odd_kernels(basic_input, kernel_size):
+    """Regression: odd kernel_size + stride=1 + padding='same' must preserve length."""
+    m = DeconvolutionBlock1d(
+        in_channels=4, out_channels=4, in_timesteps=16, kernel_size=kernel_size
+    )
+    assert m(basic_input).shape == basic_input.shape
+
+
+@pytest.mark.parametrize("kernel_size", [2, 4, 6])
+def test_deconv_block_same_padding_even_kernel_raises(kernel_size):
+    """Regression: even kernel_size + padding='same' silently broke length preservation."""
+    with pytest.raises(ValueError, match='"same" padding'):
+        DeconvolutionBlock1d(
+            in_channels=4, out_channels=4, in_timesteps=16, kernel_size=kernel_size
+        )

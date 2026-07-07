@@ -428,37 +428,51 @@ def test_constant_width_softplus_factorized_default_mean_is_zero() -> None:
     assert sig.parameters["mean"].default == 0.0
 
 
-def test_deep_constant_width_factorized_output_std_does_not_diverge() -> None:
-    """Output std stays within 20x of input std for an 8-layer unit-scale-initialized network.
+def test_constant_width_softplus_factorized_kaiming_a_reaches_body_layers() -> None:
+    """kaiming_a passed at the network level must reach every SoftplusFactorizedLinear."""
+    model = ConstantWidthSoftplusFactorizedFFNN(
+        in_features=4, out_features=4, num_layers=3, kaiming_a=5**0.5
+    )
+    for block in model.body.blocks:
+        layer = cast(Any, block).module.layer
+        assert layer._kaiming_a == 5**0.5
 
-    Without residuals and with mean=1.0 (exp regression), each layer amplifies
-    by exp(1)^2 ≈ 7.4x in variance — 7.4^8 ≈ 4e7 for a plain net.
-    Even with residuals, divergence is detectable.  This catches that regression.
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_constant_width_factorized_output_std_stays_near_unit_scale(num_layers: int) -> None:
+    """Output std stays within 2x of input std at every depth, not just 8 layers.
+
+    With branch_scale=1/sqrt(2*num_layers) (GPT-2 appendix) and normalize="layer"
+    defaulting on, variance no longer compounds geometrically with depth — unlike
+    the un-scaled stack, which grows 15x at 8 layers to 5.8e16x at 128 layers.
     """
     torch.manual_seed(0)
-    model = ConstantWidthFactorizedFFNN(in_features=8, out_features=8, num_layers=8)
+    model = ConstantWidthFactorizedFFNN(in_features=8, out_features=8, num_layers=num_layers)
     model.eval()
     with torch.no_grad():
         x = torch.randn(64, 8)
         y = model(x)
     ratio = y.std().item() / x.std().item()
-    assert 0.01 < ratio < 20.0, f"Output std diverged: {ratio:.2f}x input std"
+    assert 0.5 < ratio < 2.0, f"Output std diverged at {num_layers} layers: {ratio:.2f}x input std"
 
 
-def test_deep_constant_width_softplus_factorized_output_std_does_not_diverge() -> None:
-    """Softplus output std stays within 20x of input std at 8 layers.
-
-    Without the _SOFTPLUS_UNIT_MEAN correction, softplus(0)=log(2)≈0.69 per layer —
-    a plain 8-layer net collapses signal to 0.69^8 ≈ 0.06x.  This catches that.
-    """
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_constant_width_softplus_factorized_output_std_stays_near_unit_scale(
+    num_layers: int,
+) -> None:
+    """Softplus output std stays within 2x of input std at every depth, not just 8 layers."""
     torch.manual_seed(0)
-    model = ConstantWidthSoftplusFactorizedFFNN(in_features=8, out_features=8, num_layers=8)
+    model = ConstantWidthSoftplusFactorizedFFNN(
+        in_features=8, out_features=8, num_layers=num_layers
+    )
     model.eval()
     with torch.no_grad():
         x = torch.randn(64, 8)
         y = model(x)
     ratio = y.std().item() / x.std().item()
-    assert 0.01 < ratio < 20.0, f"Softplus output std diverged: {ratio:.2f}x input std"
+    assert 0.5 < ratio < 2.0, (
+        f"Softplus output std diverged at {num_layers} layers: {ratio:.2f}x input std"
+    )
 
 
 # ── EmbeddedSoftplusFactorizedFFNN / EmbeddedSimpleSoftplusFactorizedFFNN ────

@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
@@ -35,8 +36,11 @@ class IGatingMechanism(Protocol):
 class GLUGate(nn.Module):
     """Gated Linear Unit (Dauphin et al. 2017).
 
-    Applies ``content_proj(h) ⊙ σ(gate_proj(h))``.  The context ``x`` is
-    ignored; it is accepted only to satisfy :class:`IGatingMechanism`.
+    Applies ``a ⊙ σ(b)`` where ``[a, b] = proj(h)`` — a single doubled-width
+    projection split in half, via torch-native ``F.glu`` (equivalent to, and
+    more parameter-layout-efficient than, two separate content/gate Linears).
+    The context ``x`` is ignored; it is accepted only to satisfy
+    :class:`IGatingMechanism`.
 
     Args:
         hidden_size (int): Dimensionality of the input and output.
@@ -49,8 +53,7 @@ class GLUGate(nn.Module):
             hidden_size (int): Size of the hidden dimension.
         """
         super().__init__()
-        self.content_proj = nn.Linear(hidden_size, hidden_size)
-        self.gate_proj = nn.Linear(hidden_size, hidden_size)
+        self.proj = nn.Linear(hidden_size, 2 * hidden_size)
 
     def forward(self, h: Tensor, _x: Tensor) -> Tensor:
         """Apply GLU gating.
@@ -62,7 +65,7 @@ class GLUGate(nn.Module):
         Returns:
             Tensor: Gated output of shape ``(..., hidden_size)``.
         """
-        return self.content_proj(h) * torch.sigmoid(self.gate_proj(h))
+        return F.glu(self.proj(h), dim=-1)
 
 
 class SwiGLUGate(nn.Module):
@@ -73,17 +76,23 @@ class SwiGLUGate(nn.Module):
 
     Args:
         hidden_size (int): Dimensionality of the input and output.
+        bias (bool, optional): Whether the projections carry a bias term.
+            Shazeer 2020 omits bias on GLU-variant projections ("as is now
+            common"); defaults to ``True`` to match ``nn.Linear``'s own
+            default, set ``False`` to match the paper's convention.
     """
 
-    def __init__(self, hidden_size: int) -> None:
+    def __init__(self, hidden_size: int, bias: bool = True) -> None:
         """Initialise SwiGLUGate.
 
         Args:
             hidden_size (int): Size of the hidden dimension.
+            bias (bool, optional): Whether projections include a bias term.
+                Defaults to True.
         """
         super().__init__()
-        self.content_proj = nn.Linear(hidden_size, hidden_size)
-        self.gate_proj = nn.Linear(hidden_size, hidden_size)
+        self.content_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(self, h: Tensor, _x: Tensor) -> Tensor:
         """Apply SwiGLU gating.
@@ -101,11 +110,11 @@ class SwiGLUGate(nn.Module):
 class GRNGate(nn.Module):
     """Gated Residual Network gate (Lim et al. 2021, Temporal Fusion Transformer).
 
-    Architecture::
+    Architecture, matching the paper's four-linear structure::
 
-        eta1 = ELU(W1(h) + context_proj(x))    # bias absorbed into W1
-        eta2 = W3(eta1)
-        glu_out = eta2 ⊙ σ(W4(eta1))
+        eta2 = ELU(W2(h) + context_proj(x))    # bias absorbed into W2
+        eta1 = bottleneck(eta2)                # W1 — the paper's intermediate linear
+        glu_out = content_proj(eta1) ⊙ σ(gate_proj(eta1))
         output  = LayerNorm(h + dropout(glu_out))
 
     When ``context_size`` is ``None``, ``context_proj`` maps
@@ -138,10 +147,11 @@ class GRNGate(nn.Module):
         """
         super().__init__()
         ctx_in = context_size if context_size is not None else hidden_size
-        self.w1 = nn.Linear(hidden_size, hidden_size)
+        self.w2 = nn.Linear(hidden_size, hidden_size)
         self.context_proj = nn.Linear(ctx_in, hidden_size, bias=False)
-        self.w3 = nn.Linear(hidden_size, hidden_size)
-        self.w4 = nn.Linear(hidden_size, hidden_size)
+        self.bottleneck = nn.Linear(hidden_size, hidden_size)
+        self.content_proj = nn.Linear(hidden_size, hidden_size)
+        self.gate_proj = nn.Linear(hidden_size, hidden_size)
         self.norm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
@@ -156,9 +166,9 @@ class GRNGate(nn.Module):
         Returns:
             Tensor: Output tensor of shape ``(..., hidden_size)``.
         """
-        eta1 = F.elu(self.w1(h) + self.context_proj(x))
-        eta2 = self.w3(eta1)
-        glu_out = eta2 * torch.sigmoid(self.w4(eta1))
+        eta2 = F.elu(self.w2(h) + self.context_proj(x))
+        eta1 = self.bottleneck(eta2)
+        glu_out = self.content_proj(eta1) * torch.sigmoid(self.gate_proj(eta1))
         return self.norm(h + self.dropout(glu_out))
 
 
@@ -197,6 +207,7 @@ class UVGate(nn.Module):
         self.encoder_u = nn.Linear(in_features, hidden_size)
         self.encoder_v = nn.Linear(in_features, hidden_size)
         self.gate = nn.Linear(hidden_size, hidden_size)
+        initialize_(self, activation)
         self.activation = resolve_activation(activation)
 
     def forward(self, h: Tensor, x: Tensor) -> Tensor:
@@ -366,6 +377,12 @@ class GatedDeconvolutionBlock1d(nn.Module):
         if padding == "same" and stride != 1:
             raise ValueError(
                 '"same" padding for GatedDeconvolutionBlock1d is only supported when stride=1.'
+            )
+        if padding == "same" and kernel_size % 2 == 0:
+            raise ValueError(
+                '"same" padding for GatedDeconvolutionBlock1d only preserves length for odd '
+                f"kernel_size (got {kernel_size}); pass an explicit padding/output_padding "
+                "for even kernels."
             )
         self.in_channels = in_channels
         self.out_channels = out_channels

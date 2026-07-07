@@ -32,6 +32,7 @@ class _FactorizedLinearBase(nn.Module):
         mean: float,
         std: float,
         pos_fn: Callable[[Tensor], Tensor],
+        kaiming_a: float = 0.0,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -45,6 +46,9 @@ class _FactorizedLinearBase(nn.Module):
             std: Standard deviation for log-scale initialisation.
             pos_fn: Element-wise function mapping log-scale to positive scale
                 factors.
+            kaiming_a: Negative-slope ``a`` passed to ``kaiming_uniform_`` for
+                ``base_weight`` (``gain = sqrt(2/(1+a**2))``). ``0.0`` is the
+                textbook He/Kaiming gain for ReLU/GELU-family activations.
             device: Optional device for parameter initialisation.
             dtype: Optional dtype for parameter initialisation.
         """
@@ -54,6 +58,7 @@ class _FactorizedLinearBase(nn.Module):
         self._log_scale_mean = float(mean)
         self._log_scale_std = float(std)
         self._pos_fn = pos_fn
+        self._kaiming_a = float(kaiming_a)
         self.base_weight = nn.Parameter(
             torch.empty(out_features, in_features, device=device, dtype=dtype)
         )
@@ -66,7 +71,7 @@ class _FactorizedLinearBase(nn.Module):
 
     def reset_parameters(self) -> None:
         """Initialize parameters for the factorized linear layer."""
-        nn.init.kaiming_uniform_(self.base_weight, a=0.0)
+        nn.init.kaiming_uniform_(self.base_weight, a=self._kaiming_a)
         nn.init.normal_(self.log_scale, mean=self._log_scale_mean, std=self._log_scale_std)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
@@ -142,9 +147,24 @@ class SoftplusFactorizedLinear(_FactorizedLinearBase):
         *,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
+        """Initialize the softplus-factorized linear layer.
+
+        Args:
+            in_features: Input feature size.
+            out_features: Output feature size.
+            bias: Whether to include a bias term.
+            mean: Offset from the softplus unit-scale point.
+            std: Standard deviation for log-scale initialisation.
+            kaiming_a: Negative-slope ``a`` passed to ``kaiming_uniform_`` for
+                ``base_weight``. Defaults to ``0.0``, the textbook He/Kaiming
+                gain for ReLU/GELU-family activations.
+            device: Optional device for parameter initialisation.
+            dtype: Optional dtype for parameter initialisation.
+        """
         super().__init__(
             in_features=in_features,
             out_features=out_features,
@@ -152,6 +172,7 @@ class SoftplusFactorizedLinear(_FactorizedLinearBase):
             mean=mean,
             std=std,
             pos_fn=F.softplus,
+            kaiming_a=kaiming_a,
             device=device,
             dtype=dtype,
         )

@@ -12,6 +12,7 @@ from dlkit.domain.nn.contracts import (
 from dlkit.domain.nn.contracts import (
     StandardEntryConsumer,
 )
+from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
     FactorizedLinear,
     SkipConnection,
@@ -58,7 +59,7 @@ class ParametricDenseBlock(nn.Module):
         in_size: int | None = None,
         layer_factory: Callable[[int], nn.Module],
         activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
@@ -91,7 +92,7 @@ class _ConstantWidthParametricBody(nn.Module):
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
         activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if size <= 0:
@@ -101,6 +102,9 @@ class _ConstantWidthParametricBody(nn.Module):
 
         super().__init__()
         self.residual = _residual
+        # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
+        # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
+        branch_scale = 1.0 / math.sqrt(2 * num_layers) if num_layers > 0 else 1.0
 
         blocks: list[nn.Module] = []
         for _ in range(num_layers):
@@ -112,7 +116,9 @@ class _ConstantWidthParametricBody(nn.Module):
                 dropout=dropout,
             )
             blocks.append(
-                SkipConnection(block, build_linear_skip_layer(block)) if _residual else block
+                SkipConnection(block, build_linear_skip_layer(block), branch_scale=branch_scale)
+                if _residual
+                else block
             )
 
         self.blocks = nn.ModuleList(blocks)
@@ -136,18 +142,18 @@ class _EmbeddedParametricBody(nn.Module):
         layer_factory: Callable[[int], nn.Module],
         _residual: bool = False,
         activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         embedding_factory: Callable[[int, int], nn.Module] | None = None,
         regression_factory: Callable[[int, int], nn.Module] | None = None,
     ) -> None:
         hidden_size = _resolve_hidden_size(hidden_size, in_features, out_features)
         super().__init__()
-        self.embedding_layer = (
-            embedding_factory(in_features, hidden_size)
-            if embedding_factory is not None
-            else nn.Linear(in_features, hidden_size)
-        )
+        if embedding_factory is not None:
+            self.embedding_layer = embedding_factory(in_features, hidden_size)
+        else:
+            self.embedding_layer = nn.Linear(in_features, hidden_size)
+            initialize_(self.embedding_layer, activation)
         self.body = _ConstantWidthParametricBody(
             size=hidden_size,
             num_layers=num_layers,
@@ -157,11 +163,11 @@ class _EmbeddedParametricBody(nn.Module):
             normalize=normalize,
             dropout=dropout,
         )
-        self.regression_layer = (
-            regression_factory(hidden_size, out_features)
-            if regression_factory is not None
-            else nn.Linear(hidden_size, out_features)
-        )
+        if regression_factory is not None:
+            self.regression_layer = regression_factory(hidden_size, out_features)
+        else:
+            self.regression_layer = nn.Linear(hidden_size, out_features)
+            initialize_(self.regression_layer, activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)
@@ -199,10 +205,11 @@ def _softplus_unit_layer_factory(
     bias: bool,
     mean: float,
     std: float,
+    kaiming_a: float = 0.0,
 ) -> Callable[[int], nn.Module]:
     """Like _softplus_factorized_layer_factory but mean=0.0 → unit scale at init."""
     return lambda n: SoftplusFactorizedLinear(
-        n, n, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std
+        n, n, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std, kaiming_a=kaiming_a
     )
 
 
@@ -221,6 +228,7 @@ def _softplus_unit_rect_factory(
     bias: bool,
     mean: float,
     std: float,
+    kaiming_a: float = 0.0,
 ) -> Callable[[int, int], nn.Module]:
     """Return a rectangular ``(in_dim, out_dim) -> SoftplusFactorizedLinear`` factory.
 
@@ -228,7 +236,7 @@ def _softplus_unit_rect_factory(
     init when the user-facing ``mean=0.0`` is passed.
     """
     return lambda i, o: SoftplusFactorizedLinear(
-        i, o, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std
+        i, o, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std, kaiming_a=kaiming_a
     )
 
 
@@ -250,7 +258,7 @@ class EmbeddedParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBody):
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         embedding_factory: Callable[[int, int], nn.Module] | None = None,
         regression_factory: Callable[[int, int], nn.Module] | None = None,
@@ -285,7 +293,7 @@ class EmbeddedSimpleParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBod
         num_layers: int,
         layer_factory: Callable[[int], nn.Module],
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         embedding_factory: Callable[[int, int], nn.Module] | None = None,
         regression_factory: Callable[[int, int], nn.Module] | None = None,
@@ -322,7 +330,7 @@ class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -355,7 +363,7 @@ class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -414,8 +422,9 @@ class EmbeddedSoftplusFactorizedFFNN(EmbeddedParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -427,6 +436,7 @@ class EmbeddedSoftplusFactorizedFFNN(EmbeddedParametricFFNN):
                 bias=bias,
                 mean=mean,
                 std=std,
+                kaiming_a=kaiming_a,
             ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
@@ -471,8 +481,9 @@ class EmbeddedSimpleSoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -484,6 +495,7 @@ class EmbeddedSimpleSoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
                 bias=bias,
                 mean=mean,
                 std=std,
+                kaiming_a=kaiming_a,
             ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
@@ -533,7 +545,7 @@ class EmbeddedFactorizedEndFFNN(EmbeddedParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -588,7 +600,7 @@ class EmbeddedSimpleFactorizedEndFFNN(EmbeddedSimpleParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -643,8 +655,9 @@ class EmbeddedSoftplusFactorizedEndFFNN(EmbeddedParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -652,8 +665,12 @@ class EmbeddedSoftplusFactorizedEndFFNN(EmbeddedParametricFFNN):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
+            layer_factory=_softplus_unit_layer_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            regression_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
@@ -699,8 +716,9 @@ class EmbeddedSimpleSoftplusFactorizedEndFFNN(EmbeddedSimpleParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -708,8 +726,12 @@ class EmbeddedSimpleSoftplusFactorizedEndFFNN(EmbeddedSimpleParametricFFNN):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
+            layer_factory=_softplus_unit_layer_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            regression_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
@@ -758,7 +780,7 @@ class EmbeddedFullyFactorizedFFNN(EmbeddedParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -815,7 +837,7 @@ class EmbeddedSimpleFullyFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -872,8 +894,9 @@ class EmbeddedFullySoftplusFactorizedFFNN(EmbeddedParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -881,9 +904,15 @@ class EmbeddedFullySoftplusFactorizedFFNN(EmbeddedParametricFFNN):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(bias=bias, mean=mean, std=std),
-            embedding_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
+            layer_factory=_softplus_unit_layer_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            embedding_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            regression_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
@@ -930,8 +959,9 @@ class EmbeddedSimpleFullySoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         super().__init__(
@@ -939,9 +969,15 @@ class EmbeddedSimpleFullySoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
             out_features=out_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(bias=bias, mean=mean, std=std),
-            embedding_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_softplus_unit_rect_factory(bias=bias, mean=mean, std=std),
+            layer_factory=_softplus_unit_layer_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            embedding_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
+            regression_factory=_softplus_unit_rect_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
             activation=resolve_activation(activation, default="gelu"),
             normalize=normalize,
             dropout=dropout,
@@ -974,7 +1010,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if num_layers < 1:
@@ -1000,6 +1036,7 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
             dropout=dropout,
         )
         self.regression_layer = nn.Linear(hidden_size, out_features)
+        initialize_(self.regression_layer, resolved_activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.first_block(x)
@@ -1029,7 +1066,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if num_layers < 1:
@@ -1055,6 +1092,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
             dropout=dropout,
         )
         self.regression_layer = nn.Linear(hidden_size, out_features)
+        initialize_(self.regression_layer, resolved_activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.first_block(x)
@@ -1109,7 +1147,7 @@ class ConstantWidthFactorizedFFNN(StandardEntryConsumer, nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if in_features != out_features:
@@ -1182,7 +1220,7 @@ class ConstantWidthSimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         mean: float = 0.0,
         std: float = 0.1,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if in_features != out_features:
@@ -1257,8 +1295,9 @@ class ConstantWidthSoftplusFactorizedFFNN(StandardEntryConsumer, nn.Module):
         bias: bool = True,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
     ) -> None:
         if in_features != out_features:
@@ -1272,7 +1311,9 @@ class ConstantWidthSoftplusFactorizedFFNN(StandardEntryConsumer, nn.Module):
         self.body = _ConstantWidthParametricBody(
             size=in_features,
             num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(bias=bias, mean=mean, std=std),
+            layer_factory=_softplus_unit_layer_factory(
+                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
+            ),
             _residual=True,
             activation=resolved_activation,
             normalize=normalize,

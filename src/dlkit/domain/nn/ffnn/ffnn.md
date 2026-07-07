@@ -7,6 +7,11 @@ The package distinguishes:
 - standard vs scale-equivariant wrappers
 - embedded vs non-embedded structured variants
 
+The plain-`nn.Linear` embedding/regression layers in `residual.py`, `film.py`,
+and `constrained.py` initialize their weights via `domain.nn.init.initialize_`,
+matched to the network's `activation` — see `nn.md`. `FactorizedLinear`-backed
+branches keep their own init untouched.
+
 ## Module layout
 
 | File | Purpose |

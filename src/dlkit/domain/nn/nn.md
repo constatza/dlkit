@@ -265,6 +265,34 @@ The default classifier is graph-based and model-agnostic:
 
 Those concerns belong to `dlkit.engine.training.optimization`.
 
+## Weight initialization
+
+`init.py` provides `resolve_initializer`/`initialize_`, which pick the
+textbook He/Kaiming or Xavier scheme from the same `activation` name or
+callable every constructor already resolves via `resolve_activation` —
+mirroring its match/case dispatch so init follows from the existing
+`activation` kwarg instead of requiring a second scheme parameter.
+
+- ReLU-family (`relu`, `gelu`, `silu`, `leaky_relu`, `none`, `identity`) →
+  `nn.init.kaiming_uniform_`
+- Symmetric (`tanh`, `sigmoid`) → `nn.init.xavier_uniform_` with the matching
+  `calculate_gain`
+- An unrecognised custom callable (e.g. a lambda) falls back to the `default`
+  scheme rather than failing construction; an unrecognised *string* still
+  raises `ValueError`
+
+`initialize_(module, activation)` is called once per constructor, right
+after the relevant `nn.Linear`/`nn.Conv*` is built: in `primitives/dense.py`,
+`primitives/convolutional.py`, `primitives/gated.py` (`UVGate`), and the
+plain-`nn.Linear` embedding/regression layers of `ffnn/residual.py`,
+`ffnn/film.py`, and `ffnn/constrained.py`.
+
+Left untouched as special cases with their own hand-rolled init:
+`primitives/parametrized_layers.py` (factorized-weight layers, own
+`kaiming_a`), `spectral/coordinate.py` (`Siren`, `ModifiedMLP`), attention
+blocks (no `activation` kwarg), `ffnn/linear.py`, and `ffnn/gated.py`'s
+`GatedMLP` (no `activation` kwarg).
+
 ## Declaring effective hyperparameters for logging
 
 `ModelComponentSettings` leaves most architecture fields (`activation`, `normalize`,

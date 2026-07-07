@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from typing import Literal
 
@@ -7,6 +8,7 @@ from torch import Tensor, nn
 
 from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
+from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
@@ -58,7 +60,7 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         out_features: int,
         layers: Sequence[int],
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
@@ -77,9 +79,13 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
             "bias": bias,
             "skip": skip,
         }
+        # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
+        # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
+        branch_scale = 1.0 / math.sqrt(2 * self.num_layers) if self.num_layers > 0 else 1.0
 
         self.layers = nn.ModuleList()
         self.embedding_layer = nn.Linear(in_features, widths[0], bias=bias)
+        initialize_(self.embedding_layer, activation)
 
         for i in range(len(widths) - 1):
             block = DenseBlock(
@@ -91,11 +97,16 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
                 bias=bias,
             )
             layer = (
-                SkipConnection(block, build_linear_skip_layer(block, bias=bias)) if skip else block
+                SkipConnection(
+                    block, build_linear_skip_layer(block, bias=bias), branch_scale=branch_scale
+                )
+                if skip
+                else block
             )
             self.layers.append(layer)
 
         self.regression_layer = nn.Linear(widths[-1], out_features, bias=bias)
+        initialize_(self.regression_layer, activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)
@@ -152,7 +163,7 @@ class FFNN(VarWidthFFNN):
         hidden_size: int,
         num_layers: int,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
@@ -213,7 +224,7 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int,
         num_layers: int,
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
     ) -> None:
@@ -230,7 +241,11 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
             "bias": bias,
         }
         hidden = hidden_size
+        # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
+        # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
+        branch_scale = 1.0 / math.sqrt(2 * num_layers)
         self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
+        initialize_(self.embedding_layer, resolved_activation)
         self.layers = nn.ModuleList()
 
         for _ in range(num_layers):
@@ -242,9 +257,14 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
                 dropout=dropout,
                 bias=bias,
             )
-            self.layers.append(SkipConnection(block, build_linear_skip_layer(block, bias=bias)))
+            self.layers.append(
+                SkipConnection(
+                    block, build_linear_skip_layer(block, bias=bias), branch_scale=branch_scale
+                )
+            )
 
         self.regression_layer = nn.Linear(hidden, out_features, bias=bias)
+        initialize_(self.regression_layer, resolved_activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)

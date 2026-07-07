@@ -372,7 +372,8 @@ class Siren(StandardEntryConsumer, nn.Module):
         out_features: Dimension of the output.
         hidden_size: Width of all hidden layers.
         num_layers: Number of hidden layers (each is sin + linear).
-        omega0: Frequency multiplier for the first layer (default 30).
+        omega0: Frequency multiplier applied to every layer's pre-activation
+            (default 30), per Sitzmann et al. 2020.
     """
 
     class InputSpec(_InputSpec):
@@ -429,7 +430,7 @@ class Siren(StandardEntryConsumer, nn.Module):
         """
         x = torch.sin(self._omega0 * self.first_layer(x))
         for layer in self.hidden_layers:
-            x = torch.sin(layer(x))
+            x = torch.sin(self._omega0 * layer(x))
         return self.output_layer(x)
 
 
@@ -481,6 +482,20 @@ class ModifiedMLP(StandardEntryConsumer, nn.Module):
             [nn.Linear(hidden_size, hidden_size) for _ in range(num_layers - 1)]
         )
         self.output_layer = nn.Linear(hidden_size, out_features)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Xavier-uniform init for all linears, matching the reference implementation."""
+        linears: list[nn.Linear] = [
+            self.encoder_u,
+            self.encoder_v,
+            self.input_layer,
+            *(cast("nn.Linear", layer) for layer in self.hidden_layers),
+            self.output_layer,
+        ]
+        for layer in linears:
+            nn.init.xavier_uniform_(layer.weight)
+            nn.init.zeros_(layer.bias)
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass with U/V gating.

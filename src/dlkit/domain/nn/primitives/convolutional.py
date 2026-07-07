@@ -5,6 +5,7 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
+from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
 
@@ -52,6 +53,7 @@ class ConvolutionBlock1d(nn.Module):
             stride=stride,
             groups=groups,
         )
+        initialize_(self.conv1, activation)
         self.dropout = nn.Dropout1d(dropout) if dropout > 0.0 else nn.Identity()
         self.norm = make_norm_layer(normalize, in_channels, in_timesteps)
 
@@ -109,6 +111,12 @@ class DeconvolutionBlock1d(nn.Module):
             raise ValueError(
                 '"same" padding for DeconvolutionBlock1d is only supported when stride=1.'
             )
+        if padding == "same" and kernel_size % 2 == 0:
+            raise ValueError(
+                '"same" padding for DeconvolutionBlock1d only preserves length for odd '
+                f"kernel_size (got {kernel_size}); pass an explicit padding/output_padding "
+                "for even kernels."
+            )
         self.activation = resolve_activation(activation)
         effective_padding: int = (
             (kernel_size - 1) // 2 * dilation if padding == "same" else int(padding)
@@ -123,6 +131,7 @@ class DeconvolutionBlock1d(nn.Module):
             groups=groups,
             output_padding=output_padding,
         )
+        initialize_(self.conv1, activation)
         self.norm = make_norm_layer(normalize, in_channels, in_timesteps)
         self.dropout = nn.Dropout1d(dropout) if dropout > 0.0 else nn.Identity()
         self.out_channels = out_channels

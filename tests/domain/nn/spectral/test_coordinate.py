@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -155,6 +156,21 @@ class TestSiren:
         x = torch.randn(4, coord_input_shapes["x"][0])
         assert net(x).shape == (4, coord_output_shapes["y"][0])
 
+    def test_hidden_layers_scale_by_omega0(self) -> None:
+        """Regression: every hidden layer must apply omega0, not just the first layer."""
+        net = Siren(in_features=2, out_features=1, hidden_size=4, num_layers=2, omega0=5.0)
+        x = torch.randn(3, 2)
+
+        with patch("dlkit.domain.nn.spectral.coordinate.torch.sin", side_effect=torch.sin) as sin:
+            net(x)
+
+        first_pre_activation = sin.call_args_list[0].args[0]
+        hidden_pre_activation = sin.call_args_list[1].args[0]
+        first_hidden = cast("torch.nn.Linear", net.hidden_layers[0])
+        x1 = torch.sin(first_pre_activation)
+        expected = net._omega0 * first_hidden(x1)
+        assert torch.allclose(hidden_pre_activation, expected)
+
 
 class TestHashEncodingNetwork:
     def test_output_shape(self, coords: torch.Tensor) -> None:
@@ -231,6 +247,20 @@ class TestModifiedMLP:
         out = net(coords)
         out.sum().backward()
         assert coords.grad is not None
+
+    def test_reset_parameters_uses_xavier_uniform(self) -> None:
+        """Regression: linears must use Xavier-uniform init, not torch's Kaiming default."""
+        net = ModifiedMLP(in_features=3, out_features=2, hidden_size=16, num_layers=3)
+        for layer in (
+            net.encoder_u,
+            net.encoder_v,
+            net.input_layer,
+            *net.hidden_layers,
+            net.output_layer,
+        ):
+            bound = math.sqrt(6.0 / (layer.in_features + layer.out_features))
+            assert layer.weight.data.abs().max() <= bound + 1e-5
+            assert torch.equal(layer.bias.data, torch.zeros_like(layer.bias.data))
 
     def test_from_entries(
         self, coord_input_shapes: InputShapes, coord_output_shapes: OutputShapes

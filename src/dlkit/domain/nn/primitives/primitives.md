@@ -4,7 +4,11 @@ Building blocks for constructing neural network architectures in DLKit.
 
 ## Overview
 
-This module provides fundamental components that serve as building blocks for larger architectures:
+This module provides fundamental components that serve as building blocks for larger architectures.
+
+Blocks that take an `activation` kwarg (`DenseBlock`, `ConvolutionBlock1d`,
+`DeconvolutionBlock1d`, `UVGate`) initialize their `Linear`/`Conv` weights via
+`domain.nn.init.initialize_`, matched to that activation — see `nn.md`.
 
 | Component | File | Purpose |
 |-----------|------|---------|
@@ -45,8 +49,9 @@ Where:
 | `in_features` | `int` | required | Input dimension $d_{\text{in}}$ |
 | `out_features` | `int` | required | Output dimension $d_{\text{out}}$ |
 | `activation` | `Callable` | `F.gelu` | Activation function $\sigma$ |
-| `normalize` | `"layer" \| "batch" \| None` | `None` | Normalization type |
+| `normalize` | `"layer" \| "batch" \| None` | `"layer"` | Normalization type |
 | `dropout` | `float` | `0.0` | Dropout probability $p$ |
+| `bias` | `bool` | `True` | Whether the linear layer has a bias term |
 
 ### Example
 
@@ -123,6 +128,7 @@ The skip projection $W_{\text{skip}}$ is selected automatically:
 | `out_channels` | `int \| None` | `None` | Output channels (auto-detected from module) |
 | `stride` | `int` | `1` | Stride for projection layer |
 | `bias` | `bool` | `True` | Include bias in projection |
+| `branch_scale` | `float` | `1.0` | Multiplier on the wrapped module's output before aggregation. Set to `1/sqrt(2*num_layers)` (GPT-2 appendix) when stacking many of these to counteract residual variance growth across depth |
 
 ### Example
 
@@ -354,6 +360,10 @@ The sandwich scale $D$ preserves both symmetry and positive definiteness: if $M 
 Plain `nn.Module` (no `parametrize`). Stores `base_weight` $A$ and `log_scale` $\mathbf{s}$
 separately for a flat, transparent state dict.
 
+Implements Random Weight Factorization (RWF), per Wang, Wang, Seidman & Perdikaris,
+["Random Weight Factorization Improves the Training of Continuous Neural
+Representations"](https://arxiv.org/abs/2210.01274) (2022).
+
 **Mathematical form:**
 
 $$W = \text{diag}\!\left(e^{\mathbf{s}}\right) A$$
@@ -362,7 +372,11 @@ Equivalently: row $i$ of $W$ is $e^{s_i}$ times row $i$ of $A$.
 
 **Key parameters**:
 - `mean`, `std`: literal Gaussian parameters used to sample `log_scale`
-  $\mathbf{s}$ (paper-style RWF defaults: `mean=1.0`, `std=0.1`).
+  $\mathbf{s}$ (shipped default: `mean=0.0`, `std=0.1` — unit scale at init,
+  since $e^0 = 1$).
+- Kaiming gain on `base_weight` is fixed internally at `a=0.0` (He/Kaiming
+  gain for ReLU/GELU-family activations) and is not a public constructor
+  parameter on this class.
 
 ### `SoftplusFactorizedLinear`
 
@@ -371,6 +385,12 @@ $$W = \text{diag}(\text{softplus}(\mathbf{s})) A.$$
 
 This keeps the softplus path available for custom compositions without making
 it the default public factorized architecture.
+
+**Key parameters**: same `mean`/`std` as `FactorizedLinear`, plus:
+- `kaiming_a` (`float`, default `0.0`): the `a` gain passed to
+  `nn.init.kaiming_uniform_` for `base_weight`. `0.0` is the textbook
+  He/Kaiming gain for ReLU/GELU-family activations; expose a different value
+  explicitly if the surrounding network uses a different activation family.
 
 ### Configuring `pos_fn`
 
@@ -546,15 +566,20 @@ def forward(self, h: Tensor, x: Tensor) -> Tensor: ...
 
 | Class | Formula | Context `x` used? | Key params |
 |-------|---------|-------------------|------------|
-| `GLUGate` | `content(h) ⊙ σ(gate(h))` | No | `hidden_size` |
-| `SwiGLUGate` | `content(h) ⊙ silu(gate(h))` | No | `hidden_size` |
-| `GRNGate` | `LayerNorm(h + dropout(eta2 ⊙ σ(W4(eta1))))` where `eta1 = ELU(W1(h) + ctx(x))` | Yes | `hidden_size`, `context_size`, `dropout` |
+| `GLUGate` | `a ⊙ σ(b)` where `[a, b] = proj(h)` (torch-native `F.glu`) | No | `hidden_size` |
+| `SwiGLUGate` | `content(h) ⊙ silu(gate(h))` | No | `hidden_size`, `bias` |
+| `GRNGate` | `LayerNorm(h + dropout(content(eta1) ⊙ σ(gate(eta1))))` where `eta2 = ELU(W2(h) + ctx(x))`, `eta1 = bottleneck(eta2)` | Yes | `hidden_size`, `context_size`, `dropout` |
 | `UVGate` | `σ(gate(h)) ⊙ σ(U(x)) + (1−σ(gate(h))) ⊙ σ(V(x))` | Yes | `in_features`, `hidden_size`, `activation` |
 
 `GLUGate` and `SwiGLUGate` accept but ignore `x`; they satisfy the protocol
 for uniform use in `GatedMLP`.
 
-`GRNGate` (Lim et al. 2021, TFT):
+`SwiGLUGate` (Shazeer 2020): `bias=False` matches the paper's convention of
+omitting bias on GLU-variant projections; defaults to `True` to match
+`nn.Linear`'s own default.
+
+`GRNGate` (Lim et al. 2021, TFT) — matches the paper's four-linear structure
+(`W1` bottleneck, `W2`/`W3` pre-activation, `W4`/`W5` gate/content):
 - `context_size=None` means `x` is expected to have `hidden_size` features.
 - Explicit `context_size` projects `x` from `context_size → hidden_size`.
 

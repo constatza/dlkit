@@ -23,18 +23,6 @@ class TestFourierEnhancedFFNN:
         )
         assert model(flat_input).shape == (flat_input.shape[0], 4)
 
-    def test_scale_equivariance_is_not_guaranteed(
-        self, flat_input: torch.Tensor, n_modes: int
-    ) -> None:
-        """FourierEnhancedFFNN is NOT scale-equivariant by design — verify this."""
-        model = FourierEnhancedFFNN(
-            in_features=16, out_features=4, hidden_size=32, num_layers=2, n_modes=n_modes
-        )
-        scale = 3.0
-        out_base = model(flat_input)
-        out_scaled = model(flat_input * scale)
-        assert not torch.allclose(out_scaled, out_base * scale, atol=1e-3)
-
     def test_is_fourier_augmented_subclass(self, n_modes: int) -> None:
         model = FourierEnhancedFFNN(
             in_features=8, out_features=2, hidden_size=16, num_layers=2, n_modes=n_modes

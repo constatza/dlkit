@@ -7,6 +7,7 @@ from torch import Tensor
 
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
 from dlkit.domain.nn.contracts import StandardEntryConsumer
+from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives.conditioning import (
     ConditionedResidualSequential,
     FiLMLayer,
@@ -156,6 +157,7 @@ class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
         widths = list(layers)
         self.num_layers = len(widths) - 1
         self.embed = nn.Linear(in_features, widths[0])
+        initialize_(self.embed, activation)
         self.hidden: nn.ModuleList = nn.ModuleList(
             [
                 FiLMBlock(
@@ -170,6 +172,7 @@ class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
             ]
         )
         self.head = nn.Linear(widths[-1], out_features)
+        initialize_(self.head, activation)
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         """Embed, apply FiLM blocks, then project to output.
@@ -226,6 +229,7 @@ class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
         if num_layers < 1:
             raise ValueError("num_layers must be >= 1.")
         self.embed = nn.Linear(in_features, hidden_size)
+        initialize_(self.embed, activation)
         self.body: ConditionedResidualSequential = ConditionedResidualSequential(
             *[
                 FiLMResidualBlock(
@@ -239,6 +243,7 @@ class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
             ]
         )
         self.head = nn.Linear(hidden_size, out_features)
+        initialize_(self.head, activation)
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         """Embed, pass through residual body, then project to output.

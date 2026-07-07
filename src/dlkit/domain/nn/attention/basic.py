@@ -5,11 +5,13 @@ from torch import nn
 
 
 class SelfAttentionBlock(nn.Module):
-    """Self-attention block with LayerNorm and residual connection.
+    """Self-attention block with pre-LN and residual connection.
 
-    This module applies multihead self-attention with layer normalization and
-    residual connection, optionally permuting the input from (batch, channels, time)
-    to (batch, time, channels) format if requested.
+    Applies LayerNorm before multihead self-attention, then adds the (dropped-out)
+    attention output back onto the un-normalized input — pre-LN ordering per
+    Xiong et al. 2020, matching the sibling ``TransformerEncoderBlock``/
+    ``TransformerDecoderBlock`` (``norm_first=True``). Optionally permutes the
+    input from (batch, channels, time) to (batch, time, channels) format if requested.
     """
 
     def __init__(
@@ -43,8 +45,9 @@ class SelfAttentionBlock(nn.Module):
         """
         if self.permute:
             x = x.permute(0, 2, 1)  # (B,C,T) → (B,T,C)
-        attn_out, _ = self.attn(x, x, x)
-        x = self.norm(x + self.dropout(attn_out))
+        normed = self.norm(x)
+        attn_out, _ = self.attn(normed, normed, normed)
+        x = x + self.dropout(attn_out)
         if self.permute:
             x = x.permute(0, 2, 1)  # (B,T,C) → (B,C,T)
         return x
